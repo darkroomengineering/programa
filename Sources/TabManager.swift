@@ -1380,14 +1380,37 @@ class TabManager: ObservableObject {
             let insertIndex = newTabInsertIndex(snapshot: snapshot, placementOverride: placementOverride)
             let ordinal = Self.nextPortOrdinal
             Self.nextPortOrdinal += 1
-            let newWorkspace = makeWorkspaceForCreation(
-                title: title ?? "Terminal \(nextTabCount)",
-                workingDirectory: workingDirectory,
-                portOrdinal: ordinal,
-                configTemplate: inheritedConfig,
-                initialTerminalCommand: initialTerminalCommand,
-                initialTerminalEnvironment: initialTerminalEnvironment
-            )
+
+            // Try to claim a pre-warmed surface from the pool for instant tab creation.
+            // Fall back to normal cold-start when the pool is empty or the request is
+            // incompatible (custom command, custom env, etc.).
+            let canUsePool = initialTerminalCommand == nil
+                && initialTerminalEnvironment.isEmpty
+            let newWorkspace: Workspace
+            if canUsePool,
+               let claimed = SurfacePool.shared.claim(
+                   workspaceId: UUID(),
+                   portOrdinal: ordinal,
+                   workingDirectory: workingDirectory,
+                   configTemplate: inheritedConfig
+               ) {
+                newWorkspace = Workspace(
+                    claimedPanel: claimed.panel,
+                    title: title ?? "Terminal \(nextTabCount)",
+                    workingDirectory: workingDirectory,
+                    portOrdinal: ordinal,
+                    configTemplate: inheritedConfig
+                )
+            } else {
+                newWorkspace = makeWorkspaceForCreation(
+                    title: title ?? "Terminal \(nextTabCount)",
+                    workingDirectory: workingDirectory,
+                    portOrdinal: ordinal,
+                    configTemplate: inheritedConfig,
+                    initialTerminalCommand: initialTerminalCommand,
+                    initialTerminalEnvironment: initialTerminalEnvironment
+                )
+            }
             newWorkspace.owningTabManager = self
             if title != nil {
                 newWorkspace.setCustomTitle(title)

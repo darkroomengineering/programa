@@ -1,6 +1,6 @@
 import AppKit
 
-private let cmuxAppIconDidChangeNotification = Notification.Name("com.cmuxterm.appIconDidChange")
+private let cmuxAppIconDidChangeNotification = Notification.Name("com.darkroom.programa.appIconDidChange")
 private let cmuxAppIconModeKey = "appIconMode"
 
 private enum DockTileAppIconMode: String {

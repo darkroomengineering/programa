@@ -183,7 +183,7 @@ final class SocketControlPasswordStoreTests: XCTestCase {
         let resolved = SocketControlPasswordStore.defaultPasswordFileURL(appSupportDirectory: tempDir)
         XCTAssertEqual(
             resolved?.path,
-            tempDir.appendingPathComponent("cmux", isDirectory: true)
+            tempDir.appendingPathComponent("programa", isDirectory: true)
                 .appendingPathComponent("socket-control-password", isDirectory: false).path
         )
     }

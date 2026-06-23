@@ -316,14 +316,14 @@ final class GhosttyConfigTests: XCTestCase {
         try withTemporaryAppSupportDirectory { appSupportDirectory in
             let releaseConfigURL = try writeAppSupportConfig(
                 appSupportDirectory: appSupportDirectory,
-                bundleIdentifier: "com.cmuxterm.app",
+                bundleIdentifier: "com.darkroom.programa",
                 filename: "config",
                 contents: "font-size = 13\n"
             )
 
             XCTAssertEqual(
                 GhosttyApp.cmuxAppSupportConfigURLs(
-                    currentBundleIdentifier: "com.cmuxterm.app.debug",
+                    currentBundleIdentifier: "com.darkroom.programa.debug",
                     appSupportDirectory: appSupportDirectory
                 ),
                 [releaseConfigURL]
@@ -335,20 +335,20 @@ final class GhosttyConfigTests: XCTestCase {
         try withTemporaryAppSupportDirectory { appSupportDirectory in
             _ = try writeAppSupportConfig(
                 appSupportDirectory: appSupportDirectory,
-                bundleIdentifier: "com.cmuxterm.app",
+                bundleIdentifier: "com.darkroom.programa",
                 filename: "config",
                 contents: "font-size = 13\n"
             )
             let currentConfigURL = try writeAppSupportConfig(
                 appSupportDirectory: appSupportDirectory,
-                bundleIdentifier: "com.cmuxterm.app.debug.issue-829",
+                bundleIdentifier: "com.darkroom.programa.debug.issue-829",
                 filename: "config.ghostty",
                 contents: "font-size = 14\n"
             )
 
             XCTAssertEqual(
                 GhosttyApp.cmuxAppSupportConfigURLs(
-                    currentBundleIdentifier: "com.cmuxterm.app.debug.issue-829",
+                    currentBundleIdentifier: "com.darkroom.programa.debug.issue-829",
                     appSupportDirectory: appSupportDirectory
                 ),
                 [currentConfigURL]
@@ -360,7 +360,7 @@ final class GhosttyConfigTests: XCTestCase {
         try withTemporaryAppSupportDirectory { appSupportDirectory in
             _ = try writeAppSupportConfig(
                 appSupportDirectory: appSupportDirectory,
-                bundleIdentifier: "com.cmuxterm.app",
+                bundleIdentifier: "com.darkroom.programa",
                 filename: "config",
                 contents: "font-size = 13\n"
             )
@@ -378,14 +378,14 @@ final class GhosttyConfigTests: XCTestCase {
         try withTemporaryAppSupportDirectory { appSupportDirectory in
             _ = try writeAppSupportConfig(
                 appSupportDirectory: appSupportDirectory,
-                bundleIdentifier: "com.cmuxterm.app",
+                bundleIdentifier: "com.darkroom.programa",
                 filename: "config.ghostty",
                 contents: ""
             )
 
             XCTAssertTrue(
                 GhosttyApp.cmuxAppSupportConfigURLs(
-                    currentBundleIdentifier: "com.cmuxterm.app.debug",
+                    currentBundleIdentifier: "com.darkroom.programa.debug",
                     appSupportDirectory: appSupportDirectory
                 ).isEmpty
             )
@@ -1800,7 +1800,7 @@ final class SocketControlSettingsTests: XCTestCase {
             environment: [
                 "CMUX_SOCKET_PATH": "/tmp/cmux-debug-issue-153-tmux-compat.sock",
             ],
-            bundleIdentifier: "com.cmuxterm.app",
+            bundleIdentifier: "com.darkroom.programa",
             isDebugBuild: false,
             probeStableDefaultPathEntry: { _ in .missing }
         )
@@ -1813,7 +1813,7 @@ final class SocketControlSettingsTests: XCTestCase {
             environment: [
                 "CMUX_SOCKET_PATH": "/tmp/cmux-debug-issue-153-tmux-compat.sock",
             ],
-            bundleIdentifier: "com.cmuxterm.app.nightly",
+            bundleIdentifier: "com.darkroom.programa.nightly",
             isDebugBuild: false,
             probeStableDefaultPathEntry: { _ in .missing }
         )
@@ -1826,7 +1826,7 @@ final class SocketControlSettingsTests: XCTestCase {
             environment: [
                 "CMUX_SOCKET_PATH": "/tmp/cmux-debug-my-tag.sock",
             ],
-            bundleIdentifier: "com.cmuxterm.app.debug.my-tag",
+            bundleIdentifier: "com.darkroom.programa.debug.my-tag",
             isDebugBuild: false
         )
 
@@ -1838,7 +1838,7 @@ final class SocketControlSettingsTests: XCTestCase {
             environment: [
                 "CMUX_SOCKET_PATH": "/tmp/cmux-staging-my-tag.sock",
             ],
-            bundleIdentifier: "com.cmuxterm.app.staging.my-tag",
+            bundleIdentifier: "com.darkroom.programa.staging.my-tag",
             isDebugBuild: false
         )
 
@@ -1851,7 +1851,7 @@ final class SocketControlSettingsTests: XCTestCase {
                 "CMUX_SOCKET_PATH": "/tmp/cmux-debug-forced.sock",
                 "CMUX_ALLOW_SOCKET_OVERRIDE": "1",
             ],
-            bundleIdentifier: "com.cmuxterm.app",
+            bundleIdentifier: "com.darkroom.programa",
             isDebugBuild: false,
             probeStableDefaultPathEntry: { _ in .missing }
         )
@@ -1862,7 +1862,7 @@ final class SocketControlSettingsTests: XCTestCase {
     func testDefaultSocketPathByChannel() {
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
-                bundleIdentifier: "com.cmuxterm.app",
+                bundleIdentifier: "com.darkroom.programa",
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
@@ -1870,7 +1870,7 @@ final class SocketControlSettingsTests: XCTestCase {
         )
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
-                bundleIdentifier: "com.cmuxterm.app.nightly",
+                bundleIdentifier: "com.darkroom.programa.nightly",
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
@@ -1878,7 +1878,7 @@ final class SocketControlSettingsTests: XCTestCase {
         )
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
-                bundleIdentifier: "com.cmuxterm.app.debug.tag",
+                bundleIdentifier: "com.darkroom.programa.debug.tag",
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
@@ -1886,7 +1886,7 @@ final class SocketControlSettingsTests: XCTestCase {
         )
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
-                bundleIdentifier: "com.cmuxterm.app.staging.tag",
+                bundleIdentifier: "com.darkroom.programa.staging.tag",
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
@@ -1896,7 +1896,7 @@ final class SocketControlSettingsTests: XCTestCase {
 
     func testStableReleaseFallsBackToUserScopedSocketWhenStablePathOwnedByDifferentUser() {
         let path = SocketControlSettings.defaultSocketPath(
-            bundleIdentifier: "com.cmuxterm.app",
+            bundleIdentifier: "com.darkroom.programa",
             isDebugBuild: false,
             currentUserID: 501,
             probeStableDefaultPathEntry: { _ in .socket(ownerUserID: 0) }
@@ -1907,7 +1907,7 @@ final class SocketControlSettingsTests: XCTestCase {
 
     func testStableReleaseFallsBackToUserScopedSocketWhenStablePathIsBlockedByNonSocketEntry() {
         let path = SocketControlSettings.defaultSocketPath(
-            bundleIdentifier: "com.cmuxterm.app",
+            bundleIdentifier: "com.darkroom.programa",
             isDebugBuild: false,
             currentUserID: 501,
             probeStableDefaultPathEntry: { _ in .other(ownerUserID: 501) }
@@ -1920,7 +1920,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertTrue(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
                 environment: [:],
-                bundleIdentifier: "com.cmuxterm.app.debug",
+                bundleIdentifier: "com.darkroom.programa.debug",
                 isDebugBuild: true
             )
         )
@@ -1930,7 +1930,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertFalse(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
                 environment: ["CMUX_TAG": "tests-v1"],
-                bundleIdentifier: "com.cmuxterm.app.debug",
+                bundleIdentifier: "com.darkroom.programa.debug",
                 isDebugBuild: true
             )
         )
@@ -1940,7 +1940,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertFalse(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
                 environment: [:],
-                bundleIdentifier: "com.cmuxterm.app.debug.tests-v1",
+                bundleIdentifier: "com.darkroom.programa.debug.tests-v1",
                 isDebugBuild: true
             )
         )
@@ -1950,7 +1950,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertFalse(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
                 environment: [:],
-                bundleIdentifier: "com.cmuxterm.app.debug",
+                bundleIdentifier: "com.darkroom.programa.debug",
                 isDebugBuild: false
             )
         )
@@ -1960,7 +1960,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertFalse(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
                 environment: ["XCTestConfigurationFilePath": "/tmp/fake.xctestconfiguration"],
-                bundleIdentifier: "com.cmuxterm.app.debug",
+                bundleIdentifier: "com.darkroom.programa.debug",
                 isDebugBuild: true
             )
         )
@@ -1970,7 +1970,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertFalse(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
                 environment: ["XCInjectBundle": "/tmp/fake.xctest"],
-                bundleIdentifier: "com.cmuxterm.app.debug",
+                bundleIdentifier: "com.darkroom.programa.debug",
                 isDebugBuild: true
             )
         )
@@ -1980,7 +1980,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertFalse(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
                 environment: ["DYLD_INSERT_LIBRARIES": "/usr/lib/libXCTestBundleInject.dylib"],
-                bundleIdentifier: "com.cmuxterm.app.debug",
+                bundleIdentifier: "com.darkroom.programa.debug",
                 isDebugBuild: true
             )
         )
@@ -1992,7 +1992,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertFalse(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
                 environment: ["CMUX_UI_TEST_MODE": "1"],
-                bundleIdentifier: "com.cmuxterm.app.debug",
+                bundleIdentifier: "com.darkroom.programa.debug",
                 isDebugBuild: true
             )
         )
@@ -2003,7 +2003,7 @@ final class UITestLaunchManifestTests: XCTestCase {
     func testManifestPathReadsArgumentValue() {
         XCTAssertEqual(
             UITestLaunchManifest.manifestPath(
-                from: ["cmux", "-cmuxUITestLaunchManifest", "/tmp/cmux-ui-test-launch.json"]
+                from: ["programa", "-cmuxUITestLaunchManifest", "/tmp/cmux-ui-test-launch.json"]
             ),
             "/tmp/cmux-ui-test-launch.json"
         )
@@ -2012,7 +2012,7 @@ final class UITestLaunchManifestTests: XCTestCase {
     func testManifestPathReturnsNilWithoutValue() {
         XCTAssertNil(
             UITestLaunchManifest.manifestPath(
-                from: ["cmux", "-cmuxUITestLaunchManifest"]
+                from: ["programa", "-cmuxUITestLaunchManifest"]
             )
         )
     }
@@ -2024,7 +2024,7 @@ final class UITestLaunchManifestTests: XCTestCase {
         var applied: [String: String] = [:]
 
         UITestLaunchManifest.applyIfPresent(
-            arguments: ["cmux", UITestLaunchManifest.argumentName, "/tmp/cmux-ui-test-launch.json"],
+            arguments: ["programa", UITestLaunchManifest.argumentName, "/tmp/cmux-ui-test-launch.json"],
             loadData: { _ in payload },
             applyEnvironment: { key, value in
                 applied[key] = value
@@ -3090,7 +3090,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         defer { try? fileManager.removeItem(at: root) }
 
         try writeExecutableScript(
-            at: binDir.appendingPathComponent("cmux", isDirectory: false),
+            at: binDir.appendingPathComponent("programa", isDirectory: false),
             contents: """
             #!/bin/sh
             printf '%s\\n' "$*" >> "\(logPath.path)"
@@ -3133,7 +3133,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         defer { try? fileManager.removeItem(at: root) }
 
         try writeExecutableScript(
-            at: binDir.appendingPathComponent("cmux", isDirectory: false),
+            at: binDir.appendingPathComponent("programa", isDirectory: false),
             contents: """
             #!/bin/sh
             printf '%s\\n' "$*" >> "\(logPath.path)"
@@ -3180,7 +3180,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         defer { try? fileManager.removeItem(at: root) }
 
         try writeExecutableScript(
-            at: binDir.appendingPathComponent("cmux", isDirectory: false),
+            at: binDir.appendingPathComponent("programa", isDirectory: false),
             contents: """
             #!/bin/sh
             printf '%s\\n' "$*" >> "\(logPath.path)"
@@ -3228,7 +3228,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         defer { try? fileManager.removeItem(at: root) }
 
         try writeExecutableScript(
-            at: binDir.appendingPathComponent("cmux", isDirectory: false),
+            at: binDir.appendingPathComponent("programa", isDirectory: false),
             contents: """
             #!/bin/sh
             printf '%s\\n' "$*" >> "\(logPath.path)"
@@ -3270,7 +3270,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         defer { try? fileManager.removeItem(at: root) }
 
         try writeExecutableScript(
-            at: binDir.appendingPathComponent("cmux", isDirectory: false),
+            at: binDir.appendingPathComponent("programa", isDirectory: false),
             contents: """
             #!/bin/sh
             printf '%s\\n' "$*" >> "\(logPath.path)"
@@ -3322,7 +3322,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         defer { try? fileManager.removeItem(at: root) }
 
         try writeExecutableScript(
-            at: binDir.appendingPathComponent("cmux", isDirectory: false),
+            at: binDir.appendingPathComponent("programa", isDirectory: false),
             contents: """
             #!/bin/sh
             printf '%s\\n' "$*" >> "\(logPath.path)"

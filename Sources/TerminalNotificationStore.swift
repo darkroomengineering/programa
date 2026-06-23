@@ -683,8 +683,8 @@ final class TerminalNotificationStore: ObservableObject {
 
     static let shared = TerminalNotificationStore()
 
-    static let categoryIdentifier = "com.cmuxterm.app.userNotification"
-    static let actionShowIdentifier = "com.cmuxterm.app.userNotification.show"
+    static let categoryIdentifier = "com.darkroom.programa.userNotification"
+    static let actionShowIdentifier = "com.darkroom.programa.userNotification.show"
     private enum AuthorizationRequestOrigin: String {
         case notificationDelivery = "notification_delivery"
         case settingsButton = "settings_button"

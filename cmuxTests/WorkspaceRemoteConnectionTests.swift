@@ -1370,8 +1370,8 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         )
 
         while let item = enumerator?.nextObject() as? URL {
-            guard item.lastPathComponent == "cmux",
-                  item.path.contains(".app/Contents/Resources/bin/cmux") else {
+            guard item.lastPathComponent == "programa",
+                  item.path.contains(".app/Contents/Resources/bin/programa") else {
                 continue
             }
             return item.path

@@ -4488,7 +4488,7 @@ final class WorkspaceRemoteSessionController {
             create: true
         )
         let cacheRoot = appSupportRoot
-            .appendingPathComponent("cmux", isDirectory: true)
+            .appendingPathComponent("programa", isDirectory: true)
             .appendingPathComponent("remote-daemons", isDirectory: true)
         try fileManager.createDirectory(at: cacheRoot, withIntermediateDirectories: true)
         return cacheRoot
@@ -6918,6 +6918,98 @@ final class Workspace: Identifiable, ObservableObject {
         // didSelectTab, and focusedPaneId can otherwise be nil until user interaction.
         if let initialTabId {
             // Focus the pane containing the initial tab (or the first pane as fallback).
+            let paneToFocus: PaneID? = {
+                for paneId in bonsplitController.allPaneIds {
+                    if bonsplitController.tabs(inPane: paneId).contains(where: { $0.id == initialTabId }) {
+                        return paneId
+                    }
+                }
+                return bonsplitController.allPaneIds.first
+            }()
+            if let paneToFocus {
+                bonsplitController.focusPane(paneToFocus)
+            }
+            bonsplitController.selectTab(initialTabId)
+        }
+        tmuxLayoutSnapshot = bonsplitController.layoutSnapshot()
+    }
+
+    /// Initialize a workspace using a pre-warmed terminal panel from the surface pool.
+    /// The panel's surface is already running a shell process.
+    init(
+        claimedPanel: TerminalPanel,
+        title: String = "Terminal",
+        workingDirectory: String? = nil,
+        portOrdinal: Int = 0,
+        configTemplate: CmuxSurfaceConfigTemplate? = nil
+    ) {
+        self.id = UUID()
+        self.portOrdinal = portOrdinal
+        self.processTitle = title
+        self.title = title
+        self.customTitle = nil
+        self.customDescription = nil
+
+        let trimmedWorkingDirectory = workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let hasWorkingDirectory = !trimmedWorkingDirectory.isEmpty
+        self.currentDirectory = hasWorkingDirectory
+            ? trimmedWorkingDirectory
+            : FileManager.default.homeDirectoryForCurrentUser.path
+
+        let appearance = Self.bonsplitAppearance(
+            from: GhosttyApp.shared.defaultBackgroundColor,
+            backgroundOpacity: GhosttyApp.shared.defaultBackgroundOpacity
+        )
+        let config = BonsplitConfiguration(
+            allowSplits: true,
+            allowCloseTabs: true,
+            allowCloseLastPane: false,
+            allowTabReordering: true,
+            allowCrossPaneTabMove: true,
+            autoCloseEmptyPanes: true,
+            contentViewLifecycle: .keepAllAlive,
+            newTabPosition: .current,
+            appearance: appearance
+        )
+        self.bonsplitController = BonsplitController(configuration: config)
+        bonsplitController.contextMenuShortcuts = Self.buildContextMenuShortcuts()
+
+        let welcomeTabIds = bonsplitController.allTabIds
+
+        // Use the pre-warmed panel, updating its workspace ID to ours
+        claimedPanel.updateWorkspaceId(id)
+        let terminalPanel = claimedPanel
+        configureTerminalPanel(terminalPanel)
+        panels[terminalPanel.id] = terminalPanel
+        panelTitles[terminalPanel.id] = terminalPanel.displayTitle
+        seedTerminalInheritanceFontPoints(panelId: terminalPanel.id, configTemplate: configTemplate)
+
+        var initialTabId: TabID?
+        if let tabId = bonsplitController.createTab(
+            title: title,
+            icon: "terminal.fill",
+            kind: SurfaceKind.terminal,
+            isDirty: false,
+            isPinned: false
+        ) {
+            surfaceIdToPanelId[tabId] = terminalPanel.id
+            initialTabId = tabId
+        }
+
+        for welcomeTabId in welcomeTabIds {
+            bonsplitController.closeTab(welcomeTabId)
+        }
+
+        bonsplitController.onExternalTabDrop = { [weak self] request in
+            self?.handleExternalTabDrop(request) ?? false
+        }
+        bonsplitController.onTabCloseRequest = { [weak self] tabId, _ in
+            self?.markExplicitClose(surfaceId: tabId)
+        }
+
+        bonsplitController.delegate = self
+
+        if let initialTabId {
             let paneToFocus: PaneID? = {
                 for paneId in bonsplitController.allPaneIds {
                     if bonsplitController.tabs(inPane: paneId).contains(where: { $0.id == initialTabId }) {

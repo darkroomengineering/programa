@@ -34,7 +34,7 @@ final class MainWindowHostingView<Content: View>: NSHostingView<Content> {
 }
 
 private enum CmuxThemeNotifications {
-    static let reloadConfig = Notification.Name("com.cmuxterm.themes.reload-config")
+    static let reloadConfig = Notification.Name("com.darkroom.programa.themes.reload-config")
 }
 
 func isCommandPaletteFocusStealingTerminalOrBrowserResponder(_ responder: NSResponder) -> Bool {
@@ -2973,6 +2973,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             PostHogAnalytics.shared.flush()
         }
         notificationStore?.clearAll()
+        SurfacePool.shared.teardownAll()
         enableSuddenTerminationIfNeeded()
     }
 

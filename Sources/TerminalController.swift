@@ -11968,7 +11968,7 @@ class TerminalController {
         case "tabtransfer", "tab-transfer", "com.splittabbar.tabtransfer":
             return DragOverlayRoutingPolicy.bonsplitTabTransferType
         case "sidebarreorder", "sidebar-reorder", "sidebar_tab_reorder",
-            "com.cmux.sidebar-tab-reorder":
+            "com.darkroom.programa.sidebar-tab-reorder":
             return DragOverlayRoutingPolicy.sidebarTabReorderType
         default:
             // Allow explicit UTI strings for ad-hoc debug probes.

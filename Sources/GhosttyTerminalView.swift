@@ -1182,7 +1182,7 @@ private final class GhosttySurfaceCallbackContext {
 
 class GhosttyApp {
     static let shared = GhosttyApp()
-    private static let releaseBundleIdentifier = "com.cmuxterm.app"
+    private static let releaseBundleIdentifier = "com.darkroom.programa"
     private static let backgroundLogTimestampFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -1640,6 +1640,12 @@ class GhosttyApp {
         // Notify observers that a usable config is available (initial load).
         lastAppearanceColorScheme = GhosttyConfig.currentColorSchemePreference()
         NotificationCenter.default.post(name: .ghosttyConfigDidReload, object: nil)
+
+        // Pre-warm the surface pool so the first new tab opens instantly.
+        // Deferred to the next main-queue tick so the app is fully initialized.
+        DispatchQueue.main.async {
+            SurfacePool.shared.warmIfNeeded()
+        }
 
         #if os(macOS)
         if let app {
@@ -3372,11 +3378,11 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// Port ordinal for CMUX_PORT range assignment
     var portOrdinal: Int = 0
     /// Snapshotted once per app session so all workspaces use consistent values
-    private static let sessionPortBase: Int = {
+    static let sessionPortBase: Int = {
         let val = UserDefaults.standard.integer(forKey: "cmuxPortBase")
         return val > 0 ? val : 9100
     }()
-    private static let sessionPortRangeSize: Int = {
+    static let sessionPortRangeSize: Int = {
         let val = UserDefaults.standard.integer(forKey: "cmuxPortRange")
         return val > 0 ? val : 10
     }()
@@ -4981,7 +4987,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         NSPasteboard.PasteboardType(UTType.heif.identifier)
     ]
     private static let tabTransferPasteboardType = NSPasteboard.PasteboardType("com.splittabbar.tabtransfer")
-    private static let sidebarTabReorderPasteboardType = NSPasteboard.PasteboardType("com.cmux.sidebar-tab-reorder")
+    private static let sidebarTabReorderPasteboardType = NSPasteboard.PasteboardType("com.darkroom.programa.sidebar-tab-reorder")
 
     private enum WordPathResolutionSource: String {
         case quicklook
@@ -8571,7 +8577,7 @@ final class GhosttySurfaceScrollView: NSView {
     private var lastDragGeometryLogSignature: String?
     private var dragLayoutLogSequence: UInt64 = 0
     private static let tabTransferPasteboardType = NSPasteboard.PasteboardType("com.splittabbar.tabtransfer")
-    private static let sidebarTabReorderPasteboardType = NSPasteboard.PasteboardType("com.cmux.sidebar-tab-reorder")
+    private static let sidebarTabReorderPasteboardType = NSPasteboard.PasteboardType("com.darkroom.programa.sidebar-tab-reorder")
     private static var flashCounts: [UUID: Int] = [:]
     private static var drawCounts: [UUID: Int] = [:]
     private static var lastDrawTimes: [UUID: CFTimeInterval] = [:]

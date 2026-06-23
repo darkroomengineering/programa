@@ -44,9 +44,9 @@
 	<key>NSMainStoryboardFile</key>
 	<string></string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>A program running within cmux would like to use your microphone.</string>
+	<string>A program running within Programa would like to use your microphone.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>A program running within cmux would like to use your camera.</string>
+	<string>A program running within Programa would like to use your camera.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -68,7 +68,7 @@
 	<key>NSAppleScriptEnabled</key>
 	<true/>
 	<key>OSAScriptingDefinition</key>
-	<string>cmux.sdef</string>
+	<string>programa.sdef</string>
 	<key>NSServices</key>
 	<array>
 		<dict>
@@ -124,9 +124,9 @@
 		</dict>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>com.cmux.sidebar-tab-reorder</string>
+			<string>com.darkroom.programa.sidebar-tab-reorder</string>
 			<key>UTTypeDescription</key>
-			<string>cmux Sidebar Tab Reorder</string>
+			<string>Programa Sidebar Tab Reorder</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
@@ -153,7 +153,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://github.com/manaflow-ai/cmux/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/darkroomengineering/cmux/releases/latest/download/appcast.xml</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 	<key>SUSendProfileInfo</key>

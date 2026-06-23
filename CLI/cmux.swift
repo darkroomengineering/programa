@@ -254,7 +254,7 @@ private final class CLISocketSentryTelemetry {
         }
         var sockets: [String] = []
         for name in entries.sorted() {
-            guard name.hasPrefix("cmux"), name.hasSuffix(".sock") else { continue }
+            guard name.hasPrefix("programa"), name.hasSuffix(".sock") else { continue }
             let fullPath = URL(fileURLWithPath: directory)
                 .appendingPathComponent(name, isDirectory: false)
                 .path
@@ -336,7 +336,7 @@ private struct ClaudeHookSessionStoreFile: Codable {
 }
 
 private final class ClaudeHookSessionStore {
-    private static let defaultStatePath = "~/.cmuxterm/claude-hook-sessions.json"
+    private static let defaultStatePath = "~/.programa/claude-hook-sessions.json"
     private static let maxStateAgeSeconds: TimeInterval = 60 * 60 * 24 * 7
 
     private let statePath: String
@@ -536,9 +536,9 @@ enum CLIIDFormat: String {
 }
 
 enum SocketPasswordResolver {
-    private static let service = "com.cmuxterm.app.socket-control"
+    private static let service = "com.darkroom.programa.socket-control"
     private static let account = "local-socket-password"
-    private static let directoryName = "cmux"
+    private static let directoryName = "programa"
     private static let fileName = "socket-control-password"
 
     static func resolve(explicit: String?, socketPath: String) -> String? {
@@ -667,8 +667,8 @@ private enum CLISocketPathSource {
 }
 
 private enum CLISocketPathResolver {
-    private static let appSupportDirectoryName = "cmux"
-    private static let stableSocketFileName = "cmux.sock"
+    private static let appSupportDirectoryName = "programa"
+    private static let stableSocketFileName = "programa.sock"
     private static let lastSocketPathFileName = "last-socket-path"
     static let legacyDefaultSocketPath = "/tmp/cmux.sock"
     private static let fallbackSocketPath = "/tmp/cmux-debug.sock"
@@ -755,7 +755,7 @@ private enum CLISocketPathResolver {
                 continue
             }
             discovered.reserveCapacity(min(limit, discovered.count + entries.count))
-            for name in entries where name.hasPrefix("cmux") && name.hasSuffix(".sock") {
+            for name in entries where name.hasPrefix("programa") && name.hasSuffix(".sock") {
                 let path = URL(fileURLWithPath: directory)
                     .appendingPathComponent(name, isDirectory: false)
                     .path
@@ -3087,7 +3087,7 @@ struct CMUXCLI {
     private func launchApp() throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", "cmux"]
+        process.arguments = ["-a", "Programa"]
         try process.run()
         process.waitUntilExit()
     }
@@ -3095,7 +3095,7 @@ struct CMUXCLI {
     private func activateApp() throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", "cmux"]
+        process.arguments = ["-a", "Programa"]
         try process.run()
         process.waitUntilExit()
     }
@@ -5092,7 +5092,7 @@ struct CMUXCLI {
                 .appendingPathComponent("cmuxd-remote", isDirectory: false)
         }
         return root
-            .appendingPathComponent("cmux", isDirectory: true)
+            .appendingPathComponent("programa", isDirectory: true)
             .appendingPathComponent("remote-daemons", isDirectory: true)
             .appendingPathComponent(version, isDirectory: true)
             .appendingPathComponent("\(goOS)-\(goArch)", isDirectory: true)
@@ -8012,10 +8012,10 @@ struct CMUXCLI {
         return true
     }
 
-    private static let cmuxThemeOverrideBundleIdentifier = "com.cmuxterm.app"
+    private static let cmuxThemeOverrideBundleIdentifier = "com.darkroom.programa"
     private static let cmuxThemesBlockStart = "# cmux themes start"
     private static let cmuxThemesBlockEnd = "# cmux themes end"
-    private static let cmuxThemesReloadNotificationName = "com.cmuxterm.themes.reload-config"
+    private static let cmuxThemesReloadNotificationName = "com.darkroom.programa.themes.reload-config"
 
     private struct ThemeSelection {
         let rawValue: String?
@@ -9928,7 +9928,7 @@ struct CMUXCLI {
     ) throws -> [String: String] {
         let canonicalWorkspaceId = try resolveWorkspaceId(workspaceId, client: client)
         var context: [String: String] = [
-            "session_name": "cmux",
+            "session_name": "programa",
             "window_id": "@\(canonicalWorkspaceId)",
             "window_uuid": canonicalWorkspaceId
         ]
@@ -10362,7 +10362,7 @@ struct CMUXCLI {
     ) throws -> URL {
         let homePath = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
         let root = URL(fileURLWithPath: homePath, isDirectory: true)
-            .appendingPathComponent(".cmuxterm", isDirectory: true)
+            .appendingPathComponent(".programa", isDirectory: true)
             .appendingPathComponent(directoryName, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: nil)
         let tmuxURL = root.appendingPathComponent("tmux", isDirectory: false)
@@ -10405,7 +10405,7 @@ struct CMUXCLI {
             launcherEnvironment["CMUX_SOCKET_PASSWORD"] = explicitPassword
         }
         let shimDirectory = try createClaudeTeamsShimDirectory()
-        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "cmux")
+        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "programa")
         let focusedContext = tmuxCompatFocusedContext(
             processEnvironment: launcherEnvironment,
             explicitPassword: explicitPassword
@@ -10571,7 +10571,7 @@ struct CMUXCLI {
     private func omoShadowConfigDir() -> URL {
         let homePath = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
         return URL(fileURLWithPath: homePath, isDirectory: true)
-            .appendingPathComponent(".cmuxterm", isDirectory: true)
+            .appendingPathComponent(".programa", isDirectory: true)
             .appendingPathComponent("omo-config", isDirectory: true)
     }
 
@@ -10945,7 +10945,7 @@ struct CMUXCLI {
         try omoEnsurePlugin()
 
         let shimDirectory = try createOMOShimDirectory()
-        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "cmux")
+        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "programa")
         let focusedContext = tmuxCompatFocusedContext(
             processEnvironment: launcherEnvironment,
             explicitPassword: explicitPassword
@@ -11062,7 +11062,7 @@ struct CMUXCLI {
         }
 
         let shimDirectory = try createOMXShimDirectory()
-        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "cmux")
+        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "programa")
         let focusedContext = tmuxCompatFocusedContext(
             processEnvironment: launcherEnvironment,
             explicitPassword: explicitPassword
@@ -11186,7 +11186,7 @@ struct CMUXCLI {
         }
 
         let shimDirectory = try createOMCShimDirectory()
-        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "cmux")
+        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "programa")
         let focusedContext = tmuxCompatFocusedContext(
             processEnvironment: launcherEnvironment,
             explicitPassword: explicitPassword
@@ -11737,7 +11737,7 @@ struct CMUXCLI {
         let homePath = ProcessInfo.processInfo.environment["HOME"]
             ?? NSString(string: "~").expandingTildeInPath
         return URL(fileURLWithPath: homePath)
-            .appendingPathComponent(".cmuxterm")
+            .appendingPathComponent(".programa")
             .appendingPathComponent("tmux-compat-store.json")
     }
 
@@ -12279,7 +12279,7 @@ struct CMUXCLI {
                 print(message)
                 return
             }
-            let payload = try client.sendV2(method: "notification.create", params: ["title": "cmux", "body": message])
+            let payload = try client.sendV2(method: "notification.create", params: ["title": "Programa", "body": message])
             if jsonOutput {
                 print(jsonString(payload))
             } else {
@@ -13709,7 +13709,7 @@ struct CMUXCLI {
         let parsedInput = parseClaudeHookInput(rawInput: rawInput)
         let sessionStore = ClaudeHookSessionStore(
             processEnv: env.merging(
-                ["CMUX_CLAUDE_HOOK_STATE_PATH": "~/.cmuxterm/codex-hook-sessions.json"],
+                ["CMUX_CLAUDE_HOOK_STATE_PATH": "~/.programa/codex-hook-sessions.json"],
                 uniquingKeysWith: { _, new in new }
             )
         )

@@ -61,12 +61,12 @@ enum SocketControlMode: String, CaseIterable, Identifiable {
 }
 
 enum SocketControlPasswordStore {
-    static let directoryName = "cmux"
+    static let directoryName = "programa"
     static let fileName = "socket-control-password"
     static let didChangeNotification = Notification.Name("cmux.socketControlPasswordDidChange")
     private static let keychainMigrationDefaultsKey = "socketControlPasswordMigrationVersion"
     private static let keychainMigrationVersion = 1
-    private static let legacyKeychainService = "com.cmuxterm.app.socket-control"
+    private static let legacyKeychainService = "com.darkroom.programa.socket-control"
     private static let legacyKeychainAccount = "local-socket-password"
     private struct LazyKeychainFallbackCache {
         var hasLoaded = false
@@ -295,9 +295,9 @@ struct SocketControlSettings {
     static let allowSocketPathOverrideKey = "CMUX_ALLOW_SOCKET_OVERRIDE"
     static let socketPasswordEnvKey = "CMUX_SOCKET_PASSWORD"
     static let launchTagEnvKey = "CMUX_TAG"
-    static let baseDebugBundleIdentifier = "com.cmuxterm.app.debug"
-    private static let socketDirectoryName = "cmux"
-    private static let stableSocketFileName = "cmux.sock"
+    static let baseDebugBundleIdentifier = "com.darkroom.programa.debug"
+    private static let socketDirectoryName = "programa"
+    private static let stableSocketFileName = "programa.sock"
     private static let lastSocketPathFileName = "last-socket-path"
     static let legacyStableDefaultSocketPath = "/tmp/cmux.sock"
     static let legacyLastSocketPathFile = "/tmp/cmux-last-socket-path"
@@ -473,7 +473,7 @@ struct SocketControlSettings {
         if let taggedDebugPath = taggedDebugSocketPath(bundleIdentifier: bundleIdentifier, environment: [:]) {
             return taggedDebugPath
         }
-        if bundleIdentifier == "com.cmuxterm.app.nightly" {
+        if bundleIdentifier == "com.darkroom.programa.nightly" {
             return "/tmp/cmux-nightly.sock"
         }
         if isDebugLikeBundleIdentifier(bundleIdentifier) || isDebugBuild {
@@ -532,11 +532,11 @@ struct SocketControlSettings {
 
     static func isDebugLikeBundleIdentifier(_ bundleIdentifier: String?) -> Bool {
         guard let bundleIdentifier else { return false }
-        return bundleIdentifier == "com.cmuxterm.app.debug"
-            || bundleIdentifier.hasPrefix("com.cmuxterm.app.debug.")
+        return bundleIdentifier == "com.darkroom.programa.debug"
+            || bundleIdentifier.hasPrefix("com.darkroom.programa.debug.")
     }
 
-    /// Tagged DEV builds have bundle IDs like `com.cmuxterm.app.debug.<tag>`.
+    /// Tagged DEV builds have bundle IDs like `com.darkroom.programa.debug.<tag>`.
     static func isTaggedDevBuild(bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> Bool {
         guard let bundleIdentifier else { return false }
         return bundleIdentifier.hasPrefix("\(baseDebugBundleIdentifier).")
@@ -575,8 +575,8 @@ struct SocketControlSettings {
 
     static func isStagingBundleIdentifier(_ bundleIdentifier: String?) -> Bool {
         guard let bundleIdentifier else { return false }
-        return bundleIdentifier == "com.cmuxterm.app.staging"
-            || bundleIdentifier.hasPrefix("com.cmuxterm.app.staging.")
+        return bundleIdentifier == "com.darkroom.programa.staging"
+            || bundleIdentifier.hasPrefix("com.darkroom.programa.staging.")
     }
 
     static func stableSocketDirectoryURL(fileManager: FileManager = .default) -> URL? {
