@@ -60,13 +60,8 @@ jobs:
           path: GhosttyKit.xcframework
           key: ghosttykit-${{ hashFiles('.gitmodules', 'ghostty') }}
 
-      - name: Download pre-built GhosttyKit.xcframework
-        if: steps.cache-ghosttykit.outputs.cache-hit != 'true'
-        run: |
-          ./scripts/download-prebuilt-ghosttykit.sh
-
-      - name: Install zig
-        if: ${{ !matrix.skip_zig }}
+      - name: Set up Zig 0.15.2
+        if: ${{ matrix.skip_zig != true }}
         run: |
           ZIG_REQUIRED="0.15.2"
           if command -v zig >/dev/null 2>&1 && zig version 2>/dev/null | grep -q "^${ZIG_REQUIRED}"; then
@@ -81,6 +76,11 @@ jobs:
             export PATH="/usr/local/bin:$PATH"
             zig version
           fi
+
+      - name: Download pre-built GhosttyKit.xcframework
+        if: steps.cache-ghosttykit.outputs.cache-hit != 'true'
+        run: |
+          ./scripts/download-prebuilt-ghosttykit.sh
 
       - name: Cache DerivedData
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
