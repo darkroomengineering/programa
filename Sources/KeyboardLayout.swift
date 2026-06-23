@@ -80,7 +80,7 @@ class KeyboardLayout {
             keyCode,
             UInt16(kUCKeyActionDisplay),
             translationModifierKeyState(for: modifierFlags),
-            UInt32(LMGetKbdType()),
+            Self.reliableKeyboardType(),
             UInt32(kUCKeyTranslateNoDeadKeysBit),
             &deadKeyState,
             chars.count,
@@ -106,5 +106,19 @@ class KeyboardLayout {
         }
 
         return UInt32((carbonModifiers >> 8) & 0xFF)
+    }
+
+    /// Return a reliable keyboard type for UCKeyTranslate.
+    /// `LMGetKbdType()` reads a legacy Carbon low-memory global that can return
+    /// incorrect USB keyboard type constants on Intel Macs, causing UCKeyTranslate
+    /// to use the wrong layout mapping table (issue #1645). Passing 0 selects the
+    /// standard ANSI keyboard type, which is what Apple Silicon natively returns
+    /// and produces correct results for all modern Mac keyboards.
+    private static func reliableKeyboardType() -> UInt32 {
+        let legacyType = UInt32(LMGetKbdType())
+        // Values above 50 are USB keyboard type codes that can confuse
+        // UCKeyTranslate on Intel Macs. Fall back to 0 (standard ANSI).
+        if legacyType > 50 { return 0 }
+        return legacyType
     }
 }

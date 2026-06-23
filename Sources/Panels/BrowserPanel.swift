@@ -2040,6 +2040,47 @@ final class BrowserPanel: Panel, ObservableObject {
       }
     })();
     """
+
+    /// JS bridge that posts `compositionstart`/`compositionend` events to the native layer
+    /// via `webkit.messageHandlers.cmuxIMEState`. This lets the native `performKeyEquivalent`
+    /// detect when an Enter key is committing a CJK composition rather than submitting a form,
+    /// even though WKWebView clears marked text before the key event fires (#2626).
+    private static let imeCompositionTrackingScript = """
+    (() => {
+      try {
+        if (window.__cmuxIMETrackerInstalled) return;
+        window.__cmuxIMETrackerInstalled = true;
+        const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.cmuxIMEState;
+        if (!handler) return;
+        document.addEventListener('compositionstart', () => {
+          handler.postMessage({ composing: true });
+        }, true);
+        document.addEventListener('compositionend', () => {
+          handler.postMessage({ composing: false });
+        }, true);
+      } catch (_) {}
+    })();
+    """
+
+    private static let imeCompositionHandlerName = "cmuxIMEState"
+
+    private func setupIMECompositionTracking(for webView: CmuxWebView) {
+        let handler = IMECompositionMessageHandler { [weak webView] composing in
+            guard let webView else { return }
+            if composing {
+                webView.webViewIsComposing = true
+            } else {
+                webView.recentCompositionEndTimestamp = ProcessInfo.processInfo.systemUptime
+                // Clear the composing flag after a brief delay to cover the window between
+                // compositionend and the subsequent keydown/performKeyEquivalent.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak webView] in
+                    webView?.webViewIsComposing = false
+                }
+            }
+        }
+        webView.configuration.userContentController.add(handler, name: Self.imeCompositionHandlerName)
+    }
+
     private static let addressBarFocusRestoreScript = """
     (() => {
       try {
@@ -2548,6 +2589,17 @@ final class BrowserPanel: Panel, ObservableObject {
                 forMainFrameOnly: true
             )
         )
+        // Track IME composition state so the native layer can detect when an Enter
+        // key is committing a composition vs. submitting a form. WKWebView clears
+        // marked text before performKeyEquivalent fires, so the native hasMarkedText()
+        // check alone has a race condition for CJK input methods (#2626).
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: Self.imeCompositionTrackingScript,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
     }
 
     private func bindWebView(_ webView: CmuxWebView) {
@@ -2566,6 +2618,7 @@ final class BrowserPanel: Panel, ObservableObject {
         webView.uiDelegate = uiDelegate
         setupObservers(for: webView)
         setupReactGrabMessageHandler(for: webView)
+        setupIMECompositionTracking(for: webView)
     }
 
     private func configureNavigationDelegateCallbacks() {
@@ -10249,5 +10302,22 @@ final class BrowserDataImportCoordinator {
         alert.informativeText = lines.joined(separator: "\n")
         alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
         alert.runModal()
+    }
+}
+
+/// Receives `compositionstart`/`compositionend` bridge messages from the web view's
+/// JS IME tracking script and forwards them to the native `CmuxWebView`.
+private final class IMECompositionMessageHandler: NSObject, WKScriptMessageHandler {
+    private let onCompositionStateChanged: (Bool) -> Void
+
+    init(onCompositionStateChanged: @escaping (Bool) -> Void) {
+        self.onCompositionStateChanged = onCompositionStateChanged
+        super.init()
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any],
+              let composing = body["composing"] as? Bool else { return }
+        onCompositionStateChanged(composing)
     }
 }

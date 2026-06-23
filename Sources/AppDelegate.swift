@@ -1561,15 +1561,37 @@ func browserResponderHasMarkedText(_ responder: NSResponder?) -> Bool {
     // During IME composition, Return/Enter belongs to the text system so the
     // candidate list can commit or confirm the marked text.
     if let textInputClient = responder as? NSTextInputClient {
-        return textInputClient.hasMarkedText()
+        if textInputClient.hasMarkedText() { return true }
     }
 
     if let textField = responder as? NSTextField,
        let editor = textField.currentEditor() as? NSTextView {
-        return editor.hasMarkedText()
+        if editor.hasMarkedText() { return true }
+    }
+
+    // WKWebView clears marked text before performKeyEquivalent fires, so the
+    // synchronous hasMarkedText() check above can return false even though an IME
+    // composition just ended on the same Enter keystroke. Check the JS bridge's
+    // composition timestamp to detect this race condition (#2626).
+    if let webView = responder.cmuxEnclosingCmuxWebView {
+        if webView.webViewIsComposing { return true }
+        let age = ProcessInfo.processInfo.systemUptime - webView.recentCompositionEndTimestamp
+        if age >= 0 && age < 0.15 { return true }
     }
 
     return false
+}
+
+private extension NSResponder {
+    /// Walk the responder chain to find the enclosing CmuxWebView.
+    var cmuxEnclosingCmuxWebView: CmuxWebView? {
+        var current: NSResponder? = self
+        while let responder = current {
+            if let webView = responder as? CmuxWebView { return webView }
+            current = responder.nextResponder
+        }
+        return nil
+    }
 }
 
 func shouldDispatchBrowserReturnViaFirstResponderKeyDown(

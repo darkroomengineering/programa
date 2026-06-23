@@ -12609,6 +12609,26 @@ class TerminalController {
     }
 
     private func notifyCurrent(_ args: String) -> String {
+        let parsed = parseOptions(args)
+        let payload = parsed.positional.joined(separator: " ")
+
+        // Resolve the originating workspace from socket scope (--tab/--panel) so
+        // background session notifications target the correct tab, not the active
+        // foreground tab (#2627).
+        if let scope = Self.explicitSocketScope(options: parsed.options) {
+            let (title, subtitle, body) = parseNotificationPayload(payload)
+            DispatchQueue.main.async {
+                TerminalNotificationStore.shared.addNotification(
+                    tabId: scope.workspaceId,
+                    surfaceId: scope.panelId,
+                    title: title,
+                    subtitle: subtitle,
+                    body: body
+                )
+            }
+            return "OK"
+        }
+
         guard let tabManager = tabManager else { return "ERROR: TabManager not available" }
 
         var result = "OK"
@@ -12618,7 +12638,7 @@ class TerminalController {
                 return
             }
             let surfaceId = tabManager.focusedSurfaceId(for: tabId)
-            let (title, subtitle, body) = parseNotificationPayload(args)
+            let (title, subtitle, body) = parseNotificationPayload(payload)
             TerminalNotificationStore.shared.addNotification(
                 tabId: tabId,
                 surfaceId: surfaceId,
@@ -12631,6 +12651,24 @@ class TerminalController {
     }
 
     private func notifySurface(_ args: String) -> String {
+        let parsed = parseOptions(args)
+
+        // Honour socket scope so background sessions target the correct workspace (#2627).
+        if let scope = Self.explicitSocketScope(options: parsed.options) {
+            let payload = parsed.positional.dropFirst().joined(separator: " ")
+            let (title, subtitle, body) = parseNotificationPayload(payload)
+            DispatchQueue.main.async {
+                TerminalNotificationStore.shared.addNotification(
+                    tabId: scope.workspaceId,
+                    surfaceId: scope.panelId,
+                    title: title,
+                    subtitle: subtitle,
+                    body: body
+                )
+            }
+            return "OK"
+        }
+
         guard let tabManager = tabManager else { return "ERROR: TabManager not available" }
         let trimmed = args.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "ERROR: Missing surface id or index" }

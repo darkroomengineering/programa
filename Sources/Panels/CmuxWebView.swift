@@ -107,6 +107,16 @@ enum BrowserImageCopyPasteboardBuilder {
 /// shortcuts first by default, but allow browser content to try the Find command
 /// family before cmux falls back to its own browser find overlay.
 final class CmuxWebView: WKWebView {
+    /// Timestamp of the most recent `compositionend` event received via the JS bridge.
+    /// Used to detect when WKWebView has already cleared marked text before
+    /// `performKeyEquivalent` fires, causing `hasMarkedText()` to return `false`
+    /// even though an IME composition just ended on the same Enter keystroke (#2626).
+    var recentCompositionEndTimestamp: TimeInterval = 0
+
+    /// Whether the web view is currently inside an IME composition session.
+    /// Set to `true` on `compositionstart`, cleared with a brief delay after `compositionend`.
+    var webViewIsComposing: Bool = false
+
     // Some sites/WebKit paths report middle-click link activations as
     // WKNavigationAction.buttonNumber=4 instead of 2. Track a recent local
     // middle-click so navigation delegates can recover intent reliably.

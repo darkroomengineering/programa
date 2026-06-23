@@ -3007,6 +3007,15 @@ struct ContentView: View {
             tabManager.applyWindowBackgroundForSelectedTab()
             startWorkspaceHandoffIfNeeded(newSelectedId: newValue)
             reconcileMountedWorkspaceIds(selectedId: newValue)
+            // Kick portal geometry sync so the new workspace's HostContainerView
+            // gets a valid frame before the first ghostty_surface_refresh fires.
+            // Without this, the double-async deferred sync in scheduleExternalGeometrySynchronize
+            // can leave the Metal surface with a zero/stale frame on workspace creation (#2555).
+            if let observedWindow {
+                TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: observedWindow)
+            } else {
+                TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronizeForAllWindows()
+            }
             guard let newValue else { return }
             if selectedTabIds.count <= 1 {
                 selectedTabIds = [newValue]

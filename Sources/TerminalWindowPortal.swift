@@ -1530,6 +1530,13 @@ final class WindowTerminalPortal: NSObject {
             // revealed terminals don't sit on a stale/blank IOSurface until later focus churn.
             hostedView.reconcileGeometryNow()
             hostedView.refreshSurfaceNow(reason: "portal.reveal")
+            // Schedule a deferred refresh so terminals with active output (e.g. progress
+            // bars) get an explicit ghostty_surface_refresh after the portal reveal settles.
+            // The immediate refreshSurfaceNow can exit early if the view isn't fully in the
+            // window hierarchy yet, leaving the IOSurface frozen on a stale frame (#2628).
+            DispatchQueue.main.async { [weak hostedView] in
+                hostedView?.refreshSurfaceNow(reason: "portal.reveal.deferred")
+            }
         }
 
         if transientRecoveryReason == nil {
