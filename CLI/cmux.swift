@@ -4284,8 +4284,17 @@ struct CMUXCLI {
         guard let destination else {
             throw CLIError(message: "ssh requires a destination (example: cmux ssh user@host)")
         }
+
+        // #4948: accept bracketed IPv6 destinations (e.g. `[::1]`, `user@[2001:db8::1]:2222`).
+        // ssh needs the host unbracketed; an inline `:port` after the bracket maps to --port.
+        // Only bracketed forms are rewritten — plain `user@host` and bare IPv6 pass through.
+        let (resolvedDestination, inlinePort) = Self.normalizeSSHDestination(destination)
+        if let inlinePort, port == nil {
+            port = inlinePort
+        }
+
         return SSHCommandOptions(
-            destination: destination,
+            destination: resolvedDestination,
             port: port,
             identityFile: identityFile,
             workspaceName: workspaceName,
@@ -4295,6 +4304,36 @@ struct CMUXCLI {
             localSocketPath: localSocketPath,
             remoteRelayPort: remoteRelayPort
         )
+    }
+
+    /// Normalizes an SSH destination: unwraps a bracketed IPv6 literal and extracts an
+    /// inline port. Returns `(destination, port?)`. Only bracketed forms are altered;
+    /// `user@host`, plain hostnames, and bare IPv6 (`2001:db8::1`) pass through unchanged.
+    static func normalizeSSHDestination(_ raw: String) -> (String, Int?) {
+        let userPrefix: String
+        let hostPart: String
+        if let atIdx = raw.firstIndex(of: "@") {
+            userPrefix = String(raw[...atIdx]) // includes the trailing "@"
+            hostPart = String(raw[raw.index(after: atIdx)...])
+        } else {
+            userPrefix = ""
+            hostPart = raw
+        }
+        guard hostPart.hasPrefix("["), let closeIdx = hostPart.firstIndex(of: "]") else {
+            return (raw, nil)
+        }
+        let inner = String(hostPart[hostPart.index(after: hostPart.startIndex)..<closeIdx])
+        let afterBracket = String(hostPart[hostPart.index(after: closeIdx)...])
+        var port: Int?
+        if afterBracket.hasPrefix(":") {
+            guard let parsed = Int(afterBracket.dropFirst()), parsed > 0, parsed <= 65535 else {
+                return (raw, nil) // invalid inline port — leave unchanged so ssh surfaces a clear error
+            }
+            port = parsed
+        } else if !afterBracket.isEmpty {
+            return (raw, nil) // unexpected trailing content — don't touch
+        }
+        return (userPrefix + inner, port)
     }
 
     func buildSSHCommandText(
