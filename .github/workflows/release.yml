@@ -16,7 +16,7 @@ env:
 
 jobs:
   build-sign-notarize:
-    runs-on: warp-macos-26-arm64-6x
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -90,7 +90,7 @@ jobs:
           fi
           echo "Local CURRENT_PROJECT_VERSION=$LOCAL_BUILD"
           PUBLISHED_BUILD=$(curl -fsSL --max-time 15 \
-            https://github.com/manaflow-ai/cmux/releases/latest/download/appcast.xml 2>/dev/null \
+            https://github.com/darkroomengineering/cmux/releases/latest/download/appcast.xml 2>/dev/null \
             | sed -n 's#.*<sparkle:version>\([0-9][0-9]*\)</sparkle:version>.*#\1#p' \
             | head -n1 || true)
           if [[ "$PUBLISHED_BUILD" =~ ^[0-9]+$ ]]; then
@@ -209,7 +209,7 @@ jobs:
           ./scripts/build_remote_daemon_release_assets.sh \
             --version "$APP_VERSION" \
             --release-tag "$GITHUB_REF_NAME" \
-            --repo "manaflow-ai/cmux" \
+            --repo "darkroomengineering/cmux" \
             --output-dir "remote-daemon-assets"
           MANIFEST_JSON="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8")), separators=(",",":")))' remote-daemon-assets/cmuxd-remote-manifest.json)"
           plutil -remove CMUXRemoteDaemonManifestJSON "$APP_PLIST" >/dev/null 2>&1 || true
@@ -239,7 +239,7 @@ jobs:
           echo "Adding SUPublicEDKey to Info.plist..."
           /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string ${SPARKLE_PUBLIC_KEY}" "$APP_PLIST"
           echo "Adding SUFeedURL to Info.plist..."
-          /usr/libexec/PlistBuddy -c "Add :SUFeedURL string https://github.com/manaflow-ai/cmux/releases/latest/download/appcast.xml" "$APP_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :SUFeedURL string https://github.com/darkroomengineering/cmux/releases/latest/download/appcast.xml" "$APP_PLIST"
           echo "Verifying:"
           /usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$APP_PLIST"
           /usr/libexec/PlistBuddy -c "Print :SUFeedURL" "$APP_PLIST"
@@ -398,38 +398,6 @@ jobs:
             remote-daemon-assets/cmuxd-remote-manifest.json
           generate_release_notes: true
           overwrite_files: false
-
-      - name: Upload release appcast to R2
-        if: steps.guard_release_assets.outputs.skip_upload != 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        continue-on-error: true
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: "https://${{ secrets.CF_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
-        run: |
-          set -euo pipefail
-          command -v aws >/dev/null 2>&1 || { echo "Installing AWS CLI..."; brew install awscli; }
-
-          # Guard: only upload if this tag is the highest semver release.
-          # Prevents a backport tag (e.g. v0.62.1 after v0.63.1) from
-          # overwriting the stable appcast with an older version.
-          LATEST=$(gh release list --exclude-drafts --exclude-pre-releases \
-            --json tagName -q '.[].tagName' | sort -V | tail -1)
-          if [ -n "$LATEST" ] && [ "$LATEST" != "$GITHUB_REF_NAME" ]; then
-            echo "Skipping R2 stable upload: $GITHUB_REF_NAME is not the latest release ($LATEST)"
-            exit 0
-          fi
-
-          # Upload after GitHub Release publish so the appcast never references
-          # a DMG that doesn't exist yet. R2 PutObject is atomic, so the appcast
-          # is either the old version or the new one, never missing.
-          aws s3 cp appcast.xml \
-            "s3://cmux-binaries/stable/appcast.xml" \
-            --endpoint-url "$R2_ENDPOINT" \
-            --cache-control "no-cache, no-store, must-revalidate"
-
-          echo "R2 appcast upload complete: https://files.cmux.com/stable/appcast.xml"
 
       - name: Cleanup keychain
         if: always()

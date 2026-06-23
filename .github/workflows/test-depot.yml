@@ -28,7 +28,7 @@ on:
 
 jobs:
   tests:
-    runs-on: warp-macos-15-arm64-6x
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -63,7 +63,7 @@ jobs:
           set -euo pipefail
           GHOSTTY_SHA=$(git -C ghostty rev-parse HEAD)
           TAG="xcframework-$GHOSTTY_SHA"
-          URL="https://github.com/manaflow-ai/ghostty/releases/download/$TAG/GhosttyKit.xcframework.tar.gz"
+          URL="https://github.com/darkroomengineering/ghostty/releases/download/$TAG/GhosttyKit.xcframework.tar.gz"
           echo "Downloading xcframework for ghostty $GHOSTTY_SHA"
           MAX_RETRIES=30
           RETRY_DELAY=20

@@ -20,17 +20,17 @@ on:
         default: true
         type: boolean
       runner:
-        description: "Runner OS (Depot runners for GUI activation support)"
+        description: "Runner OS"
         required: false
-        default: "depot-macos-latest"
+        default: "macos-15"
         type: choice
         options:
-          - depot-macos-latest
-          - depot-macos-14
+          - macos-15
+          - macos-14
 
 jobs:
   e2e:
-    runs-on: ${{ inputs.runner || 'depot-macos-latest' }}
+    runs-on: ${{ inputs.runner || 'macos-15' }}
     timeout-minutes: 20
     env:
       TEST_REF: ${{ inputs.ref || github.ref }}
@@ -71,7 +71,7 @@ jobs:
           set -euo pipefail
           GHOSTTY_SHA=$(git -C ghostty rev-parse HEAD)
           TAG="xcframework-$GHOSTTY_SHA"
-          URL="https://github.com/manaflow-ai/ghostty/releases/download/$TAG/GhosttyKit.xcframework.tar.gz"
+          URL="https://github.com/darkroomengineering/ghostty/releases/download/$TAG/GhosttyKit.xcframework.tar.gz"
           echo "Downloading xcframework for ghostty $GHOSTTY_SHA"
           MAX_RETRIES=30
           RETRY_DELAY=20
@@ -173,8 +173,8 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: .ci-source-packages
-          key: spm-${{ inputs.runner || 'depot-macos-latest' }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: spm-${{ inputs.runner || 'depot-macos-latest' }}-
+          key: spm-${{ inputs.runner || 'macos-15' }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ inputs.runner || 'macos-15' }}-
 
       - name: Resolve Swift packages
         run: |
@@ -342,6 +342,7 @@ jobs:
 
       - name: Post results to cmux-dev-artifacts
         if: always()
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.DEV_ARTIFACTS_TOKEN }}
           TEST_RESULT: ${{ steps.tests.outputs.test_result || 'failed' }}
@@ -397,7 +398,7 @@ jobs:
           fi
 
           ISSUE_URL=$(gh issue create \
-            --repo manaflow-ai/cmux-dev-artifacts \
+            --repo darkroomengineering/cmux-dev-artifacts \
             --title "[$STATUS_EMOJI] $TEST_FILTER @ ${COMMIT_SHA:0:7} ($REF_DISPLAY)" \
             --body "$BODY" \
             --label "$LABEL")
