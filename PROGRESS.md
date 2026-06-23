@@ -14,7 +14,7 @@ Legend: ✅ done · ⏳ in progress · 🔒 human-gated · 🛠️ needs-build (
 - [x] 3.3 Delete R2 upload steps + `CF_R2_*`; appcast = GitHub Releases only — ✅ `6a75b07f`
 - [x] 3.4 Guard test asserts GitHub-hosted runners — ✅ `6a75b07f`
 - [x] 3.5 Repoint Sparkle monotonic fetch URLs — ✅ `6a75b07f`
-- [ ] 3.6 🛠️ GhosttyKit build-from-source in CI + Zig 0.15.2 setup (trickiest; needs CI iteration)
+- [x] 3.6 GhosttyKit source-build fallback + zig-before-download — ✅ `fe6e65a5` (🛠️ validate on first CI run; fast prebuilt path needs build-ghosttykit.yml dispatch + GHOSTTY_RELEASE_TOKEN, but CI now self-heals via source build without it)
 - [ ] 3.7 🔒 Add CI secrets in repo settings; drop `CF_R2_*`; no `APPLE_RELEASE_PROVISIONING_PROFILE_BASE64`
 
 ## Phase 4 — Feed / distribution
@@ -24,6 +24,7 @@ Legend: ✅ done · ⏳ in progress · 🔒 human-gated · 🛠️ needs-build (
 
 ## Loop log
 - Cycle 1 (`6a75b07f`, `44a6d54c`): Phase 3 CI rebrand (3.1–3.5). Also fixed: `Sources/SurfacePool.swift` was untracked and missing from da1e4571 (build-blocker) → committed.
+- Cycle 2 (`fe6e65a5`): Phase 3.6 GhosttyKit source-build fallback. Deduped a redundant zig step the implementer added (release.yml net-unchanged; compat zig relocated before download).
 
 ## Phase 5 — Triaged fixes (see PLAN.md Phase 5 table)
 - [ ] 5.1 #4948 IPv6 `cmux ssh` — cmux-only (CLI/cmux.swift:4270-4298 + TerminalController.swift:3886)
