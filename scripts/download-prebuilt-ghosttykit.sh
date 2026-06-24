@@ -19,11 +19,25 @@ ARCHIVE_NAME="${GHOSTTYKIT_ARCHIVE_NAME:-GhosttyKit.xcframework.tar.gz}"
 OUTPUT_DIR="${GHOSTTYKIT_OUTPUT_DIR:-GhosttyKit.xcframework}"
 CHECKSUMS_FILE="${GHOSTTYKIT_CHECKSUMS_FILE:-$SCRIPT_DIR/ghosttykit-checksums.txt}"
 DOWNLOAD_URL="${GHOSTTYKIT_URL:-https://github.com/darkroomengineering/ghostty/releases/download/$TAG/$ARCHIVE_NAME}"
-DOWNLOAD_RETRIES="${GHOSTTYKIT_DOWNLOAD_RETRIES:-30}"
+DOWNLOAD_RETRIES="${GHOSTTYKIT_DOWNLOAD_RETRIES:-2}"
 DOWNLOAD_RETRY_DELAY="${GHOSTTYKIT_DOWNLOAD_RETRY_DELAY:-20}"
 
 _fallback_source_build() {
   echo "Prebuilt GhosttyKit unavailable, falling back to source build via ensure-ghosttykit.sh"
+  # ensure-ghosttykit.sh needs zig, but CI jobs may run this download step BEFORE their
+  # own zig setup — so make the fallback self-sufficient (zig 0.15.2 per ghostty/build.zig.zon).
+  if ! command -v zig >/dev/null 2>&1 || ! zig version 2>/dev/null | grep -q "^0.15.2"; then
+    ZIG_REQUIRED="0.15.2"
+    zig_arch="$(uname -m)"; [ "$zig_arch" = "arm64" ] && zig_arch="aarch64"
+    echo "Installing zig ${ZIG_REQUIRED} (${zig_arch}) for the source-build fallback"
+    curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-${zig_arch}-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
+    tar xf /tmp/zig.tar.xz -C /tmp
+    sudo mkdir -p /usr/local/bin /usr/local/lib
+    sudo cp -f "/tmp/zig-${zig_arch}-macos-${ZIG_REQUIRED}/zig" /usr/local/bin/zig
+    sudo cp -rf "/tmp/zig-${zig_arch}-macos-${ZIG_REQUIRED}/lib" /usr/local/lib/zig
+    export PATH="/usr/local/bin:$PATH"
+    zig version
+  fi
   "$SCRIPT_DIR/ensure-ghosttykit.sh"
   # ensure-ghosttykit.sh leaves a symlink at $REPO_ROOT/GhosttyKit.xcframework.
   # If OUTPUT_DIR differs from repo-root default, copy/link it there as well.
