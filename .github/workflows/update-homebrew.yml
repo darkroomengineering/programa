@@ -19,12 +19,12 @@ jobs:
   update-cask:
     runs-on: ubuntu-latest
     # Only run if the tap token is set AND the release workflow succeeded (or manual trigger).
-    # Without the tap token the checkout of homebrew-cmux would fail anyway; this
-    # surfaces the skip cleanly instead of failing.
+    # Note: the `secrets` context is NOT available in a job-level `if`, so gate on
+    # event only. The tap checkout step still needs HOMEBREW_TAP_TOKEN; until the
+    # tap repo exists this is effectively manual (workflow_dispatch).
     if: >-
-      secrets.HOMEBREW_TAP_TOKEN != '' &&
-      (github.event_name == 'workflow_dispatch' ||
-       github.event.workflow_run.conclusion == 'success')
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Get version
         id: version
