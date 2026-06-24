@@ -370,9 +370,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          APP="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/Debug/cmux DEV.app" -print -quit)"
+          APP="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/Debug/Programa DEV.app" -print -quit)"
           if [ -z "${APP:-}" ] || [ ! -d "$APP" ]; then
-            echo "cmux DEV.app not found in DerivedData" >&2
+            echo "Programa DEV.app not found in DerivedData" >&2
             exit 1
           fi
 
@@ -380,14 +380,14 @@ jobs:
           SOCK="/tmp/cmux-debug-${TAG}.sock"
           BUNDLE_ID="$(
             /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist" 2>/dev/null \
-              || echo 'com.cmuxterm.app.debug'
+              || echo 'com.darkroom.programa.debug'
           )"
 
-          pkill -x "cmux DEV" || true
+          pkill -x "Programa DEV" || true
           rm -f "$SOCK" "/tmp/cmux-${TAG}.sock" || true
           defaults write "$BUNDLE_ID" socketControlMode -string full >/dev/null 2>&1 || true
 
-          CMUX_TAG="$TAG" CMUX_SOCKET_PATH="$SOCK" CMUX_UI_TEST_MODE=1 "$APP/Contents/MacOS/cmux DEV" >/tmp/cmux-ci-lag.log 2>&1 &
+          CMUX_TAG="$TAG" CMUX_SOCKET_PATH="$SOCK" CMUX_UI_TEST_MODE=1 "$APP/Contents/MacOS/Programa DEV" >/tmp/cmux-ci-lag.log 2>&1 &
           APP_PID=$!
           trap 'kill "$APP_PID" >/dev/null 2>&1 || true' EXIT
 
@@ -552,7 +552,7 @@ jobs:
           HELPER_LOG="/tmp/cmux-ui-test-display-${TOKEN}-helper.log"
 
           cleanup() {
-            pkill -x "cmux DEV" 2>/dev/null || true
+            pkill -x "Programa DEV" 2>/dev/null || true
             rm -f "$DIAG_PATH" "$DISPLAY_READY" "$DISPLAY_ID_PATH" "$DISPLAY_START" "$DISPLAY_DONE" "$HELPER_LOG"
             rm -f /tmp/cmux-ui-test-prelaunch.json /tmp/cmux-ui-test-display-harness.json
           }
@@ -563,7 +563,7 @@ jobs:
             -o "$HELPER_PATH" scripts/create-virtual-display.m
 
           # Find the app binary
-          APP_BINARY=$(find ~/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Debug/cmux DEV.app/Contents/MacOS/cmux DEV" -print -quit 2>/dev/null || true)
+          APP_BINARY=$(find ~/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Debug/Programa DEV.app/Contents/MacOS/Programa DEV" -print -quit 2>/dev/null || true)
           if [ -z "$APP_BINARY" ]; then
             echo "ERROR: App binary not found in DerivedData" >&2
             exit 1
@@ -632,7 +632,7 @@ jobs:
 
             if [ "$APP_READY" != "true" ]; then
               echo "Attempt $attempt: App not ready after 15s"
-              pkill -x "cmux DEV" 2>/dev/null || true
+              pkill -x "Programa DEV" 2>/dev/null || true
               kill "$HELPER_PID" 2>/dev/null || true
               if [ "$attempt" -eq 2 ]; then
                 echo "Display resolution UI regression failed after 2 attempts" >&2
@@ -690,7 +690,7 @@ jobs:
               exit 0
             fi
 
-            pkill -x "cmux DEV" 2>/dev/null || true
+            pkill -x "Programa DEV" 2>/dev/null || true
             kill "$HELPER_PID" 2>/dev/null || true
 
             if [ "$attempt" -eq 2 ]; then

@@ -3,10 +3,10 @@ import AppKit
 import WebKit
 import Darwin
 
-#if canImport(cmux_DEV)
-@testable import cmux_DEV
-#elseif canImport(cmux)
-@testable import cmux
+#if canImport(Programa_DEV)
+@testable import Programa_DEV
+#elseif canImport(Programa)
+@testable import Programa
 #endif
 
 final class SidebarPathFormatterTests: XCTestCase {

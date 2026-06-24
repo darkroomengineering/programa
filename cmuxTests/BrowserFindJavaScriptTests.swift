@@ -1,9 +1,9 @@
 import XCTest
 
-#if canImport(cmux_DEV)
-@testable import cmux_DEV
-#elseif canImport(cmux)
-@testable import cmux
+#if canImport(Programa_DEV)
+@testable import Programa_DEV
+#elseif canImport(Programa)
+@testable import Programa
 #endif
 
 final class BrowserFindJavaScriptTests: XCTestCase {
