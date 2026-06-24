@@ -104,7 +104,7 @@ def _derived_app_candidates_for_current_worktree():
         if os.path.realpath(workspace_path) != project_path:
             continue
         derived_root = os.path.dirname(info_path)
-        app_path = os.path.join(derived_root, "Build/Products/Debug/cmux DEV.app")
+        app_path = os.path.join(derived_root, "Build/Products/Debug/Programa DEV.app")
         if os.path.exists(app_path):
             matches.append(app_path)
     return matches
@@ -118,8 +118,8 @@ def _find_app():
     preferred_slug = _preferred_worktree_slug()
     if preferred_slug:
         preferred_tmp = []
-        preferred_tmp.extend(glob.glob(f"/tmp/cmux-{preferred_slug}/Build/Products/Debug/cmux DEV*.app"))
-        preferred_tmp.extend(glob.glob(f"/private/tmp/cmux-{preferred_slug}/Build/Products/Debug/cmux DEV*.app"))
+        preferred_tmp.extend(glob.glob(f"/tmp/cmux-{preferred_slug}/Build/Products/Debug/Programa DEV*.app"))
+        preferred_tmp.extend(glob.glob(f"/private/tmp/cmux-{preferred_slug}/Build/Products/Debug/Programa DEV*.app"))
         preferred_tmp = [p for p in preferred_tmp if os.path.exists(p)]
         if preferred_tmp:
             preferred_tmp.sort(key=os.path.getmtime, reverse=True)
@@ -132,11 +132,11 @@ def _find_app():
 
     home = os.path.expanduser("~")
     derived_candidates = glob.glob(os.path.join(
-        home, "Library/Developer/Xcode/DerivedData/*/Build/Products/Debug/cmux DEV.app"
+        home, "Library/Developer/Xcode/DerivedData/*/Build/Products/Debug/Programa DEV.app"
     ))
     tmp_candidates = []
-    tmp_candidates.extend(glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux DEV*.app"))
-    tmp_candidates.extend(glob.glob("/private/tmp/cmux-*/Build/Products/Debug/cmux DEV*.app"))
+    tmp_candidates.extend(glob.glob("/tmp/cmux-*/Build/Products/Debug/Programa DEV*.app"))
+    tmp_candidates.extend(glob.glob("/private/tmp/cmux-*/Build/Products/Debug/Programa DEV*.app"))
 
     derived_candidates = [p for p in derived_candidates if os.path.exists(p)]
     tmp_candidates = [p for p in tmp_candidates if os.path.exists(p)]
@@ -208,10 +208,10 @@ def _wait_for_socket(socket_path: str, timeout: float = 10.0) -> bool:
 
 def _kill_cmux(app_path: str = None):
     if app_path:
-        exe = os.path.join(app_path, "Contents/MacOS/cmux DEV")
+        exe = os.path.join(app_path, "Contents/MacOS/Programa DEV")
         subprocess.run(["pkill", "-f", exe], capture_output=True)
     else:
-        subprocess.run(["pkill", "-x", "cmux DEV"], capture_output=True)
+        subprocess.run(["pkill", "-x", "Programa DEV"], capture_output=True)
     time.sleep(1.5)
 
 
@@ -643,7 +643,7 @@ def run_tests():
 
     app_path = _find_app()
     if not app_path:
-        print("Error: Could not find cmux DEV.app in DerivedData")
+        print("Error: Could not find Programa DEV.app in DerivedData")
         return 1
     print(f"App: {app_path}")
 

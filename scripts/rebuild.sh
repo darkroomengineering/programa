@@ -12,7 +12,7 @@ pkill -9 -f "cmux" 2>/dev/null || true
 swift build
 
 # Copy to app bundle
-cp .build/debug/cmux .build/debug/cmux.app/Contents/MacOS/
+cp .build/debug/programa .build/debug/Programa.app/Contents/MacOS/
 
 # Open the app
-open .build/debug/cmux.app
+open .build/debug/Programa.app

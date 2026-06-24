@@ -109,8 +109,8 @@ jobs:
 
             depends_on macos: ">= :sonoma"
 
-            app "cmux.app"
-            binary "#{appdir}/cmux.app/Contents/Resources/bin/cmux"
+            app "Programa.app"
+            binary "#{appdir}/Programa.app/Contents/Resources/bin/programa"
 
             zap trash: [
               "~/Library/Application Support/cmux",
