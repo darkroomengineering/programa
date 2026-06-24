@@ -304,7 +304,7 @@ jobs:
           prepare_variant \
             "$APP_DIR" \
             "com.cmuxterm.app.nightly" \
-            "https://github.com/darkroomengineering/cmux/releases/download/nightly/appcast.xml"
+            "https://github.com/darkroomengineering/programa/releases/download/nightly/appcast.xml"
 
           echo "Nightly app name: cmux NIGHTLY"
           echo "Nightly bundle ID: com.cmuxterm.app.nightly"
@@ -324,7 +324,7 @@ jobs:
           ./scripts/build_remote_daemon_release_assets.sh \
             --version "$NIGHTLY_REMOTE_DAEMON_VERSION" \
             --release-tag "nightly" \
-            --repo "darkroomengineering/cmux" \
+            --repo "darkroomengineering/programa" \
             --output-dir "remote-daemon-assets" \
             --asset-suffix "$NIGHTLY_BUILD"
           MANIFEST_JSON="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8")), separators=(",",":")))' "remote-daemon-assets/cmuxd-remote-manifest-${NIGHTLY_BUILD}.json")"
@@ -552,7 +552,7 @@ jobs:
             - feed `appcast.xml`
             - compatibility feed `appcast-universal.xml` for older universal nightlies
 
-            [Download cmux-nightly-macos.dmg](https://github.com/darkroomengineering/cmux/releases/download/nightly/cmux-nightly-macos.dmg)
+            [Download cmux-nightly-macos.dmg](https://github.com/darkroomengineering/programa/releases/download/nightly/cmux-nightly-macos.dmg)
           files: |
             cmux-nightly-macos-${{ github.run_id }}*.dmg
             cmux-nightly-macos.dmg

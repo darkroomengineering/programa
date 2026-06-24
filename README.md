@@ -2,7 +2,7 @@
 <p align="center">A Ghostty-based macOS terminal with vertical tabs and notifications for AI coding agents</p>
 
 <p align="center">
-  <a href="https://github.com/darkroomengineering/cmux/releases/latest/download/cmux-macos.dmg">
+  <a href="https://github.com/darkroomengineering/programa/releases/latest/download/cmux-macos.dmg">
     <img src="./docs/assets/macos-badge.png" alt="Download cmux for macOS" width="180" />
   </a>
 </p>
@@ -95,7 +95,7 @@ Sidebar shows git branch, linked PR status/number, working directory, listening 
 
 ### DMG (recommended)
 
-<a href="https://github.com/darkroomengineering/cmux/releases/latest/download/cmux-macos.dmg">
+<a href="https://github.com/darkroomengineering/programa/releases/latest/download/cmux-macos.dmg">
   <img src="./docs/assets/macos-badge.png" alt="Download cmux for macOS" width="180" />
 </a>
 
@@ -230,7 +230,7 @@ Browser developer-tool shortcuts follow Safari defaults and are customizable in 
 
 ## Nightly Builds
 
-[Download cmux NIGHTLY](https://github.com/darkroomengineering/cmux/releases/download/nightly/cmux-nightly-macos.dmg)
+[Download cmux NIGHTLY](https://github.com/darkroomengineering/programa/releases/download/nightly/cmux-nightly-macos.dmg)
 
 cmux NIGHTLY is a separate app with its own bundle ID, so it runs alongside the stable version. Built automatically from the latest `main` commit and auto-updates via its own Sparkle feed.
 

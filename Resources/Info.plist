@@ -153,7 +153,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://github.com/darkroomengineering/cmux/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/darkroomengineering/programa/releases/latest/download/appcast.xml</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 	<key>SUSendProfileInfo</key>

@@ -18,7 +18,7 @@ Legend: ✅ done · ⏳ in progress · 🔒 human-gated · 🛠️ needs-build (
 - [ ] 3.7 🔒 Add CI secrets in repo settings; drop `CF_R2_*`; no `APPLE_RELEASE_PROVISIONING_PROFILE_BASE64`
 
 ## Phase 4 — Feed / distribution
-- [x] 4.1 `SUFeedURL`/appcast = darkroomengineering/cmux everywhere (app ✓, CI ✓, + fixed bump-version.sh & build-sign-upload.sh) — ✅ `6fcc555a`
+- [x] 4.1 `SUFeedURL`/appcast = darkroomengineering/programa everywhere (app ✓, CI ✓, + fixed bump-version.sh & build-sign-upload.sh) — ✅ `6fcc555a`
 - [ ] 4.2 🔒 (deferred) Internal Homebrew tap (workflow guarded on HOMEBREW_TAP_TOKEN)
 - [ ] 4.3 🔒 product decision: 21 translated `README*.md` have manaflow DMG download links — delete the translated READMEs (upstream marketing cruft) or repoint them? CHANGELOG.md manaflow PR links are accurate upstream references → keep. Not autonomous loop work.
 
