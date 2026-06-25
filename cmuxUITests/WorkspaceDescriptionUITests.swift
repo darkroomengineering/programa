@@ -26,7 +26,7 @@ final class WorkspaceDescriptionUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        dataPath = "/tmp/cmux-ui-test-workspace-description-\(UUID().uuidString).json"
+        dataPath = "/tmp/programa-ui-test-workspace-description-\(UUID().uuidString).json"
         launchTag = "ui-tests-workspace-description-\(UUID().uuidString.lowercased())"
         try? FileManager.default.removeItem(atPath: dataPath)
     }
@@ -160,18 +160,18 @@ final class WorkspaceDescriptionUITests: XCTestCase {
 
     private func configuredApp() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_GOTO_SPLIT_SETUP"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_GOTO_SPLIT_PATH"] = dataPath
-        app.launchEnvironment["CMUX_UI_TEST_FOCUS_SHORTCUTS"] = "1"
-        app.launchEnvironment["CMUX_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_GOTO_SPLIT_SETUP"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_GOTO_SPLIT_PATH"] = dataPath
+        app.launchEnvironment["PROGRAMA_UI_TEST_FOCUS_SHORTCUTS"] = "1"
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         return app
     }
 
     private func configuredSidebarApp() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         return app
     }
 

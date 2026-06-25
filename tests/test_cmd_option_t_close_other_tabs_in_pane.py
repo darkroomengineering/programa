@@ -3,7 +3,7 @@
 Regression test: Cmd+Option+T closes all other tabs in the focused pane
 after an explicit confirmation.
 
-Run this against an app launched with CMUX_SOCKET_MODE=allowAll.
+Run this against an app launched with PROGRAMA_SOCKET_MODE=allowAll.
 """
 
 import os
@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _wait_until(predicate, timeout_s: float = 5.0, interval_s: float = 0.05) -> bool:
@@ -59,7 +59,7 @@ def main() -> int:
         if not client.ping():
             raise cmuxError(
                 f"Socket ping failed on {SOCKET_PATH}. "
-                "Launch Debug app with CMUX_SOCKET_MODE=allowAll for this test."
+                "Launch Debug app with PROGRAMA_SOCKET_MODE=allowAll for this test."
             )
 
         workspace_id = client.new_workspace()

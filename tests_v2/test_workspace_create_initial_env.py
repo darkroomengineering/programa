@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -48,7 +48,7 @@ def main() -> int:
             payload = c._call(
                 "workspace.create",
                 {
-                    "initial_env": {"CMUX_INITIAL_ENV_TOKEN": token},
+                    "initial_env": {"PROGRAMA_INITIAL_ENV_TOKEN": token},
                 },
             ) or {}
             created_workspace = str(payload.get("workspace_id") or "")
@@ -64,10 +64,10 @@ def main() -> int:
             terminal_row = next((row for row in rows if str(row.get("type") or "") == "terminal"), None)
             _must(terminal_row is not None, f"Expected a terminal surface in workspace.create result: {rows}")
 
-            c.send("printf 'CMUX_ENV_CHECK=%s\\n' \"$CMUX_INITIAL_ENV_TOKEN\"\\n")
-            text = _wait_for_text(c, created_workspace, f"CMUX_ENV_CHECK={token}")
+            c.send("printf 'PROGRAMA_ENV_CHECK=%s\\n' \"$PROGRAMA_INITIAL_ENV_TOKEN\"\\n")
+            text = _wait_for_text(c, created_workspace, f"PROGRAMA_ENV_CHECK={token}")
             _must(
-                f"CMUX_ENV_CHECK={token}" in text,
+                f"PROGRAMA_ENV_CHECK={token}" in text,
                 f"initial_env token missing from terminal output: {text!r}",
             )
             c.select_workspace(baseline_workspace)

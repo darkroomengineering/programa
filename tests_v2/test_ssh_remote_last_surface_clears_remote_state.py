@@ -16,11 +16,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
-SSH_HOST = os.environ.get("CMUX_SSH_TEST_HOST", "").strip()
-SSH_PORT = os.environ.get("CMUX_SSH_TEST_PORT", "").strip()
-SSH_IDENTITY = os.environ.get("CMUX_SSH_TEST_IDENTITY", "").strip()
-SSH_OPTIONS_RAW = os.environ.get("CMUX_SSH_TEST_OPTIONS", "").strip()
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
+SSH_HOST = os.environ.get("PROGRAMA_SSH_TEST_HOST", "").strip()
+SSH_PORT = os.environ.get("PROGRAMA_SSH_TEST_PORT", "").strip()
+SSH_IDENTITY = os.environ.get("PROGRAMA_SSH_TEST_IDENTITY", "").strip()
+SSH_OPTIONS_RAW = os.environ.get("PROGRAMA_SSH_TEST_OPTIONS", "").strip()
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -46,7 +46,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -56,9 +56,9 @@ def _find_cli_binary() -> str:
 
 def _run_cli_json(cli: str, args: list[str]) -> dict:
     env = dict(os.environ)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env.pop("CMUX_TAB_ID", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env.pop("PROGRAMA_TAB_ID", None)
 
     proc = _run([cli, "--socket", SOCKET_PATH, "--json", *args], env=env)
     try:
@@ -126,7 +126,7 @@ def _remote_session_count(client: cmux, workspace_id: str) -> int:
 
 
 def _run_surface_probe(client: cmux, surface_id: str, command: str, token_prefix: str, timeout_s: float = 12.0) -> str:
-    token = f"__CMUX_{token_prefix}_{int(time.time() * 1000)}__"
+    token = f"__PROGRAMA_{token_prefix}_{int(time.time() * 1000)}__"
     client.send_surface(
         surface_id,
         (
@@ -172,7 +172,7 @@ def _open_ssh_workspace(client: cmux, cli: str, *, name: str) -> str:
 
 def main() -> int:
     if not SSH_HOST:
-        print("SKIP: set CMUX_SSH_TEST_HOST to run ssh last-surface remote state regression")
+        print("SKIP: set PROGRAMA_SSH_TEST_HOST to run ssh last-surface remote state regression")
         return 0
 
     cli = _find_cli_binary()
@@ -236,12 +236,12 @@ def main() -> int:
                 socket_output = _run_surface_probe(
                     client,
                     surface_id,
-                    r'''printf '%s' "${CMUX_SOCKET_PATH:-}"''',
+                    r'''printf '%s' "${PROGRAMA_SOCKET_PATH:-}"''',
                     f"SSH_LAST_SURFACE_SOCKET_{idx}",
                 ).strip()
                 _must(
                     not socket_output.startswith("127.0.0.1:"),
-                    f"surface {surface_id} should be local after clearing remote state, got CMUX_SOCKET_PATH={socket_output!r}",
+                    f"surface {surface_id} should be local after clearing remote state, got PROGRAMA_SOCKET_PATH={socket_output!r}",
                 )
     finally:
         if workspace_id:

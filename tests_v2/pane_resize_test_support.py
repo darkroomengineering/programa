@@ -87,7 +87,7 @@ def scrollback_has_exact_line(client: cmux, workspace_id: str, surface_id: str, 
 
 def wait_for_surface_command_roundtrip(client: cmux, workspace_id: str, surface_id: str) -> None:
     for _attempt in range(1, 5):
-        token = f"CMUX_READY_{secrets.token_hex(4)}"
+        token = f"PROGRAMA_READY_{secrets.token_hex(4)}"
         client.send_surface(surface_id, f"echo {token}\n")
         try:
             wait_for(

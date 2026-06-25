@@ -41,15 +41,15 @@ def main() -> int:
 
         # User .zshenv that records the ZDOTDIR it sees.
         (orig / ".zshenv").write_text(
-            'echo "$ZDOTDIR" > "$CMUX_ZDOTDIR_TEST_OUTPUT"\n',
+            'echo "$ZDOTDIR" > "$PROGRAMA_ZDOTDIR_TEST_OUTPUT"\n',
             encoding="utf-8",
         )
 
         env = dict(os.environ)
         env["ZDOTDIR"] = str(wrapper_dir)
-        env["CMUX_ZSH_ZDOTDIR"] = str(orig)
-        env["CMUX_ZDOTDIR_TEST_OUTPUT"] = str(seen_path)
-        env["CMUX_SHELL_INTEGRATION"] = "0"
+        env["PROGRAMA_ZSH_ZDOTDIR"] = str(orig)
+        env["PROGRAMA_ZDOTDIR_TEST_OUTPUT"] = str(seen_path)
+        env["PROGRAMA_SHELL_INTEGRATION"] = "0"
 
         # Non-interactive is enough: .zshenv is always sourced.
         result = subprocess.run(

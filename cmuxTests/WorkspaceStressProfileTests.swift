@@ -17,11 +17,11 @@ final class WorkspaceStressProfileTests: XCTestCase {
 
         static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> StressConfig {
             StressConfig(
-                workspaceCount: parseInt(environment["CMUX_WORKSPACE_STRESS_WORKSPACES"], default: 48, minimum: 2),
-                tabsPerWorkspace: parseInt(environment["CMUX_WORKSPACE_STRESS_TABS_PER_WORKSPACE"], default: 10, minimum: 1),
-                switchPasses: parseInt(environment["CMUX_WORKSPACE_STRESS_SWITCH_PASSES"], default: 6, minimum: 1),
-                createP95BudgetMs: parseDouble(environment["CMUX_WORKSPACE_STRESS_CREATE_P95_BUDGET_MS"]),
-                switchP95BudgetMs: parseDouble(environment["CMUX_WORKSPACE_STRESS_SWITCH_P95_BUDGET_MS"])
+                workspaceCount: parseInt(environment["PROGRAMA_WORKSPACE_STRESS_WORKSPACES"], default: 48, minimum: 2),
+                tabsPerWorkspace: parseInt(environment["PROGRAMA_WORKSPACE_STRESS_TABS_PER_WORKSPACE"], default: 10, minimum: 1),
+                switchPasses: parseInt(environment["PROGRAMA_WORKSPACE_STRESS_SWITCH_PASSES"], default: 6, minimum: 1),
+                createP95BudgetMs: parseDouble(environment["PROGRAMA_WORKSPACE_STRESS_CREATE_P95_BUDGET_MS"]),
+                switchP95BudgetMs: parseDouble(environment["PROGRAMA_WORKSPACE_STRESS_SWITCH_P95_BUDGET_MS"])
             )
         }
 

@@ -247,7 +247,7 @@ final class CommandPaletteSwitcherSearchIndexerTests: XCTestCase {
 
     func testFuzzyMatcherMatchesDirectoryBranchAndPortMetadata() {
         let metadata = CommandPaletteSwitcherSearchMetadata(
-            directories: ["/tmp/cmuxterm/worktrees/issue-123-switcher-search"],
+            directories: ["/tmp/programaterm/worktrees/issue-123-switcher-search"],
             branches: ["fix/switcher-metadata"],
             ports: [4317]
         )

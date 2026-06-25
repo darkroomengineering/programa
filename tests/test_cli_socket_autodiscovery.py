@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression test: CLI should auto-discover tagged debug sockets from CMUX_TAG."""
+"""Regression test: CLI should auto-discover tagged debug sockets from PROGRAMA_TAG."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ import threading
 
 
 def resolve_cmux_cli() -> str:
-    explicit = os.environ.get("CMUX_CLI_BIN") or os.environ.get("CMUX_CLI")
+    explicit = os.environ.get("PROGRAMA_CLI_BIN") or os.environ.get("PROGRAMA_CLI")
     if explicit and os.path.exists(explicit) and os.access(explicit, os.X_OK):
         return explicit
 
     candidates: list[str] = []
     candidates.extend(glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug/cmux")))
-    candidates.extend(glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux"))
+    candidates.extend(glob.glob("/tmp/programa-*/Build/Products/Debug/programa"))
     candidates = [p for p in candidates if os.path.exists(p) and os.access(p, os.X_OK)]
     if candidates:
         candidates.sort(key=os.path.getmtime, reverse=True)
@@ -28,7 +28,7 @@ def resolve_cmux_cli() -> str:
     if in_path:
         return in_path
 
-    raise RuntimeError("Unable to find cmux CLI binary. Set CMUX_CLI_BIN.")
+    raise RuntimeError("Unable to find cmux CLI binary. Set PROGRAMA_CLI_BIN.")
 
 
 class PingServer:
@@ -89,7 +89,7 @@ def main() -> int:
         return 1
 
     tag = f"cli-autodiscover-{os.getpid()}"
-    socket_path = f"/tmp/cmux-debug-{tag}.sock"
+    socket_path = f"/tmp/programa-debug-{tag}.sock"
     server = PingServer(socket_path)
     server.start()
 
@@ -102,10 +102,10 @@ def main() -> int:
         return 1
 
     env = os.environ.copy()
-    env["CMUX_SOCKET_PATH"] = "/tmp/cmux.sock"
-    env["CMUX_TAG"] = tag
-    env["CMUX_CLI_SENTRY_DISABLED"] = "1"
-    env["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+    env["PROGRAMA_SOCKET_PATH"] = "/tmp/programa.sock"
+    env["PROGRAMA_TAG"] = tag
+    env["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+    env["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
     try:
         proc = subprocess.run(
@@ -142,7 +142,7 @@ def main() -> int:
         print(f"stderr={proc.stderr!r}")
         return 1
 
-    print("PASS: cmux ping auto-discovers tagged socket from CMUX_TAG")
+    print("PASS: cmux ping auto-discovers tagged socket from PROGRAMA_TAG")
     return 0
 
 

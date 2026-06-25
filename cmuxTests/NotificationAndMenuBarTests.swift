@@ -553,7 +553,7 @@ final class NotificationDockBadgeTests: XCTestCase {
         AppFocusState.overrideIsFocused = true
         defaults.set("none", forKey: NotificationSoundSettings.key)
         defaults.set(
-            "printf '%s\\n%s\\n%s' \"$CMUX_NOTIFICATION_TITLE\" \"$CMUX_NOTIFICATION_SUBTITLE\" \"$CMUX_NOTIFICATION_BODY\" > '\(commandOutputURL.path)'",
+            "printf '%s\\n%s\\n%s' \"$PROGRAMA_NOTIFICATION_TITLE\" \"$PROGRAMA_NOTIFICATION_SUBTITLE\" \"$PROGRAMA_NOTIFICATION_BODY\" > '\(commandOutputURL.path)'",
             forKey: NotificationSoundSettings.customCommandKey
         )
 

@@ -39,7 +39,7 @@ def main() -> int:
         shim_path.write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
-            "exec \"${CMUX_CLAUDE_TEAMS_CMUX_BIN:-cmux}\" __tmux-compat \"$@\"\n",
+            "exec \"${PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN:-cmux}\" __tmux-compat \"$@\"\n",
             encoding="utf-8",
         )
         shim_path.chmod(0o555)

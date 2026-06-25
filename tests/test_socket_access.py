@@ -72,7 +72,7 @@ def _raw_send(sock, command: str, timeout: float = 3.0) -> str:
 
 
 def _preferred_worktree_slug():
-    env_slug = os.environ.get("CMUX_TAG") or os.environ.get("CMUX_BRANCH_SLUG")
+    env_slug = os.environ.get("PROGRAMA_TAG") or os.environ.get("PROGRAMA_BRANCH_SLUG")
     if env_slug:
         return env_slug.strip().lower()
 
@@ -111,15 +111,15 @@ def _derived_app_candidates_for_current_worktree():
 
 
 def _find_app():
-    explicit = os.environ.get("CMUX_APP_PATH")
+    explicit = os.environ.get("PROGRAMA_APP_PATH")
     if explicit and os.path.exists(explicit):
         return explicit
 
     preferred_slug = _preferred_worktree_slug()
     if preferred_slug:
         preferred_tmp = []
-        preferred_tmp.extend(glob.glob(f"/tmp/cmux-{preferred_slug}/Build/Products/Debug/Programa DEV*.app"))
-        preferred_tmp.extend(glob.glob(f"/private/tmp/cmux-{preferred_slug}/Build/Products/Debug/Programa DEV*.app"))
+        preferred_tmp.extend(glob.glob(f"/tmp/programa-{preferred_slug}/Build/Products/Debug/Programa DEV*.app"))
+        preferred_tmp.extend(glob.glob(f"/private/tmp/programa-{preferred_slug}/Build/Products/Debug/Programa DEV*.app"))
         preferred_tmp = [p for p in preferred_tmp if os.path.exists(p)]
         if preferred_tmp:
             preferred_tmp.sort(key=os.path.getmtime, reverse=True)
@@ -135,8 +135,8 @@ def _find_app():
         home, "Library/Developer/Xcode/DerivedData/*/Build/Products/Debug/Programa DEV.app"
     ))
     tmp_candidates = []
-    tmp_candidates.extend(glob.glob("/tmp/cmux-*/Build/Products/Debug/Programa DEV*.app"))
-    tmp_candidates.extend(glob.glob("/private/tmp/cmux-*/Build/Products/Debug/Programa DEV*.app"))
+    tmp_candidates.extend(glob.glob("/tmp/programa-*/Build/Products/Debug/Programa DEV*.app"))
+    tmp_candidates.extend(glob.glob("/private/tmp/programa-*/Build/Products/Debug/Programa DEV*.app"))
 
     derived_candidates = [p for p in derived_candidates if os.path.exists(p)]
     tmp_candidates = [p for p in tmp_candidates if os.path.exists(p)]
@@ -161,7 +161,7 @@ def _find_app():
 
 
 def _find_cli(preferred_app_path: str = ""):
-    explicit = os.environ.get("CMUX_CLI_BIN") or os.environ.get("CMUX_CLI")
+    explicit = os.environ.get("PROGRAMA_CLI_BIN") or os.environ.get("PROGRAMA_CLI")
     if explicit and os.path.exists(explicit) and os.access(explicit, os.X_OK):
         return explicit
 
@@ -174,10 +174,10 @@ def _find_cli(preferred_app_path: str = ""):
     candidates = []
     home = os.path.expanduser("~")
     candidates.extend(glob.glob(os.path.join(
-        home, "Library/Developer/Xcode/DerivedData/*/Build/Products/Debug/cmux"
+        home, "Library/Developer/Xcode/DerivedData/*/Build/Products/Debug/programa"
     )))
-    candidates.extend(glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux"))
-    candidates.extend(glob.glob("/private/tmp/cmux-*/Build/Products/Debug/cmux"))
+    candidates.extend(glob.glob("/tmp/programa-*/Build/Products/Debug/programa"))
+    candidates.extend(glob.glob("/private/tmp/programa-*/Build/Products/Debug/programa"))
     candidates = [p for p in candidates if os.path.exists(p) and os.access(p, os.X_OK)]
     if not candidates:
         return ""
@@ -224,10 +224,10 @@ def _launch_cmux(app_path: str, socket_path: str, mode: str = None, extra_env: d
 
     env_args = []
     if mode:
-        env_args = ["--env", f"CMUX_SOCKET_MODE={mode}"]
+        env_args = ["--env", f"PROGRAMA_SOCKET_MODE={mode}"]
     launch_env = {
-        "CMUX_SOCKET_PATH": socket_path,
-        "CMUX_ALLOW_SOCKET_OVERRIDE": "1",
+        "PROGRAMA_SOCKET_PATH": socket_path,
+        "PROGRAMA_ALLOW_SOCKET_OVERRIDE": "1",
     }
     if extra_env:
         launch_env.update(extra_env)
@@ -440,7 +440,7 @@ fi
 # ---------------------------------------------------------------------------
 
 def test_allowall_mode_works(socket_path: str, app_path: str) -> TestResult:
-    """Verify CMUX_SOCKET_MODE=allowAll bypasses ancestry check."""
+    """Verify PROGRAMA_SOCKET_MODE=allowAll bypasses ancestry check."""
     result = TestResult("allowAll mode allows external")
     try:
         _kill_cmux(app_path)
@@ -469,7 +469,7 @@ def test_password_mode_requires_auth(socket_path: str, app_path: str) -> TestRes
             app_path,
             socket_path,
             mode="password",
-            extra_env={"CMUX_SOCKET_PASSWORD": password}
+            extra_env={"PROGRAMA_SOCKET_PASSWORD": password}
         )
 
         sock = _raw_connect(socket_path)
@@ -495,7 +495,7 @@ def test_password_mode_v1_auth_flow(socket_path: str, app_path: str) -> TestResu
             app_path,
             socket_path,
             mode="password",
-            extra_env={"CMUX_SOCKET_PASSWORD": password}
+            extra_env={"PROGRAMA_SOCKET_PASSWORD": password}
         )
 
         sock = _raw_connect(socket_path)
@@ -533,7 +533,7 @@ def test_password_mode_v2_auth_flow(socket_path: str, app_path: str) -> TestResu
             app_path,
             socket_path,
             mode="password",
-            extra_env={"CMUX_SOCKET_PASSWORD": password}
+            extra_env={"PROGRAMA_SOCKET_PASSWORD": password}
         )
 
         sock = _raw_connect(socket_path)
@@ -592,7 +592,7 @@ def test_password_mode_cli_exit_code(socket_path: str, app_path: str) -> TestRes
             app_path,
             socket_path,
             mode="password",
-            extra_env={"CMUX_SOCKET_PASSWORD": password}
+            extra_env={"PROGRAMA_SOCKET_PASSWORD": password}
         )
 
         no_auth = subprocess.run(
@@ -647,7 +647,7 @@ def run_tests():
         return 1
     print(f"App: {app_path}")
 
-    socket_path = f"/tmp/cmux-test-socket-access-{os.getpid()}.sock"
+    socket_path = f"/tmp/programa-test-socket-access-{os.getpid()}.sock"
     try:
         os.unlink(socket_path)
     except OSError:

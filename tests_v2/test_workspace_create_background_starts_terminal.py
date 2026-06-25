@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -40,7 +40,7 @@ def main() -> int:
         created_workspace = ""
         marker_path = Path(tempfile.gettempdir()) / f"cmux-bg-start-{int(time.time() * 1000)}.txt"
         try:
-            token = f"CMUX_BG_START_{int(time.time() * 1000)}"
+            token = f"PROGRAMA_BG_START_{int(time.time() * 1000)}"
             initial_command = (
                 "python3 -c " +
                 shlex.quote(

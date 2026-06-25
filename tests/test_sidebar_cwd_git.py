@@ -6,7 +6,7 @@ This specifically covers the regression where the sidebar directory can get
 stuck (e.g. showing "~" even after multiple `cd`s).
 
 Run with a tagged instance to avoid unix socket conflicts:
-  CMUX_TAG=<tag> python3 tests/test_sidebar_cwd_git.py
+  PROGRAMA_TAG=<tag> python3 tests/test_sidebar_cwd_git.py
 """
 
 from __future__ import annotations
@@ -150,9 +150,9 @@ def _send_cd_and_wait(
 
 
 def main() -> int:
-    tag = os.environ.get("CMUX_TAG") or ""
+    tag = os.environ.get("PROGRAMA_TAG") or ""
     if not tag:
-        print("Tip: set CMUX_TAG=<tag> when running this test to avoid socket conflicts.")
+        print("Tip: set PROGRAMA_TAG=<tag> when running this test to avoid socket conflicts.")
 
     base = Path("/tmp") / f"cmux_sidebar_test_{os.getpid()}"
     repo = base / "repo"

@@ -18,10 +18,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 # Keep the fixture's extra HTTP server below 1024 so there are no eligible
 # (>1023) ports to auto-forward. This guards the "connecting forever" regression.
-REMOTE_HTTP_PORT = int(os.environ.get("CMUX_SSH_TEST_REMOTE_HTTP_PORT", "81"))
+REMOTE_HTTP_PORT = int(os.environ.get("PROGRAMA_SSH_TEST_REMOTE_HTTP_PORT", "81"))
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -39,7 +39,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -58,10 +58,10 @@ def _run(cmd: list[str], *, env: dict[str, str] | None = None, check: bool = Tru
 def _run_cli_json(cli: str, args: list[str]) -> dict:
     env = dict(os.environ)
     # Ensure --socket is what drives the relay path during tests.
-    env.pop("CMUX_SOCKET_PATH", None)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env.pop("CMUX_TAB_ID", None)
+    env.pop("PROGRAMA_SOCKET_PATH", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env.pop("PROGRAMA_TAB_ID", None)
 
     proc = _run([cli, "--socket", SOCKET_PATH, "--json", "--id-format", "both", *args], env=env)
     try:
@@ -133,7 +133,7 @@ def _wait_for_remote_ready(client, workspace_id: str, timeout: float = 45.0) -> 
 def _assert_remote_ping(host: str, host_port: int, key_path: Path, remote_socket_addr: str, *, label: str) -> None:
     ping_result = _ssh_run(
         host, host_port, key_path,
-        f"CMUX_SOCKET_PATH={remote_socket_addr} $HOME/.cmux/bin/cmux ping",
+        f"PROGRAMA_SOCKET_PATH={remote_socket_addr} $HOME/.cmux/bin/cmux ping",
         check=False,
     )
     _must(
@@ -215,8 +215,8 @@ def main() -> int:
                 f"ssh startup command should prepend ~/.cmux/bin for remote cmux CLI: {startup_cmd!r}",
             )
             _must(
-                f"CMUX_SOCKET_PATH={remote_socket_addr}" in startup_cmd,
-                f"ssh startup command should pin CMUX_SOCKET_PATH to workspace relay: {startup_cmd!r}",
+                f"PROGRAMA_SOCKET_PATH={remote_socket_addr}" in startup_cmd,
+                f"ssh startup command should pin PROGRAMA_SOCKET_PATH to workspace relay: {startup_cmd!r}",
             )
             workspace_window_id = payload.get("window_id")
             current_params = {"window_id": workspace_window_id} if isinstance(workspace_window_id, str) and workspace_window_id else {}
@@ -296,8 +296,8 @@ def main() -> int:
             remote_socket_addr_2 = f"127.0.0.1:{remote_relay_port_2}"
             startup_cmd_2 = str(payload_2.get("ssh_startup_command") or "")
             _must(
-                f"CMUX_SOCKET_PATH={remote_socket_addr_2}" in startup_cmd_2,
-                f"second ssh startup command should pin CMUX_SOCKET_PATH to second relay: {startup_cmd_2!r}",
+                f"PROGRAMA_SOCKET_PATH={remote_socket_addr_2}" in startup_cmd_2,
+                f"second ssh startup command should pin PROGRAMA_SOCKET_PATH to second relay: {startup_cmd_2!r}",
             )
             _ = _wait_for_remote_ready(client, workspace_id_2)
 
@@ -313,7 +313,7 @@ def main() -> int:
             # Test 2: cmux list-workspaces --json (v2)
             list_ws_result = _ssh_run(
                 host, host_ssh_port, key_path,
-                f"CMUX_SOCKET_PATH={remote_socket_addr} $HOME/.cmux/bin/cmux --json list-workspaces",
+                f"PROGRAMA_SOCKET_PATH={remote_socket_addr} $HOME/.cmux/bin/cmux --json list-workspaces",
                 check=False,
             )
             _must(
@@ -329,7 +329,7 @@ def main() -> int:
             # Test 3: cmux new-window (v1)
             new_win_result = _ssh_run(
                 host, host_ssh_port, key_path,
-                f"CMUX_SOCKET_PATH={remote_socket_addr} $HOME/.cmux/bin/cmux new-window",
+                f"PROGRAMA_SOCKET_PATH={remote_socket_addr} $HOME/.cmux/bin/cmux new-window",
                 check=False,
             )
             _must(
@@ -340,7 +340,7 @@ def main() -> int:
             # Test 4: cmux rpc system.capabilities (v2 passthrough)
             rpc_result = _ssh_run(
                 host, host_ssh_port, key_path,
-                f"CMUX_SOCKET_PATH={remote_socket_addr} $HOME/.cmux/bin/cmux rpc system.capabilities",
+                f"PROGRAMA_SOCKET_PATH={remote_socket_addr} $HOME/.cmux/bin/cmux rpc system.capabilities",
                 check=False,
             )
             _must(

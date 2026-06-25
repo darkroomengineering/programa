@@ -227,17 +227,17 @@ final class SurfacePool {
         var commands: [String] = []
 
         // Update per-surface/workspace env vars
-        commands.append("export CMUX_SURFACE_ID=\(surface.id.uuidString)")
-        commands.append("export CMUX_PANEL_ID=\(surface.id.uuidString)")
-        commands.append("export CMUX_WORKSPACE_ID=\(workspaceId.uuidString)")
-        commands.append("export CMUX_TAB_ID=\(workspaceId.uuidString)")
+        commands.append("export PROGRAMA_SURFACE_ID=\(surface.id.uuidString)")
+        commands.append("export PROGRAMA_PANEL_ID=\(surface.id.uuidString)")
+        commands.append("export PROGRAMA_WORKSPACE_ID=\(workspaceId.uuidString)")
+        commands.append("export PROGRAMA_TAB_ID=\(workspaceId.uuidString)")
 
         // Update port range
         let portBase = TerminalSurface.sessionPortBase
         let portRange = TerminalSurface.sessionPortRangeSize
         let startPort = portBase + portOrdinal * portRange
-        commands.append("export CMUX_PORT=\(startPort)")
-        commands.append("export CMUX_PORT_END=\(startPort + portRange - 1)")
+        commands.append("export PROGRAMA_PORT=\(startPort)")
+        commands.append("export PROGRAMA_PORT_END=\(startPort + portRange - 1)")
 
         // cd to target directory if different from home
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path

@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -39,7 +39,7 @@ def _find_cli_binary() -> str:
     candidates = glob.glob(os.path.expanduser(
         "~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"
     ), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -49,10 +49,10 @@ def _find_cli_binary() -> str:
 
 def _run_tmux_compat(cli: str, args: List[str]) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env["CMUX_SOCKET_PATH"] = SOCKET_PATH
-    env["CMUX_OMO_CMUX_BIN"] = cli
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env["PROGRAMA_SOCKET_PATH"] = SOCKET_PATH
+    env["PROGRAMA_OMO_PROGRAMA_BIN"] = cli
     cmd = [cli, "--socket", SOCKET_PATH, "__tmux-compat"] + args
     return subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
 

@@ -17,11 +17,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
-SSH_HOST = os.environ.get("CMUX_SSH_TEST_HOST", "").strip()
-SSH_PORT = os.environ.get("CMUX_SSH_TEST_PORT", "").strip()
-SSH_IDENTITY = os.environ.get("CMUX_SSH_TEST_IDENTITY", "").strip()
-SSH_OPTIONS_RAW = os.environ.get("CMUX_SSH_TEST_OPTIONS", "").strip()
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
+SSH_HOST = os.environ.get("PROGRAMA_SSH_TEST_HOST", "").strip()
+SSH_PORT = os.environ.get("PROGRAMA_SSH_TEST_PORT", "").strip()
+SSH_IDENTITY = os.environ.get("PROGRAMA_SSH_TEST_IDENTITY", "").strip()
+SSH_OPTIONS_RAW = os.environ.get("PROGRAMA_SSH_TEST_OPTIONS", "").strip()
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -47,7 +47,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -57,9 +57,9 @@ def _find_cli_binary() -> str:
 
 def _run_cli_json(cli: str, args: list[str]) -> dict:
     env = dict(os.environ)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env.pop("CMUX_TAB_ID", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env.pop("PROGRAMA_TAB_ID", None)
 
     proc = _run([cli, "--socket", SOCKET_PATH, "--json", *args], env=env)
     try:
@@ -122,17 +122,17 @@ def _focused_surface_id(client: cmux) -> str:
 
 
 def _run_remote_shell_probe(client: cmux, surface_id: str, probe_label: str) -> str:
-    token = f"__CMUX_REMOTE_SOCKET_{probe_label}_{secrets.token_hex(4)}__"
+    token = f"__PROGRAMA_REMOTE_SOCKET_{probe_label}_{secrets.token_hex(4)}__"
     client.send_surface(
         surface_id,
         (
-            f"__cmux_socket_path=\"${{CMUX_SOCKET_PATH:-}}\"; "
-            f"printf '{token}:%s:__CMUX_REMOTE_SOCKET_END__\\n' \"$__cmux_socket_path\"\n"
+            f"__cmux_socket_path=\"${{PROGRAMA_SOCKET_PATH:-}}\"; "
+            f"printf '{token}:%s:__PROGRAMA_REMOTE_SOCKET_END__\\n' \"$__cmux_socket_path\"\n"
         ),
     )
     deadline = time.time() + 15.0
     last = ""
-    pattern = re.compile(re.escape(token) + r":(.*?):__CMUX_REMOTE_SOCKET_END__")
+    pattern = re.compile(re.escape(token) + r":(.*?):__PROGRAMA_REMOTE_SOCKET_END__")
     while time.time() < deadline:
         last = client.read_terminal_text(surface_id)
         matches = pattern.findall(last)
@@ -149,7 +149,7 @@ def _assert_remote_socket_path(client: cmux, surface_id: str, shortcut_name: str
     socket_path = _run_remote_shell_probe(client, surface_id, shortcut_name)
     _must(
         socket_path.startswith("127.0.0.1:"),
-        f"{shortcut_name} should keep the new terminal on the ssh relay, got CMUX_SOCKET_PATH={socket_path!r}",
+        f"{shortcut_name} should keep the new terminal on the ssh relay, got PROGRAMA_SOCKET_PATH={socket_path!r}",
     )
 
 
@@ -212,7 +212,7 @@ def _assert_shortcut_creates_remote_terminal(
 
 def main() -> int:
     if not SSH_HOST:
-        print("SKIP: set CMUX_SSH_TEST_HOST to run ssh shortcut inheritance regression")
+        print("SKIP: set PROGRAMA_SSH_TEST_HOST to run ssh shortcut inheritance regression")
         return 0
 
     cli = _find_cli_binary()

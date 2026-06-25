@@ -250,7 +250,7 @@ def main() -> int:
         home = tmp / "home"
         home.mkdir(parents=True, exist_ok=True)
 
-        socket_path = tmp / "fake-cmux.sock"
+        socket_path = tmp / "fake-programa.sock"
         state = FakeCmuxState()
         server = FakeCmuxUnixServer(str(socket_path), state)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -270,7 +270,7 @@ def main() -> int:
             """#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\\n' "${TMUX_PANE-__UNSET__}" > "$FAKE_TMUX_PANE_LOG"
-printf '%s\\n' "${CMUX_SOCKET_PATH-__UNSET__}" > "$FAKE_SOCKET_LOG"
+printf '%s\\n' "${PROGRAMA_SOCKET_PATH-__UNSET__}" > "$FAKE_SOCKET_LOG"
 window_target="$(tmux display-message -t "${TMUX_PANE}" -p '#{session_name}:#{window_index}')"
 printf '%s\\n' "$window_target" > "$FAKE_WINDOW_TARGET_LOG"
 split_pane="$(tmux split-window -t "${TMUX_PANE}" -h -l 70% -P -F '#{pane_id}')"
@@ -284,7 +284,7 @@ tmux list-panes -t "$window_target" -F '#{pane_id}' > "$FAKE_PANE_LIST_LOG"
         env = os.environ.copy()
         env["HOME"] = str(home)
         env["PATH"] = f"{real_bin}:/usr/bin:/bin"
-        env["CMUX_SOCKET_PATH"] = str(socket_path)
+        env["PROGRAMA_SOCKET_PATH"] = str(socket_path)
         env["FAKE_TMUX_PANE_LOG"] = str(tmux_pane_log)
         env["FAKE_SOCKET_LOG"] = str(tmux_socket_log)
         env["FAKE_WINDOW_TARGET_LOG"] = str(window_target_log)
@@ -323,7 +323,7 @@ tmux list-panes -t "$window_target" -F '#{pane_id}' > "$FAKE_PANE_LIST_LOG"
 
         socket_value = read_text(tmux_socket_log)
         if socket_value != str(socket_path):
-            print(f"FAIL: expected CMUX_SOCKET_PATH={socket_path}, got {socket_value!r}")
+            print(f"FAIL: expected PROGRAMA_SOCKET_PATH={socket_path}, got {socket_value!r}")
             return 1
 
         window_target = read_text(window_target_log)

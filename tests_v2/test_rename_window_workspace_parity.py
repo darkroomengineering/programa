@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -31,7 +31,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -42,8 +42,8 @@ def _find_cli_binary() -> str:
 def _run_cli(cli: str, args: List[str], env_overrides: Optional[Dict[str, str]] = None) -> str:
     env = dict(os.environ)
     # Keep this test deterministic when running from inside another cmux shell.
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
     if env_overrides:
         env.update(env_overrides)
     cmd = [cli, "--socket", SOCKET_PATH] + args
@@ -99,16 +99,16 @@ def main() -> int:
         _run_cli(
             cli,
             ["rename-workspace", env_title],
-            env_overrides={"CMUX_WORKSPACE_ID": ws_id},
+            env_overrides={"PROGRAMA_WORKSPACE_ID": ws_id},
         )
         _must(
             _workspace_title(c, ws_id) == env_title,
-            "cmux rename-workspace should default to CMUX_WORKSPACE_ID",
+            "cmux rename-workspace should default to PROGRAMA_WORKSPACE_ID",
         )
 
         env = dict(os.environ)
-        env.pop("CMUX_WORKSPACE_ID", None)
-        env.pop("CMUX_SURFACE_ID", None)
+        env.pop("PROGRAMA_WORKSPACE_ID", None)
+        env.pop("PROGRAMA_SURFACE_ID", None)
         invalid = subprocess.run(
             [cli, "--socket", SOCKET_PATH, "rename-window", "--workspace", ws_id],
             capture_output=True,

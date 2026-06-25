@@ -20,13 +20,13 @@ from pathlib import Path
 
 
 def resolve_cmux_cli() -> str:
-    explicit = os.environ.get("CMUX_CLI_BIN") or os.environ.get("CMUX_CLI")
+    explicit = os.environ.get("PROGRAMA_CLI_BIN") or os.environ.get("PROGRAMA_CLI")
     if explicit and os.path.exists(explicit) and os.access(explicit, os.X_OK):
         return explicit
 
     candidates: list[str] = []
     candidates.extend(glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug/cmux")))
-    candidates.extend(glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux"))
+    candidates.extend(glob.glob("/tmp/programa-*/Build/Products/Debug/programa"))
     candidates = [p for p in candidates if os.path.exists(p) and os.access(p, os.X_OK)]
     if candidates:
         candidates.sort(key=os.path.getmtime, reverse=True)
@@ -36,7 +36,7 @@ def resolve_cmux_cli() -> str:
     if in_path:
         return in_path
 
-    raise RuntimeError("Unable to find cmux CLI binary. Set CMUX_CLI_BIN.")
+    raise RuntimeError("Unable to find programa CLI binary. Set PROGRAMA_CLI_BIN.")
 
 
 class TeardownUnavailableServer:
@@ -107,7 +107,7 @@ class TeardownUnavailableServer:
                         conn.sendall((response + "\n").encode("utf-8"))
 
                 if not self.commands:
-                    raise RuntimeError("cmux CLI never sent a command to the teardown test socket")
+                    raise RuntimeError("programa CLI never sent a command to the teardown test socket")
         except Exception as exc:  # pragma: no cover - explicit failure surfacing
             self.error = exc
             self.ready.set()
@@ -125,7 +125,7 @@ def main() -> int:
     temp_dir = tempfile.TemporaryDirectory(prefix="cmux-claude-hook-stop-")
     try:
         root = Path(temp_dir.name)
-        socket_path = str(root / "cmux.sock")
+        socket_path = str(root / "programa.sock")
         state_path = root / "claude-hook-state.json"
         server = TeardownUnavailableServer(socket_path)
         server.start()
@@ -138,12 +138,12 @@ def main() -> int:
             return 1
 
         env = os.environ.copy()
-        env["CMUX_SOCKET_PATH"] = socket_path
-        env["CMUX_WORKSPACE_ID"] = str(uuid.uuid4())
-        env["CMUX_SURFACE_ID"] = str(uuid.uuid4())
-        env["CMUX_CLAUDE_HOOK_STATE_PATH"] = str(state_path)
-        env["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        env["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        env["PROGRAMA_SOCKET_PATH"] = socket_path
+        env["PROGRAMA_WORKSPACE_ID"] = str(uuid.uuid4())
+        env["PROGRAMA_SURFACE_ID"] = str(uuid.uuid4())
+        env["PROGRAMA_CLAUDE_HOOK_STATE_PATH"] = str(state_path)
+        env["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        env["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         proc = subprocess.run(
             [cli_path, "--socket", socket_path, "claude-hook", "stop"],

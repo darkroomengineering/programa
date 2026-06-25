@@ -65,7 +65,7 @@ def run_wrapper(
         real_child_node_options_log = tmp / "real-child-node-options.log"
         hook_cmux_bin_log = tmp / "hook-cmux-bin.log"
         cmux_log = tmp / "cmux.log"
-        socket_path = str(tmp / "cmux.sock")
+        socket_path = str(tmp / "programa.sock")
 
         make_executable(
             real_dir / "claude",
@@ -74,7 +74,7 @@ set -euo pipefail
 : > "$FAKE_REAL_ARGS_LOG"
 printf '%s\\n' "${CLAUDECODE-__UNSET__}" > "$FAKE_REAL_CLAUDECODE_LOG"
 printf '%s\\n' "${NODE_OPTIONS-__UNSET__}" > "$FAKE_REAL_NODE_OPTIONS_LOG"
-printf '%s\\n' "${CMUX_CLAUDE_HOOK_CMUX_BIN-__UNSET__}" > "$FAKE_HOOK_CMUX_BIN_LOG"
+printf '%s\\n' "${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN-__UNSET__}" > "$FAKE_HOOK_PROGRAMA_BIN_LOG"
 for arg in "$@"; do
   printf '%s\\n' "$arg" >> "$FAKE_REAL_ARGS_LOG"
 done
@@ -120,12 +120,12 @@ fs.writeFileSync(
             wrapper_dir / "cmux",
             """#!/usr/bin/env bash
 set -euo pipefail
-printf '%s timeout=%s\\n' "$*" "${CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC-__UNSET__}" >> "$FAKE_CMUX_LOG"
+printf '%s timeout=%s\\n' "$*" "${CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC-__UNSET__}" >> "$FAKE_PROGRAMA_LOG"
 if [[ "${1:-}" == "--socket" ]]; then
   shift 2
 fi
 if [[ "${1:-}" == "ping" ]]; then
-  if [[ "${FAKE_CMUX_PING_OK:-0}" == "1" ]]; then
+  if [[ "${FAKE_PROGRAMA_PING_OK:-0}" == "1" ]]; then
     exit 0
   fi
   exit 1
@@ -148,18 +148,18 @@ exit 0
 
         env = os.environ.copy()
         env["PATH"] = f"{wrapper_dir}:{real_dir}:{env.get('PATH', '/usr/bin:/bin')}"
-        env["CMUX_SURFACE_ID"] = "surface:test"
-        env["CMUX_SOCKET_PATH"] = socket_path
+        env["PROGRAMA_SURFACE_ID"] = "surface:test"
+        env["PROGRAMA_SOCKET_PATH"] = socket_path
         env["FAKE_REAL_ARGS_LOG"] = str(real_args_log)
         env["FAKE_REAL_CLAUDECODE_LOG"] = str(real_claudecode_log)
         env["FAKE_REAL_NODE_OPTIONS_LOG"] = str(real_node_options_log)
         env["FAKE_REAL_RUNTIME_NODE_OPTIONS_LOG"] = str(real_runtime_node_options_log)
         env["FAKE_REAL_CHILD_NODE_OPTIONS_LOG"] = str(real_child_node_options_log)
         env["FAKE_REAL_NODE_SCRIPT"] = str(real_dir / "claude-real.js")
-        env["FAKE_HOOK_CMUX_BIN_LOG"] = str(hook_cmux_bin_log)
-        env["FAKE_CMUX_LOG"] = str(cmux_log)
-        env["FAKE_CMUX_PING_OK"] = "1" if socket_state == "live" else "0"
-        env["CMUX_BUNDLED_CLI_PATH"] = str(bundled_cli_path)
+        env["FAKE_HOOK_PROGRAMA_BIN_LOG"] = str(hook_cmux_bin_log)
+        env["FAKE_PROGRAMA_LOG"] = str(cmux_log)
+        env["FAKE_PROGRAMA_PING_OK"] = "1" if socket_state == "live" else "0"
+        env["PROGRAMA_BUNDLED_CLI_PATH"] = str(bundled_cli_path)
         env["CLAUDECODE"] = "nested-session-sentinel"
         env.pop("NODE_OPTIONS", None)
         if tmpdir is not None:
@@ -253,7 +253,7 @@ def test_live_socket_injects_supported_hooks(failures: list[str]) -> None:
     }.items():
         hook_command = hooks.get(hook_name, [{}])[0].get("hooks", [{}])[0].get("command", "")
         expect(
-            hook_command == f'"${{CMUX_CLAUDE_HOOK_CMUX_BIN:-cmux}}" claude-hook {expected_subcommand}',
+            hook_command == f'"${{PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-cmux}}" claude-hook {expected_subcommand}',
             f"{hook_name} hook should pin bundled cmux, got {hook_command!r}",
             failures,
         )

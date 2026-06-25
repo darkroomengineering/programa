@@ -10,8 +10,8 @@ final class MultiWindowNotificationsUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        dataPath = "/tmp/cmux-ui-test-multi-window-notifs-\(UUID().uuidString).json"
-        socketPath = "/tmp/cmux-ui-test-socket-\(UUID().uuidString).sock"
+        dataPath = "/tmp/programa-ui-test-multi-window-notifs-\(UUID().uuidString).json"
+        socketPath = "/tmp/programa-ui-test-socket-\(UUID().uuidString).sock"
         launchTag = "ui-tests-multi-window-notifs-\(UUID().uuidString.prefix(8))"
         try? FileManager.default.removeItem(atPath: dataPath)
         try? FileManager.default.removeItem(atPath: socketPath)
@@ -25,9 +25,9 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
     func testNotificationsRouteToCorrectWindow() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MULTI_WINDOW_NOTIF_SETUP"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_MULTI_WINDOW_NOTIF_PATH"] = dataPath
-        app.launchEnvironment["CMUX_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_UI_TEST_MULTI_WINDOW_NOTIF_SETUP"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MULTI_WINDOW_NOTIF_PATH"] = dataPath
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         app.launch()
         XCTAssertTrue(
             ensureForegroundAfterLaunch(app, timeout: 12.0),
@@ -112,9 +112,9 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
     func testNotificationsPopoverCanCloseViaShortcutAndEscape() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MULTI_WINDOW_NOTIF_SETUP"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_MULTI_WINDOW_NOTIF_PATH"] = dataPath
-        app.launchEnvironment["CMUX_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_UI_TEST_MULTI_WINDOW_NOTIF_SETUP"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MULTI_WINDOW_NOTIF_PATH"] = dataPath
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         app.launch()
         XCTAssertTrue(
             ensureForegroundAfterLaunch(app, timeout: 12.0),
@@ -149,9 +149,9 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
     func testNotificationsPopoverJumpToLatestButtonShowsShortcut() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MULTI_WINDOW_NOTIF_SETUP"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_MULTI_WINDOW_NOTIF_PATH"] = dataPath
-        app.launchEnvironment["CMUX_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_UI_TEST_MULTI_WINDOW_NOTIF_SETUP"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MULTI_WINDOW_NOTIF_PATH"] = dataPath
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         app.launch()
         XCTAssertTrue(
             ensureForegroundAfterLaunch(app, timeout: 12.0),
@@ -175,11 +175,11 @@ final class MultiWindowNotificationsUITests: XCTestCase {
     func testEmptyNotificationsPopoverBlocksTerminalTyping() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-socketControlMode", "allowAll"]
-        app.launchEnvironment["CMUX_SOCKET_PATH"] = socketPath
-        app.launchEnvironment["CMUX_SOCKET_MODE"] = "allowAll"
-        app.launchEnvironment["CMUX_SOCKET_ENABLE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_SOCKET_SANITY"] = "1"
-        app.launchEnvironment["CMUX_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        app.launchEnvironment["PROGRAMA_SOCKET_MODE"] = "allowAll"
+        app.launchEnvironment["PROGRAMA_SOCKET_ENABLE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_SOCKET_SANITY"] = "1"
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         app.launch()
         XCTAssertTrue(
             ensureForegroundAfterLaunch(app, timeout: 12.0),
@@ -224,15 +224,15 @@ final class MultiWindowNotificationsUITests: XCTestCase {
     func testNotifyCLIDoesNotStealFocusAcrossWindows() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-socketControlMode", "allowAll"]
-        app.launchEnvironment["CMUX_UI_TEST_MULTI_WINDOW_NOTIF_SETUP"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_MULTI_WINDOW_NOTIF_PATH"] = dataPath
-        app.launchEnvironment["CMUX_SOCKET_PATH"] = socketPath
-        app.launchEnvironment["CMUX_SOCKET_MODE"] = "allowAll"
-        app.launchEnvironment["CMUX_SOCKET_ENABLE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_SOCKET_SANITY"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_NOTIFY_SOURCE_TERMINAL_READY"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_ENABLE_DUPLICATE_LAUNCH_OBSERVER"] = "1"
-        app.launchEnvironment["CMUX_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_UI_TEST_MULTI_WINDOW_NOTIF_SETUP"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MULTI_WINDOW_NOTIF_PATH"] = dataPath
+        app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        app.launchEnvironment["PROGRAMA_SOCKET_MODE"] = "allowAll"
+        app.launchEnvironment["PROGRAMA_SOCKET_ENABLE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_SOCKET_SANITY"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_NOTIFY_SOURCE_TERMINAL_READY"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_ENABLE_DUPLICATE_LAUNCH_OBSERVER"] = "1"
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         app.launch()
         XCTAssertTrue(
             ensureForegroundAfterLaunch(app, timeout: 12.0),
@@ -739,7 +739,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         var productDirectories: [String] = []
 
         if strategy == .any {
-            for key in ["CMUX_UI_TEST_CLI_PATH", "CMUXTERM_CLI"] {
+            for key in ["PROGRAMA_UI_TEST_CLI_PATH", "CMUXTERM_CLI"] {
                 if let value = env[key], !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     candidates.append(value)
                 }
@@ -766,10 +766,10 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             appendCLIPathCandidates(fromProductsDirectory: productsDir, strategy: strategy, to: &candidates)
         }
 
-        candidates.append("/tmp/cmux-\(launchTag)/Build/Products/Debug/cmux DEV.app/Contents/Resources/bin/cmux")
-        candidates.append("/tmp/cmux-\(launchTag)/Build/Products/Debug/cmux.app/Contents/Resources/bin/cmux")
+        candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/cmux DEV.app/Contents/Resources/bin/cmux")
+        candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/cmux.app/Contents/Resources/bin/cmux")
         if strategy == .any {
-            candidates.append("/tmp/cmux-\(launchTag)/Build/Products/Debug/cmux")
+            candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/cmux")
         }
 
         var resolvedPaths: [String] = []
@@ -897,7 +897,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         _ = waitForCondition(timeout: timeout) {
             for candidate in primaryCandidates {
                 guard FileManager.default.fileExists(atPath: candidate) else { continue }
-                // Primary candidate is the explicitly requested CMUX_SOCKET_PATH. If it responds,
+                // Primary candidate is the explicitly requested PROGRAMA_SOCKET_PATH. If it responds,
                 // prefer it even before workspace contents are fully initialized.
                 if self.socketRespondsToPing(at: candidate) {
                     resolvedPath = candidate
@@ -935,15 +935,15 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
     private func expectedSocketCandidates(includeGlobalFallback: Bool) -> [String] {
         var candidates = [socketPath]
-        let taggedDebugSocket = "/tmp/cmux-debug-\(launchTag).sock"
+        let taggedDebugSocket = "/tmp/programa-debug-\(launchTag).sock"
         if !taggedDebugSocket.isEmpty {
             candidates.append(taggedDebugSocket)
         }
         if includeGlobalFallback {
             candidates.append(contentsOf: discoverTmpSocketCandidates(limit: 12))
-            candidates.append("/tmp/cmux-debug.sock")
+            candidates.append("/tmp/programa-debug.sock")
             candidates.append(stableSocketPath())
-            candidates.append("/tmp/cmux.sock")
+            candidates.append("/tmp/programa.sock")
         }
 
         var unique: [String] = []
@@ -960,7 +960,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("cmux", isDirectory: true)
             .appendingPathComponent("cmux.sock", isDirectory: false)
-            .path ?? "/tmp/cmux.sock"
+            .path ?? "/tmp/programa.sock"
     }
 
     private func socketMatchesRequiredWorkspace(_ candidatePath: String, workspaceId: String?) -> Bool {

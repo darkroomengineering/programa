@@ -6,7 +6,7 @@ This covers regressions where a listening server (e.g. `python3 -m http.server`)
 doesn't show up in the sidebar ports row.
 
 Run with a tagged instance to avoid unix socket conflicts:
-  CMUX_TAG=<tag> python3 tests/test_sidebar_ports.py
+  PROGRAMA_TAG=<tag> python3 tests/test_sidebar_ports.py
 """
 
 from __future__ import annotations
@@ -255,9 +255,9 @@ def _terminate_process_group(proc: subprocess.Popen | None) -> None:
 
 
 def main() -> int:
-    tag = os.environ.get("CMUX_TAG") or ""
+    tag = os.environ.get("PROGRAMA_TAG") or ""
     if not tag:
-        print("Tip: set CMUX_TAG=<tag> when running this test to avoid socket conflicts.")
+        print("Tip: set PROGRAMA_TAG=<tag> when running this test to avoid socket conflicts.")
 
     base = Path("/tmp") / f"cmux_ports_test_{os.getpid()}"
     tab_pid_file = base / "tab-server.pid"

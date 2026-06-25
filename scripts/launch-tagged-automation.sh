@@ -106,9 +106,9 @@ TAG_ID="$(sanitize_bundle "$TAG")"
 TAG_SLUG="$(sanitize_path "$TAG")"
 APP="$HOME/Library/Developer/Xcode/DerivedData/cmux-${TAG_SLUG}/Build/Products/Debug/Programa DEV ${TAG}.app"
 BID="com.darkroom.programa.debug.${TAG_ID}"
-SOCK="/tmp/cmux-debug-${TAG_SLUG}.sock"
-DSOCK="$HOME/Library/Application Support/cmux/cmuxd-dev-${TAG_SLUG}.sock"
-LOG="/tmp/cmux-debug-${TAG_SLUG}.log"
+SOCK="/tmp/programa-debug-${TAG_SLUG}.sock"
+DSOCK="$HOME/Library/Application Support/programa/programad-dev-${TAG_SLUG}.sock"
+LOG="/tmp/programa-debug-${TAG_SLUG}.log"
 
 if [[ ! -d "$APP" ]]; then
   echo "error: tagged app not found at $APP" >&2
@@ -123,22 +123,22 @@ sleep 0.5
 
 OPEN_ENV=(
   env
-  -u CMUX_SOCKET_PATH
-  -u CMUX_SOCKET_MODE
-  -u CMUX_TAB_ID
-  -u CMUX_PANEL_ID
-  -u CMUX_SURFACE_ID
-  -u CMUX_WORKSPACE_ID
-  -u CMUXD_UNIX_PATH
-  -u CMUX_TAG
-  -u CMUX_PORT
-  -u CMUX_PORT_END
-  -u CMUX_PORT_RANGE
-  -u CMUX_DEBUG_LOG
-  -u CMUX_BUNDLE_ID
-  -u CMUX_SHELL_INTEGRATION
-  -u CMUX_SHELL_INTEGRATION_DIR
-  -u CMUX_LOAD_GHOSTTY_ZSH_INTEGRATION
+  -u PROGRAMA_SOCKET_PATH
+  -u PROGRAMA_SOCKET_MODE
+  -u PROGRAMA_TAB_ID
+  -u PROGRAMA_PANEL_ID
+  -u PROGRAMA_SURFACE_ID
+  -u PROGRAMA_WORKSPACE_ID
+  -u PROGRAMAD_UNIX_PATH
+  -u PROGRAMA_TAG
+  -u PROGRAMA_PORT
+  -u PROGRAMA_PORT_END
+  -u PROGRAMA_PORT_RANGE
+  -u PROGRAMA_DEBUG_LOG
+  -u PROGRAMA_BUNDLE_ID
+  -u PROGRAMA_SHELL_INTEGRATION
+  -u PROGRAMA_SHELL_INTEGRATION_DIR
+  -u PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION
   -u GHOSTTY_BIN_DIR
   -u GHOSTTY_RESOURCES_DIR
   -u GHOSTTY_SHELL_FEATURES
@@ -146,10 +146,10 @@ OPEN_ENV=(
   -u GH_PAGER
   -u TERMINFO
   -u XDG_DATA_DIRS
-  "CMUX_SOCKET_MODE=${MODE}"
-  "CMUX_SOCKET_PATH=${SOCK}"
-  "CMUXD_UNIX_PATH=${DSOCK}"
-  "CMUX_DEBUG_LOG=${LOG}"
+  "PROGRAMA_SOCKET_MODE=${MODE}"
+  "PROGRAMA_SOCKET_PATH=${SOCK}"
+  "PROGRAMAD_UNIX_PATH=${DSOCK}"
+  "PROGRAMA_DEBUG_LOG=${LOG}"
 )
 
 for kv in "${EXTRA_ENV[@]}"; do
@@ -174,7 +174,7 @@ fi
 echo "app: $APP"
 echo "bundle_id: $BID"
 echo "socket: $SOCK"
-echo "cmuxd_socket: $DSOCK"
+echo "programad_socket: $DSOCK"
 echo "log: $LOG"
 echo "mode: $MODE"
 echo "socket_ready: $(if [[ -S "$SOCK" ]]; then echo yes; else echo no; fi)"

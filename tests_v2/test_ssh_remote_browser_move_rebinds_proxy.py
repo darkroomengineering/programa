@@ -16,11 +16,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux.sock")
-SSH_HOST = os.environ.get("CMUX_SSH_TEST_HOST", "").strip()
-SSH_PORT = os.environ.get("CMUX_SSH_TEST_PORT", "").strip()
-SSH_IDENTITY = os.environ.get("CMUX_SSH_TEST_IDENTITY", "").strip()
-SSH_OPTIONS_RAW = os.environ.get("CMUX_SSH_TEST_OPTIONS", "").strip()
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa.sock")
+SSH_HOST = os.environ.get("PROGRAMA_SSH_TEST_HOST", "").strip()
+SSH_PORT = os.environ.get("PROGRAMA_SSH_TEST_PORT", "").strip()
+SSH_IDENTITY = os.environ.get("PROGRAMA_SSH_TEST_IDENTITY", "").strip()
+SSH_OPTIONS_RAW = os.environ.get("PROGRAMA_SSH_TEST_OPTIONS", "").strip()
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -46,7 +46,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -56,9 +56,9 @@ def _find_cli_binary() -> str:
 
 def _run_cli_json(cli: str, args: list[str]) -> dict:
     env = dict(os.environ)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env.pop("CMUX_TAB_ID", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env.pop("PROGRAMA_TAB_ID", None)
 
     proc = _run([cli, "--socket", SOCKET_PATH, "--json", *args], env=env)
     try:
@@ -178,7 +178,7 @@ def _assert_browser_does_not_contain(client: cmux, surface_id: str, token: str, 
 
 def main() -> int:
     if not SSH_HOST:
-        print("SKIP: set CMUX_SSH_TEST_HOST to run remote browser move/proxy regression")
+        print("SKIP: set PROGRAMA_SSH_TEST_HOST to run remote browser move/proxy regression")
         return 0
 
     cli = _find_cli_binary()
@@ -186,11 +186,11 @@ def main() -> int:
     remote_surface_id = ""
 
     stamp = secrets.token_hex(4)
-    marker_file = f"CMUX_REMOTE_PROXY_MOVE_{stamp}.txt"
-    marker_body = f"CMUX_REMOTE_PROXY_BODY_{stamp}"
-    ready_token = f"CMUX_HTTP_READY_{stamp}"
+    marker_file = f"PROGRAMA_REMOTE_PROXY_MOVE_{stamp}.txt"
+    marker_body = f"PROGRAMA_REMOTE_PROXY_BODY_{stamp}"
+    ready_token = f"PROGRAMA_HTTP_READY_{stamp}"
     default_web_port = 20000 + (os.getpid() % 5000)
-    ssh_web_port = int(os.environ.get("CMUX_SSH_TEST_WEB_PORT", str(default_web_port)))
+    ssh_web_port = int(os.environ.get("PROGRAMA_SSH_TEST_WEB_PORT", str(default_web_port)))
     url = f"http://localhost:{ssh_web_port}/{marker_file}"
 
     try:
@@ -227,7 +227,7 @@ def main() -> int:
 
             server_script = (
                 f"printf '%s\\n' {marker_body} > /tmp/{marker_file}; "
-                f"python3 -m http.server {ssh_web_port} --directory /tmp >/tmp/cmux-remote-browser-proxy-{stamp}.log 2>&1 & "
+                f"python3 -m http.server {ssh_web_port} --directory /tmp >/tmp/programa-remote-browser-proxy-{stamp}.log 2>&1 & "
                 "for _ in $(seq 1 30); do "
                 f"  if curl -fsS http://localhost:{ssh_web_port}/{marker_file} | grep -q {marker_body}; then "
                 f"    echo {ready_token}; "

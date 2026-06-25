@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
-LAST_SOCKET_HINT_PATH = Path("/tmp/cmux-last-socket-path")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
+LAST_SOCKET_HINT_PATH = Path("/tmp/programa-last-socket-path")
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -32,7 +32,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -57,8 +57,8 @@ def main() -> int:
     _must(version_proc.returncode == 0, f"--version should succeed: {version_proc.returncode} {version_out!r}")
     _must("cmux" in version_out, f"--version output should mention cmux: {version_out!r}")
 
-    # Debug builds should auto-resolve the active debug socket via /tmp/cmux-last-socket-path
-    # when CMUX_SOCKET_PATH is not set.
+    # Debug builds should auto-resolve the active debug socket via /tmp/programa-last-socket-path
+    # when PROGRAMA_SOCKET_PATH is not set.
     hint_backup: str | None = None
     hint_had_file = LAST_SOCKET_HINT_PATH.exists()
     if hint_had_file:
@@ -66,8 +66,8 @@ def main() -> int:
     try:
         LAST_SOCKET_HINT_PATH.write_text(f"{SOCKET_PATH}\n", encoding="utf-8")
         auto_env = dict(os.environ)
-        auto_env.pop("CMUX_SOCKET_PATH", None)
-        auto_env.pop("CMUX_SOCKET", None)
+        auto_env.pop("PROGRAMA_SOCKET_PATH", None)
+        auto_env.pop("PROGRAMA_SOCKET", None)
         auto_ping = _run([cli, "ping"], env=auto_env)
         auto_ping_out = _merged_output(auto_ping).lower()
         _must(auto_ping.returncode == 0, f"debug auto socket resolution should succeed: {auto_ping.returncode} {auto_ping_out!r}")

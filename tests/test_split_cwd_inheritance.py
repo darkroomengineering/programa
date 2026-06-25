@@ -10,7 +10,7 @@ Requires:
   - bash shell integration sourced (cmux-bash-integration.bash)
 
 Run with a tagged instance:
-  CMUX_TAG=<tag> python3 tests/test_split_cwd_inheritance.py
+  PROGRAMA_TAG=<tag> python3 tests/test_split_cwd_inheritance.py
 """
 
 from __future__ import annotations
@@ -109,17 +109,17 @@ def _focus_first_surface(client: cmux) -> str:
 
 
 def main() -> int:
-    tag = os.environ.get("CMUX_TAG", "")
+    tag = os.environ.get("PROGRAMA_TAG", "")
 
     socket_path = None
     if tag:
-        socket_path = f"/tmp/cmux-debug-{tag}.sock"
+        socket_path = f"/tmp/programa-debug-{tag}.sock"
     client = cmux(socket_path=socket_path)
     client.connect()
 
     # Use resolved paths to avoid /tmp -> /private/tmp symlink mismatch on macOS
-    test_dir_a = str(Path("/tmp/cmux_split_cwd_test_a").resolve())
-    test_dir_b = str(Path("/tmp/cmux_split_cwd_test_b").resolve())
+    test_dir_a = str(Path("/tmp/programa_split_cwd_test_a").resolve())
+    test_dir_b = str(Path("/tmp/programa_split_cwd_test_b").resolve())
     os.makedirs(test_dir_a, exist_ok=True)
     os.makedirs(test_dir_b, exist_ok=True)
 

@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -35,7 +35,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -45,9 +45,9 @@ def _find_cli_binary() -> str:
 
 def _run_cli(cli: str, args: list[str], *, json_output: bool, extra_env: dict[str, str] | None = None) -> str:
     env = dict(os.environ)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env.pop("CMUX_TAB_ID", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env.pop("PROGRAMA_TAB_ID", None)
     if extra_env:
         env.update(extra_env)
 
@@ -218,7 +218,7 @@ def main() -> int:
                 f"cmux ssh startup script should execute the staged remote bootstrap file through /bin/sh: {ssh_startup_command!r}",
             )
             _must(
-                "export CMUX_BOOTSTRAP_TTY=\"$cmux_bootstrap_tty\"" in ssh_startup_script,
+                "export PROGRAMA_BOOTSTRAP_TTY=\"$cmux_bootstrap_tty\"" in ssh_startup_script,
                 f"cmux ssh startup script should preserve the bootstrap tty for relay warmup: {ssh_startup_command!r}",
             )
             bootstrap_b64_match = re.search(r"^cmux_remote_bootstrap_b64=([A-Za-z0-9+/=]+)$", ssh_startup_script, re.MULTILINE)
@@ -236,7 +236,7 @@ def main() -> int:
             _must("-o StrictHostKeyChecking=accept-new" in ssh_command, f"ssh command prefix mismatch: {ssh_command!r}")
             _must("-o ControlMaster=auto" in ssh_command, f"ssh command should opt into connection reuse: {ssh_command!r}")
             _must("-o ControlPersist=600" in ssh_command, f"ssh command should keep master alive for reuse: {ssh_command!r}")
-            _must("ControlPath=/tmp/cmux-ssh-" in ssh_command, f"ssh command should use shared control path template: {ssh_command!r}")
+            _must("ControlPath=/tmp/programa-ssh-" in ssh_command, f"ssh command should use shared control path template: {ssh_command!r}")
             _must(
                 "RemoteCommand=" not in ssh_command,
                 f"cmux ssh should keep the plain ssh_command separate from the terminal bootstrap wrapper: {ssh_command!r}",
@@ -246,7 +246,7 @@ def main() -> int:
                 f"cmux ssh should stage a temp startup script through ssh_terminal_command: {ssh_terminal_command!r}",
             )
             _must(
-                "export CMUX_BOOTSTRAP_TTY=\"$cmux_bootstrap_tty\"" in ssh_terminal_command,
+                "export PROGRAMA_BOOTSTRAP_TTY=\"$cmux_bootstrap_tty\"" in ssh_terminal_command,
                 f"cmux ssh should capture the bootstrap tty before handing off to the temp startup script: {ssh_terminal_command!r}",
             )
             _must(
@@ -258,27 +258,27 @@ def main() -> int:
                 f"cmux ssh should still prepend the remote cmux wrapper path in the remote bootstrap: {remote_bootstrap!r}",
             )
             _must(
-                f"export CMUX_SOCKET_PATH=127.0.0.1:{int(remote_relay_port)}" in remote_bootstrap,
+                f"export PROGRAMA_SOCKET_PATH=127.0.0.1:{int(remote_relay_port)}" in remote_bootstrap,
                 f"cmux ssh should still pin the relay socket path in the remote bootstrap: {remote_bootstrap!r}",
             )
             _must(
-                "export CMUX_WORKSPACE_ID='__CMUX_WORKSPACE_ID__'" in remote_bootstrap,
+                "export PROGRAMA_WORKSPACE_ID='__PROGRAMA_WORKSPACE_ID__'" in remote_bootstrap,
                 f"cmux ssh should export the remote workspace id into the bootstrap shell: {remote_bootstrap!r}",
             )
             _must(
-                "export CMUX_TAB_ID='__CMUX_WORKSPACE_ID__'" in remote_bootstrap,
-                f"cmux ssh should keep CMUX_TAB_ID aligned with the workspace id for shell integration: {remote_bootstrap!r}",
+                "export PROGRAMA_TAB_ID='__PROGRAMA_WORKSPACE_ID__'" in remote_bootstrap,
+                f"cmux ssh should keep PROGRAMA_TAB_ID aligned with the workspace id for shell integration: {remote_bootstrap!r}",
             )
             _must(
-                "export CMUX_SURFACE_ID='__CMUX_SURFACE_ID__'" in remote_bootstrap,
+                "export PROGRAMA_SURFACE_ID='__PROGRAMA_SURFACE_ID__'" in remote_bootstrap,
                 f"cmux ssh should export the remote surface id into the bootstrap shell: {remote_bootstrap!r}",
             )
             _must(
-                "export CMUX_PANEL_ID='__CMUX_SURFACE_ID__'" in remote_bootstrap,
-                f"cmux ssh should keep CMUX_PANEL_ID aligned with the surface id for shell integration: {remote_bootstrap!r}",
+                "export PROGRAMA_PANEL_ID='__PROGRAMA_SURFACE_ID__'" in remote_bootstrap,
+                f"cmux ssh should keep PROGRAMA_PANEL_ID aligned with the surface id for shell integration: {remote_bootstrap!r}",
             )
             _must(
-                "case \"${CMUX_LOGIN_SHELL##*/}\" in" in remote_bootstrap,
+                "case \"${PROGRAMA_LOGIN_SHELL##*/}\" in" in remote_bootstrap,
                 f"cmux ssh should still branch on the user's login shell when possible: {remote_bootstrap!r}",
             )
             _must(
@@ -290,7 +290,7 @@ def main() -> int:
                 f"cmux ssh should synchronously report the relay TTY during bootstrap: {remote_bootstrap!r}",
             )
             _must(
-                'cmux_relay_tty="${CMUX_BOOTSTRAP_TTY:-}"' in remote_bootstrap,
+                'cmux_relay_tty="${PROGRAMA_BOOTSTRAP_TTY:-}"' in remote_bootstrap,
                 f"cmux ssh should reuse the bootstrap tty when warming the relay-backed shell integration: {remote_bootstrap!r}",
             )
             _must(
@@ -298,11 +298,11 @@ def main() -> int:
                 f"cmux ssh should trigger an immediate relay-backed port scan during bootstrap: {remote_bootstrap!r}",
             )
             _must(
-                "exec \"$CMUX_LOGIN_SHELL\" --rcfile \"$cmux_shell_dir/.bashrc\" -i" in remote_bootstrap,
+                "exec \"$PROGRAMA_LOGIN_SHELL\" --rcfile \"$cmux_shell_dir/.bashrc\" -i" in remote_bootstrap,
                 f"cmux ssh should still support bash login shells with a post-rc wrapper file: {remote_bootstrap!r}",
             )
             _must(
-                "exec \"$CMUX_LOGIN_SHELL\" -i" in remote_bootstrap,
+                "exec \"$PROGRAMA_LOGIN_SHELL\" -i" in remote_bootstrap,
                 f"cmux ssh should still hand off to the user's interactive login shell when possible: {remote_bootstrap!r}",
             )
 
@@ -414,7 +414,7 @@ def main() -> int:
 
             _must(bool(workspace_id_without_name), f"cmux ssh without --name should still create workspace: {payload2}")
             _must(
-                "ControlPath=/tmp/cmux-ssh-" in ssh_command_without_name,
+                "ControlPath=/tmp/programa-ssh-" in ssh_command_without_name,
                 f"cmux ssh without --name should still include control path defaults: {ssh_command_without_name!r}",
             )
             _must(
@@ -493,7 +493,7 @@ def main() -> int:
                     "--ssh-option",
                     "controlpersist=0",
                     "--ssh-option",
-                    "controlpath=/tmp/cmux-ssh-%C-custom",
+                    "controlpath=/tmp/programa-ssh-%C-custom",
                 ],
             )
             workspace_id_case_override = _append_workspace_to_cleanup(
@@ -531,7 +531,7 @@ def main() -> int:
                 f"ssh command should not force default ControlPersist when lowercase override is supplied: {ssh_command_case_override!r}",
             )
             _must(
-                "controlpath=/tmp/cmux-ssh-%c-custom" in ssh_command_case_override_lower,
+                "controlpath=/tmp/programa-ssh-%c-custom" in ssh_command_case_override_lower,
                 f"ssh command should preserve lowercase ControlPath override value: {ssh_command_case_override!r}",
             )
             _must(

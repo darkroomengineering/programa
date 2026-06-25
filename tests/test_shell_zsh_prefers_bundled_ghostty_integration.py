@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Regression: the cmux zsh wrapper should prefer a bundled Ghostty zsh
-integration file in CMUX_SHELL_INTEGRATION_DIR over the fallback integration
+integration file in PROGRAMA_SHELL_INTEGRATION_DIR over the fallback integration
 under GHOSTTY_RESOURCES_DIR.
 
 Without this, tagged cmux builds can silently load Ghostty's installed app
@@ -43,11 +43,11 @@ def main() -> int:
             (orig / filename).write_text("", encoding="utf-8")
 
         (bundled / "ghostty-integration.zsh").write_text(
-            'echo "bundled" >> "$CMUX_TEST_OUT"\n',
+            'echo "bundled" >> "$PROGRAMA_TEST_OUT"\n',
             encoding="utf-8",
         )
         (fallback / "shell-integration" / "zsh" / "ghostty-integration").write_text(
-            'echo "fallback" >> "$CMUX_TEST_OUT"\n',
+            'echo "fallback" >> "$PROGRAMA_TEST_OUT"\n',
             encoding="utf-8",
         )
 
@@ -55,11 +55,11 @@ def main() -> int:
         env["HOME"] = str(home)
         env["ZDOTDIR"] = str(wrapper_dir)
         env["GHOSTTY_ZSH_ZDOTDIR"] = str(orig)
-        env["CMUX_SHELL_INTEGRATION_DIR"] = str(bundled)
+        env["PROGRAMA_SHELL_INTEGRATION_DIR"] = str(bundled)
         env["GHOSTTY_RESOURCES_DIR"] = str(fallback)
-        env["CMUX_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "1"
-        env["CMUX_SHELL_INTEGRATION"] = "0"
-        env["CMUX_TEST_OUT"] = str(marker)
+        env["PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "1"
+        env["PROGRAMA_SHELL_INTEGRATION"] = "0"
+        env["PROGRAMA_TEST_OUT"] = str(marker)
 
         result = subprocess.run(
             ["zsh", "-d", "-i", "-c", "true"],

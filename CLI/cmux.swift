@@ -42,7 +42,7 @@ private final class CLISocketSentryTelemetry {
     }
 
     private static func currentSentryBundleIdentifier() -> String? {
-        if let bundleIdentifier = ProcessInfo.processInfo.environment["CMUX_BUNDLE_ID"]?
+        if let bundleIdentifier = ProcessInfo.processInfo.environment["PROGRAMA_BUNDLE_ID"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !bundleIdentifier.isEmpty {
             return bundleIdentifier
@@ -132,12 +132,12 @@ private final class CLISocketSentryTelemetry {
         self.command = command.lowercased()
         self.subcommand = commandArgs.first?.lowercased() ?? "help"
         self.socketPath = socketPath
-        self.envSocketPath = processEnv["CMUX_SOCKET_PATH"] ?? processEnv["CMUX_SOCKET"]
-        self.workspaceId = processEnv["CMUX_WORKSPACE_ID"]
-        self.surfaceId = processEnv["CMUX_SURFACE_ID"]
+        self.envSocketPath = processEnv["PROGRAMA_SOCKET_PATH"] ?? processEnv["PROGRAMA_SOCKET"]
+        self.workspaceId = processEnv["PROGRAMA_WORKSPACE_ID"]
+        self.surfaceId = processEnv["PROGRAMA_SURFACE_ID"]
         self.disabledByEnv =
-            processEnv["CMUX_CLI_SENTRY_DISABLED"] == "1" ||
-            processEnv["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] == "1"
+            processEnv["PROGRAMA_CLI_SENTRY_DISABLED"] == "1" ||
+            processEnv["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] == "1"
     }
 
     func breadcrumb(_ message: String, data: [String: Any] = [:]) {
@@ -227,7 +227,7 @@ private final class CLISocketSentryTelemetry {
         if CLISocketPathResolver.isImplicitDefaultPath(socketPath),
            (envSocketPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
            !taggedSockets.isEmpty {
-            context["possible_root_cause"] = "CMUX_SOCKET_PATH/CMUX_SOCKET missing while tagged sockets exist"
+            context["possible_root_cause"] = "PROGRAMA_SOCKET_PATH/PROGRAMA_SOCKET missing while tagged sockets exist"
         }
 
         return context
@@ -348,7 +348,7 @@ private final class ClaudeHookSessionStore {
         processEnv: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default
     ) {
-        if let overridePath = processEnv["CMUX_CLAUDE_HOOK_STATE_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if let overridePath = processEnv["PROGRAMA_CLAUDE_HOOK_STATE_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !overridePath.isEmpty {
             self.statePath = NSString(string: overridePath).expandingTildeInPath
         } else {
@@ -545,7 +545,7 @@ enum SocketPasswordResolver {
         if let explicit = normalized(explicit) {
             return explicit
         }
-        if let env = normalized(ProcessInfo.processInfo.environment["CMUX_SOCKET_PASSWORD"]) {
+        if let env = normalized(ProcessInfo.processInfo.environment["PROGRAMA_SOCKET_PASSWORD"]) {
             return env
         }
         if let filePassword = loadFromFile() {
@@ -590,7 +590,7 @@ enum SocketPasswordResolver {
         socketPath: String,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> String? {
-        if let tag = normalized(environment["CMUX_TAG"]) {
+        if let tag = normalized(environment["PROGRAMA_TAG"]) {
             let scoped = sanitizeScope(tag)
             if !scoped.isEmpty {
                 return scoped
@@ -713,7 +713,7 @@ private enum CLISocketPathResolver {
     private static func candidatePaths(requestedPath: String, environment: [String: String]) -> [String] {
         var candidates: [String] = []
 
-        if let tag = normalized(environment["CMUX_TAG"]) {
+        if let tag = normalized(environment["PROGRAMA_TAG"]) {
             let slug = sanitizeTagSlug(tag)
             candidates.append("/tmp/cmux-debug-\(slug).sock")
             candidates.append("/tmp/cmux-\(slug).sock")
@@ -1055,8 +1055,8 @@ final class SocketClient {
 
     private static func relayCredentials(for endpoint: RelayEndpoint) throws -> RelayCredentials {
         let environment = ProcessInfo.processInfo.environment
-        if let relayID = trimmedEnvValue(environment["CMUX_RELAY_ID"]),
-           let relayTokenHex = trimmedEnvValue(environment["CMUX_RELAY_TOKEN"]),
+        if let relayID = trimmedEnvValue(environment["PROGRAMA_RELAY_ID"]),
+           let relayTokenHex = trimmedEnvValue(environment["PROGRAMA_RELAY_TOKEN"]),
            let relayToken = hexData(from: relayTokenHex) {
             return RelayCredentials(relayID: relayID, relayToken: relayToken)
         }
@@ -1600,7 +1600,7 @@ struct CMUXCLI {
     }
 
     private static func defaultSocketPath(environment: [String: String]) -> String {
-        if let explicit = normalizedEnvValue(environment["CMUX_SOCKET_PATH"]) {
+        if let explicit = normalizedEnvValue(environment["PROGRAMA_SOCKET_PATH"]) {
             return explicit
         }
 #if DEBUG
@@ -1616,7 +1616,7 @@ struct CMUXCLI {
     func run() throws {
         let processEnv = ProcessInfo.processInfo.environment
         let envSocketPath: String? = {
-            for key in ["CMUX_SOCKET_PATH", "CMUX_SOCKET"] {
+            for key in ["PROGRAMA_SOCKET_PATH", "PROGRAMA_SOCKET"] {
                 guard let raw = processEnv[key] else { continue }
                 let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
@@ -1821,7 +1821,7 @@ struct CMUXCLI {
         // Codex hook handler: gracefully no-op when not inside cmux
         // (before socket connection, so it doesn't fail when no socket exists)
         if command == "codex-hook" {
-            guard ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"] != nil else {
+            guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else {
                 print("{}")
                 return
             }
@@ -1892,8 +1892,8 @@ struct CMUXCLI {
             let includeCaller = !hasFlag(commandArgs, name: "--no-caller")
             if includeCaller {
                 let idWsFlag = optionValue(commandArgs, name: "--workspace")
-                let workspaceArg = idWsFlag ?? (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
-                let surfaceArg = optionValue(commandArgs, name: "--surface") ?? (idWsFlag == nil && windowId == nil ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"] : nil)
+                let workspaceArg = idWsFlag ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                let surfaceArg = optionValue(commandArgs, name: "--surface") ?? (idWsFlag == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
                 if workspaceArg != nil || surfaceArg != nil {
                     let workspaceId = try normalizeWorkspaceHandle(
                         workspaceArg,
@@ -2066,8 +2066,8 @@ struct CMUXCLI {
             let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
             let (panelArg, rem1) = parseOption(rem0, name: "--panel")
             let (sfArg, rem2) = parseOption(rem1, name: "--surface")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
-            let surfaceRaw = sfArg ?? panelArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"] : nil)
+            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+            let surfaceRaw = sfArg ?? panelArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
             guard let direction = rem2.first else {
                 throw CLIError(message: "new-split requires a direction")
             }
@@ -2176,8 +2176,8 @@ struct CMUXCLI {
 
         case "close-surface":
             let csWsFlag = optionValue(commandArgs, name: "--workspace")
-            let workspaceArg = csWsFlag ?? (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
-            let surfaceRaw = optionValue(commandArgs, name: "--surface") ?? optionValue(commandArgs, name: "--panel") ?? (csWsFlag == nil && windowId == nil ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"] : nil)
+            let workspaceArg = csWsFlag ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+            let surfaceRaw = optionValue(commandArgs, name: "--surface") ?? optionValue(commandArgs, name: "--panel") ?? (csWsFlag == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
             var params: [String: Any] = [:]
             let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
             if let wsId { params["workspace_id"] = wsId }
@@ -2263,11 +2263,11 @@ struct CMUXCLI {
             let preferTTYFallback = windowId == nil && ProcessInfo.processInfo.environment["TMUX"] != nil
             let callerWorkspaceArg = preferTTYFallback
                 ? nil
-                : (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
+                : (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
             let workspaceArg = explicitWorkspaceArg ?? callerWorkspaceArg
             let explicitSurfaceArg = optionValue(commandArgs, name: "--surface") ?? optionValue(commandArgs, name: "--panel")
             let callerSurfaceArg = explicitSurfaceArg == nil && preferTTYFallback == false && windowId == nil
-                ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"]
+                ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"]
                 : nil
             let surfaceArg = explicitSurfaceArg ?? callerSurfaceArg
             var params: [String: Any] = [:]
@@ -2357,7 +2357,7 @@ struct CMUXCLI {
 
         case "rename-workspace", "rename-window":
             let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
+            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
             let titleArgs = rem0.dropFirst(rem0.first == "--" ? 1 : 0)
             let title = titleArgs.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else {
@@ -2388,8 +2388,8 @@ struct CMUXCLI {
                 throw CLIError(message: "read-screen: unexpected arguments: \(trailing.joined(separator: " "))")
             }
 
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
-            let surfaceArg = sfArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"] : nil)
+            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+            let surfaceArg = sfArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
 
             var params: [String: Any] = [:]
             let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
@@ -2419,8 +2419,8 @@ struct CMUXCLI {
         case "send":
             let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
             let (sfArg, rem1) = parseOption(rem0, name: "--surface")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
-            let surfaceArg = sfArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"] : nil)
+            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+            let surfaceArg = sfArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
             let rawText = rem1.dropFirst(rem1.first == "--" ? 1 : 0).joined(separator: " ")
             guard !rawText.isEmpty else { throw CLIError(message: "send requires text") }
             let text = unescapeSendText(rawText)
@@ -2435,8 +2435,8 @@ struct CMUXCLI {
         case "send-key":
             let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
             let (sfArg, rem1) = parseOption(rem0, name: "--surface")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
-            let surfaceArg = sfArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"] : nil)
+            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+            let surfaceArg = sfArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
             let keyArgs = rem1.first == "--" ? Array(rem1.dropFirst()) : rem1
             guard let key = keyArgs.first else { throw CLIError(message: "send-key requires a key") }
             var params: [String: Any] = ["key": key]
@@ -2450,7 +2450,7 @@ struct CMUXCLI {
         case "send-panel":
             let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
             let (panelArg, rem1) = parseOption(rem0, name: "--panel")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
+            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
             guard let panelArg else {
                 throw CLIError(message: "send-panel requires --panel")
             }
@@ -2468,7 +2468,7 @@ struct CMUXCLI {
         case "send-key-panel":
             let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
             let (panelArg, rem1) = parseOption(rem0, name: "--panel")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
+            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
             guard let panelArg else {
                 throw CLIError(message: "send-key-panel requires --panel")
             }
@@ -2492,11 +2492,11 @@ struct CMUXCLI {
             let preferTTYFallback = windowId == nil && ProcessInfo.processInfo.environment["TMUX"] != nil
             let callerWorkspaceArg = preferTTYFallback
                 ? nil
-                : (windowId == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
+                : (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
             let workspaceArg = explicitWorkspaceArg ?? callerWorkspaceArg
             let explicitSurfaceArg = optionValue(commandArgs, name: "--surface")
             let callerSurfaceArg = explicitSurfaceArg == nil && preferTTYFallback == false && windowId == nil
-                ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"]
+                ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"]
                 : nil
             let surfaceArg = explicitSurfaceArg ?? callerSurfaceArg
 
@@ -2548,7 +2548,7 @@ struct CMUXCLI {
                 let wsId = try resolveWorkspaceId(wsFlag, client: client)
                 socketCmd += " --tab=\(wsId)"
             } else if windowId == nil,
-                      let envWs = ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"],
+                      let envWs = ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"],
                       let wsId = try? resolveWorkspaceId(envWs, client: client) {
                 socketCmd += " --tab=\(wsId)"
             }
@@ -2871,7 +2871,7 @@ struct CMUXCLI {
                 params["surface_id"] = surface
             }
         }
-        let workspaceRaw = workspaceOpt ?? (windowOpt == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
+        let workspaceRaw = workspaceOpt ?? (windowOpt == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
         if let workspaceRaw {
             if let workspace = try normalizeWorkspaceHandle(workspaceRaw, client: client) {
                 params["workspace_id"] = workspace
@@ -2974,7 +2974,7 @@ struct CMUXCLI {
         if emailOpt == nil && bodyOpt == nil && imagePaths.isEmpty {
             var params: [String: Any] = [:]
             let env = ProcessInfo.processInfo.environment
-            if let workspaceId = env["CMUX_WORKSPACE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+            if let workspaceId = env["PROGRAMA_WORKSPACE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !workspaceId.isEmpty {
                 params["workspace_id"] = workspaceId
                 params["activate"] = false
@@ -3757,7 +3757,7 @@ struct CMUXCLI {
         }
 
         let action = actionRaw.lowercased().replacingOccurrences(of: "-", with: "_")
-        let workspaceArg = workspaceOpt ?? (windowOverride == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
+        let workspaceArg = workspaceOpt ?? (windowOverride == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
         let workspaceId = try normalizeWorkspaceHandle(workspaceArg, client: client, allowCurrent: true)
 
         let inferredPositionalRaw = positional.joined(separator: " ")
@@ -3846,11 +3846,11 @@ struct CMUXCLI {
         }
 
         let action = actionRaw.lowercased().replacingOccurrences(of: "-", with: "_")
-        let workspaceArg = workspaceOpt ?? (windowOverride == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
+        let workspaceArg = workspaceOpt ?? (windowOverride == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
         let tabArg = tabOpt
             ?? surfaceOpt
             ?? (workspaceOpt == nil && windowOverride == nil
-                ? (ProcessInfo.processInfo.environment["CMUX_TAB_ID"] ?? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"])
+                ? (ProcessInfo.processInfo.environment["PROGRAMA_TAB_ID"] ?? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"])
                 : nil)
 
         let workspaceId = try normalizeWorkspaceHandle(workspaceArg, client: client, allowCurrent: true)
@@ -4403,16 +4403,16 @@ struct CMUXCLI {
             remoteBootstrapInstallShell(remoteRelayPort: options.remoteRelayPort)
         )
         var lines: [String] = [
-            "cmux_workspace_id=\"${CMUX_WORKSPACE_ID:-}\"",
-            "cmux_surface_id=\"${CMUX_SURFACE_ID:-}\"",
+            "cmux_workspace_id=\"${PROGRAMA_WORKSPACE_ID:-}\"",
+            "cmux_surface_id=\"${PROGRAMA_SURFACE_ID:-}\"",
             "cmux_remote_bootstrap_b64=\(shellQuote(encodedBootstrapScript))",
             "cmux_remote_bootstrap=\"$(printf %s \"$cmux_remote_bootstrap_b64\" | base64 -d 2>/dev/null || printf %s \"$cmux_remote_bootstrap_b64\" | base64 -D 2>/dev/null)\"",
-            "cmux_remote_bootstrap=\"$(printf '%s' \"$cmux_remote_bootstrap\" | sed \"s/__CMUX_WORKSPACE_ID__/$cmux_workspace_id/g; s/__CMUX_SURFACE_ID__/$cmux_surface_id/g\")\"",
+            "cmux_remote_bootstrap=\"$(printf '%s' \"$cmux_remote_bootstrap\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$cmux_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$cmux_surface_id/g\")\"",
             "if ! printf '%s' \"$cmux_remote_bootstrap\" | command \(installSSHPrefix) -T \(shellQuote(options.destination)) \(shellQuote(remoteBootstrapInstallCommand)); then",
             "  exit 1",
             "fi",
             "cmux_remote_command_template=\(shellQuote(remoteCommandTemplate))",
-            "cmux_remote_command=\"$(printf '%s' \"$cmux_remote_command_template\" | sed \"s/__CMUX_WORKSPACE_ID__/$cmux_workspace_id/g; s/__CMUX_SURFACE_ID__/$cmux_surface_id/g\")\"",
+            "cmux_remote_command=\"$(printf '%s' \"$cmux_remote_command_template\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$cmux_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$cmux_surface_id/g\")\"",
         ]
 
         var sshInvocation = "command \(sessionSSHPrefix) -o \"RemoteCommand=$cmux_remote_command\""
@@ -4472,7 +4472,7 @@ struct CMUXCLI {
             "if [ -n \"$cmux_bootstrap_tty\" ] && [ \"$cmux_bootstrap_tty\" != \"not a tty\" ]; then",
             "  mkdir -p \"$HOME/.cmux/relay\" >/dev/null 2>&1 || true",
             "  printf '%s' \"$cmux_bootstrap_tty\" > \"$HOME/.cmux/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
-            "  export CMUX_BOOTSTRAP_TTY=\"$cmux_bootstrap_tty\"",
+            "  export PROGRAMA_BOOTSTRAP_TTY=\"$cmux_bootstrap_tty\"",
         ]
 
         if includeRelayRPC {
@@ -4480,14 +4480,14 @@ struct CMUXCLI {
                 "  cmux_relay_cli=\"$HOME/.cmux/bin/cmux\"",
                 "  if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v cmux 2>/dev/null || true)\"; fi",
                 "  if [ -n \"$cmux_relay_cli\" ]; then",
-                "    cmux_relay_report_tty='{\"workspace_id\":\"__CMUX_WORKSPACE_ID__\",\"tty_name\":\"'$cmux_bootstrap_tty'\"}'",
-                "    cmux_relay_ports_kick='{\"workspace_id\":\"__CMUX_WORKSPACE_ID__\",\"reason\":\"command\"}'",
-                "    if [ -n \"__CMUX_SURFACE_ID__\" ]; then",
-                "      cmux_relay_report_tty='{\"workspace_id\":\"__CMUX_WORKSPACE_ID__\",\"surface_id\":\"__CMUX_SURFACE_ID__\",\"tty_name\":\"'$cmux_bootstrap_tty'\"}'",
-                "      cmux_relay_ports_kick='{\"workspace_id\":\"__CMUX_WORKSPACE_ID__\",\"surface_id\":\"__CMUX_SURFACE_ID__\",\"reason\":\"command\"}'",
+                "    cmux_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"tty_name\":\"'$cmux_bootstrap_tty'\"}'",
+                "    cmux_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"reason\":\"command\"}'",
+                "    if [ -n \"__PROGRAMA_SURFACE_ID__\" ]; then",
+                "      cmux_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"tty_name\":\"'$cmux_bootstrap_tty'\"}'",
+                "      cmux_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"reason\":\"command\"}'",
                 "    fi",
-                "    CMUX_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" CMUX_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$cmux_relay_cli\" rpc surface.report_tty \"$cmux_relay_report_tty\" >/dev/null 2>&1 || true",
-                "    CMUX_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" CMUX_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$cmux_relay_cli\" rpc surface.ports_kick \"$cmux_relay_ports_kick\" >/dev/null 2>&1 || true",
+                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$cmux_relay_cli\" rpc surface.report_tty \"$cmux_relay_report_tty\" >/dev/null 2>&1 || true",
+                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$cmux_relay_cli\" rpc surface.ports_kick \"$cmux_relay_ports_kick\" >/dev/null 2>&1 || true",
                 "    unset cmux_relay_cli cmux_relay_report_tty cmux_relay_ports_kick",
                 "  fi",
             ]
@@ -4514,19 +4514,19 @@ struct CMUXCLI {
         let remoteEnvExportLines = interactiveRemoteShellExportLines(shellFeatures: shellFeatures)
         let shellStateDir = shellStateDirForRemoteRelayPort(remoteRelayPort)
         let remoteCallerExportLines = [
-            "if [ -n '__CMUX_WORKSPACE_ID__' ]; then export CMUX_WORKSPACE_ID='__CMUX_WORKSPACE_ID__'; fi",
-            "if [ -n '__CMUX_WORKSPACE_ID__' ]; then export CMUX_TAB_ID='__CMUX_WORKSPACE_ID__'; fi",
-            "if [ -n '__CMUX_SURFACE_ID__' ]; then export CMUX_SURFACE_ID='__CMUX_SURFACE_ID__'; export CMUX_PANEL_ID='__CMUX_SURFACE_ID__'; fi",
+            "if [ -n '__PROGRAMA_WORKSPACE_ID__' ]; then export PROGRAMA_WORKSPACE_ID='__PROGRAMA_WORKSPACE_ID__'; fi",
+            "if [ -n '__PROGRAMA_WORKSPACE_ID__' ]; then export PROGRAMA_TAB_ID='__PROGRAMA_WORKSPACE_ID__'; fi",
+            "if [ -n '__PROGRAMA_SURFACE_ID__' ]; then export PROGRAMA_SURFACE_ID='__PROGRAMA_SURFACE_ID__'; export PROGRAMA_PANEL_ID='__PROGRAMA_SURFACE_ID__'; fi",
         ]
         let relaySocket = remoteRelayPort > 0 ? "127.0.0.1:\(remoteRelayPort)" : nil
         var commonShellExportLines = remoteTerminalLines
         commonShellExportLines.append(contentsOf: remoteEnvExportLines)
         commonShellExportLines.append("export PATH=\"$HOME/.cmux/bin:$PATH\"")
-        commonShellExportLines.append("export CMUX_BUNDLED_CLI_PATH=\"$HOME/.cmux/bin/cmux\"")
-        commonShellExportLines.append("export CMUX_SHELL_INTEGRATION_DIR=\"\(shellStateDir)\"")
+        commonShellExportLines.append("export PROGRAMA_BUNDLED_CLI_PATH=\"$HOME/.cmux/bin/cmux\"")
+        commonShellExportLines.append("export PROGRAMA_SHELL_INTEGRATION_DIR=\"\(shellStateDir)\"")
         if let relaySocket {
-            commonShellExportLines.append("export CMUX_SOCKET_PATH=\(relaySocket)")
-            commonShellExportLines.append("export CMUX_SOCKET=\(relaySocket)")
+            commonShellExportLines.append("export PROGRAMA_SOCKET_PATH=\(relaySocket)")
+            commonShellExportLines.append("export PROGRAMA_SOCKET=\(relaySocket)")
         }
         commonShellExportLines.append(contentsOf: remoteCallerExportLines)
         commonShellExportLines.append(contentsOf: [
@@ -4535,11 +4535,11 @@ struct CMUXCLI {
         ])
         var zshShellLines = commonShellExportLines
         zshShellLines.append(
-            #"if [ "${CMUX_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${CMUX_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh" ]; then . "${CMUX_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh"; fi"#
+            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh"; fi"#
         )
         var bashShellLines = commonShellExportLines
         bashShellLines.append(
-            #"if [ "${CMUX_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${CMUX_SHELL_INTEGRATION_DIR}/cmux-bash-integration.bash" ]; then . "${CMUX_SHELL_INTEGRATION_DIR}/cmux-bash-integration.bash"; fi"#
+            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-bash-integration.bash" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-bash-integration.bash"; fi"#
         )
         let zshBootstrap = RemoteRelayZshBootstrap(shellStateDir: shellStateDir)
         let zshEnvLines = zshBootstrap.zshEnvLines
@@ -4575,8 +4575,8 @@ struct CMUXCLI {
         }
         outerLines.append(contentsOf: commonShellExportLines)
         outerLines += [
-            "CMUX_LOGIN_SHELL=\"${SHELL:-/bin/zsh}\"",
-            "case \"${CMUX_LOGIN_SHELL##*/}\" in",
+            "PROGRAMA_LOGIN_SHELL=\"${SHELL:-/bin/zsh}\"",
+            "case \"${PROGRAMA_LOGIN_SHELL##*/}\" in",
             "  zsh)",
             "    cat > \"$cmux_shell_dir/.zshenv\" <<'CMUXZSHENV'",
         ]
@@ -4602,9 +4602,9 @@ struct CMUXCLI {
         ]
         outerLines.append(contentsOf: relayWarmupLines.map { "    " + $0 })
         outerLines += [
-            "    export CMUX_REAL_ZDOTDIR=\"${ZDOTDIR:-$HOME}\"",
+            "    export PROGRAMA_REAL_ZDOTDIR=\"${ZDOTDIR:-$HOME}\"",
             "    export ZDOTDIR=\"$cmux_shell_dir\"",
-            "    exec \"$CMUX_LOGIN_SHELL\" -il",
+            "    exec \"$PROGRAMA_LOGIN_SHELL\" -il",
             "    ;;",
             "  bash)",
             "    cat > \"$cmux_shell_dir/.bashrc\" <<'CMUXBASHRC'",
@@ -4616,14 +4616,14 @@ struct CMUXCLI {
         ]
         outerLines.append(contentsOf: relayWarmupLines.map { "    " + $0 })
         outerLines += [
-            "    exec \"$CMUX_LOGIN_SHELL\" --rcfile \"$cmux_shell_dir/.bashrc\" -i",
+            "    exec \"$PROGRAMA_LOGIN_SHELL\" --rcfile \"$cmux_shell_dir/.bashrc\" -i",
             "    ;;",
             "  *)",
         ]
         outerLines.append(contentsOf: commonShellExportLines)
         outerLines.append(contentsOf: relayWarmupLines)
         outerLines += [
-            "exec \"$CMUX_LOGIN_SHELL\" -i",
+            "exec \"$PROGRAMA_LOGIN_SHELL\" -i",
             ";;",
             "esac",
         ]
@@ -4754,26 +4754,26 @@ struct CMUXCLI {
             return []
         }
         return [
-            "cmux_relay_cli=\"${CMUX_BUNDLED_CLI_PATH:-$HOME/.cmux/bin/cmux}\"",
+            "cmux_relay_cli=\"${PROGRAMA_BUNDLED_CLI_PATH:-$HOME/.cmux/bin/cmux}\"",
             "if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v cmux 2>/dev/null || true)\"; fi",
-            "cmux_relay_tty=\"${CMUX_BOOTSTRAP_TTY:-}\"",
+            "cmux_relay_tty=\"${PROGRAMA_BOOTSTRAP_TTY:-}\"",
             "if [ -z \"$cmux_relay_tty\" ]; then cmux_relay_tty=\"$(tty 2>/dev/null || true)\"; fi",
             "cmux_relay_tty=\"${cmux_relay_tty##*/}\"",
             "if [ -n \"$cmux_relay_tty\" ] && [ \"$cmux_relay_tty\" != \"not a tty\" ]; then",
             "  mkdir -p \"$HOME/.cmux/relay\" >/dev/null 2>&1 || true",
             "  printf '%s' \"$cmux_relay_tty\" > \"$HOME/.cmux/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
             "fi",
-            "if [ -n \"$cmux_relay_cli\" ] && [ -n \"$CMUX_WORKSPACE_ID\" ] && [ -n \"$cmux_relay_tty\" ] && [ \"$cmux_relay_tty\" != \"not a tty\" ]; then",
-            "  cmux_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$CMUX_WORKSPACE_ID\\\",\\\"tty_name\\\":\\\"$cmux_relay_tty\\\"}\"",
-            "  cmux_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$CMUX_WORKSPACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
-            "  if [ -n \"$CMUX_SURFACE_ID\" ]; then",
-            "    cmux_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$CMUX_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$CMUX_SURFACE_ID\\\",\\\"tty_name\\\":\\\"$cmux_relay_tty\\\"}\"",
-            "    cmux_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$CMUX_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$CMUX_SURFACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
+            "if [ -n \"$cmux_relay_cli\" ] && [ -n \"$PROGRAMA_WORKSPACE_ID\" ] && [ -n \"$cmux_relay_tty\" ] && [ \"$cmux_relay_tty\" != \"not a tty\" ]; then",
+            "  cmux_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"tty_name\\\":\\\"$cmux_relay_tty\\\"}\"",
+            "  cmux_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
+            "  if [ -n \"$PROGRAMA_SURFACE_ID\" ]; then",
+            "    cmux_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"tty_name\\\":\\\"$cmux_relay_tty\\\"}\"",
+            "    cmux_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
             "  fi",
             "  \"$cmux_relay_cli\" rpc surface.report_tty \"$cmux_relay_report_tty\" >/dev/null 2>&1 || true",
             "  \"$cmux_relay_cli\" rpc surface.ports_kick \"$cmux_relay_ports_kick\" >/dev/null 2>&1 || true",
             "fi",
-            "unset CMUX_BOOTSTRAP_TTY cmux_relay_cli cmux_relay_tty cmux_relay_report_tty cmux_relay_ports_kick",
+            "unset PROGRAMA_BOOTSTRAP_TTY cmux_relay_cli cmux_relay_tty cmux_relay_report_tty cmux_relay_ports_kick",
         ]
     }
 
@@ -4908,8 +4908,8 @@ struct CMUXCLI {
             scriptLines.append(shellFeaturesBootstrap)
         }
         scriptLines += [
-            "CMUX_SSH_SESSION_ENDED=0",
-            "cmux_ssh_session_end() { if [ \"${CMUX_SSH_SESSION_ENDED:-0}\" = 1 ]; then return; fi; CMUX_SSH_SESSION_ENDED=1; \(lifecycleCleanup); }",
+            "PROGRAMA_SSH_SESSION_ENDED=0",
+            "cmux_ssh_session_end() { if [ \"${PROGRAMA_SSH_SESSION_ENDED:-0}\" = 1 ]; then return; fi; PROGRAMA_SSH_SESSION_ENDED=1; \(lifecycleCleanup); }",
             "trap 'cmux_ssh_session_end' EXIT HUP INT TERM",
         ]
         if isShellSnippet {
@@ -4940,16 +4940,16 @@ struct CMUXCLI {
 
     private func buildSSHSessionEndShellCommand(remoteRelayPort: Int) -> String {
         [
-            "if [ -n \"${CMUX_BUNDLED_CLI_PATH:-}\" ]",
-            "&& [ -x \"${CMUX_BUNDLED_CLI_PATH}\" ]",
-            "&& [ -n \"${CMUX_SOCKET_PATH:-}\" ]",
-            "&& [ -n \"${CMUX_WORKSPACE_ID:-}\" ]",
-            "&& [ -n \"${CMUX_SURFACE_ID:-}\" ]; then",
-            "\"${CMUX_BUNDLED_CLI_PATH}\" --socket \"${CMUX_SOCKET_PATH}\" ssh-session-end --relay-port \(remoteRelayPort) --workspace \"${CMUX_WORKSPACE_ID}\" --surface \"${CMUX_SURFACE_ID}\" >/dev/null 2>&1 || true;",
+            "if [ -n \"${PROGRAMA_BUNDLED_CLI_PATH:-}\" ]",
+            "&& [ -x \"${PROGRAMA_BUNDLED_CLI_PATH}\" ]",
+            "&& [ -n \"${PROGRAMA_SOCKET_PATH:-}\" ]",
+            "&& [ -n \"${PROGRAMA_WORKSPACE_ID:-}\" ]",
+            "&& [ -n \"${PROGRAMA_SURFACE_ID:-}\" ]; then",
+            "\"${PROGRAMA_BUNDLED_CLI_PATH}\" --socket \"${PROGRAMA_SOCKET_PATH}\" ssh-session-end --relay-port \(remoteRelayPort) --workspace \"${PROGRAMA_WORKSPACE_ID}\" --surface \"${PROGRAMA_SURFACE_ID}\" >/dev/null 2>&1 || true;",
             "elif command -v cmux >/dev/null 2>&1",
-            "&& [ -n \"${CMUX_WORKSPACE_ID:-}\" ]",
-            "&& [ -n \"${CMUX_SURFACE_ID:-}\" ]; then",
-            "cmux ssh-session-end --relay-port \(remoteRelayPort) --workspace \"${CMUX_WORKSPACE_ID}\" --surface \"${CMUX_SURFACE_ID}\" >/dev/null 2>&1 || true;",
+            "&& [ -n \"${PROGRAMA_WORKSPACE_ID:-}\" ]",
+            "&& [ -n \"${PROGRAMA_SURFACE_ID:-}\" ]; then",
+            "cmux ssh-session-end --relay-port \(remoteRelayPort) --workspace \"${PROGRAMA_WORKSPACE_ID}\" --surface \"${PROGRAMA_SURFACE_ID}\" >/dev/null 2>&1 || true;",
             "fi",
         ].joined(separator: " ")
     }
@@ -4960,17 +4960,17 @@ struct CMUXCLI {
               relayPort > 0 else {
             throw CLIError(message: "ssh-session-end requires --relay-port <port>")
         }
-        let workspaceRaw = optionValue(commandArgs, name: "--workspace") ?? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"]
-        let surfaceRaw = optionValue(commandArgs, name: "--surface") ?? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"]
+        let workspaceRaw = optionValue(commandArgs, name: "--workspace") ?? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
+        let surfaceRaw = optionValue(commandArgs, name: "--surface") ?? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"]
         guard let workspaceRaw,
               let workspaceId = try normalizeWorkspaceHandle(workspaceRaw, client: client),
               !workspaceId.isEmpty else {
-            throw CLIError(message: "ssh-session-end requires --workspace or CMUX_WORKSPACE_ID")
+            throw CLIError(message: "ssh-session-end requires --workspace or PROGRAMA_WORKSPACE_ID")
         }
         guard let surfaceRaw,
               let surfaceId = try normalizeSurfaceHandle(surfaceRaw, client: client, workspaceHandle: workspaceId),
               !surfaceId.isEmpty else {
-            throw CLIError(message: "ssh-session-end requires --surface or CMUX_SURFACE_ID")
+            throw CLIError(message: "ssh-session-end requires --surface or PROGRAMA_SURFACE_ID")
         }
         _ = try client.sendV2(method: "workspace.remote.terminal_session_end", params: [
             "workspace_id": workspaceId,
@@ -5021,7 +5021,7 @@ struct CMUXCLI {
             "cache_exists": cacheExists,
             "cache_sha256": cacheSHA ?? NSNull(),
             "cache_verified": cacheVerified,
-            "dev_local_build_fallback": ProcessInfo.processInfo.environment["CMUX_REMOTE_DAEMON_ALLOW_LOCAL_BUILD"] == "1",
+            "dev_local_build_fallback": ProcessInfo.processInfo.environment["PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD"] == "1",
             "download_command": downloadCommand,
             "download_checksums_command": downloadChecksumsCommand,
             "checksum_verify_command": checksumVerifyCommand,
@@ -5061,7 +5061,7 @@ struct CMUXCLI {
         print("verify checksum: \(checksumVerifyCommand)")
         print("attestation verify: \(verifyCommand)")
         if manifest == nil {
-            print("note: this build has no embedded remote daemon manifest. Set CMUX_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 only for dev builds.")
+            print("note: this build has no embedded remote daemon manifest. Set PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 only for dev builds.")
         }
     }
 
@@ -5169,14 +5169,14 @@ struct CMUXCLI {
             .replacingOccurrences(of: "\"", with: "\\\"")
         return [
             preferredCLIPath.map { "cmux_reconnect_cli=\(shellQuote($0));" } ?? "cmux_reconnect_cli=\"\";",
-            "cmux_reconnect_socket=\"${CMUX_SOCKET_PATH:-${CMUX_SOCKET:-}}\";",
-            "if [ -z \"$cmux_reconnect_cli\" ] && [ -n \"${CMUX_BUNDLED_CLI_PATH:-}\" ]; then cmux_reconnect_cli=\"$CMUX_BUNDLED_CLI_PATH\"; fi;",
+            "cmux_reconnect_socket=\"${PROGRAMA_SOCKET_PATH:-${PROGRAMA_SOCKET:-}}\";",
+            "if [ -z \"$cmux_reconnect_cli\" ] && [ -n \"${PROGRAMA_BUNDLED_CLI_PATH:-}\" ]; then cmux_reconnect_cli=\"$PROGRAMA_BUNDLED_CLI_PATH\"; fi;",
             "if [ ! -x \"$cmux_reconnect_cli\" ]; then cmux_reconnect_cli=\"$(command -v cmux 2>/dev/null || true)\"; fi;",
-            "if [ -n \"${CMUX_WORKSPACE_ID:-}\" ]; then",
+            "if [ -n \"${PROGRAMA_WORKSPACE_ID:-}\" ]; then",
             "if [ -z \"$cmux_reconnect_socket\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux socket not found' >&2;",
             "elif [ -z \"$cmux_reconnect_cli\" ] || [ ! -x \"$cmux_reconnect_cli\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux CLI not found' >&2;",
             "else",
-            "cmux_reconnect_payload=\"{\\\"workspace_id\\\":\\\"$CMUX_WORKSPACE_ID\\\",\\\"foreground_auth_token\\\":\\\"\(escapedForegroundAuthToken)\\\"}\";",
+            "cmux_reconnect_payload=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"foreground_auth_token\\\":\\\"\(escapedForegroundAuthToken)\\\"}\";",
             "\"$cmux_reconnect_cli\" --socket \"$cmux_reconnect_socket\" rpc workspace.remote.foreground_auth_ready \"$cmux_reconnect_payload\" >/dev/null 2>&1 || true;",
             "unset cmux_reconnect_payload;",
             "fi;",
@@ -5259,7 +5259,7 @@ struct CMUXCLI {
 
     private func cliDebugLog(_ message: @autoclosure () -> String) {
 #if DEBUG
-        let trimmedExplicit = ProcessInfo.processInfo.environment["CMUX_DEBUG_LOG"]?
+        let trimmedExplicit = ProcessInfo.processInfo.environment["PROGRAMA_DEBUG_LOG"]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let path: String? = {
             if let trimmedExplicit, !trimmedExplicit.isEmpty {
@@ -5482,7 +5482,7 @@ struct CMUXCLI {
             let (windowOpt, urlArgs) = parseOption(argsAfterWorkspace, name: "--window")
             let url = urlArgs.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
             let respectExternalOpenRules: Bool = {
-                guard let raw = ProcessInfo.processInfo.environment["CMUX_RESPECT_EXTERNAL_OPEN_RULES"] else {
+                guard let raw = ProcessInfo.processInfo.environment["PROGRAMA_RESPECT_EXTERNAL_OPEN_RULES"] else {
                     return false
                 }
                 switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
@@ -5511,7 +5511,7 @@ struct CMUXCLI {
             if let sourceSurface = try normalizeSurfaceHandle(surfaceRaw, client: client) {
                 params["surface_id"] = sourceSurface
             }
-            let workspaceRaw = workspaceOpt ?? (windowOpt == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
+            let workspaceRaw = workspaceOpt ?? (windowOpt == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
             if let workspaceRaw {
                 if let workspace = try normalizeWorkspaceHandle(workspaceRaw, client: client) {
                     params["workspace_id"] = workspace
@@ -6917,8 +6917,8 @@ struct CMUXCLI {
             Print server identity and caller context details.
 
             Flags:
-              --workspace <id|ref|index>   Caller workspace context (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref|index>     Caller surface context (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref|index>   Caller workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref|index>     Caller surface context (default: $PROGRAMA_SURFACE_ID)
               --no-caller                  Omit caller context from the request
             """
         case "list-windows":
@@ -7064,7 +7064,7 @@ struct CMUXCLI {
 
             Flags:
               --action <name>              Action name (required if not positional)
-              --workspace <id|ref|index>   Target workspace (default: current/$CMUX_WORKSPACE_ID)
+              --workspace <id|ref|index>   Target workspace (default: current/$PROGRAMA_WORKSPACE_ID)
               --title <text>               Title for rename
               --color <name|#hex>          Color for set-color (name or #RRGGBB hex)
               --description <text>         Description for set-description
@@ -7100,9 +7100,9 @@ struct CMUXCLI {
 
             Flags:
               --action <name>              Action name (required if not positional)
-              --tab <id|ref|index>         Target tab (accepts tab:<n> or surface:<n>; default: $CMUX_TAB_ID, then $CMUX_SURFACE_ID, then focused tab)
+              --tab <id|ref|index>         Target tab (accepts tab:<n> or surface:<n>; default: $PROGRAMA_TAB_ID, then $PROGRAMA_SURFACE_ID, then focused tab)
               --surface <id|ref|index>     Alias for --tab (backward compatibility)
-              --workspace <id|ref|index>   Workspace context (default: current/$CMUX_WORKSPACE_ID)
+              --workspace <id|ref|index>   Workspace context (default: current/$PROGRAMA_WORKSPACE_ID)
               --title <text>               Title for rename (or pass trailing title text)
               --url <url>                  Optional URL for new-browser-right
 
@@ -7120,11 +7120,11 @@ struct CMUXCLI {
             Resolution order for target tab:
             1) --tab
             2) --surface
-            3) $CMUX_TAB_ID / $CMUX_SURFACE_ID
+            3) $PROGRAMA_TAB_ID / $PROGRAMA_SURFACE_ID
             4) currently focused tab (optionally within --workspace)
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: current/$CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: current/$PROGRAMA_WORKSPACE_ID)
               --tab <id|ref>         Tab target (supports tab:<n> or surface:<n>)
               --surface <id|ref>     Alias for --tab
               --title <text>         Explicit title (or use trailing positional title)
@@ -7199,8 +7199,8 @@ struct CMUXCLI {
             Split the current pane in the given direction.
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref>     Surface to split from (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Surface to split from (default: $PROGRAMA_SURFACE_ID)
               --panel <id|ref>       Alias for --surface
 
             Example:
@@ -7214,7 +7214,7 @@ struct CMUXCLI {
             List panes in a workspace.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux list-panes
@@ -7227,7 +7227,7 @@ struct CMUXCLI {
             List surfaces in a pane.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
               --pane <id|ref>        Restrict to a specific pane (default: focused pane)
 
             Example:
@@ -7268,7 +7268,7 @@ struct CMUXCLI {
 
             Flags:
               --pane <id|ref>          Pane to focus (required unless passed positionally)
-              --workspace <id|ref>     Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>     Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux focus-pane --pane pane:2
@@ -7284,7 +7284,7 @@ struct CMUXCLI {
             Flags:
               --type <terminal|browser>           Pane type (default: terminal)
               --direction <left|right|up|down>    Split direction (default: right)
-              --workspace <id|ref>                Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>                Target workspace (default: $PROGRAMA_WORKSPACE_ID)
               --url <url>                         URL for browser panes
 
             Example:
@@ -7300,7 +7300,7 @@ struct CMUXCLI {
             Flags:
               --type <terminal|browser>   Surface type (default: terminal)
               --pane <id|ref>             Target pane
-              --workspace <id|ref>        Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>        Target workspace (default: $PROGRAMA_WORKSPACE_ID)
               --url <url>                 URL for browser surfaces
 
             Example:
@@ -7314,9 +7314,9 @@ struct CMUXCLI {
             Close a surface. Defaults to the focused surface if none specified.
 
             Flags:
-              --surface <id|ref>     Surface to close (default: $CMUX_SURFACE_ID)
+              --surface <id|ref>     Surface to close (default: $PROGRAMA_SURFACE_ID)
               --panel <id|ref>       Alias for --surface
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux close-surface
@@ -7359,7 +7359,7 @@ struct CMUXCLI {
             List health details for surfaces in a workspace.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux surface-health
@@ -7379,8 +7379,8 @@ struct CMUXCLI {
             Trigger the unread flash indicator for a surface.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
               --panel <id|ref>       Alias for --surface
 
             Example:
@@ -7394,7 +7394,7 @@ struct CMUXCLI {
             List surfaces (panels) in a workspace.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux list-panels
@@ -7408,7 +7408,7 @@ struct CMUXCLI {
 
             Flags:
               --panel <id|ref>       Panel/surface to focus (required)
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux focus-panel --panel surface:2
@@ -7447,7 +7447,7 @@ struct CMUXCLI {
             tmux-compatible alias: rename-window
 
             Flags:
-              --workspace <id|ref|index>   Workspace to rename (default: current/$CMUX_WORKSPACE_ID)
+              --workspace <id|ref|index>   Workspace to rename (default: current/$PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux rename-workspace "backend logs"
@@ -7466,8 +7466,8 @@ struct CMUXCLI {
             tmux-compatible alias for reading terminal text from a pane.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref>     Surface context (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Surface context (default: $PROGRAMA_SURFACE_ID)
               --scrollback           Include scrollback
               --lines <n>            Return only the last N lines (implies --scrollback)
 
@@ -7482,7 +7482,7 @@ struct CMUXCLI {
 
             Flags:
               --pane <id|ref>        Pane to resize (default: focused pane)
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
               -L|-R|-U|-D            Direction (default: -R)
               --amount <n>           Resize amount (default: 1)
             """
@@ -7493,7 +7493,7 @@ struct CMUXCLI {
             Capture pane text and pipe it to a shell command via stdin.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
               --surface <id|ref>     Surface context (default: focused surface)
               --command <command>    Shell command to run (or pass as trailing text)
             """
@@ -7516,7 +7516,7 @@ struct CMUXCLI {
             Flags:
               --pane <id|ref>         Source pane (required)
               --target-pane <id|ref>  Target pane (required)
-              --workspace <id|ref>    Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>    Workspace context (default: $PROGRAMA_WORKSPACE_ID)
             """
         case "break-pane":
             return """
@@ -7525,7 +7525,7 @@ struct CMUXCLI {
             Move a pane/surface out into its own pane context.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
               --pane <id|ref>        Source pane
               --surface <id|ref>     Source surface
               --no-focus             Do not focus the result
@@ -7538,7 +7538,7 @@ struct CMUXCLI {
 
             Flags:
               --target-pane <id|ref>  Target pane (required)
-              --workspace <id|ref>    Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>    Workspace context (default: $PROGRAMA_WORKSPACE_ID)
               --pane <id|ref>         Source pane
               --surface <id|ref>      Source surface
               --no-focus              Do not focus the result
@@ -7556,7 +7556,7 @@ struct CMUXCLI {
             Focus the previously focused pane in a workspace.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
             """
         case "find-window":
             return """
@@ -7575,7 +7575,7 @@ struct CMUXCLI {
             Clear terminal scrollback history.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
               --surface <id|ref>     Surface context (default: focused surface)
             """
         case "set-hook":
@@ -7617,7 +7617,7 @@ struct CMUXCLI {
 
             Flags:
               --name <name>         Buffer name (default: default)
-              --workspace <id|ref>  Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>  Workspace context (default: $PROGRAMA_WORKSPACE_ID)
               --surface <id|ref>    Surface context (default: focused surface)
             """
         case "list-buffers":
@@ -7633,7 +7633,7 @@ struct CMUXCLI {
             Send a command (or default shell restart command) to a surface.
 
             Flags:
-              --workspace <id|ref>   Workspace context (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
               --surface <id|ref>     Surface context (default: focused surface)
               --command <cmd>        Command text (or pass trailing command text)
             """
@@ -7653,8 +7653,8 @@ struct CMUXCLI {
             Read terminal text from a surface as plain text.
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
               --scrollback           Include scrollback (not just visible viewport)
               --lines <n>            Limit to the last n lines (implies --scrollback)
 
@@ -7669,8 +7669,8 @@ struct CMUXCLI {
             Send text to a terminal surface. Escape sequences: \\n and \\r send Enter, \\t sends Tab.
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
 
             Example:
               cmux send "echo hello"
@@ -7683,8 +7683,8 @@ struct CMUXCLI {
             Send a key event to a terminal surface.
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
 
             Example:
               cmux send-key enter
@@ -7698,7 +7698,7 @@ struct CMUXCLI {
 
             Flags:
               --panel <id|ref>       Target panel (required)
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux send-panel --panel surface:2 "echo hello\\n"
@@ -7711,7 +7711,7 @@ struct CMUXCLI {
 
             Flags:
               --panel <id|ref>       Target panel (required)
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux send-key-panel --panel surface:2 enter
@@ -7727,8 +7727,8 @@ struct CMUXCLI {
               --title <text>         Notification title (default: "Notification")
               --subtitle <text>      Notification subtitle
               --body <text>          Notification body
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
 
             Example:
               cmux notify --title "Build done" --body "All tests passed"
@@ -7757,7 +7757,7 @@ struct CMUXCLI {
             Flags:
               --icon <name>          Icon name (e.g. "sparkle", "hammer")
               --color <#hex>         Pill color (e.g. "#ff9500")
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux set-status build "compiling" --icon hammer --color "#ff9500"
@@ -7770,7 +7770,7 @@ struct CMUXCLI {
             Remove a sidebar status entry by key.
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux clear-status build
@@ -7782,7 +7782,7 @@ struct CMUXCLI {
             List all sidebar status entries for a workspace.
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux list-status
@@ -7796,7 +7796,7 @@ struct CMUXCLI {
 
             Flags:
               --label <text>         Label shown next to the progress bar
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux set-progress 0.5 --label "Building..."
@@ -7809,7 +7809,7 @@ struct CMUXCLI {
             Clear the sidebar progress bar for a workspace.
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux clear-progress
@@ -7823,7 +7823,7 @@ struct CMUXCLI {
             Flags:
               --level <level>        Log level: info, progress, success, warning, error (default: info)
               --source <name>        Source label (e.g. "build", "test")
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux log "Build started"
@@ -7837,7 +7837,7 @@ struct CMUXCLI {
             Clear all sidebar log entries for a workspace.
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux clear-log
@@ -7850,7 +7850,7 @@ struct CMUXCLI {
 
             Flags:
               --limit <n>            Show only the last N entries
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux list-log
@@ -7864,7 +7864,7 @@ struct CMUXCLI {
             status entries, progress, log entries).
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
               cmux sidebar-state
@@ -7902,8 +7902,8 @@ struct CMUXCLI {
               prompt-submit   Clear notification and set Running on user prompt
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
 
             Example:
               echo '{"session_id":"abc"}' | cmux claude-hook session-start
@@ -7932,8 +7932,8 @@ struct CMUXCLI {
               stop            Send completion notification, set Idle
 
             Flags:
-              --workspace <id|ref>   Target workspace (default: $CMUX_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $CMUX_SURFACE_ID)
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
             """
         case "browser":
             return """
@@ -7945,7 +7945,7 @@ struct CMUXCLI {
 
             Subcommands:
               open|open-split|new [url] [--workspace <id|ref|index>] [--window <id|ref|index>]
-                open/open-split/new default to $CMUX_WORKSPACE_ID when --workspace is omitted and --window is not set
+                open/open-split/new default to $PROGRAMA_WORKSPACE_ID when --workspace is omitted and --window is not set
               goto|navigate <url> [--snapshot-after]
               back|forward|reload [--snapshot-after]
               url|get-url
@@ -8025,7 +8025,7 @@ struct CMUXCLI {
             lists, blockquotes) and automatically updates when the file changes on disk.
 
             Options:
-              --workspace <id|ref|index>   Target workspace (default: $CMUX_WORKSPACE_ID)
+              --workspace <id|ref|index>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
               --surface <id|ref|index>     Source surface to split from (default: focused surface)
               --window <id|ref|index>      Target window
               --direction <left|right|up|down>  Split direction (default: right)
@@ -8086,15 +8086,15 @@ struct CMUXCLI {
 
         let selection = currentThemeSelection()
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_THEME_PICKER_CONFIG"] = try cmuxThemeOverrideConfigURL().path
-        environment["CMUX_THEME_PICKER_BUNDLE_ID"] = currentCmuxAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
-        environment["CMUX_THEME_PICKER_TARGET"] = defaultThemePickerTargetMode(current: selection).rawValue
-        environment["CMUX_THEME_PICKER_COLOR_SCHEME"] = defaultAppearancePrefersDarkThemes() ? "dark" : "light"
+        environment["PROGRAMA_THEME_PICKER_CONFIG"] = try cmuxThemeOverrideConfigURL().path
+        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentCmuxAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
+        environment["PROGRAMA_THEME_PICKER_TARGET"] = defaultThemePickerTargetMode(current: selection).rawValue
+        environment["PROGRAMA_THEME_PICKER_COLOR_SCHEME"] = defaultAppearancePrefersDarkThemes() ? "dark" : "light"
         if let light = selection.light {
-            environment["CMUX_THEME_PICKER_INITIAL_LIGHT"] = light
+            environment["PROGRAMA_THEME_PICKER_INITIAL_LIGHT"] = light
         }
         if let dark = selection.dark {
-            environment["CMUX_THEME_PICKER_INITIAL_DARK"] = dark
+            environment["PROGRAMA_THEME_PICKER_INITIAL_DARK"] = dark
         }
         if let resourcesURL = bundledGhosttyResourcesURL() {
             environment["GHOSTTY_RESOURCES_DIR"] = resourcesURL.path
@@ -8727,7 +8727,7 @@ struct CMUXCLI {
     }
 
     private func currentCmuxAppBundleIdentifier() -> String? {
-        if let bundleIdentifier = ProcessInfo.processInfo.environment["CMUX_BUNDLE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if let bundleIdentifier = ProcessInfo.processInfo.environment["PROGRAMA_BUNDLE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !bundleIdentifier.isEmpty {
             return bundleIdentifier
         }
@@ -8856,7 +8856,7 @@ struct CMUXCLI {
         if let explicit = optionValue(args, name: "--workspace") { return explicit }
         // When --window is explicitly targeted, don't fall back to env workspace from a different window
         if windowOverride != nil { return nil }
-        return ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"]
+        return ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
     }
 
     private func forwardSidebarMetadataCommand(
@@ -9224,8 +9224,8 @@ struct CMUXCLI {
 
     private func treeCallerContextFromEnvironment() -> [String: Any]? {
         let env = ProcessInfo.processInfo.environment
-        let workspaceRaw = env["CMUX_WORKSPACE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let surfaceRaw = env["CMUX_SURFACE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let workspaceRaw = env["PROGRAMA_WORKSPACE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let surfaceRaw = env["PROGRAMA_SURFACE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         var caller: [String: Any] = [:]
         if let workspaceRaw, !workspaceRaw.isEmpty {
             caller["workspace_id"] = workspaceRaw
@@ -9651,19 +9651,19 @@ struct CMUXCLI {
     }
 
     private func tmuxCallerWorkspaceHandle() -> String? {
-        normalizedTmuxTarget(ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"])
+        normalizedTmuxTarget(ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"])
     }
 
     private func tmuxCallerPaneHandle() -> String? {
         guard let pane = normalizedTmuxTarget(ProcessInfo.processInfo.environment["TMUX_PANE"])
-            ?? normalizedTmuxTarget(ProcessInfo.processInfo.environment["CMUX_PANE_ID"]) else {
+            ?? normalizedTmuxTarget(ProcessInfo.processInfo.environment["PROGRAMA_PANE_ID"]) else {
             return nil
         }
         return pane.hasPrefix("%") ? String(pane.dropFirst()) : pane
     }
 
     private func tmuxCallerSurfaceHandle() -> String? {
-        normalizedTmuxTarget(ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"])
+        normalizedTmuxTarget(ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"])
     }
 
     private func tmuxResolvedCallerWorkspaceId(client: SocketClient) -> String? {
@@ -9856,7 +9856,7 @@ struct CMUXCLI {
         if tmuxPaneSelector(from: raw) != nil {
             let resolved = try tmuxResolvePaneTarget(raw, client: client)
             // When the target pane matches the caller's pane, prefer the caller's
-            // exact surface (CMUX_SURFACE_ID) over the pane's currently selected
+            // exact surface (PROGRAMA_SURFACE_ID) over the pane's currently selected
             // surface. The selected surface can change (e.g. tab switches) after
             // claude-teams started, but the caller surface stays fixed.
             let callerPane = tmuxCallerPaneHandle()
@@ -10167,7 +10167,7 @@ struct CMUXCLI {
 
     private func tmuxCompatResolvedSocketPath(processEnvironment: [String: String]) -> String {
         let envSocketPath: String? = {
-            for key in ["CMUX_SOCKET_PATH", "CMUX_SOCKET"] {
+            for key in ["PROGRAMA_SOCKET_PATH", "PROGRAMA_SOCKET"] {
                 guard let raw = processEnvironment[key] else { continue }
                 let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
@@ -10322,33 +10322,33 @@ struct CMUXCLI {
         setenv("TMUX", fakeTmuxValue, 1)
         setenv("TMUX_PANE", fakeTmuxPane, 1)
         setenv("TERM", fakeTerm, 1)
-        setenv("CMUX_SOCKET_PATH", socketPath, 1)
-        setenv("CMUX_SOCKET", socketPath, 1)
+        setenv("PROGRAMA_SOCKET_PATH", socketPath, 1)
+        setenv("PROGRAMA_SOCKET", socketPath, 1)
         if let explicitPassword,
            !explicitPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            setenv("CMUX_SOCKET_PASSWORD", explicitPassword, 1)
+            setenv("PROGRAMA_SOCKET_PASSWORD", explicitPassword, 1)
         }
         unsetenv("TERM_PROGRAM")
         for envVar in extraEnvVars {
             setenv(envVar.key, envVar.value, 1)
         }
         if let focusedContext {
-            setenv("CMUX_WORKSPACE_ID", focusedContext.workspaceId, 1)
+            setenv("PROGRAMA_WORKSPACE_ID", focusedContext.workspaceId, 1)
             if let surfaceId = focusedContext.surfaceId, !surfaceId.isEmpty {
-                setenv("CMUX_SURFACE_ID", surfaceId, 1)
+                setenv("PROGRAMA_SURFACE_ID", surfaceId, 1)
             }
         }
     }
 
     private static let claudeNodeOptionsRestoreModule = """
-    const hadOriginalNodeOptions = process.env.CMUX_ORIGINAL_NODE_OPTIONS_PRESENT === "1";
+    const hadOriginalNodeOptions = process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT === "1";
     if (hadOriginalNodeOptions) {
-        process.env.NODE_OPTIONS = process.env.CMUX_ORIGINAL_NODE_OPTIONS ?? "";
+        process.env.NODE_OPTIONS = process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS ?? "";
     } else {
         delete process.env.NODE_OPTIONS;
     }
-    delete process.env.CMUX_ORIGINAL_NODE_OPTIONS;
-    delete process.env.CMUX_ORIGINAL_NODE_OPTIONS_PRESENT;
+    delete process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS;
+    delete process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT;
     """
 
     private func configureClaudeTeamsEnvironment(
@@ -10367,23 +10367,23 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-claude-teams",
-            cmuxBinEnvVar: "CMUX_CLAUDE_TEAMS_CMUX_BIN",
-            termOverrideEnvVar: "CMUX_CLAUDE_TEAMS_TERM",
+            cmuxBinEnvVar: "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
+            termOverrideEnvVar: "PROGRAMA_CLAUDE_TEAMS_TERM",
             extraEnvVars: [
                 (key: "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", value: "1"),
             ]
         )
         guard let restoreModuleURL = try? createClaudeNodeOptionsRestoreModule() else {
-            unsetenv("CMUX_ORIGINAL_NODE_OPTIONS_PRESENT")
-            unsetenv("CMUX_ORIGINAL_NODE_OPTIONS")
+            unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT")
+            unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS")
             return
         }
         if let existing = processEnvironment["NODE_OPTIONS"] {
-            setenv("CMUX_ORIGINAL_NODE_OPTIONS_PRESENT", "1", 1)
-            setenv("CMUX_ORIGINAL_NODE_OPTIONS", existing, 1)
+            setenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT", "1", 1)
+            setenv("PROGRAMA_ORIGINAL_NODE_OPTIONS", existing, 1)
         } else {
-            setenv("CMUX_ORIGINAL_NODE_OPTIONS_PRESENT", "0", 1)
-            unsetenv("CMUX_ORIGINAL_NODE_OPTIONS")
+            setenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT", "0", 1)
+            unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS")
         }
         setenv(
             "NODE_OPTIONS",
@@ -10413,7 +10413,7 @@ struct CMUXCLI {
         let script = """
         #!/usr/bin/env bash
         set -euo pipefail
-        exec "${CMUX_CLAUDE_TEAMS_CMUX_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
         """
         return try createTmuxCompatShimDirectory(
             directoryName: "claude-teams-bin",
@@ -10437,11 +10437,11 @@ struct CMUXCLI {
     ) throws {
         let processEnvironment = ProcessInfo.processInfo.environment
         var launcherEnvironment = processEnvironment
-        launcherEnvironment["CMUX_SOCKET_PATH"] = socketPath
-        launcherEnvironment["CMUX_SOCKET"] = socketPath
+        launcherEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        launcherEnvironment["PROGRAMA_SOCKET"] = socketPath
         if let explicitPassword,
            !explicitPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            launcherEnvironment["CMUX_SOCKET_PASSWORD"] = explicitPassword
+            launcherEnvironment["PROGRAMA_SOCKET_PASSWORD"] = explicitPassword
         }
         let shimDirectory = try createClaudeTeamsShimDirectory()
         let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "programa")
@@ -10457,7 +10457,7 @@ struct CMUXCLI {
             // Check custom path from Settings > Automation > Claude Code.
             // Try env var first (set by the app per-session), then UserDefaults.
             let candidates = [
-                launcherEnvironment["CMUX_CUSTOM_CLAUDE_PATH"],
+                launcherEnvironment["PROGRAMA_CUSTOM_CLAUDE_PATH"],
                 UserDefaults.standard.string(forKey: "claudeCodeCustomClaudePath"),
             ]
             for raw in candidates {
@@ -10522,7 +10522,7 @@ struct CMUXCLI {
         case "${1:-}" in
           -V|-v) echo "tmux 3.4"; exit 0 ;;
         esac
-        exec "${CMUX_OMO_CMUX_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
         """
         let root = try createTmuxCompatShimDirectory(
             directoryName: "omo-bin",
@@ -10543,7 +10543,7 @@ struct CMUXCLI {
             *)        shift ;;
           esac
         done
-        exec "${CMUX_OMO_CMUX_BIN:-cmux}" notify --title "${TITLE:-OpenCode}" --body "${BODY:-}"
+        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-cmux}" notify --title "${TITLE:-OpenCode}" --body "${BODY:-}"
         """
         try writeShimIfChanged(notifierScript, to: notifierURL)
 
@@ -10945,8 +10945,8 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-omo",
-            cmuxBinEnvVar: "CMUX_OMO_CMUX_BIN",
-            termOverrideEnvVar: "CMUX_OMO_TERM",
+            cmuxBinEnvVar: "PROGRAMA_OMO_PROGRAMA_BIN",
+            termOverrideEnvVar: "PROGRAMA_OMO_TERM",
             extraEnvVars: [(key: "OPENCODE_PORT", value: openCodePort)]
         )
     }
@@ -10958,11 +10958,11 @@ struct CMUXCLI {
     ) throws {
         let processEnvironment = ProcessInfo.processInfo.environment
         var launcherEnvironment = processEnvironment
-        launcherEnvironment["CMUX_SOCKET_PATH"] = socketPath
-        launcherEnvironment["CMUX_SOCKET"] = socketPath
+        launcherEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        launcherEnvironment["PROGRAMA_SOCKET"] = socketPath
         if let explicitPassword,
            !explicitPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            launcherEnvironment["CMUX_SOCKET_PASSWORD"] = explicitPassword
+            launcherEnvironment["PROGRAMA_SOCKET_PASSWORD"] = explicitPassword
         }
 
         // Check for opencode before doing expensive plugin setup
@@ -11043,7 +11043,7 @@ struct CMUXCLI {
         case "${1:-}" in
           -V|-v) echo "tmux 3.4"; exit 0 ;;
         esac
-        exec "${CMUX_OMX_CMUX_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_OMX_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
         """
         return try createTmuxCompatShimDirectory(
             directoryName: "omx-bin",
@@ -11067,8 +11067,8 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-omx",
-            cmuxBinEnvVar: "CMUX_OMX_CMUX_BIN",
-            termOverrideEnvVar: "CMUX_OMX_TERM"
+            cmuxBinEnvVar: "PROGRAMA_OMX_PROGRAMA_BIN",
+            termOverrideEnvVar: "PROGRAMA_OMX_TERM"
         )
     }
 
@@ -11079,11 +11079,11 @@ struct CMUXCLI {
     ) throws {
         let processEnvironment = ProcessInfo.processInfo.environment
         var launcherEnvironment = processEnvironment
-        launcherEnvironment["CMUX_SOCKET_PATH"] = socketPath
-        launcherEnvironment["CMUX_SOCKET"] = socketPath
+        launcherEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        launcherEnvironment["PROGRAMA_SOCKET"] = socketPath
         if let explicitPassword,
            !explicitPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            launcherEnvironment["CMUX_SOCKET_PASSWORD"] = explicitPassword
+            launcherEnvironment["PROGRAMA_SOCKET_PASSWORD"] = explicitPassword
         }
 
         let omxExecutablePath = resolveOMXExecutable(searchPath: launcherEnvironment["PATH"])
@@ -11146,7 +11146,7 @@ struct CMUXCLI {
         case "${1:-}" in
           -V|-v) echo "tmux 3.4"; exit 0 ;;
         esac
-        exec "${CMUX_OMC_CMUX_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_OMC_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
         """
         return try createTmuxCompatShimDirectory(
             directoryName: "omc-bin",
@@ -11170,21 +11170,21 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-omc",
-            cmuxBinEnvVar: "CMUX_OMC_CMUX_BIN",
-            termOverrideEnvVar: "CMUX_OMC_TERM"
+            cmuxBinEnvVar: "PROGRAMA_OMC_PROGRAMA_BIN",
+            termOverrideEnvVar: "PROGRAMA_OMC_TERM"
         )
         // omc wraps Claude Code, so it needs the same NODE_OPTIONS restore module
         guard let restoreModuleURL = try? createClaudeNodeOptionsRestoreModule() else {
-            unsetenv("CMUX_ORIGINAL_NODE_OPTIONS_PRESENT")
-            unsetenv("CMUX_ORIGINAL_NODE_OPTIONS")
+            unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT")
+            unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS")
             return
         }
         if let existing = processEnvironment["NODE_OPTIONS"] {
-            setenv("CMUX_ORIGINAL_NODE_OPTIONS_PRESENT", "1", 1)
-            setenv("CMUX_ORIGINAL_NODE_OPTIONS", existing, 1)
+            setenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT", "1", 1)
+            setenv("PROGRAMA_ORIGINAL_NODE_OPTIONS", existing, 1)
         } else {
-            setenv("CMUX_ORIGINAL_NODE_OPTIONS_PRESENT", "0", 1)
-            unsetenv("CMUX_ORIGINAL_NODE_OPTIONS")
+            setenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT", "0", 1)
+            unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS")
         }
         setenv(
             "NODE_OPTIONS",
@@ -11203,11 +11203,11 @@ struct CMUXCLI {
     ) throws {
         let processEnvironment = ProcessInfo.processInfo.environment
         var launcherEnvironment = processEnvironment
-        launcherEnvironment["CMUX_SOCKET_PATH"] = socketPath
-        launcherEnvironment["CMUX_SOCKET"] = socketPath
+        launcherEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        launcherEnvironment["PROGRAMA_SOCKET"] = socketPath
         if let explicitPassword,
            !explicitPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            launcherEnvironment["CMUX_SOCKET_PASSWORD"] = explicitPassword
+            launcherEnvironment["PROGRAMA_SOCKET_PASSWORD"] = explicitPassword
         }
 
         let omcExecutablePath = resolveOMCExecutable(searchPath: launcherEnvironment["PATH"])
@@ -11964,8 +11964,8 @@ struct CMUXCLI {
             let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
             let (sfArg, rem1) = parseOption(rem0, name: "--surface")
             let (linesArg, rem2) = parseOption(rem1, name: "--lines")
-            let workspaceArg = wsArg ?? (windowOverride == nil ? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"] : nil)
-            let surfaceArg = sfArg ?? (wsArg == nil && windowOverride == nil ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"] : nil)
+            let workspaceArg = wsArg ?? (windowOverride == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+            let surfaceArg = sfArg ?? (wsArg == nil && windowOverride == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
 
             var params: [String: Any] = [:]
             let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
@@ -12338,8 +12338,8 @@ struct CMUXCLI {
         let subcommand = commandArgs.first?.lowercased() ?? "help"
         let hookArgs = Array(commandArgs.dropFirst())
         let hookWsFlag = optionValue(hookArgs, name: "--workspace")
-        let workspaceArg = hookWsFlag ?? ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"]
-        let surfaceArg = optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? ProcessInfo.processInfo.environment["CMUX_SURFACE_ID"] : nil)
+        let workspaceArg = hookWsFlag ?? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
+        let surfaceArg = optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
         let rawInput = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let parsedInput = parseClaudeHookInput(rawInput: rawInput)
         let sessionStore = ClaudeHookSessionStore()
@@ -12368,7 +12368,7 @@ struct CMUXCLI {
                 client: client
             )
             let claudePid: Int? = {
-                guard let raw = ProcessInfo.processInfo.environment["CMUX_CLAUDE_PID"]?
+                guard let raw = ProcessInfo.processInfo.environment["PROGRAMA_CLAUDE_PID"]?
                     .trimmingCharacters(in: .whitespacesAndNewlines),
                     let pid = Int(raw),
                     pid > 0 else {
@@ -12889,7 +12889,7 @@ struct CMUXCLI {
 
     private func resolveCallerTTYName() -> String? {
         let env = ProcessInfo.processInfo.environment
-        for key in ["CMUX_CLI_TTY_NAME", "CMUX_TTY_NAME", "TTY", "SSH_TTY"] {
+        for key in ["PROGRAMA_CLI_TTY_NAME", "PROGRAMA_TTY_NAME", "TTY", "SSH_TTY"] {
             if let ttyName = normalizedTTYName(env[key]) {
                 return ttyName
             }
@@ -13348,7 +13348,7 @@ struct CMUXCLI {
     /// first so it silently succeeds even when cmux is not installed
     /// (e.g. user opened codex in a non-cmux terminal).
     private static func codexHookCommand(_ event: String) -> String {
-        "[ -n \"$CMUX_SURFACE_ID\" ] && command -v cmux >/dev/null 2>&1 && cmux codex-hook \(event) || echo '{}'"
+        "[ -n \"$PROGRAMA_SURFACE_ID\" ] && command -v cmux >/dev/null 2>&1 && cmux codex-hook \(event) || echo '{}'"
     }
 
     private static let codexHooksJSON: [String: Any] = [
@@ -13734,7 +13734,7 @@ struct CMUXCLI {
         let env = ProcessInfo.processInfo.environment
 
         // Graceful no-op: if not inside cmux, exit silently with valid JSON
-        guard env["CMUX_SURFACE_ID"] != nil else {
+        guard env["PROGRAMA_SURFACE_ID"] != nil else {
             print("{}")
             return
         }
@@ -13742,13 +13742,13 @@ struct CMUXCLI {
         let subcommand = commandArgs.first?.lowercased() ?? "help"
         let hookArgs = Array(commandArgs.dropFirst())
         let hookWsFlag = optionValue(hookArgs, name: "--workspace")
-        let workspaceArg = hookWsFlag ?? env["CMUX_WORKSPACE_ID"]
-        let surfaceArg = optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? env["CMUX_SURFACE_ID"] : nil)
+        let workspaceArg = hookWsFlag ?? env["PROGRAMA_WORKSPACE_ID"]
+        let surfaceArg = optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? env["PROGRAMA_SURFACE_ID"] : nil)
         let rawInput = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let parsedInput = parseClaudeHookInput(rawInput: rawInput)
         let sessionStore = ClaudeHookSessionStore(
             processEnv: env.merging(
-                ["CMUX_CLAUDE_HOOK_STATE_PATH": "~/.programa/codex-hook-sessions.json"],
+                ["PROGRAMA_CLAUDE_HOOK_STATE_PATH": "~/.programa/codex-hook-sessions.json"],
                 uniquingKeysWith: { _, new in new }
             )
         )
@@ -14104,7 +14104,7 @@ struct CMUXCLI {
         }
 
         if info["CMUXCommit"] == nil,
-           let commit = normalizedCommitHash(ProcessInfo.processInfo.environment["CMUX_COMMIT"]) {
+           let commit = normalizedCommitHash(ProcessInfo.processInfo.environment["PROGRAMA_COMMIT"]) {
             info["CMUXCommit"] = commit
         }
 
@@ -14356,7 +14356,7 @@ struct CMUXCLI {
           Output defaults to refs; pass --id-format uuids or --id-format both to include UUIDs.
 
         Socket Auth:
-          --password takes precedence, then CMUX_SOCKET_PASSWORD env var, then password saved in Settings.
+          --password takes precedence, then PROGRAMA_SOCKET_PASSWORD env var, then password saved in Settings.
 
         Commands:
           welcome
@@ -14480,11 +14480,11 @@ struct CMUXCLI {
           help
 
         Environment:
-          CMUX_WORKSPACE_ID   Auto-set in cmux terminals. Used as default --workspace for
+          PROGRAMA_WORKSPACE_ID   Auto-set in cmux terminals. Used as default --workspace for
                               ALL commands (send, list-panels, new-split, notify, etc.).
-          CMUX_TAB_ID         Optional alias used by `tab-action`/`rename-tab` as default --tab.
-          CMUX_SURFACE_ID     Auto-set in cmux terminals. Used as default --surface.
-          CMUX_SOCKET_PATH    Override the Unix socket path. Without this, the CLI defaults
+          PROGRAMA_TAB_ID         Optional alias used by `tab-action`/`rename-tab` as default --tab.
+          PROGRAMA_SURFACE_ID     Auto-set in cmux terminals. Used as default --surface.
+          PROGRAMA_SOCKET_PATH    Override the Unix socket path. Without this, the CLI defaults
                               to ~/Library/Application Support/cmux/cmux.sock and auto-discovers tagged/debug sockets.
         """
     }

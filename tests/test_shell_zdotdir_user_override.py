@@ -64,8 +64,8 @@ def main() -> int:
         env = dict(os.environ)
         env["HOME"] = str(home)
         env["ZDOTDIR"] = str(wrapper_dir)
-        env["CMUX_ZSH_ZDOTDIR"] = str(orig)
-        env["CMUX_SHELL_INTEGRATION"] = "0"
+        env["PROGRAMA_ZSH_ZDOTDIR"] = str(orig)
+        env["PROGRAMA_SHELL_INTEGRATION"] = "0"
 
         # Interactive is required for .zshrc; -d disables global rc files for isolation.
         result = subprocess.run(

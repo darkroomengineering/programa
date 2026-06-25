@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Regression: CLI commands are workspace-relative via CMUX_WORKSPACE_ID.
+"""Regression: CLI commands are workspace-relative via PROGRAMA_WORKSPACE_ID.
 
-Tests that when CMUX_WORKSPACE_ID is set, CLI commands target that workspace
+Tests that when PROGRAMA_WORKSPACE_ID is set, CLI commands target that workspace
 (not the focused workspace). This is the core P0 #2 behavior: agents in
 background workspaces should not affect the user's active workspace.
 """
@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -37,7 +37,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -85,7 +85,7 @@ def test_list_panels_workspace_relative(c: cmux, cli: str) -> None:
     # Also test via env var
     payload_env = _run_cli_json(
         cli, ["list-panels"],
-        env_overrides={"CMUX_WORKSPACE_ID": ws_a["id"]}
+        env_overrides={"PROGRAMA_WORKSPACE_ID": ws_a["id"]}
     )
     surfaces_env = payload_env.get("surfaces", [])
     _must(isinstance(surfaces_env, list), f"Expected surfaces array from env, got: {payload_env}")
@@ -116,7 +116,7 @@ def test_list_panes_workspace_relative(c: cmux, cli: str) -> None:
 
 
 def test_send_workspace_relative(c: cmux, cli: str) -> None:
-    """send with CMUX_WORKSPACE_ID env var targets that workspace's surface."""
+    """send with PROGRAMA_WORKSPACE_ID env var targets that workspace's surface."""
     ws_result = c._call("workspace.list")
     workspaces = ws_result.get("workspaces", [])
     _must(len(workspaces) >= 1, "Need at least 1 workspace")
@@ -131,7 +131,7 @@ def test_send_workspace_relative(c: cmux, cli: str) -> None:
     # Send a harmless empty echo via env var to verify workspace routing
     output = _run_cli(
         cli, ["send", " "],
-        env_overrides={"CMUX_WORKSPACE_ID": ws["id"]}
+        env_overrides={"PROGRAMA_WORKSPACE_ID": ws["id"]}
     )
     _must("OK" in output or "surface" in output.lower(),
           f"Expected OK from send, got: {output}")

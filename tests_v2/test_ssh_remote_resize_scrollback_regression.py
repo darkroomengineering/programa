@@ -17,13 +17,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux.sock")
-SSH_HOST = os.environ.get("CMUX_SSH_TEST_HOST", "").strip()
-SSH_PORT = os.environ.get("CMUX_SSH_TEST_PORT", "").strip()
-SSH_IDENTITY = os.environ.get("CMUX_SSH_TEST_IDENTITY", "").strip()
-SSH_OPTIONS_RAW = os.environ.get("CMUX_SSH_TEST_OPTIONS", "").strip()
-LS_ENTRY_COUNT = int(os.environ.get("CMUX_SSH_TEST_LS_COUNT", "320"))
-RESIZE_ITERATIONS = int(os.environ.get("CMUX_SSH_TEST_RESIZE_ITERATIONS", "48"))
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa.sock")
+SSH_HOST = os.environ.get("PROGRAMA_SSH_TEST_HOST", "").strip()
+SSH_PORT = os.environ.get("PROGRAMA_SSH_TEST_PORT", "").strip()
+SSH_IDENTITY = os.environ.get("PROGRAMA_SSH_TEST_IDENTITY", "").strip()
+SSH_OPTIONS_RAW = os.environ.get("PROGRAMA_SSH_TEST_OPTIONS", "").strip()
+LS_ENTRY_COUNT = int(os.environ.get("PROGRAMA_SSH_TEST_LS_COUNT", "320"))
+RESIZE_ITERATIONS = int(os.environ.get("PROGRAMA_SSH_TEST_RESIZE_ITERATIONS", "48"))
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 OSC_ESCAPE_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
@@ -52,7 +52,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -62,9 +62,9 @@ def _find_cli_binary() -> str:
 
 def _run_cli_json(cli: str, args: list[str]) -> dict:
     env = dict(os.environ)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env.pop("CMUX_TAB_ID", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env.pop("PROGRAMA_TAB_ID", None)
 
     proc = _run([cli, "--socket", SOCKET_PATH, "--json", *args], env=env)
     try:
@@ -217,10 +217,10 @@ def _choose_resize_pair(client: cmux, workspace_id: str, pane_ids: list[str]) ->
 
 def main() -> int:
     if not SSH_HOST:
-        print("SKIP: set CMUX_SSH_TEST_HOST to run remote resize scrollback regression")
+        print("SKIP: set PROGRAMA_SSH_TEST_HOST to run remote resize scrollback regression")
         return 0
     if LS_ENTRY_COUNT < 64:
-        print("SKIP: CMUX_SSH_TEST_LS_COUNT must be >= 64 for meaningful scrollback coverage")
+        print("SKIP: PROGRAMA_SSH_TEST_LS_COUNT must be >= 64 for meaningful scrollback coverage")
         return 0
 
     cli = _find_cli_binary()
@@ -250,11 +250,11 @@ def main() -> int:
             surface_id = surfaces[0][1]
 
             stamp = secrets.token_hex(4)
-            ls_entries = [f"CMUX_REMOTE_RESIZE_LS_{stamp}_{index:04d}.txt" for index in range(1, LS_ENTRY_COUNT + 1)]
-            ls_start = f"CMUX_REMOTE_RESIZE_LS_START_{stamp}"
-            ls_end = f"CMUX_REMOTE_RESIZE_LS_END_{stamp}"
+            ls_entries = [f"PROGRAMA_REMOTE_RESIZE_LS_{stamp}_{index:04d}.txt" for index in range(1, LS_ENTRY_COUNT + 1)]
+            ls_start = f"PROGRAMA_REMOTE_RESIZE_LS_START_{stamp}"
+            ls_end = f"PROGRAMA_REMOTE_RESIZE_LS_END_{stamp}"
 
-            ls_prefix = f"CMUX_REMOTE_RESIZE_LS_{stamp}_"
+            ls_prefix = f"PROGRAMA_REMOTE_RESIZE_LS_{stamp}_"
             ls_script = (
                 "tmpdir=$(mktemp -d); "
                 f"echo {ls_start}; "
@@ -314,7 +314,7 @@ def main() -> int:
                         f"resize iteration {iteration} lost pre-resize anchor lines in ssh workspace",
                     )
 
-            post_token = f"CMUX_REMOTE_RESIZE_POST_{secrets.token_hex(6)}"
+            post_token = f"PROGRAMA_REMOTE_RESIZE_POST_{secrets.token_hex(6)}"
             client.send_surface(surface_id, f"echo {post_token}\n")
             _wait_surface_contains(
                 client,

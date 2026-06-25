@@ -7,14 +7,14 @@ final class JumpToUnreadUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        dataPath = "/tmp/cmux-ui-test-jump-unread-\(UUID().uuidString).json"
+        dataPath = "/tmp/programa-ui-test-jump-unread-\(UUID().uuidString).json"
         try? FileManager.default.removeItem(atPath: dataPath)
     }
 
     func testJumpToUnreadFocusesPanelAcrossTabs() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_JUMP_UNREAD_SETUP"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_JUMP_UNREAD_PATH"] = dataPath
+        app.launchEnvironment["PROGRAMA_UI_TEST_JUMP_UNREAD_SETUP"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_JUMP_UNREAD_PATH"] = dataPath
         app.launch()
         app.activate()
 

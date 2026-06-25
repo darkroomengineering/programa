@@ -24,7 +24,7 @@ final class BrowserImportProfilesUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        capturePath = "/tmp/cmux-ui-test-browser-import-\(UUID().uuidString).json"
+        capturePath = "/tmp/programa-ui-test-browser-import-\(UUID().uuidString).json"
         try? FileManager.default.removeItem(atPath: capturePath)
     }
 
@@ -153,15 +153,15 @@ final class BrowserImportProfilesUITests: XCTestCase {
 
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_FIXTURE"] = #"{"browserName":"Helium","profiles":["You","austin"]}"#
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_DESTINATIONS"] = #"["Default"]"#
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_MODE"] = "capture-only"
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_CAPTURE_PATH"] = capturePath
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_HINT_VARIANT"] = "inlineStrip"
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_HINT_SHOW"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_HINT_DISMISSED"] = "0"
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_HINT_OPEN_BLANK_BROWSER"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_FIXTURE"] = #"{"browserName":"Helium","profiles":["You","austin"]}"#
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_DESTINATIONS"] = #"["Default"]"#
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_MODE"] = "capture-only"
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_CAPTURE_PATH"] = capturePath
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_VARIANT"] = "inlineStrip"
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_SHOW"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_DISMISSED"] = "0"
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_OPEN_BLANK_BROWSER"] = "1"
         launchAndActivate(app)
         openImportWizardFromBlankImportHint(app)
         return app
@@ -169,11 +169,11 @@ final class BrowserImportProfilesUITests: XCTestCase {
 
     private func launchAppForBlankImportHint() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_HINT_VARIANT"] = "inlineStrip"
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_HINT_SHOW"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_HINT_DISMISSED"] = "0"
-        app.launchEnvironment["CMUX_UI_TEST_BROWSER_IMPORT_HINT_OPEN_BLANK_BROWSER"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_VARIANT"] = "inlineStrip"
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_SHOW"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_DISMISSED"] = "0"
+        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_OPEN_BLANK_BROWSER"] = "1"
         launchAndActivate(app)
         waitForBlankImportHint(app)
         return app

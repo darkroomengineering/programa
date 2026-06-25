@@ -10,15 +10,15 @@
 #
 # We restore ZDOTDIR from (in priority order):
 # - GHOSTTY_ZSH_ZDOTDIR (set by GhosttyKit when it overwrote ZDOTDIR)
-# - CMUX_ZSH_ZDOTDIR (set by cmux when it overwrote a user-provided ZDOTDIR)
+# - PROGRAMA_ZSH_ZDOTDIR (set by cmux when it overwrote a user-provided ZDOTDIR)
 # - unset (zsh treats unset ZDOTDIR as $HOME)
 
 if [[ -n "${GHOSTTY_ZSH_ZDOTDIR+X}" ]]; then
     builtin export ZDOTDIR="$GHOSTTY_ZSH_ZDOTDIR"
     builtin unset GHOSTTY_ZSH_ZDOTDIR
-elif [[ -n "${CMUX_ZSH_ZDOTDIR+X}" ]]; then
-    builtin export ZDOTDIR="$CMUX_ZSH_ZDOTDIR"
-    builtin unset CMUX_ZSH_ZDOTDIR
+elif [[ -n "${PROGRAMA_ZSH_ZDOTDIR+X}" ]]; then
+    builtin export ZDOTDIR="$PROGRAMA_ZSH_ZDOTDIR"
+    builtin unset PROGRAMA_ZSH_ZDOTDIR
 else
     builtin unset ZDOTDIR
 fi
@@ -30,15 +30,15 @@ fi
 
     if [[ -o interactive \
        && -z "${ZSH_EXECUTION_STRING:-}" \
-       && "${CMUX_SHELL_INTEGRATION:-1}" != "0" \
-       && -n "${CMUX_SHELL_INTEGRATION_DIR:-}" \
-       && -r "${CMUX_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh" \
+       && "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" \
+       && -n "${PROGRAMA_SHELL_INTEGRATION_DIR:-}" \
+       && -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh" \
        && "${TERM:-}" == "xterm-256color" \
-       && -z "${CMUX_ZSH_RESTORE_TERM:-}" ]]; then
+       && -z "${PROGRAMA_ZSH_RESTORE_TERM:-}" ]]; then
         # Keep startup TERM-compatible prompt/theme selection during shell init,
         # then restore the managed xterm-256color identity before the first
         # interactive command executes.
-        builtin export CMUX_ZSH_RESTORE_TERM="$TERM"
+        builtin export PROGRAMA_ZSH_RESTORE_TERM="$TERM"
         builtin export TERM="xterm-ghostty"
     fi
 } always {
@@ -48,9 +48,9 @@ fi
         #
         # We can't rely on GHOSTTY_ZSH_ZDOTDIR here because Ghostty's own zsh
         # bootstrap unsets it before chaining into this cmux wrapper.
-        if [[ "${CMUX_LOAD_GHOSTTY_ZSH_INTEGRATION:-0}" == "1" ]]; then
-            if [[ -n "${CMUX_SHELL_INTEGRATION_DIR:-}" ]]; then
-                builtin typeset _cmux_ghostty="$CMUX_SHELL_INTEGRATION_DIR/ghostty-integration.zsh"
+        if [[ "${PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION:-0}" == "1" ]]; then
+            if [[ -n "${PROGRAMA_SHELL_INTEGRATION_DIR:-}" ]]; then
+                builtin typeset _cmux_ghostty="$PROGRAMA_SHELL_INTEGRATION_DIR/ghostty-integration.zsh"
             fi
             if [[ ! -r "${_cmux_ghostty:-}" && -n "${GHOSTTY_RESOURCES_DIR:-}" ]]; then
                 builtin typeset _cmux_ghostty="$GHOSTTY_RESOURCES_DIR/shell-integration/zsh/ghostty-integration"
@@ -59,8 +59,8 @@ fi
         fi
 
         # Load cmux integration (unless disabled)
-        if [[ "${CMUX_SHELL_INTEGRATION:-1}" != "0" && -n "${CMUX_SHELL_INTEGRATION_DIR:-}" ]]; then
-            builtin typeset _cmux_integ="$CMUX_SHELL_INTEGRATION_DIR/cmux-zsh-integration.zsh"
+        if [[ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" && -n "${PROGRAMA_SHELL_INTEGRATION_DIR:-}" ]]; then
+            builtin typeset _cmux_integ="$PROGRAMA_SHELL_INTEGRATION_DIR/cmux-zsh-integration.zsh"
             [[ -r "$_cmux_integ" ]] && builtin source -- "$_cmux_integ"
         fi
     fi

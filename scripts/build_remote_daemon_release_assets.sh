@@ -10,10 +10,10 @@ Usage: scripts/build_remote_daemon_release_assets.sh \
   --output-dir <dir> \
   [--asset-suffix <suffix>]
 
-Builds cmuxd-remote release assets for the supported remote platforms and emits:
-  cmuxd-remote-<goos>-<goarch>[-<suffix>]
-  cmuxd-remote-checksums[-<suffix>].txt
-  cmuxd-remote-manifest[-<suffix>].json
+Builds programad-remote release assets for the supported remote platforms and emits:
+  programad-remote-<goos>-<goarch>[-<suffix>]
+  programad-remote-checksums[-<suffix>].txt
+  programad-remote-manifest[-<suffix>].json
 
 When --asset-suffix is provided, all output filenames and manifest download URLs
 include the suffix, making each build's assets immutable (used by nightly builds
@@ -68,7 +68,7 @@ if [[ -z "$VERSION" || -z "$RELEASE_TAG" || -z "$REPO" || -z "$OUTPUT_DIR" ]]; t
 fi
 
 if ! command -v go >/dev/null 2>&1; then
-  echo "error: go is required to build cmuxd-remote release assets" >&2
+  echo "error: go is required to build programad-remote release assets" >&2
   exit 1
 fi
 
@@ -77,7 +77,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DAEMON_ROOT="${REPO_ROOT}/daemon/remote"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
-rm -f "$OUTPUT_DIR"/cmuxd-remote-* "$OUTPUT_DIR"/cmuxd-remote-checksums.txt "$OUTPUT_DIR"/cmuxd-remote-manifest.json
+rm -f "$OUTPUT_DIR"/programad-remote-* "$OUTPUT_DIR"/programad-remote-checksums.txt "$OUTPUT_DIR"/programad-remote-manifest.json
 
 DAEMON_GO_LDFLAGS="-s -w -X main.version=${VERSION}"
 DAEMON_GO_BUILD_ARGS=(
@@ -92,9 +92,9 @@ if [[ -n "$ASSET_SUFFIX" ]]; then
   SUFFIX_TAG="-${ASSET_SUFFIX}"
 fi
 
-CHECKSUMS_ASSET_NAME="cmuxd-remote-checksums${SUFFIX_TAG}.txt"
+CHECKSUMS_ASSET_NAME="programad-remote-checksums${SUFFIX_TAG}.txt"
 CHECKSUMS_PATH="${OUTPUT_DIR}/${CHECKSUMS_ASSET_NAME}"
-MANIFEST_PATH="${OUTPUT_DIR}/cmuxd-remote-manifest${SUFFIX_TAG}.json"
+MANIFEST_PATH="${OUTPUT_DIR}/programad-remote-manifest${SUFFIX_TAG}.json"
 
 TARGETS=(
   "darwin arm64"
@@ -104,18 +104,18 @@ TARGETS=(
 )
 
 : > "$CHECKSUMS_PATH"
-ENTRIES_FILE="$(mktemp "${TMPDIR:-/tmp}/cmuxd-remote-entries.XXXXXX")"
+ENTRIES_FILE="$(mktemp "${TMPDIR:-/tmp}/programad-remote-entries.XXXXXX")"
 trap 'rm -f "$ENTRIES_FILE"' EXIT
 : > "$ENTRIES_FILE"
 
 for target in "${TARGETS[@]}"; do
   read -r GOOS GOARCH <<<"$target"
-  ASSET_NAME="cmuxd-remote-${GOOS}-${GOARCH}${SUFFIX_TAG}"
+  ASSET_NAME="programad-remote-${GOOS}-${GOARCH}${SUFFIX_TAG}"
   OUTPUT_PATH="${OUTPUT_DIR}/${ASSET_NAME}"
 
   # Build into a temp path first, then rename (the binary content is the same
   # regardless of suffix, so we build once and move).
-  BUILD_PATH="${OUTPUT_DIR}/cmuxd-remote-${GOOS}-${GOARCH}.build"
+  BUILD_PATH="${OUTPUT_DIR}/programad-remote-${GOOS}-${GOARCH}.build"
   (
     cd "$DAEMON_ROOT"
     GOOS="$GOOS" \
@@ -123,7 +123,7 @@ for target in "${TARGETS[@]}"; do
     CGO_ENABLED=0 \
     go "${DAEMON_GO_BUILD_ARGS[@]}" \
       -o "$BUILD_PATH" \
-      ./cmd/cmuxd-remote
+      ./cmd/programad-remote
   )
   mv "$BUILD_PATH" "$OUTPUT_PATH"
   chmod 755 "$OUTPUT_PATH"
@@ -170,4 +170,4 @@ manifest = {
 Path(manifest_path).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 
-echo "Built cmuxd-remote assets in ${OUTPUT_DIR}"
+echo "Built programad-remote assets in ${OUTPUT_DIR}"

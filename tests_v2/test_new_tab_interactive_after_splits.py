@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _wait_for(pred, timeout_s: float, step_s: float = 0.05) -> None:
@@ -223,8 +223,8 @@ def main() -> int:
 
             baseline_present = int(c.render_stats(new_id).get("presentCount", 0) or 0)
 
-            token = f"CMUX_NEW_TAB_OK_{i}_{uuid.uuid4().hex[:10]}"
-            tmp = f"/tmp/cmux_new_tab_{token}.txt"
+            token = f"PROGRAMA_NEW_TAB_OK_{i}_{uuid.uuid4().hex[:10]}"
+            tmp = f"/tmp/programa_new_tab_{token}.txt"
             cmd = f"echo {token} > {tmp}"
             _ = _type_and_wait_visible(c, new_id, cmd)
 

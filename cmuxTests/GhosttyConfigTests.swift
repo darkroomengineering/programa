@@ -33,10 +33,10 @@ final class SidebarPathFormatterTests: XCTestCase {
     func testShortenedPathLeavesExternalPathUnchanged() {
         XCTAssertEqual(
             SidebarPathFormatter.shortenedPath(
-                "/tmp/cmux",
+                "/tmp/programa",
                 homeDirectoryPath: "/Users/example"
             ),
-            "/tmp/cmux"
+            "/tmp/programa"
         )
     }
 }
@@ -80,8 +80,8 @@ final class GhosttyConfigTests: XCTestCase {
     }
 
     func testThemeSearchPathsIncludeXDGDataDirsThemes() {
-        let pathA = "/tmp/cmux-theme-a"
-        let pathB = "/tmp/cmux-theme-b"
+        let pathA = "/tmp/programa-theme-a"
+        let pathB = "/tmp/programa-theme-b"
         let paths = GhosttyConfig.themeSearchPaths(
             forThemeName: "Solarized Light",
             environment: ["XDG_DATA_DIRS": "\(pathA):\(pathB)"],
@@ -809,14 +809,14 @@ final class WorkspaceRemoteDaemonManifestTests: XCTestCase {
           "appVersion": "0.62.0",
           "releaseTag": "v0.62.0",
           "releaseURL": "https://github.com/manaflow-ai/cmux/releases/tag/v0.62.0",
-          "checksumsAssetName": "cmuxd-remote-checksums.txt",
-          "checksumsURL": "https://github.com/manaflow-ai/cmux/releases/download/v0.62.0/cmuxd-remote-checksums.txt",
+          "checksumsAssetName": "programad-remote-checksums.txt",
+          "checksumsURL": "https://github.com/manaflow-ai/cmux/releases/download/v0.62.0/programad-remote-checksums.txt",
           "entries": [
             {
               "goOS": "linux",
               "goArch": "amd64",
-              "assetName": "cmuxd-remote-linux-amd64",
-              "downloadURL": "https://github.com/manaflow-ai/cmux/releases/download/v0.62.0/cmuxd-remote-linux-amd64",
+              "assetName": "programad-remote-linux-amd64",
+              "downloadURL": "https://github.com/manaflow-ai/cmux/releases/download/v0.62.0/programad-remote-linux-amd64",
               "sha256": "abc123"
             }
           ]
@@ -828,7 +828,7 @@ final class WorkspaceRemoteDaemonManifestTests: XCTestCase {
         ])
 
         XCTAssertEqual(manifest?.releaseTag, "v0.62.0")
-        XCTAssertEqual(manifest?.entry(goOS: "linux", goArch: "amd64")?.assetName, "cmuxd-remote-linux-amd64")
+        XCTAssertEqual(manifest?.entry(goOS: "linux", goArch: "amd64")?.assetName, "programad-remote-linux-amd64")
     }
 
     func testRemoteDaemonCachePathIsVersionedByPlatform() throws {
@@ -838,8 +838,8 @@ final class WorkspaceRemoteDaemonManifestTests: XCTestCase {
             goArch: "arm64"
         )
 
-        XCTAssertTrue(url.path.contains("/Application Support/cmux/remote-daemons/0.62.0/linux-arm64/"))
-        XCTAssertEqual(url.lastPathComponent, "cmuxd-remote")
+        XCTAssertTrue(url.path.contains("/Application Support/programa/remote-daemons/0.62.0/linux-arm64/"))
+        XCTAssertEqual(url.lastPathComponent, "programad-remote")
     }
 }
 
@@ -1012,44 +1012,44 @@ final class GhosttyTerminalStartupEnvironmentTests: XCTestCase {
     }
 
     func testMergedStartupEnvironmentAllowsSessionReplayAndInitialEnvCMUXKeys() {
-        let replayPath = "/tmp/cmux-replay-\(UUID().uuidString)"
+        let replayPath = "/tmp/programa-replay-\(UUID().uuidString)"
         let merged = TerminalSurface.mergedStartupEnvironment(
             base: [
                 "PATH": "/usr/bin",
-                "CMUX_SURFACE_ID": "managed-surface"
+                "PROGRAMA_SURFACE_ID": "managed-surface"
             ],
-            protectedKeys: ["PATH", "CMUX_SURFACE_ID"],
+            protectedKeys: ["PATH", "PROGRAMA_SURFACE_ID"],
             additionalEnvironment: [
                 SessionScrollbackReplayStore.environmentKey: replayPath
             ],
             initialEnvironmentOverrides: [
-                "CMUX_INITIAL_ENV_TOKEN": "token-123"
+                "PROGRAMA_INITIAL_ENV_TOKEN": "token-123"
             ]
         )
 
         XCTAssertEqual(merged[SessionScrollbackReplayStore.environmentKey], replayPath)
-        XCTAssertEqual(merged["CMUX_INITIAL_ENV_TOKEN"], "token-123")
+        XCTAssertEqual(merged["PROGRAMA_INITIAL_ENV_TOKEN"], "token-123")
     }
 
     func testMergedStartupEnvironmentProtectsManagedKeysOnly() {
         let merged = TerminalSurface.mergedStartupEnvironment(
             base: [
                 "PATH": "/usr/bin",
-                "CMUX_SURFACE_ID": "managed-surface"
+                "PROGRAMA_SURFACE_ID": "managed-surface"
             ],
-            protectedKeys: ["PATH", "CMUX_SURFACE_ID"],
+            protectedKeys: ["PATH", "PROGRAMA_SURFACE_ID"],
             additionalEnvironment: [
-                "CMUX_SURFACE_ID": "user-surface",
+                "PROGRAMA_SURFACE_ID": "user-surface",
                 "CUSTOM_FLAG": "1"
             ],
             initialEnvironmentOverrides: [
                 "PATH": "/tmp/bin",
-                "CMUX_SURFACE_ID": "override-surface"
+                "PROGRAMA_SURFACE_ID": "override-surface"
             ]
         )
 
         XCTAssertEqual(merged["PATH"], "/usr/bin")
-        XCTAssertEqual(merged["CMUX_SURFACE_ID"], "managed-surface")
+        XCTAssertEqual(merged["PROGRAMA_SURFACE_ID"], "managed-surface")
         XCTAssertEqual(merged["CUSTOM_FLAG"], "1")
     }
 
@@ -1212,7 +1212,7 @@ final class BrowserPanelRemoteStoreTests: XCTestCase {
                 relayPort: 64001,
                 relayID: "relay-store-dest",
                 relayToken: String(repeating: "a", count: 64),
-                localSocketPath: "/tmp/cmux-store-dest.sock",
+                localSocketPath: "/tmp/programa-store-dest.sock",
                 terminalStartupCommand: "ssh cmux-macmini"
             ),
             autoConnect: false
@@ -1244,7 +1244,7 @@ final class BrowserPanelRemoteStoreTests: XCTestCase {
                 relayPort: 64002,
                 relayID: "relay-store-source",
                 relayToken: String(repeating: "b", count: 64),
-                localSocketPath: "/tmp/cmux-store-source.sock",
+                localSocketPath: "/tmp/programa-store-source.sock",
                 terminalStartupCommand: "ssh cmux-macmini"
             ),
             autoConnect: false
@@ -1281,7 +1281,7 @@ final class BrowserPanelRemoteStoreTests: XCTestCase {
             relayPort: 64000,
             relayID: "relay-test",
             relayToken: String(repeating: "a", count: 64),
-            localSocketPath: "/tmp/cmux-test.sock",
+            localSocketPath: "/tmp/programa-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
 
@@ -1309,13 +1309,13 @@ final class WorkspaceRemoteConfigurationTransportKeyTests: XCTestCase {
             sshOptions: [
                 "Compression=yes",
                 "ControlMaster=auto",
-                "ControlPath=/tmp/cmux-ssh-501-64000-%C",
+                "ControlPath=/tmp/programa-ssh-501-64000-%C",
             ],
             localProxyPort: 9000,
             relayPort: 64000,
             relayID: "relay-a",
             relayToken: "token-a",
-            localSocketPath: "/tmp/cmux-a.sock",
+            localSocketPath: "/tmp/programa-a.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let second = WorkspaceRemoteConfiguration(
@@ -1325,13 +1325,13 @@ final class WorkspaceRemoteConfigurationTransportKeyTests: XCTestCase {
             sshOptions: [
                 "Compression=yes",
                 "ControlMaster=auto",
-                "ControlPath=/tmp/cmux-ssh-501-64001-%C",
+                "ControlPath=/tmp/programa-ssh-501-64001-%C",
             ],
             localProxyPort: 9000,
             relayPort: 64001,
             relayID: "relay-b",
             relayToken: "token-b",
-            localSocketPath: "/tmp/cmux-b.sock",
+            localSocketPath: "/tmp/programa-b.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
 
@@ -1342,8 +1342,8 @@ final class WorkspaceRemoteConfigurationTransportKeyTests: XCTestCase {
 final class WorkspaceRemoteSSHCleanupTests: XCTestCase {
     func testOrphanedCMUXRemoteSSHPIDsMatchesOnlyParentOneRelayAndDaemonTransports() {
         let psOutput = """
-          101 1 /usr/bin/ssh -N -T -S none -o ControlPath=/tmp/cmux-ssh-501-56080-%C -R 127.0.0.1:56080:127.0.0.1:64048 cmux-macmini
-          102 1 /usr/bin/ssh -T -S none -o RequestTTY=no cmux-macmini sh -c 'exec .cmux/bin/cmuxd-remote/0.63.1/darwin-arm64/cmuxd-remote serve --stdio'
+          101 1 /usr/bin/ssh -N -T -S none -o ControlPath=/tmp/programa-ssh-501-56080-%C -R 127.0.0.1:56080:127.0.0.1:64048 cmux-macmini
+          102 1 /usr/bin/ssh -T -S none -o RequestTTY=no cmux-macmini sh -c 'exec .programa/bin/programad-remote/0.63.1/darwin-arm64/programad-remote serve --stdio'
           103 999 /usr/bin/ssh -N -T -S none -R 127.0.0.1:56081:127.0.0.1:64049 cmux-macmini
           104 1 /usr/bin/ssh -tt cmux-macmini
           105 1 /usr/bin/ssh -N -T -S none -R 127.0.0.1:56082:127.0.0.1:64050 other-host
@@ -1363,7 +1363,7 @@ final class WorkspaceRemoteSSHCleanupTests: XCTestCase {
         let psOutput = """
           201 1 /usr/bin/ssh -N -T -S none -R 127.0.0.1:56080:127.0.0.1:64048 cmux-macmini
           202 1 /usr/bin/ssh -N -T -S none -R 127.0.0.1:56081:127.0.0.1:64049 cmux-macmini
-          203 1 /usr/bin/ssh -T -S none -o RequestTTY=no cmux-macmini sh -c 'exec .cmux/bin/cmuxd-remote/0.63.1/darwin-arm64/cmuxd-remote serve --stdio'
+          203 1 /usr/bin/ssh -T -S none -o RequestTTY=no cmux-macmini sh -c 'exec .programa/bin/programad-remote/0.63.1/darwin-arm64/programad-remote serve --stdio'
         """
 
         XCTAssertEqual(
@@ -1783,13 +1783,13 @@ final class SocketControlSettingsTests: XCTestCase {
     func testInvalidEnvSocketModeDoesNotOverrideUserMode() {
         XCTAssertNil(
             SocketControlSettings.envOverrideMode(
-                environment: ["CMUX_SOCKET_MODE": "definitely-not-a-mode"]
+                environment: ["PROGRAMA_SOCKET_MODE": "definitely-not-a-mode"]
             )
         )
         XCTAssertEqual(
             SocketControlSettings.effectiveMode(
                 userMode: .password,
-                environment: ["CMUX_SOCKET_MODE": "definitely-not-a-mode"]
+                environment: ["PROGRAMA_SOCKET_MODE": "definitely-not-a-mode"]
             ),
             .password
         )
@@ -1798,7 +1798,7 @@ final class SocketControlSettingsTests: XCTestCase {
     func testStableReleaseIgnoresAmbientSocketOverrideByDefault() {
         let path = SocketControlSettings.socketPath(
             environment: [
-                "CMUX_SOCKET_PATH": "/tmp/cmux-debug-issue-153-tmux-compat.sock",
+                "PROGRAMA_SOCKET_PATH": "/tmp/programa-debug-issue-153-tmux-compat.sock",
             ],
             bundleIdentifier: "com.darkroom.programa",
             isDebugBuild: false,
@@ -1811,52 +1811,52 @@ final class SocketControlSettingsTests: XCTestCase {
     func testNightlyReleaseUsesDedicatedDefaultAndIgnoresAmbientSocketOverride() {
         let path = SocketControlSettings.socketPath(
             environment: [
-                "CMUX_SOCKET_PATH": "/tmp/cmux-debug-issue-153-tmux-compat.sock",
+                "PROGRAMA_SOCKET_PATH": "/tmp/programa-debug-issue-153-tmux-compat.sock",
             ],
             bundleIdentifier: "com.darkroom.programa.nightly",
             isDebugBuild: false,
             probeStableDefaultPathEntry: { _ in .missing }
         )
 
-        XCTAssertEqual(path, "/tmp/cmux-nightly.sock")
+        XCTAssertEqual(path, "/tmp/programa-nightly.sock")
     }
 
     func testDebugBundleHonorsSocketOverrideWithoutOptInFlag() {
         let path = SocketControlSettings.socketPath(
             environment: [
-                "CMUX_SOCKET_PATH": "/tmp/cmux-debug-my-tag.sock",
+                "PROGRAMA_SOCKET_PATH": "/tmp/programa-debug-my-tag.sock",
             ],
             bundleIdentifier: "com.darkroom.programa.debug.my-tag",
             isDebugBuild: false
         )
 
-        XCTAssertEqual(path, "/tmp/cmux-debug-my-tag.sock")
+        XCTAssertEqual(path, "/tmp/programa-debug-my-tag.sock")
     }
 
     func testStagingBundleHonorsSocketOverrideWithoutOptInFlag() {
         let path = SocketControlSettings.socketPath(
             environment: [
-                "CMUX_SOCKET_PATH": "/tmp/cmux-staging-my-tag.sock",
+                "PROGRAMA_SOCKET_PATH": "/tmp/programa-staging-my-tag.sock",
             ],
             bundleIdentifier: "com.darkroom.programa.staging.my-tag",
             isDebugBuild: false
         )
 
-        XCTAssertEqual(path, "/tmp/cmux-staging-my-tag.sock")
+        XCTAssertEqual(path, "/tmp/programa-staging-my-tag.sock")
     }
 
     func testStableReleaseCanOptInToSocketOverride() {
         let path = SocketControlSettings.socketPath(
             environment: [
-                "CMUX_SOCKET_PATH": "/tmp/cmux-debug-forced.sock",
-                "CMUX_ALLOW_SOCKET_OVERRIDE": "1",
+                "PROGRAMA_SOCKET_PATH": "/tmp/programa-debug-forced.sock",
+                "PROGRAMA_ALLOW_SOCKET_OVERRIDE": "1",
             ],
             bundleIdentifier: "com.darkroom.programa",
             isDebugBuild: false,
             probeStableDefaultPathEntry: { _ in .missing }
         )
 
-        XCTAssertEqual(path, "/tmp/cmux-debug-forced.sock")
+        XCTAssertEqual(path, "/tmp/programa-debug-forced.sock")
     }
 
     func testDefaultSocketPathByChannel() {
@@ -1874,7 +1874,7 @@ final class SocketControlSettingsTests: XCTestCase {
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
-            "/tmp/cmux-nightly.sock"
+            "/tmp/programa-nightly.sock"
         )
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
@@ -1882,7 +1882,7 @@ final class SocketControlSettingsTests: XCTestCase {
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
-            "/tmp/cmux-debug.sock"
+            "/tmp/programa-debug.sock"
         )
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
@@ -1890,7 +1890,7 @@ final class SocketControlSettingsTests: XCTestCase {
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
-            "/tmp/cmux-staging.sock"
+            "/tmp/programa-staging.sock"
         )
     }
 
@@ -1929,7 +1929,7 @@ final class SocketControlSettingsTests: XCTestCase {
     func testUntaggedDebugBundleAllowedWithLaunchTag() {
         XCTAssertFalse(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
-                environment: ["CMUX_TAG": "tests-v1"],
+                environment: ["PROGRAMA_TAG": "tests-v1"],
                 bundleIdentifier: "com.darkroom.programa.debug",
                 isDebugBuild: true
             )
@@ -1988,10 +1988,10 @@ final class SocketControlSettingsTests: XCTestCase {
 
     func testXCUITestLaunchEnvironmentIgnoresLaunchTagGate() {
         // XCUITest launches the app as a separate process without XCTest env vars.
-        // The app receives CMUX_UI_TEST_* vars via XCUIApplication.launchEnvironment.
+        // The app receives PROGRAMA_UI_TEST_* vars via XCUIApplication.launchEnvironment.
         XCTAssertFalse(
             SocketControlSettings.shouldBlockUntaggedDebugLaunch(
-                environment: ["CMUX_UI_TEST_MODE": "1"],
+                environment: ["PROGRAMA_UI_TEST_MODE": "1"],
                 bundleIdentifier: "com.darkroom.programa.debug",
                 isDebugBuild: true
             )
@@ -2003,9 +2003,9 @@ final class UITestLaunchManifestTests: XCTestCase {
     func testManifestPathReadsArgumentValue() {
         XCTAssertEqual(
             UITestLaunchManifest.manifestPath(
-                from: ["programa", "-cmuxUITestLaunchManifest", "/tmp/cmux-ui-test-launch.json"]
+                from: ["programa", "-cmuxUITestLaunchManifest", "/tmp/programa-ui-test-launch.json"]
             ),
-            "/tmp/cmux-ui-test-launch.json"
+            "/tmp/programa-ui-test-launch.json"
         )
     }
 
@@ -2019,20 +2019,20 @@ final class UITestLaunchManifestTests: XCTestCase {
 
     func testApplyIfPresentDecodesEnvironmentPayload() {
         let payload = """
-        {"environment":{"CMUX_TAG":"ui-tests-display","CMUX_SOCKET_PATH":"/tmp/cmux-ui-tests.sock"}}
+        {"environment":{"PROGRAMA_TAG":"ui-tests-display","PROGRAMA_SOCKET_PATH":"/tmp/programa-ui-tests.sock"}}
         """.data(using: .utf8)!
         var applied: [String: String] = [:]
 
         UITestLaunchManifest.applyIfPresent(
-            arguments: ["programa", UITestLaunchManifest.argumentName, "/tmp/cmux-ui-test-launch.json"],
+            arguments: ["programa", UITestLaunchManifest.argumentName, "/tmp/programa-ui-test-launch.json"],
             loadData: { _ in payload },
             applyEnvironment: { key, value in
                 applied[key] = value
             }
         )
 
-        XCTAssertEqual(applied["CMUX_TAG"], "ui-tests-display")
-        XCTAssertEqual(applied["CMUX_SOCKET_PATH"], "/tmp/cmux-ui-tests.sock")
+        XCTAssertEqual(applied["PROGRAMA_TAG"], "ui-tests-display")
+        XCTAssertEqual(applied["PROGRAMA_SOCKET_PATH"], "/tmp/programa-ui-tests.sock")
     }
 }
 
@@ -2814,19 +2814,19 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadGhosttyIntegration: false,
             cmuxLoadShellIntegration: true,
             command: """
-            print -r -- "CMD=$TERM|${CMUX_ZSH_RESTORE_TERM-unset}" >> "$CMUX_TEST_OUTPUT"
+            print -r -- "CMD=$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}" >> "$PROGRAMA_TEST_OUTPUT"
             """,
             userZshRCContents: """
-            export CMUX_STARTUP_THEME_TERM="$TERM"
+            export PROGRAMA_STARTUP_THEME_TERM="$TERM"
             if [[ $TERM = (*256color|*rxvt*) ]]; then
-              export CMUX_STARTUP_THEME_BRANCH=extended
+              export PROGRAMA_STARTUP_THEME_BRANCH=extended
             else
-              export CMUX_STARTUP_THEME_BRANCH=basic
+              export PROGRAMA_STARTUP_THEME_BRANCH=basic
             fi
 
             cmux_test_ready() {
-              print -r -- "PRE=$CMUX_STARTUP_THEME_TERM|$CMUX_STARTUP_THEME_BRANCH|$TERM|${CMUX_ZSH_RESTORE_TERM-unset}" > "$CMUX_TEST_OUTPUT"
-              : > "$CMUX_TEST_READY"
+              print -r -- "PRE=$PROGRAMA_STARTUP_THEME_TERM|$PROGRAMA_STARTUP_THEME_BRANCH|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}" > "$PROGRAMA_TEST_OUTPUT"
+              : > "$PROGRAMA_TEST_READY"
             }
             precmd_functions+=(cmux_test_ready)
             """
@@ -2844,10 +2844,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadGhosttyIntegration: false,
             cmuxLoadShellIntegration: true,
             command: """
-            print -r -- "$CMUX_STARTUP_TERM|$TERM|${CMUX_ZSH_RESTORE_TERM-unset}"
+            print -r -- "$PROGRAMA_STARTUP_TERM|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}"
             """,
             userZshRCContents: """
-            export CMUX_STARTUP_TERM="$TERM"
+            export PROGRAMA_STARTUP_TERM="$TERM"
             """
         )
 
@@ -2859,10 +2859,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadGhosttyIntegration: false,
             cmuxLoadShellIntegration: false,
             command: """
-            print -r -- "$CMUX_STARTUP_TERM|$TERM|${CMUX_ZSH_RESTORE_TERM-unset}"
+            print -r -- "$PROGRAMA_STARTUP_TERM|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}"
             """,
             userZshRCContents: """
-            export CMUX_STARTUP_TERM="$TERM"
+            export PROGRAMA_STARTUP_TERM="$TERM"
             """
         )
 
@@ -2874,13 +2874,13 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadGhosttyIntegration: false,
             cmuxLoadShellIntegration: true,
             command: """
-            print -r -- "$CMUX_STARTUP_TERM|$TERM|${CMUX_ZSH_RESTORE_TERM-unset}|${CMUX_SHELL_INTEGRATION:-unset}"
+            print -r -- "$PROGRAMA_STARTUP_TERM|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}|${PROGRAMA_SHELL_INTEGRATION:-unset}"
             """,
             userZshEnvContents: """
-            export CMUX_SHELL_INTEGRATION=0
+            export PROGRAMA_SHELL_INTEGRATION=0
             """,
             userZshRCContents: """
-            export CMUX_STARTUP_TERM="$TERM"
+            export PROGRAMA_STARTUP_TERM="$TERM"
             """
         )
 
@@ -2909,11 +2909,11 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadShellIntegration: true,
             command: """
             _cmux_preexec 'echo $TERM'
-            print -r -- "$TERM|${CMUX_ZSH_RESTORE_TERM-unset}"
+            print -r -- "$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}"
             """,
             extraEnvironment: [
                 "TERM": "xterm-ghostty",
-                "CMUX_ZSH_RESTORE_TERM": "xterm-256color",
+                "PROGRAMA_ZSH_RESTORE_TERM": "xterm-256color",
             ]
         )
 
@@ -2952,21 +2952,21 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             command: "_cmux_preexec tmux; print -r -- READY",
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
-                "CMUX_SOCKET_PATH": "/tmp/cmux-current.sock",
-                "CMUX_TAG": "feat-tmux-notification-attention-state",
-                "CMUX_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_SURFACE_ID": "22222222-2222-2222-2222-222222222222",
-                "CMUX_TAB_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_SOCKET_PATH": "/tmp/programa-current.sock",
+                "PROGRAMA_TAG": "feat-tmux-notification-attention-state",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_SURFACE_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_TAB_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
             ]
         )
 
         let log = (try? String(contentsOf: logPath, encoding: .utf8)) ?? ""
-        XCTAssertTrue(log.contains("set-environment -g CMUX_TAG feat-tmux-notification-attention-state"), log)
-        XCTAssertTrue(log.contains("set-environment -g CMUX_SOCKET_PATH /tmp/cmux-current.sock"), log)
-        XCTAssertTrue(log.contains("set-environment -g CMUX_WORKSPACE_ID 11111111-1111-1111-1111-111111111111"), log)
-        XCTAssertFalse(log.contains("set-environment -g CMUX_SURFACE_ID"), log)
-        XCTAssertFalse(log.contains("set-environment -g CMUX_PANEL_ID"), log)
+        XCTAssertTrue(log.contains("set-environment -g PROGRAMA_TAG feat-tmux-notification-attention-state"), log)
+        XCTAssertTrue(log.contains("set-environment -g PROGRAMA_SOCKET_PATH /tmp/programa-current.sock"), log)
+        XCTAssertTrue(log.contains("set-environment -g PROGRAMA_WORKSPACE_ID 11111111-1111-1111-1111-111111111111"), log)
+        XCTAssertFalse(log.contains("set-environment -g PROGRAMA_SURFACE_ID"), log)
+        XCTAssertFalse(log.contains("set-environment -g PROGRAMA_PANEL_ID"), log)
     }
 
     func testShellIntegrationClearsStaleSurfaceScopedTmuxEnvironmentAutomatically() throws {
@@ -2984,8 +2984,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             contents: """
             #!/bin/sh
             if [ "$1" = "show-environment" ] && [ "$2" = "-g" ]; then
-              printf '%s\\n' 'CMUX_SURFACE_ID=99999999-9999-9999-9999-999999999999'
-              printf '%s\\n' 'CMUX_PANEL_ID=99999999-9999-9999-9999-999999999999'
+              printf '%s\\n' 'PROGRAMA_SURFACE_ID=99999999-9999-9999-9999-999999999999'
+              printf '%s\\n' 'PROGRAMA_PANEL_ID=99999999-9999-9999-9999-999999999999'
               exit 0
             fi
             printf '%s\\n' "$*" >> "\(logPath.path)"
@@ -2999,18 +2999,18 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             command: "_cmux_preexec tmux; print -r -- READY",
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
-                "CMUX_SOCKET_PATH": "/tmp/cmux-current.sock",
-                "CMUX_TAG": "feat-tmux-notification-attention-state",
-                "CMUX_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_SURFACE_ID": "22222222-2222-2222-2222-222222222222",
-                "CMUX_TAB_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_SOCKET_PATH": "/tmp/programa-current.sock",
+                "PROGRAMA_TAG": "feat-tmux-notification-attention-state",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_SURFACE_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_TAB_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
             ]
         )
 
         let log = (try? String(contentsOf: logPath, encoding: .utf8)) ?? ""
-        XCTAssertTrue(log.contains("set-environment -gu CMUX_SURFACE_ID"), log)
-        XCTAssertTrue(log.contains("set-environment -gu CMUX_PANEL_ID"), log)
+        XCTAssertTrue(log.contains("set-environment -gu PROGRAMA_SURFACE_ID"), log)
+        XCTAssertTrue(log.contains("set-environment -gu PROGRAMA_PANEL_ID"), log)
     }
 
     func testShellIntegrationRefreshesWorkspaceScopedCmuxEnvironmentFromTmuxWithoutOverwritingSurfaceScope() throws {
@@ -3027,12 +3027,12 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             contents: """
             #!/bin/sh
             if [ "$1" = "show-environment" ] && [ "$2" = "-g" ]; then
-              printf '%s\\n' 'CMUX_SOCKET_PATH=/tmp/cmux-current.sock'
-              printf '%s\\n' 'CMUX_TAG=feat-tmux-notification-attention-state'
-              printf '%s\\n' 'CMUX_WORKSPACE_ID=11111111-1111-1111-1111-111111111111'
-              printf '%s\\n' 'CMUX_SURFACE_ID=99999999-9999-9999-9999-999999999999'
-              printf '%s\\n' 'CMUX_TAB_ID=11111111-1111-1111-1111-111111111111'
-              printf '%s\\n' 'CMUX_PANEL_ID=99999999-9999-9999-9999-999999999999'
+              printf '%s\\n' 'PROGRAMA_SOCKET_PATH=/tmp/programa-current.sock'
+              printf '%s\\n' 'PROGRAMA_TAG=feat-tmux-notification-attention-state'
+              printf '%s\\n' 'PROGRAMA_WORKSPACE_ID=11111111-1111-1111-1111-111111111111'
+              printf '%s\\n' 'PROGRAMA_SURFACE_ID=99999999-9999-9999-9999-999999999999'
+              printf '%s\\n' 'PROGRAMA_TAB_ID=11111111-1111-1111-1111-111111111111'
+              printf '%s\\n' 'PROGRAMA_PANEL_ID=99999999-9999-9999-9999-999999999999'
               exit 0
             fi
             exit 0
@@ -3042,22 +3042,22 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         let output = try runInteractiveZsh(
             cmuxLoadGhosttyIntegration: false,
             cmuxLoadShellIntegration: true,
-            command: "_cmux_precmd; print -r -- \"$CMUX_TAG|$CMUX_SOCKET_PATH|$CMUX_WORKSPACE_ID|$CMUX_SURFACE_ID|$CMUX_PANEL_ID\"",
+            command: "_cmux_precmd; print -r -- \"$PROGRAMA_TAG|$PROGRAMA_SOCKET_PATH|$PROGRAMA_WORKSPACE_ID|$PROGRAMA_SURFACE_ID|$PROGRAMA_PANEL_ID\"",
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
                 "TMUX": "/tmp/tmux-stale,123,0",
-                "CMUX_SOCKET_PATH": "/tmp/cmux-stale.sock",
-                "CMUX_TAG": "feat-tmux-integration-experiments",
-                "CMUX_WORKSPACE_ID": "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
-                "CMUX_SURFACE_ID": "22222222-2222-2222-2222-222222222222",
-                "CMUX_TAB_ID": "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
-                "CMUX_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_SOCKET_PATH": "/tmp/programa-stale.sock",
+                "PROGRAMA_TAG": "feat-tmux-integration-experiments",
+                "PROGRAMA_WORKSPACE_ID": "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+                "PROGRAMA_SURFACE_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_TAB_ID": "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+                "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
             ]
         )
 
         XCTAssertEqual(
             output,
-            "feat-tmux-notification-attention-state|/tmp/cmux-current.sock|11111111-1111-1111-1111-111111111111|22222222-2222-2222-2222-222222222222|22222222-2222-2222-2222-222222222222"
+            "feat-tmux-notification-attention-state|/tmp/programa-current.sock|11111111-1111-1111-1111-111111111111|22222222-2222-2222-2222-222222222222|22222222-2222-2222-2222-222222222222"
         )
     }
 
@@ -3066,13 +3066,13 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadGhosttyIntegration: false,
             cmuxLoadShellIntegration: true,
             command: """
-            _CMUX_TTY_NAME=ttys999
+            _PROGRAMA_TTY_NAME=ttys999
             print -r -- "$(_cmux_report_tty_payload)"
             """,
             extraEnvironment: [
                 "TMUX": "/tmp/tmux-current,123,0",
-                "CMUX_TAB_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_PANEL_ID": "99999999-9999-9999-9999-999999999999",
+                "PROGRAMA_TAB_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_PANEL_ID": "99999999-9999-9999-9999-999999999999",
             ]
         )
 
@@ -3103,16 +3103,16 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
-            _CMUX_TTY_NAME=ttys777
+            _PROGRAMA_TTY_NAME=ttys777
             _cmux_report_tty_via_relay
             cat "\(logPath.path)"
             """,
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
-                "CMUX_SOCKET_PATH": "127.0.0.1:64011",
-                "CMUX_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_TAB_ID": "22222222-2222-2222-2222-222222222222",
-                "CMUX_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_SOCKET_PATH": "127.0.0.1:64011",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_TAB_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
             ]
         )
 
@@ -3155,10 +3155,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             """,
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
-                "CMUX_SOCKET_PATH": "127.0.0.1:64011",
-                "CMUX_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_TAB_ID": "22222222-2222-2222-2222-222222222222",
-                "CMUX_PANEL_ID": "",
+                "PROGRAMA_SOCKET_PATH": "127.0.0.1:64011",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_TAB_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_PANEL_ID": "",
             ]
         )
 
@@ -3193,8 +3193,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
-            _CMUX_TTY_REPORTED=1
-            _CMUX_PORTS_LAST_RUN=-999
+            _PROGRAMA_TTY_REPORTED=1
+            _PROGRAMA_PORTS_LAST_RUN=-999
             _cmux_precmd
             repeat 20; do
               [[ -s "\(logPath.path)" ]] && break
@@ -3204,10 +3204,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             """,
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
-                "CMUX_SOCKET_PATH": "127.0.0.1:64011",
-                "CMUX_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_TAB_ID": "22222222-2222-2222-2222-222222222222",
-                "CMUX_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_SOCKET_PATH": "127.0.0.1:64011",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_TAB_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
             ]
         )
 
@@ -3240,16 +3240,16 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
-            _CMUX_TTY_NAME=ttys888
+            _PROGRAMA_TTY_NAME=ttys888
             _cmux_report_tty_via_relay
             cat "\(logPath.path)"
             """,
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
-                "CMUX_SOCKET_PATH": "127.0.0.1:64011",
-                "CMUX_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_TAB_ID": "22222222-2222-2222-2222-222222222222",
-                "CMUX_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_SOCKET_PATH": "127.0.0.1:64011",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_TAB_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
             ]
         )
 
@@ -3282,8 +3282,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
-            _CMUX_TTY_NAME=ttys889
-            _CMUX_TTY_REPORTED=0
+            _PROGRAMA_TTY_NAME=ttys889
+            _PROGRAMA_TTY_REPORTED=0
             _cmux_preexec_command "python3 -m http.server 8899"
             for _cmux_i in $(seq 1 20); do
               [ -s "\(logPath.path)" ] && break
@@ -3293,10 +3293,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             """,
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
-                "CMUX_SOCKET_PATH": "127.0.0.1:64011",
-                "CMUX_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_TAB_ID": "22222222-2222-2222-2222-222222222222",
-                "CMUX_PANEL_ID": "",
+                "PROGRAMA_SOCKET_PATH": "127.0.0.1:64011",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_TAB_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_PANEL_ID": "",
             ]
         )
 
@@ -3334,8 +3334,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             cmuxLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
-            _CMUX_TTY_REPORTED=1
-            _CMUX_PORTS_LAST_RUN=-999
+            _PROGRAMA_TTY_REPORTED=1
+            _PROGRAMA_PORTS_LAST_RUN=-999
             _cmux_prompt_command
             for _cmux_i in $(seq 1 20); do
               [ -s "\(logPath.path)" ] && break
@@ -3345,10 +3345,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             """,
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
-                "CMUX_SOCKET_PATH": "127.0.0.1:64011",
-                "CMUX_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
-                "CMUX_TAB_ID": "22222222-2222-2222-2222-222222222222",
-                "CMUX_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_SOCKET_PATH": "127.0.0.1:64011",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_TAB_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
             ]
         )
 
@@ -3430,19 +3430,19 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             "SHELL": "/bin/zsh",
             "USER": NSUserName(),
             "ZDOTDIR": cmuxZdotdir.path,
-            "CMUX_ZSH_ZDOTDIR": userZdotdir.path,
-            "CMUX_SHELL_INTEGRATION": "0",
+            "PROGRAMA_ZSH_ZDOTDIR": userZdotdir.path,
+            "PROGRAMA_SHELL_INTEGRATION": "0",
             "GHOSTTY_RESOURCES_DIR": ghosttyResources.path,
         ]
         if cmuxLoadGhosttyIntegration {
-            process.environment?["CMUX_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "1"
+            process.environment?["PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "1"
         }
         if cmuxLoadShellIntegration {
-            process.environment?["CMUX_SHELL_INTEGRATION"] = "1"
-            process.environment?["CMUX_SHELL_INTEGRATION_DIR"] = cmuxZdotdir.path
-            process.environment?["CMUX_SOCKET_PATH"] = root.appendingPathComponent("cmux-test.sock").path
-            process.environment?["CMUX_TAB_ID"] = "tab-test"
-            process.environment?["CMUX_PANEL_ID"] = "panel-test"
+            process.environment?["PROGRAMA_SHELL_INTEGRATION"] = "1"
+            process.environment?["PROGRAMA_SHELL_INTEGRATION_DIR"] = cmuxZdotdir.path
+            process.environment?["PROGRAMA_SOCKET_PATH"] = root.appendingPathComponent("cmux-test.sock").path
+            process.environment?["PROGRAMA_TAB_ID"] = "tab-test"
+            process.environment?["PROGRAMA_PANEL_ID"] = "panel-test"
         }
         for (key, value) in extraEnvironment {
             process.environment?[key] = value
@@ -3543,21 +3543,21 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             "SHELL": "/bin/zsh",
             "USER": NSUserName(),
             "ZDOTDIR": cmuxZdotdir.path,
-            "CMUX_ZSH_ZDOTDIR": userZdotdir.path,
-            "CMUX_SHELL_INTEGRATION": "0",
+            "PROGRAMA_ZSH_ZDOTDIR": userZdotdir.path,
+            "PROGRAMA_SHELL_INTEGRATION": "0",
             "GHOSTTY_RESOURCES_DIR": ghosttyResources.path,
-            "CMUX_TEST_READY": readyPath.path,
-            "CMUX_TEST_OUTPUT": outputPath.path,
+            "PROGRAMA_TEST_READY": readyPath.path,
+            "PROGRAMA_TEST_OUTPUT": outputPath.path,
         ]
         if cmuxLoadGhosttyIntegration {
-            process.environment?["CMUX_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "1"
+            process.environment?["PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "1"
         }
         if cmuxLoadShellIntegration {
-            process.environment?["CMUX_SHELL_INTEGRATION"] = "1"
-            process.environment?["CMUX_SHELL_INTEGRATION_DIR"] = cmuxZdotdir.path
-            process.environment?["CMUX_SOCKET_PATH"] = root.appendingPathComponent("cmux-test.sock").path
-            process.environment?["CMUX_TAB_ID"] = "tab-test"
-            process.environment?["CMUX_PANEL_ID"] = "panel-test"
+            process.environment?["PROGRAMA_SHELL_INTEGRATION"] = "1"
+            process.environment?["PROGRAMA_SHELL_INTEGRATION_DIR"] = cmuxZdotdir.path
+            process.environment?["PROGRAMA_SOCKET_PATH"] = root.appendingPathComponent("cmux-test.sock").path
+            process.environment?["PROGRAMA_TAB_ID"] = "tab-test"
+            process.environment?["PROGRAMA_PANEL_ID"] = "panel-test"
         }
         for (key, value) in extraEnvironment {
             process.environment?[key] = value
@@ -3673,9 +3673,9 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             "USER": NSUserName(),
         ]
         if cmuxLoadShellIntegration {
-            process.environment?["CMUX_SOCKET_PATH"] = root.appendingPathComponent("cmux-test.sock").path
-            process.environment?["CMUX_TAB_ID"] = "tab-test"
-            process.environment?["CMUX_PANEL_ID"] = "panel-test"
+            process.environment?["PROGRAMA_SOCKET_PATH"] = root.appendingPathComponent("cmux-test.sock").path
+            process.environment?["PROGRAMA_TAB_ID"] = "tab-test"
+            process.environment?["PROGRAMA_PANEL_ID"] = "panel-test"
         }
         for (key, value) in extraEnvironment {
             process.environment?[key] = value

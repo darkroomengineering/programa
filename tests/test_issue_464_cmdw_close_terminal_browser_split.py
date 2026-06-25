@@ -14,7 +14,7 @@ Expected:
 
 This test uses debug socket commands (`simulate_shortcut`, `layout_debug`,
 `surface_health`, `drag_hit_chain`).
-Run against a Debug app socket (typically with CMUX_SOCKET_MODE=allowAll).
+Run against a Debug app socket (typically with PROGRAMA_SOCKET_MODE=allowAll).
 """
 
 import os
@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _wait_until(predicate, timeout_s: float = 5.0, interval_s: float = 0.05) -> bool:
@@ -83,7 +83,7 @@ def main() -> int:
         if not ping_ok:
             raise cmuxError(
                 f"Socket ping failed on {SOCKET_PATH}. "
-                "Launch Debug app with CMUX_SOCKET_MODE=allowAll for this test."
+                "Launch Debug app with PROGRAMA_SOCKET_MODE=allowAll for this test."
             )
 
         workspace_id = client.new_workspace()

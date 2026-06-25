@@ -16,11 +16,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux.sock")
-SSH_HOST = os.environ.get("CMUX_SSH_TEST_HOST", "").strip()
-SSH_PORT = os.environ.get("CMUX_SSH_TEST_PORT", "").strip()
-SSH_IDENTITY = os.environ.get("CMUX_SSH_TEST_IDENTITY", "").strip()
-SSH_OPTIONS_RAW = os.environ.get("CMUX_SSH_TEST_OPTIONS", "").strip()
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa.sock")
+SSH_HOST = os.environ.get("PROGRAMA_SSH_TEST_HOST", "").strip()
+SSH_PORT = os.environ.get("PROGRAMA_SSH_TEST_PORT", "").strip()
+SSH_IDENTITY = os.environ.get("PROGRAMA_SSH_TEST_IDENTITY", "").strip()
+SSH_OPTIONS_RAW = os.environ.get("PROGRAMA_SSH_TEST_OPTIONS", "").strip()
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -46,7 +46,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -56,9 +56,9 @@ def _find_cli_binary() -> str:
 
 def _run_cli_json(cli: str, args: list[str]) -> dict:
     env = dict(os.environ)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env.pop("CMUX_TAB_ID", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env.pop("PROGRAMA_TAB_ID", None)
 
     proc = _run([cli, "--socket", SOCKET_PATH, "--json", *args], env=env)
     try:
@@ -172,7 +172,7 @@ def _wait_browser_favicon(client: cmux, surface_id: str, timeout_s: float = 20.0
 
 def main() -> int:
     if not SSH_HOST:
-        print("SKIP: set CMUX_SSH_TEST_HOST to run remote favicon proxy regression")
+        print("SKIP: set PROGRAMA_SSH_TEST_HOST to run remote favicon proxy regression")
         return 0
 
     cli = _find_cli_binary()
@@ -183,15 +183,15 @@ def main() -> int:
     hit_file_path = ""
 
     stamp = secrets.token_hex(4)
-    page_token = f"CMUX_REMOTE_FAVICON_PAGE_{stamp}"
-    server_ready_token = f"CMUX_REMOTE_FAVICON_READY_{stamp}"
+    page_token = f"PROGRAMA_REMOTE_FAVICON_PAGE_{stamp}"
+    server_ready_token = f"PROGRAMA_REMOTE_FAVICON_READY_{stamp}"
     default_web_port = 23000 + (os.getpid() % 4000)
-    ssh_web_port = int(os.environ.get("CMUX_SSH_TEST_WEB_PORT", str(default_web_port)))
+    ssh_web_port = int(os.environ.get("PROGRAMA_SSH_TEST_WEB_PORT", str(default_web_port)))
     url = f"http://localhost:{ssh_web_port}/"
     png_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9WewAAAABJRU5ErkJggg=="
-    server_script_path = f"/tmp/cmux_remote_favicon_server_{stamp}.py"
-    server_log_path = f"/tmp/cmux_remote_favicon_server_{stamp}.log"
-    hit_file_path = f"/tmp/cmux_remote_favicon_hit_{stamp}"
+    server_script_path = f"/tmp/programa_remote_favicon_server_{stamp}.py"
+    server_log_path = f"/tmp/programa_remote_favicon_server_{stamp}.log"
+    hit_file_path = f"/tmp/programa_remote_favicon_hit_{stamp}"
 
     try:
         with cmux(SOCKET_PATH) as setup_client:

@@ -88,7 +88,7 @@ func TestRunVersion(t *testing.T) {
 }
 
 func TestWrapperBinaryDispatchesIntoCLI(t *testing.T) {
-	if os.Getenv("CMUXD_REMOTE_MAIN_HELPER") == "1" {
+	if os.Getenv("PROGRAMAD_REMOTE_MAIN_HELPER") == "1" {
 		separator := 0
 		for i, arg := range os.Args {
 			if arg == "--" {
@@ -105,7 +105,7 @@ func TestWrapperBinaryDispatchesIntoCLI(t *testing.T) {
 	}
 
 	sockPath := startMockSocket(t, "PONG")
-	wrapperPath := filepath.Join(t.TempDir(), "cmuxd-remote-current")
+	wrapperPath := filepath.Join(t.TempDir(), "programad-remote-current")
 	if err := os.Symlink(os.Args[0], wrapperPath); err != nil {
 		t.Fatalf("symlink wrapper path: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestWrapperBinaryDispatchesIntoCLI(t *testing.T) {
 		"--",
 		"--socket", sockPath, "ping",
 	)
-	cmd.Env = append(os.Environ(), "CMUXD_REMOTE_MAIN_HELPER=1")
+	cmd.Env = append(os.Environ(), "PROGRAMAD_REMOTE_MAIN_HELPER=1")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("wrapper invocation failed: %v\n%s", err, output)

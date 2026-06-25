@@ -163,7 +163,7 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
                 relayPort: 4444,
                 relayID: "relay-id",
                 relayToken: "relay-token",
-                localSocketPath: "/tmp/cmux-test.sock",
+                localSocketPath: "/tmp/programa-test.sock",
                 terminalStartupCommand: "ssh example.com"
             ),
             autoConnect: false

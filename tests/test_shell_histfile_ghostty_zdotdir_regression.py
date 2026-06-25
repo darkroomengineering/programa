@@ -65,9 +65,9 @@ def main() -> int:
 
         # Simulate the buggy situation: cmux stores Ghostty's injected ZDOTDIR
         # as the "original" ZDOTDIR, then sets ZDOTDIR to its own wrapper.
-        env["CMUX_ORIGINAL_ZDOTDIR"] = str(ghostty_zsh_dir)
+        env["PROGRAMA_ORIGINAL_ZDOTDIR"] = str(ghostty_zsh_dir)
         env["ZDOTDIR"] = str(cmux_wrapper_dir)
-        env["CMUX_SHELL_INTEGRATION"] = "0"
+        env["PROGRAMA_SHELL_INTEGRATION"] = "0"
 
         rc, out = _run_zsh_print_histfile(env)
         if rc != 0:

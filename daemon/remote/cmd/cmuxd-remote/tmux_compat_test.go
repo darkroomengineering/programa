@@ -135,7 +135,7 @@ func TestTmuxShellCommandText(t *testing.T) {
 
 func TestTmuxWaitForSignalPath(t *testing.T) {
 	path := tmuxWaitForSignalPath("test-signal")
-	if !strings.HasPrefix(path, "/tmp/cmux-wait-for-") {
+	if !strings.HasPrefix(path, "/tmp/programa-wait-for-") {
 		t.Errorf("unexpected path prefix: %s", path)
 	}
 	if !strings.HasSuffix(path, ".sig") {
@@ -305,9 +305,9 @@ func TestCreateOMOShimDir(t *testing.T) {
 func TestConfigureAgentEnvironment(t *testing.T) {
 	// Save and restore env vars
 	envKeys := []string{
-		"CMUX_CLAUDE_TEAMS_CMUX_BIN", "PATH", "TMUX", "TMUX_PANE",
-		"TERM", "CMUX_SOCKET_PATH", "CMUX_SOCKET", "TERM_PROGRAM",
-		"CMUX_WORKSPACE_ID", "CMUX_SURFACE_ID",
+		"PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN", "PATH", "TMUX", "TMUX_PANE",
+		"TERM", "PROGRAMA_SOCKET_PATH", "PROGRAMA_SOCKET", "TERM_PROGRAM",
+		"PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID",
 		"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "COLORTERM",
 	}
 	saved := make(map[string]string)
@@ -335,9 +335,9 @@ func TestConfigureAgentEnvironment(t *testing.T) {
 			paneHandle:  "pane-456",
 			surfaceId:   "surf-789",
 		},
-		tmuxPathPrefix: "cmux-claude-teams",
-		cmuxBinEnvVar:  "CMUX_CLAUDE_TEAMS_CMUX_BIN",
-		termEnvVar:     "CMUX_CLAUDE_TEAMS_TERM",
+		tmuxPathPrefix: "programa-claude-teams",
+		cmuxBinEnvVar:  "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
+		termEnvVar:     "PROGRAMA_CLAUDE_TEAMS_TERM",
 		extraEnv: map[string]string{
 			"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
 		},
@@ -357,19 +357,19 @@ func TestConfigureAgentEnvironment(t *testing.T) {
 		t.Errorf("TMUX_PANE = %q, want %%pane-456", os.Getenv("TMUX_PANE"))
 	}
 	// Verify socket path
-	if os.Getenv("CMUX_SOCKET_PATH") != "127.0.0.1:54321" {
-		t.Errorf("CMUX_SOCKET_PATH = %q", os.Getenv("CMUX_SOCKET_PATH"))
+	if os.Getenv("PROGRAMA_SOCKET_PATH") != "127.0.0.1:54321" {
+		t.Errorf("PROGRAMA_SOCKET_PATH = %q", os.Getenv("PROGRAMA_SOCKET_PATH"))
 	}
 	// Verify COLORTERM is set for truecolor support
 	if os.Getenv("COLORTERM") != "truecolor" {
 		t.Errorf("COLORTERM = %q, want truecolor", os.Getenv("COLORTERM"))
 	}
 	// Verify workspace/surface IDs
-	if os.Getenv("CMUX_WORKSPACE_ID") != "ws-abc" {
-		t.Errorf("CMUX_WORKSPACE_ID = %q", os.Getenv("CMUX_WORKSPACE_ID"))
+	if os.Getenv("PROGRAMA_WORKSPACE_ID") != "ws-abc" {
+		t.Errorf("PROGRAMA_WORKSPACE_ID = %q", os.Getenv("PROGRAMA_WORKSPACE_ID"))
 	}
-	if os.Getenv("CMUX_SURFACE_ID") != "surf-789" {
-		t.Errorf("CMUX_SURFACE_ID = %q", os.Getenv("CMUX_SURFACE_ID"))
+	if os.Getenv("PROGRAMA_SURFACE_ID") != "surf-789" {
+		t.Errorf("PROGRAMA_SURFACE_ID = %q", os.Getenv("PROGRAMA_SURFACE_ID"))
 	}
 	// Verify extra env
 	if os.Getenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS") != "1" {

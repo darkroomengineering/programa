@@ -280,7 +280,7 @@ def main() -> int:
         home = tmp / "home"
         home.mkdir(parents=True, exist_ok=True)
 
-        socket_path = tmp / "fake-cmux.sock"
+        socket_path = tmp / "fake-programa.sock"
         state = FakeCmuxState()
         server = FakeCmuxUnixServer(str(socket_path), state)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -324,7 +324,7 @@ printf '%s\\n%s\\n%s\\n' "$t1" "$t2" "$t3" > "$RESULT_LOG"
         env = os.environ.copy()
         env["HOME"] = str(home)
         env["PATH"] = f"{real_bin}:/usr/bin:/bin"
-        env["CMUX_SOCKET_PATH"] = str(socket_path)
+        env["PROGRAMA_SOCKET_PATH"] = str(socket_path)
         env["RESULT_LOG"] = str(result_log)
 
         try:

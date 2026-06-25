@@ -16,8 +16,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
-SSH_HOST = os.environ.get("CMUX_SSH_TEST_HOST", "").strip()
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
+SSH_HOST = os.environ.get("PROGRAMA_SSH_TEST_HOST", "").strip()
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -35,7 +35,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -45,9 +45,9 @@ def _find_cli_binary() -> str:
 
 def _run_cli_json(cli: str, args: list[str]) -> dict:
     env = dict(os.environ)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env.pop("CMUX_TAB_ID", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env.pop("PROGRAMA_TAB_ID", None)
 
     import subprocess
 
@@ -114,7 +114,7 @@ def _wait_text(client: cmux, surface_id: str, token: str, timeout: float = 12.0)
 
 
 def _wait_shell_ready(client: cmux, surface_id: str, timeout: float = 20.0) -> None:
-    token = f"__CMUX_SHELL_READY_{secrets.token_hex(6)}__"
+    token = f"__PROGRAMA_SHELL_READY_{secrets.token_hex(6)}__"
     client.send_surface(surface_id, f"printf '{token}'; echo")
     client.send_key_surface(surface_id, "enter")
     _wait_text(client, surface_id, token, timeout=timeout)
@@ -132,7 +132,7 @@ def _assert_no_login_profile_noise(text: str) -> None:
 
 
 def _run_remote_shell_command(client: cmux, surface_id: str, command: str, timeout: float = 12.0) -> tuple[int, str, str]:
-    token = f"__CMUX_REMOTE_CMD_{secrets.token_hex(6)}__"
+    token = f"__PROGRAMA_REMOTE_CMD_{secrets.token_hex(6)}__"
     start_marker = f"{token}:START"
     status_marker = f"{token}:STATUS"
     end_marker = f"{token}:END"
@@ -171,7 +171,7 @@ def _run_remote_shell_command(client: cmux, surface_id: str, command: str, timeo
 
 def main() -> int:
     if not SSH_HOST:
-        print("SKIP: set CMUX_SSH_TEST_HOST to run interactive ssh cmux command regression")
+        print("SKIP: set PROGRAMA_SSH_TEST_HOST to run interactive ssh cmux command regression")
         return 0
 
     cli = _find_cli_binary()

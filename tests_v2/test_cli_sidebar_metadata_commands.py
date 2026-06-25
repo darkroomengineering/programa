@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -31,7 +31,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -79,7 +79,7 @@ def main() -> int:
             env_log_response = _run_cli(
                 cli,
                 ["log", "--", "env scoped log"],
-                extra_env={"CMUX_WORKSPACE_ID": workspace_id},
+                extra_env={"PROGRAMA_WORKSPACE_ID": workspace_id},
             )
             _must(env_log_response.startswith("OK"), f"log with env workspace should succeed, got {env_log_response!r}")
 

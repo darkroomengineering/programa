@@ -534,9 +534,9 @@ enum NotificationSoundSettings {
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = ["-c", command]
             var env = ProcessInfo.processInfo.environment
-            env["CMUX_NOTIFICATION_TITLE"] = title
-            env["CMUX_NOTIFICATION_SUBTITLE"] = subtitle
-            env["CMUX_NOTIFICATION_BODY"] = body
+            env["PROGRAMA_NOTIFICATION_TITLE"] = title
+            env["PROGRAMA_NOTIFICATION_SUBTITLE"] = subtitle
+            env["PROGRAMA_NOTIFICATION_BODY"] = body
             process.environment = env
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
@@ -579,7 +579,7 @@ enum NotificationPaneFlashSettings {
 }
 
 enum TaggedRunBadgeSettings {
-    static let environmentKey = "CMUX_TAG"
+    static let environmentKey = "PROGRAMA_TAG"
     private static let maxTagLength = 10
 
     static func normalizedTag(from env: [String: String] = ProcessInfo.processInfo.environment) -> String? {

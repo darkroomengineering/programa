@@ -20,12 +20,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
-DOCKER_SSH_HOST = os.environ.get("CMUX_SSH_TEST_DOCKER_HOST", "127.0.0.1")
-DOCKER_PUBLISH_ADDR = os.environ.get("CMUX_SSH_TEST_DOCKER_BIND_ADDR", "127.0.0.1")
-FIXTURE_REMOTE_HTTP_PORT = int(os.environ.get("CMUX_SSH_TEST_FIXTURE_HTTP_PORT", "43173"))
-FIXTURE_REMOTE_WS_PORT = int(os.environ.get("CMUX_SSH_TEST_FIXTURE_WS_PORT", "43174"))
-REMOTE_HTTP_PORT = int(os.environ.get("CMUX_SSH_TEST_REMOTE_HTTP_PORT", "8000"))
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
+DOCKER_SSH_HOST = os.environ.get("PROGRAMA_SSH_TEST_DOCKER_HOST", "127.0.0.1")
+DOCKER_PUBLISH_ADDR = os.environ.get("PROGRAMA_SSH_TEST_DOCKER_BIND_ADDR", "127.0.0.1")
+FIXTURE_REMOTE_HTTP_PORT = int(os.environ.get("PROGRAMA_SSH_TEST_FIXTURE_HTTP_PORT", "43173"))
+FIXTURE_REMOTE_WS_PORT = int(os.environ.get("PROGRAMA_SSH_TEST_FIXTURE_WS_PORT", "43174"))
+REMOTE_HTTP_PORT = int(os.environ.get("PROGRAMA_SSH_TEST_REMOTE_HTTP_PORT", "8000"))
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 OSC_ESCAPE_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 
@@ -45,7 +45,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -63,9 +63,9 @@ def _run(cmd: list[str], *, env: dict[str, str] | None = None, check: bool = Tru
 
 def _run_cli_json(cli: str, args: list[str]) -> dict:
     env = dict(os.environ)
-    env.pop("CMUX_WORKSPACE_ID", None)
-    env.pop("CMUX_SURFACE_ID", None)
-    env.pop("CMUX_TAB_ID", None)
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    env.pop("PROGRAMA_SURFACE_ID", None)
+    env.pop("PROGRAMA_TAB_ID", None)
 
     proc = _run([cli, "--socket", SOCKET_PATH, "--json", *args], env=env)
     try:
@@ -141,7 +141,7 @@ def _is_terminal_surface_not_found(exc: Exception) -> bool:
 
 
 def _read_probe_value(client: cmux, surface_id: str, command: str, timeout: float = 20.0) -> str:
-    token = f"__CMUX_PROBE_{secrets.token_hex(6)}__"
+    token = f"__PROGRAMA_PROBE_{secrets.token_hex(6)}__"
     client.send_surface(surface_id, f"{command}; printf '{token}%s\\n' $?\\n")
 
     pattern = re.compile(re.escape(token) + r"([^\r\n]*)")
@@ -169,7 +169,7 @@ def _read_probe_value(client: cmux, surface_id: str, command: str, timeout: floa
 
 
 def _read_probe_payload(client: cmux, surface_id: str, payload_command: str, timeout: float = 20.0) -> str:
-    token = f"__CMUX_PAYLOAD_{secrets.token_hex(6)}__"
+    token = f"__PROGRAMA_PAYLOAD_{secrets.token_hex(6)}__"
     client.send_surface(surface_id, f"printf '{token}%s\\n' \"$({payload_command})\"\\n")
 
     pattern = re.compile(re.escape(token) + r"([^\r\n]*)")
@@ -276,11 +276,11 @@ def _wait_surface_tty(client: cmux, workspace_id: str, surface_id: str, timeout:
 def _launch_startup_command_pty(startup_command: str, workspace_id: str, surface_id: str) -> tuple[subprocess.Popen[bytes], int]:
     _must(bool(startup_command.strip()), "cmux ssh output missing ssh_terminal_startup_command for PTY fallback")
     env = dict(os.environ)
-    env.pop("CMUX_SOCKET_PATH", None)
-    env["CMUX_WORKSPACE_ID"] = workspace_id
-    env["CMUX_SURFACE_ID"] = surface_id
-    env["CMUX_TAB_ID"] = workspace_id
-    env["CMUX_PANEL_ID"] = surface_id
+    env.pop("PROGRAMA_SOCKET_PATH", None)
+    env["PROGRAMA_WORKSPACE_ID"] = workspace_id
+    env["PROGRAMA_SURFACE_ID"] = surface_id
+    env["PROGRAMA_TAB_ID"] = workspace_id
+    env["PROGRAMA_PANEL_ID"] = surface_id
 
     master_fd, slave_fd = pty.openpty()
     proc = subprocess.Popen(
@@ -635,17 +635,17 @@ def main() -> int:
             term_program_version = _read_probe_payload(client, surface_id, "printf '%s' \"${TERM_PROGRAM_VERSION:-}\"")
             _must(bool(term_program_version), "ssh-env should propagate non-empty TERM_PROGRAM_VERSION")
 
-            tty_retry_token = f"CMUX_TTY_RETRY_{secrets.token_hex(6)}"
+            tty_retry_token = f"PROGRAMA_TTY_RETRY_{secrets.token_hex(6)}"
             client.send_surface(surface_id, f"echo {tty_retry_token}\n")
             _wait_surface_contains(client, workspace_id, surface_id, tty_retry_token)
 
             tty_name = _wait_surface_tty(client, workspace_id, surface_id)
             _must(bool(tty_name), "remote surface should report a tty once shell integration is active")
 
-            port_token = f"CMUX_REMOTE_HTTP_{secrets.token_hex(6)}"
+            port_token = f"PROGRAMA_REMOTE_HTTP_{secrets.token_hex(6)}"
             client.send_surface(
                 surface_id,
-                f"python3 -m http.server {REMOTE_HTTP_PORT} >/tmp/cmux-http-{port_token}.log 2>&1 & echo {port_token}\n",
+                f"python3 -m http.server {REMOTE_HTTP_PORT} >/tmp/programa-http-{port_token}.log 2>&1 & echo {port_token}\n",
             )
             _wait_surface_contains(client, workspace_id, surface_id, port_token)
             port_status, port_workspace_row = _wait_for_remote_port(
@@ -666,9 +666,9 @@ def main() -> int:
             )
 
             ls_stamp = secrets.token_hex(4)
-            ls_entries = [f"CMUX_RESIZE_LS_{ls_stamp}_{index:02d}" for index in range(1, 17)]
-            ls_start = f"CMUX_RESIZE_LS_START_{ls_stamp}"
-            ls_end = f"CMUX_RESIZE_LS_END_{ls_stamp}"
+            ls_entries = [f"PROGRAMA_RESIZE_LS_{ls_stamp}_{index:02d}" for index in range(1, 17)]
+            ls_start = f"PROGRAMA_RESIZE_LS_START_{ls_stamp}"
+            ls_end = f"PROGRAMA_RESIZE_LS_END_{ls_stamp}"
             names = " ".join(ls_entries)
             ls_script = (
                 "tmpdir=$(mktemp -d); "
@@ -749,7 +749,7 @@ def main() -> int:
                 f"resize lost all pre-resize visible lines from viewport: {pre_visible_lines}",
             )
 
-            resize_post_token = f"CMUX_RESIZE_POST_{secrets.token_hex(6)}"
+            resize_post_token = f"PROGRAMA_RESIZE_POST_{secrets.token_hex(6)}"
             client.send_surface(surface_id, f"echo {resize_post_token}\n")
             _wait_surface_contains(client, workspace_id, surface_id, resize_post_token)
 

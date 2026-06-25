@@ -33,12 +33,12 @@ class cmuxError(Exception):
     """Exception raised for cmux errors."""
 
 
-_APP_SUPPORT_DIR = os.path.expanduser("~/Library/Application Support/cmux")
-_STABLE_SOCKET_PATH = os.path.join(_APP_SUPPORT_DIR, "cmux.sock")
-_LEGACY_STABLE_SOCKET_PATH = "/tmp/cmux.sock"
+_APP_SUPPORT_DIR = os.path.expanduser("~/Library/Application Support/programa")
+_STABLE_SOCKET_PATH = os.path.join(_APP_SUPPORT_DIR, "programa.sock")
+_LEGACY_STABLE_SOCKET_PATH = "/tmp/programa.sock"
 _LAST_SOCKET_PATH_FILES = [
     os.path.join(_APP_SUPPORT_DIR, "last-socket-path"),
-    "/tmp/cmux-last-socket-path",
+    "/tmp/programa-last-socket-path",
 ]
 
 
@@ -55,9 +55,9 @@ def _read_last_socket_path() -> Optional[str]:
 
 
 def _default_socket_path() -> str:
-    # Backwards/forward compatibility: some scripts export CMUX_SOCKET,
-    # while the client historically used CMUX_SOCKET_PATH.
-    override = os.environ.get("CMUX_SOCKET_PATH") or os.environ.get("CMUX_SOCKET")
+    # Backwards/forward compatibility: some scripts export PROGRAMA_SOCKET,
+    # while the client historically used PROGRAMA_SOCKET_PATH.
+    override = os.environ.get("PROGRAMA_SOCKET_PATH") or os.environ.get("PROGRAMA_SOCKET")
     if override:
         if os.path.exists(override):
             return override
@@ -68,13 +68,13 @@ def _default_socket_path() -> str:
     if last_socket and os.path.exists(last_socket):
         return last_socket
 
-    candidates = ["/tmp/cmux-debug.sock", _STABLE_SOCKET_PATH, _LEGACY_STABLE_SOCKET_PATH]
+    candidates = ["/tmp/programa-debug.sock", _STABLE_SOCKET_PATH, _LEGACY_STABLE_SOCKET_PATH]
     for path in candidates:
         if os.path.exists(path):
             return path
 
-    discovered = glob.glob("/tmp/cmux-debug-*.sock")
-    discovered.extend(glob.glob(os.path.join(_APP_SUPPORT_DIR, "cmux*.sock")))
+    discovered = glob.glob("/tmp/programa-debug-*.sock")
+    discovered.extend(glob.glob(os.path.join(_APP_SUPPORT_DIR, "programa*.sock")))
     discovered = [path for path in discovered if os.path.exists(path)]
     if discovered:
         discovered.sort(key=os.path.getmtime, reverse=True)

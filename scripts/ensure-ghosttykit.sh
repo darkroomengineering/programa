@@ -79,7 +79,7 @@ if ! git -C ghostty diff --quiet --ignore-submodules=all HEAD -- || [[ -n "$UNTR
   GHOSTTY_KEY="${GHOSTTY_SHA}-dirty-${DIRTY_HASH}"
 fi
 
-CACHE_ROOT="${CMUX_GHOSTTYKIT_CACHE_DIR:-$HOME/.cache/cmux/ghosttykit}"
+CACHE_ROOT="${PROGRAMA_GHOSTTYKIT_CACHE_DIR:-$HOME/.cache/programa/ghosttykit}"
 CACHE_DIR="$CACHE_ROOT/$GHOSTTY_KEY"
 CACHE_XCFRAMEWORK="$CACHE_DIR/GhosttyKit.xcframework"
 LOCAL_XCFRAMEWORK="$PROJECT_DIR/ghostty/macos/GhosttyKit.xcframework"

@@ -35,27 +35,27 @@ def _run_shell(
     env.update(
         {
             "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin",
-            "CMUX_SOCKET_PATH": "127.0.0.1:64011",
-            "CMUX_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
-            "CMUX_TAB_ID": "22222222-2222-2222-2222-222222222222",
-            "CMUX_PANEL_ID": "22222222-2222-2222-2222-222222222222",
-            "CMUX_TEST_LOG": str(log_path),
-            "CMUX_TEST_STATE": str(state_path),
-            "CMUX_TEST_BIN_DIR": str(bin_dir),
+            "PROGRAMA_SOCKET_PATH": "127.0.0.1:64011",
+            "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+            "PROGRAMA_TAB_ID": "22222222-2222-2222-2222-222222222222",
+            "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+            "PROGRAMA_TEST_LOG": str(log_path),
+            "PROGRAMA_TEST_STATE": str(state_path),
+            "PROGRAMA_TEST_BIN_DIR": str(bin_dir),
         }
     )
     command = f"""
 source "{integration_path}"
-PATH="$CMUX_TEST_BIN_DIR:$PATH"
+PATH="$PROGRAMA_TEST_BIN_DIR:$PATH"
 hash -r 2>/dev/null || true
 : > "{log_path}"
 rm -f "{state_path}"
-_CMUX_TTY_NAME={tty_name}
-_CMUX_TTY_REPORTED=0
+_PROGRAMA_TTY_NAME={tty_name}
+_PROGRAMA_TTY_REPORTED=0
 _cmux_report_tty_once || true
-first="${{_CMUX_TTY_REPORTED}}:$(wc -l < "{log_path}" | tr -d ' ')"
+first="${{_PROGRAMA_TTY_REPORTED}}:$(wc -l < "{log_path}" | tr -d ' ')"
 _cmux_report_tty_once || true
-second="${{_CMUX_TTY_REPORTED}}:$(wc -l < "{log_path}" | tr -d ' ')"
+second="${{_PROGRAMA_TTY_REPORTED}}:$(wc -l < "{log_path}" | tr -d ' ')"
 printf '%s\\n' "$first|$second"
 """.strip()
     result = subprocess.run(
@@ -83,12 +83,12 @@ def main() -> int:
             bin_dir / "cmux",
             """#!/bin/sh
 count=0
-if [ -r "$CMUX_TEST_STATE" ]; then
-    count=$(cat "$CMUX_TEST_STATE")
+if [ -r "$PROGRAMA_TEST_STATE" ]; then
+    count=$(cat "$PROGRAMA_TEST_STATE")
 fi
 count=$((count + 1))
-printf '%s' "$count" > "$CMUX_TEST_STATE"
-printf '%s\n' "$*" >> "$CMUX_TEST_LOG"
+printf '%s' "$count" > "$PROGRAMA_TEST_STATE"
+printf '%s\n' "$*" >> "$PROGRAMA_TEST_LOG"
 if [ "$count" -eq 1 ]; then
     printf '%s\n' '{"ok":false,"error":{"code":"not_found"}}'
 else

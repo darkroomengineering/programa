@@ -28,11 +28,11 @@ def main() -> int:
 
         env = dict(os.environ)
         env["PATH"] = str(base / "empty-bin")
-        env["CMUX_RESTORE_SCROLLBACK_FILE"] = str(replay_file)
-        env["CMUX_TEST_INTEGRATION_SCRIPT"] = str(integration_script)
+        env["PROGRAMA_RESTORE_SCROLLBACK_FILE"] = str(replay_file)
+        env["PROGRAMA_TEST_INTEGRATION_SCRIPT"] = str(integration_script)
 
         result = subprocess.run(
-            ["/bin/zsh", "-f", "-c", 'source "$CMUX_TEST_INTEGRATION_SCRIPT"'],
+            ["/bin/zsh", "-f", "-c", 'source "$PROGRAMA_TEST_INTEGRATION_SCRIPT"'],
             env=env,
             capture_output=True,
             timeout=5,

@@ -41,9 +41,9 @@ MONITOR_DURATION = 3.0
 
 def get_cmux_pid() -> Optional[int]:
     """Get the PID of the running cmux process."""
-    socket_path = os.environ.get("CMUX_SOCKET_PATH")
+    socket_path = os.environ.get("PROGRAMA_SOCKET_PATH")
     if not socket_path:
-        # Ask cmux.py to resolve default socket path (supports CMUX_TAG and last-socket file).
+        # Ask cmux.py to resolve default socket path (supports PROGRAMA_TAG and last-socket file).
         try:
             socket_path = cmux().socket_path
         except Exception:
@@ -262,7 +262,7 @@ def main():
         print(f"Connected to {socket_path}")
     except cmuxError:
         print("\n❌ SKIP: Could not connect to cmux socket")
-        print("Tip: set CMUX_TAG=<tag> or CMUX_SOCKET_PATH=<path> to target a tagged instance.")
+        print("Tip: set PROGRAMA_TAG=<tag> or PROGRAMA_SOCKET_PATH=<path> to target a tagged instance.")
         return 0
 
     results = []

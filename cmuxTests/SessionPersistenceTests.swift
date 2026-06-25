@@ -59,7 +59,7 @@ final class SessionPersistenceTests: XCTestCase {
             relayPort: 64001,
             relayID: "relay-test",
             relayToken: String(repeating: "c", count: 64),
-            localSocketPath: "/tmp/cmux-test.sock",
+            localSocketPath: "/tmp/programa-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
 
@@ -359,12 +359,12 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testNormalizedExportedScreenPathAcceptsAbsoluteAndFileURL() {
         XCTAssertEqual(
-            TerminalController.normalizedExportedScreenPath("/tmp/cmux-screen.txt"),
-            "/tmp/cmux-screen.txt"
+            TerminalController.normalizedExportedScreenPath("/tmp/programa-screen.txt"),
+            "/tmp/programa-screen.txt"
         )
         XCTAssertEqual(
-            TerminalController.normalizedExportedScreenPath(" file:///tmp/cmux-screen.txt "),
-            "/tmp/cmux-screen.txt"
+            TerminalController.normalizedExportedScreenPath(" file:///tmp/programa-screen.txt "),
+            "/tmp/programa-screen.txt"
         )
     }
 

@@ -53,17 +53,17 @@ def run_zsh(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple[int, str, 
     env = dict(os.environ)
     env["HOME"] = str(home)
     env["ZDOTDIR"] = str(shell_dir)
-    env["CMUX_ZSH_ZDOTDIR"] = str(orig)
-    env["CMUX_SHELL_INTEGRATION"] = "1"
-    env["CMUX_SHELL_INTEGRATION_DIR"] = str(shell_dir)
-    env["CMUX_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "0"
-    env["CMUX_TEST_LOG"] = str(log_path)
-    env["CMUX_TEST_REAL_BIN"] = str(real_bin)
+    env["PROGRAMA_ZSH_ZDOTDIR"] = str(orig)
+    env["PROGRAMA_SHELL_INTEGRATION"] = "1"
+    env["PROGRAMA_SHELL_INTEGRATION_DIR"] = str(shell_dir)
+    env["PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "0"
+    env["PROGRAMA_TEST_LOG"] = str(log_path)
+    env["PROGRAMA_TEST_REAL_BIN"] = str(real_bin)
     env["PATH"] = f"{real_bin}:/usr/bin:/bin"
     env.pop("GHOSTTY_BIN_DIR", None)
 
     result = subprocess.run(
-        ["zsh", "-d", "-i", "-c", 'PATH="$CMUX_TEST_REAL_BIN:$PATH"; claude zsh-case'],
+        ["zsh", "-d", "-i", "-c", 'PATH="$PROGRAMA_TEST_REAL_BIN:$PATH"; claude zsh-case'],
         env=env,
         capture_output=True,
         text=True,
@@ -76,9 +76,9 @@ def run_zsh(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple[int, str, 
 
 def run_zsh_with_alias(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple[int, str, list[str]]:
     env = dict(os.environ)
-    env["CMUX_SHELL_INTEGRATION_DIR"] = str(shell_dir)
-    env["CMUX_TEST_LOG"] = str(log_path)
-    env["CMUX_TEST_REAL_BIN"] = str(real_bin)
+    env["PROGRAMA_SHELL_INTEGRATION_DIR"] = str(shell_dir)
+    env["PROGRAMA_TEST_LOG"] = str(log_path)
+    env["PROGRAMA_TEST_REAL_BIN"] = str(real_bin)
     env["PATH"] = f"{real_bin}:/usr/bin:/bin"
     env.pop("GHOSTTY_BIN_DIR", None)
 
@@ -87,7 +87,7 @@ def run_zsh_with_alias(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple
             "zsh",
             "-fic",
             f'alias claude="echo alias"; source "{shell_dir / "cmux-zsh-integration.zsh"}"; '
-            'PATH="$CMUX_TEST_REAL_BIN:$PATH"; claude zsh-alias-case',
+            'PATH="$PROGRAMA_TEST_REAL_BIN:$PATH"; claude zsh-alias-case',
         ],
         env=env,
         capture_output=True,
@@ -101,9 +101,9 @@ def run_zsh_with_alias(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple
 
 def run_bash(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple[int, str, list[str]]:
     env = dict(os.environ)
-    env["CMUX_SHELL_INTEGRATION_DIR"] = str(shell_dir)
-    env["CMUX_TEST_LOG"] = str(log_path)
-    env["CMUX_TEST_REAL_BIN"] = str(real_bin)
+    env["PROGRAMA_SHELL_INTEGRATION_DIR"] = str(shell_dir)
+    env["PROGRAMA_TEST_LOG"] = str(log_path)
+    env["PROGRAMA_TEST_REAL_BIN"] = str(real_bin)
     env["PATH"] = f"{real_bin}:/usr/bin:/bin"
     env.pop("GHOSTTY_BIN_DIR", None)
 
@@ -113,7 +113,7 @@ def run_bash(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple[int, str,
             "--noprofile",
             "--norc",
             "-c",
-            f'source "{shell_dir / "cmux-bash-integration.bash"}"; PATH="$CMUX_TEST_REAL_BIN:$PATH"; claude bash-case',
+            f'source "{shell_dir / "cmux-bash-integration.bash"}"; PATH="$PROGRAMA_TEST_REAL_BIN:$PATH"; claude bash-case',
         ],
         env=env,
         capture_output=True,
@@ -127,9 +127,9 @@ def run_bash(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple[int, str,
 
 def run_bash_with_alias(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple[int, str, list[str]]:
     env = dict(os.environ)
-    env["CMUX_SHELL_INTEGRATION_DIR"] = str(shell_dir)
-    env["CMUX_TEST_LOG"] = str(log_path)
-    env["CMUX_TEST_REAL_BIN"] = str(real_bin)
+    env["PROGRAMA_SHELL_INTEGRATION_DIR"] = str(shell_dir)
+    env["PROGRAMA_TEST_LOG"] = str(log_path)
+    env["PROGRAMA_TEST_REAL_BIN"] = str(real_bin)
     env["PATH"] = f"{real_bin}:/usr/bin:/bin"
     env.pop("GHOSTTY_BIN_DIR", None)
 
@@ -139,8 +139,8 @@ def run_bash_with_alias(shell_dir: Path, real_bin: Path, log_path: Path) -> tupl
             "--noprofile",
             "--norc",
             "-ic",
-            f'alias claude="$CMUX_TEST_REAL_BIN/user-claude"; source "{shell_dir / "cmux-bash-integration.bash"}"; '
-            'PATH="$CMUX_TEST_REAL_BIN:$PATH"; claude bash-alias-case',
+            f'alias claude="$PROGRAMA_TEST_REAL_BIN/user-claude"; source "{shell_dir / "cmux-bash-integration.bash"}"; '
+            'PATH="$PROGRAMA_TEST_REAL_BIN:$PATH"; claude bash-alias-case',
         ],
         env=env,
         capture_output=True,
@@ -154,9 +154,9 @@ def run_bash_with_alias(shell_dir: Path, real_bin: Path, log_path: Path) -> tupl
 
 def run_bash_with_function(shell_dir: Path, real_bin: Path, log_path: Path) -> tuple[int, str, list[str]]:
     env = dict(os.environ)
-    env["CMUX_SHELL_INTEGRATION_DIR"] = str(shell_dir)
-    env["CMUX_TEST_LOG"] = str(log_path)
-    env["CMUX_TEST_REAL_BIN"] = str(real_bin)
+    env["PROGRAMA_SHELL_INTEGRATION_DIR"] = str(shell_dir)
+    env["PROGRAMA_TEST_LOG"] = str(log_path)
+    env["PROGRAMA_TEST_REAL_BIN"] = str(real_bin)
     env["PATH"] = f"{real_bin}:/usr/bin:/bin"
     env.pop("GHOSTTY_BIN_DIR", None)
 
@@ -166,9 +166,9 @@ def run_bash_with_function(shell_dir: Path, real_bin: Path, log_path: Path) -> t
             "--noprofile",
             "--norc",
             "-ic",
-            f'claude() {{ "$CMUX_TEST_REAL_BIN/user-claude-function" "$@"; }}; '
+            f'claude() {{ "$PROGRAMA_TEST_REAL_BIN/user-claude-function" "$@"; }}; '
             f'source "{shell_dir / "cmux-bash-integration.bash"}"; '
-            'PATH="$CMUX_TEST_REAL_BIN:$PATH"; claude bash-function-case',
+            'PATH="$PROGRAMA_TEST_REAL_BIN:$PATH"; claude bash-function-case',
         ],
         env=env,
         capture_output=True,
@@ -193,28 +193,28 @@ def main() -> int:
             bundle_bin / "claude",
             """#!/usr/bin/env bash
 set -euo pipefail
-printf 'wrapper:%s\n' "$*" >> "$CMUX_TEST_LOG"
+printf 'wrapper:%s\n' "$*" >> "$PROGRAMA_TEST_LOG"
 """,
         )
         write_executable(
             real_bin / "claude",
             """#!/usr/bin/env bash
 set -euo pipefail
-printf 'real:%s\n' "$*" >> "$CMUX_TEST_LOG"
+printf 'real:%s\n' "$*" >> "$PROGRAMA_TEST_LOG"
 """,
         )
         write_executable(
             real_bin / "user-claude",
             """#!/usr/bin/env bash
 set -euo pipefail
-printf 'user-alias:%s\n' "$*" >> "$CMUX_TEST_LOG"
+printf 'user-alias:%s\n' "$*" >> "$PROGRAMA_TEST_LOG"
 """,
         )
         write_executable(
             real_bin / "user-claude-function",
             """#!/usr/bin/env bash
 set -euo pipefail
-printf 'user-function:%s\n' "$*" >> "$CMUX_TEST_LOG"
+printf 'user-function:%s\n' "$*" >> "$PROGRAMA_TEST_LOG"
 """,
         )
 

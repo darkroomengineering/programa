@@ -103,7 +103,7 @@ class UpdateController {
 #if DEBUG
         // Keep the permission-related defaults resettable for UI tests even though the
         // delegate now suppresses Sparkle's permission UI entirely.
-        if ProcessInfo.processInfo.environment["CMUX_UI_TEST_RESET_SPARKLE_PERMISSION"] == "1" {
+        if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_RESET_SPARKLE_PERMISSION"] == "1" {
             let defaults = UserDefaults.standard
             defaults.removeObject(forKey: UpdateSettings.automaticChecksKey)
             defaults.removeObject(forKey: UpdateSettings.automaticallyUpdateKey)
@@ -321,8 +321,8 @@ class UpdateController {
     private func recordUITestTimestamp(key: String) {
 #if DEBUG
         let env = ProcessInfo.processInfo.environment
-        guard env["CMUX_UI_TEST_MODE"] == "1" else { return }
-        guard let path = env["CMUX_UI_TEST_TIMING_PATH"] else { return }
+        guard env["PROGRAMA_UI_TEST_MODE"] == "1" else { return }
+        guard let path = env["PROGRAMA_UI_TEST_TIMING_PATH"] else { return }
 
         let url = URL(fileURLWithPath: path)
         var payload: [String: Double] = [:]

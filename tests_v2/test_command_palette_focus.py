@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _focused_surface_id(client: cmux) -> str:
@@ -41,8 +41,8 @@ def _wait_until(predicate, timeout_s: float = 3.0, interval_s: float = 0.05, mes
 
 
 def main() -> int:
-    token = "CMUX_PALETTE_FOCUS_PROBE_9412"
-    restore_token = "CMUX_PALETTE_RESTORE_PROBE_7731"
+    token = "PROGRAMA_PALETTE_FOCUS_PROBE_9412"
+    restore_token = "PROGRAMA_PALETTE_RESTORE_PROBE_7731"
 
     with cmux(SOCKET_PATH) as client:
         client.new_workspace()

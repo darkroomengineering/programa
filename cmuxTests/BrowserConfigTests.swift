@@ -3226,9 +3226,9 @@ final class BrowserLinkOpenSettingsTests: XCTestCase {
 
 final class BrowserNavigableURLResolutionTests: XCTestCase {
     func testResolvesFileSchemeAsNavigableURL() throws {
-        let resolved = try XCTUnwrap(resolveBrowserNavigableURL("file:///tmp/cmux-local-test.html"))
+        let resolved = try XCTUnwrap(resolveBrowserNavigableURL("file:///tmp/programa-local-test.html"))
         XCTAssertTrue(resolved.isFileURL)
-        XCTAssertEqual(resolved.path, "/tmp/cmux-local-test.html")
+        XCTAssertEqual(resolved.path, "/tmp/programa-local-test.html")
     }
 
     func testRejectsNonWebNonFileScheme() {
@@ -3296,7 +3296,7 @@ final class BrowserExternalNavigationSchemeTests: XCTestCase {
         let http = try XCTUnwrap(URL(string: "http://example.com"))
         let about = try XCTUnwrap(URL(string: "about:blank"))
         let data = try XCTUnwrap(URL(string: "data:text/plain,hello"))
-        let file = try XCTUnwrap(URL(string: "file:///tmp/cmux-local-test.html"))
+        let file = try XCTUnwrap(URL(string: "file:///tmp/programa-local-test.html"))
         let blob = try XCTUnwrap(URL(string: "blob:https://example.com/550e8400-e29b-41d4-a716-446655440000"))
         let javascript = try XCTUnwrap(URL(string: "javascript:void(0)"))
         let webkitInternal = try XCTUnwrap(URL(string: "applewebdata://local/page"))

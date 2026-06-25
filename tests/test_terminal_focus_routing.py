@@ -9,7 +9,7 @@ routed elsewhere).
 This test validates:
   1) The focused terminal is actually first responder (`is_terminal_focused`).
   2) Text insertion via debug socket (`simulate_type`) lands in the expected terminal by writing
-     $CMUX_SURFACE_ID to a temp file.
+     $PROGRAMA_SURFACE_ID to a temp file.
 """
 
 import os
@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
-FOCUS_FILE = Path("/tmp/cmux_focus_routing.txt")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
+FOCUS_FILE = Path("/tmp/programa_focus_routing.txt")
 
 
 def _focused_surface_id(c: cmux) -> str:
@@ -97,7 +97,7 @@ def _assert_routed_to_surface(c: cmux, expected_surface_id: str, panel_id: str) 
                 pass
 
         # Write the currently focused surface id into a well-known file.
-        c.simulate_type(f"echo $CMUX_SURFACE_ID > {FOCUS_FILE}")
+        c.simulate_type(f"echo $PROGRAMA_SURFACE_ID > {FOCUS_FILE}")
         c.simulate_shortcut("enter")
         try:
             actual = _wait_for_file_content(FOCUS_FILE, timeout_s=3.0 + (attempt * 0.5))

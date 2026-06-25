@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _must(cond: bool, msg: str) -> None:
@@ -31,7 +31,7 @@ def _find_cli_binary() -> str:
         return fixed
 
     candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
-    candidates += glob.glob("/tmp/cmux-*/Build/Products/Debug/cmux")
+    candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
         raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
@@ -41,9 +41,9 @@ def _find_cli_binary() -> str:
 
 def _run_cli(cli: str, args: List[str], env: Optional[Dict[str, str]] = None) -> str:
     merged_env = dict(os.environ)
-    merged_env.pop("CMUX_WORKSPACE_ID", None)
-    merged_env.pop("CMUX_SURFACE_ID", None)
-    merged_env.pop("CMUX_TAB_ID", None)
+    merged_env.pop("PROGRAMA_WORKSPACE_ID", None)
+    merged_env.pop("PROGRAMA_SURFACE_ID", None)
+    merged_env.pop("PROGRAMA_TAB_ID", None)
     if env:
         merged_env.update(env)
 
@@ -100,13 +100,13 @@ def main() -> int:
             cli,
             ["rename-tab", env_title],
             env={
-                "CMUX_WORKSPACE_ID": ws_id,
-                "CMUX_TAB_ID": surface_id,
+                "PROGRAMA_WORKSPACE_ID": ws_id,
+                "PROGRAMA_TAB_ID": surface_id,
             },
         )
         _must(
             "action=rename" in env_out.lower() and "tab=" in env_out.lower(),
-            f"rename-tab via CMUX_TAB_ID should route to tab.action rename summary, got: {env_out!r}",
+            f"rename-tab via PROGRAMA_TAB_ID should route to tab.action rename summary, got: {env_out!r}",
         )
 
         invalid = subprocess.run(
@@ -114,7 +114,7 @@ def main() -> int:
             capture_output=True,
             text=True,
             check=False,
-            env={k: v for k, v in os.environ.items() if k not in {"CMUX_WORKSPACE_ID", "CMUX_SURFACE_ID", "CMUX_TAB_ID"}},
+            env={k: v for k, v in os.environ.items() if k not in {"PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID", "PROGRAMA_TAB_ID"}},
         )
         invalid_output = f"{invalid.stdout}\n{invalid.stderr}"
         _must(invalid.returncode != 0, "Expected rename-tab without title to fail")

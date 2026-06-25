@@ -72,7 +72,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
     ) throws -> String {
         let fileManager = FileManager.default
         let home = fileManager.temporaryDirectory.appendingPathComponent("cmux-relay-zsh-\(UUID().uuidString)")
-        let relayDir = home.appendingPathComponent(".cmux/relay/64011.shell")
+        let relayDir = home.appendingPathComponent(".programa/relay/64011.shell")
 
         try fileManager.createDirectory(at: relayDir, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: home) }
@@ -92,7 +92,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
                 "TERM=xterm-256color",
                 "SHELL=/bin/zsh",
                 "USER=\(NSUserName())",
-                "CMUX_REAL_ZDOTDIR=\(home.path)",
+                "PROGRAMA_REAL_ZDOTDIR=\(home.path)",
                 "ZDOTDIR=\(relayDir.path)",
                 "/bin/zsh",
                 "-ilc",
@@ -115,8 +115,8 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
     func testRemoteRelayMetadataCleanupScriptRemovesMatchingSocketAddr() {
         let fileManager = FileManager.default
         let home = fileManager.temporaryDirectory.appendingPathComponent("cmux-relay-cleanup-\(UUID().uuidString)")
-        let relayDir = home.appendingPathComponent(".cmux/relay")
-        let socketAddrURL = home.appendingPathComponent(".cmux/socket_addr")
+        let relayDir = home.appendingPathComponent(".programa/relay")
+        let socketAddrURL = home.appendingPathComponent(".programa/socket_addr")
         let authURL = relayDir.appendingPathComponent("64008.auth")
         let daemonPathURL = relayDir.appendingPathComponent("64008.daemon_path")
         let ttyURL = relayDir.appendingPathComponent("64008.tty")
@@ -150,8 +150,8 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
     func testRemoteRelayMetadataCleanupScriptPreservesDifferentSocketAddr() {
         let fileManager = FileManager.default
         let home = fileManager.temporaryDirectory.appendingPathComponent("cmux-relay-cleanup-preserve-\(UUID().uuidString)")
-        let relayDir = home.appendingPathComponent(".cmux/relay")
-        let socketAddrURL = home.appendingPathComponent(".cmux/socket_addr")
+        let relayDir = home.appendingPathComponent(".programa/relay")
+        let socketAddrURL = home.appendingPathComponent(".programa/socket_addr")
         let authURL = relayDir.appendingPathComponent("64009.auth")
         let daemonPathURL = relayDir.appendingPathComponent("64009.daemon_path")
         let ttyURL = relayDir.appendingPathComponent("64009.tty")
@@ -296,7 +296,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             relayPort: 64007,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
 
@@ -321,7 +321,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             relayPort: 64029,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini",
             foregroundAuthToken: "token-a"
         )
@@ -345,7 +345,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             relayPort: 64030,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini",
             foregroundAuthToken: "token-a"
         )
@@ -371,7 +371,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             relayPort: 64031,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini",
             foregroundAuthToken: "token-b"
         )
@@ -394,7 +394,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             relayPort: 64032,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini",
             foregroundAuthToken: "token-a"
         )
@@ -415,14 +415,14 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
                 "StrictHostKeyChecking=accept-new",
             ],
             localProxyPort: nil,
             relayPort: 64012,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let cleanupRequested = expectation(description: "control master cleanup requested")
@@ -450,7 +450,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
                 "-o", "ControlMaster=no",
                 "-p", "2222",
                 "-i", "/Users/test/.ssh/id_ed25519",
-                "-o", "ControlPath=/tmp/cmux-ssh-%C",
+                "-o", "ControlPath=/tmp/programa-ssh-%C",
                 "-o", "StrictHostKeyChecking=accept-new",
                 "-O", "exit",
                 "cmux-macmini",
@@ -468,13 +468,13 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
             ],
             localProxyPort: nil,
             relayPort: 64014,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let cleanupRequested = expectation(description: "control master cleanup requested")
@@ -503,7 +503,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             [
                 "-o", "BatchMode=yes",
                 "-o", "ControlMaster=no",
-                "-o", "ControlPath=/tmp/cmux-ssh-%C",
+                "-o", "ControlPath=/tmp/programa-ssh-%C",
                 "-O", "exit",
                 "cmux-macmini",
             ]
@@ -522,7 +522,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             relayPort: 64015,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let cleanupRequested = expectation(description: "control master cleanup requested")
@@ -569,14 +569,14 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
                 "StrictHostKeyChecking=accept-new",
             ],
             localProxyPort: nil,
             relayPort: 64018,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let cleanupRequested = expectation(description: "control master cleanup requested")
@@ -605,7 +605,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
                 "-o", "ControlMaster=no",
                 "-p", "2222",
                 "-i", "/Users/test/.ssh/id_ed25519",
-                "-o", "ControlPath=/tmp/cmux-ssh-%C",
+                "-o", "ControlPath=/tmp/programa-ssh-%C",
                 "-o", "StrictHostKeyChecking=accept-new",
                 "-O", "exit",
                 "cmux-macmini",
@@ -623,13 +623,13 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
             ],
             localProxyPort: nil,
             relayPort: 64016,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let cleanupRequested = expectation(description: "control master cleanup requested")
@@ -672,13 +672,13 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
             ],
             localProxyPort: nil,
             relayPort: 64017,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let cleanupRequested = expectation(description: "control master cleanup requested")
@@ -726,13 +726,13 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
             ],
             localProxyPort: nil,
             relayPort: 64018,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let cleanupRequested = expectation(description: "control master cleanup requested")
@@ -780,13 +780,13 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
             ],
             localProxyPort: nil,
             relayPort: 64019,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let cleanupRequested = expectation(description: "control master cleanup requested")
@@ -835,13 +835,13 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
             ],
             localProxyPort: nil,
             relayPort: 64013,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         let cleanupRequested = expectation(description: "control master cleanup requested")
@@ -869,7 +869,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
 
         let remotePath = WorkspaceRemoteSessionController.remoteDropPath(for: fileURL, uuid: uuid)
 
-        XCTAssertEqual(remotePath, "/tmp/cmux-drop-12345678-1234-1234-1234-1234567890ab.png")
+        XCTAssertEqual(remotePath, "/tmp/programa-drop-12345678-1234-1234-1234-1234567890ab.png")
     }
 
     @MainActor
@@ -884,7 +884,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             relayPort: 64007,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
 
@@ -1013,7 +1013,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
                 2145: [
                     "ssh",
                     "-o", "ControlMaster=auto",
-                    "-o", "ControlPath=/tmp/cmux-ssh-%C",
+                    "-o", "ControlPath=/tmp/programa-ssh-%C",
                     "-o", "StrictHostKeyChecking=accept-new",
                     "-p", "2200",
                     "-i", "/Users/test/.ssh/id_ed25519",
@@ -1030,7 +1030,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
                 identityFile: "/Users/test/.ssh/id_ed25519",
                 configFile: nil,
                 jumpHost: nil,
-                controlPath: "/tmp/cmux-ssh-%C",
+                controlPath: "/tmp/programa-ssh-%C",
                 useIPv4: false,
                 useIPv6: false,
                 forwardAgent: false,
@@ -1051,19 +1051,19 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             argumentsByPID: [
                 2145: [
                     "ssh",
-                    "-S", "/tmp/cmux-ssh-%C",
+                    "-S", "/tmp/programa-ssh-%C",
                     "-p", "2200",
                     "lawrence@example.com",
                 ],
             ]
         )
 
-        XCTAssertEqual(session?.controlPath, "/tmp/cmux-ssh-%C")
+        XCTAssertEqual(session?.controlPath, "/tmp/programa-ssh-%C")
         let scpArgs = session?.scpArgumentsForTesting(
             localPath: "/tmp/local.png",
-            remotePath: "/tmp/cmux-drop-123.png"
+            remotePath: "/tmp/programa-drop-123.png"
         ) ?? []
-        XCTAssertTrue(scpArgs.contains("ControlPath=/tmp/cmux-ssh-%C"))
+        XCTAssertTrue(scpArgs.contains("ControlPath=/tmp/programa-ssh-%C"))
         XCTAssertFalse(scpArgs.contains("-S"))
     }
 
@@ -1075,7 +1075,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
                 "StrictHostKeyChecking=accept-new",
             ],
             localProxyPort: nil,
@@ -1088,14 +1088,14 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
 
         let arguments = WorkspaceRemoteSSHBatchCommandBuilder.daemonTransportArguments(
             configuration: configuration,
-            remotePath: "/remote/cmuxd-remote"
+            remotePath: "/remote/programad-remote"
         )
 
         XCTAssertFalse(arguments.contains("-S"))
         XCTAssertTrue(arguments.contains("ControlMaster=no"))
-        XCTAssertTrue(arguments.contains(where: { $0 == "ControlPath /tmp/cmux-ssh-%C" || $0 == "ControlPath=/tmp/cmux-ssh-%C" }))
+        XCTAssertTrue(arguments.contains(where: { $0 == "ControlPath /tmp/programa-ssh-%C" || $0 == "ControlPath=/tmp/programa-ssh-%C" }))
         XCTAssertTrue(arguments.contains("cmux-macmini"))
-        XCTAssertTrue(arguments.last?.contains("/remote/cmuxd-remote") ?? false)
+        XCTAssertTrue(arguments.last?.contains("/remote/programad-remote") ?? false)
     }
 
     func testDaemonTransportArgumentsReuseWhitespaceConfiguredControlPath() {
@@ -1106,7 +1106,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster auto",
                 "ControlPersist 600",
-                "ControlPath /tmp/cmux-ssh-%C",
+                "ControlPath /tmp/programa-ssh-%C",
                 "StrictHostKeyChecking accept-new",
             ],
             localProxyPort: nil,
@@ -1119,12 +1119,12 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
 
         let arguments = WorkspaceRemoteSSHBatchCommandBuilder.daemonTransportArguments(
             configuration: configuration,
-            remotePath: "/remote/cmuxd-remote"
+            remotePath: "/remote/programad-remote"
         )
 
         XCTAssertFalse(arguments.contains("-S"))
         XCTAssertTrue(arguments.contains("ControlMaster=no"))
-        XCTAssertTrue(arguments.contains(where: { $0 == "ControlPath /tmp/cmux-ssh-%C" || $0 == "ControlPath=/tmp/cmux-ssh-%C" }))
+        XCTAssertTrue(arguments.contains(where: { $0 == "ControlPath /tmp/programa-ssh-%C" || $0 == "ControlPath=/tmp/programa-ssh-%C" }))
     }
 
     func testReverseRelayControlMasterArgumentsReuseConfiguredControlSocket() throws {
@@ -1135,7 +1135,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster=auto",
                 "ControlPersist=600",
-                "ControlPath=/tmp/cmux-ssh-%C",
+                "ControlPath=/tmp/programa-ssh-%C",
                 "StrictHostKeyChecking=accept-new",
             ],
             localProxyPort: nil,
@@ -1156,7 +1156,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
 
         XCTAssertFalse(arguments.contains("-S"))
         XCTAssertTrue(arguments.contains("ControlMaster=no"))
-        XCTAssertTrue(arguments.contains("ControlPath=/tmp/cmux-ssh-%C"))
+        XCTAssertTrue(arguments.contains("ControlPath=/tmp/programa-ssh-%C"))
         XCTAssertTrue(arguments.contains("-O"))
         XCTAssertTrue(arguments.contains("forward"))
         XCTAssertTrue(arguments.contains("-R"))
@@ -1172,7 +1172,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             sshOptions: [
                 "ControlMaster auto",
                 "ControlPersist 600",
-                "ControlPath /tmp/cmux-ssh-%C",
+                "ControlPath /tmp/programa-ssh-%C",
                 "StrictHostKeyChecking accept-new",
             ],
             localProxyPort: nil,
@@ -1193,7 +1193,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
 
         XCTAssertFalse(arguments.contains("-S"))
         XCTAssertTrue(arguments.contains("ControlMaster=no"))
-        XCTAssertTrue(arguments.contains(where: { $0 == "ControlPath /tmp/cmux-ssh-%C" || $0 == "ControlPath=/tmp/cmux-ssh-%C" }))
+        XCTAssertTrue(arguments.contains(where: { $0 == "ControlPath /tmp/programa-ssh-%C" || $0 == "ControlPath=/tmp/programa-ssh-%C" }))
         XCTAssertTrue(arguments.contains("-O"))
         XCTAssertTrue(arguments.contains("forward"))
     }
@@ -1215,10 +1215,10 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
 
         let scpArgs = session.scpArgumentsForTesting(
             localPath: "/tmp/local.png",
-            remotePath: "/tmp/cmux-drop-123.png"
+            remotePath: "/tmp/programa-drop-123.png"
         )
 
-        XCTAssertEqual(scpArgs.last, "lawrence@[2001:db8::1]:/tmp/cmux-drop-123.png")
+        XCTAssertEqual(scpArgs.last, "lawrence@[2001:db8::1]:/tmp/programa-drop-123.png")
     }
 
     func testDetectsForegroundSSHSessionWithLowercaseAgentFlag() {
@@ -1284,7 +1284,7 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
             relayPort: 64007,
             relayID: String(repeating: "a", count: 16),
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-debug-test.sock",
+            localSocketPath: "/tmp/programa-debug-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
 
@@ -1617,11 +1617,11 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
 
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        environment["CMUX_WORKSPACE_ID"] = staleWorkspace
-        environment["CMUX_SURFACE_ID"] = staleSurface
-        environment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        environment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_SOCKET_PATH"] = socketPath
+        environment["PROGRAMA_WORKSPACE_ID"] = staleWorkspace
+        environment["PROGRAMA_SURFACE_ID"] = staleSurface
+        environment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let result = runProcess(
             executablePath: cliPath,
@@ -1720,11 +1720,11 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
 
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        environment["CMUX_WORKSPACE_ID"] = staleWorkspace
-        environment["CMUX_SURFACE_ID"] = staleSurface
-        environment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        environment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_SOCKET_PATH"] = socketPath
+        environment["PROGRAMA_WORKSPACE_ID"] = staleWorkspace
+        environment["PROGRAMA_SURFACE_ID"] = staleSurface
+        environment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let result = runProcess(
             executablePath: cliPath,
@@ -1820,9 +1820,9 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
 
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        environment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        environment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_SOCKET_PATH"] = socketPath
+        environment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let result = runProcess(
             executablePath: cliPath,
@@ -1831,7 +1831,7 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
                 "--name", "SSH Workspace",
                 "--port", "2222",
                 "--identity", "/Users/test/.ssh/id_ed25519",
-                "--ssh-option", "ControlPath /tmp/cmux-ssh-%C",
+                "--ssh-option", "ControlPath /tmp/programa-ssh-%C",
                 "--ssh-option", "StrictHostKeyChecking=accept-new",
                 "cmux-macmini",
             ],
@@ -1883,7 +1883,7 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         let sshOptions = try XCTUnwrap(configureParams["ssh_options"] as? [String])
         XCTAssertTrue(sshOptions.contains("ControlMaster=auto"))
         XCTAssertTrue(sshOptions.contains("ControlPersist=600"))
-        XCTAssertTrue(sshOptions.contains("ControlPath /tmp/cmux-ssh-%C"))
+        XCTAssertTrue(sshOptions.contains("ControlPath /tmp/programa-ssh-%C"))
         XCTAssertTrue(sshOptions.contains("StrictHostKeyChecking=accept-new"))
 
         // `cmux ssh` should land the user in the new SSH workspace immediately.
@@ -1950,9 +1950,9 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
 
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        environment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        environment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_SOCKET_PATH"] = socketPath
+        environment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let result = runProcess(
             executablePath: cliPath,
@@ -1961,7 +1961,7 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
                 "--no-focus",
                 "--port", "2222",
                 "--ssh-option", "ControlMaster no",
-                "--ssh-option", "ControlPath /tmp/cmux-ssh-%C",
+                "--ssh-option", "ControlPath /tmp/programa-ssh-%C",
                 "cmux-macmini",
             ],
             environment: environment,
@@ -1989,7 +1989,7 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         XCTAssertNil(configureParams["foreground_auth_token"])
         let sshOptions = try XCTUnwrap(configureParams["ssh_options"] as? [String])
         XCTAssertTrue(sshOptions.contains("ControlMaster no"))
-        XCTAssertTrue(sshOptions.contains("ControlPath /tmp/cmux-ssh-%C"))
+        XCTAssertTrue(sshOptions.contains("ControlPath /tmp/programa-ssh-%C"))
     }
 
     @MainActor
@@ -2058,9 +2058,9 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
 
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        environment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        environment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_SOCKET_PATH"] = socketPath
+        environment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let result = runProcess(
             executablePath: cliPath,
@@ -2069,7 +2069,7 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
                 "--name", "SSH Workspace",
                 "--port", "2222",
                 "--identity", "/Users/test/.ssh/id_ed25519",
-                "--ssh-option", "ControlPath=/tmp/cmux-ssh-%C",
+                "--ssh-option", "ControlPath=/tmp/programa-ssh-%C",
                 "--ssh-option", "StrictHostKeyChecking=accept-new",
                 "cmux-macmini",
             ],
@@ -2108,7 +2108,7 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         import sys
 
         args = sys.argv[1:]
-        with open(os.environ["CMUX_FAKE_SSH_LOG"], "a", encoding="utf-8") as handle:
+        with open(os.environ["PROGRAMA_FAKE_SSH_LOG"], "a", encoding="utf-8") as handle:
             handle.write(json.dumps(args) + "\\n")
 
         local_command = None
@@ -2129,11 +2129,11 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         var startupEnvironment = ProcessInfo.processInfo.environment
         startupEnvironment["HOME"] = tempRoot.path
         startupEnvironment["PATH"] = "\(fakeBin.path):/usr/bin:/bin:/usr/sbin:/sbin"
-        startupEnvironment["CMUX_FAKE_SSH_LOG"] = fakeSSHLog.path
-        startupEnvironment["CMUX_SOCKET_PATH"] = socketPath
-        startupEnvironment["CMUX_WORKSPACE_ID"] = workspaceID
-        startupEnvironment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        startupEnvironment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        startupEnvironment["PROGRAMA_FAKE_SSH_LOG"] = fakeSSHLog.path
+        startupEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        startupEnvironment["PROGRAMA_WORKSPACE_ID"] = workspaceID
+        startupEnvironment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        startupEnvironment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let foregroundAuthState = MockSocketServerState()
         let foregroundAuthHandled = startMockServer(listenerFD: listenerFD, state: foregroundAuthState) { line in
@@ -2340,12 +2340,12 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
 
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        environment["CMUX_WORKSPACE_ID"] = staleWorkspace
-        environment["CMUX_SURFACE_ID"] = staleSurface
-        environment["CMUX_CLI_TTY_NAME"] = callerTTY
-        environment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        environment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_SOCKET_PATH"] = socketPath
+        environment["PROGRAMA_WORKSPACE_ID"] = staleWorkspace
+        environment["PROGRAMA_SURFACE_ID"] = staleSurface
+        environment["PROGRAMA_CLI_TTY_NAME"] = callerTTY
+        environment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let result = runProcess(
             executablePath: cliPath,
@@ -2458,13 +2458,13 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
 
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        environment["CMUX_WORKSPACE_ID"] = workspaceId
-        environment["CMUX_SURFACE_ID"] = staleSurface
-        environment["CMUX_CLI_TTY_NAME"] = callerTTY
+        environment["PROGRAMA_SOCKET_PATH"] = socketPath
+        environment["PROGRAMA_WORKSPACE_ID"] = workspaceId
+        environment["PROGRAMA_SURFACE_ID"] = staleSurface
+        environment["PROGRAMA_CLI_TTY_NAME"] = callerTTY
         environment["TMUX"] = "/tmp/tmux-current,123,0"
-        environment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        environment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let result = runProcess(
             executablePath: cliPath,
@@ -2595,12 +2595,12 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
 
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        environment["CMUX_WORKSPACE_ID"] = staleWorkspace
-        environment["CMUX_SURFACE_ID"] = staleSurface
-        environment["CMUX_CLI_TTY_NAME"] = callerTTY
-        environment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        environment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_SOCKET_PATH"] = socketPath
+        environment["PROGRAMA_WORKSPACE_ID"] = staleWorkspace
+        environment["PROGRAMA_SURFACE_ID"] = staleSurface
+        environment["PROGRAMA_CLI_TTY_NAME"] = callerTTY
+        environment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let result = runProcess(
             executablePath: cliPath,
@@ -2737,13 +2737,13 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
 
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        environment["CMUX_WORKSPACE_ID"] = workspaceId
-        environment["CMUX_SURFACE_ID"] = staleSurface
-        environment["CMUX_CLI_TTY_NAME"] = callerTTY
+        environment["PROGRAMA_SOCKET_PATH"] = socketPath
+        environment["PROGRAMA_WORKSPACE_ID"] = workspaceId
+        environment["PROGRAMA_SURFACE_ID"] = staleSurface
+        environment["PROGRAMA_CLI_TTY_NAME"] = callerTTY
         environment["TMUX"] = "/tmp/tmux-current,123,0"
-        environment["CMUX_CLI_SENTRY_DISABLED"] = "1"
-        environment["CMUX_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLI_SENTRY_DISABLED"] = "1"
+        environment["PROGRAMA_CLAUDE_HOOK_SENTRY_DISABLED"] = "1"
 
         let result = runProcess(
             executablePath: cliPath,

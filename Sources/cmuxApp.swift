@@ -199,7 +199,7 @@ struct cmuxApp: App {
     }
 
     private static func terminateForMissingLaunchTag() -> Never {
-        let message = "error: refusing to launch untagged cmux DEV; start with ./scripts/reload.sh --tag <name> (or set CMUX_TAG for test harnesses)"
+        let message = "error: refusing to launch untagged programa DEV; start with ./scripts/reload.sh --tag <name> (or set PROGRAMA_TAG for test harnesses)"
         fputs("\(message)\n", stderr)
         fflush(stderr)
         NSLog("%@", message)
@@ -326,7 +326,7 @@ struct cmuxApp: App {
                 .environmentObject(cmuxConfigStore)
                 .onAppear {
 #if DEBUG
-                    if ProcessInfo.processInfo.environment["CMUX_UI_TEST_MODE"] == "1" {
+                    if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_MODE"] == "1" {
                         UpdateLogStore.shared.append("ui test: cmuxApp onAppear")
                     }
 #endif
@@ -336,7 +336,7 @@ struct cmuxApp: App {
                     cmuxConfigStore.wireDirectoryTracking(tabManager: tabManager)
                     cmuxConfigStore.loadAll()
                     applyAppearance()
-                    if ProcessInfo.processInfo.environment["CMUX_UI_TEST_SHOW_SETTINGS"] == "1" {
+                    if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_SHOW_SETTINGS"] == "1" {
                         DispatchQueue.main.async {
                             appDelegate.openPreferencesWindow(debugSource: "uiTestShowSettings")
                         }
@@ -2591,7 +2591,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func writeFocusDiagnosticsIfNeeded(stage: String) {
         let env = ProcessInfo.processInfo.environment
-        guard let path = env["CMUX_UI_TEST_DIAGNOSTICS_PATH"], !path.isEmpty else { return }
+        guard let path = env["PROGRAMA_UI_TEST_DIAGNOSTICS_PATH"], !path.isEmpty else { return }
 
         var payload = loadFocusDiagnostics(at: path)
         payload["focusStage"] = stage
@@ -2682,7 +2682,7 @@ private struct AboutPanelView: View {
         if let value = Bundle.main.infoDictionary?["CMUXCommit"] as? String, !value.isEmpty {
             return value
         }
-        let env = ProcessInfo.processInfo.environment["CMUX_COMMIT"] ?? ""
+        let env = ProcessInfo.processInfo.environment["PROGRAMA_COMMIT"] ?? ""
         return env.isEmpty ? nil : env
     }
     private var copyright: String? { Bundle.main.infoDictionary?["NSHumanReadableCopyright"] as? String }
@@ -3852,7 +3852,7 @@ enum PreferredEditorSettings {
     /// Open a file path with the user's preferred editor, falling back to system default.
     static func open(_ url: URL) {
         if CmuxUITestCapture.appendLineIfConfigured(
-            envKey: "CMUX_UI_TEST_CAPTURE_OPEN_PATH",
+            envKey: "PROGRAMA_UI_TEST_CAPTURE_OPEN_PATH",
             line: url.path
         ) {
             return
@@ -3971,11 +3971,11 @@ enum CmuxRuntimeDebugCapture {
 
     private static let configuration: Configuration? = {
         let env = ProcessInfo.processInfo.environment
-        guard let baseURLString = env["CMUX_RUNTIME_DEBUG_BASE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let baseURLString = env["PROGRAMA_RUNTIME_DEBUG_BASE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               let baseURL = URL(string: baseURLString),
-              let token = env["CMUX_RUNTIME_DEBUG_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let token = env["PROGRAMA_RUNTIME_DEBUG_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               !token.isEmpty,
-              let sessionID = env["CMUX_RUNTIME_DEBUG_SESSION_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let sessionID = env["PROGRAMA_RUNTIME_DEBUG_SESSION_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               !sessionID.isEmpty else {
             return nil
         }
@@ -4910,7 +4910,7 @@ struct SettingsView: View {
 
                         SettingsCardRow(
                             "Notification Command",
-                            subtitle: "Run a shell command when a notification arrives. $CMUX_NOTIFICATION_TITLE, $CMUX_NOTIFICATION_SUBTITLE, $CMUX_NOTIFICATION_BODY are set."
+                            subtitle: "Run a shell command when a notification arrives. $PROGRAMA_NOTIFICATION_TITLE, $PROGRAMA_NOTIFICATION_SUBTITLE, $PROGRAMA_NOTIFICATION_BODY are set."
                         ) {
                             TextField("say \"done\"", text: $notificationCustomCommand)
                                 .textFieldStyle(.roundedBorder)
@@ -5419,7 +5419,7 @@ struct SettingsView: View {
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
                         }
-                        SettingsCardNote(String(localized: "settings.automation.socketOverrides.note", defaultValue: "Overrides: CMUX_SOCKET_ENABLE, CMUX_SOCKET_MODE, and CMUX_SOCKET_PATH (set CMUX_ALLOW_SOCKET_OVERRIDE=1 for stable/nightly builds)."))
+                        SettingsCardNote(String(localized: "settings.automation.socketOverrides.note", defaultValue: "Overrides: PROGRAMA_SOCKET_ENABLE, PROGRAMA_SOCKET_MODE, and PROGRAMA_SOCKET_PATH (set PROGRAMA_ALLOW_SOCKET_OVERRIDE=1 for stable/nightly builds)."))
                     }
 
                     SettingsCard {
@@ -5455,7 +5455,7 @@ struct SettingsView: View {
                     }
 
                     SettingsCard {
-                        SettingsCardRow(String(localized: "settings.automation.portBase", defaultValue: "Port Base"), subtitle: String(localized: "settings.automation.portBase.subtitle", defaultValue: "Starting port for CMUX_PORT env var."), controlWidth: pickerColumnWidth) {
+                        SettingsCardRow(String(localized: "settings.automation.portBase", defaultValue: "Port Base"), subtitle: String(localized: "settings.automation.portBase.subtitle", defaultValue: "Starting port for PROGRAMA_PORT env var."), controlWidth: pickerColumnWidth) {
                             TextField("", value: $cmuxPortBase, format: .number)
                                 .textFieldStyle(.roundedBorder)
                                 .multilineTextAlignment(.trailing)
@@ -5471,7 +5471,7 @@ struct SettingsView: View {
 
                         SettingsCardDivider()
 
-                        SettingsCardNote(String(localized: "settings.automation.port.note", defaultValue: "Each workspace gets CMUX_PORT and CMUX_PORT_END env vars with a dedicated port range. New terminals inherit these values."))
+                        SettingsCardNote(String(localized: "settings.automation.port.note", defaultValue: "Each workspace gets PROGRAMA_PORT and PROGRAMA_PORT_END env vars with a dedicated port range. New terminals inherit these values."))
                     }
 
                     SettingsSectionHeader(title: String(localized: "settings.section.customCommands", defaultValue: "Custom Commands"))

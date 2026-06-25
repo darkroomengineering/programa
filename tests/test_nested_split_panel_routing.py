@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _baseline_all(c: cmux, panel_ids: list[str], label: str) -> None:
@@ -86,7 +86,7 @@ def main() -> int:
 
         # Route-check each panel.
         for i, target in enumerate(panel_ids):
-            marker = f"CMUX_ROUTE_{i}_{target[:6]}"
+            marker = f"PROGRAMA_ROUTE_{i}_{target[:6]}"
 
             _baseline_all(c, panel_ids, label=f"step{i}")
 

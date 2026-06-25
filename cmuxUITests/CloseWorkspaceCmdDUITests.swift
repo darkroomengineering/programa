@@ -10,7 +10,7 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
     func testCmdDConfirmsCloseWhenClosingLastWorkspaceClosesWindow() {
         let app = XCUIApplication()
         // Force a confirmation alert when closing the current workspace so we can validate Cmd+D.
-        app.launchEnvironment["CMUX_UI_TEST_FORCE_CONFIRM_CLOSE_WORKSPACE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_FORCE_CONFIRM_CLOSE_WORKSPACE"] = "1"
         app.launch()
         app.activate()
 
@@ -29,9 +29,9 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
 
     func testCmdWClosingLastTabKeepsWorkspaceWindowOpen() {
         let app = XCUIApplication()
-        let keyequivPath = "/tmp/cmux-ui-test-keyequiv-\(UUID().uuidString).json"
+        let keyequivPath = "/tmp/programa-ui-test-keyequiv-\(UUID().uuidString).json"
         try? FileManager.default.removeItem(atPath: keyequivPath)
-        app.launchEnvironment["CMUX_UI_TEST_KEYEQUIV_PATH"] = keyequivPath
+        app.launchEnvironment["PROGRAMA_UI_TEST_KEYEQUIV_PATH"] = keyequivPath
         app.launch()
         app.activate()
 
@@ -58,7 +58,7 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
 
     func testCmdNOpensNewWindowWhenNoWindowsOpen() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_FORCE_CONFIRM_CLOSE_WORKSPACE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_FORCE_CONFIRM_CLOSE_WORKSPACE"] = "1"
         app.launch()
         app.activate()
 
@@ -86,15 +86,15 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
         let attempts = 8
         for attempt in 1...attempts {
             let app = XCUIApplication()
-            let dataPath = "/tmp/cmux-ui-test-child-exit-split-\(UUID().uuidString).json"
+            let dataPath = "/tmp/programa-ui-test-child-exit-split-\(UUID().uuidString).json"
             try? FileManager.default.removeItem(atPath: dataPath)
 
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lr"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lr"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
             app.launch()
             app.activate()
             defer { app.terminate() }
@@ -124,10 +124,10 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
 
     func testCtrlDFromKeyboardInHorizontalSplitClosesOnlyFocusedPane() {
         let app = XCUIApplication()
-        let dataPath = "/tmp/cmux-ui-test-child-exit-keyboard-\(UUID().uuidString).json"
+        let dataPath = "/tmp/programa-ui-test-child-exit-keyboard-\(UUID().uuidString).json"
         try? FileManager.default.removeItem(atPath: dataPath)
-        app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
+        app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
         app.launch()
         app.activate()
 
@@ -180,14 +180,14 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
 
     func testCtrlDFromKeyboardInThreePaneLayoutClosesOnlyFocusedPane() {
         let app = XCUIApplication()
-        let dataPath = "/tmp/cmux-ui-test-child-exit-keyboard-tree-\(UUID().uuidString).json"
+        let dataPath = "/tmp/programa-ui-test-child-exit-keyboard-tree-\(UUID().uuidString).json"
         try? FileManager.default.removeItem(atPath: dataPath)
-        app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
-        app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lr_left_vertical"
-        app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "2"
-        app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
+        app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lr_left_vertical"
+        app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "2"
+        app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
         app.launch()
         app.activate()
 
@@ -239,14 +239,14 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
         let attempts = 8
         for attempt in 1...attempts {
             let app = XCUIApplication()
-            let dataPath = "/tmp/cmux-ui-test-child-exit-keyboard-2x2-\(UUID().uuidString).json"
+            let dataPath = "/tmp/programa-ui-test-child-exit-keyboard-2x2-\(UUID().uuidString).json"
             try? FileManager.default.removeItem(atPath: dataPath)
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lrtd_close_right_then_exit_top_left"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "0"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lrtd_close_right_then_exit_top_left"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "0"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
             app.launch()
             app.activate()
             defer { app.terminate() }
@@ -312,14 +312,14 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
         let attempts = 8
         for attempt in 1...attempts {
             let app = XCUIApplication()
-            let dataPath = "/tmp/cmux-ui-test-child-exit-keyboard-2x2-bottom-\(UUID().uuidString).json"
+            let dataPath = "/tmp/programa-ui-test-child-exit-keyboard-2x2-bottom-\(UUID().uuidString).json"
             try? FileManager.default.removeItem(atPath: dataPath)
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "tdlr_close_bottom_then_exit_top_left"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "0"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "tdlr_close_bottom_then_exit_top_left"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "0"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
             app.launch()
             app.activate()
             defer { app.terminate() }
@@ -385,13 +385,13 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
         let attempts = 8
         for attempt in 1...attempts {
             let app = XCUIApplication()
-            let dataPath = "/tmp/cmux-ui-test-child-exit-keyboard-2x2-realkey-\(UUID().uuidString).json"
+            let dataPath = "/tmp/programa-ui-test-child-exit-keyboard-2x2-realkey-\(UUID().uuidString).json"
             try? FileManager.default.removeItem(atPath: dataPath)
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lrtd_close_right_then_exit_top_left"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "0"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lrtd_close_right_then_exit_top_left"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "0"
             app.launch()
             app.activate()
             defer { app.terminate() }
@@ -465,13 +465,13 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
         let attempts = 12
         for attempt in 1...attempts {
             let app = XCUIApplication()
-            let dataPath = "/tmp/cmux-ui-test-child-exit-keyboard-lr-realkey-\(UUID().uuidString).json"
+            let dataPath = "/tmp/programa-ui-test-child-exit-keyboard-lr-realkey-\(UUID().uuidString).json"
             try? FileManager.default.removeItem(atPath: dataPath)
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lr"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "0"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lr"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "0"
             app.launch()
             app.activate()
             defer { app.terminate() }
@@ -545,15 +545,15 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
         let attempts = 12
         for attempt in 1...attempts {
             let app = XCUIApplication()
-            let dataPath = "/tmp/cmux-ui-test-child-exit-keyboard-lr-early-ctrl-\(UUID().uuidString).json"
+            let dataPath = "/tmp/programa-ui-test-child-exit-keyboard-lr-early-ctrl-\(UUID().uuidString).json"
             try? FileManager.default.removeItem(atPath: dataPath)
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lr"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
-            app.launchEnvironment["CMUX_UI_TEST_CHILD_EXIT_KEYBOARD_TRIGGER_MODE"] = "early_ctrl_d"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"] = dataPath
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_LAYOUT"] = "lr"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_EXPECTED_PANELS_AFTER"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_AUTO_TRIGGER"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_STRICT"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_TRIGGER_MODE"] = "early_ctrl_d"
             app.launch()
             app.activate()
             defer { app.terminate() }

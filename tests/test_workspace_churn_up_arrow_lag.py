@@ -34,24 +34,24 @@ from typing import Callable, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cmux import cmux, cmuxError
 
-NEW_WORKSPACES = int(os.environ.get("CMUX_LAG_NEW_WORKSPACES", "20"))
-SWITCH_PASSES = int(os.environ.get("CMUX_LAG_SWITCH_PASSES", "1"))
-SWITCH_DELAY_S = float(os.environ.get("CMUX_LAG_SWITCH_DELAY_S", "0.06"))
-HISTORY_SEED_LINES = int(os.environ.get("CMUX_LAG_HISTORY_LINES", "120"))
-KEY_EVENTS = int(os.environ.get("CMUX_LAG_KEY_EVENTS", "180"))
-KEY_DELAY_S = float(os.environ.get("CMUX_LAG_KEY_DELAY_S", "0.0"))
-KEY_COMBO = os.environ.get("CMUX_LAG_KEY_COMBO", "up")
+NEW_WORKSPACES = int(os.environ.get("PROGRAMA_LAG_NEW_WORKSPACES", "20"))
+SWITCH_PASSES = int(os.environ.get("PROGRAMA_LAG_SWITCH_PASSES", "1"))
+SWITCH_DELAY_S = float(os.environ.get("PROGRAMA_LAG_SWITCH_DELAY_S", "0.06"))
+HISTORY_SEED_LINES = int(os.environ.get("PROGRAMA_LAG_HISTORY_LINES", "120"))
+KEY_EVENTS = int(os.environ.get("PROGRAMA_LAG_KEY_EVENTS", "180"))
+KEY_DELAY_S = float(os.environ.get("PROGRAMA_LAG_KEY_DELAY_S", "0.0"))
+KEY_COMBO = os.environ.get("PROGRAMA_LAG_KEY_COMBO", "up")
 
-MAX_P95_RATIO = float(os.environ.get("CMUX_LAG_MAX_P95_RATIO", "1.70"))
-MAX_AVG_RATIO = float(os.environ.get("CMUX_LAG_MAX_AVG_RATIO", "1.70"))
-MAX_CHURN_P95_MS = float(os.environ.get("CMUX_LAG_MAX_CHURN_P95_MS", "35.0"))
-MAX_P95_DELTA_MS = float(os.environ.get("CMUX_LAG_MAX_P95_DELTA_MS", "20.0"))
-MAX_AVG_DELTA_MS = float(os.environ.get("CMUX_LAG_MAX_AVG_DELTA_MS", "12.0"))
-MIN_BASELINE_P95_MS_FOR_RATIO = float(os.environ.get("CMUX_LAG_MIN_BASELINE_P95_MS_FOR_RATIO", "6.0"))
-MIN_BASELINE_AVG_MS_FOR_RATIO = float(os.environ.get("CMUX_LAG_MIN_BASELINE_AVG_MS_FOR_RATIO", "4.0"))
-MAX_CPU_PERCENT = float(os.environ.get("CMUX_LAG_MAX_CPU_PERCENT", "180.0"))
-ENFORCE_CPU = os.environ.get("CMUX_LAG_ENFORCE_CPU", "0") == "1"
-ALLOW_MAIN_SOCKET = os.environ.get("CMUX_LAG_ALLOW_MAIN_SOCKET", "0") == "1"
+MAX_P95_RATIO = float(os.environ.get("PROGRAMA_LAG_MAX_P95_RATIO", "1.70"))
+MAX_AVG_RATIO = float(os.environ.get("PROGRAMA_LAG_MAX_AVG_RATIO", "1.70"))
+MAX_CHURN_P95_MS = float(os.environ.get("PROGRAMA_LAG_MAX_CHURN_P95_MS", "35.0"))
+MAX_P95_DELTA_MS = float(os.environ.get("PROGRAMA_LAG_MAX_P95_DELTA_MS", "20.0"))
+MAX_AVG_DELTA_MS = float(os.environ.get("PROGRAMA_LAG_MAX_AVG_DELTA_MS", "12.0"))
+MIN_BASELINE_P95_MS_FOR_RATIO = float(os.environ.get("PROGRAMA_LAG_MIN_BASELINE_P95_MS_FOR_RATIO", "6.0"))
+MIN_BASELINE_AVG_MS_FOR_RATIO = float(os.environ.get("PROGRAMA_LAG_MIN_BASELINE_AVG_MS_FOR_RATIO", "4.0"))
+MAX_CPU_PERCENT = float(os.environ.get("PROGRAMA_LAG_MAX_CPU_PERCENT", "180.0"))
+ENFORCE_CPU = os.environ.get("PROGRAMA_LAG_ENFORCE_CPU", "0") == "1"
+ALLOW_MAIN_SOCKET = os.environ.get("PROGRAMA_LAG_ALLOW_MAIN_SOCKET", "0") == "1"
 
 
 @dataclass
@@ -176,15 +176,15 @@ def get_cmux_pid_for_socket(socket_path: Optional[str]) -> Optional[int]:
 
 
 def resolve_target_socket() -> str:
-    socket_path = os.environ.get("CMUX_SOCKET_PATH")
+    socket_path = os.environ.get("PROGRAMA_SOCKET_PATH")
     if not socket_path:
         raise cmuxError(
-            "CMUX_SOCKET_PATH is required. Point it to a tagged dev socket (for example /tmp/cmux-debug-<tag>.sock)."
+            "PROGRAMA_SOCKET_PATH is required. Point it to a tagged dev socket (for example /tmp/programa-debug-<tag>.sock)."
         )
     base = os.path.basename(socket_path)
-    if not ALLOW_MAIN_SOCKET and base in {"cmux.sock", "cmux-debug.sock"}:
+    if not ALLOW_MAIN_SOCKET and base in {"programa.sock", "programa-debug.sock"}:
         raise cmuxError(
-            f"Refusing to run against main socket '{socket_path}'. Set CMUX_SOCKET_PATH to a tagged dev instance."
+            f"Refusing to run against main socket '{socket_path}'. Set PROGRAMA_SOCKET_PATH to a tagged dev instance."
         )
     return socket_path
 

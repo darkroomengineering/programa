@@ -26,36 +26,36 @@ final class FinderServicePathResolverTests: XCTestCase {
 
     func testOrderedUniqueDirectoriesUsesParentForFilesAndDedupes() {
         let input: [URL] = [
-            URL(fileURLWithPath: "/tmp/cmux-services/project", isDirectory: true),
-            URL(fileURLWithPath: "/tmp/cmux-services/project/README.md", isDirectory: false),
-            URL(fileURLWithPath: "/tmp/cmux-services/../cmux-services/project", isDirectory: true),
-            URL(fileURLWithPath: "/tmp/cmux-services/other", isDirectory: true),
+            URL(fileURLWithPath: "/tmp/programa-services/project", isDirectory: true),
+            URL(fileURLWithPath: "/tmp/programa-services/project/README.md", isDirectory: false),
+            URL(fileURLWithPath: "/tmp/programa-services/../cmux-services/project", isDirectory: true),
+            URL(fileURLWithPath: "/tmp/programa-services/other", isDirectory: true),
         ]
 
         let directories = FinderServicePathResolver.orderedUniqueDirectories(from: input)
         XCTAssertEqual(
             directories,
             [
-                "/tmp/cmux-services/project",
-                "/tmp/cmux-services/other",
+                "/tmp/programa-services/project",
+                "/tmp/programa-services/other",
             ]
         )
     }
 
     func testOrderedUniqueDirectoriesPreservesFirstSeenOrder() {
         let input: [URL] = [
-            URL(fileURLWithPath: "/tmp/cmux-services/b", isDirectory: true),
-            URL(fileURLWithPath: "/tmp/cmux-services/a/file.txt", isDirectory: false),
-            URL(fileURLWithPath: "/tmp/cmux-services/a", isDirectory: true),
-            URL(fileURLWithPath: "/tmp/cmux-services/b/file.txt", isDirectory: false),
+            URL(fileURLWithPath: "/tmp/programa-services/b", isDirectory: true),
+            URL(fileURLWithPath: "/tmp/programa-services/a/file.txt", isDirectory: false),
+            URL(fileURLWithPath: "/tmp/programa-services/a", isDirectory: true),
+            URL(fileURLWithPath: "/tmp/programa-services/b/file.txt", isDirectory: false),
         ]
 
         let directories = FinderServicePathResolver.orderedUniqueDirectories(from: input)
         XCTAssertEqual(
             directories,
             [
-                "/tmp/cmux-services/b",
-                "/tmp/cmux-services/a",
+                "/tmp/programa-services/b",
+                "/tmp/programa-services/a",
             ]
         )
     }

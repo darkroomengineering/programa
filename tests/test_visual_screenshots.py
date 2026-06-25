@@ -33,7 +33,7 @@ from typing import Optional, List, Union
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 HTML_REPORT = Path(__file__).parent / "visual_report.html"
 
 # Timing constants
@@ -159,7 +159,7 @@ def stamp_terminals(client: cmux, label: str) -> None:
             continue
         try:
             # Keep it simple to avoid shell quoting issues.
-            client.send_surface(idx, f"echo CMUX_VIS {safe} surf={idx}\n")
+            client.send_surface(idx, f"echo PROGRAMA_VIS {safe} surf={idx}\n")
         except Exception:
             pass
 

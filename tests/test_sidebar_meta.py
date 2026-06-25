@@ -51,9 +51,9 @@ def _wait_for_state_field(
 
 
 def main() -> int:
-    tag = os.environ.get("CMUX_TAG") or ""
+    tag = os.environ.get("PROGRAMA_TAG") or ""
     if not tag:
-        print("Tip: set CMUX_TAG=<tag> when running this test to avoid socket conflicts.")
+        print("Tip: set PROGRAMA_TAG=<tag> when running this test to avoid socket conflicts.")
 
     pr_url = "https://github.com/manaflow-ai/cmux/pull/337"
 

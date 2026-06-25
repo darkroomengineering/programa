@@ -11,18 +11,18 @@ import (
 	"time"
 )
 
-// runTmuxCompat handles `cmux __tmux-compat <args...>`, translating tmux
-// commands into cmux JSON-RPC calls over the relay socket.
+// runTmuxCompat handles `programa __tmux-compat <args...>`, translating tmux
+// commands into programa JSON-RPC calls over the relay socket.
 func runTmuxCompat(socketPath string, args []string, refreshAddr func() string) int {
 	command, cmdArgs, err := splitTmuxCmd(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cmux __tmux-compat: %v\n", err)
+		fmt.Fprintf(os.Stderr, "programa __tmux-compat: %v\n", err)
 		return 1
 	}
 
 	rc := &rpcContext{socketPath: socketPath, refreshAddr: refreshAddr}
 	if err := dispatchTmuxCommand(rc, command, cmdArgs); err != nil {
-		fmt.Fprintf(os.Stderr, "cmux __tmux-compat: %v\n", err)
+		fmt.Fprintf(os.Stderr, "programa __tmux-compat: %v\n", err)
 		return 1
 	}
 	return 0
@@ -194,7 +194,7 @@ func tmuxFormatContext(rc *rpcContext, workspaceId string, paneId string, surfac
 	}
 
 	ctx := map[string]string{
-		"session_name":  "cmux",
+		"session_name":  "programa",
 		"session_id":    "$0",
 		"window_id":     "@" + canonicalWsId,
 		"window_uuid":   canonicalWsId,
@@ -376,11 +376,11 @@ func intFromAnyGo(v any) int {
 // --- Target resolution ---
 
 func tmuxCallerWorkspaceHandle() string {
-	return strings.TrimSpace(os.Getenv("CMUX_WORKSPACE_ID"))
+	return strings.TrimSpace(os.Getenv("PROGRAMA_WORKSPACE_ID"))
 }
 
 func tmuxCallerSurfaceHandle() string {
-	return strings.TrimSpace(os.Getenv("CMUX_SURFACE_ID"))
+	return strings.TrimSpace(os.Getenv("PROGRAMA_SURFACE_ID"))
 }
 
 func tmuxResolvedCallerWorkspaceId(rc *rpcContext) string {
@@ -396,7 +396,7 @@ func tmuxResolvedCallerWorkspaceId(rc *rpcContext) string {
 }
 
 func tmuxCallerPaneHandle() string {
-	for _, key := range []string{"TMUX_PANE", "CMUX_PANE_ID"} {
+	for _, key := range []string{"TMUX_PANE", "PROGRAMA_PANE_ID"} {
 		v := strings.TrimSpace(os.Getenv(key))
 		if v != "" {
 			return strings.TrimPrefix(v, "%")
@@ -876,7 +876,7 @@ type tmuxCompatStore struct {
 
 func tmuxCompatStoreURL() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cmuxterm", "tmux-compat-store.json")
+	return filepath.Join(home, ".programaterm", "tmux-compat-store.json")
 }
 
 func loadTmuxCompatStore() tmuxCompatStore {
@@ -1046,7 +1046,7 @@ func tmuxWaitForSignalPath(name string) string {
 			sanitized.WriteByte('_')
 		}
 	}
-	return fmt.Sprintf("/tmp/cmux-wait-for-%s.sig", sanitized.String())
+	return fmt.Sprintf("/tmp/programa-wait-for-%s.sig", sanitized.String())
 }
 
 // --- Main dispatch ---

@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _wait_for_terminal_focus(c: cmux, panel_id: str, timeout_s: float = 6.0) -> bool:
@@ -113,7 +113,7 @@ def main() -> int:
         s1 = _panel_snapshot_retry(c, new_id, "newtab_baseline1")
 
         # Type a command that prints many lines (large visual delta).
-        draw_cmd = "for i in {1..40}; do echo CMUX_DRAW_$i; done"
+        draw_cmd = "for i in {1..40}; do echo PROGRAMA_DRAW_$i; done"
         c.simulate_type(draw_cmd)
         c.simulate_shortcut("enter")
         time.sleep(0.45)

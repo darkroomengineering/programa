@@ -59,7 +59,7 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
             relayPort: 64001,
             relayID: "relay-test",
             relayToken: String(repeating: "b", count: 64),
-            localSocketPath: "/tmp/cmux-test.sock",
+            localSocketPath: "/tmp/programa-test.sock",
             terminalStartupCommand: "ssh cmux-macmini"
         )
         remoteWorkspace.configureRemoteConnection(configuration, autoConnect: false)

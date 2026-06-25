@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # cmux open wrapper - routes HTTP(S) URLs to cmux's in-app browser
 #
-# When running inside a cmux terminal (CMUX_SOCKET_PATH is set), this wrapper
+# When running inside a cmux terminal (PROGRAMA_SOCKET_PATH is set), this wrapper
 # intercepts `open https://...` invocations and opens them in cmux's built-in
 # browser within the same workspace. All other arguments pass through to
 # /usr/bin/open unchanged.
 
-SYSTEM_OPEN_BIN="${CMUX_OPEN_WRAPPER_SYSTEM_OPEN:-/usr/bin/open}"
-DEFAULTS_BIN="${CMUX_OPEN_WRAPPER_DEFAULTS:-/usr/bin/defaults}"
-PYTHON3_BIN="${CMUX_OPEN_WRAPPER_PYTHON3:-}"
+SYSTEM_OPEN_BIN="${PROGRAMA_OPEN_WRAPPER_SYSTEM_OPEN:-/usr/bin/open}"
+DEFAULTS_BIN="${PROGRAMA_OPEN_WRAPPER_DEFAULTS:-/usr/bin/defaults}"
+PYTHON3_BIN="${PROGRAMA_OPEN_WRAPPER_PYTHON3:-}"
 
 if [[ ! -x "$SYSTEM_OPEN_BIN" ]]; then
     SYSTEM_OPEN_BIN="/usr/bin/open"
@@ -26,7 +26,7 @@ elif command -v python3 >/dev/null 2>&1; then
     PYTHON3_BIN="$(command -v python3)"
 fi
 
-settings_domain="${CMUX_BUNDLE_ID:-}"
+settings_domain="${PROGRAMA_BUNDLE_ID:-}"
 whitelist_raw=""
 whitelist_patterns=()
 
@@ -365,7 +365,7 @@ load_whitelist_patterns() {
 }
 
 # Pass through immediately if not in a cmux terminal.
-if [[ -z "$CMUX_SOCKET_PATH" ]]; then
+if [[ -z "$PROGRAMA_SOCKET_PATH" ]]; then
     system_open "$@"
 fi
 
@@ -442,9 +442,9 @@ fi
 
 # Find cmux CLI (same directory as this script).
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
-CMUX_CLI="$SELF_DIR/cmux"
+PROGRAMA_CLI="$SELF_DIR/programa"
 
-if [[ ! -x "$CMUX_CLI" ]]; then
+if [[ ! -x "$PROGRAMA_CLI" ]]; then
     system_open "$@"
 fi
 
@@ -457,7 +457,7 @@ for url in "${cmux_targets[@]}"; do
         failed_urls+=("$url")
         continue
     fi
-    CMUX_RESPECT_EXTERNAL_OPEN_RULES=1 "$CMUX_CLI" browser open "$url" 2>/dev/null || failed_urls+=("$url")
+    PROGRAMA_RESPECT_EXTERNAL_OPEN_RULES=1 "$PROGRAMA_CLI" browser open "$url" 2>/dev/null || failed_urls+=("$url")
 done
 
 # Fall back to system open for unmatched args and URLs that failed.

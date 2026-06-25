@@ -51,7 +51,7 @@ SUSPICIOUS_PATTERNS = [
 
 def get_cmux_pid() -> Optional[int]:
     """Get the PID of the running cmux process."""
-    socket_path = os.environ.get("CMUX_SOCKET_PATH")
+    socket_path = os.environ.get("PROGRAMA_SOCKET_PATH")
     if not socket_path:
         try:
             socket_path = cmux().socket_path
@@ -187,7 +187,7 @@ def main():
                 print(f"  - {issue}")
 
         # Save sample for debugging
-        sample_file = Path(f"/tmp/cmux_cpu_test_sample_{pid}.txt")
+        sample_file = Path(f"/tmp/programa_cpu_test_sample_{pid}.txt")
         sample_file.write_text(sample_output)
         print(f"\nFull sample saved to: {sample_file}")
 

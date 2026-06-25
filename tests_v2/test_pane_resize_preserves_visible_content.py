@@ -23,7 +23,7 @@ from pane_resize_test_support import (
 )
 
 
-DEFAULT_SOCKET_PATHS = ["/tmp/cmux-debug.sock", "/tmp/cmux.sock"]
+DEFAULT_SOCKET_PATHS = ["/tmp/programa-debug.sock", "/tmp/programa.sock"]
 
 
 def _run_once(socket_path: str) -> int:
@@ -39,12 +39,12 @@ def _run_once(socket_path: str) -> int:
             _wait_for_surface_command_roundtrip(client, workspace_id, surface_id)
 
             stamp = secrets.token_hex(4)
-            resize_lines = [f"CMUX_LOCAL_RESIZE_LINE_{stamp}_{index:02d}" for index in range(1, 33)]
+            resize_lines = [f"PROGRAMA_LOCAL_RESIZE_LINE_{stamp}_{index:02d}" for index in range(1, 33)]
             clear_and_draw = (
                 "clear; "
                 f"for i in $(seq 1 {len(resize_lines)}); do "
                 "n=$(printf '%02d' \"$i\"); "
-                f"echo CMUX_LOCAL_RESIZE_LINE_{stamp}_$n; "
+                f"echo PROGRAMA_LOCAL_RESIZE_LINE_{stamp}_$n; "
                 "done"
             )
             client.send_surface(surface_id, f"{clear_and_draw}\n")
@@ -100,7 +100,7 @@ def _run_once(socket_path: str) -> int:
                 f"resize lost all pre-resize visible lines from viewport: {pre_visible_lines}",
             )
 
-            post_token = f"CMUX_LOCAL_RESIZE_POST_{stamp}"
+            post_token = f"PROGRAMA_LOCAL_RESIZE_POST_{stamp}"
             client.send_surface(surface_id, f"echo {post_token}\n")
             _wait_for(lambda: _scrollback_has_exact_line(client, workspace_id, surface_id, post_token), timeout_s=8.0)
 
@@ -129,7 +129,7 @@ def _run_once(socket_path: str) -> int:
 
 
 def main() -> int:
-    env_socket = os.environ.get("CMUX_SOCKET")
+    env_socket = os.environ.get("PROGRAMA_SOCKET")
     if env_socket:
         return _run_once(env_socket)
 

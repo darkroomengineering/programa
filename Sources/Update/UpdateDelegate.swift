@@ -20,7 +20,7 @@ extension UpdateDriver: SPUUpdaterDelegate {
     func feedURLString(for updater: SPUUpdater) -> String? {
 #if DEBUG
         let env = ProcessInfo.processInfo.environment
-        if let override = env["CMUX_UI_TEST_FEED_URL"], !override.isEmpty {
+        if let override = env["PROGRAMA_UI_TEST_FEED_URL"], !override.isEmpty {
             UpdateTestURLProtocol.registerIfNeeded()
             recordFeedURLString(override, usedFallback: false)
             return override

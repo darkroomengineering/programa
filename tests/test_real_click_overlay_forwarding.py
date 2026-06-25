@@ -235,7 +235,7 @@ def main() -> int:
     socket_path = cmux.default_socket_path()
     if not os.path.exists(socket_path):
         print(f"SKIP: Socket not found at {socket_path}")
-        print("Tip: start cmux first (or set CMUX_TAG / CMUX_SOCKET_PATH).")
+        print("Tip: start cmux first (or set PROGRAMA_TAG / PROGRAMA_SOCKET_PATH).")
         return 0
 
     bundle_id = cmux.default_bundle_id()

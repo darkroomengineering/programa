@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _wait_for(pred, timeout_s: float, step_s: float = 0.05) -> None:
@@ -81,8 +81,8 @@ def _wait_for_render_context(c: cmux, panel_id: str, timeout_s: float = 5.0) -> 
 
 
 def main() -> int:
-    token = f"CMUX_INIT_{int(time.time() * 1000)}"
-    tmp = f"/tmp/cmux_init_{token}.txt"
+    token = f"PROGRAMA_INIT_{int(time.time() * 1000)}"
+    tmp = f"/tmp/programa_init_{token}.txt"
     with cmux(SOCKET_PATH) as c:
         c.activate_app()
         time.sleep(0.2)

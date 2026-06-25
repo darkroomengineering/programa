@@ -154,9 +154,9 @@ def run_cli(
     args: list[str],
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
-    env["CMUX_SOCKET_PATH"] = str(socket_path)
-    env["CMUX_WORKSPACE_ID"] = "workspace:1"
-    env["CMUX_SURFACE_ID"] = "surface:1"
+    env["PROGRAMA_SOCKET_PATH"] = str(socket_path)
+    env["PROGRAMA_WORKSPACE_ID"] = "workspace:1"
+    env["PROGRAMA_SURFACE_ID"] = "surface:1"
     env["TMUX_PANE"] = "%pane:1"
     env["HOME"] = str(fake_home)
     return subprocess.run(
@@ -226,7 +226,7 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="cmux-tmux-surface-ref-") as td:
             tmp = Path(td)
-            socket_path = tmp / "fake-cmux.sock"
+            socket_path = tmp / "fake-programa.sock"
             state = FakeCmuxState()
             server = FakeCmuxUnixServer(str(socket_path), state)
             thread = threading.Thread(target=server.serve_forever, daemon=True)

@@ -630,34 +630,34 @@ final class TerminalCmdClickUITests: XCTestCase {
         viewportOffsetDelta: Int? = nil
     ) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_TAG"] = "ui-test-terminal-cmd-click"
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_SETUP"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_PATH"] = setupDataPath
-        app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_COMMAND_PATH"] = commandPath
-        app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_FIXTURE_DIR"] = fixtureDirectoryURL.path
-        app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_FILE_NAME"] = fileName
-        app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_DISPLAY_MODE"] = displayMode.rawValue
-        app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_LINE_FORMAT"] = lineFormat.rawValue
+        app.launchEnvironment["PROGRAMA_TAG"] = "ui-test-terminal-cmd-click"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_SETUP"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_PATH"] = setupDataPath
+        app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_COMMAND_PATH"] = commandPath
+        app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_FIXTURE_DIR"] = fixtureDirectoryURL.path
+        app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_FILE_NAME"] = fileName
+        app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_DISPLAY_MODE"] = displayMode.rawValue
+        app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_LINE_FORMAT"] = lineFormat.rawValue
         if !linePrefix.isEmpty {
-            app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_LINE_PREFIX"] = linePrefix
+            app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_LINE_PREFIX"] = linePrefix
         }
         if !extraFileNames.isEmpty,
            let data = try? JSONSerialization.data(withJSONObject: extraFileNames, options: [.sortedKeys]),
            let json = String(data: data, encoding: .utf8) {
-            app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_EXTRA_FILE_NAMES_JSON"] = json
+            app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_EXTRA_FILE_NAMES_JSON"] = json
         }
         if captureOpenPaths {
-            app.launchEnvironment["CMUX_UI_TEST_CAPTURE_OPEN_PATH"] = openCapturePath
+            app.launchEnvironment["PROGRAMA_UI_TEST_CAPTURE_OPEN_PATH"] = openCapturePath
         }
         if captureHoverDiagnostics {
-            app.launchEnvironment["CMUX_UI_TEST_CMD_HOVER_DIAGNOSTICS_PATH"] = hoverDiagnosticsPath
+            app.launchEnvironment["PROGRAMA_UI_TEST_CMD_HOVER_DIAGNOSTICS_PATH"] = hoverDiagnosticsPath
         }
         if let quicklookOverride {
-            app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_QUICKLOOK_OVERRIDE"] = quicklookOverride
+            app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_QUICKLOOK_OVERRIDE"] = quicklookOverride
         }
         if let viewportOffsetDelta {
-            app.launchEnvironment["CMUX_UI_TEST_TERMINAL_CMD_CLICK_VIEWPORT_OFFSET_DELTA"] = String(viewportOffsetDelta)
+            app.launchEnvironment["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_VIEWPORT_OFFSET_DELTA"] = String(viewportOffsetDelta)
         }
         launchAndEnsureForeground(app)
         return app

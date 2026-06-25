@@ -7,9 +7,9 @@
 if [[ -n "${GHOSTTY_ZSH_ZDOTDIR+X}" ]]; then
     builtin export ZDOTDIR="$GHOSTTY_ZSH_ZDOTDIR"
     builtin unset GHOSTTY_ZSH_ZDOTDIR
-elif [[ -n "${CMUX_ZSH_ZDOTDIR+X}" ]]; then
-    builtin export ZDOTDIR="$CMUX_ZSH_ZDOTDIR"
-    builtin unset CMUX_ZSH_ZDOTDIR
+elif [[ -n "${PROGRAMA_ZSH_ZDOTDIR+X}" ]]; then
+    builtin export ZDOTDIR="$PROGRAMA_ZSH_ZDOTDIR"
+    builtin unset PROGRAMA_ZSH_ZDOTDIR
 else
     builtin unset ZDOTDIR
 fi

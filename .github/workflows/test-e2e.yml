@@ -209,7 +209,7 @@ jobs:
 
           if [ "$TEST_FILTER" = "DisplayResolutionRegressionUITests" ]; then
             HELPER_PATH="/tmp/create-virtual-display"
-            MANIFEST_PATH="/tmp/cmux-ui-test-display-harness.json"
+            MANIFEST_PATH="/tmp/programa-ui-test-display-harness.json"
 
             rm -f "$MANIFEST_PATH"
             trap 'rm -f "$MANIFEST_PATH"' EXIT

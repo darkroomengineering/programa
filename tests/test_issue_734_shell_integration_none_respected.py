@@ -26,14 +26,14 @@ def _run_case(
     env["HOME"] = str(home)
     env["ZDOTDIR"] = str(wrapper_dir)
     env["GHOSTTY_RESOURCES_DIR"] = str(ghostty_resources)
-    env["CMUX_SHELL_INTEGRATION"] = "0"
-    env["CMUX_TEST_OUT"] = str(out_path)
+    env["PROGRAMA_SHELL_INTEGRATION"] = "0"
+    env["PROGRAMA_TEST_OUT"] = str(out_path)
 
     # Keep input deterministic and local to this test.
     for key in (
         "GHOSTTY_ZSH_ZDOTDIR",
-        "CMUX_ZSH_ZDOTDIR",
-        "CMUX_ORIGINAL_ZDOTDIR",
+        "PROGRAMA_ZSH_ZDOTDIR",
+        "PROGRAMA_ORIGINAL_ZDOTDIR",
         "GHOSTTY_SHELL_FEATURES",
         "GHOSTTY_BIN_DIR",
     ):
@@ -42,7 +42,7 @@ def _run_case(
     if ghostty_enabled:
         env["GHOSTTY_ZSH_ZDOTDIR"] = str(orig_zdotdir)
     else:
-        env["CMUX_ZSH_ZDOTDIR"] = str(orig_zdotdir)
+        env["PROGRAMA_ZSH_ZDOTDIR"] = str(orig_zdotdir)
 
     result = subprocess.run(
         ["zsh", "-d", "-i", "-c", "true"],
@@ -79,7 +79,7 @@ def main() -> int:
 
         marker = base / "ghostty-sourced.txt"
         (resources / "shell-integration" / "zsh" / "ghostty-integration").write_text(
-            'echo "sourced" >> "$CMUX_TEST_OUT"\n',
+            'echo "sourced" >> "$PROGRAMA_TEST_OUT"\n',
             encoding="utf-8",
         )
 

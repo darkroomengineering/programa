@@ -27,7 +27,7 @@ from pane_resize_test_support import (
 )
 
 
-DEFAULT_SOCKET_PATHS = ["/tmp/cmux-debug.sock", "/tmp/cmux.sock"]
+DEFAULT_SOCKET_PATHS = ["/tmp/programa-debug.sock", "/tmp/programa.sock"]
 
 
 def _has_exact_marker_lines(
@@ -89,8 +89,8 @@ def _run_once(socket_path: str) -> int:
             for name in expected_names:
                 (fixture_dir / name).write_text(name + "\n", encoding="utf-8")
 
-            start_marker = f"CMUX_LS_SCROLLBACK_START_{secrets.token_hex(4)}"
-            end_marker = f"CMUX_LS_SCROLLBACK_END_{secrets.token_hex(4)}"
+            start_marker = f"PROGRAMA_LS_SCROLLBACK_START_{secrets.token_hex(4)}"
+            end_marker = f"PROGRAMA_LS_SCROLLBACK_END_{secrets.token_hex(4)}"
             fixture_arg = shlex.quote(str(fixture_dir))
             run_ls = (
                 f"cd {fixture_arg}; "
@@ -174,7 +174,7 @@ def _run_once(socket_path: str) -> int:
 
 
 def main() -> int:
-    env_socket = os.environ.get("CMUX_SOCKET")
+    env_socket = os.environ.get("PROGRAMA_SOCKET")
     if env_socket:
         return _run_once(env_socket)
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOURCE_PACKAGES_DIR="${CMUX_SOURCE_PACKAGES_DIR:-$PWD/.ci-source-packages}"
-DERIVED_DATA_PATH="${CMUX_DERIVED_DATA_PATH:-$PWD/.ci-bundled-ghostty-helper}"
-CONFIGURATION="${CMUX_CONFIGURATION:-Debug}"
+SOURCE_PACKAGES_DIR="${PROGRAMA_SOURCE_PACKAGES_DIR:-$PWD/.ci-source-packages}"
+DERIVED_DATA_PATH="${PROGRAMA_DERIVED_DATA_PATH:-$PWD/.ci-bundled-ghostty-helper}"
+CONFIGURATION="${PROGRAMA_CONFIGURATION:-Debug}"
 
 case "$CONFIGURATION" in
   Debug)

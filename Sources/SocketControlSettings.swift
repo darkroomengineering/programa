@@ -292,15 +292,15 @@ enum SocketControlPasswordStore {
 struct SocketControlSettings {
     static let appStorageKey = "socketControlMode"
     static let legacyEnabledKey = "socketControlEnabled"
-    static let allowSocketPathOverrideKey = "CMUX_ALLOW_SOCKET_OVERRIDE"
-    static let socketPasswordEnvKey = "CMUX_SOCKET_PASSWORD"
-    static let launchTagEnvKey = "CMUX_TAG"
+    static let allowSocketPathOverrideKey = "PROGRAMA_ALLOW_SOCKET_OVERRIDE"
+    static let socketPasswordEnvKey = "PROGRAMA_SOCKET_PASSWORD"
+    static let launchTagEnvKey = "PROGRAMA_TAG"
     static let baseDebugBundleIdentifier = "com.darkroom.programa.debug"
     private static let socketDirectoryName = "programa"
     private static let stableSocketFileName = "programa.sock"
     private static let lastSocketPathFileName = "last-socket-path"
-    static let legacyStableDefaultSocketPath = "/tmp/cmux.sock"
-    static let legacyLastSocketPathFile = "/tmp/cmux-last-socket-path"
+    static let legacyStableDefaultSocketPath = "/tmp/programa.sock"
+    static let legacyLastSocketPathFile = "/tmp/programa-last-socket-path"
 
     static var stableDefaultSocketPath: String {
         stableSocketFileURL()?.path ?? legacyStableDefaultSocketPath
@@ -382,8 +382,8 @@ struct SocketControlSettings {
             return false
         }
         // XCUITest launches the app as a separate process without XCTest env vars,
-        // so isRunningUnderXCTest() misses it. Check for any CMUX_UI_TEST_ env var.
-        if environment.keys.contains(where: { $0.hasPrefix("CMUX_UI_TEST_") }) {
+        // so isRunningUnderXCTest() misses it. Check for any PROGRAMA_UI_TEST_ env var.
+        if environment.keys.contains(where: { $0.hasPrefix("PROGRAMA_UI_TEST_") }) {
             return false
         }
 
@@ -442,14 +442,14 @@ struct SocketControlSettings {
             environment: environment
         ) {
             if isTruthy(environment[allowSocketPathOverrideKey]),
-               let override = environment["CMUX_SOCKET_PATH"],
+               let override = environment["PROGRAMA_SOCKET_PATH"],
                !override.isEmpty {
                 return override
             }
             return taggedDebugPath
         }
 
-        guard let override = environment["CMUX_SOCKET_PATH"], !override.isEmpty else {
+        guard let override = environment["PROGRAMA_SOCKET_PATH"], !override.isEmpty else {
             return fallback
         }
 
@@ -474,13 +474,13 @@ struct SocketControlSettings {
             return taggedDebugPath
         }
         if bundleIdentifier == "com.darkroom.programa.nightly" {
-            return "/tmp/cmux-nightly.sock"
+            return "/tmp/programa-nightly.sock"
         }
         if isDebugLikeBundleIdentifier(bundleIdentifier) || isDebugBuild {
-            return "/tmp/cmux-debug.sock"
+            return "/tmp/programa-debug.sock"
         }
         if isStagingBundleIdentifier(bundleIdentifier) {
-            return "/tmp/cmux-staging.sock"
+            return "/tmp/programa-staging.sock"
         }
         return resolvedStableDefaultSocketPath(
             currentUserID: currentUserID,
@@ -491,7 +491,7 @@ struct SocketControlSettings {
     static func userScopedStableSocketPath(currentUserID: uid_t = getuid()) -> String {
         stableSocketDirectoryURL()?
             .appendingPathComponent("cmux-\(currentUserID).sock", isDirectory: false)
-            .path ?? "/tmp/cmux-\(currentUserID).sock"
+            .path ?? "/tmp/programa-\(currentUserID).sock"
     }
 
     static func resolvedStableDefaultSocketPath(
@@ -553,7 +553,7 @@ struct SocketControlSettings {
                 .replacingOccurrences(of: ".", with: "-")
                 .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
             if !slug.isEmpty {
-                return "/tmp/cmux-debug-\(slug).sock"
+                return "/tmp/programa-debug-\(slug).sock"
             }
         }
 
@@ -570,7 +570,7 @@ struct SocketControlSettings {
               !tag.isEmpty else {
             return nil
         }
-        return "/tmp/cmux-debug-\(tag).sock"
+        return "/tmp/programa-debug-\(tag).sock"
     }
 
     static func isStagingBundleIdentifier(_ bundleIdentifier: String?) -> Bool {
@@ -637,7 +637,7 @@ struct SocketControlSettings {
     static func envOverrideEnabled(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool? {
-        guard let raw = environment["CMUX_SOCKET_ENABLE"], !raw.isEmpty else {
+        guard let raw = environment["PROGRAMA_SOCKET_ENABLE"], !raw.isEmpty else {
             return nil
         }
 
@@ -654,7 +654,7 @@ struct SocketControlSettings {
     static func envOverrideMode(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> SocketControlMode? {
-        guard let raw = environment["CMUX_SOCKET_MODE"], !raw.isEmpty else {
+        guard let raw = environment["PROGRAMA_SOCKET_MODE"], !raw.isEmpty else {
             return nil
         }
         return parseMode(raw)

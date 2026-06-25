@@ -189,7 +189,7 @@ cask "cmux" do
   binary "#{appdir}/Programa.app/Contents/Resources/bin/programa"
 
   zap trash: [
-    "~/Library/Application Support/cmux",
+    "~/Library/Application Support/programa",
     "~/Library/Caches/cmux",
     "~/Library/Preferences/ai.manaflow.cmuxterm.plist",
   ]

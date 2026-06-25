@@ -3469,7 +3469,7 @@ struct ContentView: View {
                 }
             }
 #if DEBUG
-            if ProcessInfo.processInfo.environment["CMUX_UI_TEST_MODE"] == "1" {
+            if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_MODE"] == "1" {
                 UpdateLogStore.shared.append("ui test window accessor: id=\(windowIdentifier) visible=\(window.isVisible)")
             }
 #endif
@@ -8495,7 +8495,7 @@ struct ContentView: View {
 #if DEBUG
         guard !didApplyUITestSidebarSelection else { return }
         let env = ProcessInfo.processInfo.environment
-        guard let rawValue = env["CMUX_UI_TEST_SIDEBAR_SELECTED_WORKSPACE_INDICES"]?
+        guard let rawValue = env["PROGRAMA_UI_TEST_SIDEBAR_SELECTED_WORKSPACE_INDICES"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
               !rawValue.isEmpty else {
             return
@@ -10229,7 +10229,7 @@ enum DevBuildBannerDebugSettings {
 
 private enum FeedbackComposerSettings {
     static let storedEmailKey = "sidebarHelpFeedbackEmail"
-    static let endpointEnvironmentKey = "CMUX_FEEDBACK_API_URL"
+    static let endpointEnvironmentKey = "PROGRAMA_FEEDBACK_API_URL"
     static let defaultEndpoint = "https://cmux.com/api/feedback"
     static let foundersEmail = "founders@manaflow.com"
     static let maxMessageLength = 4_000
@@ -10305,7 +10305,7 @@ private struct FeedbackComposerAppMetadata {
         let env = ProcessInfo.processInfo.environment
         let commit = (infoDictionary["CMUXCommit"] as? String).flatMap { value in
             value.isEmpty ? nil : value
-        } ?? env["CMUX_COMMIT"]
+        } ?? env["PROGRAMA_COMMIT"]
 
         return FeedbackComposerAppMetadata(
             appVersion: infoDictionary["CFBundleShortVersionString"] as? String ?? "",

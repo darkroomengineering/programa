@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
 
 
-SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
+SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 def _wait_for_terminal_focus(c: cmux, panel_id: str, timeout_s: float = 4.0) -> None:
     deadline = time.time() + timeout_s
@@ -93,7 +93,7 @@ def main() -> int:
         # (git status, theme init, etc). Ensure each surface has executed at least one
         # command and rendered output before we start snapshot-diff assertions.
         for pid in panel_ids:
-            c.send_surface(pid, f"echo CMUX_READY_{pid[:6]}\n")
+            c.send_surface(pid, f"echo PROGRAMA_READY_{pid[:6]}\n")
         time.sleep(0.6)
 
         # Ensure snapshots start from a clean baseline.
@@ -105,7 +105,7 @@ def main() -> int:
 
         # Route-check each panel.
         for i, target in enumerate(panel_ids):
-            marker = f"CMUX_ROUTE_{i}_{target[:6]}"
+            marker = f"PROGRAMA_ROUTE_{i}_{target[:6]}"
 
             # Route assertions are meaningful only for the surface the user is currently
             # interacting with. Focus the target surface, then validate that typing/output

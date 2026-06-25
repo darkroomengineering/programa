@@ -45,12 +45,12 @@ class cmuxError(Exception):
     pass
 
 
-_APP_SUPPORT_DIR = os.path.expanduser("~/Library/Application Support/cmux")
-_STABLE_SOCKET_PATH = os.path.join(_APP_SUPPORT_DIR, "cmux.sock")
-_LEGACY_STABLE_SOCKET_PATH = "/tmp/cmux.sock"
+_APP_SUPPORT_DIR = os.path.expanduser("~/Library/Application Support/programa")
+_STABLE_SOCKET_PATH = os.path.join(_APP_SUPPORT_DIR, "programa.sock")
+_LEGACY_STABLE_SOCKET_PATH = "/tmp/programa.sock"
 _LAST_SOCKET_PATH_FILES = [
     os.path.join(_APP_SUPPORT_DIR, "last-socket-path"),
-    "/tmp/cmux-last-socket-path",
+    "/tmp/programa-last-socket-path",
 ]
 _DEFAULT_DEBUG_BUNDLE_ID = "com.darkroom.programa.debug"
 
@@ -76,11 +76,11 @@ def _quote_option_value(value: str) -> str:
 
 
 def _default_bundle_id() -> str:
-    override = os.environ.get("CMUX_BUNDLE_ID")
+    override = os.environ.get("PROGRAMA_BUNDLE_ID")
     if override:
         return override
 
-    tag = os.environ.get("CMUX_TAG")
+    tag = os.environ.get("PROGRAMA_TAG")
     if tag:
         suffix = _sanitize_bundle_suffix(tag)
         return f"{_DEFAULT_DEBUG_BUNDLE_ID}.{suffix}"
@@ -119,12 +119,12 @@ def _can_connect(path: str, timeout: float = 0.15, retries: int = 4) -> bool:
 
 
 def _default_socket_path() -> str:
-    tag = os.environ.get("CMUX_TAG")
+    tag = os.environ.get("PROGRAMA_TAG")
     if tag:
         slug = _sanitize_tag_slug(tag)
         tagged_candidates = [
-            f"/tmp/cmux-debug-{slug}.sock",
-            f"/tmp/cmux-{slug}.sock",
+            f"/tmp/programa-debug-{slug}.sock",
+            f"/tmp/programa-{slug}.sock",
         ]
         for path in tagged_candidates:
             if os.path.exists(path) and _can_connect(path):
@@ -137,7 +137,7 @@ def _default_socket_path() -> str:
         # Prefer the debug naming convention when we have to guess.
         return tagged_candidates[0]
 
-    override = os.environ.get("CMUX_SOCKET_PATH")
+    override = os.environ.get("PROGRAMA_SOCKET_PATH")
     if override:
         if os.path.exists(override) and _can_connect(override):
             return override
@@ -151,14 +151,14 @@ def _default_socket_path() -> str:
             return last_socket
 
     # Prefer the non-tagged sockets when present.
-    candidates = ["/tmp/cmux-debug.sock", _STABLE_SOCKET_PATH, _LEGACY_STABLE_SOCKET_PATH]
+    candidates = ["/tmp/programa-debug.sock", _STABLE_SOCKET_PATH, _LEGACY_STABLE_SOCKET_PATH]
     for path in candidates:
         if os.path.exists(path) and _can_connect(path):
             return path
 
     # Otherwise, fall back to the newest discovered socket if there is one.
-    tagged = glob.glob("/tmp/cmux-debug-*.sock")
-    tagged.extend(glob.glob(os.path.join(_APP_SUPPORT_DIR, "cmux*.sock")))
+    tagged = glob.glob("/tmp/programa-debug-*.sock")
+    tagged.extend(glob.glob(os.path.join(_APP_SUPPORT_DIR, "programa*.sock")))
     tagged = [p for p in tagged if os.path.exists(p)]
     if tagged:
         tagged.sort(key=lambda p: os.path.getmtime(p), reverse=True)

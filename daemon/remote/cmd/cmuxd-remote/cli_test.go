@@ -45,12 +45,12 @@ func captureStdout(t *testing.T, fn func()) string {
 
 func makeShortUnixSocketPath(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "cmuxd-")
+	dir, err := os.MkdirTemp("/tmp", "programad-")
 	if err != nil {
 		t.Fatalf("mkdtemp: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return filepath.Join(dir, "cmux.sock")
+	return filepath.Join(dir, "programa.sock")
 }
 
 // startMockSocket creates a Unix socket that accepts one connection,
@@ -252,7 +252,7 @@ func startMockAuthenticatedTCPSocket(t *testing.T, relayID, relayToken, response
 				defer conn.Close()
 				nonce := "testnonce"
 				challenge, _ := json.Marshal(map[string]any{
-					"protocol": "cmux-relay-auth",
+					"protocol": "programa-relay-auth",
 					"version":  1,
 					"relay_id": relayID,
 					"nonce":    nonce,
@@ -397,8 +397,8 @@ func TestCLIPingV1OverAuthenticatedTCPWithEnv(t *testing.T) {
 	relayID := "relay-1"
 	relayToken := strings.Repeat("a1", 32)
 	addr := startMockAuthenticatedTCPSocket(t, relayID, relayToken, "pong")
-	t.Setenv("CMUX_RELAY_ID", relayID)
-	t.Setenv("CMUX_RELAY_TOKEN", relayToken)
+	t.Setenv("PROGRAMA_RELAY_ID", relayID)
+	t.Setenv("PROGRAMA_RELAY_TOKEN", relayToken)
 
 	code := runCLI([]string{"--socket", addr, "ping"})
 	if code != 0 {
@@ -417,9 +417,9 @@ func TestCLIPingV1OverAuthenticatedTCPWithRelayFile(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("CMUX_RELAY_ID", "")
-	t.Setenv("CMUX_RELAY_TOKEN", "")
-	relayDir := filepath.Join(home, ".cmux", "relay")
+	t.Setenv("PROGRAMA_RELAY_ID", "")
+	t.Setenv("PROGRAMA_RELAY_TOKEN", "")
+	relayDir := filepath.Join(home, ".programa", "relay")
 	if err := os.MkdirAll(relayDir, 0o700); err != nil {
 		t.Fatalf("mkdir relay dir: %v", err)
 	}
@@ -436,7 +436,7 @@ func TestCLIPingV1OverAuthenticatedTCPWithRelayFile(t *testing.T) {
 
 func TestDialSocketDetection(t *testing.T) {
 	// Unix socket paths should attempt Unix dial
-	for _, path := range []string{"/tmp/cmux-nonexistent-test-99999.sock", "/var/run/cmux-nonexistent.sock"} {
+	for _, path := range []string{"/tmp/programa-nonexistent-test-99999.sock", "/var/run/programa-nonexistent.sock"} {
 		conn, err := dialSocket(path, nil)
 		if conn != nil {
 			conn.Close()
@@ -491,7 +491,7 @@ func TestSocketRoundTripReadsFullMultilineV1Response(t *testing.T) {
 func TestCLICloseWindowV1(t *testing.T) {
 	// Verify that the flag value is appended to the v1 command
 	dir := t.TempDir()
-	sockPath := filepath.Join(dir, "cmux.sock")
+	sockPath := filepath.Join(dir, "programa.sock")
 
 	receivedCh := make(chan string, 1)
 	ln, err := net.Listen("unix", sockPath)
@@ -584,8 +584,8 @@ func TestCLIUnknownCommand(t *testing.T) {
 }
 
 func TestCLINoSocket(t *testing.T) {
-	// Without CMUX_SOCKET_PATH set, should fail
-	os.Unsetenv("CMUX_SOCKET_PATH")
+	// Without PROGRAMA_SOCKET_PATH set, should fail
+	os.Unsetenv("PROGRAMA_SOCKET_PATH")
 	code := runCLI([]string{"ping"})
 	if code != 1 {
 		t.Fatalf("missing socket should return 1, got %d", code)
@@ -594,8 +594,8 @@ func TestCLINoSocket(t *testing.T) {
 
 func TestCLISocketEnvVar(t *testing.T) {
 	sockPath := startMockSocket(t, "pong")
-	os.Setenv("CMUX_SOCKET_PATH", sockPath)
-	defer os.Unsetenv("CMUX_SOCKET_PATH")
+	os.Setenv("PROGRAMA_SOCKET_PATH", sockPath)
+	defer os.Unsetenv("PROGRAMA_SOCKET_PATH")
 
 	code := runCLI([]string{"ping"})
 	if code != 0 {
@@ -606,7 +606,7 @@ func TestCLISocketEnvVar(t *testing.T) {
 func TestCLIV2FlagMapping(t *testing.T) {
 	// Verify that --workspace gets mapped to workspace_id in params
 	dir := t.TempDir()
-	sockPath := filepath.Join(dir, "cmux.sock")
+	sockPath := filepath.Join(dir, "programa.sock")
 
 	receivedParamsCh := make(chan map[string]any, 1)
 	ln, err := net.Listen("unix", sockPath)
@@ -647,18 +647,18 @@ func TestCLIV2FlagMapping(t *testing.T) {
 }
 
 func TestBusyboxArgv0Detection(t *testing.T) {
-	// Verify that when argv[0] base is "cmux", we enter CLI mode
-	base := filepath.Base("cmux")
-	if base != "cmux" {
-		t.Fatalf("expected base 'cmux', got %q", base)
+	// Verify that when argv[0] base is "programa", we enter CLI mode
+	base := filepath.Base("programa")
+	if base != "programa" {
+		t.Fatalf("expected base 'programa', got %q", base)
 	}
-	base2 := filepath.Base("/home/user/.cmux/bin/cmux")
-	if base2 != "cmux" {
-		t.Fatalf("expected base 'cmux', got %q", base2)
+	base2 := filepath.Base("/home/user/.programa/bin/programa")
+	if base2 != "programa" {
+		t.Fatalf("expected base 'programa', got %q", base2)
 	}
-	base3 := filepath.Base("cmuxd-remote")
-	if base3 == "cmux" {
-		t.Fatalf("cmuxd-remote should not match cmux")
+	base3 := filepath.Base("programad-remote")
+	if base3 == "programa" {
+		t.Fatalf("programad-remote should not match programa")
 	}
 }
 
@@ -756,7 +756,7 @@ func TestCLIFocusPanelUsesSurfaceFocus(t *testing.T) {
 
 func TestCLIBrowserOpenUsesOpenSplitAndWorkspaceEnv(t *testing.T) {
 	sockPath, requests := startMockV2SocketWithRequestCapture(t)
-	t.Setenv("CMUX_WORKSPACE_ID", "env-ws")
+	t.Setenv("PROGRAMA_WORKSPACE_ID", "env-ws")
 	code := runCLI([]string{"--socket", sockPath, "--json", "browser", "open", "https://example.com"})
 	if code != 0 {
 		t.Fatalf("browser open should return 0, got %d", code)
@@ -781,7 +781,7 @@ func TestCLIBrowserOpenUsesOpenSplitAndWorkspaceEnv(t *testing.T) {
 
 func TestCLIBrowserGetURLUsesCurrentMethodAndSurfaceEnv(t *testing.T) {
 	sockPath, requests := startMockV2SocketWithRequestCapture(t)
-	t.Setenv("CMUX_SURFACE_ID", "env-sf")
+	t.Setenv("PROGRAMA_SURFACE_ID", "env-sf")
 	code := runCLI([]string{"--socket", sockPath, "--json", "browser", "get-url"})
 	if code != 0 {
 		t.Fatalf("browser get-url should return 0, got %d", code)
@@ -872,9 +872,9 @@ func TestParseFlagsCollectsKnownFlagsAndPositionalArgs(t *testing.T) {
 }
 
 func TestCLIEnvVarDefaults(t *testing.T) {
-	// Test that CMUX_WORKSPACE_ID and CMUX_SURFACE_ID are used as defaults
+	// Test that PROGRAMA_WORKSPACE_ID and PROGRAMA_SURFACE_ID are used as defaults
 	dir := t.TempDir()
-	sockPath := filepath.Join(dir, "cmux.sock")
+	sockPath := filepath.Join(dir, "programa.sock")
 
 	receivedParamsCh := make(chan map[string]any, 1)
 	ln, err := net.Listen("unix", sockPath)
@@ -900,10 +900,10 @@ func TestCLIEnvVarDefaults(t *testing.T) {
 		conn.Close()
 	}()
 
-	os.Setenv("CMUX_WORKSPACE_ID", "env-ws-id")
-	os.Setenv("CMUX_SURFACE_ID", "env-sf-id")
-	defer os.Unsetenv("CMUX_WORKSPACE_ID")
-	defer os.Unsetenv("CMUX_SURFACE_ID")
+	os.Setenv("PROGRAMA_WORKSPACE_ID", "env-ws-id")
+	os.Setenv("PROGRAMA_SURFACE_ID", "env-sf-id")
+	defer os.Unsetenv("PROGRAMA_WORKSPACE_ID")
+	defer os.Unsetenv("PROGRAMA_SURFACE_ID")
 
 	code := runCLI([]string{"--socket", sockPath, "--json", "close-surface"})
 	if code != 0 {

@@ -197,25 +197,25 @@ import sys
 import time
 from pathlib import Path
 
-host = os.environ["CMUX_TEST_BIND_HOST"]
-port = int(os.environ["CMUX_TEST_PORT"])
-cli_path = os.environ["CMUX_TEST_CLI_PATH"]
-socket_path = os.environ["CMUX_TEST_SOCKET_PATH"]
-workspace_id = os.environ["CMUX_WORKSPACE_ID"]
-surface_id = os.environ["CMUX_SURFACE_ID"]
-state_path = os.environ["CMUX_CLAUDE_HOOK_STATE_PATH"]
-session_id = os.environ["CMUX_TEST_SESSION_ID"]
-cwd = os.environ["CMUX_TEST_CWD"]
-ready_file = Path(os.environ["CMUX_TEST_READY_FILE"])
-start_file = Path(os.environ["CMUX_TEST_START_FILE"])
-server_pid_file = Path(os.environ["CMUX_TEST_SERVER_PID_FILE"])
-server_log_file = Path(os.environ["CMUX_TEST_SERVER_LOG_FILE"])
+host = os.environ["PROGRAMA_TEST_BIND_HOST"]
+port = int(os.environ["PROGRAMA_TEST_PORT"])
+cli_path = os.environ["PROGRAMA_TEST_CLI_PATH"]
+socket_path = os.environ["PROGRAMA_TEST_SOCKET_PATH"]
+workspace_id = os.environ["PROGRAMA_WORKSPACE_ID"]
+surface_id = os.environ["PROGRAMA_SURFACE_ID"]
+state_path = os.environ["PROGRAMA_CLAUDE_HOOK_STATE_PATH"]
+session_id = os.environ["PROGRAMA_TEST_SESSION_ID"]
+cwd = os.environ["PROGRAMA_TEST_CWD"]
+ready_file = Path(os.environ["PROGRAMA_TEST_READY_FILE"])
+start_file = Path(os.environ["PROGRAMA_TEST_START_FILE"])
+server_pid_file = Path(os.environ["PROGRAMA_TEST_SERVER_PID_FILE"])
+server_log_file = Path(os.environ["PROGRAMA_TEST_SERVER_LOG_FILE"])
 
 hook_env = os.environ.copy()
-hook_env["CMUX_SOCKET_PATH"] = socket_path
-hook_env["CMUX_WORKSPACE_ID"] = workspace_id
-hook_env["CMUX_SURFACE_ID"] = surface_id
-hook_env["CMUX_CLAUDE_HOOK_STATE_PATH"] = state_path
+hook_env["PROGRAMA_SOCKET_PATH"] = socket_path
+hook_env["PROGRAMA_WORKSPACE_ID"] = workspace_id
+hook_env["PROGRAMA_SURFACE_ID"] = surface_id
+hook_env["PROGRAMA_CLAUDE_HOOK_STATE_PATH"] = state_path
 payload = json.dumps({"session_id": session_id, "cwd": cwd})
 result = subprocess.run(
     [cli_path, "--socket", socket_path, "codex-hook", "session-start"],
@@ -269,19 +269,19 @@ finally:
     )
 
     env = os.environ.copy()
-    env["CMUX_TEST_BIND_HOST"] = _PREFERRED_BIND_HOST
-    env["CMUX_TEST_PORT"] = str(port)
-    env["CMUX_TEST_CLI_PATH"] = cli_path
-    env["CMUX_TEST_SOCKET_PATH"] = socket_path
-    env["CMUX_WORKSPACE_ID"] = workspace_id
-    env["CMUX_SURFACE_ID"] = surface_id
-    env["CMUX_CLAUDE_HOOK_STATE_PATH"] = str(state_path)
-    env["CMUX_TEST_SESSION_ID"] = session_id
-    env["CMUX_TEST_CWD"] = str(cwd)
-    env["CMUX_TEST_READY_FILE"] = str(ready_file)
-    env["CMUX_TEST_START_FILE"] = str(start_file)
-    env["CMUX_TEST_SERVER_PID_FILE"] = str(server_pid_file)
-    env["CMUX_TEST_SERVER_LOG_FILE"] = str(server_log_file)
+    env["PROGRAMA_TEST_BIND_HOST"] = _PREFERRED_BIND_HOST
+    env["PROGRAMA_TEST_PORT"] = str(port)
+    env["PROGRAMA_TEST_CLI_PATH"] = cli_path
+    env["PROGRAMA_TEST_SOCKET_PATH"] = socket_path
+    env["PROGRAMA_WORKSPACE_ID"] = workspace_id
+    env["PROGRAMA_SURFACE_ID"] = surface_id
+    env["PROGRAMA_CLAUDE_HOOK_STATE_PATH"] = str(state_path)
+    env["PROGRAMA_TEST_SESSION_ID"] = session_id
+    env["PROGRAMA_TEST_CWD"] = str(cwd)
+    env["PROGRAMA_TEST_READY_FILE"] = str(ready_file)
+    env["PROGRAMA_TEST_START_FILE"] = str(start_file)
+    env["PROGRAMA_TEST_SERVER_PID_FILE"] = str(server_pid_file)
+    env["PROGRAMA_TEST_SERVER_LOG_FILE"] = str(server_log_file)
 
     proc = subprocess.Popen(
         [sys.executable, str(launcher_script)],

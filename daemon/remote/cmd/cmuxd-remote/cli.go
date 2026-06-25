@@ -86,9 +86,9 @@ func init() {
 	}
 }
 
-// runCLI is the entry point for the "cli" subcommand (or busybox "cmux" invocation).
+// runCLI is the entry point for the "cli" subcommand (or busybox "programa" invocation).
 func runCLI(args []string) int {
-	socketPath := os.Getenv("CMUX_SOCKET_PATH")
+	socketPath := os.Getenv("PROGRAMA_SOCKET_PATH")
 
 	// Parse global flags
 	var jsonOutput bool
@@ -97,7 +97,7 @@ func runCLI(args []string) int {
 		switch args[i] {
 		case "--socket":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cmux: --socket requires a path")
+				fmt.Fprintln(os.Stderr, "programa: --socket requires a path")
 				return 2
 			}
 			socketPath = args[i+1]
@@ -133,7 +133,7 @@ doneFlags:
 		refreshAddr = readSocketAddrFile
 	}
 	if socketPath == "" {
-		fmt.Fprintln(os.Stderr, "cmux: CMUX_SOCKET_PATH not set and --socket not provided")
+		fmt.Fprintln(os.Stderr, "programa: PROGRAMA_SOCKET_PATH not set and --socket not provided")
 		return 1
 	}
 
@@ -168,7 +168,7 @@ doneFlags:
 
 	spec, ok := commandIndex[cmdName]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "cmux: unknown command %q\n", cmdName)
+		fmt.Fprintf(os.Stderr, "programa: unknown command %q\n", cmdName)
 		return 2
 	}
 
@@ -178,7 +178,7 @@ doneFlags:
 	case protoV2:
 		return execV2(socketPath, spec, cmdArgs, jsonOutput, refreshAddr)
 	default:
-		fmt.Fprintf(os.Stderr, "cmux: internal error: unknown protocol for %q\n", cmdName)
+		fmt.Fprintf(os.Stderr, "programa: internal error: unknown protocol for %q\n", cmdName)
 		return 1
 	}
 }
@@ -190,7 +190,7 @@ func execV1(socketPath string, spec *commandSpec, args []string, refreshAddr fun
 	if !spec.noParams {
 		parsed, err := parseFlags(args, spec.flagKeys)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cmux: %v\n", err)
+			fmt.Fprintf(os.Stderr, "programa: %v\n", err)
 			return 2
 		}
 		for _, key := range spec.flagKeys {
@@ -202,7 +202,7 @@ func execV1(socketPath string, spec *commandSpec, args []string, refreshAddr fun
 
 	resp, err := socketRoundTrip(socketPath, cmd, refreshAddr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cmux: %v\n", err)
+		fmt.Fprintf(os.Stderr, "programa: %v\n", err)
 		return 1
 	}
 	fmt.Print(resp)
@@ -222,7 +222,7 @@ func execV2(socketPath string, spec *commandSpec, args []string, jsonOutput bool
 	if !spec.noParams {
 		parsed, err := parseFlags(args, spec.flagKeys)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cmux: %v\n", err)
+			fmt.Fprintf(os.Stderr, "programa: %v\n", err)
 			return 2
 		}
 		// Map flag keys to JSON param keys (e.g. "workspace" → "workspace_id" where appropriate)
@@ -247,7 +247,7 @@ func execV2(socketPath string, spec *commandSpec, args []string, jsonOutput bool
 
 	resp, err := socketRoundTripV2(socketPath, spec.v2Method, params, refreshAddr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cmux: %v\n", err)
+		fmt.Fprintf(os.Stderr, "programa: %v\n", err)
 		return 1
 	}
 
@@ -262,31 +262,31 @@ func execV2(socketPath string, spec *commandSpec, args []string, jsonOutput bool
 // runRPC sends an arbitrary JSON-RPC method with optional JSON params.
 func runRPC(socketPath string, args []string, jsonOutput bool, refreshAddr func() string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "cmux rpc: requires a method name")
+		fmt.Fprintln(os.Stderr, "programa rpc: requires a method name")
 		return 2
 	}
 	method := args[0]
 	var params map[string]any
 	if len(args) > 1 {
 		if err := json.Unmarshal([]byte(args[1]), &params); err != nil {
-			fmt.Fprintf(os.Stderr, "cmux rpc: invalid JSON params: %v\n", err)
+			fmt.Fprintf(os.Stderr, "programa rpc: invalid JSON params: %v\n", err)
 			return 2
 		}
 	}
 
 	resp, err := socketRoundTripV2(socketPath, method, params, refreshAddr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cmux: %v\n", err)
+		fmt.Fprintf(os.Stderr, "programa: %v\n", err)
 		return 1
 	}
 	fmt.Println(resp)
 	return 0
 }
 
-// runBrowserRelay handles "cmux browser <subcommand>" by mapping to browser.* v2 methods.
+// runBrowserRelay handles "programa browser <subcommand>" by mapping to browser.* v2 methods.
 func runBrowserRelay(socketPath string, args []string, jsonOutput bool, refreshAddr func() string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "cmux browser: requires a subcommand (open, navigate, back, forward, reload, get-url)")
+		fmt.Fprintln(os.Stderr, "programa browser: requires a subcommand (open, navigate, back, forward, reload, get-url)")
 		return 2
 	}
 
@@ -326,14 +326,14 @@ func runBrowserRelay(socketPath string, args []string, jsonOutput bool, refreshA
 		flagKeys = []string{"surface"}
 		useSurfaceEnv = true
 	default:
-		fmt.Fprintf(os.Stderr, "cmux browser: unknown subcommand %q\n", sub)
+		fmt.Fprintf(os.Stderr, "programa browser: unknown subcommand %q\n", sub)
 		return 2
 	}
 
 	params := make(map[string]any)
 	parsed, err := parseFlags(subArgs, flagKeys)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cmux browser: %v\n", err)
+		fmt.Fprintf(os.Stderr, "programa browser: %v\n", err)
 		return 2
 	}
 	for _, key := range flagKeys {
@@ -356,7 +356,7 @@ func runBrowserRelay(socketPath string, args []string, jsonOutput bool, refreshA
 
 	resp, err := socketRoundTripV2(socketPath, method, params, refreshAddr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cmux: %v\n", err)
+		fmt.Fprintf(os.Stderr, "programa: %v\n", err)
 		return 1
 	}
 	if jsonOutput {
@@ -371,7 +371,7 @@ func applyWorkspaceEnvFallback(params map[string]any) {
 	if _, ok := params["workspace_id"]; ok {
 		return
 	}
-	if envWs := os.Getenv("CMUX_WORKSPACE_ID"); envWs != "" {
+	if envWs := os.Getenv("PROGRAMA_WORKSPACE_ID"); envWs != "" {
 		params["workspace_id"] = envWs
 	}
 }
@@ -380,7 +380,7 @@ func applySurfaceEnvFallback(params map[string]any) {
 	if _, ok := params["surface_id"]; ok {
 		return
 	}
-	if envSf := os.Getenv("CMUX_SURFACE_ID"); envSf != "" {
+	if envSf := os.Getenv("PROGRAMA_SURFACE_ID"); envSf != "" {
 		params["surface_id"] = envSf
 	}
 }
@@ -486,14 +486,14 @@ func parseFlags(args []string, keys []string) (parsedFlags, error) {
 	return result, nil
 }
 
-// readSocketAddrFile reads the socket address from ~/.cmux/socket_addr as a fallback
-// when CMUX_SOCKET_PATH is not set. Written by the cmux app after the relay establishes.
+// readSocketAddrFile reads the socket address from ~/.programa/socket_addr as a fallback
+// when PROGRAMA_SOCKET_PATH is not set. Written by the programa app after the relay establishes.
 func readSocketAddrFile() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(home, ".cmux", "socket_addr"))
+	data, err := os.ReadFile(filepath.Join(home, ".programa", "socket_addr"))
 	if err != nil {
 		return ""
 	}
@@ -510,7 +510,7 @@ func readRelayAuthFile(socketPath string) *relayAuthState {
 		if err != nil {
 			return nil
 		}
-		data, err := os.ReadFile(filepath.Join(home, ".cmux", "relay", port+".auth"))
+		data, err := os.ReadFile(filepath.Join(home, ".programa", "relay", port+".auth"))
 		if err != nil {
 			return nil
 		}
@@ -527,15 +527,15 @@ func readRelayAuthFile(socketPath string) *relayAuthState {
 }
 
 func currentRelayAuth(socketPath string) *relayAuthState {
-	relayID := strings.TrimSpace(os.Getenv("CMUX_RELAY_ID"))
-	relayToken := strings.TrimSpace(os.Getenv("CMUX_RELAY_TOKEN"))
+	relayID := strings.TrimSpace(os.Getenv("PROGRAMA_RELAY_ID"))
+	relayToken := strings.TrimSpace(os.Getenv("PROGRAMA_RELAY_TOKEN"))
 	if relayID != "" && relayToken != "" {
 		return &relayAuthState{RelayID: relayID, RelayToken: relayToken}
 	}
 	return readRelayAuthFile(socketPath)
 }
 
-// dialSocket connects to the cmux socket. If addr contains a colon and doesn't
+// dialSocket connects to the programa socket. If addr contains a colon and doesn't
 // start with '/', it's treated as a TCP address (host:port); otherwise Unix socket.
 // For TCP connections, refreshAddr is used only to recover from a stale socket_addr
 // rewrite, not to poll for relay readiness.
@@ -595,7 +595,7 @@ func authenticateRelayConn(conn net.Conn, auth *relayAuthState) error {
 	if err := json.Unmarshal([]byte(line), &challenge); err != nil {
 		return fmt.Errorf("invalid relay auth challenge")
 	}
-	if challenge.Protocol != "cmux-relay-auth" || challenge.Version != 1 || challenge.RelayID != auth.RelayID || challenge.Nonce == "" {
+	if challenge.Protocol != "programa-relay-auth" || challenge.Version != 1 || challenge.RelayID != auth.RelayID || challenge.Nonce == "" {
 		return fmt.Errorf("relay auth challenge mismatch")
 	}
 
@@ -757,7 +757,7 @@ func randomHex(n int) string {
 }
 
 func cliUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: cmux [--socket <path>] [--json] <command> [args...]")
+	fmt.Fprintln(os.Stderr, "Usage: programa [--socket <path>] [--json] <command> [args...]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  ping                     Check connectivity")
@@ -775,8 +775,8 @@ func cliUsage() {
 	fmt.Fprintln(os.Stderr, "  notify                    Create a notification")
 	fmt.Fprintln(os.Stderr, "  browser <sub>             Browser commands (open, navigate, back, forward, reload, get-url)")
 	fmt.Fprintln(os.Stderr, "  claude-teams [args...]     Launch Claude Code in teammate mode")
-	fmt.Fprintln(os.Stderr, "  omo [args...]              Launch OpenCode with cmux integration")
-	fmt.Fprintln(os.Stderr, "  omx [args...]              Launch Oh My Codex with cmux integration")
-	fmt.Fprintln(os.Stderr, "  omc [args...]              Launch Oh My Claude Code with cmux integration")
+	fmt.Fprintln(os.Stderr, "  omo [args...]              Launch OpenCode with programa integration")
+	fmt.Fprintln(os.Stderr, "  omx [args...]              Launch Oh My Codex with programa integration")
+	fmt.Fprintln(os.Stderr, "  omc [args...]              Launch Oh My Claude Code with programa integration")
 	fmt.Fprintln(os.Stderr, "  rpc <method> [json-params] Send arbitrary JSON-RPC")
 }

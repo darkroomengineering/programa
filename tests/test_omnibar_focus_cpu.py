@@ -32,7 +32,7 @@ SAMPLE_INTERVAL_S = 0.5
 
 
 def get_cmux_pid() -> int | None:
-    socket_path = os.environ.get("CMUX_SOCKET_PATH")
+    socket_path = os.environ.get("PROGRAMA_SOCKET_PATH")
     if not socket_path:
         try:
             socket_path = cmux().socket_path
@@ -164,7 +164,7 @@ def main() -> int:
             sample_text = sample.stdout + sample.stderr
             if "updateNSView" in sample_text or "makeFirstResponder" in sample_text:
                 print("  Confirmed: sample shows updateNSView / makeFirstResponder loop")
-            sample_path = f"/tmp/cmux_omnibar_focus_cpu_{pid}.txt"
+            sample_path = f"/tmp/programa_omnibar_focus_cpu_{pid}.txt"
             with open(sample_path, "w") as f:
                 f.write(sample_text)
             print(f"  Sample saved to {sample_path}")

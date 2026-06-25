@@ -232,7 +232,7 @@ jobs:
           set -euo pipefail
           CLI_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/programa"
           [ -x "$CLI_BINARY" ] || { echo "programa CLI binary not found at $CLI_BINARY" >&2; exit 1; }
-          CMUX_CLI_BIN="$CLI_BINARY" python3 tests/test_cli_version_memory_guard.py
+          PROGRAMA_CLI_BIN="$CLI_BINARY" python3 tests/test_cli_version_memory_guard.py
 
       - name: Check whether build commit is still current main HEAD after build
         if: needs.decide.outputs.should_publish == 'true' && steps.current_head_prebuild.outputs.still_current == 'true'

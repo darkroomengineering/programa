@@ -11,7 +11,7 @@ cmux markdown <path>          # shorthand (implicit "open")
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--workspace <id\|ref\|index>` | Target workspace | `$CMUX_WORKSPACE_ID` |
+| `--workspace <id\|ref\|index>` | Target workspace | `$PROGRAMA_WORKSPACE_ID` |
 | `--surface <id\|ref\|index>` | Source surface to split from | Focused surface |
 | `--window <id\|ref>` | Target window | Current window |
 

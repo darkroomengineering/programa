@@ -224,7 +224,7 @@ jobs:
       - name: Run bundled Ghostty theme picker helper regression
         run: |
           set -euo pipefail
-          CMUX_SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages" \
+          PROGRAMA_SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages" \
             ./tests/test_bundled_ghostty_theme_picker_helper.sh
 
       - name: Run CLI version memory guard regression
@@ -232,17 +232,17 @@ jobs:
           set -euo pipefail
 
           CLI_BIN="$(
-            find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/Debug/cmux" -exec stat -f '%m %N' {} \; \
+            find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/Debug/programa" -exec stat -f '%m %N' {} \; \
               | sort -nr \
               | head -1 \
               | cut -d' ' -f2-
           )"
           if [ -z "${CLI_BIN:-}" ] || [ ! -x "$CLI_BIN" ]; then
-            echo "cmux CLI binary not found in DerivedData" >&2
+            echo "programa CLI binary not found in DerivedData" >&2
             exit 1
           fi
 
-          CMUX_CLI_BIN="$CLI_BIN" python3 tests/test_cli_version_memory_guard.py
+          PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_version_memory_guard.py
 
   tests-build-and-lag:
     # Build the full cmux scheme and run the lag regression on GitHub-hosted runners.
@@ -377,17 +377,17 @@ jobs:
           fi
 
           TAG="ci-lag"
-          SOCK="/tmp/cmux-debug-${TAG}.sock"
+          SOCK="/tmp/programa-debug-${TAG}.sock"
           BUNDLE_ID="$(
             /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist" 2>/dev/null \
               || echo 'com.darkroom.programa.debug'
           )"
 
           pkill -x "Programa DEV" || true
-          rm -f "$SOCK" "/tmp/cmux-${TAG}.sock" || true
+          rm -f "$SOCK" "/tmp/programa-${TAG}.sock" || true
           defaults write "$BUNDLE_ID" socketControlMode -string full >/dev/null 2>&1 || true
 
-          CMUX_TAG="$TAG" CMUX_SOCKET_PATH="$SOCK" CMUX_UI_TEST_MODE=1 "$APP/Contents/MacOS/Programa DEV" >/tmp/cmux-ci-lag.log 2>&1 &
+          PROGRAMA_TAG="$TAG" PROGRAMA_SOCKET_PATH="$SOCK" PROGRAMA_UI_TEST_MODE=1 "$APP/Contents/MacOS/Programa DEV" >/tmp/programa-ci-lag.log 2>&1 &
           APP_PID=$!
           trap 'kill "$APP_PID" >/dev/null 2>&1 || true' EXIT
 
@@ -397,15 +397,15 @@ jobs:
           done
           [ -S "$SOCK" ] || { echo "Socket not ready at $SOCK" >&2; exit 1; }
 
-          CMUX_SOCKET_PATH="$SOCK" \
-          CMUX_LAG_MAX_P95_RATIO=1.70 \
-          CMUX_LAG_MAX_AVG_RATIO=1.70 \
-          CMUX_LAG_MIN_BASELINE_P95_MS_FOR_RATIO=6.0 \
-          CMUX_LAG_MIN_BASELINE_AVG_MS_FOR_RATIO=4.0 \
-          CMUX_LAG_MAX_P95_DELTA_MS=20.0 \
-          CMUX_LAG_MAX_AVG_DELTA_MS=12.0 \
-          CMUX_LAG_MAX_CHURN_P95_MS=35 \
-          CMUX_LAG_KEY_EVENTS=180 \
+          PROGRAMA_SOCKET_PATH="$SOCK" \
+          PROGRAMA_LAG_MAX_P95_RATIO=1.70 \
+          PROGRAMA_LAG_MAX_AVG_RATIO=1.70 \
+          PROGRAMA_LAG_MIN_BASELINE_P95_MS_FOR_RATIO=6.0 \
+          PROGRAMA_LAG_MIN_BASELINE_AVG_MS_FOR_RATIO=4.0 \
+          PROGRAMA_LAG_MAX_P95_DELTA_MS=20.0 \
+          PROGRAMA_LAG_MAX_AVG_DELTA_MS=12.0 \
+          PROGRAMA_LAG_MAX_CHURN_P95_MS=35 \
+          PROGRAMA_LAG_KEY_EVENTS=180 \
           python3 tests/test_workspace_churn_up_arrow_lag.py
 
       - name: Cleanup virtual display
@@ -515,15 +515,15 @@ jobs:
           clang -framework Foundation -framework CoreGraphics \
             -o "$HELPER_PATH" scripts/create-virtual-display.m
 
-          VDISPLAY_READY="/tmp/cmux-vdisplay-persistent.ready"
-          VDISPLAY_ID_PATH="/tmp/cmux-vdisplay-persistent.id"
+          VDISPLAY_READY="/tmp/programa-vdisplay-persistent.ready"
+          VDISPLAY_ID_PATH="/tmp/programa-vdisplay-persistent.id"
           rm -f "$VDISPLAY_READY" "$VDISPLAY_ID_PATH"
 
           "$HELPER_PATH" \
             --modes "1920x1080" \
             --ready-path "$VDISPLAY_READY" \
             --display-id-path "$VDISPLAY_ID_PATH" \
-            > /tmp/cmux-vdisplay-persistent.log 2>&1 &
+            > /tmp/programa-vdisplay-persistent.log 2>&1 &
           echo "VDISPLAY_PERSISTENT_PID=$!" >> "$GITHUB_ENV"
 
           echo "Waiting for persistent virtual display..."
@@ -533,7 +533,7 @@ jobs:
           done
           if [ ! -f "$VDISPLAY_READY" ]; then
             echo "ERROR: Persistent virtual display not ready after 12s" >&2
-            cat /tmp/cmux-vdisplay-persistent.log 2>/dev/null || true
+            cat /tmp/programa-vdisplay-persistent.log 2>/dev/null || true
             exit 1
           fi
           echo "Persistent virtual display ready: ID=$(cat "$VDISPLAY_ID_PATH")"
@@ -544,17 +544,17 @@ jobs:
           SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
           HELPER_PATH="/tmp/create-virtual-display"
           TOKEN="$(uuidgen)"
-          DIAG_PATH="/tmp/cmux-ui-test-display-churn-${TOKEN}.json"
-          DISPLAY_READY="/tmp/cmux-ui-test-display-${TOKEN}.ready"
-          DISPLAY_ID_PATH="/tmp/cmux-ui-test-display-${TOKEN}.id"
-          DISPLAY_START="/tmp/cmux-ui-test-display-${TOKEN}.start"
-          DISPLAY_DONE="/tmp/cmux-ui-test-display-${TOKEN}.done"
-          HELPER_LOG="/tmp/cmux-ui-test-display-${TOKEN}-helper.log"
+          DIAG_PATH="/tmp/programa-ui-test-display-churn-${TOKEN}.json"
+          DISPLAY_READY="/tmp/programa-ui-test-display-${TOKEN}.ready"
+          DISPLAY_ID_PATH="/tmp/programa-ui-test-display-${TOKEN}.id"
+          DISPLAY_START="/tmp/programa-ui-test-display-${TOKEN}.start"
+          DISPLAY_DONE="/tmp/programa-ui-test-display-${TOKEN}.done"
+          HELPER_LOG="/tmp/programa-ui-test-display-${TOKEN}-helper.log"
 
           cleanup() {
             pkill -x "Programa DEV" 2>/dev/null || true
             rm -f "$DIAG_PATH" "$DISPLAY_READY" "$DISPLAY_ID_PATH" "$DISPLAY_START" "$DISPLAY_DONE" "$HELPER_LOG"
-            rm -f /tmp/cmux-ui-test-prelaunch.json /tmp/cmux-ui-test-display-harness.json
+            rm -f /tmp/programa-ui-test-prelaunch.json /tmp/programa-ui-test-display-harness.json
           }
           trap cleanup EXIT
 
@@ -603,12 +603,12 @@ jobs:
             echo "Virtual display ready: ID=$DISPLAY_ID"
 
             # Launch app from shell (non-sandboxed, outside XCTest sandbox)
-            CMUX_UI_TEST_MODE=1 \
-            CMUX_UI_TEST_DIAGNOSTICS_PATH="$DIAG_PATH" \
-            CMUX_UI_TEST_DISPLAY_RENDER_STATS=1 \
-            CMUX_UI_TEST_TARGET_DISPLAY_ID="$DISPLAY_ID" \
-            CMUX_TAG="ui-tests-display-resolution" \
-            "$APP_BINARY" > /tmp/cmux-ui-test-app.log 2>&1 &
+            PROGRAMA_UI_TEST_MODE=1 \
+            PROGRAMA_UI_TEST_DIAGNOSTICS_PATH="$DIAG_PATH" \
+            PROGRAMA_UI_TEST_DISPLAY_RENDER_STATS=1 \
+            PROGRAMA_UI_TEST_TARGET_DISPLAY_ID="$DISPLAY_ID" \
+            PROGRAMA_TAG="ui-tests-display-resolution" \
+            "$APP_BINARY" > /tmp/programa-ui-test-app.log 2>&1 &
             APP_PID=$!
             echo "App launched: PID=$APP_PID"
 
@@ -624,7 +624,7 @@ jobs:
               fi
               if ! kill -0 "$APP_PID" 2>/dev/null; then
                 echo "ERROR: App crashed during startup"
-                cat /tmp/cmux-ui-test-app.log 2>/dev/null | tail -30 || true
+                cat /tmp/programa-ui-test-app.log 2>/dev/null | tail -30 || true
                 break
               fi
               sleep 0.5
@@ -637,7 +637,7 @@ jobs:
               if [ "$attempt" -eq 2 ]; then
                 echo "Display resolution UI regression failed after 2 attempts" >&2
                 echo "--- App log ---"
-                cat /tmp/cmux-ui-test-app.log 2>/dev/null | tail -50 || true
+                cat /tmp/programa-ui-test-app.log 2>/dev/null | tail -50 || true
                 echo "--- Helper log ---"
                 cat "$HELPER_LOG" 2>/dev/null | tail -20 || true
                 echo "--- Diagnostics ---"
@@ -666,16 +666,16 @@ jobs:
               echo "WARNING: Render stats not available after 20s. Diagnostics:"
               cat "$DIAG_PATH" 2>/dev/null || true
               echo "--- App log ---"
-              cat /tmp/cmux-ui-test-app.log 2>/dev/null | tail -30 || true
+              cat /tmp/programa-ui-test-app.log 2>/dev/null | tail -30 || true
             fi
 
             # Write manifests so test can find the pre-launched state
-            MANIFEST_PATH="/tmp/cmux-ui-test-display-harness.json"
+            MANIFEST_PATH="/tmp/programa-ui-test-display-harness.json"
             cat >"$MANIFEST_PATH" <<MANIFEST_EOF
           {"readyPath":"$DISPLAY_READY","displayIDPath":"$DISPLAY_ID_PATH","donePath":"$DISPLAY_DONE","logPath":"$HELPER_LOG"}
           MANIFEST_EOF
 
-            PRELAUNCH_PATH="/tmp/cmux-ui-test-prelaunch.json"
+            PRELAUNCH_PATH="/tmp/programa-ui-test-prelaunch.json"
             cat >"$PRELAUNCH_PATH" <<PRELAUNCH_EOF
           {"diagnosticsPath":"$DIAG_PATH"}
           PRELAUNCH_EOF
@@ -719,4 +719,4 @@ jobs:
           if [ -n "${VDISPLAY_PERSISTENT_PID:-}" ]; then
             kill "$VDISPLAY_PERSISTENT_PID" >/dev/null 2>&1 || true
           fi
-          rm -f /tmp/cmux-vdisplay-persistent.ready /tmp/cmux-vdisplay-persistent.id /tmp/cmux-vdisplay-persistent.log
+          rm -f /tmp/programa-vdisplay-persistent.ready /tmp/programa-vdisplay-persistent.id /tmp/programa-vdisplay-persistent.log

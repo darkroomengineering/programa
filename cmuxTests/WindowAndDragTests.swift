@@ -306,7 +306,7 @@ final class AppDelegateLaunchServicesRegistrationTests: XCTestCase {
         var registerCallCount = 0
 
         app.scheduleLaunchServicesBundleRegistrationForTesting(
-            bundleURL: URL(fileURLWithPath: "/tmp/../tmp/cmux-launch-services-test.app"),
+            bundleURL: URL(fileURLWithPath: "/tmp/../tmp/programa-launch-services-test.app"),
             scheduler: { work in
                 scheduledWork = work
             },

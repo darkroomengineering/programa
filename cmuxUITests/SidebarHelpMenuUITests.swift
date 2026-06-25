@@ -25,7 +25,7 @@ final class SidebarHelpMenuUITests: XCTestCase {
 
     func testHelpMenuOpensKeyboardShortcutsSection() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
         launchAndActivate(app)
 
         XCTAssertTrue(waitForWindowCount(atLeast: 1, app: app, timeout: 6.0))
@@ -49,11 +49,11 @@ final class SidebarHelpMenuUITests: XCTestCase {
 
     func testHelpMenuCheckForUpdatesTriggersSidebarUpdatePill() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_FEED_URL"] = "https://cmux.test/appcast.xml"
-        app.launchEnvironment["CMUX_UI_TEST_FEED_MODE"] = "available"
-        app.launchEnvironment["CMUX_UI_TEST_UPDATE_VERSION"] = "9.9.9"
-        app.launchEnvironment["CMUX_UI_TEST_AUTO_ALLOW_PERMISSION"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_FEED_URL"] = "https://cmux.test/appcast.xml"
+        app.launchEnvironment["PROGRAMA_UI_TEST_FEED_MODE"] = "available"
+        app.launchEnvironment["PROGRAMA_UI_TEST_UPDATE_VERSION"] = "9.9.9"
+        app.launchEnvironment["PROGRAMA_UI_TEST_AUTO_ALLOW_PERMISSION"] = "1"
         launchAndActivate(app)
 
         XCTAssertTrue(waitForWindowCount(atLeast: 1, app: app, timeout: 6.0))
@@ -79,7 +79,7 @@ final class SidebarHelpMenuUITests: XCTestCase {
 
     func testHelpMenuSendFeedbackOpensComposerSheet() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
         launchAndActivate(app)
 
         XCTAssertTrue(waitForWindowCount(atLeast: 1, app: app, timeout: 6.0))
@@ -228,7 +228,7 @@ final class FeedbackComposerShortcutUITests: XCTestCase {
 
     func testCmdOptionFOpensFeedbackComposer() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
         app.launch()
         app.activate()
 
@@ -249,7 +249,7 @@ final class FeedbackComposerShortcutUITests: XCTestCase {
 
     func testCmdOptionFWorksWithHiddenSidebar() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
         app.launch()
         app.activate()
 
@@ -274,8 +274,8 @@ final class FeedbackComposerShortcutUITests: XCTestCase {
 
     func testCmdOptionFWorksFromSettingsWindow() {
         let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_SHOW_SETTINGS"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_SHOW_SETTINGS"] = "1"
         app.launch()
         app.activate()
 
@@ -304,7 +304,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        socketPath = "/tmp/cmux-ui-test-command-palette-\(UUID().uuidString).sock"
+        socketPath = "/tmp/programa-ui-test-command-palette-\(UUID().uuidString).sock"
         try? FileManager.default.removeItem(atPath: socketPath)
     }
 
@@ -319,12 +319,12 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
     ) {
         app.launchArguments += ["-socketControlMode", "allowAll"]
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_SOCKET_PATH"] = socketPath
-        app.launchEnvironment["CMUX_SOCKET_ENABLE"] = "1"
-        app.launchEnvironment["CMUX_SOCKET_MODE"] = "allowAll"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        app.launchEnvironment["PROGRAMA_SOCKET_ENABLE"] = "1"
+        app.launchEnvironment["PROGRAMA_SOCKET_MODE"] = "allowAll"
         if showSettingsWindow {
-            app.launchEnvironment["CMUX_UI_TEST_SHOW_SETTINGS"] = "1"
+            app.launchEnvironment["PROGRAMA_UI_TEST_SHOW_SETTINGS"] = "1"
         }
     }
 
@@ -413,7 +413,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
     func testCmdShiftPCheckQueryPrefersCheckForUpdatesBeforeAttemptUpdate() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
         launchAndActivate(app)
 
         XCTAssertTrue(
@@ -521,12 +521,12 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
 
     func testMinimalModeToggleKeepsSettingsWindowFocused() throws {
         let app = XCUIApplication()
-        let diagnosticsPath = "/tmp/cmux-ui-test-settings-focus-\(UUID().uuidString).json"
+        let diagnosticsPath = "/tmp/programa-ui-test-settings-focus-\(UUID().uuidString).json"
         try? FileManager.default.removeItem(atPath: diagnosticsPath)
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_SHOW_SETTINGS"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_DIAGNOSTICS_PATH"] = diagnosticsPath
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_SHOW_SETTINGS"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_DIAGNOSTICS_PATH"] = diagnosticsPath
         launchAndActivate(app)
 
         XCTAssertTrue(

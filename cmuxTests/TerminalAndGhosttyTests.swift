@@ -489,13 +489,13 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
 
         TerminalImageTransferPlanner.executeForTesting(
             plan: .uploadFiles([url], .workspaceRemote),
-            uploadWorkspaceRemote: { _, _, finish in finish(.success(["/tmp/cmux-drop-123.png"])) },
+            uploadWorkspaceRemote: { _, _, finish in finish(.success(["/tmp/programa-drop-123.png"])) },
             uploadDetectedSSH: { _, _, _, finish in finish(.failure(NSError(domain: "unused", code: 0))) },
             insertText: { completedText = $0 },
             onFailure: { _ in XCTFail("unexpected failure") }
         )
 
-        XCTAssertEqual(completedText, "/tmp/cmux-drop-123.png")
+        XCTAssertEqual(completedText, "/tmp/programa-drop-123.png")
     }
 
     func testCancelledRemoteImagePasteExecutionSuppressesCompletionHandlers() throws {
@@ -527,7 +527,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
 
         XCTAssertTrue(returnedOperation === operation)
         XCTAssertTrue(operation.cancel())
-        completion?(.success(["/tmp/cmux-drop-cancelled.png"]))
+        completion?(.success(["/tmp/programa-drop-cancelled.png"]))
 
         XCTAssertEqual(cancellationHandlerCalls, 1)
         XCTAssertTrue(insertedTexts.isEmpty)
@@ -542,7 +542,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         XCTAssertTrue(operation.cancel())
 
         let returnedOperation = TerminalImageTransferPlanner.executeForTesting(
-            plan: .insertText("/tmp/cmux-drop-local.png"),
+            plan: .insertText("/tmp/programa-drop-local.png"),
             operation: operation,
             uploadWorkspaceRemote: { _, _, finish in
                 finish(.failure(NSError(domain: "unused", code: 0)))
@@ -583,7 +583,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
             isRemoteTerminalSurface: true,
             uploadRemote: { urls, finish in
                 uploadedURLs = urls
-                finish(.success(["/tmp/cmux-drop-abc123.png"]))
+                finish(.success(["/tmp/programa-drop-abc123.png"]))
             },
             sendText: { sentText.append($0) },
             onFailure: { failureCount += 1 }
@@ -592,7 +592,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
 
         XCTAssertTrue(handled)
         XCTAssertEqual(uploadedURLs.count, 1)
-        XCTAssertEqual(sentText, ["/tmp/cmux-drop-abc123.png"])
+        XCTAssertEqual(sentText, ["/tmp/programa-drop-abc123.png"])
         XCTAssertEqual(failureCount, 0)
     }
 
@@ -610,7 +610,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
                 uploadedURL = urls.first
                 XCTAssertEqual(urls.count, 1)
                 XCTAssertTrue(FileManager.default.fileExists(atPath: urls[0].path))
-                finish(.success(["/tmp/cmux-drop-abc123.png"]))
+                finish(.success(["/tmp/programa-drop-abc123.png"]))
             },
             sendText: { _ in },
             onFailure: {}
@@ -3670,22 +3670,22 @@ final class TerminalOpenURLTargetResolutionTests: XCTestCase {
     }
 
     func testResolvesFileSchemeAsExternal() throws {
-        let target = try XCTUnwrap(resolveTerminalOpenURLTarget("file:///tmp/cmux.txt"))
+        let target = try XCTUnwrap(resolveTerminalOpenURLTarget("file:///tmp/programa.txt"))
         switch target {
         case let .external(url):
             XCTAssertTrue(url.isFileURL)
-            XCTAssertEqual(url.path, "/tmp/cmux.txt")
+            XCTAssertEqual(url.path, "/tmp/programa.txt")
         default:
             XCTFail("Expected file URL to open externally")
         }
     }
 
     func testResolvesAbsolutePathAsExternalFileURL() throws {
-        let target = try XCTUnwrap(resolveTerminalOpenURLTarget("/tmp/cmux-path.txt"))
+        let target = try XCTUnwrap(resolveTerminalOpenURLTarget("/tmp/programa-path.txt"))
         switch target {
         case let .external(url):
             XCTAssertTrue(url.isFileURL)
-            XCTAssertEqual(url.path, "/tmp/cmux-path.txt")
+            XCTAssertEqual(url.path, "/tmp/programa-path.txt")
         default:
             XCTFail("Expected absolute file path to open externally")
         }
@@ -3702,12 +3702,12 @@ final class TerminalOpenURLTargetResolutionTests: XCTestCase {
     }
 
     func testResolvesHostlessHTTPSAsExternal() throws {
-        let target = try XCTUnwrap(resolveTerminalOpenURLTarget("https:///tmp/cmux.txt"))
+        let target = try XCTUnwrap(resolveTerminalOpenURLTarget("https:///tmp/programa.txt"))
         switch target {
         case let .external(url):
             XCTAssertEqual(url.scheme, "https")
             XCTAssertNil(url.host)
-            XCTAssertEqual(url.path, "/tmp/cmux.txt")
+            XCTAssertEqual(url.path, "/tmp/programa.txt")
         default:
             XCTFail("Expected hostless HTTPS URL to open externally")
         }
@@ -3815,7 +3815,7 @@ final class TerminalControllerSocketListenerHealthTests: XCTestCase {
     func testNonStableSocketBindFailureDoesNotFallback() {
         XCTAssertNil(
             TerminalController.fallbackSocketPathAfterBindFailure(
-                requestedPath: "/tmp/cmux-debug.sock",
+                requestedPath: "/tmp/programa-debug.sock",
                 stage: "bind",
                 errnoCode: EACCES,
                 currentUserID: 501
@@ -3824,7 +3824,7 @@ final class TerminalControllerSocketListenerHealthTests: XCTestCase {
     }
 
     private func makeTempSocketPath() -> String {
-        "/tmp/cmux-socket-health-\(UUID().uuidString).sock"
+        "/tmp/programa-socket-health-\(UUID().uuidString).sock"
     }
 
     private func bindUnixSocket(at path: String) throws -> Int32 {

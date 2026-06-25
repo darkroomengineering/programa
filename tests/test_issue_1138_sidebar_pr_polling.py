@@ -102,11 +102,11 @@ def _gh_stub() -> str:
     return textwrap.dedent(
         """\
         #!/bin/sh
-        args_log="${CMUX_TEST_GH_ARGS_LOG:?}"
-        count_file="${CMUX_TEST_GH_COUNT_FILE:?}"
-        pid_file="${CMUX_TEST_GH_PID_FILE:-}"
-        scenario="${CMUX_TEST_SCENARIO:?}"
-        head_file="${CMUX_TEST_HEAD_FILE:?}"
+        args_log="${PROGRAMA_TEST_GH_ARGS_LOG:?}"
+        count_file="${PROGRAMA_TEST_GH_COUNT_FILE:?}"
+        pid_file="${PROGRAMA_TEST_GH_PID_FILE:-}"
+        scenario="${PROGRAMA_TEST_SCENARIO:?}"
+        head_file="${PROGRAMA_TEST_HEAD_FILE:?}"
 
         printf '%s\\n' "$*" >> "$args_log"
 
@@ -174,7 +174,7 @@ def _gh_stub() -> str:
               if [ -n "$pid_file" ]; then
                 printf '%s\\n' "$$" > "$pid_file"
               fi
-              sleep "${CMUX_TEST_HANG_SECONDS:-4}"
+              sleep "${PROGRAMA_TEST_HANG_SECONDS:-4}"
               exit 0
             fi
             printf '1138\\tOPEN\\thttps://github.com/manaflow-ai/cmux/pull/1138\\n'
@@ -203,57 +203,57 @@ def _gh_stub() -> str:
 def _shell_command(kind: str, scenario: str) -> str:
     shared = {
         "prompt_helper_idle": (
-            'cd "$CMUX_TEST_REPO"\n'
-            '_CMUX_PR_POLL_INTERVAL=1\n'
+            'cd "$PROGRAMA_TEST_REPO"\n'
+            '_PROGRAMA_PR_POLL_INTERVAL=1\n'
             '_cmux_prompt_entry\n'
             ': "$(/bin/printf helper)"\n'
             'sleep 3\n'
             '_cmux_cleanup\n'
         ),
         "transient_same_context": (
-            'cd "$CMUX_TEST_REPO"\n'
-            '_CMUX_PR_POLL_INTERVAL=1\n'
+            'cd "$PROGRAMA_TEST_REPO"\n'
+            '_PROGRAMA_PR_POLL_INTERVAL=1\n'
             '_cmux_prompt_entry\n'
             'sleep 3\n'
             '_cmux_cleanup\n'
         ),
         "branch_switch_clear": (
-            'cd "$CMUX_TEST_REPO"\n'
-            '_CMUX_PR_POLL_INTERVAL=10\n'
+            'cd "$PROGRAMA_TEST_REPO"\n'
+            '_PROGRAMA_PR_POLL_INTERVAL=10\n'
             '_cmux_prompt_entry\n'
             'sleep 1\n'
-            'printf \'ref: refs/heads/feature/new\\n\' > "$CMUX_TEST_HEAD_FILE"\n'
+            'printf \'ref: refs/heads/feature/new\\n\' > "$PROGRAMA_TEST_HEAD_FILE"\n'
             '_cmux_prompt_entry\n'
             'sleep 2\n'
             '_cmux_cleanup\n'
         ),
         "timeout_recovery": (
-            'cd "$CMUX_TEST_REPO"\n'
-            '_CMUX_PR_POLL_INTERVAL=1\n'
-            '_CMUX_ASYNC_JOB_TIMEOUT=1\n'
+            'cd "$PROGRAMA_TEST_REPO"\n'
+            '_PROGRAMA_PR_POLL_INTERVAL=1\n'
+            '_PROGRAMA_ASYNC_JOB_TIMEOUT=1\n'
             '_cmux_prompt_entry\n'
             'sleep 4\n'
             '_cmux_cleanup\n'
         ),
         "explicit_branch_fallback": (
-            'cd "$CMUX_TEST_REPO"\n'
-            '_CMUX_PR_POLL_INTERVAL=10\n'
+            'cd "$PROGRAMA_TEST_REPO"\n'
+            '_PROGRAMA_PR_POLL_INTERVAL=10\n'
             '_cmux_prompt_entry\n'
             'sleep 2\n'
             '_cmux_cleanup\n'
         ),
         "initial_prompt_preserves_pr_badge": (
-            'cd "$CMUX_TEST_REPO"\n'
-            '_CMUX_PR_POLL_INTERVAL=10\n'
+            'cd "$PROGRAMA_TEST_REPO"\n'
+            '_PROGRAMA_PR_POLL_INTERVAL=10\n'
             '_cmux_prompt_entry\n'
             'sleep 2\n'
             '_cmux_cleanup\n'
         ),
         "nested_shell_stops_parent_poll": (
-            'cd "$CMUX_TEST_REPO"\n'
-            '_CMUX_PR_POLL_INTERVAL=10\n'
+            'cd "$PROGRAMA_TEST_REPO"\n'
+            '_PROGRAMA_PR_POLL_INTERVAL=10\n'
             '_cmux_prompt_entry\n'
-            'parent_pid="$_CMUX_PR_POLL_PID"\n'
+            'parent_pid="$_PROGRAMA_PR_POLL_PID"\n'
             '[ -n "$parent_pid" ] || { echo "missing parent poll pid" >&2; exit 41; }\n'
             '_cmux_nested_shell_entry\n'
             'sleep 1\n'
@@ -261,7 +261,7 @@ def _shell_command(kind: str, scenario: str) -> str:
             '  echo "parent poller still running" >&2\n'
             '  exit 42\n'
             'fi\n'
-            'parent_watch_pid="${_CMUX_GIT_HEAD_WATCH_PID:-}"\n'
+            'parent_watch_pid="${_PROGRAMA_GIT_HEAD_WATCH_PID:-}"\n'
             'if [ -n "$parent_watch_pid" ] && kill -0 "$parent_watch_pid" 2>/dev/null; then\n'
             '  echo "parent HEAD watcher still running" >&2\n'
             '  exit 43\n'
@@ -269,8 +269,8 @@ def _shell_command(kind: str, scenario: str) -> str:
             '_cmux_cleanup\n'
         ),
         "ports_kick_throttle": (
-            'cd "$CMUX_TEST_REPO"\n'
-            '_CMUX_PR_POLL_INTERVAL=10\n'
+            'cd "$PROGRAMA_TEST_REPO"\n'
+            '_PROGRAMA_PR_POLL_INTERVAL=10\n'
             '_cmux_ports_kick\n'
             '_cmux_prompt_entry\n'
             'sleep 1\n'
@@ -278,8 +278,8 @@ def _shell_command(kind: str, scenario: str) -> str:
             '_cmux_cleanup\n'
         ),
         "preexec_preserves_pr_cache": (
-            'cd "$CMUX_TEST_REPO"\n'
-            '_CMUX_PR_POLL_INTERVAL=10\n'
+            'cd "$PROGRAMA_TEST_REPO"\n'
+            '_PROGRAMA_PR_POLL_INTERVAL=10\n'
             '_cmux_prompt_entry\n'
             'sleep 1\n'
             '_cmux_regular_command_entry\n'
@@ -292,8 +292,8 @@ def _shell_command(kind: str, scenario: str) -> str:
     if kind == "zsh":
         return textwrap.dedent(
             f"""\
-            source "$CMUX_TEST_SCRIPT"
-            _cmux_send() {{ print -r -- "$1" >> "$CMUX_TEST_SEND_LOG"; }}
+            source "$PROGRAMA_TEST_SCRIPT"
+            _cmux_send() {{ print -r -- "$1" >> "$PROGRAMA_TEST_SEND_LOG"; }}
             _cmux_prompt_entry() {{ _cmux_precmd; }}
             _cmux_nested_shell_entry() {{ _cmux_preexec zsh; }}
             _cmux_regular_command_entry() {{ _cmux_preexec "echo hi"; }}
@@ -304,8 +304,8 @@ def _shell_command(kind: str, scenario: str) -> str:
     if kind == "bash":
         return textwrap.dedent(
             f"""\
-            source "$CMUX_TEST_SCRIPT"
-            _cmux_send() {{ printf '%s\\n' "$1" >> "$CMUX_TEST_SEND_LOG"; }}
+            source "$PROGRAMA_TEST_SCRIPT"
+            _cmux_send() {{ printf '%s\\n' "$1" >> "$PROGRAMA_TEST_SEND_LOG"; }}
             _cmux_prompt_entry() {{ _cmux_prompt_command; }}
             _cmux_nested_shell_entry() {{ _cmux_bash_preexec_hook bash; }}
             _cmux_regular_command_entry() {{ _cmux_bash_preexec_hook "echo hi"; }}
@@ -344,7 +344,7 @@ def _run_case(base: Path, *, shell: str, shell_args: list[str], script: Path, sc
     bindir = base / "bin"
     repo = base / "repo"
     repo_git = repo / ".git"
-    socket_path = base / "cmux.sock"
+    socket_path = base / "programa.sock"
     send_log = base / f"{shell}-{scenario}-send.log"
     gh_count_file = base / f"{shell}-{scenario}-gh-count.txt"
     gh_args_log = base / f"{shell}-{scenario}-gh-args.log"
@@ -360,18 +360,18 @@ def _run_case(base: Path, *, shell: str, shell_args: list[str], script: Path, sc
 
     env = dict(os.environ)
     env["PATH"] = f"{bindir}:{env.get('PATH', '')}"
-    env["CMUX_SOCKET_PATH"] = str(socket_path)
-    env["CMUX_TAB_ID"] = "00000000-0000-0000-0000-000000000001"
-    env["CMUX_PANEL_ID"] = "00000000-0000-0000-0000-000000000002"
-    env["CMUX_TEST_SCRIPT"] = str(script)
-    env["CMUX_TEST_REPO"] = str(repo)
-    env["CMUX_TEST_SEND_LOG"] = str(send_log)
-    env["CMUX_TEST_GH_COUNT_FILE"] = str(gh_count_file)
-    env["CMUX_TEST_GH_ARGS_LOG"] = str(gh_args_log)
-    env["CMUX_TEST_GH_PID_FILE"] = str(gh_pid_file)
-    env["CMUX_TEST_SCENARIO"] = scenario
-    env["CMUX_TEST_HEAD_FILE"] = str(head_file)
-    env["CMUX_TEST_HANG_SECONDS"] = "4"
+    env["PROGRAMA_SOCKET_PATH"] = str(socket_path)
+    env["PROGRAMA_TAB_ID"] = "00000000-0000-0000-0000-000000000001"
+    env["PROGRAMA_PANEL_ID"] = "00000000-0000-0000-0000-000000000002"
+    env["PROGRAMA_TEST_SCRIPT"] = str(script)
+    env["PROGRAMA_TEST_REPO"] = str(repo)
+    env["PROGRAMA_TEST_SEND_LOG"] = str(send_log)
+    env["PROGRAMA_TEST_GH_COUNT_FILE"] = str(gh_count_file)
+    env["PROGRAMA_TEST_GH_ARGS_LOG"] = str(gh_args_log)
+    env["PROGRAMA_TEST_GH_PID_FILE"] = str(gh_pid_file)
+    env["PROGRAMA_TEST_SCENARIO"] = scenario
+    env["PROGRAMA_TEST_HEAD_FILE"] = str(head_file)
+    env["PROGRAMA_TEST_HANG_SECONDS"] = "4"
 
     with BoundUnixSocket(socket_path):
         result = subprocess.run(

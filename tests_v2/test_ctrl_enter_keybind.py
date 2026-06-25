@@ -29,24 +29,24 @@ def infer_app_name_for_osascript(socket_path: str) -> str:
     Infer the app display name from the socket path.
 
     Examples:
-      - /tmp/cmux-debug.sock          -> "cmux DEV"
-      - /tmp/cmux-debug-foo.sock      -> "cmux DEV foo"
-      - ~/Library/Application Support/cmux/cmux.sock -> "cmux"
-      - /tmp/cmux-foo.sock            -> "cmux foo"
+      - /tmp/programa-debug.sock          -> "programa DEV"
+      - /tmp/programa-debug-foo.sock      -> "programa DEV foo"
+      - ~/Library/Application Support/programa/programa.sock -> "programa"
+      - /tmp/programa-foo.sock            -> "programa foo"
     """
     base = Path(socket_path).name
-    if base.startswith("cmux-debug") and base.endswith(".sock"):
-        suffix = base[len("cmux-debug") : -len(".sock")]
+    if base.startswith("programa-debug") and base.endswith(".sock"):
+        suffix = base[len("programa-debug") : -len(".sock")]
         if suffix.startswith("-") and suffix[1:]:
-            return f"cmux DEV {suffix[1:]}"
-        return "cmux DEV"
-    if base.startswith("cmux") and base.endswith(".sock"):
-        suffix = base[len("cmux") : -len(".sock")]
+            return f"programa DEV {suffix[1:]}"
+        return "programa DEV"
+    if base.startswith("programa") and base.endswith(".sock"):
+        suffix = base[len("programa") : -len(".sock")]
         if suffix.startswith("-") and suffix[1:]:
-            return f"cmux {suffix[1:]}"
-        return "cmux"
+            return f"programa {suffix[1:]}"
+        return "programa"
     # Fallback: tests usually run against Debug builds.
-    return "cmux DEV"
+    return "programa DEV"
 
 
 def run_osascript(script: str) -> None:

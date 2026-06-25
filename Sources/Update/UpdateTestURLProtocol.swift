@@ -73,8 +73,8 @@ final class UpdateTestURLProtocol: URLProtocol {
 
     private static func appcastData() -> Data {
         let env = ProcessInfo.processInfo.environment
-        let mode = env["CMUX_UI_TEST_FEED_MODE"] ?? "available"
-        let version = env["CMUX_UI_TEST_UPDATE_VERSION"] ?? "9.9.9"
+        let mode = env["PROGRAMA_UI_TEST_FEED_MODE"] ?? "available"
+        let version = env["PROGRAMA_UI_TEST_UPDATE_VERSION"] ?? "9.9.9"
         let updateURL = "https://\(host)\(updatePath)"
         let updateLength = updateArchiveData().count
 

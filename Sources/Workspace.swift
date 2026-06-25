@@ -1916,7 +1916,7 @@ enum RemoteLoopbackHTTPResponseRewriter {
 private final class WorkspaceRemoteDaemonProxyTunnel {
     private final class ProxySession {
         private static let maxHandshakeBytes = 64 * 1024
-        private static let remoteLoopbackProxyAliasHost = "cmux-loopback.localtest.me"
+        private static let remoteLoopbackProxyAliasHost = "programa-loopback.localtest.me"
 
         private enum HandshakeProtocol {
             case undecided
@@ -2798,7 +2798,7 @@ private final class WorkspaceRemoteCLIRelayServer {
         private let relayToken: Data
         private let queue: DispatchQueue
         private let onClose: () -> Void
-        private let challengeProtocol = "cmux-relay-auth"
+        private let challengeProtocol = "programa-relay-auth"
         private let challengeVersion = 1
         private let minimumFailureDelay: TimeInterval = 0.05
         private let maximumFrameBytes = 16 * 1024
@@ -3953,7 +3953,7 @@ final class WorkspaceRemoteSessionController {
         bootstrapRemoteTTYFetchInFlight = true
         defer { bootstrapRemoteTTYFetchInFlight = false }
 
-        let command = "sh -c \(Self.shellSingleQuoted("tty_path=\"$HOME/.cmux/relay/\(relayPort).tty\"; if [ -r \"$tty_path\" ]; then cat \"$tty_path\"; fi"))"
+        let command = "sh -c \(Self.shellSingleQuoted("tty_path=\"$HOME/.programa/relay/\(relayPort).tty\"; if [ -r \"$tty_path\" ]; then cat \"$tty_path\"; fi"))"
         do {
             let result = try sshExec(
                 arguments: sshCommonArguments(batchMode: true) + [configuration.destination, command],
@@ -4058,9 +4058,9 @@ final class WorkspaceRemoteSessionController {
         _ = try? sshExec(arguments: arguments, timeout: 4)
     }
 
-    private static let remotePlatformProbeOSMarker = "__CMUX_REMOTE_OS__="
-    private static let remotePlatformProbeArchMarker = "__CMUX_REMOTE_ARCH__="
-    private static let remotePlatformProbeExistsMarker = "__CMUX_REMOTE_EXISTS__="
+    private static let remotePlatformProbeOSMarker = "__PROGRAMA_REMOTE_OS__="
+    private static let remotePlatformProbeArchMarker = "__PROGRAMA_REMOTE_ARCH__="
+    private static let remotePlatformProbeExistsMarker = "__PROGRAMA_REMOTE_EXISTS__="
     private static let bootstrapRemoteTTYRetryDelay: TimeInterval = 0.5
     private static let bootstrapRemoteTTYRetryLimit = 8
 
@@ -4395,11 +4395,11 @@ final class WorkspaceRemoteSessionController {
     static func remoteRelayMetadataCleanupScript(relayPort: Int) -> String {
         """
         relay_socket='127.0.0.1:\(relayPort)'
-        socket_addr_file="$HOME/.cmux/socket_addr"
+        socket_addr_file="$HOME/.programa/socket_addr"
         if [ -r "$socket_addr_file" ] && [ "$(tr -d '\\r\\n' < "$socket_addr_file")" = "$relay_socket" ]; then
           rm -f "$socket_addr_file"
         fi
-        rm -f "$HOME/.cmux/relay/\(relayPort).auth" "$HOME/.cmux/relay/\(relayPort).daemon_path" "$HOME/.cmux/relay/\(relayPort).tty"
+        rm -f "$HOME/.programa/relay/\(relayPort).auth" "$HOME/.programa/relay/\(relayPort).daemon_path" "$HOME/.programa/relay/\(relayPort).tty"
         """
     }
 
@@ -4419,7 +4419,7 @@ final class WorkspaceRemoteSessionController {
           armv7l) cmux_go_arch=arm ;;
           *) exit 71 ;;
         esac
-        cmux_remote_path="$HOME/.cmux/bin/cmuxd-remote/\(version)/${cmux_go_os}-${cmux_go_arch}/cmuxd-remote"
+        cmux_remote_path="$HOME/.programa/bin/programad-remote/\(version)/${cmux_go_os}-${cmux_go_arch}/programad-remote"
         if [ -x "$cmux_remote_path" ]; then
           printf '%syes\\n' '\(Self.remotePlatformProbeExistsMarker)'
         else
@@ -4503,7 +4503,7 @@ final class WorkspaceRemoteSessionController {
         try remoteDaemonCacheRoot(fileManager: fileManager)
             .appendingPathComponent(version, isDirectory: true)
             .appendingPathComponent("\(goOS)-\(goArch)", isDirectory: true)
-            .appendingPathComponent("cmuxd-remote", isDirectory: false)
+            .appendingPathComponent("programad-remote", isDirectory: false)
     }
 
     private static func sha256Hex(forFile url: URL) throws -> String {
@@ -4513,12 +4513,12 @@ final class WorkspaceRemoteSessionController {
     }
 
     private static func allowLocalDaemonBuildFallback(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        environment["CMUX_REMOTE_DAEMON_ALLOW_LOCAL_BUILD"] == "1"
+        environment["PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD"] == "1"
     }
 
     private static func explicitRemoteDaemonBinaryURL(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
         guard allowLocalDaemonBuildFallback(environment: environment) else { return nil }
-        guard let path = environment["CMUX_REMOTE_DAEMON_BINARY"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let path = environment["PROGRAMA_REMOTE_DAEMON_BINARY"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               !path.isEmpty else {
             return nil
         }
@@ -4527,15 +4527,15 @@ final class WorkspaceRemoteSessionController {
 
     private static func versionedRemoteDaemonBuildURL(goOS: String, goArch: String, version: String) -> URL {
         URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("cmux-remote-daemon-build", isDirectory: true)
+            .appendingPathComponent("programa-remote-daemon-build", isDirectory: true)
             .appendingPathComponent(version, isDirectory: true)
             .appendingPathComponent("\(goOS)-\(goArch)", isDirectory: true)
-            .appendingPathComponent("cmuxd-remote", isDirectory: false)
+            .appendingPathComponent("programad-remote", isDirectory: false)
     }
 
     /// Fetch the live manifest JSON from the release, returning nil on any failure.
     private static func fetchRemoteManifestLocked(releaseURL: String, version: String) -> WorkspaceRemoteDaemonManifest? {
-        guard let manifestURL = URL(string: "\(releaseURL)/cmuxd-remote-manifest.json") else { return nil }
+        guard let manifestURL = URL(string: "\(releaseURL)/programad-remote-manifest.json") else { return nil }
         let request = NSMutableURLRequest(url: manifestURL)
         request.timeoutInterval = 15
         request.setValue("cmux/\(version)", forHTTPHeaderField: "User-Agent")
@@ -4656,13 +4656,13 @@ final class WorkspaceRemoteSessionController {
 
         guard Self.allowLocalDaemonBuildFallback() else {
             throw NSError(domain: "cmux.remote.daemon", code: 20, userInfo: [
-                NSLocalizedDescriptionKey: "this build does not include a verified cmuxd-remote manifest for \(goOS)-\(goArch). Use a release/nightly build, or set CMUX_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 for a dev-only fallback.",
+                NSLocalizedDescriptionKey: "this build does not include a verified programad-remote manifest for \(goOS)-\(goArch). Use a release/nightly build, or set PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 for a dev-only fallback.",
             ])
         }
 
         guard let repoRoot = Self.findRepoRoot() else {
             throw NSError(domain: "cmux.remote.daemon", code: 20, userInfo: [
-                NSLocalizedDescriptionKey: "cannot locate cmux repo root for dev-only cmuxd-remote build fallback",
+                NSLocalizedDescriptionKey: "cannot locate cmux repo root for dev-only programad-remote build fallback",
             ])
         }
         let daemonRoot = repoRoot.appendingPathComponent("daemon/remote", isDirectory: true)
@@ -4674,7 +4674,7 @@ final class WorkspaceRemoteSessionController {
         }
         guard let goBinary = Self.which("go") else {
             throw NSError(domain: "cmux.remote.daemon", code: 22, userInfo: [
-                NSLocalizedDescriptionKey: "go is required for the dev-only cmuxd-remote build fallback",
+                NSLocalizedDescriptionKey: "go is required for the dev-only programad-remote build fallback",
             ])
         }
 
@@ -4688,7 +4688,7 @@ final class WorkspaceRemoteSessionController {
         let ldflags = "-s -w -X main.version=\(version)"
         let result = try runProcess(
             executable: goBinary,
-            arguments: ["build", "-trimpath", "-buildvcs=false", "-ldflags", ldflags, "-o", output.path, "./cmd/cmuxd-remote"],
+            arguments: ["build", "-trimpath", "-buildvcs=false", "-ldflags", ldflags, "-o", output.path, "./cmd/programad-remote"],
             environment: env,
             currentDirectory: daemonRoot,
             stdin: nil,
@@ -4697,12 +4697,12 @@ final class WorkspaceRemoteSessionController {
         guard result.status == 0 else {
             let detail = Self.bestErrorLine(stderr: result.stderr, stdout: result.stdout) ?? "go build failed with status \(result.status)"
             throw NSError(domain: "cmux.remote.daemon", code: 23, userInfo: [
-                NSLocalizedDescriptionKey: "failed to build cmuxd-remote: \(detail)",
+                NSLocalizedDescriptionKey: "failed to build programad-remote: \(detail)",
             ])
         }
         guard FileManager.default.isExecutableFile(atPath: output.path) else {
             throw NSError(domain: "cmux.remote.daemon", code: 24, userInfo: [
-                NSLocalizedDescriptionKey: "cmuxd-remote build output is not executable",
+                NSLocalizedDescriptionKey: "programad-remote build output is not executable",
             ])
         }
         debugLog("remote.build.output path=\(output.path)")
@@ -4747,7 +4747,7 @@ final class WorkspaceRemoteSessionController {
         guard scpResult.status == 0 else {
             let detail = Self.bestErrorLine(stderr: scpResult.stderr, stdout: scpResult.stdout) ?? "scp exited \(scpResult.status)"
             throw NSError(domain: "cmux.remote.daemon", code: 31, userInfo: [
-                NSLocalizedDescriptionKey: "failed to upload cmuxd-remote: \(detail)",
+                NSLocalizedDescriptionKey: "failed to upload programad-remote: \(detail)",
             ])
         }
 
@@ -4816,7 +4816,7 @@ final class WorkspaceRemoteSessionController {
     static func remoteDropPath(for fileURL: URL, uuid: UUID = UUID()) -> String {
         let extensionSuffix = fileURL.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowercasedSuffix = extensionSuffix.isEmpty ? "" : ".\(extensionSuffix.lowercased())"
-        return "/tmp/cmux-drop-\(uuid.uuidString.lowercased())\(lowercasedSuffix)"
+        return "/tmp/programa-drop-\(uuid.uuidString.lowercased())\(lowercasedSuffix)"
     }
 
     private func cleanupUploadedRemotePaths(_ remotePaths: [String]) {
@@ -4872,7 +4872,7 @@ final class WorkspaceRemoteSessionController {
         let version = (resultObject["version"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let capabilities = (resultObject["capabilities"] as? [String]) ?? []
         return DaemonHello(
-            name: (name?.isEmpty == false ? name! : "cmuxd-remote"),
+            name: (name?.isEmpty == false ? name! : "programad-remote"),
             version: (version?.isEmpty == false ? version! : "dev"),
             capabilities: capabilities,
             remotePath: remotePath
@@ -4935,15 +4935,15 @@ final class WorkspaceRemoteSessionController {
         #!/bin/sh
         set -eu
 
-        daemon="$HOME/.cmux/bin/cmuxd-remote-current"
-        socket_path="${CMUX_SOCKET_PATH:-}"
-        if [ -z "$socket_path" ] && [ -r "$HOME/.cmux/socket_addr" ]; then
-          socket_path="$(tr -d '\\r\\n' < "$HOME/.cmux/socket_addr")"
+        daemon="$HOME/.programa/bin/programad-remote-current"
+        socket_path="${PROGRAMA_SOCKET_PATH:-}"
+        if [ -z "$socket_path" ] && [ -r "$HOME/.programa/socket_addr" ]; then
+          socket_path="$(tr -d '\\r\\n' < "$HOME/.programa/socket_addr")"
         fi
 
         if [ -n "$socket_path" ] && [ "${socket_path#/}" = "$socket_path" ] && [ "${socket_path#*:}" != "$socket_path" ]; then
           relay_port="${socket_path##*:}"
-          relay_map="$HOME/.cmux/relay/${relay_port}.daemon_path"
+          relay_map="$HOME/.programa/relay/${relay_port}.daemon_path"
           if [ -r "$relay_map" ]; then
             mapped_daemon="$(tr -d '\\r\\n' < "$relay_map")"
             if [ -n "$mapped_daemon" ] && [ -x "$mapped_daemon" ]; then
@@ -4959,14 +4959,14 @@ final class WorkspaceRemoteSessionController {
     static func remoteCLIWrapperInstallScript(daemonRemotePath: String) -> String {
         let trimmedRemotePath = daemonRemotePath.trimmingCharacters(in: .whitespacesAndNewlines)
         return """
-        mkdir -p "$HOME/.cmux/bin" "$HOME/.cmux/relay"
-        ln -sf "$HOME/\(trimmedRemotePath)" "$HOME/.cmux/bin/cmuxd-remote-current"
-        wrapper_tmp="$HOME/.cmux/bin/.cmux-wrapper.tmp.$$"
+        mkdir -p "$HOME/.programa/bin" "$HOME/.programa/relay"
+        ln -sf "$HOME/\(trimmedRemotePath)" "$HOME/.programa/bin/programad-remote-current"
+        wrapper_tmp="$HOME/.programa/bin/.programa-wrapper.tmp.$$"
         cat > "$wrapper_tmp" <<'CMUXWRAPPER'
         \(remoteCLIWrapperScript())
         CMUXWRAPPER
         chmod 755 "$wrapper_tmp"
-        mv -f "$wrapper_tmp" "$HOME/.cmux/bin/cmux"
+        mv -f "$wrapper_tmp" "$HOME/.programa/bin/programa"
         """
     }
 
@@ -4982,15 +4982,15 @@ final class WorkspaceRemoteSessionController {
         """
         return """
         umask 077
-        mkdir -p "$HOME/.cmux" "$HOME/.cmux/relay"
-        chmod 700 "$HOME/.cmux/relay"
+        mkdir -p "$HOME/.programa" "$HOME/.programa/relay"
+        chmod 700 "$HOME/.programa/relay"
         \(remoteCLIWrapperInstallScript(daemonRemotePath: trimmedRemotePath))
-        printf '%s' "$HOME/\(trimmedRemotePath)" > "$HOME/.cmux/relay/\(relayPort).daemon_path"
-        cat > "$HOME/.cmux/relay/\(relayPort).auth" <<'CMUXRELAYAUTH'
+        printf '%s' "$HOME/\(trimmedRemotePath)" > "$HOME/.programa/relay/\(relayPort).daemon_path"
+        cat > "$HOME/.programa/relay/\(relayPort).auth" <<'PROGRAMARELAYAUTH'
         \(authPayload)
-        CMUXRELAYAUTH
-        chmod 600 "$HOME/.cmux/relay/\(relayPort).auth"
-        printf '%s' '127.0.0.1:\(relayPort)' > "$HOME/.cmux/socket_addr"
+        PROGRAMARELAYAUTH
+        chmod 600 "$HOME/.programa/relay/\(relayPort).auth"
+        printf '%s' '127.0.0.1:\(relayPort)' > "$HOME/.programa/socket_addr"
         """
     }
 
@@ -5077,7 +5077,7 @@ final class WorkspaceRemoteSessionController {
     }
 
     private static func remoteDaemonPath(version: String, goOS: String, goArch: String) -> String {
-        ".cmux/bin/cmuxd-remote/\(version)/\(goOS)-\(goArch)/cmuxd-remote"
+        ".programa/bin/programad-remote/\(version)/\(goOS)-\(goArch)/programad-remote"
     }
 
     static func orphanedCMUXRemoteSSHPIDs(
@@ -5184,7 +5184,7 @@ final class WorkspaceRemoteSessionController {
         if trimmed.contains(" -N ") && trimmed.contains(" -R 127.0.0.1:") {
             return true
         }
-        if trimmed.contains("cmuxd-remote") && trimmed.contains(" serve --stdio") {
+        if trimmed.contains("programad-remote") && trimmed.contains(" serve --stdio") {
             return true
         }
         return false
@@ -5306,11 +5306,11 @@ final class WorkspaceRemoteSessionController {
             .deletingLastPathComponent() // repo root
         candidates.append(compileTimeRoot)
         let environment = ProcessInfo.processInfo.environment
-        if let envRoot = environment["CMUX_REMOTE_DAEMON_SOURCE_ROOT"],
+        if let envRoot = environment["PROGRAMA_REMOTE_DAEMON_SOURCE_ROOT"],
            !envRoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             candidates.append(URL(fileURLWithPath: envRoot, isDirectory: true))
         }
-        if let envRoot = environment["CMUXTERM_REPO_ROOT"],
+        if let envRoot = environment["PROGRAMATERM_REPO_ROOT"],
            !envRoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             candidates.append(URL(fileURLWithPath: envRoot, isDirectory: true))
         }
@@ -5811,7 +5811,7 @@ final class WorkspaceRemoteSessionController {
         fi
 
         if [ "$cmux_used_ss" -eq 0 ] && command -v lsof >/dev/null 2>&1 && [ -n "$cmux_tty_csv" ]; then
-          cmux_tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t cmux-ports)"
+          cmux_tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t programa-ports)"
           trap 'rm -rf "$cmux_tmpdir"' EXIT INT TERM
           cmux_pid_tty_map="$cmux_tmpdir/pid_tty"
           ps -t "$cmux_tty_csv" -o pid=,tty= 2>/dev/null | awk '
@@ -6500,7 +6500,7 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var currentDirectory: String
     private(set) var preferredBrowserProfileID: UUID?
 
-    /// Ordinal for CMUX_PORT range assignment (monotonically increasing per app session)
+    /// Ordinal for PROGRAMA_PORT range assignment (monotonically increasing per app session)
     var portOrdinal: Int = 0
 
     /// The bonsplit controller managing the split panes for this workspace

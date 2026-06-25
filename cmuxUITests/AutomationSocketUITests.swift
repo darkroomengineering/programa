@@ -11,7 +11,7 @@ final class AutomationSocketUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        socketPath = "/tmp/cmux-debug-\(UUID().uuidString).sock"
+        socketPath = "/tmp/programa-debug-\(UUID().uuidString).sock"
         resetSocketDefaults()
         removeSocketFile()
     }
@@ -48,11 +48,11 @@ final class AutomationSocketUITests: XCTestCase {
     private func configuredApp(mode: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-\(modeKey)", mode]
-        app.launchEnvironment["CMUX_SOCKET_PATH"] = socketPath
-        app.launchEnvironment["CMUX_UI_TEST_SOCKET_SANITY"] = "1"
+        app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        app.launchEnvironment["PROGRAMA_UI_TEST_SOCKET_SANITY"] = "1"
         // Debug launches require a tag outside reload.sh; provide one in UITests so CI
         // does not fail with "Application ... does not have a process ID".
-        app.launchEnvironment["CMUX_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         return app
     }
 

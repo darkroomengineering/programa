@@ -106,13 +106,13 @@ esac
             cmux,
             """#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\\n' "$*" >> "$FAKE_CMUX_LOG"
+printf '%s\\n' "$*" >> "$FAKE_PROGRAMA_LOG"
 url=""
 for arg in "$@"; do
   url="$arg"
 done
-if [[ -n "${FAKE_CMUX_FAIL_URLS:-}" ]]; then
-  IFS=',' read -r -a failures <<< "$FAKE_CMUX_FAIL_URLS"
+if [[ -n "${FAKE_PROGRAMA_FAIL_URLS:-}" ]]; then
+  IFS=',' read -r -a failures <<< "$FAKE_PROGRAMA_FAIL_URLS"
   for fail_url in "${failures[@]}"; do
     if [[ "$url" == "$fail_url" ]]; then
       exit 1
@@ -130,16 +130,16 @@ exit 0
                 target.write_text("<!doctype html><title>fixture</title>", encoding="utf-8")
 
         env = os.environ.copy()
-        env["CMUX_SOCKET_PATH"] = "/tmp/cmux-open-wrapper-test.sock"
-        env["CMUX_BUNDLE_ID"] = "com.darkroom.programa.debug.test"
-        env["CMUX_OPEN_WRAPPER_SYSTEM_OPEN"] = str(system_open)
-        env["CMUX_OPEN_WRAPPER_DEFAULTS"] = str(defaults)
+        env["PROGRAMA_SOCKET_PATH"] = "/tmp/programa-open-wrapper-test.sock"
+        env["PROGRAMA_BUNDLE_ID"] = "com.darkroom.programa.debug.test"
+        env["PROGRAMA_OPEN_WRAPPER_SYSTEM_OPEN"] = str(system_open)
+        env["PROGRAMA_OPEN_WRAPPER_DEFAULTS"] = str(defaults)
         env["FAKE_OPEN_LOG"] = str(open_log)
-        env["FAKE_CMUX_LOG"] = str(cmux_log)
+        env["FAKE_PROGRAMA_LOG"] = str(cmux_log)
         if python_bin is None:
-            env.pop("CMUX_OPEN_WRAPPER_PYTHON3", None)
+            env.pop("PROGRAMA_OPEN_WRAPPER_PYTHON3", None)
         else:
-            env["CMUX_OPEN_WRAPPER_PYTHON3"] = python_bin
+            env["PROGRAMA_OPEN_WRAPPER_PYTHON3"] = python_bin
 
         if intercept_setting is None:
             env.pop("FAKE_DEFAULTS_INTERCEPT_OPEN", None)
@@ -162,9 +162,9 @@ exit 0
             env["FAKE_DEFAULTS_EXTERNAL_PATTERNS"] = external_patterns
 
         if fail_urls:
-            env["FAKE_CMUX_FAIL_URLS"] = ",".join(fail_urls)
+            env["FAKE_PROGRAMA_FAIL_URLS"] = ",".join(fail_urls)
         else:
-            env.pop("FAKE_CMUX_FAIL_URLS", None)
+            env.pop("FAKE_PROGRAMA_FAIL_URLS", None)
 
         result = subprocess.run(
             ["/bin/bash", str(wrapper), *args],
@@ -422,7 +422,7 @@ def test_local_html_file_routes_to_cmux(failures: list[str]) -> None:
 
 
 def test_file_url_html_routes_to_cmux(failures: list[str]) -> None:
-    url = "file:///tmp/cmux-open-wrapper-fixture.html"
+    url = "file:///tmp/programa-open-wrapper-fixture.html"
     open_log, cmux_log, code, stderr = run_wrapper(
         args=[url],
         intercept_setting="1",
@@ -434,7 +434,7 @@ def test_file_url_html_routes_to_cmux(failures: list[str]) -> None:
 
 
 def test_file_url_html_routes_to_cmux_without_python_binary(failures: list[str]) -> None:
-    url = "file:///tmp/cmux-open-wrapper-fixture.html"
+    url = "file:///tmp/programa-open-wrapper-fixture.html"
     open_log, cmux_log, code, stderr = run_wrapper(
         args=[url],
         intercept_setting="1",
