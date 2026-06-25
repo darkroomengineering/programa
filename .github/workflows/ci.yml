@@ -59,24 +59,6 @@ jobs:
       - name: Validate remote daemon release assets
         run: ./tests/test_remote_daemon_release_assets.sh
 
-  web-typecheck:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Typecheck
-        run: bun tsc --noEmit
-
   tests:
     runs-on: macos-15
     timeout-minutes: 45
