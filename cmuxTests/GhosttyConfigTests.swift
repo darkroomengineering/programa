@@ -627,6 +627,33 @@ final class GhosttyConfigTests: XCTestCase {
     }
 }
 
+final class NSColorHexRoundTripTests: XCTestCase {
+    // These tests verify that NSColor(hex:)?.hexString() is lossless for every
+    // representable 24-bit colour.  With the old floor-truncation implementation
+    // Int(component * 255) the value 1/255 ≈ 0.003921 floors to 0, so
+    // "#010101" round-trips to "#000000" — the indicator of the colour-picker
+    // hue-drift bug (issue #8 / upstream cmux #6761).
+    func testHexRoundTripPreservesOneToneChannel() {
+        XCTAssertEqual(NSColor(hex: "#010101")?.hexString(), "#010101")
+    }
+
+    func testHexRoundTripPreservesDistinctRGBChannels() {
+        XCTAssertEqual(NSColor(hex: "#010203")?.hexString(), "#010203")
+    }
+
+    func testHexRoundTripPreservesMidGreyChannel() {
+        XCTAssertEqual(NSColor(hex: "#7F7F7F")?.hexString(), "#7F7F7F")
+    }
+
+    func testHexRoundTripPreservesWhite() {
+        XCTAssertEqual(NSColor(hex: "#FFFFFF")?.hexString(), "#FFFFFF")
+    }
+
+    func testHexRoundTripPreservesBlack() {
+        XCTAssertEqual(NSColor(hex: "#000000")?.hexString(), "#000000")
+    }
+}
+
 final class WorkspaceChromeThemeTests: XCTestCase {
     func testResolvedChromeColorsUsesLightGhosttyBackground() {
         guard let backgroundColor = NSColor(hex: "#FDF6E3") else {
