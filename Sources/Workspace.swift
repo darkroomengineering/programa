@@ -7644,10 +7644,18 @@ final class Workspace: Identifiable, ObservableObject {
         }
     }
 
-    func updatePanelShellActivityState(panelId: UUID, state: PanelShellActivityState) {
-        guard panels[panelId] != nil else { return }
+    /// Updates the shell-activity state for a panel.
+    ///
+    /// - Returns: `true` if the update was applied (panel exists and state changed),
+    ///   `false` if it was a no-op (panel absent or state unchanged).
+    ///   Callers that deduplicate reports MUST only record the state in their dedup
+    ///   dict when this returns `true`; recording on `false` would suppress the next
+    ///   identical report even though it was never actually applied.
+    @discardableResult
+    func updatePanelShellActivityState(panelId: UUID, state: PanelShellActivityState) -> Bool {
+        guard panels[panelId] != nil else { return false }
         let previousState = panelShellActivityStates[panelId] ?? .unknown
-        guard previousState != state else { return }
+        guard previousState != state else { return false }
         panelShellActivityStates[panelId] = state
 #if DEBUG
         dlog(
@@ -7655,6 +7663,7 @@ final class Workspace: Identifiable, ObservableObject {
             "panel=\(panelId.uuidString.prefix(5)) from=\(previousState.rawValue) to=\(state.rawValue)"
         )
 #endif
+        return true
     }
 
     func panelNeedsConfirmClose(panelId: UUID, fallbackNeedsConfirmClose: Bool) -> Bool {

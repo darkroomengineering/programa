@@ -2750,13 +2750,19 @@ class TabManager: ObservableObject {
         )
     }
 
+    /// Updates the shell-activity state for a surface.
+    ///
+    /// - Returns: `true` if the update was applied (workspace and panel both exist and
+    ///   state changed), `false` otherwise. Callers that deduplicate reports MUST only
+    ///   record the state in their dedup dict when this returns `true`.
+    @discardableResult
     func updateSurfaceShellActivity(
         tabId: UUID,
         surfaceId: UUID,
         state: Workspace.PanelShellActivityState
-    ) {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return }
-        tab.updatePanelShellActivityState(panelId: surfaceId, state: state)
+    ) -> Bool {
+        guard let tab = tabs.first(where: { $0.id == tabId }) else { return false }
+        return tab.updatePanelShellActivityState(panelId: surfaceId, state: state)
     }
 
     private func normalizeDirectory(_ directory: String) -> String {
