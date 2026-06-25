@@ -50,6 +50,9 @@ final class WindowTerminalHostView: NSView {
     private var sidebarDividerMissCount = 0
     private var trackingArea: NSTrackingArea?
     private var activeDividerCursorKind: DividerCursorKind?
+    // PERF: Cache split-divider regions to avoid recursive view-tree walk on every
+    // pointer event. Invalidated on any geometry change.
+    private var cachedDividerRegions: [DividerRegion]?
 #if DEBUG
     private var lastDragRouteSignature: String?
 #endif
@@ -63,6 +66,7 @@ final class WindowTerminalHostView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        cachedDividerRegions = nil
         if window == nil {
             clearActiveDividerCursor(restoreArrow: false)
         }
@@ -71,19 +75,21 @@ final class WindowTerminalHostView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        cachedDividerRegions = nil
         window?.invalidateCursorRects(for: self)
     }
 
     override func setFrameOrigin(_ newOrigin: NSPoint) {
         super.setFrameOrigin(newOrigin)
+        cachedDividerRegions = nil
         window?.invalidateCursorRects(for: self)
     }
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        guard let window, let rootView = window.contentView else { return }
-        var regions: [DividerRegion] = []
-        Self.collectSplitDividerRegions(in: rootView, into: &regions)
+        guard window != nil else { return }
+        // Warms the cache. Subsequent pointer events avoid the recursive walk.
+        let regions = dividerRegions()
         let expansion: CGFloat = 4
         for region in regions {
             var rectInHost = convert(region.rectInWindow, from: nil)
@@ -275,11 +281,33 @@ final class WindowTerminalHostView: NSView {
         }
     }
 
+    // PERF: Returns the cached divider regions, computing and caching on first call.
+    // The cache is invalidated by setFrameSize / setFrameOrigin / viewDidMoveToWindow.
+    // Do NOT call from non-pointer-event paths.
+    private func dividerRegions() -> [DividerRegion] {
+        if let cached = cachedDividerRegions { return cached }
+        guard let rootView = window?.contentView else {
+            cachedDividerRegions = []
+            return []
+        }
+        var regions: [DividerRegion] = []
+        Self.collectSplitDividerRegions(in: rootView, into: &regions)
+        cachedDividerRegions = regions
+        return regions
+    }
+
     private func splitDividerCursorKind(at point: NSPoint) -> DividerCursorKind? {
-        guard let window else { return nil }
+        guard window != nil else { return nil }
         let windowPoint = convert(point, to: nil)
-        guard let rootView = window.contentView else { return nil }
-        return Self.dividerCursorKind(at: windowPoint, in: rootView)
+        let expansion: CGFloat = 5
+        for region in dividerRegions() {
+            // Mirror the original dividerCursorKind expansion: expand in all directions.
+            let expanded = region.rectInWindow.insetBy(dx: -expansion, dy: -expansion)
+            if expanded.contains(windowPoint) {
+                return region.isVertical ? .vertical : .horizontal
+            }
+        }
+        return nil
     }
 
     static func hasSplitDivider(atScreenPoint screenPoint: NSPoint, in window: NSWindow) -> Bool {
