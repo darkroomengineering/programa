@@ -628,29 +628,39 @@ final class GhosttyConfigTests: XCTestCase {
 }
 
 final class NSColorHexRoundTripTests: XCTestCase {
-    // These tests verify that NSColor(hex:)?.hexString() is lossless for every
-    // representable 24-bit colour.  With the old floor-truncation implementation
-    // Int(component * 255) the value 1/255 ≈ 0.003921 floors to 0, so
-    // "#010101" round-trips to "#000000" — the indicator of the colour-picker
-    // hue-drift bug (issue #8 / upstream cmux #6761).
-    func testHexRoundTripPreservesOneToneChannel() {
-        XCTAssertEqual(NSColor(hex: "#010101")?.hexString(), "#010101")
+    // hexString() must be lossless for sRGB inputs. The old implementation used
+    // floor truncation (Int(component * 255)), so 127/255 ≈ 0.498 → 126.999
+    // floored to 126 (#7E7E7E instead of #7F7F7F) and 1/255 floored to 0
+    // (#000000 instead of #010101). That per-channel precision loss is what makes
+    // the colour-picker hue drift while dragging (issue #8 / upstream cmux #6761).
+    //
+    // Colours are built directly in sRGB (the space hexString() reads in) so the
+    // floor error is exercised. NSColor(hex:) instead builds a deviceRGB colour
+    // whose device→sRGB conversion nudges these values past the floor threshold,
+    // masking the bug — which is why the original hex-based tests passed even
+    // against the broken code. These FAIL on floor truncation, PASS with .rounded().
+    private func srgb(_ r: Int, _ g: Int, _ b: Int) -> NSColor {
+        NSColor(srgbRed: CGFloat(r) / 255.0, green: CGFloat(g) / 255.0, blue: CGFloat(b) / 255.0, alpha: 1.0)
     }
 
-    func testHexRoundTripPreservesDistinctRGBChannels() {
-        XCTAssertEqual(NSColor(hex: "#010203")?.hexString(), "#010203")
+    func testHexStringRoundsMidGreyChannel() {
+        XCTAssertEqual(srgb(127, 127, 127).hexString(), "#7F7F7F")
     }
 
-    func testHexRoundTripPreservesMidGreyChannel() {
-        XCTAssertEqual(NSColor(hex: "#7F7F7F")?.hexString(), "#7F7F7F")
+    func testHexStringRoundsOneToneChannel() {
+        XCTAssertEqual(srgb(1, 1, 1).hexString(), "#010101")
     }
 
-    func testHexRoundTripPreservesWhite() {
-        XCTAssertEqual(NSColor(hex: "#FFFFFF")?.hexString(), "#FFFFFF")
+    func testHexStringRoundsDistinctChannels() {
+        XCTAssertEqual(srgb(1, 2, 3).hexString(), "#010203")
     }
 
-    func testHexRoundTripPreservesBlack() {
-        XCTAssertEqual(NSColor(hex: "#000000")?.hexString(), "#000000")
+    func testHexStringWhite() {
+        XCTAssertEqual(srgb(255, 255, 255).hexString(), "#FFFFFF")
+    }
+
+    func testHexStringBlack() {
+        XCTAssertEqual(srgb(0, 0, 0).hexString(), "#000000")
     }
 }
 
