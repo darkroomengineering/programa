@@ -458,6 +458,13 @@ class TerminalController {
             }
         }
 
+        /// Returns `true` when the incoming state differs from the last *applied* state,
+        /// meaning the report is worth dispatching to the main thread.
+        ///
+        /// This method only reads the dedup dict; it does NOT record the new state.
+        /// Call `recordShellActivity` after the update is confirmed applied on the main
+        /// thread so that a failed apply (panel absent) never suppresses the next
+        /// identical report.
         func shouldPublishShellActivity(
             workspaceId: UUID,
             panelId: UUID,
@@ -465,14 +472,23 @@ class TerminalController {
         ) -> Bool {
             let key = SocketSurfaceKey(workspaceId: workspaceId, panelId: panelId)
             return queue.sync {
-                if lastReportedShellStates[key] == state {
-                    return false
+                lastReportedShellStates[key] != state
+            }
+        }
+
+        /// Records that the given state was successfully applied to the given panel.
+        /// Must be called only when `updateSurfaceShellActivity` returned `true`.
+        func recordShellActivity(
+            workspaceId: UUID,
+            panelId: UUID,
+            state: Workspace.PanelShellActivityState
+        ) {
+            let key = SocketSurfaceKey(workspaceId: workspaceId, panelId: panelId)
+            queue.async {
+                if self.lastReportedShellStates.count >= self.maxTrackedShellStates {
+                    self.lastReportedShellStates.removeAll(keepingCapacity: true)
                 }
-                if lastReportedShellStates.count >= maxTrackedShellStates {
-                    lastReportedShellStates.removeAll(keepingCapacity: true)
-                }
-                lastReportedShellStates[key] = state
-                return true
+                self.lastReportedShellStates[key] = state
             }
         }
     }
@@ -15366,6 +15382,10 @@ class TerminalController {
         }
 
         if let scope = Self.explicitSocketScope(options: parsed.options) {
+            // Fast-path check: skip dispatch if we already know this state is current.
+            // Note: we only READ here, not record. Recording happens after the update is
+            // confirmed applied on the main thread, preventing a race where the panel
+            // isn't registered yet and the dedup would suppress subsequent reports.
             guard Self.socketFastPathState.shouldPublishShellActivity(
                 workspaceId: scope.workspaceId,
                 panelId: scope.panelId,
@@ -15373,9 +15393,24 @@ class TerminalController {
             ) else {
                 return "OK"
             }
+            let fastPathState = Self.socketFastPathState
             DispatchQueue.main.async {
                 guard let tabManager = AppDelegate.shared?.tabManagerFor(tabId: scope.workspaceId) else { return }
-                tabManager.updateSurfaceShellActivity(tabId: scope.workspaceId, surfaceId: scope.panelId, state: state)
+                let applied = tabManager.updateSurfaceShellActivity(
+                    tabId: scope.workspaceId,
+                    surfaceId: scope.panelId,
+                    state: state
+                )
+                // Only record the state in the dedup dict when the update actually
+                // applied (panel was registered). If the panel was absent, we do NOT
+                // record, so the next identical report will not be suppressed.
+                if applied {
+                    fastPathState.recordShellActivity(
+                        workspaceId: scope.workspaceId,
+                        panelId: scope.panelId,
+                        state: state
+                    )
+                }
             }
             return "OK"
         }
