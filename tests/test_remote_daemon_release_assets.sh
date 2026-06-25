@@ -12,12 +12,12 @@ trap 'rm -rf "$OUTPUT_DIR"' EXIT
   --output-dir "$OUTPUT_DIR" >/dev/null
 
 for asset in \
-  cmuxd-remote-darwin-arm64 \
-  cmuxd-remote-darwin-amd64 \
-  cmuxd-remote-linux-arm64 \
-  cmuxd-remote-linux-amd64 \
-  cmuxd-remote-checksums.txt \
-  cmuxd-remote-manifest.json
+  programad-remote-darwin-arm64 \
+  programad-remote-darwin-amd64 \
+  programad-remote-linux-arm64 \
+  programad-remote-linux-amd64 \
+  programad-remote-checksums.txt \
+  programad-remote-manifest.json
 do
   if [[ ! -f "$OUTPUT_DIR/$asset" ]]; then
     echo "FAIL: missing asset $asset" >&2
@@ -25,7 +25,7 @@ do
   fi
 done
 
-python3 - <<'PY' "$OUTPUT_DIR/cmuxd-remote-manifest.json" "$OUTPUT_DIR/cmuxd-remote-checksums.txt"
+python3 - <<'PY' "$OUTPUT_DIR/programad-remote-manifest.json" "$OUTPUT_DIR/programad-remote-checksums.txt"
 import json
 import sys
 from pathlib import Path
@@ -48,7 +48,7 @@ if manifest["appVersion"] != "0.62.0-test":
     raise SystemExit(f"FAIL: unexpected appVersion {manifest['appVersion']}")
 if manifest["releaseTag"] != "v0.62.0-test":
     raise SystemExit(f"FAIL: unexpected releaseTag {manifest['releaseTag']}")
-if not manifest["checksumsURL"].endswith("/cmuxd-remote-checksums.txt"):
+if not manifest["checksumsURL"].endswith("/programad-remote-checksums.txt"):
     raise SystemExit(f"FAIL: unexpected checksumsURL {manifest['checksumsURL']}")
 
 checksum_lines = [line for line in checksums_path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -78,12 +78,12 @@ trap 'rm -rf "$OUTPUT_DIR" "$SUFFIX_DIR"' EXIT
   --asset-suffix "123456" >/dev/null
 
 for asset in \
-  cmuxd-remote-darwin-arm64-123456 \
-  cmuxd-remote-darwin-amd64-123456 \
-  cmuxd-remote-linux-arm64-123456 \
-  cmuxd-remote-linux-amd64-123456 \
-  cmuxd-remote-checksums-123456.txt \
-  cmuxd-remote-manifest-123456.json
+  programad-remote-darwin-arm64-123456 \
+  programad-remote-darwin-amd64-123456 \
+  programad-remote-linux-arm64-123456 \
+  programad-remote-linux-amd64-123456 \
+  programad-remote-checksums-123456.txt \
+  programad-remote-manifest-123456.json
 do
   if [[ ! -f "$SUFFIX_DIR/$asset" ]]; then
     echo "FAIL: missing suffixed asset $asset" >&2
@@ -91,7 +91,7 @@ do
   fi
 done
 
-python3 - <<'PY' "$SUFFIX_DIR/cmuxd-remote-manifest-123456.json"
+python3 - <<'PY' "$SUFFIX_DIR/programad-remote-manifest-123456.json"
 import json
 import sys
 from pathlib import Path

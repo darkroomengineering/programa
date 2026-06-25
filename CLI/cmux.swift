@@ -5128,14 +5128,14 @@ struct CMUXCLI {
                 .appendingPathComponent("cmux-remote-daemons", isDirectory: true)
                 .appendingPathComponent(version, isDirectory: true)
                 .appendingPathComponent("\(goOS)-\(goArch)", isDirectory: true)
-                .appendingPathComponent("cmuxd-remote", isDirectory: false)
+                .appendingPathComponent("programad-remote", isDirectory: false)
         }
         return root
             .appendingPathComponent("programa", isDirectory: true)
             .appendingPathComponent("remote-daemons", isDirectory: true)
             .appendingPathComponent(version, isDirectory: true)
             .appendingPathComponent("\(goOS)-\(goArch)", isDirectory: true)
-            .appendingPathComponent("cmuxd-remote", isDirectory: false)
+            .appendingPathComponent("programad-remote", isDirectory: false)
     }
 
     private func sha256Hex(forFile url: URL) throws -> String {
@@ -7185,7 +7185,7 @@ struct CMUXCLI {
             return """
             Usage: cmux remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]
 
-            Show the embedded cmuxd-remote release manifest, local cache status, checksum verification state,
+            Show the embedded programad-remote release manifest, local cache status, checksum verification state,
             and the GitHub attestation verification command for a target platform.
 
             Example:

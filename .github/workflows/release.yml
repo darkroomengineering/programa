@@ -211,7 +211,7 @@ jobs:
             --release-tag "$GITHUB_REF_NAME" \
             --repo "darkroomengineering/programa" \
             --output-dir "remote-daemon-assets"
-          MANIFEST_JSON="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8")), separators=(",",":")))' remote-daemon-assets/cmuxd-remote-manifest.json)"
+          MANIFEST_JSON="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8")), separators=(",",":")))' remote-daemon-assets/programad-remote-manifest.json)"
           plutil -remove CMUXRemoteDaemonManifestJSON "$APP_PLIST" >/dev/null 2>&1 || true
           plutil -insert CMUXRemoteDaemonManifestJSON -string "$MANIFEST_JSON" "$APP_PLIST"
 
@@ -365,12 +365,12 @@ jobs:
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: |
-            remote-daemon-assets/cmuxd-remote-darwin-arm64
-            remote-daemon-assets/cmuxd-remote-darwin-amd64
-            remote-daemon-assets/cmuxd-remote-linux-arm64
-            remote-daemon-assets/cmuxd-remote-linux-amd64
-            remote-daemon-assets/cmuxd-remote-checksums.txt
-            remote-daemon-assets/cmuxd-remote-manifest.json
+            remote-daemon-assets/programad-remote-darwin-arm64
+            remote-daemon-assets/programad-remote-darwin-amd64
+            remote-daemon-assets/programad-remote-linux-arm64
+            remote-daemon-assets/programad-remote-linux-amd64
+            remote-daemon-assets/programad-remote-checksums.txt
+            remote-daemon-assets/programad-remote-manifest.json
 
       - name: Upload build artifacts (dry-run)
         if: steps.guard_release_assets.outputs.skip_upload != 'true' && github.event_name == 'workflow_dispatch'
@@ -380,7 +380,7 @@ jobs:
           path: |
             cmux-macos.dmg
             appcast.xml
-            remote-daemon-assets/cmuxd-remote-*
+            remote-daemon-assets/programad-remote-*
           if-no-files-found: error
 
       - name: Upload release asset
@@ -390,12 +390,12 @@ jobs:
           files: |
             cmux-macos.dmg
             appcast.xml
-            remote-daemon-assets/cmuxd-remote-darwin-arm64
-            remote-daemon-assets/cmuxd-remote-darwin-amd64
-            remote-daemon-assets/cmuxd-remote-linux-arm64
-            remote-daemon-assets/cmuxd-remote-linux-amd64
-            remote-daemon-assets/cmuxd-remote-checksums.txt
-            remote-daemon-assets/cmuxd-remote-manifest.json
+            remote-daemon-assets/programad-remote-darwin-arm64
+            remote-daemon-assets/programad-remote-darwin-amd64
+            remote-daemon-assets/programad-remote-linux-arm64
+            remote-daemon-assets/programad-remote-linux-amd64
+            remote-daemon-assets/programad-remote-checksums.txt
+            remote-daemon-assets/programad-remote-manifest.json
           generate_release_notes: true
           overwrite_files: false
 
