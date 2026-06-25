@@ -27,7 +27,7 @@ echo "Current: MARKETING_VERSION=$CURRENT_MARKETING, CURRENT_PROJECT_VERSION=$CU
 LATEST_RELEASE_BUILD="$(
   curl -fsSL --max-time 8 https://github.com/darkroomengineering/programa/releases/latest/download/appcast.xml 2>/dev/null \
     | sed -n 's#.*<sparkle:version>\([0-9][0-9]*\)</sparkle:version>.*#\1#p' \
-    | head -n1
+    | head -n1 || true
 )"
 if [[ "$LATEST_RELEASE_BUILD" =~ ^[0-9]+$ ]]; then
   if (( LATEST_RELEASE_BUILD > MIN_BUILD )); then
