@@ -303,8 +303,8 @@ jobs:
             exit 1
           fi
           APP_PATH="build-universal/Build/Products/Release/Programa.app"
-          ZIP_SUBMIT="cmux-notary.zip"
-          DMG_RELEASE="cmux-macos.dmg"
+          ZIP_SUBMIT="programa-notary.zip"
+          DMG_RELEASE="programa-macos.dmg"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_SUBMIT"
           APP_SUBMIT_JSON="$(xcrun notarytool submit "$ZIP_SUBMIT" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait --output-format json)"
           APP_SUBMIT_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$APP_SUBMIT_JSON")"
@@ -323,7 +323,7 @@ jobs:
             --identity="$APPLE_SIGNING_IDENTITY" \
             "$APP_PATH" \
             ./
-          mv ./cmux*.dmg "$DMG_RELEASE"
+          mv ./programa*.dmg "$DMG_RELEASE"
           DMG_SUBMIT_JSON="$(xcrun notarytool submit "$DMG_RELEASE" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait --output-format json)"
           DMG_SUBMIT_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$DMG_SUBMIT_JSON")"
           DMG_STATUS="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$DMG_SUBMIT_JSON")"
@@ -358,7 +358,7 @@ jobs:
             echo "Missing SPARKLE_PRIVATE_KEY secret" >&2
             exit 1
           fi
-          ./scripts/sparkle_generate_appcast.sh cmux-macos.dmg "$GITHUB_REF_NAME" appcast.xml
+          ./scripts/sparkle_generate_appcast.sh programa-macos.dmg "$GITHUB_REF_NAME" appcast.xml
 
       - name: Attest remote daemon release assets
         if: steps.guard_release_assets.outputs.skip_all != 'true'
@@ -378,7 +378,7 @@ jobs:
         with:
           name: cmux-release-dry-run
           path: |
-            cmux-macos.dmg
+            programa-macos.dmg
             appcast.xml
             remote-daemon-assets/programad-remote-*
           if-no-files-found: error
@@ -388,7 +388,7 @@ jobs:
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
         with:
           files: |
-            cmux-macos.dmg
+            programa-macos.dmg
             appcast.xml
             remote-daemon-assets/programad-remote-darwin-arm64
             remote-daemon-assets/programad-remote-darwin-amd64

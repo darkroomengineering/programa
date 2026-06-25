@@ -1,6 +1,6 @@
 #!/bin/bash
 # Regression test: verify the homebrew cask SHA256 matches the actual release DMG.
-# Catches issues like https://github.com/manaflow-ai/cmux/issues/110 where a race
+# Catches issues like https://github.com/darkroomengineering/programa/issues/110 where a race
 # condition caused the cask to contain the SHA of a 404 page instead of the DMG.
 set -euo pipefail
 
@@ -22,7 +22,7 @@ fi
 echo "Cask version: $VERSION"
 echo "Cask SHA256:  $CASK_SHA"
 
-URL="https://github.com/manaflow-ai/cmux/releases/download/v${VERSION}/cmux-macos.dmg"
+URL="https://github.com/darkroomengineering/programa/releases/download/v${VERSION}/programa-macos.dmg"
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
 
