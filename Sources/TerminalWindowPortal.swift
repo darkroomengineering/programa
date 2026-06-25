@@ -87,6 +87,13 @@ final class WindowTerminalHostView: NSView {
 
     override func resetCursorRects() {
         super.resetCursorRects()
+        // A split add/remove can change divider geometry without changing the host
+        // frame, so the frame-hook invalidation alone is insufficient (#6587 review).
+        // Drop the cache here so the warm below always reflects current structure;
+        // resetCursorRects is driven by invalidateCursorRects, not per pointer event,
+        // so this keeps the cache fresh per cursor-rect cycle without re-walking the
+        // tree on every hover.
+        cachedDividerRegions = nil
         guard window != nil else { return }
         // Warms the cache. Subsequent pointer events avoid the recursive walk.
         let regions = dividerRegions()
@@ -802,6 +809,12 @@ final class WindowTerminalPortal: NSObject {
         synchronizeLayoutHierarchy()
         synchronizeAllHostedViews(excluding: nil)
         reconcileVisibleHostedViewsAfterGeometrySync(reason: "portal.externalGeometrySync")
+        // This fires on NSSplitView.didResizeSubviewsNotification (split add/remove),
+        // which can change divider geometry without changing the host frame — so the
+        // host's frame hooks never run. Force a cursor-rect rebuild so the host drops
+        // its stale divider-region cache (see resetCursorRects) and the new divider is
+        // grabbable (#6587 review).
+        hostView.window?.invalidateCursorRects(for: hostView)
     }
 
     private func ensureDividerOverlayOnTop() {

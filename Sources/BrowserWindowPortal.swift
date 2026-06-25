@@ -428,6 +428,11 @@ final class WindowBrowserHostView: NSView {
 
     override func resetCursorRects() {
         super.resetCursorRects()
+        // A split add/remove can change divider geometry without changing the host
+        // frame, so frame-hook invalidation alone is insufficient (#6587 review).
+        // Drop the cache here so the warm below reflects current structure;
+        // resetCursorRects is driven by invalidateCursorRects, not per pointer event.
+        cachedDividerRegions = nil
         guard window != nil else { return }
         // Warms the cache. Subsequent pointer events avoid the recursive walk.
         let regions = dividerRegions()
@@ -2325,6 +2330,11 @@ final class WindowBrowserPortal: NSObject {
                 reason: "externalGeometry"
             )
         }
+        // Split add/remove fires this (via NSSplitView.didResizeSubviewsNotification)
+        // without changing the host frame, so force a cursor-rect rebuild → the host
+        // drops its stale divider-region cache (see resetCursorRects) and the new
+        // divider is grabbable (#6587 review).
+        hostView.window?.invalidateCursorRects(for: hostView)
     }
 
     @discardableResult
