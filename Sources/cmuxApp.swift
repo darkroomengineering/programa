@@ -4227,36 +4227,6 @@ struct SettingsView: View {
         )
     }
 
-    private var selectionColorBinding: Binding<Color> {
-        Binding(
-            get: {
-                if let hex = sidebarSelectionColorHex, let nsColor = NSColor(hex: hex) {
-                    return Color(nsColor: nsColor)
-                }
-                return cmuxAccentColor()
-            },
-            set: { newColor in
-                let nsColor = NSColor(newColor)
-                sidebarSelectionColorHex = nsColor.hexString()
-            }
-        )
-    }
-
-    private var notificationBadgeColorBinding: Binding<Color> {
-        Binding(
-            get: {
-                if let hex = sidebarNotificationBadgeColorHex, let nsColor = NSColor(hex: hex) {
-                    return Color(nsColor: nsColor)
-                }
-                return cmuxAccentColor()
-            },
-            set: { newColor in
-                let nsColor = NSColor(newColor)
-                sidebarNotificationBadgeColorHex = nsColor.hexString()
-            }
-        )
-    }
-
     private var selectedSocketControlMode: SocketControlMode {
         SocketControlSettings.migrateMode(socketControlMode)
     }
@@ -4325,30 +4295,6 @@ struct SettingsView: View {
                     ? WorkspacePresentationModeSettings.Mode.minimal.rawValue
                     : WorkspacePresentationModeSettings.Mode.standard.rawValue
                 SettingsWindowController.shared.preserveFocusAfterPreferenceMutation()
-            }
-        )
-    }
-
-    private var settingsSidebarTintLightBinding: Binding<Color> {
-        Binding(
-            get: {
-                Color(nsColor: NSColor(hex: sidebarTintHexLight ?? sidebarTintHex) ?? .black)
-            },
-            set: { newColor in
-                let nsColor = NSColor(newColor)
-                sidebarTintHexLight = nsColor.hexString()
-            }
-        )
-    }
-
-    private var settingsSidebarTintDarkBinding: Binding<Color> {
-        Binding(
-            get: {
-                Color(nsColor: NSColor(hex: sidebarTintHexDark ?? sidebarTintHex) ?? .black)
-            },
-            set: { newColor in
-                let nsColor = NSColor(newColor)
-                sidebarTintHexDark = nsColor.hexString()
             }
         )
     }
@@ -5152,13 +5098,12 @@ struct SettingsView: View {
                                     .controlSize(.small)
                                 }
 
-                                ColorPicker(
-                                    "",
-                                    selection: selectionColorBinding,
-                                    supportsOpacity: false
-                                )
-                                .labelsHidden()
-                                .frame(width: 38)
+                                HexColorPicker(
+                                    hex: sidebarSelectionColorHex,
+                                    fallback: cmuxAccentColor()
+                                ) { newHex in
+                                    sidebarSelectionColorHex = newHex
+                                }
 
                                 Text(sidebarSelectionColorHex ?? String(localized: "settings.sidebarAppearance.defaultLabel", defaultValue: "Default"))
                                     .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -5182,13 +5127,12 @@ struct SettingsView: View {
                                     .controlSize(.small)
                                 }
 
-                                ColorPicker(
-                                    "",
-                                    selection: notificationBadgeColorBinding,
-                                    supportsOpacity: false
-                                )
-                                .labelsHidden()
-                                .frame(width: 38)
+                                HexColorPicker(
+                                    hex: sidebarNotificationBadgeColorHex,
+                                    fallback: cmuxAccentColor()
+                                ) { newHex in
+                                    sidebarNotificationBadgeColorHex = newHex
+                                }
 
                                 Text(sidebarNotificationBadgeColorHex ?? String(localized: "settings.sidebarAppearance.defaultLabel", defaultValue: "Default"))
                                     .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -5228,13 +5172,13 @@ struct SettingsView: View {
                                     )
                                 ) {
                                     HStack(spacing: 8) {
-                                        ColorPicker(
-                                            "",
-                                            selection: tabColorBinding(for: entry.name),
-                                            supportsOpacity: false
-                                        )
-                                        .labelsHidden()
-                                        .frame(width: 38)
+                                        HexColorPicker(
+                                            hex: entry.hex,
+                                            fallback: .blue
+                                        ) { newHex in
+                                            WorkspaceTabColorSettings.setColor(named: entry.name, hex: newHex)
+                                            reloadWorkspaceTabColorSettings()
+                                        }
 
                                         Text(entry.hex)
                                             .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -5289,13 +5233,12 @@ struct SettingsView: View {
                             subtitle: String(localized: "settings.sidebarAppearance.tintColorLight.subtitle", defaultValue: "Sidebar tint color when using light appearance.")
                         ) {
                             HStack(spacing: 8) {
-                                ColorPicker(
-                                    String(localized: "settings.sidebarAppearance.tintColorLight.picker", defaultValue: "Light tint"),
-                                    selection: settingsSidebarTintLightBinding,
-                                    supportsOpacity: false
-                                )
-                                .labelsHidden()
-                                .frame(width: 38)
+                                HexColorPicker(
+                                    hex: sidebarTintHexLight ?? sidebarTintHex,
+                                    fallback: .black
+                                ) { newHex in
+                                    sidebarTintHexLight = newHex
+                                }
 
                                 Text(sidebarTintHexLight ?? String(localized: "settings.sidebarAppearance.defaultLabel", defaultValue: "Default"))
                                     .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -5311,13 +5254,12 @@ struct SettingsView: View {
                             subtitle: String(localized: "settings.sidebarAppearance.tintColorDark.subtitle", defaultValue: "Sidebar tint color when using dark appearance.")
                         ) {
                             HStack(spacing: 8) {
-                                ColorPicker(
-                                    String(localized: "settings.sidebarAppearance.tintColorDark.picker", defaultValue: "Dark tint"),
-                                    selection: settingsSidebarTintDarkBinding,
-                                    supportsOpacity: false
-                                )
-                                .labelsHidden()
-                                .frame(width: 38)
+                                HexColorPicker(
+                                    hex: sidebarTintHexDark ?? sidebarTintHex,
+                                    fallback: .black
+                                ) { newHex in
+                                    sidebarTintHexDark = newHex
+                                }
 
                                 Text(sidebarTintHexDark ?? String(localized: "settings.sidebarAppearance.defaultLabel", defaultValue: "Default"))
                                     .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -6119,22 +6061,6 @@ struct SettingsView: View {
         DispatchQueue.main.async { isResettingSettings = false }
     }
 
-    private func tabColorBinding(for name: String) -> Binding<Color> {
-        Binding(
-            get: {
-                let hex = WorkspaceTabColorSettings.currentColorHex(named: name)
-                    ?? WorkspaceTabColorSettings.defaultColorHex(named: name)
-                    ?? "#1565C0"
-                return Color(nsColor: NSColor(hex: hex) ?? .systemBlue)
-            },
-            set: { newValue in
-                let hex = NSColor(newValue).hexString()
-                WorkspaceTabColorSettings.setColor(named: name, hex: hex)
-                reloadWorkspaceTabColorSettings()
-            }
-        )
-    }
-
     private func baseTabColorHex(for name: String) -> String? {
         WorkspaceTabColorSettings.defaultColorHex(named: name)
     }
@@ -6159,6 +6085,56 @@ struct SettingsView: View {
 
     private func refreshDetectedImportBrowsers() {
         detectedImportBrowsers = InstalledBrowserDetector.detectInstalledBrowsers()
+    }
+}
+
+/// A ColorPicker that buffers the current colour in `@State` so that dragging
+/// the hue wheel never forces a hex round-trip on every frame.  The stored hex
+/// is only written once the user commits a value (on SwiftUI's `.onChange`
+/// callback), which fires once per drag-end gesture rather than per frame.
+///
+/// This replaces computed `Binding<Color>` properties whose getter converted a
+/// stored hex string to `Color` on every frame, causing the quantisation that
+/// made the hue indicator jump (issue #8 / upstream cmux #6761).
+private struct HexColorPicker: View {
+    /// The current hex value from `@AppStorage`, or `nil` when the slot is unset.
+    var hex: String?
+    /// Colour to show when `hex` is nil or unparseable.
+    var fallback: Color
+    /// Called with the new hex string whenever the picker value changes.
+    var onHexChange: (String) -> Void
+
+    @State private var pickerColor: Color
+
+    init(hex: String?, fallback: Color, onHexChange: @escaping (String) -> Void) {
+        self.hex = hex
+        self.fallback = fallback
+        self.onHexChange = onHexChange
+        let initial: Color
+        if let hex, let ns = NSColor(hex: hex) {
+            initial = Color(nsColor: ns)
+        } else {
+            initial = fallback
+        }
+        _pickerColor = State(initialValue: initial)
+    }
+
+    var body: some View {
+        ColorPicker("", selection: $pickerColor, supportsOpacity: false)
+            .labelsHidden()
+            .frame(width: 38)
+            .onChange(of: pickerColor) { newColor in
+                onHexChange(NSColor(newColor).hexString())
+            }
+            .onChange(of: hex) { newHex in
+                // Keep the buffer in sync when the hex is reset externally
+                // (e.g. the Reset button sets sidebarSelectionColorHex = nil).
+                if let newHex, let ns = NSColor(hex: newHex) {
+                    pickerColor = Color(nsColor: ns)
+                } else {
+                    pickerColor = fallback
+                }
+            }
     }
 }
 
