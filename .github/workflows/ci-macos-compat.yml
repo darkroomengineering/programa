@@ -58,7 +58,7 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: GhosttyKit.xcframework
-          key: ghosttykit-${{ hashFiles('.gitmodules', 'ghostty') }}
+          key: ghosttykit-v2-${{ hashFiles('.gitmodules', 'ghostty') }}
 
       - name: Set up Zig 0.15.2
         if: ${{ matrix.skip_zig != true }}

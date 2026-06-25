@@ -48,6 +48,16 @@ _fallback_source_build() {
     echo "Source build did not produce $OUTPUT_DIR" >&2
     exit 1
   fi
+  # ensure-ghosttykit.sh leaves a symlink into ~/.cache. CI caches ./GhosttyKit.xcframework
+  # by path, and a symlink caches as a 247-byte dangling link (real framework absent on a
+  # fresh runner). Materialize a real directory so the cache stores actual framework files.
+  for _link in "$OUTPUT_DIR" "$REPO_ROOT/GhosttyKit.xcframework"; do
+    if [ -L "$_link" ]; then
+      _target="$(readlink "$_link")"
+      rm -f "$_link"
+      cp -R "$_target" "$_link"
+    fi
+  done
   echo "Source build complete: $OUTPUT_DIR is ready"
 }
 
