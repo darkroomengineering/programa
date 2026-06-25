@@ -3,6 +3,16 @@ import Cocoa
 import Combine
 import SwiftUI
 
+/// Returns `true` when the Sparkle updater should be suppressed for the given bundle identifier.
+///
+/// Tagged DEV builds (`com.darkroom.programa.debug.<tag>`) and staging builds
+/// (`com.darkroom.programa.staging`) must never start the public Sparkle update feed:
+/// they are not release binaries and should never show the "Update Available" pill.
+func updateControllerShouldSkipStartup(bundleIdentifier: String?) -> Bool {
+    SocketControlSettings.isDebugLikeBundleIdentifier(bundleIdentifier)
+        || SocketControlSettings.isStagingBundleIdentifier(bundleIdentifier)
+}
+
 enum UpdateSettings {
     static let automaticChecksKey = "SUEnableAutomaticChecks"
     static let automaticallyUpdateKey = "SUAutomaticallyUpdate"
@@ -98,6 +108,7 @@ class UpdateController {
 
     /// Start the updater. If startup fails, the error is shown via the custom UI.
     func startUpdaterIfNeeded() {
+        guard !updateControllerShouldSkipStartup(bundleIdentifier: Bundle.main.bundleIdentifier) else { return }
         guard !didStartUpdater else { return }
         ensureSparkleInstallationCache()
 #if DEBUG

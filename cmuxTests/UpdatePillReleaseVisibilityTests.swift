@@ -192,3 +192,74 @@ final class TitlebarControlsHoverPolicyTests: XCTestCase {
         XCTAssertFalse(titlebarControlsShouldTrackButtonHover(config: TitlebarControlsStyle.softButtons.config))
     }
 }
+
+/// Tests for the predicate that suppresses the Sparkle updater in non-release builds.
+///
+/// Tagged DEV builds and staging builds must never start the public update feed
+/// so users don't see a spurious "Update Available" pill. This suite exercises
+/// the pure function that gates `startUpdaterIfNeeded()` — no Sparkle or app
+/// objects are created, so the tests run fast and without side effects.
+final class UpdateControllerStartupSuppressTests: XCTestCase {
+
+    // MARK: — debug bundle identifiers
+
+    func testUntaggedDebugBundleIdentifierSuppressesUpdater() {
+        XCTAssertTrue(
+            updateControllerShouldSkipStartup(bundleIdentifier: "com.darkroom.programa.debug"),
+            "Untagged debug build must not start Sparkle"
+        )
+    }
+
+    func testTaggedDebugBundleIdentifierSuppressesUpdater() {
+        XCTAssertTrue(
+            updateControllerShouldSkipStartup(bundleIdentifier: "com.darkroom.programa.debug.fix-some-bug"),
+            "Tagged DEV build must not start Sparkle"
+        )
+    }
+
+    func testDebugBundleIdentifierWithNumericTagSuppressesUpdater() {
+        XCTAssertTrue(
+            updateControllerShouldSkipStartup(bundleIdentifier: "com.darkroom.programa.debug.1"),
+            "Tagged DEV build with numeric tag must not start Sparkle"
+        )
+    }
+
+    // MARK: — staging bundle identifiers
+
+    func testStagingBundleIdentifierSuppressesUpdater() {
+        XCTAssertTrue(
+            updateControllerShouldSkipStartup(bundleIdentifier: "com.darkroom.programa.staging"),
+            "Staging build must not start Sparkle"
+        )
+    }
+
+    func testTaggedStagingBundleIdentifierSuppressesUpdater() {
+        XCTAssertTrue(
+            updateControllerShouldSkipStartup(bundleIdentifier: "com.darkroom.programa.staging.qa"),
+            "Tagged staging build must not start Sparkle"
+        )
+    }
+
+    // MARK: — release bundle identifiers
+
+    func testProductionBundleIdentifierDoesNotSuppressUpdater() {
+        XCTAssertFalse(
+            updateControllerShouldSkipStartup(bundleIdentifier: "com.darkroom.programa"),
+            "Release build must start Sparkle normally"
+        )
+    }
+
+    func testNilBundleIdentifierDoesNotSuppressUpdater() {
+        XCTAssertFalse(
+            updateControllerShouldSkipStartup(bundleIdentifier: nil),
+            "nil bundle identifier must not suppress the updater (fail-open to release behaviour)"
+        )
+    }
+
+    func testUnrelatedBundleIdentifierDoesNotSuppressUpdater() {
+        XCTAssertFalse(
+            updateControllerShouldSkipStartup(bundleIdentifier: "com.example.app"),
+            "Unrelated bundle identifier must not suppress the updater"
+        )
+    }
+}
