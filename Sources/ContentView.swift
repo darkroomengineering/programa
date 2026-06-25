@@ -15691,11 +15691,11 @@ extension NSColor {
         var blue: CGFloat = 0
         var alpha: CGFloat = 0
         color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        let redByte = min(255, max(0, Int(red * 255)))
-        let greenByte = min(255, max(0, Int(green * 255)))
-        let blueByte = min(255, max(0, Int(blue * 255)))
+        let redByte = min(255, max(0, Int((red * 255).rounded())))
+        let greenByte = min(255, max(0, Int((green * 255).rounded())))
+        let blueByte = min(255, max(0, Int((blue * 255).rounded())))
         if includeAlpha {
-            let alphaByte = min(255, max(0, Int(alpha * 255)))
+            let alphaByte = min(255, max(0, Int((alpha * 255).rounded())))
             return String(format: "#%02X%02X%02X%02X", redByte, greenByte, blueByte, alphaByte)
         }
         return String(format: "#%02X%02X%02X", redByte, greenByte, blueByte)
