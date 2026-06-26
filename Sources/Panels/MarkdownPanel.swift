@@ -1,4 +1,5 @@
 import Foundation
+import Bonsplit
 import Combine
 
 // MARK: - MarkdownSearchState
