@@ -723,6 +723,41 @@ final class CmuxSettingsFileStore {
         if let raw = jsonString(section["reactGrabVersion"]) {
             snapshot.managedUserDefaults[ReactGrabSettings.versionKey] = .string(raw)
         }
+        if let proxyRaw = section["proxy"] {
+            guard let proxyDict = proxyRaw as? [String: Any] else {
+                logInvalid("browser.proxy", sourcePath: sourcePath)
+                return
+            }
+            guard let host = jsonString(proxyDict["host"]) else {
+                logInvalid("browser.proxy.host", sourcePath: sourcePath)
+                return
+            }
+            let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedHost.isEmpty else {
+                logInvalid("browser.proxy.host", sourcePath: sourcePath)
+                return
+            }
+            guard let port = jsonInt(proxyDict["port"]), port >= 1 && port <= 65535 else {
+                logInvalid("browser.proxy.port", sourcePath: sourcePath)
+                return
+            }
+            let typeRaw: String
+            if let raw = jsonString(proxyDict["type"]) {
+                guard BrowserUserProxySettings.ProxyType(rawValue: raw) != nil else {
+                    logInvalid("browser.proxy.type", sourcePath: sourcePath)
+                    return
+                }
+                typeRaw = raw
+            } else if proxyDict.keys.contains("type") {
+                logInvalid("browser.proxy.type", sourcePath: sourcePath)
+                return
+            } else {
+                typeRaw = BrowserUserProxySettings.ProxyType.socks5.rawValue
+            }
+            snapshot.managedUserDefaults[BrowserUserProxySettings.hostKey] = .string(trimmedHost)
+            snapshot.managedUserDefaults[BrowserUserProxySettings.portKey] = .int(port)
+            snapshot.managedUserDefaults[BrowserUserProxySettings.typeKey] = .string(typeRaw)
+        }
     }
 
     private func parseShortcutsSection(
