@@ -6260,6 +6260,57 @@
         }
       }
     },
+    "settings.app.persistScrollback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Scrollback on Quit"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "終了時にスクロールバックを保存"
+          }
+        }
+      }
+    },
+    "settings.app.persistScrollback.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal scrollback is not written to disk."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スクロールバックはディスクに書き込まれません。"
+          }
+        }
+      }
+    },
+    "settings.app.persistScrollback.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal scrollback is saved and restored on next launch."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スクロールバックは保存され、次回起動時に復元されます。"
+          }
+        }
+      }
+    },
     "settings.app.renameSelectsName": {
       "extractionState": "manual",
       "localizations": {

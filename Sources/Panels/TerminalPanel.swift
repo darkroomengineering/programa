@@ -208,9 +208,10 @@ final class TerminalPanel: Panel, ObservableObject {
     }
 
     func shouldPersistScrollbackForSessionSnapshot() -> Bool {
+        guard ScrollbackPersistenceSettings.isEnabled() else { return false }
         // Session restore only replays terminal output into a fresh shell. If Ghostty
         // says we are not safely at a prompt, replaying that state later is misleading.
-        !surface.needsConfirmClose()
+        return !surface.needsConfirmClose()
     }
 
     func triggerFlash(reason: WorkspaceAttentionFlashReason) {
