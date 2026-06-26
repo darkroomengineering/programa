@@ -12441,6 +12441,13 @@ private struct TabItemView: View, Equatable {
     @State private var workspaceObservationGeneration: UInt64 = 0
     @State private var isHovering = false
     @State private var rowHeight: CGFloat = 1
+    // Cached results of the expensive bonsplit tree walk + branch/dir/PR snapshot.
+    // Updated only by the debounced publisher, onAppear, and settings changes —
+    // NOT by the immediate publisher (title keystrokes). This prevents the tree
+    // walk from running on every keystroke in single-panel workspaces.
+    @State private var cachedOrderedPanelIds: [UUID]? = nil
+    @State private var cachedBranchDirectoryLines: [VerticalBranchDirectoryLine] = []
+    @State private var cachedPullRequestRows: [PullRequestDisplay] = []
 
     var isMultiSelected: Bool {
         selectedTabIds.contains(tab.id)
@@ -12681,9 +12688,11 @@ private struct TabItemView: View, Equatable {
         let latestNotificationSubtitle = latestNotificationText
         let effectiveSubtitle = latestNotificationSubtitle
         let detailVisibility = visibleAuxiliaryDetails
-        let orderedPanelIds: [UUID]? = (detailVisibility.showsBranchDirectory || detailVisibility.showsPullRequests)
-            ? tab.sidebarOrderedPanelIds()
-            : nil
+        // Read from cache — updated only by the debounced publisher, onAppear,
+        // and settings changes. Title-keystroke re-renders skip this tree walk.
+        let orderedPanelIds: [UUID]? = cachedOrderedPanelIds
+        let branchDirectoryLines: [VerticalBranchDirectoryLine] = cachedBranchDirectoryLines
+        let pullRequestRows: [PullRequestDisplay] = cachedPullRequestRows
         let compactGitBranchSummaryText: String? = {
             guard detailVisibility.showsBranchDirectory,
                   !sidebarBranchVerticalLayout,
@@ -12705,19 +12714,7 @@ private struct TabItemView: View, Equatable {
             gitSummary: compactGitBranchSummaryText,
             directorySummary: compactDirectorySummaryText
         )
-        let branchDirectoryLines: [VerticalBranchDirectoryLine] = {
-            guard detailVisibility.showsBranchDirectory,
-                  sidebarBranchVerticalLayout,
-                  let orderedPanelIds else {
-                return []
-            }
-            return verticalBranchDirectoryLines(orderedPanelIds: orderedPanelIds)
-        }()
         let branchLinesContainBranch = sidebarShowGitBranch && branchDirectoryLines.contains { $0.branch != nil }
-        let pullRequestRows: [PullRequestDisplay] = {
-            guard detailVisibility.showsPullRequests, let orderedPanelIds else { return [] }
-            return pullRequestDisplays(orderedPanelIds: orderedPanelIds)
-        }()
 
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
@@ -13056,6 +13053,10 @@ private struct TabItemView: View, Equatable {
                 "desc=\"\(debugCommandPaletteTextPreview(description))\""
             )
 #endif
+            // Refresh expensive caches (tree walk, branch/dir/PR) before
+            // signalling a redraw. The immediate publisher intentionally does
+            // NOT call this so that title keystrokes skip the tree walk.
+            recomputeSidebarDetailCache()
             workspaceObservationGeneration &+= 1
         }
         .onDrag {
@@ -13097,6 +13098,15 @@ private struct TabItemView: View, Equatable {
         }
         .accessibilityAction(named: Text(moveDownActionText)) {
             moveBy(1)
+        }
+        .onAppear {
+            // Prime the cache so branch/dir/PR rows appear immediately,
+            // before the first debounced publisher fires.
+            recomputeSidebarDetailCache()
+        }
+        .onChange(of: visibleAuxiliaryDetails) { _ in
+            // Toggling branch/PR columns changes which data we need to cache.
+            recomputeSidebarDetailCache()
         }
         .contextMenu { workspaceContextMenu }
     }
@@ -13667,6 +13677,25 @@ private struct TabItemView: View, Equatable {
     private struct VerticalBranchDirectoryLine {
         let branch: String?
         let directory: String?
+    }
+
+    /// Recomputes the expensive sidebar detail caches (bonsplit tree walk,
+    /// branch/directory lines, PR snapshot) and writes them into @State.
+    /// Must be called only from the debounced publisher, onAppear, and
+    /// settings-change handlers — never from the immediate (title) publisher.
+    private func recomputeSidebarDetailCache() {
+        let detail = visibleAuxiliaryDetails
+        let needsDetail = detail.showsBranchDirectory || detail.showsPullRequests
+        let ids: [UUID]? = needsDetail ? tab.sidebarOrderedPanelIds() : nil
+        cachedOrderedPanelIds = ids
+        cachedBranchDirectoryLines = {
+            guard detail.showsBranchDirectory, sidebarBranchVerticalLayout, let ids else { return [] }
+            return verticalBranchDirectoryLines(orderedPanelIds: ids)
+        }()
+        cachedPullRequestRows = {
+            guard detail.showsPullRequests, let ids else { return [] }
+            return pullRequestDisplays(orderedPanelIds: ids)
+        }()
     }
 
     private func verticalBranchDirectoryLines(orderedPanelIds: [UUID]) -> [VerticalBranchDirectoryLine] {
