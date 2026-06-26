@@ -38,6 +38,17 @@ struct MarkdownPanelView: View {
                 MarkdownPointerObserver(onPointerDown: onRequestPanelFocus)
             }
         }
+        .overlay(alignment: .top) {
+            if let state = panel.searchState {
+                MarkdownSearchOverlay(
+                    panelId: panel.id,
+                    searchState: state,
+                    onNext: { panel.findNext() },
+                    onPrevious: { panel.findPrevious() },
+                    onClose: { panel.hideFind() }
+                )
+            }
+        }
         .onChange(of: panel.focusFlashToken) { _ in
             triggerFocusFlashAnimation()
         }
@@ -289,6 +300,183 @@ struct MarkdownPanelView: View {
         }
     }
 }
+
+// MARK: - MarkdownSearchOverlay
+
+/// Find bar overlay for MarkdownPanelView. Mirrors BrowserSearchOverlay's visual style
+/// and drag-to-corner behaviour, but uses a SwiftUI TextField since markdown panels
+/// have no webview focus concerns.
+struct MarkdownSearchOverlay: View {
+    let panelId: UUID
+    @ObservedObject var searchState: MarkdownSearchState
+    let onNext: () -> Void
+    let onPrevious: () -> Void
+    let onClose: () -> Void
+
+    @FocusState private var isSearchFieldFocused: Bool
+    @State private var corner: Corner = .topRight
+    @State private var dragOffset: CGSize = .zero
+    @State private var barSize: CGSize = .zero
+
+    private let padding: CGFloat = 8
+
+    var body: some View {
+        GeometryReader { geo in
+            HStack(spacing: 4) {
+                TextField(
+                    String(localized: "search.placeholder", defaultValue: "Search"),
+                    text: $searchState.needle
+                )
+                .focused($isSearchFieldFocused)
+                .textFieldStyle(.plain)
+                .frame(width: 180)
+                .padding(.leading, 8)
+                .padding(.trailing, 50)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.1))
+                .cornerRadius(6)
+                .overlay(alignment: .trailing) {
+                    counterView
+                }
+                .onSubmit {
+                    let isShift = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+                    if isShift {
+                        onPrevious()
+                    } else {
+                        onNext()
+                    }
+                }
+                .onExitCommand {
+                    onClose()
+                }
+
+                Button(action: {
+#if DEBUG
+                    dlog("markdown.findbar.next panel=\(panelId.uuidString.prefix(5))")
+#endif
+                    onNext()
+                }) {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(SearchButtonStyle())
+                .safeHelp(String(localized: "search.nextMatch.help", defaultValue: "Next match (Return)"))
+
+                Button(action: {
+#if DEBUG
+                    dlog("markdown.findbar.prev panel=\(panelId.uuidString.prefix(5))")
+#endif
+                    onPrevious()
+                }) {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(SearchButtonStyle())
+                .safeHelp(String(localized: "search.previousMatch.help", defaultValue: "Previous match (Shift+Return)"))
+
+                Button(action: {
+#if DEBUG
+                    dlog("markdown.findbar.close panel=\(panelId.uuidString.prefix(5))")
+#endif
+                    onClose()
+                }) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(SearchButtonStyle())
+                .safeHelp(String(localized: "search.close.help", defaultValue: "Close (Esc)"))
+            }
+            .padding(8)
+            .background(.background)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .shadow(radius: 4)
+            .onAppear {
+#if DEBUG
+                dlog("markdown.findbar.appear panel=\(panelId.uuidString.prefix(5))")
+#endif
+                isSearchFieldFocused = true
+            }
+            .background(
+                GeometryReader { barGeo in
+                    Color.clear.onAppear {
+                        barSize = barGeo.size
+                    }
+                }
+            )
+            .padding(padding)
+            .offset(dragOffset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: corner.alignment)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        dragOffset = value.translation
+                    }
+                    .onEnded { value in
+                        let centerPos = centerPosition(for: corner, in: geo.size, barSize: barSize)
+                        let newCenter = CGPoint(
+                            x: centerPos.x + value.translation.width,
+                            y: centerPos.y + value.translation.height
+                        )
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            corner = closestCorner(to: newCenter, in: geo.size)
+                            dragOffset = .zero
+                        }
+                    }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var counterView: some View {
+        if let currentIndex = searchState.currentIndex {
+            Text("\(currentIndex + 1)/\(searchState.matches.count)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+                .padding(.trailing, 8)
+        } else if !searchState.needle.isEmpty {
+            Text("0/0")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+                .padding(.trailing, 8)
+        }
+    }
+
+    // MARK: - Corner drag helpers (mirrors BrowserSearchOverlay)
+
+    enum Corner {
+        case topLeft, topRight, bottomLeft, bottomRight
+
+        var alignment: Alignment {
+            switch self {
+            case .topLeft: return .topLeading
+            case .topRight: return .topTrailing
+            case .bottomLeft: return .bottomLeading
+            case .bottomRight: return .bottomTrailing
+            }
+        }
+    }
+
+    private func centerPosition(for corner: Corner, in containerSize: CGSize, barSize: CGSize) -> CGPoint {
+        let halfWidth = barSize.width / 2 + padding
+        let halfHeight = barSize.height / 2 + padding
+        switch corner {
+        case .topLeft:    return CGPoint(x: halfWidth, y: halfHeight)
+        case .topRight:   return CGPoint(x: containerSize.width - halfWidth, y: halfHeight)
+        case .bottomLeft: return CGPoint(x: halfWidth, y: containerSize.height - halfHeight)
+        case .bottomRight: return CGPoint(x: containerSize.width - halfWidth, y: containerSize.height - halfHeight)
+        }
+    }
+
+    private func closestCorner(to point: CGPoint, in containerSize: CGSize) -> Corner {
+        let midX = containerSize.width / 2
+        let midY = containerSize.height / 2
+        if point.x < midX {
+            return point.y < midY ? .topLeft : .bottomLeft
+        }
+        return point.y < midY ? .topRight : .bottomRight
+    }
+}
+
+// MARK: - MarkdownPointerObserver
 
 private struct MarkdownPointerObserver: NSViewRepresentable {
     let onPointerDown: () -> Void
