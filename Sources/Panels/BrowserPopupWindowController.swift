@@ -80,6 +80,7 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
     private let downloadDelegate: BrowserDownloadDelegate
 
     private static var associatedObjectKey: UInt8 = 0
+    private var hasShownPanel = false
 
     init(
         configuration: WKWebViewConfiguration,
@@ -239,7 +240,12 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
         dlog("popup.init depth=\(nestingDepth) size=\(Int(contentRect.width))x\(Int(contentRect.height)) opener=\(openerPanel?.id.uuidString.prefix(5) ?? "nil")")
         #endif
 
-        panel.makeKeyAndOrderFront(self)
+        // Defer reveal until first real content commits (see PopupNavigationDelegate.didCommit)
+        // so the user never sees about:blank. Fallback ensures we still show if navigation
+        // never commits (e.g. popup opened with no URL).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.showPanelIfNeeded()
+        }
     }
 
     // MARK: - Child popup tracking
@@ -250,6 +256,12 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
 
     func removeChildPopup(_ child: BrowserPopupWindowController) {
         childPopups.removeAll { $0 === child }
+    }
+
+    fileprivate func showPanelIfNeeded() {
+        guard !hasShownPanel else { return }
+        hasShownPanel = true
+        panel.makeKeyAndOrderFront(self)
     }
 
     func setBrowserThemeMode(_ mode: BrowserThemeMode) {
@@ -541,6 +553,13 @@ private class PopupUIDelegate: NSObject, WKUIDelegate {
 private class PopupNavigationDelegate: NSObject, WKNavigationDelegate {
     weak var controller: BrowserPopupWindowController?
     var downloadDelegate: WKDownloadDelegate?
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // Show the popup only once the first real (non-blank) content commits,
+        // so the OAuth URL is what the user sees first.
+        guard let url = webView.url, url.absoluteString != "about:blank" else { return }
+        controller?.showPanelIfNeeded()
+    }
 
     func webView(
         _ webView: WKWebView,
