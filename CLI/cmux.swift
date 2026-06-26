@@ -1062,7 +1062,7 @@ final class SocketClient {
         }
 
         let authURL = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
-            .appendingPathComponent(".cmux/relay/\(endpoint.port).auth", isDirectory: false)
+            .appendingPathComponent(".programa/relay/\(endpoint.port).auth", isDirectory: false)
         guard let authData = try? Data(contentsOf: authURL),
               let authObject = try? JSONSerialization.jsonObject(with: authData) as? [String: Any],
               let relayID = trimmedEnvValue(authObject["relay_id"] as? String),
@@ -4428,7 +4428,7 @@ struct CMUXCLI {
         remoteRelayPort: Int
     ) -> String {
         var lines = remoteBootstrapTTYCaptureLines(remoteRelayPort: remoteRelayPort, includeRelayRPC: true)
-        lines.append("/bin/sh \"$HOME/.cmux/relay/\(remoteRelayPort).bootstrap.sh\"")
+        lines.append("/bin/sh \"$HOME/.programa/relay/\(remoteRelayPort).bootstrap.sh\"")
         return lines.joined(separator: "\n")
     }
 
@@ -4436,8 +4436,8 @@ struct CMUXCLI {
         [
             "set -eu",
             "umask 077",
-            "cmux_bootstrap_path=\"$HOME/.cmux/relay/\(remoteRelayPort).bootstrap.sh\"",
-            "mkdir -p \"$HOME/.cmux/relay\"",
+            "cmux_bootstrap_path=\"$HOME/.programa/relay/\(remoteRelayPort).bootstrap.sh\"",
+            "mkdir -p \"$HOME/.programa/relay\"",
             "cat > \"$cmux_bootstrap_path\"",
             "chmod 700 \"$cmux_bootstrap_path\" >/dev/null 2>&1 || true",
         ].joined(separator: "\n")
@@ -4470,15 +4470,15 @@ struct CMUXCLI {
             "cmux_bootstrap_tty=\"$(tty 2>/dev/null || true)\"",
             "cmux_bootstrap_tty=\"${cmux_bootstrap_tty##*/}\"",
             "if [ -n \"$cmux_bootstrap_tty\" ] && [ \"$cmux_bootstrap_tty\" != \"not a tty\" ]; then",
-            "  mkdir -p \"$HOME/.cmux/relay\" >/dev/null 2>&1 || true",
-            "  printf '%s' \"$cmux_bootstrap_tty\" > \"$HOME/.cmux/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
+            "  mkdir -p \"$HOME/.programa/relay\" >/dev/null 2>&1 || true",
+            "  printf '%s' \"$cmux_bootstrap_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
             "  export PROGRAMA_BOOTSTRAP_TTY=\"$cmux_bootstrap_tty\"",
         ]
 
         if includeRelayRPC {
             lines += [
-                "  cmux_relay_cli=\"$HOME/.cmux/bin/cmux\"",
-                "  if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v cmux 2>/dev/null || true)\"; fi",
+                "  cmux_relay_cli=\"$HOME/.programa/bin/programa\"",
+                "  if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
                 "  if [ -n \"$cmux_relay_cli\" ]; then",
                 "    cmux_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"tty_name\":\"'$cmux_bootstrap_tty'\"}'",
                 "    cmux_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"reason\":\"command\"}'",
@@ -4521,8 +4521,8 @@ struct CMUXCLI {
         let relaySocket = remoteRelayPort > 0 ? "127.0.0.1:\(remoteRelayPort)" : nil
         var commonShellExportLines = remoteTerminalLines
         commonShellExportLines.append(contentsOf: remoteEnvExportLines)
-        commonShellExportLines.append("export PATH=\"$HOME/.cmux/bin:$PATH\"")
-        commonShellExportLines.append("export PROGRAMA_BUNDLED_CLI_PATH=\"$HOME/.cmux/bin/cmux\"")
+        commonShellExportLines.append("export PATH=\"$HOME/.programa/bin:$PATH\"")
+        commonShellExportLines.append("export PROGRAMA_BUNDLED_CLI_PATH=\"$HOME/.programa/bin/programa\"")
         commonShellExportLines.append("export PROGRAMA_SHELL_INTEGRATION_DIR=\"\(shellStateDir)\"")
         if let relaySocket {
             commonShellExportLines.append("export PROGRAMA_SOCKET_PATH=\(relaySocket)")
@@ -4555,7 +4555,7 @@ struct CMUXCLI {
         let relayWarmupLines = interactiveRemoteRelayWarmupLines(remoteRelayPort: remoteRelayPort)
 
         var outerLines: [String] = [
-            "mkdir -p \"$HOME/.cmux/relay\"",
+            "mkdir -p \"$HOME/.programa/relay\"",
             "cmux_shell_dir=\"\(shellStateDir)\"",
             "mkdir -p \"$cmux_shell_dir\"",
         ]
@@ -4632,7 +4632,7 @@ struct CMUXCLI {
     }
 
     private func shellStateDirForRemoteRelayPort(_ remoteRelayPort: Int) -> String {
-        "$HOME/.cmux/relay/\(max(remoteRelayPort, 0)).shell"
+        "$HOME/.programa/relay/\(max(remoteRelayPort, 0)).shell"
     }
 
     private func bundledShellIntegrationScript(named fileName: String) -> String? {
@@ -4754,14 +4754,14 @@ struct CMUXCLI {
             return []
         }
         return [
-            "cmux_relay_cli=\"${PROGRAMA_BUNDLED_CLI_PATH:-$HOME/.cmux/bin/cmux}\"",
-            "if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v cmux 2>/dev/null || true)\"; fi",
+            "cmux_relay_cli=\"${PROGRAMA_BUNDLED_CLI_PATH:-$HOME/.programa/bin/programa}\"",
+            "if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
             "cmux_relay_tty=\"${PROGRAMA_BOOTSTRAP_TTY:-}\"",
             "if [ -z \"$cmux_relay_tty\" ]; then cmux_relay_tty=\"$(tty 2>/dev/null || true)\"; fi",
             "cmux_relay_tty=\"${cmux_relay_tty##*/}\"",
             "if [ -n \"$cmux_relay_tty\" ] && [ \"$cmux_relay_tty\" != \"not a tty\" ]; then",
-            "  mkdir -p \"$HOME/.cmux/relay\" >/dev/null 2>&1 || true",
-            "  printf '%s' \"$cmux_relay_tty\" > \"$HOME/.cmux/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
+            "  mkdir -p \"$HOME/.programa/relay\" >/dev/null 2>&1 || true",
+            "  printf '%s' \"$cmux_relay_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
             "fi",
             "if [ -n \"$cmux_relay_cli\" ] && [ -n \"$PROGRAMA_WORKSPACE_ID\" ] && [ -n \"$cmux_relay_tty\" ] && [ \"$cmux_relay_tty\" != \"not a tty\" ]; then",
             "  cmux_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"tty_name\\\":\\\"$cmux_relay_tty\\\"}\"",
