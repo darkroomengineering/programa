@@ -1,4 +1,5 @@
 import AppKit
+import Bonsplit
 import SwiftUI
 import MarkdownUI
 
