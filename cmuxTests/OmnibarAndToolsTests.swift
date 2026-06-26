@@ -379,6 +379,38 @@ final class VSCodeServeWebControllerTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: tokenFileURL.path))
     }
+
+    func testStopDoesNotRemovePersistentConnectionTokenFile() throws {
+        // Persistent token files live under Application Support, not NSTemporaryDirectory.
+        // stop() must leave them intact so Settings Sync / auth survives restarts (issue #21).
+        let appSupportDir = try XCTUnwrap(
+            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+            "Application Support directory must be resolvable"
+        )
+        let persistentTokenDir = appSupportDir
+            .appendingPathComponent("programa", isDirectory: true)
+            .appendingPathComponent("vscode-server", isDirectory: true)
+        try FileManager.default.createDirectory(at: persistentTokenDir, withIntermediateDirectories: true)
+        // Use a unique file name to avoid interfering with the real connection-token.
+        let tokenFileURL = persistentTokenDir
+            .appendingPathComponent("connection-token-test-\(UUID().uuidString)", isDirectory: false)
+        defer { try? FileManager.default.removeItem(at: tokenFileURL) }
+        try Data("persistenttoken".utf8).write(to: tokenFileURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tokenFileURL.path))
+
+        let controller = VSCodeServeWebController.makeForTesting { _, _ in
+            XCTFail("Expected no launch")
+            return nil
+        }
+        controller.trackConnectionTokenFileForTesting(tokenFileURL)
+
+        controller.stop()
+
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: tokenFileURL.path),
+            "Persistent token under Application Support must not be deleted by stop()"
+        )
+    }
 }
 
 
