@@ -754,6 +754,7 @@ enum VSCodeCLILaunchConfigurationBuilder {
         }
         environment.removeValue(forKey: "NODE_OPTIONS")
         environment.removeValue(forKey: "NODE_REPL_EXTERNAL_MODULE")
+        environment["VSCODE_CLI_USE_FILE_KEYRING"] = "1"
 
         return VSCodeCLILaunchConfiguration(
             executableURL: codeTunnelURL,
@@ -928,7 +929,7 @@ final class VSCodeServeWebController {
             return (processes, tokenFileURLs, completions)
         }
 
-        for tokenFileURL in tokenFileURLs {
+        for tokenFileURL in tokenFileURLs where tokenFileURL.path.hasPrefix(NSTemporaryDirectory()) {
             Self.removeConnectionTokenFile(at: tokenFileURL)
         }
 
@@ -966,11 +967,17 @@ final class VSCodeServeWebController {
 
         let process = Process()
         process.executableURL = launchConfiguration.executableURL
+        // TODO(#21): --port 0 means VS Code gets an OS-assigned ephemeral port each restart, so
+        // the browser must re-navigate to the new URL. To stabilise: either use a fixed loopback
+        // port, or persist the port assigned by VS Code (from ServeWebOutputCollector) under
+        // vscodeServerDataDir and reuse it here. The --server-data-dir and persistent
+        // connection-token already fix Settings Sync / OAuth auth; the URL change is UX-only.
         process.arguments = launchConfiguration.argumentsPrefix + [
             "serve-web",
             "--accept-server-license-terms",
             "--host", "127.0.0.1",
             "--port", "0",
+            "--server-data-dir", Self.vscodeServerDataDir?.path ?? NSTemporaryDirectory(),
             "--connection-token-file", connectionTokenFileURL.path,
         ]
         process.environment = launchConfiguration.environment
@@ -1006,7 +1013,7 @@ final class VSCodeServeWebController {
                 }
                 if let tokenFileURL = self.connectionTokenFilesByProcessID.removeValue(
                     forKey: ObjectIdentifier(terminatedProcess)
-                ) {
+                ), tokenFileURL.path.hasPrefix(NSTemporaryDirectory()) {
                     Self.removeConnectionTokenFile(at: tokenFileURL)
                 }
             }
@@ -1028,7 +1035,7 @@ final class VSCodeServeWebController {
                 }
                 if let tokenFileURL = self.connectionTokenFilesByProcessID.removeValue(
                     forKey: ObjectIdentifier(process)
-                ) {
+                ), tokenFileURL.path.hasPrefix(NSTemporaryDirectory()) {
                     Self.removeConnectionTokenFile(at: tokenFileURL)
                 }
                 return false
@@ -1037,7 +1044,9 @@ final class VSCodeServeWebController {
         guard didStart else {
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             stderrPipe.fileHandleForReading.readabilityHandler = nil
-            Self.removeConnectionTokenFile(at: connectionTokenFileURL)
+            if connectionTokenFileURL.path.hasPrefix(NSTemporaryDirectory()) {
+                Self.removeConnectionTokenFile(at: connectionTokenFileURL)
+            }
             return nil
         }
 
@@ -1058,7 +1067,7 @@ final class VSCodeServeWebController {
                     }
                     if let tokenFileURL = self.connectionTokenFilesByProcessID.removeValue(
                         forKey: ObjectIdentifier(process)
-                    ) {
+                    ), tokenFileURL.path.hasPrefix(NSTemporaryDirectory()) {
                         Self.removeConnectionTokenFile(at: tokenFileURL)
                     }
                 }
@@ -1077,21 +1086,65 @@ final class VSCodeServeWebController {
         }
     }
 
+    /// Stable Application Support directory for VS Code serve-web state.
+    /// Mirrors the "programa" subdirectory convention used elsewhere in the app.
+    private static var vscodeServerDataDir: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("programa", isDirectory: true)
+            .appendingPathComponent("vscode-server", isDirectory: true)
+    }
+
     private static func randomConnectionToken() -> String {
         UUID().uuidString.replacingOccurrences(of: "-", with: "")
     }
 
+    /// Returns a URL for the connection token file. Prefers a persistent file
+    /// under Application Support so the token (and the browser's vscode-tkn
+    /// cookie) survives Programa restarts (issue #21). Falls back to an
+    /// ephemeral temp-dir file when Application Support is unavailable.
     private static func makeConnectionTokenFile() -> URL? {
+        if let persistentURL = vscodeServerDataDir?
+            .appendingPathComponent("connection-token", isDirectory: false) {
+            if let url = makePersistentConnectionTokenFile(at: persistentURL) {
+                return url
+            }
+        }
+        return makeEphemeralConnectionTokenFile()
+    }
+
+    private static func makePersistentConnectionTokenFile(at tokenFileURL: URL) -> URL? {
+        let dir = tokenFileURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Reuse an existing non-empty token so the browser cookie stays valid.
+        if let existingData = try? Data(contentsOf: tokenFileURL), !existingData.isEmpty {
+            return tokenFileURL
+        }
+        let token = randomConnectionToken()
+        guard let tokenData = token.data(using: .utf8) else { return nil }
+        let fd = open(tokenFileURL.path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else { return nil }
+        defer { _ = close(fd) }
+        let wroteAllBytes = tokenData.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return false }
+            return write(fd, baseAddress, rawBuffer.count) == rawBuffer.count
+        }
+        guard wroteAllBytes else {
+            try? FileManager.default.removeItem(at: tokenFileURL)
+            return nil
+        }
+        return tokenFileURL
+    }
+
+    private static func makeEphemeralConnectionTokenFile() -> URL? {
         let token = randomConnectionToken()
         let tokenFileName = "cmux-vscode-token-\(UUID().uuidString)"
         let tokenFileURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent(tokenFileName, isDirectory: false)
         guard let tokenData = token.data(using: .utf8) else { return nil }
-
         let fileDescriptor = open(tokenFileURL.path, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)
         guard fileDescriptor >= 0 else { return nil }
         defer { _ = close(fileDescriptor) }
-
         let wroteAllBytes = tokenData.withUnsafeBytes { rawBuffer in
             guard let baseAddress = rawBuffer.baseAddress else { return false }
             return write(fileDescriptor, baseAddress, rawBuffer.count) == rawBuffer.count
@@ -1100,7 +1153,6 @@ final class VSCodeServeWebController {
             removeConnectionTokenFile(at: tokenFileURL)
             return nil
         }
-
         return tokenFileURL
     }
 
