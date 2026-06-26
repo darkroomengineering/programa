@@ -27,6 +27,39 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         super.tearDown()
     }
 
+    /// Regression for #6618: `shouldPublishShellActivity` used to record the state
+    /// it was queried with (write-on-read). When a report arrived before the panel
+    /// existed, that premature write suppressed every later identical report, so the
+    /// panel's shell state stayed `.unknown` forever. The read and the write are now
+    /// split — `recordShellActivity` is the only writer and runs only after a
+    /// confirmed main-thread apply.
+    func testShellActivityDedupDoesNotSuppressWhenApplyWasNeverRecorded() {
+        let fastPath = TerminalController.SocketFastPathState()
+        let workspaceId = UUID()
+        let panelId = UUID()
+        let idle = Workspace.PanelShellActivityState.promptIdle
+
+        // First report for this surface must publish.
+        XCTAssertTrue(fastPath.shouldPublishShellActivity(
+            workspaceId: workspaceId, panelId: panelId, state: idle))
+
+        // The panel was absent, so the apply was never recorded. Querying again must
+        // NOT have been suppressed by the previous read (the core of the #6618 bug).
+        XCTAssertTrue(fastPath.shouldPublishShellActivity(
+            workspaceId: workspaceId, panelId: panelId, state: idle))
+
+        // After a confirmed apply is recorded, the identical report is deduped.
+        // recordShellActivity hops a serial queue; the subsequent sync read is FIFO-
+        // ordered behind it, so this is deterministic without sleeping.
+        fastPath.recordShellActivity(workspaceId: workspaceId, panelId: panelId, state: idle)
+        XCTAssertFalse(fastPath.shouldPublishShellActivity(
+            workspaceId: workspaceId, panelId: panelId, state: idle))
+
+        // A different state always publishes.
+        XCTAssertTrue(fastPath.shouldPublishShellActivity(
+            workspaceId: workspaceId, panelId: panelId, state: .commandRunning))
+    }
+
     func testSocketPermissionsFollowAccessMode() throws {
         let tabManager = TabManager()
 
