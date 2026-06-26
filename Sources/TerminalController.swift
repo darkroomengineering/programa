@@ -437,7 +437,9 @@ class TerminalController {
         let panelId: UUID
     }
 
-    private final class SocketFastPathState: @unchecked Sendable {
+    // `internal` (not `private`) so the dedup logic can be exercised by
+    // `TerminalControllerSocketSecurityTests` via `@testable import` (regression #6618).
+    final class SocketFastPathState: @unchecked Sendable {
         private let queue = DispatchQueue(label: "com.cmux.socket-fast-path")
         private var lastReportedDirectories: [SocketSurfaceKey: String] = [:]
         private var lastReportedShellStates: [SocketSurfaceKey: Workspace.PanelShellActivityState] = [:]
