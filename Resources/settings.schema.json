@@ -422,6 +422,28 @@
           "type": "string",
           "default": "0.1.29",
           "description": "Pinned react-grab version for the browser toolbar helper."
+        },
+        "proxy": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Route the embedded browser through a proxy. Applied only when no remote relay endpoint is active (the relay takes precedence). Requires host and port; type defaults to socks5.",
+          "properties": {
+            "host": {
+              "type": "string",
+              "description": "Proxy host name or IP address."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "description": "Proxy port number (1–65535)."
+            },
+            "type": {
+              "type": "string",
+              "enum": ["socks5", "httpConnect"],
+              "description": "Proxy protocol type. \"socks5\" uses SOCKSv5; \"httpConnect\" uses HTTP CONNECT tunneling. Defaults to \"socks5\"."
+            }
+          }
         }
       }
     },

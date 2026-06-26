@@ -2804,23 +2804,43 @@ final class BrowserPanel: Panel, ObservableObject {
         guard #available(macOS 14.0, *) else { return }
 
         let store = webView.configuration.websiteDataStore
-        guard let endpoint = remoteProxyEndpoint else {
-            store.proxyConfigurations = []
+
+        // Relay endpoint takes precedence: when active, configure both SOCKS and
+        // HTTP CONNECT so the SSH relay can intercept all WebView traffic.
+        if let endpoint = remoteProxyEndpoint {
+            let host = endpoint.host.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !host.isEmpty,
+                  endpoint.port > 0 && endpoint.port <= 65535,
+                  let nwPort = NWEndpoint.Port(rawValue: UInt16(endpoint.port)) else {
+                store.proxyConfigurations = []
+                return
+            }
+            let nwEndpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: nwPort)
+            let socks = ProxyConfiguration(socksv5Proxy: nwEndpoint)
+            let connect = ProxyConfiguration(httpCONNECTProxy: nwEndpoint)
+            store.proxyConfigurations = [socks, connect]
             return
         }
 
-        let host = endpoint.host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !host.isEmpty,
-              endpoint.port > 0 && endpoint.port <= 65535,
-              let nwPort = NWEndpoint.Port(rawValue: UInt16(endpoint.port)) else {
+        // No relay endpoint — apply the user-configured proxy if set, else clear.
+        if let descriptor = BrowserUserProxySettings.descriptor() {
+            guard let nwPort = NWEndpoint.Port(rawValue: UInt16(descriptor.port)) else {
+                store.proxyConfigurations = []
+                return
+            }
+            let nwEndpoint = NWEndpoint.hostPort(
+                host: NWEndpoint.Host(descriptor.host),
+                port: nwPort
+            )
+            switch descriptor.proxyType {
+            case .socks5:
+                store.proxyConfigurations = [ProxyConfiguration(socksv5Proxy: nwEndpoint)]
+            case .httpConnect:
+                store.proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy: nwEndpoint)]
+            }
+        } else {
             store.proxyConfigurations = []
-            return
         }
-
-        let nwEndpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: nwPort)
-        let socks = ProxyConfiguration(socksv5Proxy: nwEndpoint)
-        let connect = ProxyConfiguration(httpCONNECTProxy: nwEndpoint)
-        store.proxyConfigurations = [socks, connect]
     }
 
     private func beginDownloadActivity() {
@@ -10302,6 +10322,44 @@ final class BrowserDataImportCoordinator {
         alert.informativeText = lines.joined(separator: "\n")
         alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
         alert.runModal()
+    }
+}
+
+// MARK: - User Proxy Settings
+
+/// Persists and reads user-configured proxy settings (config-file only; no Settings UI).
+///
+/// When `browser.proxy` is present in `settings.json`, the config-file parser writes
+/// host/port/type into UserDefaults via these keys. `BrowserPanel` reads them back
+/// through `descriptor()` when building `WKWebsiteDataStore.proxyConfigurations`.
+enum BrowserUserProxySettings {
+    static let hostKey = "browserUserProxyHost"
+    static let portKey = "browserUserProxyPort"
+    static let typeKey = "browserUserProxyType"
+
+    enum ProxyType: String {
+        case socks5
+        case httpConnect
+    }
+
+    struct Descriptor {
+        let host: String
+        let port: Int
+        let proxyType: ProxyType
+    }
+
+    /// Returns the user-configured proxy descriptor, or nil when no valid proxy is set.
+    static func descriptor(defaults: UserDefaults = .standard) -> Descriptor? {
+        guard let host = defaults.string(forKey: hostKey) else { return nil }
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHost.isEmpty else { return nil }
+        // Use object(forKey:) check so that port == 0 stored as a real value is still caught.
+        guard defaults.object(forKey: portKey) != nil else { return nil }
+        let port = defaults.integer(forKey: portKey)
+        guard port >= 1 && port <= 65535 else { return nil }
+        let typeRaw = defaults.string(forKey: typeKey) ?? ProxyType.socks5.rawValue
+        guard let proxyType = ProxyType(rawValue: typeRaw) else { return nil }
+        return Descriptor(host: trimmedHost, port: port, proxyType: proxyType)
     }
 }
 
