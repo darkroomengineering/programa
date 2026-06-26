@@ -1210,7 +1210,9 @@ class TabManager: ObservableObject {
     }
 
     var isFindVisible: Bool {
-        selectedTerminalPanel?.searchState != nil || focusedBrowserPanel?.searchState != nil
+        selectedTerminalPanel?.searchState != nil
+            || focusedBrowserPanel?.searchState != nil
+            || focusedMarkdownPanel?.searchState != nil
     }
 
     var canUseSelectionForFind: Bool {
@@ -1227,18 +1229,9 @@ class TabManager: ObservableObject {
             _ = panel.performBindingAction("start_search")
             return
         }
-        if let panel = selectedTerminalPanel {
-            let hadExistingSearch = panel.searchState != nil
-            let handled = startOrFocusTerminalSearch(panel.surface)
-            NSLog("Find: startSearch workspace=%@ panel=%@", panel.workspaceId.uuidString, panel.id.uuidString)
-#if DEBUG
-            dlog(
-                "find.startSearch workspace=\(panel.workspaceId.uuidString.prefix(5)) " +
-                "panel=\(panel.id.uuidString.prefix(5)) existing=\(hadExistingSearch ? "yes" : "no") " +
-                "handled=\(handled ? 1 : 0) " +
-                "firstResponder=\(String(describing: panel.surface.hostedView.window?.firstResponder))"
-            )
-#endif
+
+        if let panel = focusedMarkdownPanel {
+            panel.startFind()
             return
         }
 
@@ -1261,12 +1254,22 @@ class TabManager: ObservableObject {
             return
         }
 
+        if let panel = focusedMarkdownPanel {
+            panel.findNext()
+            return
+        }
+
         focusedBrowserPanel?.findNext()
     }
 
     func findPrevious() {
         if let panel = selectedTerminalPanel {
             _ = panel.performBindingAction("search:previous")
+            return
+        }
+
+        if let panel = focusedMarkdownPanel {
+            panel.findPrevious()
             return
         }
 
@@ -1282,6 +1285,11 @@ class TabManager: ObservableObject {
     func hideFind() {
         if let panel = selectedTerminalPanel {
             panel.searchState = nil
+            return
+        }
+
+        if let panel = focusedMarkdownPanel {
+            panel.hideFind()
             return
         }
 
@@ -3322,6 +3330,13 @@ class TabManager: ObservableObject {
         guard let tab = selectedWorkspace,
               let panelId = tab.focusedPanelId else { return nil }
         return tab.panels[panelId] as? BrowserPanel
+    }
+
+    /// Returns the focused panel if it's a MarkdownPanel, nil otherwise
+    var focusedMarkdownPanel: MarkdownPanel? {
+        guard let tab = selectedWorkspace,
+              let panelId = tab.focusedPanelId else { return nil }
+        return tab.panels[panelId] as? MarkdownPanel
     }
 
     @discardableResult
