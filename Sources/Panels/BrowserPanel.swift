@@ -6255,6 +6255,16 @@ private class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
         if !navigationResponse.isForMainFrame {
+            // Subframe responses normally render inline, but a Content-Disposition:
+            // attachment header signals an explicit download intent (e.g. a Gmail
+            // attachment inside an iframe). Check before allowing so those reach
+            // the download delegate instead of being silently dropped.
+            if let response = navigationResponse.response as? HTTPURLResponse,
+               let cd = response.value(forHTTPHeaderField: "Content-Disposition"),
+               cd.lowercased().hasPrefix("attachment") {
+                decisionHandler(.download)
+                return
+            }
             decisionHandler(.allow)
             return
         }
