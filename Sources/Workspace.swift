@@ -6768,6 +6768,47 @@ final class Workspace: Identifiable, ObservableObject {
         return themedColor.hexString(includeAlpha: includeAlpha)
     }
 
+    /// Returns a clearly-perceptible divider hex derived from the chrome background hex.
+    /// Dark backgrounds are lightened ~28% toward white; light backgrounds are darkened ~20% toward
+    /// black. These factors are meaningfully stronger than bonsplit's built-in weak fallback (0.16/0.12
+    /// tone at reduced alpha), ensuring the 1pt split divider is visible in both dark and light themes.
+    /// The result is always an opaque #RRGGBB string (no alpha), matching hexString(includeAlpha:false).
+    static func bonsplitDividerHex(fromChromeHex chromeHex: String) -> String {
+        // Parse #RRGGBB or #RRGGBBAA produced by hexString(includeAlpha:)
+        let stripped = chromeHex.hasPrefix("#") ? String(chromeHex.dropFirst()) : chromeHex
+        guard stripped.count >= 6,
+              let rByte = UInt8(stripped.prefix(2), radix: 16),
+              let gByte = UInt8(stripped.dropFirst(2).prefix(2), radix: 16),
+              let bByte = UInt8(stripped.dropFirst(4).prefix(2), radix: 16)
+        else {
+            return chromeHex  // fallback: return unchanged on parse failure
+        }
+
+        var r = CGFloat(rByte) / 255.0
+        var g = CGFloat(gByte) / 255.0
+        var b = CGFloat(bByte) / 255.0
+
+        // Perceptual luminance check (sRGB coefficients, no gamma expansion needed for light/dark)
+        let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+        if luminance < 0.5 {
+            // Dark background: lighten 28% toward white
+            r += (1.0 - r) * 0.28
+            g += (1.0 - g) * 0.28
+            b += (1.0 - b) * 0.28
+        } else {
+            // Light background: darken 20% toward black
+            r *= 0.80
+            g *= 0.80
+            b *= 0.80
+        }
+
+        let rOut = min(255, max(0, Int((r * 255).rounded())))
+        let gOut = min(255, max(0, Int((g * 255).rounded())))
+        let bOut = min(255, max(0, Int((b * 255).rounded())))
+        return String(format: "#%02X%02X%02X", rOut, gOut, bOut)
+    }
+
     nonisolated static func resolvedChromeColors(
         from backgroundColor: NSColor
     ) -> BonsplitConfiguration.Appearance.ChromeColors {
@@ -6778,14 +6819,16 @@ final class Workspace: Identifiable, ObservableObject {
         from backgroundColor: NSColor,
         backgroundOpacity: Double
     ) -> BonsplitConfiguration.Appearance {
-        BonsplitConfiguration.Appearance(
+        let chromeHex = Self.bonsplitChromeHex(
+            backgroundColor: backgroundColor,
+            backgroundOpacity: backgroundOpacity
+        )
+        return BonsplitConfiguration.Appearance(
             splitButtonTooltips: Self.currentSplitButtonTooltips(),
             enableAnimations: false,
             chromeColors: .init(
-                backgroundHex: Self.bonsplitChromeHex(
-                    backgroundColor: backgroundColor,
-                    backgroundOpacity: backgroundOpacity
-                )
+                backgroundHex: chromeHex,
+                borderHex: Self.bonsplitDividerHex(fromChromeHex: chromeHex)
             )
         )
     }
@@ -6817,6 +6860,7 @@ final class Workspace: Identifiable, ObservableObject {
             return
         }
         bonsplitController.configuration.appearance.chromeColors.backgroundHex = nextHex
+        bonsplitController.configuration.appearance.chromeColors.borderHex = Self.bonsplitDividerHex(fromChromeHex: nextHex)
         if GhosttyApp.shared.backgroundLogEnabled {
             GhosttyApp.shared.logBackground(
                 "theme applied workspace=\(id.uuidString) reason=\(reason) resultingBg=\(bonsplitController.configuration.appearance.chromeColors.backgroundHex ?? "nil")"
