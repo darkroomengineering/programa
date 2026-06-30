@@ -136,6 +136,7 @@
 					C1A2B3C4D5E6F70800000004 /* TerminalControllerShellStateDedupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */; };
 					2BB56A710BB1FC50367E5BCF /* TabManagerSessionSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */; };
 					C1A2B3C4D5E6F70800000001 /* CmuxConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000002 /* CmuxConfigTests.swift */; };
+					C1A2B3C4D5E6F70800000006 /* ServeWebPortStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000005 /* ServeWebPortStoreTests.swift */; };
 		/* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -336,6 +337,7 @@
 				C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalControllerShellStateDedupTests.swift; sourceTree = "<group>"; };
 				10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManagerSessionSnapshotTests.swift; sourceTree = "<group>"; };
 				C1A2B3C4D5E6F70800000002 /* CmuxConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CmuxConfigTests.swift; sourceTree = "<group>"; };
+				C1A2B3C4D5E6F70800000005 /* ServeWebPortStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServeWebPortStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -618,6 +620,7 @@
 					C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */,
 					10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */,
 					C1A2B3C4D5E6F70800000002 /* CmuxConfigTests.swift */,
+					C1A2B3C4D5E6F70800000005 /* ServeWebPortStoreTests.swift */,
 				);
 				path = cmuxTests;
 				sourceTree = "<group>";
@@ -903,6 +906,7 @@
 					C1A2B3C4D5E6F70800000004 /* TerminalControllerShellStateDedupTests.swift in Sources */,
 					2BB56A710BB1FC50367E5BCF /* TabManagerSessionSnapshotTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000001 /* CmuxConfigTests.swift in Sources */,
+					C1A2B3C4D5E6F70800000006 /* ServeWebPortStoreTests.swift in Sources */,
 				);
 				runOnlyForDeploymentPostprocessing = 0;
 			};

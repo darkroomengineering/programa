@@ -967,16 +967,16 @@ final class VSCodeServeWebController {
 
         let process = Process()
         process.executableURL = launchConfiguration.executableURL
-        // TODO(#21): --port 0 means VS Code gets an OS-assigned ephemeral port each restart, so
-        // the browser must re-navigate to the new URL. To stabilise: either use a fixed loopback
-        // port, or persist the port assigned by VS Code (from ServeWebOutputCollector) under
-        // vscodeServerDataDir and reuse it here. The --server-data-dir and persistent
-        // connection-token already fix Settings Sync / OAuth auth; the URL change is UX-only.
+        // #21: reuse the port VS Code assigned on a previous run so the embedded browser
+        // keeps the same URL across restarts. ServeWebPortStore returns the persisted port
+        // only when it is still bindable, otherwise "0" (OS-assigned) — so a now-occupied
+        // port falls back gracefully instead of failing the launch. The --server-data-dir
+        // and persistent connection-token already fix Settings Sync / OAuth auth.
         process.arguments = launchConfiguration.argumentsPrefix + [
             "serve-web",
             "--accept-server-license-terms",
             "--host", "127.0.0.1",
-            "--port", "0",
+            "--port", ServeWebPortStore.portArgument(persistedIn: Self.vscodeServerDataDir),
             "--server-data-dir", Self.vscodeServerDataDir?.path ?? NSTemporaryDirectory(),
             "--connection-token-file", connectionTokenFileURL.path,
         ]
@@ -1073,6 +1073,11 @@ final class VSCodeServeWebController {
                 }
             }
             return nil
+        }
+
+        // #21: remember the assigned port so the next launch can request it again.
+        if let assignedPort = serveWebURL.port {
+            ServeWebPortStore.persist(port: assignedPort, in: Self.vscodeServerDataDir)
         }
 
         return (process, serveWebURL)
@@ -1213,6 +1218,73 @@ final class ServeWebOutputCollector {
         if webUIURL != nil { return true }
         _ = semaphore.wait(timeout: .now() + timeoutSeconds)
         return webUIURL != nil
+    }
+}
+
+/// Persists the VS Code serve-web port across restarts (#21) so the embedded browser
+/// keeps the same URL. The port `code serve-web` assigns is written under the serve-web
+/// data dir and reused on the next launch — but only when it is still bindable, so a
+/// now-occupied port falls back to an OS-assigned one instead of failing the launch.
+enum ServeWebPortStore {
+    static let fileName = "serve-web-port"
+
+    /// The `--port` argument for `code serve-web`: the persisted port when it is valid and
+    /// currently free, otherwise "0" (let the OS assign one). `isPortAvailable` is injectable
+    /// for testing; it defaults to a real loopback bind probe.
+    static func portArgument(
+        persistedIn directory: URL?,
+        isPortAvailable: (Int) -> Bool = ServeWebPortStore.isPortAvailable
+    ) -> String {
+        guard let url = portFileURL(in: directory),
+              let data = try? Data(contentsOf: url),
+              let raw = String(data: data, encoding: .utf8),
+              let port = parsePort(raw),
+              isPortAvailable(port) else {
+            return "0"
+        }
+        return String(port)
+    }
+
+    /// Records the port VS Code assigned so the next launch can request it again. No-op for
+    /// out-of-range ports or when the data dir is unavailable.
+    static func persist(port: Int, in directory: URL?) {
+        guard isValidPort(port), let url = portFileURL(in: directory) else { return }
+        let dir = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? Data(String(port).utf8).write(to: url, options: .atomic)
+    }
+
+    /// Parses a stored port string, returning nil for malformed or out-of-range values.
+    static func parsePort(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let port = Int(trimmed), isValidPort(port) else { return nil }
+        return port
+    }
+
+    /// True when a TCP socket can bind 127.0.0.1:port right now.
+    static func isPortAvailable(_ port: Int) -> Bool {
+        guard isValidPort(port) else { return false }
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var reuse: Int32 = 1
+        _ = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = in_port_t(UInt16(port)).bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let bound = withUnsafePointer(to: &addr) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                bind(fd, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        return bound == 0
+    }
+
+    private static func isValidPort(_ port: Int) -> Bool { (1...65535).contains(port) }
+
+    private static func portFileURL(in directory: URL?) -> URL? {
+        directory?.appendingPathComponent(fileName, isDirectory: false)
     }
 }
 
