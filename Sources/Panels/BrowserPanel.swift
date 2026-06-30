@@ -5853,6 +5853,27 @@ class BrowserDownloadDelegate: NSObject, WKDownloadDelegate {
         return safe.isEmpty ? "download" : safe
     }
 
+    /// Resolves a non-colliding destination in ~/Downloads, appending " 2", " 3", … like Safari.
+    static func uniqueDownloadsURL(for filename: String) -> URL {
+        let fileManager = FileManager.default
+        let downloads = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Downloads", isDirectory: true)
+        try? fileManager.createDirectory(at: downloads, withIntermediateDirectories: true)
+
+        var candidate = downloads.appendingPathComponent(filename, isDirectory: false)
+        guard fileManager.fileExists(atPath: candidate.path) else { return candidate }
+
+        let base = (filename as NSString).deletingPathExtension
+        let ext = (filename as NSString).pathExtension
+        var counter = 2
+        repeat {
+            let name = ext.isEmpty ? "\(base) \(counter)" : "\(base) \(counter).\(ext)"
+            candidate = downloads.appendingPathComponent(name, isDirectory: false)
+            counter += 1
+        } while fileManager.fileExists(atPath: candidate.path)
+        return candidate
+    }
+
     private func storeState(_ state: DownloadState, for download: WKDownload) {
         activeDownloadsLock.lock()
         activeDownloads[ObjectIdentifier(download)] = state
@@ -5908,27 +5929,16 @@ class BrowserDownloadDelegate: NSObject, WKDownloadDelegate {
         #endif
         NSLog("BrowserPanel download finished: %@", info.suggestedFilename)
 
-        // Show NSSavePanel on the next runloop iteration (safe context).
+        // #9: auto-save to ~/Downloads (Safari-style) instead of prompting with a save panel.
         DispatchQueue.main.async {
             self.onDownloadReadyToSave?()
-            let savePanel = NSSavePanel()
-            savePanel.nameFieldStringValue = info.suggestedFilename
-            savePanel.canCreateDirectories = true
-            savePanel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-
-            savePanel.begin { result in
-                guard result == .OK, let destURL = savePanel.url else {
-                    try? FileManager.default.removeItem(at: info.tempURL)
-                    return
-                }
-                do {
-                    try? FileManager.default.removeItem(at: destURL)
-                    try FileManager.default.moveItem(at: info.tempURL, to: destURL)
-                    NSLog("BrowserPanel download saved: %@", destURL.path)
-                } catch {
-                    NSLog("BrowserPanel download move failed: %@", error.localizedDescription)
-                    try? FileManager.default.removeItem(at: info.tempURL)
-                }
+            let destURL = Self.uniqueDownloadsURL(for: info.suggestedFilename)
+            do {
+                try FileManager.default.moveItem(at: info.tempURL, to: destURL)
+                NSLog("BrowserPanel download saved: %@", destURL.path)
+            } catch {
+                NSLog("BrowserPanel download move failed: %@", error.localizedDescription)
+                try? FileManager.default.removeItem(at: info.tempURL)
             }
         }
     }
