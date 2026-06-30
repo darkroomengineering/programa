@@ -53,8 +53,14 @@ struct GhosttyConfig {
             return splitDividerColor
         }
 
+        // On light backgrounds a subtle darken reads as a divider. On dark/near-black
+        // backgrounds, darkening pushes toward black and the divider disappears — lighten
+        // instead so the divider stays visible. Users can still override via
+        // `split-divider-color`.
         let isLightBackground = backgroundColor.isLightColor
-        return backgroundColor.darken(by: isLightBackground ? 0.08 : 0.4)
+        return isLightBackground
+            ? backgroundColor.darken(by: 0.08)
+            : backgroundColor.lighten(by: 0.18)
     }
 
     static func load(
@@ -586,6 +592,22 @@ extension NSColor {
             hue: h,
             saturation: s,
             brightness: min(b * (1 - amount), 1),
+            alpha: a
+        )
+    }
+
+    /// Additively raises brightness so the result stays visible even on pure black
+    /// (where multiplicative scaling would have no effect).
+    func lighten(by amount: CGFloat) -> NSColor {
+        var h: CGFloat = 0
+        var s: CGFloat = 0
+        var b: CGFloat = 0
+        var a: CGFloat = 0
+        getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        return NSColor(
+            hue: h,
+            saturation: s,
+            brightness: min(b + amount, 1),
             alpha: a
         )
     }

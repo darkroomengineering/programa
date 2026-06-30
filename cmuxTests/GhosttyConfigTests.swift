@@ -79,6 +79,43 @@ final class GhosttyConfigTests: XCTestCase {
         XCTAssertTrue(candidates.contains("iTerm2 Solarized Dark"))
     }
 
+    // #26: on near-black backgrounds the divider must be lightened to stay visible,
+    // not darkened toward black.
+    func testSplitDividerLightensOnNearBlackBackground() {
+        var config = GhosttyConfig()
+        config.splitDividerColor = nil
+        config.backgroundColor = NSColor(hex: "#0a0a0a")!
+
+        let divider = config.resolvedSplitDividerColor
+        XCTAssertGreaterThan(
+            divider.luminance,
+            config.backgroundColor.luminance + 0.05,
+            "Divider on a near-black background should be clearly lighter than the background"
+        )
+    }
+
+    func testSplitDividerDarkensOnLightBackground() {
+        var config = GhosttyConfig()
+        config.splitDividerColor = nil
+        config.backgroundColor = NSColor(hex: "#fafafa")!
+
+        let divider = config.resolvedSplitDividerColor
+        XCTAssertLessThan(
+            divider.luminance,
+            config.backgroundColor.luminance,
+            "Divider on a light background should be darker than the background"
+        )
+    }
+
+    func testSplitDividerHonorsExplicitOverride() {
+        var config = GhosttyConfig()
+        let override = NSColor(hex: "#ff0000")!
+        config.splitDividerColor = override
+        config.backgroundColor = NSColor(hex: "#0a0a0a")!
+
+        XCTAssertEqual(config.resolvedSplitDividerColor, override)
+    }
+
     func testThemeSearchPathsIncludeXDGDataDirsThemes() {
         let pathA = "/tmp/programa-theme-a"
         let pathB = "/tmp/programa-theme-b"
