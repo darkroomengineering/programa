@@ -267,7 +267,14 @@ final class ProgramaConfigStore: ObservableObject {
     private(set) var localConfigPath: String?
     let globalConfigPath: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return (home as NSString).appendingPathComponent(".config/cmux/cmux.json")
+        let newPath = (home as NSString).appendingPathComponent(".config/programa/programa.json")
+        let legacyPath = (home as NSString).appendingPathComponent(".config/cmux/cmux.json")
+        let fm = FileManager.default
+        // Prefer the new path; transparently fall back to the legacy cmux path so
+        // existing users' ~/.config/cmux/cmux.json keeps working after the rebrand.
+        if fm.fileExists(atPath: newPath) { return newPath }
+        if fm.fileExists(atPath: legacyPath) { return legacyPath }
+        return newPath
     }()
 
     private var cancellables = Set<AnyCancellable>()
@@ -320,7 +327,7 @@ final class ProgramaConfigStore: ObservableObject {
         let newPath: String?
         if let directory, !directory.isEmpty {
             newPath = findProgramaConfig(startingFrom: directory)
-                ?? (directory as NSString).appendingPathComponent("cmux.json")
+                ?? (directory as NSString).appendingPathComponent("programa.json")
         } else {
             newPath = nil
         }
@@ -338,9 +345,12 @@ final class ProgramaConfigStore: ObservableObject {
         var current = directory
         let fs = FileManager.default
         while true {
-            let candidate = (current as NSString).appendingPathComponent("cmux.json")
-            if fs.fileExists(atPath: candidate) {
-                return candidate
+            // Prefer programa.json; accept legacy cmux.json so existing project roots keep working.
+            for name in ["programa.json", "cmux.json"] {
+                let candidate = (current as NSString).appendingPathComponent(name)
+                if fs.fileExists(atPath: candidate) {
+                    return candidate
+                }
             }
             let parent = (current as NSString).deletingLastPathComponent
             if parent == current { break }

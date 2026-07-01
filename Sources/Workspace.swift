@@ -756,7 +756,7 @@ extension Workspace {
     }
 }
 
-// MARK: - cmux.json custom layout
+// MARK: - programa.json custom layout
 
 extension Workspace {
 

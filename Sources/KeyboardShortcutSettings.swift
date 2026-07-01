@@ -5,7 +5,7 @@ import SwiftUI
 enum KeyboardShortcutSettings {
     static let didChangeNotification = Notification.Name("cmux.keyboardShortcutSettingsDidChange")
     static let actionUserInfoKey = "action"
-    static let settingsFileDisplayPath = "~/.config/cmux/settings.json"
+    static let settingsFileDisplayPath = "~/.config/programa/settings.json"
     static var settingsFileStore: KeyboardShortcutSettingsFileStore = .shared {
         didSet {
             notifySettingsFileDidChange()

@@ -30,7 +30,14 @@ final class ProgramaSettingsFileStore {
 
     static var defaultPrimaryPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return (home as NSString).appendingPathComponent(".config/cmux/settings.json")
+        let newPath = (home as NSString).appendingPathComponent(".config/programa/settings.json")
+        let legacyPath = (home as NSString).appendingPathComponent(".config/cmux/settings.json")
+        let fm = FileManager.default
+        // Prefer the new path; fall back to the legacy cmux path so existing users'
+        // ~/.config/programa/settings.json keeps working after the rebrand.
+        if fm.fileExists(atPath: newPath) { return newPath }
+        if fm.fileExists(atPath: legacyPath) { return legacyPath }
+        return newPath
     }
 
     static var defaultFallbackPath: String? {
@@ -1233,7 +1240,7 @@ final class ProgramaSettingsFileStore {
             "  // Uncomment and edit any setting to make it file-managed.",
             "  // Remove a setting to fall back to the value saved in Settings.",
             "  // cmux creates this template on launch when both settings file locations are missing.",
-            "  // ~/.config/cmux/settings.json takes precedence over the Application Support fallback.",
+            "  // ~/.config/programa/settings.json takes precedence over the Application Support fallback.",
             "",
         ]
 

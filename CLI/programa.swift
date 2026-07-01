@@ -7347,7 +7347,7 @@ struct CMUXCLI {
             Usage: cmux reload-config
 
             Run the same configuration reload as the Reload Configuration shortcut.
-            This reloads Ghostty config, re-reads ~/.config/cmux/settings.json, and refreshes terminals.
+            This reloads Ghostty config, re-reads ~/.config/programa/settings.json, and refreshes terminals.
 
             Example:
               cmux reload-config

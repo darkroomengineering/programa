@@ -5444,7 +5444,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             SettingsCardRow(
                                 String(localized: "settings.customCommands.trustedDirectories", defaultValue: "Trusted Directories"),
-                                subtitle: String(localized: "settings.customCommands.trustedDirectories.subtitle", defaultValue: "Commands from cmux.json in these directories run without confirmation. One path per line.")
+                                subtitle: String(localized: "settings.customCommands.trustedDirectories.subtitle", defaultValue: "Commands from programa.json in these directories run without confirmation. One path per line.")
                             ) {
                                 EmptyView()
                             }
@@ -5468,7 +5468,7 @@ struct SettingsView: View {
                         }
 
                         SettingsCardDivider()
-                        SettingsCardNote(String(localized: "settings.customCommands.trustedDirectories.note", defaultValue: "Place a cmux.json in your project root to define custom commands. Trust a directory from the confirmation dialog, or add paths here. For git repos, trusting the root covers all subdirectories."))
+                        SettingsCardNote(String(localized: "settings.customCommands.trustedDirectories.note", defaultValue: "Place a programa.json in your project root to define custom commands. Trust a directory from the confirmation dialog, or add paths here. For git repos, trusting the root covers all subdirectories."))
                     }
 
                     SettingsSectionHeader(title: String(localized: "settings.section.browser", defaultValue: "Browser"))

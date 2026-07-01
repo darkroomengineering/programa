@@ -7073,7 +7073,7 @@ struct ContentView: View {
             )
         )
 
-        let cmuxConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "cmux.json"))
+        let cmuxConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "programa.json"))
         for command in cmuxConfigStore.loadedCommands {
             let commandName = sanitizeProgramaConfigPaletteText(command.name)
             let subtitle = command.description
