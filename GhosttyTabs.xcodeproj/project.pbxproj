@@ -135,7 +135,7 @@
 					8C4BBF2DEF6DF93F395A9EE7 /* TerminalControllerSocketSecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */; };
 					C1A2B3C4D5E6F70800000004 /* TerminalControllerShellStateDedupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */; };
 					2BB56A710BB1FC50367E5BCF /* TabManagerSessionSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */; };
-					C1A2B3C4D5E6F70800000001 /* CmuxConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000002 /* CmuxConfigTests.swift */; };
+					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */; };
 					C1A2B3C4D5E6F70800000006 /* ServeWebPortStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000005 /* ServeWebPortStoreTests.swift */; };
 		/* End PBXBuildFile section */
 
@@ -209,8 +209,8 @@
 
 		/* Begin PBXFileReference section */
 			A5001000 /* cmux.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cmux.app; sourceTree = BUILT_PRODUCTS_DIR; };
-			F1000002A1B2C3D4E5F60718 /* cmuxTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = cmuxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-			7E7E6EF344A568AC7FEE3715 /* cmuxUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = cmuxUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+			F1000002A1B2C3D4E5F60718 /* programaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+			7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			A5001011 /* ProgramaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaApp.swift; sourceTree = "<group>"; };
 			A5001012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 			9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSelectionState.swift; sourceTree = "<group>"; };
@@ -336,7 +336,7 @@
 				491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalControllerSocketSecurityTests.swift; sourceTree = "<group>"; };
 				C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalControllerShellStateDedupTests.swift; sourceTree = "<group>"; };
 				10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManagerSessionSnapshotTests.swift; sourceTree = "<group>"; };
-				C1A2B3C4D5E6F70800000002 /* CmuxConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CmuxConfigTests.swift; sourceTree = "<group>"; };
+				C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfigTests.swift; sourceTree = "<group>"; };
 				C1A2B3C4D5E6F70800000005 /* ServeWebPortStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServeWebPortStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -453,8 +453,8 @@
 				A5001016 /* GhosttyKit.xcframework */,
 				A5001017 /* ghostty.h */,
 				A5001018 /* cmux-Bridging-Header.h */,
-				3196C9C2D01F054C1D3385DD /* cmuxUITests */,
-				F1000003A1B2C3D4E5F60718 /* cmuxTests */,
+				3196C9C2D01F054C1D3385DD /* programaUITests */,
+				F1000003A1B2C3D4E5F60718 /* programaTests */,
 				A5001042 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -556,13 +556,13 @@
 				A5001000 /* cmux.app */,
 				B9000004A1B2C3D4E5F60719 /* cmux */,
 				D1320AA0D1320AA0D1320AA5 /* CmuxDockTilePlugin.plugin */,
-				7E7E6EF344A568AC7FEE3715 /* cmuxUITests.xctest */,
-				F1000002A1B2C3D4E5F60718 /* cmuxTests.xctest */,
+				7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */,
+				F1000002A1B2C3D4E5F60718 /* programaTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-			3196C9C2D01F054C1D3385DD /* cmuxUITests */ = {
+			3196C9C2D01F054C1D3385DD /* programaUITests */ = {
 				isa = PBXGroup;
 						children = (
 							B9000011A1B2C3D4E5F60719 /* AutomationSocketUITests.swift */,
@@ -583,10 +583,10 @@
 						E1000001A1B2C3D4E5F60718 /* MenuKeyEquivalentRoutingUITests.swift */,
 						AA1B2C3D4E5F60719 /* BonsplitTabDragUITests.swift */,
 					);
-				path = cmuxUITests;
+				path = programaUITests;
 				sourceTree = "<group>";
 			};
-			F1000003A1B2C3D4E5F60718 /* cmuxTests */ = {
+			F1000003A1B2C3D4E5F60718 /* programaTests */ = {
 				isa = PBXGroup;
 				children = (
 					F2000001A1B2C3D4E5F60718 /* UpdatePillReleaseVisibilityTests.swift */,
@@ -619,10 +619,10 @@
 					491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */,
 					C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */,
 					10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */,
-					C1A2B3C4D5E6F70800000002 /* CmuxConfigTests.swift */,
+					C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */,
 					C1A2B3C4D5E6F70800000005 /* ServeWebPortStoreTests.swift */,
 				);
-				path = cmuxTests;
+				path = programaTests;
 				sourceTree = "<group>";
 			};
 /* End PBXGroup section */
@@ -694,9 +694,9 @@
 			productReference = B9000004A1B2C3D4E5F60719 /* cmux */;
 			productType = "com.apple.product-type.tool";
 		};
-		CB450DF0F0B3839599082C4D /* cmuxUITests */ = {
+		CB450DF0F0B3839599082C4D /* programaUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AD2C7ED08993D3CD4910A1FF /* Build configuration list for PBXNativeTarget "cmuxUITests" */;
+			buildConfigurationList = AD2C7ED08993D3CD4910A1FF /* Build configuration list for PBXNativeTarget "programaUITests" */;
 			buildPhases = (
 				E436EF0BA8EC9E6721A42F79 /* Sources */,
 				AB408954939A11B8A87BB5DE /* Frameworks */,
@@ -707,14 +707,14 @@
 			dependencies = (
 				32568B0DCFC8656BA952468E /* PBXTargetDependency */,
 			);
-			name = cmuxUITests;
-			productName = cmuxUITests;
-			productReference = 7E7E6EF344A568AC7FEE3715 /* cmuxUITests.xctest */;
+			name = programaUITests;
+			productName = programaUITests;
+			productReference = 7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
-		F1000004A1B2C3D4E5F60718 /* cmuxTests */ = {
+		F1000004A1B2C3D4E5F60718 /* programaTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = F1000010A1B2C3D4E5F60718 /* Build configuration list for PBXNativeTarget "cmuxTests" */;
+			buildConfigurationList = F1000010A1B2C3D4E5F60718 /* Build configuration list for PBXNativeTarget "programaTests" */;
 			buildPhases = (
 				F1000005A1B2C3D4E5F60718 /* Sources */,
 				F1000006A1B2C3D4E5F60718 /* Frameworks */,
@@ -725,9 +725,9 @@
 			dependencies = (
 				F1000009A1B2C3D4E5F60718 /* PBXTargetDependency */,
 			);
-			name = cmuxTests;
-			productName = cmuxTests;
-			productReference = F1000002A1B2C3D4E5F60718 /* cmuxTests.xctest */;
+			name = programaTests;
+			productName = programaTests;
+			productReference = F1000002A1B2C3D4E5F60718 /* programaTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -763,8 +763,8 @@
 				A5001050 /* GhosttyTabs */,
 				D1320AA0D1320AA0D1320AA8 /* CmuxDockTilePlugin */,
 				B9000005A1B2C3D4E5F60719 /* cmux-cli */,
-				CB450DF0F0B3839599082C4D /* cmuxUITests */,
-				F1000004A1B2C3D4E5F60718 /* cmuxTests */,
+				CB450DF0F0B3839599082C4D /* programaUITests */,
+				F1000004A1B2C3D4E5F60718 /* programaTests */,
 			);
 		};
 /* End PBXProject section */
@@ -905,7 +905,7 @@
 					8C4BBF2DEF6DF93F395A9EE7 /* TerminalControllerSocketSecurityTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000004 /* TerminalControllerShellStateDedupTests.swift in Sources */,
 					2BB56A710BB1FC50367E5BCF /* TabManagerSessionSnapshotTests.swift in Sources */,
-					C1A2B3C4D5E6F70800000001 /* CmuxConfigTests.swift in Sources */,
+					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000006 /* ServeWebPortStoreTests.swift in Sources */,
 				);
 				runOnlyForDeploymentPostprocessing = 0;
@@ -1332,7 +1332,7 @@
 		defaultConfigurationIsVisible = 0;
 		defaultConfigurationName = Release;
 	};
-	AD2C7ED08993D3CD4910A1FF /* Build configuration list for PBXNativeTarget "cmuxUITests" */ = {
+	AD2C7ED08993D3CD4910A1FF /* Build configuration list for PBXNativeTarget "programaUITests" */ = {
 		isa = XCConfigurationList;
 		buildConfigurations = (
 			C117776A77E71D1432F570D7 /* Debug */,
@@ -1341,7 +1341,7 @@
 		defaultConfigurationIsVisible = 0;
 		defaultConfigurationName = Release;
 	};
-	F1000010A1B2C3D4E5F60718 /* Build configuration list for PBXNativeTarget "cmuxTests" */ = {
+	F1000010A1B2C3D4E5F60718 /* Build configuration list for PBXNativeTarget "programaTests" */ = {
 		isa = XCConfigurationList;
 		buildConfigurations = (
 			F1000011A1B2C3D4E5F60718 /* Debug */,
