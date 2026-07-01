@@ -21,6 +21,11 @@ contracts compile but need CI/manual verification before merge.
    `programa`-prefixed (never deletes legacy). Renamed standalone keys (welcomeShown, surfacePoolEnabled,
    devMutate…, debugBG, focusDebug, keyLatencyProbe, shortcutMonitorTrace, typingTimingLogs, settingsFile.backups).
 
+6h. **release artifacts** — `cmux.entitlements`→`programa.entitlements` (git mv + 3 signing refs), nightly DMG/artifact names `cmux-nightly-*`→`programa-nightly-*`. Homebrew left (external/deprecated).
+CI-fix. **tests/ guard scripts** — `test_ci_scheme_testaction_debug.sh` + `test_bundled_ghostty_theme_picker_helper.sh` pointed at the old `cmux.xcscheme`/`-scheme cmux` (Phase 4 miss). Fixed.
+
+**PR: #48** — CI green except `tests-build-and-lag` (known runner flake; re-running).
+
 ## Remaining (each = its own build-gated commit; runtime = CI/manual)
 
 ### 6d — shell-integration lockstep (LARGE)
