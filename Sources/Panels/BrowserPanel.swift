@@ -1746,19 +1746,19 @@ final class BrowserPanel: Panel, ObservableObject {
 
     static let telemetryHookBootstrapScriptSource = """
     (() => {
-      if (window.__cmuxHooksInstalled) return true;
-      window.__cmuxHooksInstalled = true;
+      if (window.__programaHooksInstalled) return true;
+      window.__programaHooksInstalled = true;
 
-      window.__cmuxConsoleLog = window.__cmuxConsoleLog || [];
+      window.__programaConsoleLog = window.__programaConsoleLog || [];
       const __pushConsole = (level, args) => {
         try {
           const text = Array.from(args || []).map((x) => {
             if (typeof x === 'string') return x;
             try { return JSON.stringify(x); } catch (_) { return String(x); }
           }).join(' ');
-          window.__cmuxConsoleLog.push({ level, text, timestamp_ms: Date.now() });
-          if (window.__cmuxConsoleLog.length > 512) {
-            window.__cmuxConsoleLog.splice(0, window.__cmuxConsoleLog.length - 512);
+          window.__programaConsoleLog.push({ level, text, timestamp_ms: Date.now() });
+          if (window.__programaConsoleLog.length > 512) {
+            window.__programaConsoleLog.splice(0, window.__programaConsoleLog.length - 512);
           }
         } catch (_) {}
       };
@@ -1772,16 +1772,16 @@ final class BrowserPanel: Panel, ObservableObject {
         };
       }
 
-      window.__cmuxErrorLog = window.__cmuxErrorLog || [];
+      window.__programaErrorLog = window.__programaErrorLog || [];
       window.addEventListener('error', (ev) => {
         try {
           const message = String((ev && ev.message) || '');
           const source = String((ev && ev.filename) || '');
           const line = Number((ev && ev.lineno) || 0);
           const col = Number((ev && ev.colno) || 0);
-          window.__cmuxErrorLog.push({ message, source, line, column: col, timestamp_ms: Date.now() });
-          if (window.__cmuxErrorLog.length > 512) {
-            window.__cmuxErrorLog.splice(0, window.__cmuxErrorLog.length - 512);
+          window.__programaErrorLog.push({ message, source, line, column: col, timestamp_ms: Date.now() });
+          if (window.__programaErrorLog.length > 512) {
+            window.__programaErrorLog.splice(0, window.__programaErrorLog.length - 512);
           }
         } catch (_) {}
       });
@@ -1789,9 +1789,9 @@ final class BrowserPanel: Panel, ObservableObject {
         try {
           const reason = ev && ev.reason;
           const message = typeof reason === 'string' ? reason : (reason && reason.message ? String(reason.message) : String(reason));
-          window.__cmuxErrorLog.push({ message, source: 'unhandledrejection', line: 0, column: 0, timestamp_ms: Date.now() });
-          if (window.__cmuxErrorLog.length > 512) {
-            window.__cmuxErrorLog.splice(0, window.__cmuxErrorLog.length - 512);
+          window.__programaErrorLog.push({ message, source: 'unhandledrejection', line: 0, column: 0, timestamp_ms: Date.now() });
+          if (window.__programaErrorLog.length > 512) {
+            window.__programaErrorLog.splice(0, window.__programaErrorLog.length - 512);
           }
         } catch (_) {}
       });
@@ -1802,20 +1802,20 @@ final class BrowserPanel: Panel, ObservableObject {
 
     static let dialogTelemetryHookBootstrapScriptSource = """
     (() => {
-      if (window.__cmuxDialogHooksInstalled) return true;
-      window.__cmuxDialogHooksInstalled = true;
+      if (window.__programaDialogHooksInstalled) return true;
+      window.__programaDialogHooksInstalled = true;
 
-      window.__cmuxDialogQueue = window.__cmuxDialogQueue || [];
-      window.__cmuxDialogDefaults = window.__cmuxDialogDefaults || { confirm: false, prompt: null };
+      window.__programaDialogQueue = window.__programaDialogQueue || [];
+      window.__programaDialogDefaults = window.__programaDialogDefaults || { confirm: false, prompt: null };
       const __pushDialog = (type, message, defaultText) => {
-        window.__cmuxDialogQueue.push({
+        window.__programaDialogQueue.push({
           type,
           message: String(message || ''),
           default_text: defaultText == null ? null : String(defaultText),
           timestamp_ms: Date.now()
         });
-        if (window.__cmuxDialogQueue.length > 128) {
-          window.__cmuxDialogQueue.splice(0, window.__cmuxDialogQueue.length - 128);
+        if (window.__programaDialogQueue.length > 128) {
+          window.__programaDialogQueue.splice(0, window.__programaDialogQueue.length - 128);
         }
       };
 
@@ -1824,11 +1824,11 @@ final class BrowserPanel: Panel, ObservableObject {
       };
       window.confirm = function(message) {
         __pushDialog('confirm', message, null);
-        return !!window.__cmuxDialogDefaults.confirm;
+        return !!window.__programaDialogDefaults.confirm;
       };
       window.prompt = function(message, defaultValue) {
         __pushDialog('prompt', message, defaultValue == null ? null : defaultValue);
-        const v = window.__cmuxDialogDefaults.prompt;
+        const v = window.__programaDialogDefaults.prompt;
         if (v === null || v === undefined) {
           return defaultValue == null ? '' : String(defaultValue);
         }
@@ -1908,12 +1908,12 @@ final class BrowserPanel: Panel, ObservableObject {
     (() => {
       try {
         const syncState = (state) => {
-          window.__cmuxAddressBarFocusState = state;
+          window.__programaAddressBarFocusState = state;
           try {
             if (window.top && window.top !== window) {
-              window.top.postMessage({ cmuxAddressBarFocusState: state }, "*");
+              window.top.postMessage({ programaAddressBarFocusState: state }, "*");
             } else if (window.top) {
-              window.top.__cmuxAddressBarFocusState = state;
+              window.top.__programaAddressBarFocusState = state;
             }
           } catch (_) {}
         };
@@ -1956,27 +1956,27 @@ final class BrowserPanel: Panel, ObservableObject {
     private static let addressBarFocusTrackingBootstrapScript = """
     (() => {
       try {
-        if (window.__cmuxAddressBarFocusTrackerInstalled) return true;
-        window.__cmuxAddressBarFocusTrackerInstalled = true;
+        if (window.__programaAddressBarFocusTrackerInstalled) return true;
+        window.__programaAddressBarFocusTrackerInstalled = true;
 
         const syncState = (state) => {
-          window.__cmuxAddressBarFocusState = state;
+          window.__programaAddressBarFocusState = state;
           try {
             if (window.top && window.top !== window) {
-              window.top.postMessage({ cmuxAddressBarFocusState: state }, "*");
+              window.top.postMessage({ programaAddressBarFocusState: state }, "*");
             } else if (window.top) {
-              window.top.__cmuxAddressBarFocusState = state;
+              window.top.__programaAddressBarFocusState = state;
             }
           } catch (_) {}
         };
 
-        if (window.top === window && !window.__cmuxAddressBarFocusMessageBridgeInstalled) {
-          window.__cmuxAddressBarFocusMessageBridgeInstalled = true;
+        if (window.top === window && !window.__programaAddressBarFocusMessageBridgeInstalled) {
+          window.__programaAddressBarFocusMessageBridgeInstalled = true;
           window.addEventListener("message", (ev) => {
             try {
               const data = ev ? ev.data : null;
-              if (!data || !Object.prototype.hasOwnProperty.call(data, "cmuxAddressBarFocusState")) return;
-              window.__cmuxAddressBarFocusState = data.cmuxAddressBarFocusState || null;
+              if (!data || !Object.prototype.hasOwnProperty.call(data, "programaAddressBarFocusState")) return;
+              window.__programaAddressBarFocusState = data.programaAddressBarFocusState || null;
             } catch (_) {}
           }, true);
         }
@@ -2042,15 +2042,15 @@ final class BrowserPanel: Panel, ObservableObject {
     """
 
     /// JS bridge that posts `compositionstart`/`compositionend` events to the native layer
-    /// via `webkit.messageHandlers.cmuxIMEState`. This lets the native `performKeyEquivalent`
+    /// via `webkit.messageHandlers.programaIMEState`. This lets the native `performKeyEquivalent`
     /// detect when an Enter key is committing a CJK composition rather than submitting a form,
     /// even though WKWebView clears marked text before the key event fires (#2626).
     private static let imeCompositionTrackingScript = """
     (() => {
       try {
-        if (window.__cmuxIMETrackerInstalled) return;
-        window.__cmuxIMETrackerInstalled = true;
-        const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.cmuxIMEState;
+        if (window.__programaIMETrackerInstalled) return;
+        window.__programaIMETrackerInstalled = true;
+        const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.programaIMEState;
         if (!handler) return;
         document.addEventListener('compositionstart', () => {
           handler.postMessage({ composing: true });
@@ -2062,7 +2062,7 @@ final class BrowserPanel: Panel, ObservableObject {
     })();
     """
 
-    private static let imeCompositionHandlerName = "cmuxIMEState"
+    private static let imeCompositionHandlerName = "programaIMEState"
 
     private func setupIMECompositionTracking(for webView: ProgramaWebView) {
         let handler = IMECompositionMessageHandler { [weak webView] composing in
@@ -2085,23 +2085,23 @@ final class BrowserPanel: Panel, ObservableObject {
     (() => {
       try {
         const readState = () => {
-          let state = window.__cmuxAddressBarFocusState;
+          let state = window.__programaAddressBarFocusState;
           try {
             if ((!state || typeof state.id !== "string" || !state.id) &&
-                window.top && window.top.__cmuxAddressBarFocusState) {
-              state = window.top.__cmuxAddressBarFocusState;
+                window.top && window.top.__programaAddressBarFocusState) {
+              state = window.top.__programaAddressBarFocusState;
             }
           } catch (_) {}
           return state;
         };
 
         const clearState = () => {
-          window.__cmuxAddressBarFocusState = null;
+          window.__programaAddressBarFocusState = null;
           try {
             if (window.top && window.top !== window) {
-              window.top.postMessage({ cmuxAddressBarFocusState: null }, "*");
+              window.top.postMessage({ programaAddressBarFocusState: null }, "*");
             } else if (window.top) {
-              window.top.__cmuxAddressBarFocusState = null;
+              window.top.__programaAddressBarFocusState = null;
             }
           } catch (_) {}
         };
@@ -2303,7 +2303,7 @@ final class BrowserPanel: Panel, ObservableObject {
     var reactGrabMessageHandler: ReactGrabMessageHandler?
     var pendingReactGrabReturnTargetPanelId: UUID?
     var pendingReactGrabRoundTripToken: String?
-    let reactGrabBridgeSessionUpdaterName = "__cmuxReactGrabBridgeSync_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+    let reactGrabBridgeSessionUpdaterName = "__programaReactGrabBridgeSync_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
     private var preferredDeveloperToolsPresentation: DeveloperToolsPresentation = .unknown
     private var forceDeveloperToolsRefreshOnNextAttach: Bool = false
     private var developerToolsRestoreRetryWorkItem: DispatchWorkItem?
@@ -2571,7 +2571,7 @@ final class BrowserPanel: Panel, ObservableObject {
         // Keep browser console/error/dialog telemetry active from document start on every navigation.
         // Main frame only — injecting into cross-origin iframes causes CAPTCHA providers
         // (reCAPTCHA, hCaptcha, Cloudflare Turnstile) to detect the overridden console.*
-        // methods and __cmux* globals as environment tampering, failing the challenge.
+        // methods and __programa* globals as environment tampering, failing the challenge.
         configuration.userContentController.addUserScript(
             WKUserScript(
                 source: Self.telemetryHookBootstrapScriptSource,

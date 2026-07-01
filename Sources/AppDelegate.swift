@@ -9223,11 +9223,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
               secondaryCenterY: -1,
               activeId: active && typeof active.id === "string" ? active.id : "",
               activeTag: active && active.tagName ? active.tagName.toLowerCase() : "",
-              trackerInstalled: window.__cmuxAddressBarFocusTrackerInstalled === true,
+              trackerInstalled: window.__programaAddressBarFocusTrackerInstalled === true,
               trackedStateId:
-                window.__cmuxAddressBarFocusState &&
-                typeof window.__cmuxAddressBarFocusState.id === "string"
-                  ? window.__cmuxAddressBarFocusState.id
+                window.__programaAddressBarFocusState &&
+                typeof window.__programaAddressBarFocusState.id === "string"
+                  ? window.__programaAddressBarFocusState.id
                   : "",
               readyState: String(document.readyState || "")
             };
@@ -9303,11 +9303,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             const selectionStart = typeof input.selectionStart === "number" ? input.selectionStart : null;
             const selectionEnd = typeof input.selectionEnd === "number" ? input.selectionEnd : null;
             if (
-              !window.__cmuxAddressBarFocusState ||
-              typeof window.__cmuxAddressBarFocusState.id !== "string" ||
-              window.__cmuxAddressBarFocusState.id !== trackedFocusId
+              !window.__programaAddressBarFocusState ||
+              typeof window.__programaAddressBarFocusState.id !== "string" ||
+              window.__programaAddressBarFocusState.id !== trackedFocusId
             ) {
-              window.__cmuxAddressBarFocusState = { id: trackedFocusId, selectionStart, selectionEnd };
+              window.__programaAddressBarFocusState = { id: trackedFocusId, selectionStart, selectionEnd };
             }
 
             const secondaryRect = secondaryInput.getBoundingClientRect();
@@ -9330,17 +9330,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
               secondaryCenterY,
               activeId: active && typeof active.id === "string" ? active.id : "",
               activeTag: active && active.tagName ? active.tagName.toLowerCase() : "",
-              trackerInstalled: window.__cmuxAddressBarFocusTrackerInstalled === true,
+              trackerInstalled: window.__programaAddressBarFocusTrackerInstalled === true,
               trackedStateId:
-                window.__cmuxAddressBarFocusState &&
-                typeof window.__cmuxAddressBarFocusState.id === "string"
-                  ? window.__cmuxAddressBarFocusState.id
+                window.__programaAddressBarFocusState &&
+                typeof window.__programaAddressBarFocusState.id === "string"
+                  ? window.__programaAddressBarFocusState.id
                   : "",
               readyState: String(document.readyState || "")
             };
           };
           const ready = () =>
-            window.__cmuxAddressBarFocusTrackerInstalled === true &&
+            window.__programaAddressBarFocusTrackerInstalled === true &&
             String(document.readyState || "") === "complete";
 
           if (ready()) {
@@ -9517,7 +9517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                   type: "",
                   editable: "false",
                   trackedFocusStateId: "",
-                  focusTrackerInstalled: window.__cmuxAddressBarFocusTrackerInstalled === true ? "true" : "false"
+                  focusTrackerInstalled: window.__programaAddressBarFocusTrackerInstalled === true ? "true" : "false"
                 };
               }
               const tag = (active.tagName || "").toLowerCase();
@@ -9532,12 +9532,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 type,
                 editable: editable ? "true" : "false",
                 trackedFocusStateId:
-                  window.__cmuxAddressBarFocusState &&
-                  typeof window.__cmuxAddressBarFocusState.id === "string"
-                    ? window.__cmuxAddressBarFocusState.id
+                  window.__programaAddressBarFocusState &&
+                  typeof window.__programaAddressBarFocusState.id === "string"
+                    ? window.__programaAddressBarFocusState.id
                     : "",
                 focusTrackerInstalled:
-                  window.__cmuxAddressBarFocusTrackerInstalled === true ? "true" : "false"
+                  window.__programaAddressBarFocusTrackerInstalled === true ? "true" : "false"
               };
             } catch (_) {
               return {

@@ -184,8 +184,8 @@ class TerminalController {
 
     private final class V2BrowserUndefinedSentinel {}
 
-    private static let v2BrowserEvalEnvelopeTypeKey = "__cmux_t"
-    private static let v2BrowserEvalEnvelopeValueKey = "__cmux_v"
+    private static let v2BrowserEvalEnvelopeTypeKey = "__programa_t"
+    private static let v2BrowserEvalEnvelopeValueKey = "__programa_v"
     private static let v2BrowserEvalEnvelopeTypeUndefined = "undefined"
     private static let v2BrowserEvalEnvelopeTypeValue = "value"
 
@@ -7265,7 +7265,7 @@ class TerminalController {
         let timeout = Double(timeoutMs) / 1000.0
         let waitScript = """
         (() => {
-          const __cmuxEvaluate = () => {
+          const __programaEvaluate = () => {
             try {
               return !!(\(conditionScript));
             } catch (_) {
@@ -7273,7 +7273,7 @@ class TerminalController {
             }
           };
 
-          if (__cmuxEvaluate()) {
+          if (__programaEvaluate()) {
             return true;
           }
 
@@ -7291,7 +7291,7 @@ class TerminalController {
               resolve(value);
             };
             const recheck = () => {
-              if (__cmuxEvaluate()) {
+              if (__programaEvaluate()) {
                 finish(true);
               }
             };
@@ -7392,16 +7392,16 @@ class TerminalController {
         if let frameSelector = v2BrowserCurrentFrameSelector(surfaceId: surfaceId) {
             let selectorLiteral = v2JSONLiteral(frameSelector)
             framePrelude = """
-            let __cmuxDoc = document;
+            let __programaDoc = document;
             try {
-              const __cmuxFrame = document.querySelector(\(selectorLiteral));
-              if (__cmuxFrame && __cmuxFrame.contentDocument) {
-                __cmuxDoc = __cmuxFrame.contentDocument;
+              const __programaFrame = document.querySelector(\(selectorLiteral));
+              if (__programaFrame && __programaFrame.contentDocument) {
+                __programaDoc = __programaFrame.contentDocument;
               }
             } catch (_) {}
             """
         } else {
-            framePrelude = "const __cmuxDoc = document;"
+            framePrelude = "const __programaDoc = document;"
         }
 
         let executionBlock: String
@@ -7414,24 +7414,24 @@ class TerminalController {
         let asyncFunctionBody = """
         \(framePrelude)
 
-        const __cmuxMaybeAwait = async (__r) => {
+        const __programaMaybeAwait = async (__r) => {
           if (__r !== null && (typeof __r === 'object' || typeof __r === 'function') && typeof __r.then === 'function') {
             return await __r;
           }
           return __r;
         };
 
-        const __cmuxEvalInFrame = async function() {
-          const document = __cmuxDoc;
+        const __programaEvalInFrame = async function() {
+          const document = __programaDoc;
           \(executionBlock)
-          const __value = await __cmuxMaybeAwait(__r);
+          const __value = await __programaMaybeAwait(__r);
           return {
-            __cmux_t: (typeof __value === 'undefined') ? 'undefined' : 'value',
-            __cmux_v: __value
+            __programa_t: (typeof __value === 'undefined') ? 'undefined' : 'value',
+            __programa_v: __value
           };
         };
 
-        return await __cmuxEvalInFrame();
+        return await __programaEvalInFrame();
         """
 
         var rawResult: V2JavaScriptResult
@@ -7542,7 +7542,7 @@ class TerminalController {
 
         let injector = """
         (() => {
-          window.__cmuxInitScriptsApplied = window.__cmuxInitScriptsApplied || { scripts: [], styles: [] };
+          window.__programaInitScriptsApplied = window.__programaInitScriptsApplied || { scripts: [], styles: [] };
           return true;
         })()
         """
@@ -9188,7 +9188,7 @@ class TerminalController {
         return v2BrowserWithPanel(params: params) { _, ws, surfaceId, browserPanel in
             let script = """
             (() => {
-              const __cmuxCssPath = (el) => {
+              const __programaCssPath = (el) => {
                 if (!el || el.nodeType !== 1) return null;
                 if (el.id) return '#' + CSS.escape(el.id);
                 const parts = [];
@@ -9213,17 +9213,17 @@ class TerminalController {
                 return parts.join(' > ');
               };
 
-              const __cmuxFound = (() => {
+              const __programaFound = (() => {
             \(finderBody)
               })();
-              if (!__cmuxFound) return { ok: false, error: 'not_found' };
-              const selector = __cmuxCssPath(__cmuxFound);
+              if (!__programaFound) return { ok: false, error: 'not_found' };
+              const selector = __programaCssPath(__programaFound);
               if (!selector) return { ok: false, error: 'not_found' };
               return {
                 ok: true,
                 selector,
-                tag: String(__cmuxFound.tagName || '').toLowerCase(),
-                text: String(__cmuxFound.textContent || '').trim()
+                tag: String(__programaFound.tagName || '').toLowerCase(),
+                text: String(__programaFound.textContent || '').trim()
               };
             })()
             """
@@ -9730,19 +9730,19 @@ class TerminalController {
             let textLiteral = text.map(v2JSONLiteral) ?? "null"
             let script = """
             (() => {
-              const q = window.__cmuxDialogQueue || [];
+              const q = window.__programaDialogQueue || [];
               if (!q.length) return { ok: false, error: 'not_found' };
               const entry = q.shift();
               if (entry.type === 'confirm') {
-                window.__cmuxDialogDefaults = window.__cmuxDialogDefaults || { confirm: false, prompt: null };
-                window.__cmuxDialogDefaults.confirm = \(acceptLiteral);
+                window.__programaDialogDefaults = window.__programaDialogDefaults || { confirm: false, prompt: null };
+                window.__programaDialogDefaults.confirm = \(acceptLiteral);
               }
               if (entry.type === 'prompt') {
-                window.__cmuxDialogDefaults = window.__cmuxDialogDefaults || { confirm: false, prompt: null };
+                window.__programaDialogDefaults = window.__programaDialogDefaults || { confirm: false, prompt: null };
                 if (\(acceptLiteral)) {
-                  window.__cmuxDialogDefaults.prompt = \(textLiteral);
+                  window.__programaDialogDefaults.prompt = \(textLiteral);
                 } else {
-                  window.__cmuxDialogDefaults.prompt = null;
+                  window.__programaDialogDefaults.prompt = null;
                 }
               }
               return { ok: true, dialog: entry, remaining: q.length };
@@ -10400,9 +10400,9 @@ class TerminalController {
             let clearLiteral = clear ? "true" : "false"
             let script = """
             (() => {
-              const items = Array.isArray(window.__cmuxConsoleLog) ? window.__cmuxConsoleLog.slice() : [];
+              const items = Array.isArray(window.__programaConsoleLog) ? window.__programaConsoleLog.slice() : [];
               if (\(clearLiteral)) {
-                window.__cmuxConsoleLog = [];
+                window.__programaConsoleLog = [];
               }
               return { ok: true, items };
             })()
@@ -10438,9 +10438,9 @@ class TerminalController {
             let clearLiteral = clear ? "true" : "false"
             let script = """
             (() => {
-              const items = Array.isArray(window.__cmuxErrorLog) ? window.__cmuxErrorLog.slice() : [];
+              const items = Array.isArray(window.__programaErrorLog) ? window.__programaErrorLog.slice() : [];
               if (\(clearLiteral)) {
-                window.__cmuxErrorLog = [];
+                window.__programaErrorLog = [];
               }
               return { ok: true, items };
             })()

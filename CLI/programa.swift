@@ -5006,7 +5006,7 @@ struct CMUXCLI {
         let payload: [String: Any] = [
             "app_version": remoteDaemonVersionString(from: info),
             "build": info["CFBundleVersion"] ?? NSNull(),
-            "commit": info["CMUXCommit"] ?? NSNull(),
+            "commit": info["ProgramaCommit"] ?? NSNull(),
             "manifest_present": manifest != nil,
             "release_tag": releaseTag,
             "release_url": manifest?.releaseURL ?? NSNull(),
@@ -5406,7 +5406,7 @@ struct CMUXCLI {
 
         func displayBrowserValue(_ value: Any) -> String {
             if let dict = value as? [String: Any],
-               let type = dict["__cmux_t"] as? String,
+               let type = dict["__programa_t"] as? String,
                type == "undefined" {
                 return "undefined"
             }
@@ -13984,7 +13984,7 @@ struct CMUXCLI {
 
     private func versionSummary() -> String {
         let info = resolvedVersionInfo()
-        let commit = info["CMUXCommit"].flatMap { normalizedCommitHash($0) }
+        let commit = info["ProgramaCommit"].flatMap { normalizedCommitHash($0) }
         let baseSummary: String
         if let version = info["CFBundleShortVersionString"], let build = info["CFBundleVersion"] {
             baseSummary = "cmux \(version) (\(build))"
@@ -14076,7 +14076,7 @@ struct CMUXCLI {
         let needsPlistFallback =
             info["CFBundleShortVersionString"] == nil ||
             info["CFBundleVersion"] == nil ||
-            info["CMUXCommit"] == nil
+            info["ProgramaCommit"] == nil
         if needsPlistFallback {
             for plistURL in candidateInfoPlistURLs() {
                 guard let data = try? Data(contentsOf: plistURL),
@@ -14089,7 +14089,7 @@ struct CMUXCLI {
                 info.merge(parsed, uniquingKeysWith: { current, _ in current })
                 if info["CFBundleShortVersionString"] != nil,
                    info["CFBundleVersion"] != nil,
-                   info["CMUXCommit"] != nil {
+                   info["ProgramaCommit"] != nil {
                     break
                 }
             }
@@ -14098,14 +14098,14 @@ struct CMUXCLI {
         let needsProjectFallback =
             info["CFBundleShortVersionString"] == nil ||
             info["CFBundleVersion"] == nil ||
-            info["CMUXCommit"] == nil
+            info["ProgramaCommit"] == nil
         if needsProjectFallback, let fromProject = versionInfoFromProjectFile() {
             info.merge(fromProject, uniquingKeysWith: { current, _ in current })
         }
 
-        if info["CMUXCommit"] == nil,
+        if info["ProgramaCommit"] == nil,
            let commit = normalizedCommitHash(ProcessInfo.processInfo.environment["PROGRAMA_COMMIT"]) {
-            info["CMUXCommit"] = commit
+            info["ProgramaCommit"] = commit
         }
 
         return info
@@ -14127,9 +14127,9 @@ struct CMUXCLI {
                 info["CFBundleVersion"] = trimmed
             }
         }
-        if let commit = dictionary["CMUXCommit"] as? String,
+        if let commit = dictionary["ProgramaCommit"] as? String,
            let normalizedCommit = normalizedCommitHash(commit) {
-            info["CMUXCommit"] = normalizedCommit
+            info["ProgramaCommit"] = normalizedCommit
         }
         return info.isEmpty ? nil : info
     }
@@ -14154,7 +14154,7 @@ struct CMUXCLI {
                     info["CFBundleVersion"] = build
                 }
                 if let commit = gitCommitHash(at: current) {
-                    info["CMUXCommit"] = commit
+                    info["ProgramaCommit"] = commit
                 }
                 if !info.isEmpty {
                     return info

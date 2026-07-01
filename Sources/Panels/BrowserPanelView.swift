@@ -4573,14 +4573,14 @@ struct WebViewRepresentable: NSViewRepresentable {
                     if (typeof WI === "undefined")
                         return null;
                     const allowSideDock = \(sideDockAllowedLiteral);
-                    if (!WI.__cmuxOriginalUpdateDockNavigationItems && typeof WI._updateDockNavigationItems === "function")
-                        WI.__cmuxOriginalUpdateDockNavigationItems = WI._updateDockNavigationItems;
-                    if (!WI.__cmuxOriginalDockLeft && typeof WI._dockLeft === "function")
-                        WI.__cmuxOriginalDockLeft = WI._dockLeft;
-                    if (!WI.__cmuxOriginalDockRight && typeof WI._dockRight === "function")
-                        WI.__cmuxOriginalDockRight = WI._dockRight;
-                    if (!WI.__cmuxOriginalTogglePreviousDockConfiguration && typeof WI._togglePreviousDockConfiguration === "function")
-                        WI.__cmuxOriginalTogglePreviousDockConfiguration = WI._togglePreviousDockConfiguration;
+                    if (!WI.__programaOriginalUpdateDockNavigationItems && typeof WI._updateDockNavigationItems === "function")
+                        WI.__programaOriginalUpdateDockNavigationItems = WI._updateDockNavigationItems;
+                    if (!WI.__programaOriginalDockLeft && typeof WI._dockLeft === "function")
+                        WI.__programaOriginalDockLeft = WI._dockLeft;
+                    if (!WI.__programaOriginalDockRight && typeof WI._dockRight === "function")
+                        WI.__programaOriginalDockRight = WI._dockRight;
+                    if (!WI.__programaOriginalTogglePreviousDockConfiguration && typeof WI._togglePreviousDockConfiguration === "function")
+                        WI.__programaOriginalTogglePreviousDockConfiguration = WI._togglePreviousDockConfiguration;
                     function callOriginal(fn, event) {
                         return typeof fn === "function" ? fn.call(WI, event) : null;
                     }
@@ -4594,34 +4594,34 @@ struct WebViewRepresentable: NSViewRepresentable {
                         }
                     }
                     function enforceDockControls() {
-                        const disallowSideDock = !WI.__cmuxAllowSideDock;
+                        const disallowSideDock = !WI.__programaAllowSideDock;
                         updateButton(WI._dockLeftTabBarButton, disallowSideDock || WI.dockConfiguration === WI.DockConfiguration.Left);
                         updateButton(WI._dockRightTabBarButton, disallowSideDock || WI.dockConfiguration === WI.DockConfiguration.Right);
                     }
-                    WI.__cmuxAllowSideDock = allowSideDock;
+                    WI.__programaAllowSideDock = allowSideDock;
                     WI._dockLeft = function(event) {
-                        if (!WI.__cmuxAllowSideDock)
+                        if (!WI.__programaAllowSideDock)
                             return callOriginal(WI._dockBottom, event);
-                        return callOriginal(WI.__cmuxOriginalDockLeft, event);
+                        return callOriginal(WI.__programaOriginalDockLeft, event);
                     };
                     WI._dockRight = function(event) {
-                        if (!WI.__cmuxAllowSideDock)
+                        if (!WI.__programaAllowSideDock)
                             return callOriginal(WI._dockBottom, event);
-                        return callOriginal(WI.__cmuxOriginalDockRight, event);
+                        return callOriginal(WI.__programaOriginalDockRight, event);
                     };
                     WI._togglePreviousDockConfiguration = function(event) {
                         const previousSideDock = WI._previousDockConfiguration === WI.DockConfiguration.Left || WI._previousDockConfiguration === WI.DockConfiguration.Right;
-                        if (!WI.__cmuxAllowSideDock && previousSideDock)
+                        if (!WI.__programaAllowSideDock && previousSideDock)
                             return callOriginal(WI._dockBottom, event);
-                        return callOriginal(WI.__cmuxOriginalTogglePreviousDockConfiguration, event);
+                        return callOriginal(WI.__programaOriginalTogglePreviousDockConfiguration, event);
                     };
                     WI._updateDockNavigationItems = function(...args) {
-                        if (typeof WI.__cmuxOriginalUpdateDockNavigationItems === "function")
-                            WI.__cmuxOriginalUpdateDockNavigationItems.apply(WI, args);
+                        if (typeof WI.__programaOriginalUpdateDockNavigationItems === "function")
+                            WI.__programaOriginalUpdateDockNavigationItems.apply(WI, args);
                         enforceDockControls();
                     };
                     WI._updateDockNavigationItems();
-                    return WI.__cmuxAllowSideDock;
+                    return WI.__programaAllowSideDock;
                 })();
                 """,
                 completionHandler: nil
