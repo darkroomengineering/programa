@@ -2679,7 +2679,7 @@ private struct AboutPanelView: View {
     private var version: String? { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String }
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }
     private var commit: String? {
-        if let value = Bundle.main.infoDictionary?["CMUXCommit"] as? String, !value.isEmpty {
+        if let value = Bundle.main.infoDictionary?["ProgramaCommit"] as? String, !value.isEmpty {
             return value
         }
         let env = ProcessInfo.processInfo.environment["PROGRAMA_COMMIT"] ?? ""

@@ -10303,7 +10303,7 @@ private struct FeedbackComposerAppMetadata {
     static var current: FeedbackComposerAppMetadata {
         let infoDictionary = Bundle.main.infoDictionary ?? [:]
         let env = ProcessInfo.processInfo.environment
-        let commit = (infoDictionary["CMUXCommit"] as? String).flatMap { value in
+        let commit = (infoDictionary["ProgramaCommit"] as? String).flatMap { value in
             value.isEmpty ? nil : value
         } ?? env["PROGRAMA_COMMIT"]
 
