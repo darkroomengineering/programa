@@ -278,7 +278,7 @@ jobs:
             exit 1
           fi
           APP_PATH="build-universal/Build/Products/Release/Programa.app"
-          ENTITLEMENTS="cmux.entitlements"
+          ENTITLEMENTS="programa.entitlements"
           CLI_PATH="$APP_PATH/Contents/Resources/bin/programa"
           HELPER_PATH="$APP_PATH/Contents/Resources/bin/ghostty"
           if [ -f "$CLI_PATH" ]; then
@@ -379,7 +379,7 @@ jobs:
         if: steps.guard_release_assets.outputs.skip_upload != 'true' && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cmux-release-dry-run
+          name: programa-release-dry-run
           path: |
             programa-macos.dmg
             appcast.xml

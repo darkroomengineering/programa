@@ -278,7 +278,7 @@ jobs:
           echo "NIGHTLY_MARKETING_VERSION=${NIGHTLY_MARKETING_VERSION}" >> "$GITHUB_ENV"
           echo "NIGHTLY_REMOTE_DAEMON_VERSION=${NIGHTLY_MARKETING_VERSION}" >> "$GITHUB_ENV"
 
-          NIGHTLY_DMG_IMMUTABLE="cmux-nightly-macos-${NIGHTLY_BUILD}.dmg"
+          NIGHTLY_DMG_IMMUTABLE="programa-nightly-macos-${NIGHTLY_BUILD}.dmg"
           echo "NIGHTLY_DMG_IMMUTABLE=${NIGHTLY_DMG_IMMUTABLE}" >> "$GITHUB_ENV"
 
           prepare_variant() {
@@ -393,7 +393,7 @@ jobs:
             echo "Missing APPLE_SIGNING_IDENTITY secret" >&2
             exit 1
           fi
-          ENTITLEMENTS="cmux.entitlements"
+          ENTITLEMENTS="programa.entitlements"
           for APP_PATH in \
             "build-universal/Build/Products/Release/Programa NIGHTLY.app"
           do
@@ -471,7 +471,7 @@ jobs:
 
           notarize_and_package \
             "build-universal/Build/Products/Release/Programa NIGHTLY.app" \
-            "cmux-nightly-macos.dmg" \
+            "programa-nightly-macos.dmg" \
             "$NIGHTLY_DMG_IMMUTABLE"
 
       - name: Upload dSYMs to Sentry
@@ -519,9 +519,9 @@ jobs:
         if: needs.decide.outputs.should_publish != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cmux-nightly-${{ needs.decide.outputs.short_sha }}
+          name: programa-nightly-${{ needs.decide.outputs.short_sha }}
           path: |
-            cmux-nightly-macos*.dmg
+            programa-nightly-macos*.dmg
             appcast.xml
             remote-daemon-assets/programad-remote-*
             appcast-universal.xml
@@ -552,10 +552,10 @@ jobs:
             - feed `appcast.xml`
             - compatibility feed `appcast-universal.xml` for older universal nightlies
 
-            [Download cmux-nightly-macos.dmg](https://github.com/darkroomengineering/programa/releases/download/nightly/cmux-nightly-macos.dmg)
+            [Download programa-nightly-macos.dmg](https://github.com/darkroomengineering/programa/releases/download/nightly/programa-nightly-macos.dmg)
           files: |
-            cmux-nightly-macos-${{ github.run_id }}*.dmg
-            cmux-nightly-macos.dmg
+            programa-nightly-macos-${{ github.run_id }}*.dmg
+            programa-nightly-macos.dmg
             appcast.xml
             remote-daemon-assets/programad-remote-*
             appcast-universal.xml

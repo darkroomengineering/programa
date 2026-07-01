@@ -47,7 +47,7 @@ fi
 
 TAG="$1"
 SIGN_HASH="A050CC7E193C8221BDBA204E731B046CDCCC1B30"
-ENTITLEMENTS="cmux.entitlements"
+ENTITLEMENTS="programa.entitlements"
 APP_PATH="build/Build/Products/Release/Programa.app"
 
 # --- Pre-flight ---
