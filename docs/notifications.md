@@ -1,29 +1,29 @@
 # Notifications
 
-cmux provides a notification panel for AI agents like Claude Code, Codex, and OpenCode. Notifications appear in a dedicated panel and trigger macOS system notifications.
+Programa provides a notification panel for AI agents like Claude Code, Codex, and OpenCode. Notifications appear in a dedicated panel and trigger macOS system notifications.
 
 ## Quick Start
 
 ```bash
-# Send a notification (if cmux is available)
-command -v cmux &>/dev/null && cmux notify --title "Done" --body "Task complete"
+# Send a notification (if programa is available)
+command -v programa &>/dev/null && programa notify --title "Done" --body "Task complete"
 
 # With fallback to macOS notifications
-command -v cmux &>/dev/null && cmux notify --title "Done" --body "Task complete" || osascript -e 'display notification "Task complete" with title "Done"'
+command -v programa &>/dev/null && programa notify --title "Done" --body "Task complete" || osascript -e 'display notification "Task complete" with title "Done"'
 ```
 
 ## Detection
 
-Check if `cmux` CLI is available before using it:
+Check if `programa` CLI is available before using it:
 
 ```bash
 # Shell
-if command -v cmux &>/dev/null; then
-    cmux notify --title "Hello"
+if command -v programa &>/dev/null; then
+    programa notify --title "Hello"
 fi
 
 # One-liner with fallback
-command -v cmux &>/dev/null && cmux notify --title "Hello" || osascript -e 'display notification "" with title "Hello"'
+command -v programa &>/dev/null && programa notify --title "Hello" || osascript -e 'display notification "" with title "Hello"'
 ```
 
 ```python
@@ -32,8 +32,8 @@ import shutil
 import subprocess
 
 def notify(title: str, body: str = ""):
-    if shutil.which("cmux"):
-        subprocess.run(["cmux", "notify", "--title", title, "--body", body])
+    if shutil.which("programa"):
+        subprocess.run(["programa", "notify", "--title", title, "--body", body])
     else:
         # Fallback to macOS
         subprocess.run(["osascript", "-e", f'display notification "{body}" with title "{title}"'])
@@ -43,13 +43,13 @@ def notify(title: str, body: str = ""):
 
 ```bash
 # Simple notification
-cmux notify --title "Build Complete"
+programa notify --title "Build Complete"
 
 # With subtitle and body
-cmux notify --title "Claude Code" --subtitle "Permission" --body "Approval needed"
+programa notify --title "Claude Code" --subtitle "Permission" --body "Approval needed"
 
 # Notify specific tab/panel
-cmux notify --title "Done" --tab 0 --panel 1
+programa notify --title "Done" --tab 0 --panel 1
 ```
 
 ## Integration Examples
@@ -68,28 +68,28 @@ Copilot CLI supports [hooks](https://docs.github.com/en/copilot/how-tos/use-copi
     "userPromptSubmitted": [
       {
         "type": "command",
-        "bash": "if command -v cmux &>/dev/null; then cmux set-status copilot_cli Running; fi",
+        "bash": "if command -v programa &>/dev/null; then programa set-status copilot_cli Running; fi",
         "timeoutSec": 3
       }
     ],
     "agentStop": [
       {
         "type": "command",
-        "bash": "if command -v cmux &>/dev/null; then cmux notify --title 'Copilot CLI' --body 'Done'; cmux set-status copilot_cli Idle; else osascript -e 'display notification \"Done\" with title \"Copilot CLI\"'; fi",
+        "bash": "if command -v programa &>/dev/null; then programa notify --title 'Copilot CLI' --body 'Done'; programa set-status copilot_cli Idle; else osascript -e 'display notification \"Done\" with title \"Copilot CLI\"'; fi",
         "timeoutSec": 5
       }
     ],
     "errorOccurred": [
       {
         "type": "command",
-        "bash": "if command -v cmux &>/dev/null; then cmux notify --title 'Copilot CLI' --subtitle 'Error' --body \"$(cat | jq -r '.errorMessage // \"An error occurred\"' 2>/dev/null | head -c 100)\"; cmux set-status copilot_cli Error; else osascript -e 'display notification \"An error occurred\" with title \"Copilot CLI\"'; fi",
+        "bash": "if command -v programa &>/dev/null; then programa notify --title 'Copilot CLI' --subtitle 'Error' --body \"$(cat | jq -r '.errorMessage // \"An error occurred\"' 2>/dev/null | head -c 100)\"; programa set-status copilot_cli Error; else osascript -e 'display notification \"An error occurred\" with title \"Copilot CLI\"'; fi",
         "timeoutSec": 5
       }
     ],
     "sessionEnd": [
       {
         "type": "command",
-        "bash": "if command -v cmux &>/dev/null; then cmux clear-status copilot_cli; fi",
+        "bash": "if command -v programa &>/dev/null; then programa clear-status copilot_cli; fi",
         "timeoutSec": 3
       }
     ]
@@ -114,7 +114,7 @@ Or for repo-level hooks, create `.github/hooks/notify.json`:
 Add to `~/.codex/config.toml`:
 
 ```toml
-notify = ["bash", "-c", "command -v cmux &>/dev/null && cmux notify --title Codex --body \"$(echo $1 | jq -r '.\"last-assistant-message\" // \"Turn complete\"' 2>/dev/null | head -c 100)\" || osascript -e 'display notification \"Turn complete\" with title \"Codex\"'", "--"]
+notify = ["bash", "-c", "command -v programa &>/dev/null && programa notify --title Codex --body \"$(echo $1 | jq -r '.\"last-assistant-message\" // \"Turn complete\"' 2>/dev/null | head -c 100)\" || osascript -e 'display notification \"Turn complete\" with title \"Codex\"'", "--"]
 ```
 
 Or create a simple script `~/.local/bin/codex-notify.sh`:
@@ -122,7 +122,7 @@ Or create a simple script `~/.local/bin/codex-notify.sh`:
 ```bash
 #!/bin/bash
 MSG=$(echo "$1" | jq -r '."last-assistant-message" // "Turn complete"' 2>/dev/null | head -c 100)
-command -v cmux &>/dev/null && cmux notify --title "Codex" --body "$MSG" || osascript -e "display notification \"$MSG\" with title \"Codex\""
+command -v programa &>/dev/null && programa notify --title "Codex" --body "$MSG" || osascript -e "display notification \"$MSG\" with title \"Codex\""
 ```
 
 Then use:
@@ -132,13 +132,13 @@ notify = ["bash", "~/.local/bin/codex-notify.sh"]
 
 ### OpenCode Plugin
 
-Create `.opencode/plugins/cmux-notify.js`:
+Create `.opencode/plugins/programa-notify.js`:
 
 ```javascript
-export const CmuxNotificationPlugin = async ({ $, }) => {
+export const ProgramaNotificationPlugin = async ({ $, }) => {
   const notify = async (title, body) => {
     try {
-      await $`command -v cmux && cmux notify --title ${title} --body ${body}`;
+      await $`command -v programa && programa notify --title ${title} --body ${body}`;
     } catch {
       await $`osascript -e ${"display notification \"" + body + "\" with title \"" + title + "\""}`;
     }
@@ -156,27 +156,27 @@ export const CmuxNotificationPlugin = async ({ $, }) => {
 
 ## Environment Variables
 
-cmux sets these in child shells:
+Programa sets these in child shells:
 
 | Variable | Description |
 |----------|-------------|
-| `CMUX_SOCKET_PATH` | Path to control socket |
-| `CMUX_TAB_ID` | UUID of the current tab |
-| `CMUX_PANEL_ID` | UUID of the current panel |
+| `PROGRAMA_SOCKET_PATH` | Path to control socket |
+| `PROGRAMA_TAB_ID` | UUID of the current tab |
+| `PROGRAMA_PANEL_ID` | UUID of the current panel |
 
 ## CLI Commands
 
 ```
-cmux notify --title <text> [--subtitle <text>] [--body <text>] [--tab <id|index>] [--panel <id|index>]
-cmux list-notifications
-cmux clear-notifications
-cmux set-status <key> <value>
-cmux clear-status <key>
-cmux ping
+programa notify --title <text> [--subtitle <text>] [--body <text>] [--tab <id|index>] [--panel <id|index>]
+programa list-notifications
+programa clear-notifications
+programa set-status <key> <value>
+programa clear-status <key>
+programa ping
 ```
 
 ## Best Practices
 
-1. **Always check availability first** - Use `command -v cmux` before calling
+1. **Always check availability first** - Use `command -v programa` before calling
 2. **Provide fallbacks** - Use `|| osascript` for macOS fallback
 3. **Keep notifications concise** - Title should be brief, use body for details

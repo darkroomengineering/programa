@@ -1,4 +1,4 @@
-# cmux agent notes
+# Programa agent notes
 
 ## Initial setup
 
@@ -31,26 +31,26 @@ By default, `reload.sh` builds but does **not** launch the app. The script print
 Example. If `reload.sh` output contains:
 ```
 App path:
-  /Users/someone/Library/Developer/Xcode/DerivedData/cmux-my-tag/Build/Products/Debug/cmux DEV my-tag.app
+  /Users/someone/Library/Developer/Xcode/DerivedData/programa-my-tag/Build/Products/Debug/Programa DEV my-tag.app
 ```
 
 **Claude Code** outputs:
 ```markdown
 =======================================================
-[cmux DEV my-tag.app](file:///Users/someone/Library/Developer/Xcode/DerivedData/cmux-my-tag/Build/Products/Debug/cmux%20DEV%20my-tag.app)
+[Programa DEV my-tag.app](file:///Users/someone/Library/Developer/Xcode/DerivedData/programa-my-tag/Build/Products/Debug/Programa%20DEV%20my-tag.app)
 =======================================================
 ```
 
 **Codex** outputs:
 ```
 =======================================================
-[my-tag: file:///Users/someone/Library/Developer/Xcode/DerivedData/cmux-my-tag/Build/Products/Debug/cmux%20DEV%20my-tag.app](file:///Users/someone/Library/Developer/Xcode/DerivedData/cmux-my-tag/Build/Products/Debug/cmux%20DEV%20my-tag.app)
+[my-tag: file:///Users/someone/Library/Developer/Xcode/DerivedData/programa-my-tag/Build/Products/Debug/Programa%20DEV%20my-tag.app](file:///Users/someone/Library/Developer/Xcode/DerivedData/programa-my-tag/Build/Products/Debug/Programa%20DEV%20my-tag.app)
 =======================================================
 ```
 
-Never use `/tmp/cmux-<tag>/...` app links in chat output.
+Never use `/tmp/programa-<tag>/...` app links in chat output.
 
-After making code changes, always use `reload.sh --tag` to build. **Never run bare `xcodebuild` or `open` an untagged `cmux DEV.app`.** Untagged builds share the default debug socket and bundle ID with other agents, causing conflicts and stealing focus.
+After making code changes, always use `reload.sh --tag` to build. **Never run bare `xcodebuild` or `open` an untagged `Programa DEV.app`.** Untagged builds share the default debug socket and bundle ID with other agents, causing conflicts and stealing focus.
 
 ```bash
 ./scripts/reload.sh --tag <your-branch-slug>
@@ -59,7 +59,7 @@ After making code changes, always use `reload.sh --tag` to build. **Never run ba
 If you only need to verify the build compiles (no launch), use a tagged derivedDataPath:
 
 ```bash
-xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/cmux-<your-tag> build
+xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/programa-<your-tag> build
 ```
 
 When rebuilding GhosttyKit.xcframework, always use Release optimizations:
@@ -68,10 +68,10 @@ When rebuilding GhosttyKit.xcframework, always use Release optimizations:
 cd ghostty && zig build -Demit-xcframework=true -Dxcframework-target=universal -Doptimize=ReleaseFast
 ```
 
-When rebuilding cmuxd for release/bundling, always use ReleaseFast:
+When rebuilding programad for release/bundling, always use ReleaseFast:
 
 ```bash
-cd cmuxd && zig build -Doptimize=ReleaseFast
+cd programad && zig build -Doptimize=ReleaseFast
 ```
 
 `reload` = build the Debug app (tag required). Pass `--launch` to also kill existing and open:
@@ -87,7 +87,7 @@ cd cmuxd && zig build -Doptimize=ReleaseFast
 ./scripts/reloadp.sh
 ```
 
-`reloads` = kill and launch the Release app as "cmux STAGING" (isolated from production cmux):
+`reloads` = kill and launch the Release app as "Programa STAGING" (isolated from production Programa):
 
 ```bash
 ./scripts/reloads.sh
@@ -114,14 +114,14 @@ Before launching a new tagged run, clean up any older tags you started in this s
 All debug events (keys, mouse, focus, splits, tabs) go to a unified log in DEBUG builds:
 
 ```bash
-tail -f "$(cat /tmp/cmux-last-debug-log-path 2>/dev/null || echo /tmp/cmux-debug.log)"
+tail -f "$(cat /tmp/programa-last-debug-log-path 2>/dev/null || echo /tmp/programa-debug.log)"
 ```
 
-- Untagged Debug app: `/tmp/cmux-debug.log`
-- Tagged Debug app (`./scripts/reload.sh --tag <tag>`): `/tmp/cmux-debug-<tag>.log`
-- `reload.sh` writes the current path to `/tmp/cmux-last-debug-log-path`
-- `reload.sh` writes the selected dev CLI path to `/tmp/cmux-last-cli-path`
-- `reload.sh` updates `/tmp/cmux-cli` and `$HOME/.local/bin/cmux-dev` to that CLI
+- Untagged Debug app: `/tmp/programa-debug.log`
+- Tagged Debug app (`./scripts/reload.sh --tag <tag>`): `/tmp/programa-debug-<tag>.log`
+- `reload.sh` writes the current path to `/tmp/programa-last-debug-log-path`
+- `reload.sh` writes the selected dev CLI path to `/tmp/programa-last-cli-path`
+- `reload.sh` updates `/tmp/programa-cli` and `$HOME/.local/bin/programa-dev` to that CLI
 
 - Implementation: `vendor/bonsplit/Sources/Bonsplit/Public/DebugEventLog.swift`
 - Free function `dlog("message")` — logs with timestamp and appends to file in real time
@@ -146,12 +146,12 @@ This makes it visible in the GitHub PR UI (Commits tab, check statuses) that the
 The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use it for visual iteration:
 
 - **Debug > Debug Windows** contains panels for tuning layout, colors, and behavior. Entries are alphabetical with no dividers.
-- To add a debug toggle or visual option: create an `NSWindowController` subclass with a `shared` singleton, add it to the "Debug Windows" menu in `Sources/cmuxApp.swift`, and add a SwiftUI view with `@AppStorage` bindings for live changes.
+- To add a debug toggle or visual option: create an `NSWindowController` subclass with a `shared` singleton, add it to the "Debug Windows" menu in `Sources/programaApp.swift`, and add a SwiftUI view with `@AppStorage` bindings for live changes.
 - When the user says "debug menu" or "debug window", they mean this menu, not `defaults write`.
 
 ## Pitfalls
 
-- **Custom UTTypes** for drag-and-drop must be declared in `Resources/Info.plist` under `UTExportedTypeDeclarations` (e.g. `com.splittabbar.tabtransfer`, `com.cmux.sidebar-tab-reorder`).
+- **Custom UTTypes** for drag-and-drop must be declared in `Resources/Info.plist` under `UTExportedTypeDeclarations` (e.g. `com.splittabbar.tabtransfer`, `com.darkroom.programa.sidebar-tab-reorder`).
 - Do not add an app-level display link or manual `ghostty_surface_draw` loop; rely on Ghostty wakeups/renderer to avoid typing lag.
 - **Typing-latency-sensitive paths** (read carefully before touching these areas):
   - `WindowTerminalHostView.hitTest()` in `TerminalWindowPortal.swift`: called on every event including keyboard. All divider/sidebar/drag routing is gated to pointer events only. Do not add work outside the `isPointerEvent` guard.
@@ -160,7 +160,7 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 - **Terminal find layering contract:** `SurfaceSearchOverlay` must be mounted from `GhosttySurfaceScrollView` in `Sources/GhosttyTerminalView.swift` (AppKit portal layer), not from SwiftUI panel containers such as `Sources/Panels/TerminalPanelView.swift`. Portal-hosted terminal views can sit above SwiftUI during split/workspace churn.
 - **Submodule safety:** When modifying a submodule (ghostty, vendor/bonsplit, etc.), always push the submodule commit to its remote `main` branch BEFORE committing the updated pointer in the parent repo. Never commit on a detached HEAD or temporary branch — the commit will be orphaned and lost. Verify with: `cd <submodule> && git merge-base --is-ancestor HEAD origin/main`.
 - **All user-facing strings must be localized.** Use `String(localized: "key.name", defaultValue: "English text")` for every string shown in the UI (labels, buttons, menus, dialogs, tooltips, error messages). Keys go in `Resources/Localizable.xcstrings` with translations for all supported languages (currently English and Japanese). Never use bare string literals in SwiftUI `Text()`, `Button()`, alert titles, etc.
-- **Shortcut policy:** Every new cmux-owned keyboard shortcut must be added to `KeyboardShortcutSettings`, visible/editable in Settings, supported in `~/.config/cmux/settings.json`, and documented in the keyboard shortcut and configuration docs.
+- **Shortcut policy:** Every new Programa-owned keyboard shortcut must be added to `KeyboardShortcutSettings`, visible/editable in Settings, supported in `~/.config/programa/settings.json`, and documented in the keyboard shortcut and configuration docs.
 
 ## Test quality policy
 
@@ -191,23 +191,23 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 
 **Never run tests locally.** All tests (E2E, UI, python socket tests) run via GitHub Actions or on the VM.
 
-- **E2E / UI tests:** trigger via `gh workflow run test-e2e.yml` (see cmuxterm-hq CLAUDE.md for details)
-- **Unit tests:** `xcodebuild -scheme cmux-unit` is safe (no app launch), but prefer CI
-- **Python socket tests (tests_v2/):** these connect to a running cmux instance's socket. Never launch an untagged `cmux DEV.app` to run them. If you must test locally, use a tagged build's socket (`/tmp/cmux-debug-<tag>.sock`) with `CMUX_SOCKET=/tmp/cmux-debug-<tag>.sock`
-- **Never `open` an untagged `cmux DEV.app`** from DerivedData. It conflicts with the user's running debug instance.
+- **E2E / UI tests:** trigger via `gh workflow run test-e2e.yml` (see programa-hq CLAUDE.md for details)
+- **Unit tests:** `xcodebuild -scheme programa-unit` is safe (no app launch), but prefer CI
+- **Python socket tests (tests_v2/):** these connect to a running Programa instance's socket. Never launch an untagged `Programa DEV.app` to run them. If you must test locally, use a tagged build's socket (`/tmp/programa-debug-<tag>.sock`) with `PROGRAMA_SOCKET=/tmp/programa-debug-<tag>.sock`
+- **Never `open` an untagged `Programa DEV.app`** from DerivedData. It conflicts with the user's running debug instance.
 
 ## Ghostty submodule workflow
 
-Ghostty changes must be committed in the `ghostty` submodule and pushed to the `manaflow-ai/ghostty` fork.
+Ghostty changes must be committed in the `ghostty` submodule and pushed to the Darkroom Engineering ghostty fork.
 Keep `docs/ghostty-fork.md` up to date with any fork changes and conflict notes.
 
 ```bash
 cd ghostty
-git remote -v  # origin = upstream, manaflow = fork
+git remote -v  # origin = upstream, darkroom = fork
 git checkout -b <branch>
 git add <files>
 git commit -m "..."
-git push manaflow <branch>
+git push darkroom <branch>
 ```
 
 To keep the fork up to date with upstream:
@@ -217,7 +217,7 @@ cd ghostty
 git fetch origin
 git checkout main
 git merge origin/main
-git push manaflow main
+git push darkroom main
 ```
 
 Then update the parent repo with the new submodule SHA:
@@ -253,13 +253,13 @@ Manual release steps (if not using the command):
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
-gh run watch --repo manaflow-ai/cmux
+gh run watch --repo darkroomengineering/programa
 ```
 
 Notes:
 - Requires GitHub secrets: `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD`,
   `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
-- The release asset is `cmux-macos.dmg` attached to the tag.
-- README download button points to `releases/latest/download/cmux-macos.dmg`.
+- The release asset is `programa-macos.dmg` attached to the tag.
+- README download button points to `releases/latest/download/programa-macos.dmg`.
 - Versioning: bump the minor version for updates unless explicitly asked otherwise.
 - Changelog: update `CHANGELOG.md`; docs changelog is rendered from it.
