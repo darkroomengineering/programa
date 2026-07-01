@@ -8087,7 +8087,7 @@ struct CMUXCLI {
         let selection = currentThemeSelection()
         var environment = ProcessInfo.processInfo.environment
         environment["PROGRAMA_THEME_PICKER_CONFIG"] = try cmuxThemeOverrideConfigURL().path
-        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentCmuxAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
+        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentProgramaAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
         environment["PROGRAMA_THEME_PICKER_TARGET"] = defaultThemePickerTargetMode(current: selection).rawValue
         environment["PROGRAMA_THEME_PICKER_COLOR_SCHEME"] = defaultAppearancePrefersDarkThemes() ? "dark" : "light"
         if let light = selection.light {
@@ -8717,7 +8717,7 @@ struct CMUXCLI {
     }
 
     private func reloadThemesIfPossible() -> ThemeReloadStatus {
-        let bundleIdentifier = currentCmuxAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
+        let bundleIdentifier = currentProgramaAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
         DistributedNotificationCenter.default().post(
             name: Notification.Name(Self.cmuxThemesReloadNotificationName),
             object: nil,
@@ -8726,7 +8726,7 @@ struct CMUXCLI {
         return ThemeReloadStatus(requested: true, targetBundleIdentifier: bundleIdentifier)
     }
 
-    private func currentCmuxAppBundleIdentifier() -> String? {
+    private func currentProgramaAppBundleIdentifier() -> String? {
         if let bundleIdentifier = ProcessInfo.processInfo.environment["PROGRAMA_BUNDLE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !bundleIdentifier.isEmpty {
             return bundleIdentifier
@@ -10244,7 +10244,7 @@ struct CMUXCLI {
         }
     }
 
-    private func isCmuxClaudeWrapper(at path: String) -> Bool {
+    private func isProgramaClaudeWrapper(at path: String) -> Bool {
         guard let data = FileManager.default.contents(atPath: path) else { return false }
         let prefixData = data.prefix(512)
         guard let prefix = String(data: prefixData, encoding: .utf8) else { return false }
@@ -10272,7 +10272,7 @@ struct CMUXCLI {
         resolveExecutableInSearchPath(
             "claude",
             searchPath: searchPath,
-            skip: { self.isCmuxClaudeWrapper(at: $0) }
+            skip: { self.isProgramaClaudeWrapper(at: $0) }
         )
     }
 
@@ -10467,7 +10467,7 @@ struct CMUXCLI {
                 guard FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDir),
                       !isDir.boolValue,
                       FileManager.default.isExecutableFile(atPath: trimmed),
-                      !isCmuxClaudeWrapper(at: trimmed) else { continue }
+                      !isProgramaClaudeWrapper(at: trimmed) else { continue }
                 return trimmed
             }
             return resolveClaudeExecutable(searchPath: launcherEnvironment["PATH"])

@@ -174,7 +174,7 @@ final class SocketControlPasswordStoreTests: XCTestCase {
         XCTAssertEqual(readCount, 1)
     }
 
-    func testDefaultPasswordFileURLUsesCmuxAppSupportPath() throws {
+    func testDefaultPasswordFileURLUsesProgramaAppSupportPath() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("cmux-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -241,7 +241,7 @@ final class SocketControlPasswordStoreTests: XCTestCase {
     }
 }
 
-final class CmuxCLIPathInstallerTests: XCTestCase {
+final class ProgramaCLIPathInstallerTests: XCTestCase {
     func testInstallAndUninstallRoundTripWithoutAdministratorPrivileges() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
@@ -261,7 +261,7 @@ final class CmuxCLIPathInstallerTests: XCTestCase {
 
         var privilegedInstallCallCount = 0
         var privilegedUninstallCallCount = 0
-        let installer = CmuxCLIPathInstaller(
+        let installer = ProgramaCLIPathInstaller(
             fileManager: fileManager,
             destinationURL: destinationURL,
             bundledCLIURLProvider: { bundledCLIURL },
@@ -311,7 +311,7 @@ final class CmuxCLIPathInstallerTests: XCTestCase {
         }
 
         var privilegedInstallCallCount = 0
-        let installer = CmuxCLIPathInstaller(
+        let installer = ProgramaCLIPathInstaller(
             fileManager: fileManager,
             destinationURL: destinationURL,
             bundledCLIURLProvider: { bundledCLIURL },

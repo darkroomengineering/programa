@@ -17,8 +17,8 @@ final class KeyboardShortcutSettingsObserver: ObservableObject {
     }
 }
 
-final class CmuxSettingsFileStore {
-    static let shared = CmuxSettingsFileStore()
+final class ProgramaSettingsFileStore {
+    static let shared = ProgramaSettingsFileStore()
 
     static let currentSchemaVersion = 1
     static let schemaURLString = "https://raw.githubusercontent.com/darkroomengineering/programa/main/Resources/settings.schema.json"
@@ -65,8 +65,8 @@ final class CmuxSettingsFileStore {
     private(set) var activeSourcePath: String?
 
     init(
-        primaryPath: String = CmuxSettingsFileStore.defaultPrimaryPath,
-        fallbackPath: String? = CmuxSettingsFileStore.defaultFallbackPath,
+        primaryPath: String = ProgramaSettingsFileStore.defaultPrimaryPath,
+        fallbackPath: String? = ProgramaSettingsFileStore.defaultFallbackPath,
         fileManager: FileManager = .default,
         notificationCenter: NotificationCenter = .default,
         startWatching: Bool = true
@@ -98,7 +98,7 @@ final class CmuxSettingsFileStore {
                 self?.reapplyManagedSettingsIfNeeded()
             }
         trustObserver = notificationCenter.addObserver(
-            forName: CmuxDirectoryTrust.didChangeNotification,
+            forName: ProgramaDirectoryTrust.didChangeNotification,
             object: nil,
             queue: nil
         ) { [weak self] _ in
@@ -189,7 +189,7 @@ final class CmuxSettingsFileStore {
             try template.write(to: fileURL, atomically: true, encoding: .utf8)
             try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
         } catch {
-            NSLog("[CmuxSettingsFileStore] failed to bootstrap %@: %@", primaryPath, String(describing: error))
+            NSLog("[ProgramaSettingsFileStore] failed to bootstrap %@: %@", primaryPath, String(describing: error))
         }
     }
 
@@ -262,7 +262,7 @@ final class CmuxSettingsFileStore {
             }
             return .parsed(parseSettingsFile(root: root, sourcePath: path))
         } catch {
-            NSLog("[CmuxSettingsFileStore] parse error at %@: %@", path, String(describing: error))
+            NSLog("[ProgramaSettingsFileStore] parse error at %@: %@", path, String(describing: error))
             return .invalid
         }
     }
@@ -271,7 +271,7 @@ final class CmuxSettingsFileStore {
         let schemaVersion = jsonInt(root["schemaVersion"]) ?? 1
         if schemaVersion > Self.currentSchemaVersion {
             NSLog(
-                "[CmuxSettingsFileStore] %@ uses future schemaVersion %d; parsing known fields only",
+                "[ProgramaSettingsFileStore] %@ uses future schemaVersion %d; parsing known fields only",
                 sourcePath,
                 schemaVersion
             )
@@ -435,11 +435,11 @@ final class CmuxSettingsFileStore {
         if let value = jsonBool(section["showPullRequests"]) {
             snapshot.managedUserDefaults["sidebarShowPullRequest"] = .bool(value)
         }
-        if let value = jsonBool(section["openPullRequestLinksInCmuxBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowserKey] = .bool(value)
+        if let value = jsonBool(section["openPullRequestLinksInProgramaBrowser"]) {
+            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey] = .bool(value)
         }
-        if let value = jsonBool(section["openPortLinksInCmuxBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPortLinksInCmuxBrowserKey] = .bool(value)
+        if let value = jsonBool(section["openPortLinksInProgramaBrowser"]) {
+            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPortLinksInProgramaBrowserKey] = .bool(value)
         }
         if let value = jsonBool(section["showSSH"]) {
             snapshot.managedUserDefaults["sidebarShowSSH"] = .bool(value)
@@ -500,12 +500,12 @@ final class CmuxSettingsFileStore {
             for (rawName, rawValue) in rawColors {
                 let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !name.isEmpty else {
-                    NSLog("[CmuxSettingsFileStore] ignoring empty workspace color name in %@", sourcePath)
+                    NSLog("[ProgramaSettingsFileStore] ignoring empty workspace color name in %@", sourcePath)
                     continue
                 }
                 guard let hex = jsonString(rawValue),
                       let normalizedHex = WorkspaceTabColorSettings.normalizedHex(hex) else {
-                    NSLog("[CmuxSettingsFileStore] ignoring invalid workspace color '%@' in %@", name, sourcePath)
+                    NSLog("[ProgramaSettingsFileStore] ignoring invalid workspace color '%@' in %@", name, sourcePath)
                     continue
                 }
                 normalizedPalette[name] = normalizedHex
@@ -522,12 +522,12 @@ final class CmuxSettingsFileStore {
             )
             for (name, rawValue) in rawOverrides {
                 guard validNames.contains(name) else {
-                    NSLog("[CmuxSettingsFileStore] ignoring unknown workspace color '%@' in %@", name, sourcePath)
+                    NSLog("[ProgramaSettingsFileStore] ignoring unknown workspace color '%@' in %@", name, sourcePath)
                     continue
                 }
                 guard let hex = jsonString(rawValue),
                       let normalizedHex = WorkspaceTabColorSettings.normalizedHex(hex) else {
-                    NSLog("[CmuxSettingsFileStore] ignoring invalid workspace color override '%@' in %@", name, sourcePath)
+                    NSLog("[ProgramaSettingsFileStore] ignoring invalid workspace color override '%@' in %@", name, sourcePath)
                     continue
                 }
                 palette[name] = normalizedHex
@@ -683,11 +683,11 @@ final class CmuxSettingsFileStore {
             }
             snapshot.managedUserDefaults[BrowserThemeSettings.modeKey] = .string(mode.rawValue)
         }
-        if let value = jsonBool(section["openTerminalLinksInCmuxBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openTerminalLinksInCmuxBrowserKey] = .bool(value)
+        if let value = jsonBool(section["openTerminalLinksInProgramaBrowser"]) {
+            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowserKey] = .bool(value)
         }
-        if let value = jsonBool(section["interceptTerminalOpenCommandInCmuxBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.interceptTerminalOpenCommandInCmuxBrowserKey] = .bool(value)
+        if let value = jsonBool(section["interceptTerminalOpenCommandInProgramaBrowser"]) {
+            snapshot.managedUserDefaults[BrowserLinkOpenSettings.interceptTerminalOpenCommandInProgramaBrowserKey] = .bool(value)
         }
         if let values = jsonStringArray(section["hostsToOpenInEmbeddedBrowser"]) {
             let normalized = values
@@ -781,12 +781,12 @@ final class CmuxSettingsFileStore {
 
         for (rawAction, rawBinding) in bindings {
             guard let action = KeyboardShortcutSettings.Action(rawValue: rawAction) else {
-                NSLog("[CmuxSettingsFileStore] ignoring unknown shortcut action '%@' in %@", rawAction, sourcePath)
+                NSLog("[ProgramaSettingsFileStore] ignoring unknown shortcut action '%@' in %@", rawAction, sourcePath)
                 continue
             }
             guard let shortcut = parseShortcutBindingValue(rawBinding, action: action) else {
                 NSLog(
-                    "[CmuxSettingsFileStore] ignoring invalid shortcut binding for '%@' in %@",
+                    "[ProgramaSettingsFileStore] ignoring invalid shortcut binding for '%@' in %@",
                     rawAction,
                     sourcePath
                 )
@@ -952,7 +952,7 @@ final class CmuxSettingsFileStore {
             }
             if snapshot.managedCustomSettings.trustedDirectories != nil,
                backups[Self.trustedDirectoriesBackupIdentifier] == nil {
-                backups[Self.trustedDirectoriesBackupIdentifier] = .stringArray(CmuxDirectoryTrust.shared.allTrustedPaths)
+                backups[Self.trustedDirectoriesBackupIdentifier] = .stringArray(ProgramaDirectoryTrust.shared.allTrustedPaths)
             }
             if snapshot.managedCustomSettings.socketPassword != nil,
                backups[Self.socketPasswordBackupIdentifier] == nil {
@@ -978,8 +978,8 @@ final class CmuxSettingsFileStore {
 
     private func applyManagedCustomSettings(_ settings: ManagedCustomSettings) {
         if let trustedDirectories = settings.trustedDirectories,
-           CmuxDirectoryTrust.shared.allTrustedPaths != trustedDirectories {
-            CmuxDirectoryTrust.shared.replaceAll(with: trustedDirectories)
+           ProgramaDirectoryTrust.shared.allTrustedPaths != trustedDirectories {
+            ProgramaDirectoryTrust.shared.replaceAll(with: trustedDirectories)
         }
 
         if let socketPassword = settings.socketPassword {
@@ -1002,9 +1002,9 @@ final class CmuxSettingsFileStore {
         switch identifier {
         case Self.trustedDirectoriesBackupIdentifier:
             if case .stringArray(let values) = backup {
-                CmuxDirectoryTrust.shared.replaceAll(with: values)
+                ProgramaDirectoryTrust.shared.replaceAll(with: values)
             } else {
-                CmuxDirectoryTrust.shared.replaceAll(with: [])
+                ProgramaDirectoryTrust.shared.replaceAll(with: [])
             }
         case Self.socketPasswordBackupIdentifier:
             switch backup {
@@ -1185,7 +1185,7 @@ final class CmuxSettingsFileStore {
     }
 
     private func logInvalid(_ path: String, sourcePath: String) {
-        NSLog("[CmuxSettingsFileStore] ignoring invalid setting '%@' in %@", path, sourcePath)
+        NSLog("[ProgramaSettingsFileStore] ignoring invalid setting '%@' in %@", path, sourcePath)
     }
 
     private func jsonString(_ rawValue: Any?) -> String? {
@@ -1311,8 +1311,8 @@ final class CmuxSettingsFileStore {
                     "showNotificationMessage": SidebarWorkspaceDetailSettings.defaultShowNotificationMessage,
                     "showBranchDirectory": true,
                     "showPullRequests": true,
-                    "openPullRequestLinksInCmuxBrowser": BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInCmuxBrowser,
-                    "openPortLinksInCmuxBrowser": BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInCmuxBrowser,
+                    "openPullRequestLinksInProgramaBrowser": BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser,
+                    "openPortLinksInProgramaBrowser": BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInProgramaBrowser,
                     "showSSH": true,
                     "showPorts": true,
                     "showLog": true,
@@ -1359,8 +1359,8 @@ final class CmuxSettingsFileStore {
                     "defaultSearchEngine": BrowserSearchSettings.defaultSearchEngine.rawValue,
                     "showSearchSuggestions": BrowserSearchSettings.defaultSearchSuggestionsEnabled,
                     "theme": BrowserThemeSettings.defaultMode.rawValue,
-                    "openTerminalLinksInCmuxBrowser": BrowserLinkOpenSettings.defaultOpenTerminalLinksInCmuxBrowser,
-                    "interceptTerminalOpenCommandInCmuxBrowser": BrowserLinkOpenSettings.defaultInterceptTerminalOpenCommandInCmuxBrowser,
+                    "openTerminalLinksInProgramaBrowser": BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser,
+                    "interceptTerminalOpenCommandInProgramaBrowser": BrowserLinkOpenSettings.defaultInterceptTerminalOpenCommandInProgramaBrowser,
                     "hostsToOpenInEmbeddedBrowser": [String](),
                     "urlsToAlwaysOpenExternally": [String](),
                     "insecureHttpHostsAllowedInEmbeddedBrowser": BrowserInsecureHTTPSettings.defaultAllowlistPatterns,
@@ -1418,7 +1418,7 @@ final class CmuxSettingsFileStore {
     }
 }
 
-typealias KeyboardShortcutSettingsFileStore = CmuxSettingsFileStore
+typealias KeyboardShortcutSettingsFileStore = ProgramaSettingsFileStore
 
 private struct ResolvedSettingsSnapshot {
     var path: String?
@@ -1443,10 +1443,10 @@ private struct ManagedCustomSettings: Equatable {
     var managedIdentifiers: Set<String> {
         var identifiers: Set<String> = []
         if trustedDirectories != nil {
-            identifiers.insert(CmuxSettingsFileStore.trustedDirectoriesBackupIdentifier)
+            identifiers.insert(ProgramaSettingsFileStore.trustedDirectoriesBackupIdentifier)
         }
         if socketPassword != nil {
-            identifiers.insert(CmuxSettingsFileStore.socketPasswordBackupIdentifier)
+            identifiers.insert(ProgramaSettingsFileStore.socketPasswordBackupIdentifier)
         }
         return identifiers
     }

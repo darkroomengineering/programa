@@ -4,8 +4,8 @@ import Foundation
 /// When a directory (or its git repo root) is trusted, `confirm: true` commands
 /// from that directory's cmux.json skip the confirmation dialog.
 /// Global config (~/.config/cmux/cmux.json) is always trusted.
-final class CmuxDirectoryTrust {
-    static let shared = CmuxDirectoryTrust()
+final class ProgramaDirectoryTrust {
+    static let shared = ProgramaDirectoryTrust()
     static let didChangeNotification = Notification.Name("cmux.directoryTrustDidChange")
 
     private let storePath: String

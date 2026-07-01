@@ -614,7 +614,7 @@ struct BrowserPanelView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .webViewDidReceiveClick).filter { [weak panel] note in
             // Only handle clicks from our own webview.
-            guard let webView = note.object as? CmuxWebView else { return false }
+            guard let webView = note.object as? ProgramaWebView else { return false }
             return webView === panel?.webView
         }) { _ in
 #if DEBUG
@@ -1357,7 +1357,7 @@ struct BrowserPanelView: View {
         reason: String,
         isPanelFocusedOverride: Bool? = nil
     ) {
-        guard let cmuxWebView = panel.webView as? CmuxWebView else { return }
+        guard let cmuxWebView = panel.webView as? ProgramaWebView else { return }
         let isPanelFocused = isPanelFocusedOverride ?? isFocused
         let next = isPanelFocused && !panel.shouldSuppressWebViewFocus()
         if cmuxWebView.allowsFirstResponderAcquisition != next {
@@ -1982,10 +1982,10 @@ struct BrowserPanelView: View {
 
     private func refreshSuggestions() {
 #if DEBUG
-        let typingTimingStart = CmuxTypingTiming.start()
+        let typingTimingStart = ProgramaTypingTiming.start()
         defer {
             let trimmedQuery = omnibarState.buffer.trimmingCharacters(in: .whitespacesAndNewlines)
-            CmuxTypingTiming.logDuration(
+            ProgramaTypingTiming.logDuration(
                 path: "browser.omnibar.refreshSuggestions",
                 startedAt: typingTimingStart,
                 extra: "focused=\(addressBarFocused ? 1 : 0) queryLen=\(trimmedQuery.utf8.count) suggestionCount=\(omnibarState.suggestions.count)"
@@ -3407,10 +3407,10 @@ private final class OmnibarNativeTextField: NSTextField {
 
     override func keyDown(with event: NSEvent) {
 #if DEBUG
-        let typingTimingStart = CmuxTypingTiming.start()
+        let typingTimingStart = ProgramaTypingTiming.start()
         var route = "super"
         defer {
-            CmuxTypingTiming.logDuration(
+            ProgramaTypingTiming.logDuration(
                 path: "browser.omnibar.keyDown",
                 startedAt: typingTimingStart,
                 event: event,
@@ -3437,10 +3437,10 @@ private final class OmnibarNativeTextField: NSTextField {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
 #if DEBUG
-        let typingTimingStart = CmuxTypingTiming.start()
+        let typingTimingStart = ProgramaTypingTiming.start()
         var handled = false
         defer {
-            CmuxTypingTiming.logDuration(
+            ProgramaTypingTiming.logDuration(
                 path: "browser.omnibar.performKeyEquivalent",
                 startedAt: typingTimingStart,
                 event: event,
@@ -3690,9 +3690,9 @@ private struct OmnibarTextFieldRepresentable: NSViewRepresentable {
 
         func controlTextDidChange(_ obj: Notification) {
 #if DEBUG
-            let typingTimingStart = CmuxTypingTiming.start()
+            let typingTimingStart = ProgramaTypingTiming.start()
             defer {
-                CmuxTypingTiming.logDuration(
+                ProgramaTypingTiming.logDuration(
                     path: "browser.omnibar.controlTextDidChange",
                     startedAt: typingTimingStart,
                     event: NSApp.currentEvent,
@@ -3714,10 +3714,10 @@ private struct OmnibarTextFieldRepresentable: NSViewRepresentable {
 
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
 #if DEBUG
-            let typingTimingStart = CmuxTypingTiming.start()
+            let typingTimingStart = ProgramaTypingTiming.start()
             var handled = false
             defer {
-                CmuxTypingTiming.logDuration(
+                ProgramaTypingTiming.logDuration(
                     path: "browser.omnibar.doCommandBy",
                     startedAt: typingTimingStart,
                     event: NSApp.currentEvent,
@@ -3844,10 +3844,10 @@ private struct OmnibarTextFieldRepresentable: NSViewRepresentable {
 
         func handleKeyEvent(_ event: NSEvent, editor: NSTextView?) -> Bool {
 #if DEBUG
-            let typingTimingStart = CmuxTypingTiming.start()
+            let typingTimingStart = ProgramaTypingTiming.start()
             var handled = false
             defer {
-                CmuxTypingTiming.logDuration(
+                ProgramaTypingTiming.logDuration(
                     path: "browser.omnibar.handleKeyEvent",
                     startedAt: typingTimingStart,
                     event: event,
@@ -6714,7 +6714,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         webView: WKWebView,
         isPanelFocused: Bool
     ) {
-        guard let cmuxWebView = webView as? CmuxWebView else { return }
+        guard let cmuxWebView = webView as? ProgramaWebView else { return }
         let next = isPanelFocused && !panel.shouldSuppressWebViewFocus()
         if cmuxWebView.allowsFirstResponderAcquisition != next {
 #if DEBUG

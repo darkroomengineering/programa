@@ -1300,7 +1300,7 @@ class TabManager: ObservableObject {
         title: String,
         workingDirectory: String?,
         portOrdinal: Int,
-        configTemplate: CmuxSurfaceConfigTemplate?,
+        configTemplate: ProgramaSurfaceConfigTemplate?,
         initialTerminalCommand: String?,
         initialTerminalEnvironment: [String: String]
     ) -> Workspace {
@@ -2472,7 +2472,7 @@ class TabManager: ObservableObject {
         return candidates.first
     }
 
-    private func inheritedTerminalConfigForNewWorkspace() -> CmuxSurfaceConfigTemplate? {
+    private func inheritedTerminalConfigForNewWorkspace() -> ProgramaSurfaceConfigTemplate? {
         inheritedTerminalConfigForNewWorkspace(workspace: selectedWorkspace)
     }
 
@@ -2495,11 +2495,11 @@ class TabManager: ObservableObject {
 
     func inheritedTerminalConfigForNewWorkspace(
         workspace: Workspace?
-    ) -> CmuxSurfaceConfigTemplate? {
+    ) -> ProgramaSurfaceConfigTemplate? {
         guard let fontPoints = cachedInheritedTerminalFontPointsForNewWorkspace(workspace: workspace) else {
             return nil
         }
-        var config = CmuxSurfaceConfigTemplate()
+        var config = ProgramaSurfaceConfigTemplate()
         config.fontSize = fontPoints
         return config
     }
@@ -2516,13 +2516,13 @@ class TabManager: ObservableObject {
 
     private func workspaceCreationConfigTemplate(
         inheritedTerminalFontPoints: Float?
-    ) -> CmuxSurfaceConfigTemplate? {
+    ) -> ProgramaSurfaceConfigTemplate? {
         guard let inheritedTerminalFontPoints, inheritedTerminalFontPoints > 0 else {
             return nil
         }
         // Rebuild a clean Swift-owned template instead of carrying over any pointer-backed
         // inherited config state from the source workspace.
-        var config = CmuxSurfaceConfigTemplate()
+        var config = ProgramaSurfaceConfigTemplate()
         config.fontSize = inheritedTerminalFontPoints
         return config
     }

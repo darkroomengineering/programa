@@ -72,7 +72,7 @@ final class SurfacePool {
         workspaceId: UUID,
         portOrdinal: Int,
         workingDirectory: String?,
-        configTemplate: CmuxSurfaceConfigTemplate?
+        configTemplate: ProgramaSurfaceConfigTemplate?
     ) -> ClaimedSurface? {
         guard isEnabled else { return nil }
 

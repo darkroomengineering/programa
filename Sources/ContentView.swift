@@ -1798,7 +1798,7 @@ struct ContentView: View {
     @EnvironmentObject var notificationStore: TerminalNotificationStore
     @EnvironmentObject var sidebarState: SidebarState
     @EnvironmentObject var sidebarSelectionState: SidebarSelectionState
-    @EnvironmentObject var cmuxConfigStore: CmuxConfigStore
+    @EnvironmentObject var cmuxConfigStore: ProgramaConfigStore
     @State private var sidebarWidth: CGFloat = 200
     @State private var hoveredResizerHandles: Set<SidebarResizerHandle> = []
     @State private var isResizerDragging = false
@@ -1863,8 +1863,8 @@ struct ContentView: View {
     private var commandPaletteRenameSelectAllOnFocus = CommandPaletteRenameSelectionSettings.defaultSelectAllOnFocus
     @AppStorage(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey)
     private var commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
-    @AppStorage(BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowserKey)
-    private var openSidebarPullRequestLinksInCmuxBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInCmuxBrowser
+    @AppStorage(BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey)
+    private var openSidebarPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser
     @State private var commandPaletteShouldFocusWorkspaceDescriptionEditor = false
     @FocusState private var isCommandPaletteSearchFocused: Bool
     @FocusState private var isCommandPaletteRenameFocused: Bool
@@ -6077,7 +6077,7 @@ struct ContentView: View {
     private func commandPaletteCommandsContext(
         terminalOpenTargets: Set<TerminalDirectoryOpenTarget>
     ) -> CommandPaletteCommandsContext {
-        let cliInstalledInPATH = AppDelegate.shared?.isCmuxCLIInstalledInPATH() ?? false
+        let cliInstalledInPATH = AppDelegate.shared?.isProgramaCLIInstalledInPATH() ?? false
         var snapshot = commandPaletteContextSnapshot(terminalOpenTargets: terminalOpenTargets)
         snapshot.setBool(CommandPaletteContextKeys.cliInstalledInPATH, cliInstalledInPATH)
         return CommandPaletteCommandsContext(
@@ -7075,9 +7075,9 @@ struct ContentView: View {
 
         let cmuxConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "cmux.json"))
         for command in cmuxConfigStore.loadedCommands {
-            let commandName = sanitizeCmuxConfigPaletteText(command.name)
+            let commandName = sanitizeProgramaConfigPaletteText(command.name)
             let subtitle = command.description
-                .map { sanitizeCmuxConfigPaletteText($0) }
+                .map { sanitizeProgramaConfigPaletteText($0) }
                 .flatMap { $0.isEmpty ? nil : constant($0) }
                 ?? cmuxConfigDefaultSubtitle
             contributions.append(
@@ -7093,7 +7093,7 @@ struct ContentView: View {
         return contributions
     }
 
-    private func sanitizeCmuxConfigPaletteText(_ text: String) -> String {
+    private func sanitizeProgramaConfigPaletteText(_ text: String) -> String {
         let dangerous: Set<Unicode.Scalar> = [
             "\u{200B}", "\u{200C}", "\u{200D}", "\u{200E}", "\u{200F}",
             "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{202E}",
@@ -7131,10 +7131,10 @@ struct ContentView: View {
             AppDelegate.shared?.openNewMainWindow(nil)
         }
         registry.register(commandId: "palette.installCLI") {
-            AppDelegate.shared?.installCmuxCLIInPath(nil)
+            AppDelegate.shared?.installProgramaCLIInPath(nil)
         }
         registry.register(commandId: "palette.uninstallCLI") {
-            AppDelegate.shared?.uninstallCmuxCLIInPath(nil)
+            AppDelegate.shared?.uninstallProgramaCLIInPath(nil)
         }
         registry.register(commandId: "palette.newTerminalTab") {
             tabManager.newSurface()
@@ -7461,7 +7461,7 @@ struct ContentView: View {
                 let rawCwd = tabManager.selectedWorkspace?.currentDirectory
                 let baseCwd = (rawCwd?.isEmpty == false) ? rawCwd!
                     : FileManager.default.homeDirectoryForCurrentUser.path
-                CmuxConfigExecutor.execute(
+                ProgramaConfigExecutor.execute(
                     command: captured,
                     tabManager: tabManager,
                     baseCwd: baseCwd,
@@ -8679,7 +8679,7 @@ struct ContentView: View {
         guard !pullRequests.isEmpty else { return false }
 
         var openedCount = 0
-        if openSidebarPullRequestLinksInCmuxBrowser {
+        if openSidebarPullRequestLinksInProgramaBrowser {
             for pullRequest in pullRequests {
                 if tabManager.openBrowser(url: pullRequest.url, insertAtEnd: true) != nil {
                     openedCount += 1
@@ -9778,8 +9778,8 @@ private struct SidebarTabItemSettingsSnapshot: Equatable {
     let usesVerticalBranchLayout: Bool
     let showsGitBranchIcon: Bool
     let showsSSH: Bool
-    let openPullRequestLinksInCmuxBrowser: Bool
-    let openPortLinksInCmuxBrowser: Bool
+    let openPullRequestLinksInProgramaBrowser: Bool
+    let openPortLinksInProgramaBrowser: Bool
     let showsNotificationMessage: Bool
     let activeTabIndicatorStyle: SidebarActiveTabIndicatorStyle
     let selectionColorHex: String?
@@ -9806,10 +9806,10 @@ private struct SidebarTabItemSettingsSnapshot: Equatable {
         usesVerticalBranchLayout = SidebarBranchLayoutSettings.usesVerticalLayout(defaults: defaults)
         showsGitBranchIcon = Self.bool(defaults: defaults, key: "sidebarShowGitBranchIcon", defaultValue: false)
         showsSSH = Self.bool(defaults: defaults, key: "sidebarShowSSH", defaultValue: true)
-        openPullRequestLinksInCmuxBrowser = BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowser(
+        openPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowser(
             defaults: defaults
         )
-        openPortLinksInCmuxBrowser = BrowserLinkOpenSettings.openSidebarPortLinksInCmuxBrowser(
+        openPortLinksInProgramaBrowser = BrowserLinkOpenSettings.openSidebarPortLinksInProgramaBrowser(
             defaults: defaults
         )
 
@@ -12497,12 +12497,12 @@ private struct TabItemView: View, Equatable {
         settings.notificationBadgeColorHex
     }
 
-    private var openSidebarPullRequestLinksInCmuxBrowser: Bool {
-        settings.openPullRequestLinksInCmuxBrowser
+    private var openSidebarPullRequestLinksInProgramaBrowser: Bool {
+        settings.openPullRequestLinksInProgramaBrowser
     }
 
-    private var openSidebarPortLinksInCmuxBrowser: Bool {
-        settings.openPortLinksInCmuxBrowser
+    private var openSidebarPortLinksInProgramaBrowser: Bool {
+        settings.openPortLinksInProgramaBrowser
     }
 
     private var titleFontWeight: Font.Weight {
@@ -13763,7 +13763,7 @@ private struct TabItemView: View, Equatable {
 
     private func openPullRequestLink(_ url: URL) {
         updateSelection()
-        if openSidebarPullRequestLinksInCmuxBrowser {
+        if openSidebarPullRequestLinksInProgramaBrowser {
             if tabManager.openBrowser(
                 inWorkspace: tab.id,
                 url: url,
@@ -13780,7 +13780,7 @@ private struct TabItemView: View, Equatable {
     private func openPortLink(_ port: Int) {
         guard let url = URL(string: "http://localhost:\(port)") else { return }
         updateSelection()
-        if openSidebarPortLinksInCmuxBrowser {
+        if openSidebarPortLinksInProgramaBrowser {
             if tabManager.openBrowser(
                 inWorkspace: tab.id,
                 url: url,

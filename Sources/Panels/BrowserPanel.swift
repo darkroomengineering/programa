@@ -532,59 +532,59 @@ final class BrowserProfileStore: ObservableObject {
 }
 
 enum BrowserLinkOpenSettings {
-    static let openTerminalLinksInCmuxBrowserKey = "browserOpenTerminalLinksInCmuxBrowser"
-    static let defaultOpenTerminalLinksInCmuxBrowser: Bool = true
+    static let openTerminalLinksInProgramaBrowserKey = "browserOpenTerminalLinksInProgramaBrowser"
+    static let defaultOpenTerminalLinksInProgramaBrowser: Bool = true
 
-    static let openSidebarPullRequestLinksInCmuxBrowserKey = "browserOpenSidebarPullRequestLinksInCmuxBrowser"
-    static let defaultOpenSidebarPullRequestLinksInCmuxBrowser: Bool = true
+    static let openSidebarPullRequestLinksInProgramaBrowserKey = "browserOpenSidebarPullRequestLinksInProgramaBrowser"
+    static let defaultOpenSidebarPullRequestLinksInProgramaBrowser: Bool = true
 
-    static let openSidebarPortLinksInCmuxBrowserKey = "browserOpenSidebarPortLinksInCmuxBrowser"
-    static let defaultOpenSidebarPortLinksInCmuxBrowser: Bool = true
+    static let openSidebarPortLinksInProgramaBrowserKey = "browserOpenSidebarPortLinksInProgramaBrowser"
+    static let defaultOpenSidebarPortLinksInProgramaBrowser: Bool = true
 
-    static let interceptTerminalOpenCommandInCmuxBrowserKey = "browserInterceptTerminalOpenCommandInCmuxBrowser"
-    static let defaultInterceptTerminalOpenCommandInCmuxBrowser: Bool = true
+    static let interceptTerminalOpenCommandInProgramaBrowserKey = "browserInterceptTerminalOpenCommandInProgramaBrowser"
+    static let defaultInterceptTerminalOpenCommandInProgramaBrowser: Bool = true
 
     static let browserHostWhitelistKey = "browserHostWhitelist"
     static let defaultBrowserHostWhitelist: String = ""
     static let browserExternalOpenPatternsKey = "browserExternalOpenPatterns"
     static let defaultBrowserExternalOpenPatterns: String = ""
 
-    static func openTerminalLinksInCmuxBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openTerminalLinksInCmuxBrowserKey) == nil {
-            return defaultOpenTerminalLinksInCmuxBrowser
+    static func openTerminalLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: openTerminalLinksInProgramaBrowserKey) == nil {
+            return defaultOpenTerminalLinksInProgramaBrowser
         }
-        return defaults.bool(forKey: openTerminalLinksInCmuxBrowserKey)
+        return defaults.bool(forKey: openTerminalLinksInProgramaBrowserKey)
     }
 
-    static func openSidebarPullRequestLinksInCmuxBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openSidebarPullRequestLinksInCmuxBrowserKey) == nil {
-            return defaultOpenSidebarPullRequestLinksInCmuxBrowser
+    static func openSidebarPullRequestLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: openSidebarPullRequestLinksInProgramaBrowserKey) == nil {
+            return defaultOpenSidebarPullRequestLinksInProgramaBrowser
         }
-        return defaults.bool(forKey: openSidebarPullRequestLinksInCmuxBrowserKey)
+        return defaults.bool(forKey: openSidebarPullRequestLinksInProgramaBrowserKey)
     }
 
-    static func openSidebarPortLinksInCmuxBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openSidebarPortLinksInCmuxBrowserKey) == nil {
-            return defaultOpenSidebarPortLinksInCmuxBrowser
+    static func openSidebarPortLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: openSidebarPortLinksInProgramaBrowserKey) == nil {
+            return defaultOpenSidebarPortLinksInProgramaBrowser
         }
-        return defaults.bool(forKey: openSidebarPortLinksInCmuxBrowserKey)
+        return defaults.bool(forKey: openSidebarPortLinksInProgramaBrowserKey)
     }
 
-    static func interceptTerminalOpenCommandInCmuxBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: interceptTerminalOpenCommandInCmuxBrowserKey) != nil {
-            return defaults.bool(forKey: interceptTerminalOpenCommandInCmuxBrowserKey)
+    static func interceptTerminalOpenCommandInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: interceptTerminalOpenCommandInProgramaBrowserKey) != nil {
+            return defaults.bool(forKey: interceptTerminalOpenCommandInProgramaBrowserKey)
         }
 
         // Migrate existing behavior for users who only had the link-click toggle.
-        if defaults.object(forKey: openTerminalLinksInCmuxBrowserKey) != nil {
-            return defaults.bool(forKey: openTerminalLinksInCmuxBrowserKey)
+        if defaults.object(forKey: openTerminalLinksInProgramaBrowserKey) != nil {
+            return defaults.bool(forKey: openTerminalLinksInProgramaBrowserKey)
         }
 
-        return defaultInterceptTerminalOpenCommandInCmuxBrowser
+        return defaultInterceptTerminalOpenCommandInProgramaBrowser
     }
 
-    static func initialInterceptTerminalOpenCommandInCmuxBrowserValue(defaults: UserDefaults = .standard) -> Bool {
-        interceptTerminalOpenCommandInCmuxBrowser(defaults: defaults)
+    static func initialInterceptTerminalOpenCommandInProgramaBrowserValue(defaults: UserDefaults = .standard) -> Bool {
+        interceptTerminalOpenCommandInProgramaBrowser(defaults: defaults)
     }
 
     static func hostWhitelist(defaults: UserDefaults = .standard) -> [String] {
@@ -2064,7 +2064,7 @@ final class BrowserPanel: Panel, ObservableObject {
 
     private static let imeCompositionHandlerName = "cmuxIMEState"
 
-    private func setupIMECompositionTracking(for webView: CmuxWebView) {
+    private func setupIMECompositionTracking(for webView: ProgramaWebView) {
         let handler = IMECompositionMessageHandler { [weak webView] composing in
             guard let webView else { return }
             if composing {
@@ -2530,14 +2530,14 @@ final class BrowserPanel: Panel, ObservableObject {
     private static func makeWebView(
         profileID: UUID,
         websiteDataStore: WKWebsiteDataStore? = nil
-    ) -> CmuxWebView {
+    ) -> ProgramaWebView {
         let config = WKWebViewConfiguration()
         configureWebViewConfiguration(
             config,
             websiteDataStore: websiteDataStore ?? BrowserProfileStore.shared.websiteDataStore(for: profileID)
         )
 
-        let webView = CmuxWebView(frame: .zero, configuration: config)
+        let webView = ProgramaWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
         if #available(macOS 13.3, *) {
             webView.isInspectable = true
@@ -2602,7 +2602,7 @@ final class BrowserPanel: Panel, ObservableObject {
         )
     }
 
-    private func bindWebView(_ webView: CmuxWebView) {
+    private func bindWebView(_ webView: ProgramaWebView) {
         webView.onContextMenuDownloadStateChanged = { [weak self] downloading in
             if downloading {
                 self?.beginDownloadActivity()
@@ -2933,8 +2933,8 @@ final class BrowserPanel: Panel, ObservableObject {
         previousWebView.stopLoading()
         previousWebView.navigationDelegate = nil
         previousWebView.uiDelegate = nil
-        if let previousCmuxWebView = previousWebView as? CmuxWebView {
-            previousCmuxWebView.onContextMenuDownloadStateChanged = nil
+        if let previousProgramaWebView = previousWebView as? ProgramaWebView {
+            previousProgramaWebView.onContextMenuDownloadStateChanged = nil
         }
 
         profileID = resolvedProfileID
@@ -3282,8 +3282,8 @@ final class BrowserPanel: Panel, ObservableObject {
         oldWebView.stopLoading()
         oldWebView.navigationDelegate = nil
         oldWebView.uiDelegate = nil
-        if let oldCmuxWebView = oldWebView as? CmuxWebView {
-            oldCmuxWebView.onContextMenuDownloadStateChanged = nil
+        if let oldProgramaWebView = oldWebView as? ProgramaWebView {
+            oldProgramaWebView.onContextMenuDownloadStateChanged = nil
         }
 
         let replacement = Self.makeWebView(
@@ -3976,7 +3976,7 @@ final class BrowserPanel: Panel, ObservableObject {
         alert.messageText = String(localized: "browser.error.insecure.title", defaultValue: "Connection isn\u{2019}t secure")
         alert.informativeText = String(localized: "browser.error.insecure.message", defaultValue: "\(host) uses plain HTTP, so traffic can be read or modified on the network.\n\nOpen this URL in your default browser, or proceed in cmux.")
         alert.addButton(withTitle: String(localized: "browser.openInDefaultBrowser", defaultValue: "Open in Default Browser"))
-        alert.addButton(withTitle: String(localized: "browser.proceedInCmux", defaultValue: "Proceed in cmux"))
+        alert.addButton(withTitle: String(localized: "browser.proceedInPrograma", defaultValue: "Proceed in cmux"))
         alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
         alert.showsSuppressionButton = true
         alert.suppressionButton?.title = String(localized: "browser.alwaysAllowHost", defaultValue: "Always allow this host in cmux")
@@ -4139,8 +4139,8 @@ extension BrowserPanel {
         oldWebView.stopLoading()
         oldWebView.navigationDelegate = nil
         oldWebView.uiDelegate = nil
-        if let oldCmuxWebView = oldWebView as? CmuxWebView {
-            oldCmuxWebView.onContextMenuDownloadStateChanged = nil
+        if let oldProgramaWebView = oldWebView as? ProgramaWebView {
+            oldProgramaWebView.onContextMenuDownloadStateChanged = nil
         }
 
         let replacement = Self.makeWebView(
@@ -6189,7 +6189,7 @@ private class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        let hasRecentMiddleClickIntent = CmuxWebView.hasRecentMiddleClickIntent(for: webView)
+        let hasRecentMiddleClickIntent = ProgramaWebView.hasRecentMiddleClickIntent(for: webView)
         let shouldOpenInNewTab = browserNavigationShouldOpenInNewTab(
             navigationType: navigationAction.navigationType,
             modifierFlags: navigationAction.modifierFlags,
@@ -6429,7 +6429,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
             navigationType: navigationAction.navigationType,
             modifierFlags: navigationAction.modifierFlags,
             buttonNumber: navigationAction.buttonNumber,
-            hasRecentMiddleClickIntent: CmuxWebView.hasRecentMiddleClickIntent(for: webView)
+            hasRecentMiddleClickIntent: ProgramaWebView.hasRecentMiddleClickIntent(for: webView)
         )
 
         if isScriptedPopup, let popupWebView = openPopup?(configuration, windowFeatures) {
@@ -10384,7 +10384,7 @@ enum BrowserUserProxySettings {
 }
 
 /// Receives `compositionstart`/`compositionend` bridge messages from the web view's
-/// JS IME tracking script and forwards them to the native `CmuxWebView`.
+/// JS IME tracking script and forwards them to the native `ProgramaWebView`.
 private final class IMECompositionMessageHandler: NSObject, WKScriptMessageHandler {
     private let onCompositionStateChanged: (Bool) -> Void
 

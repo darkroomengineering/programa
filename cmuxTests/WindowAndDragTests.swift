@@ -1129,7 +1129,7 @@ final class FileDropOverlayViewTests: XCTestCase {
         let anchor = NSView(frame: NSRect(x: 40, y: 36, width: 220, height: 150))
         contentView.addSubview(anchor)
 
-        let webView = CmuxWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        let webView = ProgramaWebView(frame: .zero, configuration: WKWebViewConfiguration())
         BrowserWindowPortalRegistry.bind(webView: webView, to: anchor, visibleInUI: true)
         BrowserWindowPortalRegistry.synchronizeForAnchor(anchor)
 
