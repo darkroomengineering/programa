@@ -349,7 +349,7 @@ final class GhosttyConfigTests: XCTestCase {
         )
     }
 
-    func testCmuxAppSupportConfigURLsUseReleaseConfigForDebugBundleWithoutCurrentConfig() throws {
+    func testProgramaAppSupportConfigURLsUseReleaseConfigForDebugBundleWithoutCurrentConfig() throws {
         try withTemporaryAppSupportDirectory { appSupportDirectory in
             let releaseConfigURL = try writeAppSupportConfig(
                 appSupportDirectory: appSupportDirectory,
@@ -368,7 +368,7 @@ final class GhosttyConfigTests: XCTestCase {
         }
     }
 
-    func testCmuxAppSupportConfigURLsPreferCurrentBundleConfigWhenPresent() throws {
+    func testProgramaAppSupportConfigURLsPreferCurrentBundleConfigWhenPresent() throws {
         try withTemporaryAppSupportDirectory { appSupportDirectory in
             _ = try writeAppSupportConfig(
                 appSupportDirectory: appSupportDirectory,
@@ -393,7 +393,7 @@ final class GhosttyConfigTests: XCTestCase {
         }
     }
 
-    func testCmuxAppSupportConfigURLsSkipReleaseFallbackForNonDebugBundle() throws {
+    func testProgramaAppSupportConfigURLsSkipReleaseFallbackForNonDebugBundle() throws {
         try withTemporaryAppSupportDirectory { appSupportDirectory in
             _ = try writeAppSupportConfig(
                 appSupportDirectory: appSupportDirectory,
@@ -411,7 +411,7 @@ final class GhosttyConfigTests: XCTestCase {
         }
     }
 
-    func testCmuxAppSupportConfigURLsIgnoreMissingOrEmptyFiles() throws {
+    func testProgramaAppSupportConfigURLsIgnoreMissingOrEmptyFiles() throws {
         try withTemporaryAppSupportDirectory { appSupportDirectory in
             _ = try writeAppSupportConfig(
                 appSupportDirectory: appSupportDirectory,
@@ -2799,7 +2799,7 @@ final class SidebarBackgroundConfigTests: XCTestCase {
 }
 
 final class ZshShellIntegrationHandoffTests: XCTestCase {
-    func testGhosttyPromptHooksLoadWhenCmuxRequestsZshIntegration() throws {
+    func testGhosttyPromptHooksLoadWhenProgramaRequestsZshIntegration() throws {
         let output = try runInteractiveZsh(cmuxLoadGhosttyIntegration: true)
 
         XCTAssertTrue(output.contains("PRECMD=1"), output)
@@ -2807,7 +2807,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         XCTAssertTrue(output.contains("PRECMDS=_ghostty_precmd"), output)
     }
 
-    func testGhosttyPromptHooksDoNotLoadWithoutCmuxHandoffFlag() throws {
+    func testGhosttyPromptHooksDoNotLoadWithoutProgramaHandoffFlag() throws {
         let output = try runInteractiveZsh(cmuxLoadGhosttyIntegration: false)
 
         XCTAssertTrue(output.contains("PRECMD=0"), output)
@@ -2961,7 +2961,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
     }
 
-    func testShellIntegrationPublishesOnlyWorkspaceScopedCmuxEnvironmentToTmuxServerAutomatically() throws {
+    func testShellIntegrationPublishesOnlyWorkspaceScopedProgramaEnvironmentToTmuxServerAutomatically() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
             .appendingPathComponent("cmux-zsh-tmux-publish-\(UUID().uuidString)")
@@ -3050,7 +3050,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         XCTAssertTrue(log.contains("set-environment -gu PROGRAMA_PANEL_ID"), log)
     }
 
-    func testShellIntegrationRefreshesWorkspaceScopedCmuxEnvironmentFromTmuxWithoutOverwritingSurfaceScope() throws {
+    func testShellIntegrationRefreshesWorkspaceScopedProgramaEnvironmentFromTmuxWithoutOverwritingSurfaceScope() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
             .appendingPathComponent("cmux-zsh-tmux-refresh-\(UUID().uuidString)")

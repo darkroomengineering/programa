@@ -139,7 +139,7 @@ struct cmuxApp: App {
     @StateObject private var notificationStore = TerminalNotificationStore.shared
     @StateObject private var sidebarState = SidebarState()
     @StateObject private var sidebarSelectionState = SidebarSelectionState()
-    @StateObject private var cmuxConfigStore = CmuxConfigStore()
+    @StateObject private var cmuxConfigStore = ProgramaConfigStore()
     @StateObject private var keyboardShortcutSettingsObserver = KeyboardShortcutSettingsObserver.shared
     private let primaryWindowId = UUID()
     @AppStorage(AppearanceSettings.appearanceModeKey) private var appearanceMode = AppearanceSettings.defaultMode.rawValue
@@ -171,8 +171,11 @@ struct cmuxApp: App {
         let startupAppearance = AppearanceSettings.resolvedMode()
         Self.applyAppearance(startupAppearance)
         _tabManager = StateObject(wrappedValue: TabManager())
-        // Migrate legacy and old-format socket mode values to the new enum.
         let defaults = UserDefaults.standard
+        // Rebrand: forward every legacy cmux-prefixed default to its programa key
+        // before anything reads the new keys, so existing users keep their prefs.
+        Self.migrateCmuxDefaultsToProgramaIfNeeded(defaults: defaults)
+        // Migrate legacy and old-format socket mode values to the new enum.
         if let stored = defaults.string(forKey: SocketControlSettings.appStorageKey) {
             let migrated = SocketControlSettings.migrateMode(stored)
             if migrated.rawValue != stored {
@@ -268,6 +271,22 @@ struct cmuxApp: App {
         setenv(key, updated, 1)
     }
 
+    /// One-time rebrand migration: copy every `cmux`-prefixed UserDefaults value to
+    /// the corresponding `programa`-prefixed key. Version-gated so it runs once, and
+    /// never deletes the legacy keys (a downgrade still finds its old values).
+    private static func migrateCmuxDefaultsToProgramaIfNeeded(defaults: UserDefaults) {
+        let migrationKey = "programaDefaultsRebrandMigrationVersion"
+        let targetVersion = 1
+        guard defaults.integer(forKey: migrationKey) < targetVersion else { return }
+        for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix("cmux") {
+            let newKey = "programa" + key.dropFirst("cmux".count)
+            if defaults.object(forKey: newKey) == nil {
+                defaults.set(value, forKey: newKey)
+            }
+        }
+        defaults.set(targetVersion, forKey: migrationKey)
+    }
+
     private func migrateSidebarAppearanceDefaultsIfNeeded(defaults: UserDefaults) {
         let migrationKey = "sidebarAppearanceDefaultsVersion"
         let targetVersion = 1
@@ -355,8 +374,8 @@ struct cmuxApp: App {
                 splitCommandButton(title: String(localized: "menu.app.settings", defaultValue: "Settings…"), shortcut: menuShortcut(for: .openSettings)) {
                     appDelegate.openPreferencesWindow(debugSource: "menu.cmdComma")
                 }
-                Button(String(localized: "menu.app.openCmuxSettingsFile", defaultValue: "Open settings.json")) {
-                    openCmuxSettingsFileInEditor()
+                Button(String(localized: "menu.app.openProgramaSettingsFile", defaultValue: "Open settings.json")) {
+                    openProgramaSettingsFileInEditor()
                 }
                 Button(String(localized: "menu.app.ghosttySettings", defaultValue: "Ghostty Settings…")) {
                     GhosttyApp.shared.openConfigurationInTextEdit()
@@ -378,7 +397,7 @@ struct cmuxApp: App {
             }
 
             CommandGroup(replacing: .appTermination) {
-                splitCommandButton(title: String(localized: "menu.quitCmux", defaultValue: "Quit cmux"), shortcut: menuShortcut(for: .quit)) {
+                splitCommandButton(title: String(localized: "menu.quitPrograma", defaultValue: "Quit cmux"), shortcut: menuShortcut(for: .quit)) {
                     NSApp.terminate(nil)
                 }
             }
@@ -2679,7 +2698,7 @@ private struct AboutPanelView: View {
     private var version: String? { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String }
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }
     private var commit: String? {
-        if let value = Bundle.main.infoDictionary?["CMUXCommit"] as? String, !value.isEmpty {
+        if let value = Bundle.main.infoDictionary?["ProgramaCommit"] as? String, !value.isEmpty {
             return value
         }
         let env = ProcessInfo.processInfo.environment["PROGRAMA_COMMIT"] ?? ""
@@ -3828,7 +3847,7 @@ enum ClaudeCodeIntegrationSettings {
 }
 
 enum WelcomeSettings {
-    static let shownKey = "cmuxWelcomeShown"
+    static let shownKey = "programaWelcomeShown"
 }
 
 enum TelemetrySettings {
@@ -3860,7 +3879,7 @@ enum PreferredEditorSettings {
 
     /// Open a file path with the user's preferred editor, falling back to system default.
     static func open(_ url: URL) {
-        if CmuxUITestCapture.appendLineIfConfigured(
+        if ProgramaUITestCapture.appendLineIfConfigured(
             envKey: "PROGRAMA_UI_TEST_CAPTURE_OPEN_PATH",
             line: url.path
         ) {
@@ -3897,7 +3916,7 @@ enum PreferredEditorSettings {
     }
 }
 
-enum CmuxUITestCapture {
+enum ProgramaUITestCapture {
     static func appendLineIfConfigured(envKey: String, line: String) -> Bool {
         guard let url = configuredURL(for: envKey) else { return false }
         appendLine(line, to: url)
@@ -3971,7 +3990,7 @@ enum CmuxUITestCapture {
     }
 }
 
-enum CmuxRuntimeDebugCapture {
+enum ProgramaRuntimeDebugCapture {
     private struct Configuration {
         let baseURL: URL
         let token: String
@@ -4044,12 +4063,12 @@ enum CmuxRuntimeDebugCapture {
     }
 }
 
-private func openCmuxSettingsFileInEditor() {
+private func openProgramaSettingsFileInEditor() {
     let url = KeyboardShortcutSettings.settingsFileStore.settingsFileURLForEditing()
     PreferredEditorSettings.open(url)
 }
 
-private func openCmuxSettingsFileInTextEdit() {
+private func openProgramaSettingsFileInTextEdit() {
     #if os(macOS)
     let fileURL = KeyboardShortcutSettings.settingsFileStore.settingsFileURLForEditing()
     let editorURL = URL(fileURLWithPath: "/System/Applications/TextEdit.app")
@@ -4086,9 +4105,9 @@ struct SettingsView: View {
     @AppStorage(BrowserImportHintSettings.showOnBlankTabsKey) private var showBrowserImportHintOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
     @AppStorage(BrowserImportHintSettings.dismissedKey) private var isBrowserImportHintDismissed = BrowserImportHintSettings.defaultDismissed
     @AppStorage(ReactGrabSettings.versionKey) private var reactGrabVersion = ReactGrabSettings.defaultVersion
-    @AppStorage(BrowserLinkOpenSettings.openTerminalLinksInCmuxBrowserKey) private var openTerminalLinksInCmuxBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInCmuxBrowser
-    @AppStorage(BrowserLinkOpenSettings.interceptTerminalOpenCommandInCmuxBrowserKey)
-    private var interceptTerminalOpenCommandInCmuxBrowser = BrowserLinkOpenSettings.initialInterceptTerminalOpenCommandInCmuxBrowserValue()
+    @AppStorage(BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowserKey) private var openTerminalLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser
+    @AppStorage(BrowserLinkOpenSettings.interceptTerminalOpenCommandInProgramaBrowserKey)
+    private var interceptTerminalOpenCommandInProgramaBrowser = BrowserLinkOpenSettings.initialInterceptTerminalOpenCommandInProgramaBrowserValue()
     @AppStorage(BrowserLinkOpenSettings.browserHostWhitelistKey) private var browserHostWhitelist = BrowserLinkOpenSettings.defaultBrowserHostWhitelist
     @AppStorage(BrowserLinkOpenSettings.browserExternalOpenPatternsKey)
     private var browserExternalOpenPatterns = BrowserLinkOpenSettings.defaultBrowserExternalOpenPatterns
@@ -4126,10 +4145,10 @@ struct SettingsView: View {
     @AppStorage("sidebarNotificationBadgeColorHex") private var sidebarNotificationBadgeColorHex: String?
     @AppStorage("sidebarShowBranchDirectory") private var sidebarShowBranchDirectory = true
     @AppStorage("sidebarShowPullRequest") private var sidebarShowPullRequest = true
-    @AppStorage(BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowserKey)
-    private var openSidebarPullRequestLinksInCmuxBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInCmuxBrowser
-    @AppStorage(BrowserLinkOpenSettings.openSidebarPortLinksInCmuxBrowserKey)
-    private var openSidebarPortLinksInCmuxBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInCmuxBrowser
+    @AppStorage(BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey)
+    private var openSidebarPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser
+    @AppStorage(BrowserLinkOpenSettings.openSidebarPortLinksInProgramaBrowserKey)
+    private var openSidebarPortLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInProgramaBrowser
     @AppStorage(ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
     private var showShortcutHintsOnCommandHold = ShortcutHintDebugSettings.defaultShowHintsOnCommandHold
     @AppStorage("sidebarShowSSH") private var sidebarShowSSH = true
@@ -4166,7 +4185,7 @@ struct SettingsView: View {
     @State private var showLanguageRestartAlert = false
     @State private var isResettingSettings = false
     @State private var workspaceTabPaletteEntries = WorkspaceTabColorSettings.palette()
-    @State private var trustedDirectoriesDraft: String = CmuxDirectoryTrust.shared.allTrustedPaths.joined(separator: "\n")
+    @State private var trustedDirectoriesDraft: String = ProgramaDirectoryTrust.shared.allTrustedPaths.joined(separator: "\n")
 
     private var selectedWorkspacePlacement: NewWorkspacePlacement {
         NewWorkspacePlacement(rawValue: newWorkspacePlacement) ?? WorkspacePlacementSettings.defaultPlacement
@@ -4348,7 +4367,7 @@ struct SettingsView: View {
             .split(separator: "\n", omittingEmptySubsequences: true)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        CmuxDirectoryTrust.shared.replaceAll(with: paths)
+        ProgramaDirectoryTrust.shared.replaceAll(with: paths)
     }
 
     private var hasCustomNotificationSoundFilePath: Bool {
@@ -5010,11 +5029,11 @@ struct SettingsView: View {
 
                         SettingsCardRow(
                             String(localized: "settings.app.openSidebarPRLinks", defaultValue: "Open Sidebar PR Links in cmux Browser"),
-                            subtitle: openSidebarPullRequestLinksInCmuxBrowser
+                            subtitle: openSidebarPullRequestLinksInProgramaBrowser
                                 ? String(localized: "settings.app.openSidebarPRLinks.subtitleOn", defaultValue: "Clicks open inside cmux browser.")
                                 : String(localized: "settings.app.openSidebarPRLinks.subtitleOff", defaultValue: "Clicks open in your default browser.")
                         ) {
-                            Toggle("", isOn: $openSidebarPullRequestLinksInCmuxBrowser)
+                            Toggle("", isOn: $openSidebarPullRequestLinksInProgramaBrowser)
                                 .labelsHidden()
                                 .controlSize(.small)
                         }
@@ -5024,11 +5043,11 @@ struct SettingsView: View {
 
                         SettingsCardRow(
                             String(localized: "settings.app.openSidebarPortLinks", defaultValue: "Open Sidebar Port Links in cmux Browser"),
-                            subtitle: openSidebarPortLinksInCmuxBrowser
+                            subtitle: openSidebarPortLinksInProgramaBrowser
                                 ? String(localized: "settings.app.openSidebarPortLinks.subtitleOn", defaultValue: "Port clicks open inside cmux browser.")
                                 : String(localized: "settings.app.openSidebarPortLinks.subtitleOff", defaultValue: "Port clicks open in your default browser.")
                         ) {
-                            Toggle("", isOn: $openSidebarPortLinksInCmuxBrowser)
+                            Toggle("", isOn: $openSidebarPortLinksInProgramaBrowser)
                                 .labelsHidden()
                                 .controlSize(.small)
                         }
@@ -5444,7 +5463,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             SettingsCardRow(
                                 String(localized: "settings.customCommands.trustedDirectories", defaultValue: "Trusted Directories"),
-                                subtitle: String(localized: "settings.customCommands.trustedDirectories.subtitle", defaultValue: "Commands from cmux.json in these directories run without confirmation. One path per line.")
+                                subtitle: String(localized: "settings.customCommands.trustedDirectories.subtitle", defaultValue: "Commands from programa.json in these directories run without confirmation. One path per line.")
                             ) {
                                 EmptyView()
                             }
@@ -5468,7 +5487,7 @@ struct SettingsView: View {
                         }
 
                         SettingsCardDivider()
-                        SettingsCardNote(String(localized: "settings.customCommands.trustedDirectories.note", defaultValue: "Place a cmux.json in your project root to define custom commands. Trust a directory from the confirmation dialog, or add paths here. For git repos, trusting the root covers all subdirectories."))
+                        SettingsCardNote(String(localized: "settings.customCommands.trustedDirectories.note", defaultValue: "Place a programa.json in your project root to define custom commands. Trust a directory from the confirmation dialog, or add paths here. For git repos, trusting the root covers all subdirectories."))
                     }
 
                     SettingsSectionHeader(title: String(localized: "settings.section.browser", defaultValue: "Browser"))
@@ -5515,7 +5534,7 @@ struct SettingsView: View {
                             String(localized: "settings.browser.openTerminalLinks", defaultValue: "Open Terminal Links in cmux Browser"),
                             subtitle: String(localized: "settings.browser.openTerminalLinks.subtitle", defaultValue: "When off, links clicked in terminal output open in your default browser.")
                         ) {
-                            Toggle("", isOn: $openTerminalLinksInCmuxBrowser)
+                            Toggle("", isOn: $openTerminalLinksInProgramaBrowser)
                                 .labelsHidden()
                                 .controlSize(.small)
                         }
@@ -5526,12 +5545,12 @@ struct SettingsView: View {
                             String(localized: "settings.browser.interceptOpen", defaultValue: "Intercept open http(s) in Terminal"),
                             subtitle: String(localized: "settings.browser.interceptOpen.subtitle", defaultValue: "When off, `open https://...` and `open http://...` always use your default browser.")
                         ) {
-                            Toggle("", isOn: $interceptTerminalOpenCommandInCmuxBrowser)
+                            Toggle("", isOn: $interceptTerminalOpenCommandInProgramaBrowser)
                                 .labelsHidden()
                                 .controlSize(.small)
                         }
 
-                        if openTerminalLinksInCmuxBrowser || interceptTerminalOpenCommandInCmuxBrowser {
+                        if openTerminalLinksInProgramaBrowser || interceptTerminalOpenCommandInProgramaBrowser {
                             SettingsCardDivider()
 
                             VStack(alignment: .leading, spacing: 6) {
@@ -5755,7 +5774,7 @@ struct SettingsView: View {
                                     .accessibilityIdentifier("SettingsKeyboardShortcutsChordDocsLink")
 
                                 Button(String(localized: "settings.app.settingsFile.openButton", defaultValue: "Open settings.json")) {
-                                    openCmuxSettingsFileInTextEdit()
+                                    openProgramaSettingsFileInTextEdit()
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
@@ -5875,7 +5894,7 @@ struct SettingsView: View {
                             title: String(localized: "settings.app.settingsFile.openButton", defaultValue: "Open settings.json"),
                             helpText: KeyboardShortcutSettings.settingsFileStore.settingsFileDisplayPath(),
                             accessibilityIdentifier: "SettingsFileOpenButton",
-                            action: openCmuxSettingsFileInTextEdit
+                            action: openProgramaSettingsFileInTextEdit
                         )
                     }
                 }
@@ -6018,8 +6037,8 @@ struct SettingsView: View {
         browserImportHintVariantRaw = BrowserImportHintSettings.defaultVariant.rawValue
         showBrowserImportHintOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
         isBrowserImportHintDismissed = BrowserImportHintSettings.defaultDismissed
-        openTerminalLinksInCmuxBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInCmuxBrowser
-        interceptTerminalOpenCommandInCmuxBrowser = BrowserLinkOpenSettings.defaultInterceptTerminalOpenCommandInCmuxBrowser
+        openTerminalLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser
+        interceptTerminalOpenCommandInProgramaBrowser = BrowserLinkOpenSettings.defaultInterceptTerminalOpenCommandInProgramaBrowser
         browserHostWhitelist = BrowserLinkOpenSettings.defaultBrowserHostWhitelist
         browserExternalOpenPatterns = BrowserLinkOpenSettings.defaultBrowserExternalOpenPatterns
         browserInsecureHTTPAllowlist = BrowserInsecureHTTPSettings.defaultAllowlistText
@@ -6059,8 +6078,8 @@ struct SettingsView: View {
         sidebarNotificationBadgeColorHex = nil
         sidebarShowBranchDirectory = true
         sidebarShowPullRequest = true
-        openSidebarPullRequestLinksInCmuxBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInCmuxBrowser
-        openSidebarPortLinksInCmuxBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInCmuxBrowser
+        openSidebarPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser
+        openSidebarPortLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInProgramaBrowser
         showShortcutHintsOnCommandHold = ShortcutHintDebugSettings.defaultShowHintsOnCommandHold
         sidebarShowSSH = true
         sidebarShowPorts = true

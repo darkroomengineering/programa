@@ -1,13 +1,13 @@
 # TODO
 
 ## Issue 151: Remote SSH (Living Execution)
-- [x] `cmux ssh` creates remote workspace metadata and does not require `--name`
-- [x] Remote daemon bootstrap/upload/start path with `cmuxd-remote serve --stdio`
+- [x] `programa ssh` creates remote workspace metadata and does not require `--name`
+- [x] Remote daemon bootstrap/upload/start path with `programad-remote serve --stdio`
 - [x] Reconnect/disconnect controls (CLI/API/context menu) + improved error surfacing
 - [x] Retry count/time surfaced in remote daemon/probe error details
 - [ ] Remove automatic remote service port mirroring (`ssh -L` from detected remote listening ports)
 - [ ] Add transport-scoped proxy broker (SOCKS5 + HTTP CONNECT) for remote traffic
-- [ ] Extend `cmuxd-remote` RPC beyond `hello/ping` with proxy stream methods (`proxy.open|close`)
+- [ ] Extend `programad-remote` RPC beyond `hello/ping` with proxy stream methods (`proxy.open|close`)
 - [ ] Auto-wire WKWebView in remote workspaces to proxy via `WKWebsiteDataStore.proxyConfigurations`
 - [ ] Add browser proxy e2e tests (remote egress IP, websocket, reconnect continuity)
 - [ ] Implement PTY resize coordinator with tmux semantics (`smallest screen wins`)
@@ -16,15 +16,15 @@
 ## Socket API / Agent
 - [x] Add window handles + `window.list/current/focus/create/close` for multi-window socket control (v2) + v1 equivalents (`list_windows`, etc) + CLI support.
 - [x] Add surface move/reorder commands (move between panes, reorder within pane, move across workspaces/windows).
-- [x] Add browser automation API inspired by `vercel-labs/agent-browser`, but backed by cmux's WKWebView (wait, click, type, eval, screenshot, etc.).
+- [x] Add browser automation API inspired by `vercel-labs/agent-browser`, but backed by Programa's WKWebView (wait, click, type, eval, screenshot, etc.).
 - [x] Finalize browser parity contract and command mapping decisions in `docs/agent-browser-port-spec.md`.
-- [x] Add `cmux browser` command surface that mirrors agent-browser semantics and targets explicit `surface_id` handles.
+- [x] Add `programa browser` command surface that mirrors agent-browser semantics and targets explicit `surface_id` handles.
 - [x] Add short handle refs (`surface:N`, `pane:N`, `workspace:N`, `window:N`) and CLI `--id-format refs|uuids|both` output control.
 - [x] Add v1->v2 compatibility shim for migrated browser/topology commands while v1 remains supported.
 - [x] Port browser automation coverage to `tests_v2/` per `docs/agent-browser-port-spec.md` and keep v1 + v2 suites green.
   - Added `tests_v2/test_browser_api_comprehensive.py`, `tests_v2/test_browser_api_p0.py`, `tests_v2/test_browser_api_extended_families.py`, `tests_v2/test_browser_api_unsupported_matrix.py`, and `tests_v2/test_browser_cli_agent_port.py`.
   - Full VM runs: `./scripts/run-tests-v1.sh` and `./scripts/run-tests-v2.sh` passing (v2 visual D12 remains reported as a known non-blocking VM failure, matching v1 policy).
-- [x] Fix `cmux browser open|open-split|new` URL parsing so routing flags (`--workspace`, `--window`) are removed before URL construction.
+- [x] Fix `programa browser open|open-split|new` URL parsing so routing flags (`--workspace`, `--window`) are removed before URL construction.
 - [x] Fix `identify --workspace/--surface` caller parsing to honor ref handles (`workspace:N`, `surface:N`) instead of falling back to current/focused IDs.
 - [x] Update `browser.open_split` placement policy: reuse nearest right sibling pane first (nested-aware), only create a new split when caller has no right sibling.
 - [x] Upgrade `browser.snapshot` to agent-browser-style output (`snapshot` tree text + `refs`) and make non-JSON CLI output print snapshot content instead of `OK`.
@@ -34,7 +34,7 @@
 - [x] Make legacy `new-pane`/`new-surface` CLI output prefer short `surface:N` refs by default.
 - [x] Add optional `--snapshot-after` / `snapshot_after` action feedback to include a fresh post-action browser snapshot.
 - [x] Switch CLI `--json` default ID output to refs-first (UUIDs only via `--id-format uuids|both`) and add regression coverage.
-- [x] Expand end-user skill docs with deep-linkable cmux-browser references/templates plus a new core `skills/cmux/` topology skill.
+- [x] Expand end-user skill docs with deep-linkable programa-browser references/templates plus a new core `skills/programa/` topology skill.
 
 ## Command Palette
 - [ ] Add cmd+shift+p palette with all commands
@@ -47,7 +47,7 @@
   - Opens a new terminal
   - Shows user the diff to their config file (claude.json, opencode config, codex config, etc.)
   - Prompts user to type 'y' to confirm
-  - Implement as part of `cmux` CLI, menubar just triggers the CLI command
+  - Implement as part of `programa` CLI, menubar just triggers the CLI command
 
 ## Additional Integrations
 - [ ] Codex integration
@@ -66,7 +66,7 @@
 
 ## Refactoring
 - [ ] **P0** Remove all index-based APIs in favor of short ID refs (surface:N, pane:N, workspace:N, window:N)
-- [ ] **P0** CLI commands should be workspace-relative using CMUX_WORKSPACE_ID env var (not focused workspace) so agents in background workspaces don't affect the user's active workspace. Affected: send, send-key, send-panel, send-key-panel, new-split, new-pane, new-surface, close-surface, list-panes, list-pane-surfaces, list-panels, focus-pane, focus-panel, surface-health
+- [ ] **P0** CLI commands should be workspace-relative using PROGRAMA_WORKSPACE_ID env var (not focused workspace) so agents in background workspaces don't affect the user's active workspace. Affected: send, send-key, send-panel, send-key-panel, new-split, new-pane, new-surface, close-surface, list-panes, list-pane-surfaces, list-panels, focus-pane, focus-panel, surface-health
 - [ ] **P0** Remove `close-workspace` with no args — require explicit workspace short ID or UUID, with clear error message if missing
 
 ## UI/UX Improvements
@@ -75,7 +75,7 @@
 - [ ] Notification popover: each button item should show outline outside when focused/hovered
 - [ ] Notification popover: add right-click context menu to mark as read/unread
 - [ ] Right-click tab should allow renaming that workspace
-- [ ] Cmd+click should open links in cmux (browser panel) instead of external browser
+- [ ] Cmd+click should open links in Programa (browser panel) instead of external browser
 - [ ] "Waiting for input" notification should include custom terminal title if set
 - [ ] Close button for current/active tab should always be visible (not just on hover)
 - [ ] Add browser icon to the left of the plus button in the tab bar
@@ -121,7 +121,7 @@
   - `browser.network.route|unroute|requests`
   - `browser.screencast.start|stop`
   - `browser.input_mouse|input_keyboard|input_touch`
-- [x] Extend `cmux browser ...` CLI grammar for the new families (including aliases).
+- [x] Extend `programa browser ...` CLI grammar for the new families (including aliases).
 - [x] Port/add v2 tests for all newly implemented families.
 - [x] Update unsupported matrix tests to assert `not_supported` for hard platform gaps (instead of `method_not_found`).
-- [x] Re-run full `run-tests-v1.sh` and `run-tests-v2.sh` on `cmux-vm`.
+- [x] Re-run full `run-tests-v1.sh` and `run-tests-v2.sh` on `programa-vm`.

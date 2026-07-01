@@ -121,7 +121,7 @@ fi
 
 XCODEBUILD_ARGS=(
   -project GhosttyTabs.xcodeproj
-  -scheme cmux
+  -scheme programa
   -configuration Release
   -destination 'platform=macOS'
 )

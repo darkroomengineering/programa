@@ -23,7 +23,7 @@ rm -rf "$DERIVED_DATA_PATH"
 
 xcodebuild \
   -project GhosttyTabs.xcodeproj \
-  -scheme cmux \
+  -scheme programa \
   -configuration "$CONFIGURATION" \
   -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
   -disableAutomaticPackageResolution \

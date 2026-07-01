@@ -14,8 +14,8 @@ enum BrowserFindJavaScript {
         let escaped = jsStringEscape(query)
         return """
         (() => {
-          const MARK_CLASS = '__cmux-find';
-          const CURRENT_CLASS = '__cmux-find-current';
+          const MARK_CLASS = '__programa-find';
+          const CURRENT_CLASS = '__programa-find-current';
 
           // Remove previous highlights first.
           \(clearBody)
@@ -79,8 +79,8 @@ enum BrowserFindJavaScript {
             parent.replaceChild(frag, node);
           }
 
-          window.__cmuxFindMatches = matches;
-          window.__cmuxFindIndex = 0;
+          window.__programaFindMatches = matches;
+          window.__programaFindIndex = 0;
 
           if (matches.length > 0) {
             matches[0].classList.add(CURRENT_CLASS);
@@ -88,12 +88,12 @@ enum BrowserFindJavaScript {
           }
 
           // Inject highlight styles if not already present.
-          if (!document.getElementById('__cmux-find-style')) {
+          if (!document.getElementById('__programa-find-style')) {
             const style = document.createElement('style');
-            style.id = '__cmux-find-style';
+            style.id = '__programa-find-style';
             style.textContent = `
-              mark.__cmux-find { background: #facc15; color: #000; border-radius: 2px; }
-              mark.__cmux-find.__cmux-find-current { background: #f97316; color: #fff; }
+              mark.__programa-find { background: #facc15; color: #000; border-radius: 2px; }
+              mark.__programa-find.__programa-find-current { background: #f97316; color: #fff; }
             `;
             document.head.appendChild(style);
           }
@@ -107,24 +107,24 @@ enum BrowserFindJavaScript {
     static func nextScript() -> String {
         """
         (() => {
-          const matches = window.__cmuxFindMatches || [];
+          const matches = window.__programaFindMatches || [];
           if (matches.length === 0) return JSON.stringify({ total: 0, current: 0 });
-          let idx = window.__cmuxFindIndex || 0;
+          let idx = window.__programaFindIndex || 0;
           if (!matches[idx] || !matches[idx].isConnected) {
-            window.__cmuxFindMatches = [];
-            window.__cmuxFindIndex = 0;
+            window.__programaFindMatches = [];
+            window.__programaFindIndex = 0;
             return JSON.stringify({ total: 0, current: 0 });
           }
-          matches[idx].classList.remove('__cmux-find-current');
+          matches[idx].classList.remove('__programa-find-current');
           idx = (idx + 1) % matches.length;
           if (!matches[idx] || !matches[idx].isConnected) {
-            window.__cmuxFindMatches = [];
-            window.__cmuxFindIndex = 0;
+            window.__programaFindMatches = [];
+            window.__programaFindIndex = 0;
             return JSON.stringify({ total: 0, current: 0 });
           }
-          matches[idx].classList.add('__cmux-find-current');
+          matches[idx].classList.add('__programa-find-current');
           matches[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
-          window.__cmuxFindIndex = idx;
+          window.__programaFindIndex = idx;
           return JSON.stringify({ total: matches.length, current: idx });
         })()
         """
@@ -134,24 +134,24 @@ enum BrowserFindJavaScript {
     static func previousScript() -> String {
         """
         (() => {
-          const matches = window.__cmuxFindMatches || [];
+          const matches = window.__programaFindMatches || [];
           if (matches.length === 0) return JSON.stringify({ total: 0, current: 0 });
-          let idx = window.__cmuxFindIndex || 0;
+          let idx = window.__programaFindIndex || 0;
           if (!matches[idx] || !matches[idx].isConnected) {
-            window.__cmuxFindMatches = [];
-            window.__cmuxFindIndex = 0;
+            window.__programaFindMatches = [];
+            window.__programaFindIndex = 0;
             return JSON.stringify({ total: 0, current: 0 });
           }
-          matches[idx].classList.remove('__cmux-find-current');
+          matches[idx].classList.remove('__programa-find-current');
           idx = (idx - 1 + matches.length) % matches.length;
           if (!matches[idx] || !matches[idx].isConnected) {
-            window.__cmuxFindMatches = [];
-            window.__cmuxFindIndex = 0;
+            window.__programaFindMatches = [];
+            window.__programaFindIndex = 0;
             return JSON.stringify({ total: 0, current: 0 });
           }
-          matches[idx].classList.add('__cmux-find-current');
+          matches[idx].classList.add('__programa-find-current');
           matches[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
-          window.__cmuxFindIndex = idx;
+          window.__programaFindIndex = idx;
           return JSON.stringify({ total: matches.length, current: idx });
         })()
         """
@@ -162,9 +162,9 @@ enum BrowserFindJavaScript {
         """
         (() => {
           \(clearBody)
-          window.__cmuxFindMatches = [];
-          window.__cmuxFindIndex = 0;
-          const style = document.getElementById('__cmux-find-style');
+          window.__programaFindMatches = [];
+          window.__programaFindIndex = 0;
+          const style = document.getElementById('__programa-find-style');
           if (style) style.remove();
           return 'ok';
         })()
@@ -175,7 +175,7 @@ enum BrowserFindJavaScript {
 
     /// JS snippet (no wrapping IIFE) that removes existing mark highlights.
     private static let clearBody = """
-    document.querySelectorAll('mark.__cmux-find').forEach(mark => {
+    document.querySelectorAll('mark.__programa-find').forEach(mark => {
             const parent = mark.parentNode;
             if (!parent) return;
             const text = document.createTextNode(mark.textContent || '');

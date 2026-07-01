@@ -159,7 +159,7 @@ sanitize_path() {
 
 tagged_derived_data_path() {
   local slug="$1"
-  echo "$HOME/Library/Developer/Xcode/DerivedData/cmux-${slug}"
+  echo "$HOME/Library/Developer/Xcode/DerivedData/programa-${slug}"
 }
 
 print_tag_cleanup_reminder() {
@@ -172,8 +172,8 @@ print_tag_cleanup_reminder() {
   while IFS= read -r -d '' path; do
     if [[ "$path" == /tmp/programa-* ]]; then
       tag="${path#/tmp/programa-}"
-    elif [[ "$path" == "$HOME/Library/Developer/Xcode/DerivedData/cmux-"* ]]; then
-      tag="${path#$HOME/Library/Developer/Xcode/DerivedData/cmux-}"
+    elif [[ "$path" == "$HOME/Library/Developer/Xcode/DerivedData/programa-"* ]]; then
+      tag="${path#$HOME/Library/Developer/Xcode/DerivedData/programa-}"
     else
       continue
     fi
@@ -191,7 +191,7 @@ print_tag_cleanup_reminder() {
     stale_tags+=("$tag")
   done < <(
     find /tmp -maxdepth 1 -name 'programa-*' -print0 2>/dev/null
-    find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 1 -type d -name 'cmux-*' -print0 2>/dev/null
+    find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 1 -type d -name 'programa-*' -print0 2>/dev/null
   )
 
   echo
@@ -304,7 +304,7 @@ fi
 
 XCODEBUILD_ARGS=(
   -project GhosttyTabs.xcodeproj
-  -scheme cmux
+  -scheme programa
   -configuration Debug
   -destination 'platform=macOS'
 )

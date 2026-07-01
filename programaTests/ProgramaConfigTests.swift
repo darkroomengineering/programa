@@ -8,11 +8,11 @@ import XCTest
 
 // MARK: - JSON Decoding
 
-final class CmuxConfigDecodingTests: XCTestCase {
+final class ProgramaConfigDecodingTests: XCTestCase {
 
-    private func decode(_ json: String) throws -> CmuxConfigFile {
+    private func decode(_ json: String) throws -> ProgramaConfigFile {
         let data = json.data(using: .utf8)!
-        return try JSONDecoder().decode(CmuxConfigFile.self, from: data)
+        return try JSONDecoder().decode(ProgramaConfigFile.self, from: data)
     }
 
     // MARK: Simple commands
@@ -512,28 +512,28 @@ final class CmuxConfigDecodingTests: XCTestCase {
 
 // MARK: - Command identity
 
-final class CmuxCommandIdentityTests: XCTestCase {
+final class ProgramaCommandIdentityTests: XCTestCase {
 
     func testCommandIdIsDeterministic() {
-        let cmd = CmuxCommandDefinition(name: "Run tests", command: "test")
+        let cmd = ProgramaCommandDefinition(name: "Run tests", command: "test")
         XCTAssertEqual(cmd.id, "cmux.config.command.Run%20tests")
     }
 
     func testCommandIdEncodesSpecialCharacters() {
-        let cmd = CmuxCommandDefinition(name: "build & deploy", command: "make")
+        let cmd = ProgramaCommandDefinition(name: "build & deploy", command: "make")
         XCTAssertTrue(cmd.id.hasPrefix("cmux.config.command."))
         XCTAssertFalse(cmd.id.contains("&"))
         XCTAssertFalse(cmd.id.contains(" "))
     }
 
     func testCommandIdIsUniqueForDifferentNames() {
-        let cmd1 = CmuxCommandDefinition(name: "build", command: "make build")
-        let cmd2 = CmuxCommandDefinition(name: "test", command: "make test")
+        let cmd1 = ProgramaCommandDefinition(name: "build", command: "make build")
+        let cmd2 = ProgramaCommandDefinition(name: "test", command: "make test")
         XCTAssertNotEqual(cmd1.id, cmd2.id)
     }
 
     func testCommandIdDoesNotCollideWithBuiltinPrefix() {
-        let cmd = CmuxCommandDefinition(name: "palette.newWorkspace", command: "echo")
+        let cmd = ProgramaCommandDefinition(name: "palette.newWorkspace", command: "echo")
         XCTAssertTrue(cmd.id.hasPrefix("cmux.config.command."))
         XCTAssertNotEqual(cmd.id, "palette.newWorkspace")
     }
@@ -541,45 +541,45 @@ final class CmuxCommandIdentityTests: XCTestCase {
 
 // MARK: - Split clamping
 
-final class CmuxSplitDefinitionTests: XCTestCase {
+final class ProgramaSplitDefinitionTests: XCTestCase {
 
     func testClampedSplitPositionDefaultsToHalf() {
-        let split = CmuxSplitDefinition(direction: .horizontal, split: nil, children: [])
+        let split = ProgramaSplitDefinition(direction: .horizontal, split: nil, children: [])
         XCTAssertEqual(split.clampedSplitPosition, 0.5)
     }
 
     func testClampedSplitPositionPassesThroughValidValue() {
-        let split = CmuxSplitDefinition(direction: .vertical, split: 0.3, children: [])
+        let split = ProgramaSplitDefinition(direction: .vertical, split: 0.3, children: [])
         XCTAssertEqual(split.clampedSplitPosition, 0.3, accuracy: 0.001)
     }
 
     func testClampedSplitPositionClampsLow() {
-        let split = CmuxSplitDefinition(direction: .horizontal, split: 0.01, children: [])
+        let split = ProgramaSplitDefinition(direction: .horizontal, split: 0.01, children: [])
         XCTAssertEqual(split.clampedSplitPosition, 0.1, accuracy: 0.001)
     }
 
     func testClampedSplitPositionClampsHigh() {
-        let split = CmuxSplitDefinition(direction: .horizontal, split: 0.99, children: [])
+        let split = ProgramaSplitDefinition(direction: .horizontal, split: 0.99, children: [])
         XCTAssertEqual(split.clampedSplitPosition, 0.9, accuracy: 0.001)
     }
 
     func testClampedSplitPositionClampsNegative() {
-        let split = CmuxSplitDefinition(direction: .horizontal, split: -1.0, children: [])
+        let split = ProgramaSplitDefinition(direction: .horizontal, split: -1.0, children: [])
         XCTAssertEqual(split.clampedSplitPosition, 0.1, accuracy: 0.001)
     }
 
     func testClampedSplitPositionClampsAboveOne() {
-        let split = CmuxSplitDefinition(direction: .horizontal, split: 2.0, children: [])
+        let split = ProgramaSplitDefinition(direction: .horizontal, split: 2.0, children: [])
         XCTAssertEqual(split.clampedSplitPosition, 0.9, accuracy: 0.001)
     }
 
     func testSplitOrientationHorizontal() {
-        let split = CmuxSplitDefinition(direction: .horizontal, split: nil, children: [])
+        let split = ProgramaSplitDefinition(direction: .horizontal, split: nil, children: [])
         XCTAssertEqual(split.splitOrientation, .horizontal)
     }
 
     func testSplitOrientationVertical() {
-        let split = CmuxSplitDefinition(direction: .vertical, split: nil, children: [])
+        let split = ProgramaSplitDefinition(direction: .vertical, split: nil, children: [])
         XCTAssertEqual(split.splitOrientation, .vertical)
     }
 }
@@ -587,41 +587,41 @@ final class CmuxSplitDefinitionTests: XCTestCase {
 // MARK: - CWD resolution
 
 @MainActor
-final class CmuxConfigCwdResolutionTests: XCTestCase {
+final class ProgramaConfigCwdResolutionTests: XCTestCase {
 
     private let baseCwd = "/Users/test/project"
 
     func testNilCwdReturnsBase() {
         XCTAssertEqual(
-            CmuxConfigStore.resolveCwd(nil, relativeTo: baseCwd),
+            ProgramaConfigStore.resolveCwd(nil, relativeTo: baseCwd),
             baseCwd
         )
     }
 
     func testEmptyCwdReturnsBase() {
         XCTAssertEqual(
-            CmuxConfigStore.resolveCwd("", relativeTo: baseCwd),
+            ProgramaConfigStore.resolveCwd("", relativeTo: baseCwd),
             baseCwd
         )
     }
 
     func testDotCwdReturnsBase() {
         XCTAssertEqual(
-            CmuxConfigStore.resolveCwd(".", relativeTo: baseCwd),
+            ProgramaConfigStore.resolveCwd(".", relativeTo: baseCwd),
             baseCwd
         )
     }
 
     func testAbsolutePathReturnedAsIs() {
         XCTAssertEqual(
-            CmuxConfigStore.resolveCwd("/tmp/other", relativeTo: baseCwd),
+            ProgramaConfigStore.resolveCwd("/tmp/other", relativeTo: baseCwd),
             "/tmp/other"
         )
     }
 
     func testRelativePathJoinedToBase() {
         XCTAssertEqual(
-            CmuxConfigStore.resolveCwd("backend/src", relativeTo: baseCwd),
+            ProgramaConfigStore.resolveCwd("backend/src", relativeTo: baseCwd),
             "/Users/test/project/backend/src"
         )
     }
@@ -629,7 +629,7 @@ final class CmuxConfigCwdResolutionTests: XCTestCase {
     func testTildeExpandsToHome() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         XCTAssertEqual(
-            CmuxConfigStore.resolveCwd("~", relativeTo: baseCwd),
+            ProgramaConfigStore.resolveCwd("~", relativeTo: baseCwd),
             home
         )
     }
@@ -637,14 +637,14 @@ final class CmuxConfigCwdResolutionTests: XCTestCase {
     func testTildeSlashExpandsToHomePlusPath() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         XCTAssertEqual(
-            CmuxConfigStore.resolveCwd("~/Documents/work", relativeTo: baseCwd),
+            ProgramaConfigStore.resolveCwd("~/Documents/work", relativeTo: baseCwd),
             (home as NSString).appendingPathComponent("Documents/work")
         )
     }
 
     func testSingleSubdirectory() {
         XCTAssertEqual(
-            CmuxConfigStore.resolveCwd("src", relativeTo: baseCwd),
+            ProgramaConfigStore.resolveCwd("src", relativeTo: baseCwd),
             "/Users/test/project/src"
         )
     }
@@ -652,14 +652,14 @@ final class CmuxConfigCwdResolutionTests: XCTestCase {
 
 // MARK: - Layout encoding round-trip
 
-final class CmuxLayoutEncodingTests: XCTestCase {
+final class ProgramaLayoutEncodingTests: XCTestCase {
 
     func testPaneNodeRoundTrips() throws {
-        let original = CmuxLayoutNode.pane(CmuxPaneDefinition(surfaces: [
-            CmuxSurfaceDefinition(type: .terminal, name: "shell")
+        let original = ProgramaLayoutNode.pane(ProgramaPaneDefinition(surfaces: [
+            ProgramaSurfaceDefinition(type: .terminal, name: "shell")
         ]))
         let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(CmuxLayoutNode.self, from: data)
+        let decoded = try JSONDecoder().decode(ProgramaLayoutNode.self, from: data)
 
         if case .pane(let pane) = decoded {
             XCTAssertEqual(pane.surfaces.count, 1)
@@ -670,16 +670,16 @@ final class CmuxLayoutEncodingTests: XCTestCase {
     }
 
     func testSplitNodeRoundTrips() throws {
-        let original = CmuxLayoutNode.split(CmuxSplitDefinition(
+        let original = ProgramaLayoutNode.split(ProgramaSplitDefinition(
             direction: .vertical,
             split: 0.7,
             children: [
-                .pane(CmuxPaneDefinition(surfaces: [CmuxSurfaceDefinition(type: .terminal)])),
-                .pane(CmuxPaneDefinition(surfaces: [CmuxSurfaceDefinition(type: .browser, url: "http://localhost")]))
+                .pane(ProgramaPaneDefinition(surfaces: [ProgramaSurfaceDefinition(type: .terminal)])),
+                .pane(ProgramaPaneDefinition(surfaces: [ProgramaSurfaceDefinition(type: .browser, url: "http://localhost")]))
             ]
         ))
         let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(CmuxLayoutNode.self, from: data)
+        let decoded = try JSONDecoder().decode(ProgramaLayoutNode.self, from: data)
 
         if case .split(let split) = decoded {
             XCTAssertEqual(split.direction, .vertical)

@@ -5006,7 +5006,7 @@ struct CMUXCLI {
         let payload: [String: Any] = [
             "app_version": remoteDaemonVersionString(from: info),
             "build": info["CFBundleVersion"] ?? NSNull(),
-            "commit": info["CMUXCommit"] ?? NSNull(),
+            "commit": info["ProgramaCommit"] ?? NSNull(),
             "manifest_present": manifest != nil,
             "release_tag": releaseTag,
             "release_url": manifest?.releaseURL ?? NSNull(),
@@ -5406,7 +5406,7 @@ struct CMUXCLI {
 
         func displayBrowserValue(_ value: Any) -> String {
             if let dict = value as? [String: Any],
-               let type = dict["__cmux_t"] as? String,
+               let type = dict["__programa_t"] as? String,
                type == "undefined" {
                 return "undefined"
             }
@@ -7347,7 +7347,7 @@ struct CMUXCLI {
             Usage: cmux reload-config
 
             Run the same configuration reload as the Reload Configuration shortcut.
-            This reloads Ghostty config, re-reads ~/.config/cmux/settings.json, and refreshes terminals.
+            This reloads Ghostty config, re-reads ~/.config/programa/settings.json, and refreshes terminals.
 
             Example:
               cmux reload-config
@@ -8087,7 +8087,7 @@ struct CMUXCLI {
         let selection = currentThemeSelection()
         var environment = ProcessInfo.processInfo.environment
         environment["PROGRAMA_THEME_PICKER_CONFIG"] = try cmuxThemeOverrideConfigURL().path
-        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentCmuxAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
+        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentProgramaAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
         environment["PROGRAMA_THEME_PICKER_TARGET"] = defaultThemePickerTargetMode(current: selection).rawValue
         environment["PROGRAMA_THEME_PICKER_COLOR_SCHEME"] = defaultAppearancePrefersDarkThemes() ? "dark" : "light"
         if let light = selection.light {
@@ -8717,7 +8717,7 @@ struct CMUXCLI {
     }
 
     private func reloadThemesIfPossible() -> ThemeReloadStatus {
-        let bundleIdentifier = currentCmuxAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
+        let bundleIdentifier = currentProgramaAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
         DistributedNotificationCenter.default().post(
             name: Notification.Name(Self.cmuxThemesReloadNotificationName),
             object: nil,
@@ -8726,7 +8726,7 @@ struct CMUXCLI {
         return ThemeReloadStatus(requested: true, targetBundleIdentifier: bundleIdentifier)
     }
 
-    private func currentCmuxAppBundleIdentifier() -> String? {
+    private func currentProgramaAppBundleIdentifier() -> String? {
         if let bundleIdentifier = ProcessInfo.processInfo.environment["PROGRAMA_BUNDLE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !bundleIdentifier.isEmpty {
             return bundleIdentifier
@@ -10244,7 +10244,7 @@ struct CMUXCLI {
         }
     }
 
-    private func isCmuxClaudeWrapper(at path: String) -> Bool {
+    private func isProgramaClaudeWrapper(at path: String) -> Bool {
         guard let data = FileManager.default.contents(atPath: path) else { return false }
         let prefixData = data.prefix(512)
         guard let prefix = String(data: prefixData, encoding: .utf8) else { return false }
@@ -10272,7 +10272,7 @@ struct CMUXCLI {
         resolveExecutableInSearchPath(
             "claude",
             searchPath: searchPath,
-            skip: { self.isCmuxClaudeWrapper(at: $0) }
+            skip: { self.isProgramaClaudeWrapper(at: $0) }
         )
     }
 
@@ -10467,7 +10467,7 @@ struct CMUXCLI {
                 guard FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDir),
                       !isDir.boolValue,
                       FileManager.default.isExecutableFile(atPath: trimmed),
-                      !isCmuxClaudeWrapper(at: trimmed) else { continue }
+                      !isProgramaClaudeWrapper(at: trimmed) else { continue }
                 return trimmed
             }
             return resolveClaudeExecutable(searchPath: launcherEnvironment["PATH"])
@@ -13984,7 +13984,7 @@ struct CMUXCLI {
 
     private func versionSummary() -> String {
         let info = resolvedVersionInfo()
-        let commit = info["CMUXCommit"].flatMap { normalizedCommitHash($0) }
+        let commit = info["ProgramaCommit"].flatMap { normalizedCommitHash($0) }
         let baseSummary: String
         if let version = info["CFBundleShortVersionString"], let build = info["CFBundleVersion"] {
             baseSummary = "cmux \(version) (\(build))"
@@ -14076,7 +14076,7 @@ struct CMUXCLI {
         let needsPlistFallback =
             info["CFBundleShortVersionString"] == nil ||
             info["CFBundleVersion"] == nil ||
-            info["CMUXCommit"] == nil
+            info["ProgramaCommit"] == nil
         if needsPlistFallback {
             for plistURL in candidateInfoPlistURLs() {
                 guard let data = try? Data(contentsOf: plistURL),
@@ -14089,7 +14089,7 @@ struct CMUXCLI {
                 info.merge(parsed, uniquingKeysWith: { current, _ in current })
                 if info["CFBundleShortVersionString"] != nil,
                    info["CFBundleVersion"] != nil,
-                   info["CMUXCommit"] != nil {
+                   info["ProgramaCommit"] != nil {
                     break
                 }
             }
@@ -14098,14 +14098,14 @@ struct CMUXCLI {
         let needsProjectFallback =
             info["CFBundleShortVersionString"] == nil ||
             info["CFBundleVersion"] == nil ||
-            info["CMUXCommit"] == nil
+            info["ProgramaCommit"] == nil
         if needsProjectFallback, let fromProject = versionInfoFromProjectFile() {
             info.merge(fromProject, uniquingKeysWith: { current, _ in current })
         }
 
-        if info["CMUXCommit"] == nil,
+        if info["ProgramaCommit"] == nil,
            let commit = normalizedCommitHash(ProcessInfo.processInfo.environment["PROGRAMA_COMMIT"]) {
-            info["CMUXCommit"] = commit
+            info["ProgramaCommit"] = commit
         }
 
         return info
@@ -14127,9 +14127,9 @@ struct CMUXCLI {
                 info["CFBundleVersion"] = trimmed
             }
         }
-        if let commit = dictionary["CMUXCommit"] as? String,
+        if let commit = dictionary["ProgramaCommit"] as? String,
            let normalizedCommit = normalizedCommitHash(commit) {
-            info["CMUXCommit"] = normalizedCommit
+            info["ProgramaCommit"] = normalizedCommit
         }
         return info.isEmpty ? nil : info
     }
@@ -14154,7 +14154,7 @@ struct CMUXCLI {
                     info["CFBundleVersion"] = build
                 }
                 if let commit = gitCommitHash(at: current) {
-                    info["CMUXCommit"] = commit
+                    info["ProgramaCommit"] = commit
                 }
                 if !info.isEmpty {
                     return info

@@ -1,7 +1,7 @@
 # Socket/CLI No-Focus-Steal Todo
 
 ## Goal
-Ensure commands run through the cmux Unix socket/CLI do not steal user focus from the current UI workflow.
+Ensure commands run through the Programa Unix socket/CLI do not steal user focus from the current UI workflow.
 
 Policy target:
 - App activation/window raising from socket commands: **never**.
@@ -73,4 +73,4 @@ All other commands should preserve current user focus context.
 ## CLI Coverage
 - [x] Ensure every top-level CLI command routes to non-focus-stealing socket behavior.
 - [x] Add/verify `rename-workspace` + `rename-window` behavior remains intact.
-- [x] Add explicit `rename-tab` command (defaults to `CMUX_TAB_ID` / `CMUX_SURFACE_ID` / `CMUX_WORKSPACE_ID` when flags omitted).
+- [x] Add explicit `rename-tab` command (defaults to `PROGRAMA_TAB_ID` / `PROGRAMA_SURFACE_ID` / `PROGRAMA_WORKSPACE_ID` when flags omitted).

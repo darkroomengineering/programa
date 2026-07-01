@@ -1209,7 +1209,7 @@ final class WorkspaceCreationPlacementTests: XCTestCase {
             title: String,
             workingDirectory: String?,
             portOrdinal: Int,
-            configTemplate: CmuxSurfaceConfigTemplate?,
+            configTemplate: ProgramaSurfaceConfigTemplate?,
             initialTerminalCommand: String?,
             initialTerminalEnvironment: [String: String]
         ) -> Workspace {
@@ -1446,11 +1446,11 @@ final class WorkspaceCreationPlacementTests: XCTestCase {
 @MainActor
 final class WorkspaceCreationConfigSanitizationTests: XCTestCase {
     private final class UnsafeConfigSnapshotTabManager: TabManager {
-        private var injectedConfig: CmuxSurfaceConfigTemplate?
-        var capturedConfigTemplate: CmuxSurfaceConfigTemplate?
+        private var injectedConfig: ProgramaSurfaceConfigTemplate?
+        var capturedConfigTemplate: ProgramaSurfaceConfigTemplate?
 
         func installInjectedConfig(fontSize: Float) {
-            var config = CmuxSurfaceConfigTemplate()
+            var config = ProgramaSurfaceConfigTemplate()
             config.fontSize = fontSize
             config.workingDirectory = "/tmp/programa-workspace-snapshot"
             config.command = "echo snapshot"
@@ -1460,7 +1460,7 @@ final class WorkspaceCreationConfigSanitizationTests: XCTestCase {
 
         override func inheritedTerminalConfigForNewWorkspace(
             workspace: Workspace?
-        ) -> CmuxSurfaceConfigTemplate? {
+        ) -> ProgramaSurfaceConfigTemplate? {
             injectedConfig ?? super.inheritedTerminalConfigForNewWorkspace(workspace: workspace)
         }
 
@@ -1468,7 +1468,7 @@ final class WorkspaceCreationConfigSanitizationTests: XCTestCase {
             title: String,
             workingDirectory: String?,
             portOrdinal: Int,
-            configTemplate: CmuxSurfaceConfigTemplate?,
+            configTemplate: ProgramaSurfaceConfigTemplate?,
             initialTerminalCommand: String?,
             initialTerminalEnvironment: [String: String]
         ) -> Workspace {

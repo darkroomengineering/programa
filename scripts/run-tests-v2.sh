@@ -11,7 +11,7 @@ fi
 
 cd "$(dirname "$0")/.."
 
-DERIVED_DATA_PATH="$HOME/Library/Developer/Xcode/DerivedData/cmux-tests-v2"
+DERIVED_DATA_PATH="$HOME/Library/Developer/Xcode/DerivedData/programa-tests-v2"
 APP="$DERIVED_DATA_PATH/Build/Products/Debug/Programa DEV.app"
 RUN_TAG="tests-v2"
 
@@ -22,7 +22,7 @@ echo "== build =="
 rm -rf "$DERIVED_DATA_PATH/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules" || true
 xcodebuild \
   -project GhosttyTabs.xcodeproj \
-  -scheme cmux \
+  -scheme programa \
   -configuration Debug \
   -destination "platform=macOS" \
   -derivedDataPath "$DERIVED_DATA_PATH" \

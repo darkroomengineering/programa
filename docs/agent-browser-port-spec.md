@@ -3,11 +3,11 @@
 Last updated: February 13, 2026  
 Source inventory snapshot: `vercel-labs/agent-browser` @ `03a8cb9`
 
-This document tracks implemented behavior and remaining parity gaps for the cmux browser port.
+This document tracks implemented behavior and remaining parity gaps for the Programa browser port.
 
 ## Goals
 
-1. Provide an LLM-friendly browser automation API in cmux with stable handles.
+1. Provide an LLM-friendly browser automation API in Programa with stable handles.
 2. Keep v1 CLI/socket behavior working while v2 reaches full parity.
 3. Port `agent-browser` command surface (where meaningful for `WKWebView`).
 4. Ensure move/reorder operations preserve `surface_id` identity.
@@ -16,8 +16,8 @@ This document tracks implemented behavior and remaining parity gaps for the cmux
 ## Validation Status
 
 As of February 12, 2026:
-1. `./scripts/run-tests-v1.sh` passes on `cmux-vm`.
-2. `./scripts/run-tests-v2.sh` passes on `cmux-vm`.
+1. `./scripts/run-tests-v1.sh` passes on `programa-vm`.
+2. `./scripts/run-tests-v2.sh` passes on `programa-vm`.
 3. Browser parity suites passing in v2: `test_browser_api_comprehensive.py`, `test_browser_api_p0.py`, `test_browser_api_extended_families.py`, `test_browser_api_unsupported_matrix.py`, and `test_browser_cli_agent_port.py`.
 4. Visual suite note: `tests/test_visual_screenshots.py` and `tests_v2/test_visual_screenshots.py` both report D12 (`Nested: Close Top of T-shape`) as a known non-blocking VM failure when it reproduces (`VIEW_DETACHED`).
 
@@ -186,9 +186,9 @@ Protocol-only action names:
 31. `video_start`
 32. `video_stop`
 
-## cmux Target API (v2)
+## Programa Target API (v2)
 
-### Already Present in cmux
+### Already Present in Programa
 
 1. `system.ping`
 2. `system.capabilities`
@@ -226,11 +226,11 @@ P1 (important but not blocking initial parity):
 3. `browser.frame.main`
 4. `browser.dialog.respond`
 5. `browser.download.wait`
-6. `browser.tab.*` compatibility aliases mapped to cmux surfaces
+6. `browser.tab.*` compatibility aliases mapped to Programa surfaces
 7. `browser.console.list`
 8. `browser.errors.list`
 9. `browser.highlight`
-10. `browser.state.save|load` (browser state in cmux context)
+10. `browser.state.save|load` (browser state in Programa context)
 
 P2 (advanced parity / optional):
 1. network interception/mocking equivalents (`route|unroute|requests|responsebody`)
@@ -250,24 +250,24 @@ P2 (advanced parity / optional):
 
 Primary form:
 ```bash
-cmux browser --surface <surface-id> <agent-browser-style-command...>
+programa browser --surface <surface-id> <agent-browser-style-command...>
 ```
 
 Shorthand:
 ```bash
-cmux browser <surface-id> <agent-browser-style-command...>
+programa browser <surface-id> <agent-browser-style-command...>
 ```
 
 Agent discovery:
 ```bash
-cmux identify
-cmux capabilities
-cmux browser identify --surface <surface-id>   # wrapper over system.identify + browser fields
+programa identify
+programa capabilities
+programa browser identify --surface <surface-id>   # wrapper over system.identify + browser fields
 ```
 
 Flash:
 ```bash
-cmux trigger-flash [--workspace <id>] [--surface <id>]
+programa trigger-flash [--workspace <id>] [--surface <id>]
 ```
 
 Compatibility:
@@ -298,7 +298,7 @@ Hard invariant:
 
 - [x] Lock method names/payload schemas for all new `browser.*` methods.
 - [x] Add schema validation for each new method with strict error codes (`invalid_params`, `not_found`, `invalid_state`).
-- [x] Add `browser` command group in `CLI/cmux.swift` that accepts agent-browser-style command grammar.
+- [x] Add `browser` command group in `CLI/programa.swift` that accepts agent-browser-style command grammar.
 - [x] Add `--surface` mandatory targeting (with fallback from `system.identify` when explicitly desired).
 - [x] Add consistent JSON output mode for all browser commands.
 - [x] Implement short-ref allocator and resolver for `window/pane/workspace/surface` (`window:N`, `workspace:N`, `pane:N`, `surface:N`).
@@ -377,11 +377,11 @@ Hard invariant:
    - `tests_v2/test_browser_api_comprehensive.py`
    - `tests_v2/test_browser_api_unsupported_matrix.py`
 2. `src/actions.test.ts` -> adapted negative coverage in `tests_v2/test_browser_api_comprehensive.py` (`invalid_params`, `not_found`, `timeout`).
-3. `src/protocol.test.ts` -> adapted browser command/shape validation in `tests_v2/test_browser_api_unsupported_matrix.py` and existing `CLI/cmux.swift` command grammar checks.
+3. `src/protocol.test.ts` -> adapted browser command/shape validation in `tests_v2/test_browser_api_unsupported_matrix.py` and existing `CLI/programa.swift` command grammar checks.
 4. `test/file-access.test.ts` and `test/launch-options.test.ts` -> partially applicable to `WKWebView`; currently tracked as follow-up parity work (not blocking current browser method coverage).
-5. `src/daemon.test.ts`, `src/stream-server.test.ts`, `test/serverless.test.ts`, `src/ios-manager.test.ts` -> out-of-scope for cmux browser parity (different transport/runtime).
+5. `src/daemon.test.ts`, `src/stream-server.test.ts`, `test/serverless.test.ts`, `src/ios-manager.test.ts` -> out-of-scope for Programa browser parity (different transport/runtime).
 
-### Implemented cmux Browser Suites
+### Implemented Programa Browser Suites
 
 1. `tests_v2/test_browser_api_p0.py`
 2. `tests_v2/test_browser_api_comprehensive.py`
@@ -407,16 +407,16 @@ Hard invariant:
 4. No regressions in existing window/workspace/surface workflows.
 
 Planned verification commands at implementation completion:
-1. `ssh cmux-vm 'cd /Users/cmux/GhosttyTabs && ./scripts/run-tests-v2.sh'`
-2. `ssh cmux-vm 'cd /Users/cmux/GhosttyTabs && ./scripts/run-tests-v1.sh'`
+1. `ssh programa-vm 'cd /Users/programa/GhosttyTabs && ./scripts/run-tests-v2.sh'`
+2. `ssh programa-vm 'cd /Users/programa/GhosttyTabs && ./scripts/run-tests-v1.sh'`
 
 ## Decision Log (Locked - February 12, 2026)
 
-1. `cmux browser tab ...` maps to browser `surface` tabs only (no separate workspace-level tab meaning inside `browser` namespace).
+1. `programa browser tab ...` maps to browser `surface` tabs only (no separate workspace-level tab meaning inside `browser` namespace).
 2. Default browser placement without explicit target is caller-relative: reuse the nearest right sibling pane; if none exists, split right from the caller pane.
 3. Deeply nested layouts use local split ancestry: choose the nearest right sibling leaf in the caller's subtree path and avoid reshuffling unrelated panes.
 4. Network parity target is full parity (not block-only phase).
-5. Output shape is cmux-native overall, but `browser.snapshot` and selector `not_found` diagnostics intentionally mirror agent-browser semantics for agent usability.
+5. Output shape is Programa-native overall, but `browser.snapshot` and selector `not_found` diagnostics intentionally mirror agent-browser semantics for agent usability.
 6. ID model accepts UUIDs and short refs.
 7. Short ref format uses full words and colon: `surface:N`, `pane:N`, `workspace:N`, `window:N`.
 8. Short refs are global per daemon, monotonic, and never reused until daemon restart.
@@ -432,4 +432,4 @@ Planned verification commands at implementation completion:
 ## Remaining Open Decisions
 
 1. Unsupported command policy: strict `not_supported` errors vs best-effort fallback for commands that cannot be implemented on `WKWebView` with correct semantics.
-2. Whether to expose protocol-only agent-browser actions in first public release of `cmux browser` or gate them behind a second rollout phase.
+2. Whether to expose protocol-only agent-browser actions in first public release of `programa browser` or gate them behind a second rollout phase.

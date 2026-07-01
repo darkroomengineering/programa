@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PROJECT="GhosttyTabs.xcodeproj"
-SCHEME="cmux-unit"
+SCHEME="programa-unit"
 CONFIGURATION="${PROGRAMA_TEST_CONFIGURATION:-Debug}"
 DESTINATION="${PROGRAMA_TEST_DESTINATION:-platform=macOS}"
 

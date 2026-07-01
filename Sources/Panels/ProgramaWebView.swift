@@ -106,7 +106,7 @@ enum BrowserImageCopyPasteboardBuilder {
 /// preventing the app menu/SwiftUI Commands from receiving them. Route app/menu
 /// shortcuts first by default, but allow browser content to try the Find command
 /// family before cmux falls back to its own browser find overlay.
-final class CmuxWebView: WKWebView {
+final class ProgramaWebView: WKWebView {
     /// Timestamp of the most recent `compositionend` event received via the JS bridge.
     /// Used to detect when WKWebView has already cleared marked text before
     /// `performKeyEquivalent` fires, causing `hasMarkedText()` to return `false`
@@ -129,7 +129,7 @@ final class CmuxWebView: WKWebView {
     private static let middleClickIntentMaxAge: TimeInterval = 0.8
 
     static func hasRecentMiddleClickIntent(for webView: WKWebView) -> Bool {
-        guard let webView = webView as? CmuxWebView else { return false }
+        guard let webView = webView as? ProgramaWebView else { return false }
         guard let intent = lastMiddleClickIntent else { return false }
 
         let age = ProcessInfo.processInfo.systemUptime - intent.uptime
@@ -141,7 +141,7 @@ final class CmuxWebView: WKWebView {
         return intent.webViewID == ObjectIdentifier(webView)
     }
 
-    private static func recordMiddleClickIntent(for webView: CmuxWebView) {
+    private static func recordMiddleClickIntent(for webView: ProgramaWebView) {
         lastMiddleClickIntent = MiddleClickIntent(
             webViewID: ObjectIdentifier(webView),
             uptime: ProcessInfo.processInfo.systemUptime
@@ -164,7 +164,7 @@ final class CmuxWebView: WKWebView {
     /// Called when "Open Link in New Tab" context menu is selected.
     /// Bypasses createWebViewWith so the link opens as a tab, not a popup.
     var onContextMenuOpenLinkInNewTab: ((URL) -> Void)?
-    var contextMenuLinkURLProvider: ((CmuxWebView, NSPoint, @escaping (URL?) -> Void) -> Void)?
+    var contextMenuLinkURLProvider: ((ProgramaWebView, NSPoint, @escaping (URL?) -> Void) -> Void)?
     var contextMenuDefaultBrowserOpener: ((URL) -> Bool)?
     /// Guard against background panes stealing first responder (e.g. page autofocus).
     /// BrowserPanelView updates this as pane focus state changes.
@@ -230,10 +230,10 @@ final class CmuxWebView: WKWebView {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
 #if DEBUG
-        let typingTimingStart = CmuxTypingTiming.start()
+        let typingTimingStart = ProgramaTypingTiming.start()
         var handled = false
         defer {
-            CmuxTypingTiming.logDuration(
+            ProgramaTypingTiming.logDuration(
                 path: "browser.web.performKeyEquivalent",
                 startedAt: typingTimingStart,
                 event: event,
@@ -315,10 +315,10 @@ final class CmuxWebView: WKWebView {
 
     override func keyDown(with event: NSEvent) {
 #if DEBUG
-        let typingTimingStart = CmuxTypingTiming.start()
+        let typingTimingStart = ProgramaTypingTiming.start()
         var route = "super"
         defer {
-            CmuxTypingTiming.logDuration(
+            ProgramaTypingTiming.logDuration(
                 path: "browser.web.keyDown",
                 startedAt: typingTimingStart,
                 event: event,

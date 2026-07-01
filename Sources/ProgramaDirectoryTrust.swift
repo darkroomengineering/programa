@@ -1,11 +1,11 @@
 import Foundation
 
-/// Manages trusted directories for cmux.json command execution.
+/// Manages trusted directories for programa.json command execution.
 /// When a directory (or its git repo root) is trusted, `confirm: true` commands
-/// from that directory's cmux.json skip the confirmation dialog.
-/// Global config (~/.config/cmux/cmux.json) is always trusted.
-final class CmuxDirectoryTrust {
-    static let shared = CmuxDirectoryTrust()
+/// from that directory's programa.json skip the confirmation dialog.
+/// Global config (~/.config/programa/programa.json) is always trusted.
+final class ProgramaDirectoryTrust {
+    static let shared = ProgramaDirectoryTrust()
     static let didChangeNotification = Notification.Name("cmux.directoryTrustDidChange")
 
     private let storePath: String
@@ -30,16 +30,16 @@ final class CmuxDirectoryTrust {
         }
     }
 
-    /// Check if a cmux.json path is trusted.
+    /// Check if a programa.json path is trusted.
     /// Global config is always trusted. For local configs, check the git repo root
-    /// (or the cmux.json parent directory if not in a git repo).
+    /// (or the programa.json parent directory if not in a git repo).
     func isTrusted(configPath: String, globalConfigPath: String) -> Bool {
         if configPath == globalConfigPath { return true }
         let trustKey = Self.trustKey(for: configPath)
         return trustedPaths.contains(trustKey)
     }
 
-    /// Trust the directory containing a cmux.json. If the cmux.json is inside a git
+    /// Trust the directory containing a programa.json. If the programa.json is inside a git
     /// repo, trusts the repo root (covering all subdirectories).
     func trust(configPath: String) {
         let trustKey = Self.trustKey(for: configPath)
@@ -79,8 +79,8 @@ final class CmuxDirectoryTrust {
 
     // MARK: - Private
 
-    /// Resolve the trust key for a cmux.json path: git repo root if inside a repo,
-    /// otherwise the cmux.json's parent directory.
+    /// Resolve the trust key for a programa.json path: git repo root if inside a repo,
+    /// otherwise the programa.json's parent directory.
     static func trustKey(for configPath: String) -> String {
         let configDir = (configPath as NSString).deletingLastPathComponent
         if let gitRoot = findGitRoot(from: configDir) {

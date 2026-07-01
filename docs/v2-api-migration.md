@@ -134,12 +134,12 @@ Debug / Test-only:
 v1 suite stays in `tests/`.
 
 v2 suite lives in `tests_v2/` and should:
-- use a v2 JSON client (`tests_v2/cmux.py`)
+- use a v2 JSON client (`tests_v2/programa.py`)
 - avoid depending on v1 text output formats
 
 VM runners:
-- v1: `ssh cmux-vm 'cd /Users/cmux/GhosttyTabs && ./scripts/run-tests-v1.sh'`
-- v2: `ssh cmux-vm 'cd /Users/cmux/GhosttyTabs && ./scripts/run-tests-v2.sh'`
+- v1: `ssh programa-vm 'cd /Users/programa/GhosttyTabs && ./scripts/run-tests-v1.sh'`
+- v2: `ssh programa-vm 'cd /Users/programa/GhosttyTabs && ./scripts/run-tests-v2.sh'`
 
 ## Open Questions
 

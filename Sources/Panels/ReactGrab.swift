@@ -143,7 +143,7 @@ enum ReactGrabScriptLoader {
 
 // MARK: - WKScriptMessageHandler
 
-private let reactGrabMessageHandlerName = "cmuxReactGrab"
+private let reactGrabMessageHandlerName = "programaReactGrab"
 
 enum ReactGrabBridgeMessage {
     case stateChange(isActive: Bool)

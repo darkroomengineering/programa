@@ -2,10 +2,10 @@ import AppKit
 import Foundation
 
 @MainActor
-struct CmuxConfigExecutor {
+struct ProgramaConfigExecutor {
 
     static func execute(
-        command: CmuxCommandDefinition,
+        command: ProgramaCommandDefinition,
         tabManager: TabManager,
         baseCwd: String,
         configSourcePath: String?,
@@ -17,7 +17,7 @@ struct CmuxConfigExecutor {
             let shellCommand = sanitizeForDisplay(rawCommand)
             let needsConfirm = command.confirm ?? false
             if needsConfirm, let sourcePath = configSourcePath {
-                let trusted = CmuxDirectoryTrust.shared.isTrusted(
+                let trusted = ProgramaDirectoryTrust.shared.isTrusted(
                     configPath: sourcePath,
                     globalConfigPath: globalConfigPath
                 )
@@ -64,7 +64,7 @@ struct CmuxConfigExecutor {
         guard response == .alertFirstButtonReturn else { return false }
 
         if checkbox.state == .on {
-            CmuxDirectoryTrust.shared.trust(configPath: configPath)
+            ProgramaDirectoryTrust.shared.trust(configPath: configPath)
         }
 
         return true
@@ -82,8 +82,8 @@ struct CmuxConfigExecutor {
     }
 
     private static func executeWorkspaceCommand(
-        command: CmuxCommandDefinition,
-        workspace wsDef: CmuxWorkspaceDefinition,
+        command: ProgramaCommandDefinition,
+        workspace wsDef: ProgramaWorkspaceDefinition,
         tabManager: TabManager,
         baseCwd: String
     ) {
@@ -118,7 +118,7 @@ struct CmuxConfigExecutor {
             }
         }
 
-        let resolvedCwd = CmuxConfigStore.resolveCwd(wsDef.cwd, relativeTo: baseCwd)
+        let resolvedCwd = ProgramaConfigStore.resolveCwd(wsDef.cwd, relativeTo: baseCwd)
         let newWorkspace = tabManager.addWorkspace(workingDirectory: resolvedCwd)
         newWorkspace.setCustomTitle(workspaceName)
         if let color = wsDef.color {

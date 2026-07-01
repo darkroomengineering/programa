@@ -23,7 +23,7 @@ private func debugWorkspaceDescriptionPreview(_ text: String?, limit: Int = 120)
 }
 #endif
 
-struct CmuxSurfaceConfigTemplate {
+struct ProgramaSurfaceConfigTemplate {
     var fontSize: Float32 = 0
     var workingDirectory: String?
     var command: String?
@@ -103,9 +103,9 @@ func cmuxCurrentSurfaceFontSizePoints(_ surface: ghostty_surface_t) -> Float? {
 func cmuxInheritedSurfaceConfig(
     sourceSurface: ghostty_surface_t,
     context: ghostty_surface_context_e
-) -> CmuxSurfaceConfigTemplate {
+) -> ProgramaSurfaceConfigTemplate {
     let inherited = ghostty_surface_inherited_config(sourceSurface, context)
-    var config = CmuxSurfaceConfigTemplate(cConfig: inherited)
+    var config = ProgramaSurfaceConfigTemplate(cConfig: inherited)
 
     // Make runtime zoom inheritance explicit, even when Ghostty's
     // inherit-font-size config is disabled.
@@ -756,14 +756,14 @@ extension Workspace {
     }
 }
 
-// MARK: - cmux.json custom layout
+// MARK: - programa.json custom layout
 
 extension Workspace {
 
-    func applyCustomLayout(_ layout: CmuxLayoutNode, baseCwd: String) {
+    func applyCustomLayout(_ layout: ProgramaLayoutNode, baseCwd: String) {
         guard let rootPaneId = bonsplitController.allPaneIds.first else { return }
 
-        var leaves: [(paneId: PaneID, surfaces: [CmuxSurfaceDefinition])] = []
+        var leaves: [(paneId: PaneID, surfaces: [ProgramaSurfaceDefinition])] = []
         buildCustomLayoutTree(layout, inPane: rootPaneId, leaves: &leaves)
 
         // First leaf reuses the initial terminal created by addWorkspace;
@@ -783,9 +783,9 @@ extension Workspace {
     }
 
     private func buildCustomLayoutTree(
-        _ node: CmuxLayoutNode,
+        _ node: ProgramaLayoutNode,
         inPane paneId: PaneID,
-        leaves: inout [(paneId: PaneID, surfaces: [CmuxSurfaceDefinition])]
+        leaves: inout [(paneId: PaneID, surfaces: [ProgramaSurfaceDefinition])]
     ) {
         switch node {
         case .pane(let pane):
@@ -793,7 +793,7 @@ extension Workspace {
 
         case .split(let split):
             guard split.children.count == 2 else {
-                NSLog("[CmuxConfig] split node requires exactly 2 children, got %d", split.children.count)
+                NSLog("[ProgramaConfig] split node requires exactly 2 children, got %d", split.children.count)
                 leaves.append((paneId: paneId, surfaces: []))
                 return
             }
@@ -826,7 +826,7 @@ extension Workspace {
 
     private func populateCustomPane(
         _ paneId: PaneID,
-        surfaces: [CmuxSurfaceDefinition],
+        surfaces: [ProgramaSurfaceDefinition],
         baseCwd: String,
         focusPanelId: inout UUID?
     ) {
@@ -860,14 +860,14 @@ extension Workspace {
     private func configureExistingSurface(
         panelId: UUID,
         inPane paneId: PaneID,
-        surface: CmuxSurfaceDefinition,
+        surface: ProgramaSurfaceDefinition,
         baseCwd: String,
         focusPanelId: inout UUID?
     ) {
         switch surface.type {
         case .terminal where surface.cwd != nil || surface.env != nil:
             // Placeholder can't change cwd/env — replace it
-            let resolvedCwd = CmuxConfigStore.resolveCwd(surface.cwd, relativeTo: baseCwd)
+            let resolvedCwd = ProgramaConfigStore.resolveCwd(surface.cwd, relativeTo: baseCwd)
             if let panel = newTerminalSurface(
                 inPane: paneId,
                 focus: false,
@@ -899,13 +899,13 @@ extension Workspace {
 
     private func createNewSurface(
         inPane paneId: PaneID,
-        surface: CmuxSurfaceDefinition,
+        surface: ProgramaSurfaceDefinition,
         baseCwd: String,
         focusPanelId: inout UUID?
     ) {
         switch surface.type {
         case .terminal:
-            let resolvedCwd = CmuxConfigStore.resolveCwd(surface.cwd, relativeTo: baseCwd)
+            let resolvedCwd = ProgramaConfigStore.resolveCwd(surface.cwd, relativeTo: baseCwd)
             if let panel = newTerminalSurface(
                 inPane: paneId,
                 focus: false,
@@ -927,7 +927,7 @@ extension Workspace {
     }
 
     private func applyCustomDividerPositions(
-        configNode: CmuxLayoutNode,
+        configNode: ProgramaLayoutNode,
         liveNode: ExternalTreeNode
     ) {
         switch (configNode, liveNode) {
@@ -972,7 +972,7 @@ extension Workspace {
             guard !resolved else { return }
             resolved = true
             if let observer { NotificationCenter.default.removeObserver(observer) }
-            NSLog("[CmuxConfig] surface not ready after 3s, dropping command (%d chars)", text.count)
+            NSLog("[ProgramaConfig] surface not ready after 3s, dropping command (%d chars)", text.count)
         }
     }
 }
@@ -6872,7 +6872,7 @@ final class Workspace: Identifiable, ObservableObject {
         title: String = "Terminal",
         workingDirectory: String? = nil,
         portOrdinal: Int = 0,
-        configTemplate: CmuxSurfaceConfigTemplate? = nil,
+        configTemplate: ProgramaSurfaceConfigTemplate? = nil,
         initialTerminalCommand: String? = nil,
         initialTerminalEnvironment: [String: String] = [:]
     ) {
@@ -6985,7 +6985,7 @@ final class Workspace: Identifiable, ObservableObject {
         title: String = "Terminal",
         workingDirectory: String? = nil,
         portOrdinal: Int = 0,
-        configTemplate: CmuxSurfaceConfigTemplate? = nil
+        configTemplate: ProgramaSurfaceConfigTemplate? = nil
     ) {
         self.id = UUID()
         self.portOrdinal = portOrdinal
@@ -8752,7 +8752,7 @@ final class Workspace: Identifiable, ObservableObject {
 
     private func seedTerminalInheritanceFontPoints(
         panelId: UUID,
-        configTemplate: CmuxSurfaceConfigTemplate?
+        configTemplate: ProgramaSurfaceConfigTemplate?
     ) {
         guard let fontPoints = configTemplate?.fontSize, fontPoints > 0 else { return }
         terminalInheritanceFontPointsByPanelId[panelId] = fontPoints
@@ -8762,7 +8762,7 @@ final class Workspace: Identifiable, ObservableObject {
     private func resolvedTerminalInheritanceFontPoints(
         for terminalPanel: TerminalPanel,
         sourceSurface: ghostty_surface_t,
-        inheritedConfig: CmuxSurfaceConfigTemplate
+        inheritedConfig: ProgramaSurfaceConfigTemplate
     ) -> Float? {
         let runtimePoints = cmuxCurrentSurfaceFontSizePoints(sourceSurface)
         if let rooted = terminalInheritanceFontPointsByPanelId[terminalPanel.id], rooted > 0 {
@@ -8873,7 +8873,7 @@ final class Workspace: Identifiable, ObservableObject {
     private func inheritedTerminalConfig(
         preferredPanelId: UUID? = nil,
         inPane preferredPaneId: PaneID? = nil
-    ) -> CmuxSurfaceConfigTemplate? {
+    ) -> ProgramaSurfaceConfigTemplate? {
         // Walk candidates in priority order and use the first panel that still exposes
         // a runtime surface pointer.
         for terminalPanel in terminalPanelConfigInheritanceCandidates(
@@ -8909,7 +8909,7 @@ final class Workspace: Identifiable, ObservableObject {
         }
 
         if let fallbackFontPoints = lastTerminalConfigInheritanceFontPoints {
-            var config = CmuxSurfaceConfigTemplate()
+            var config = ProgramaSurfaceConfigTemplate()
             config.fontSize = fallbackFontPoints
 #if DEBUG
             dlog(

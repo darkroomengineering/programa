@@ -104,7 +104,7 @@ fi
 
 TAG_ID="$(sanitize_bundle "$TAG")"
 TAG_SLUG="$(sanitize_path "$TAG")"
-APP="$HOME/Library/Developer/Xcode/DerivedData/cmux-${TAG_SLUG}/Build/Products/Debug/Programa DEV ${TAG}.app"
+APP="$HOME/Library/Developer/Xcode/DerivedData/programa-${TAG_SLUG}/Build/Products/Debug/Programa DEV ${TAG}.app"
 BID="com.darkroom.programa.debug.${TAG_ID}"
 SOCK="/tmp/programa-debug-${TAG_SLUG}.sock"
 DSOCK="$HOME/Library/Application Support/programa/programad-dev-${TAG_SLUG}.sock"
