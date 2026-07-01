@@ -27,7 +27,7 @@
 		A5001601 /* SentryHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001600 /* SentryHelper.swift */; };
 		A5001621 /* AppleScriptSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001620 /* AppleScriptSupport.swift */; };
 		D1320AA0D1320AA0D1320AA1 /* AppIconDockTilePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */; };
-		D1320AA0D1320AA0D1320AA2 /* CmuxDockTilePlugin.plugin in Copy Dock Tile Plugin */ = {isa = PBXBuildFile; fileRef = D1320AA0D1320AA0D1320AA5 /* CmuxDockTilePlugin.plugin */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1320AA0D1320AA0D1320AA2 /* ProgramaDockTilePlugin.plugin in Copy Dock Tile Plugin */ = {isa = PBXBuildFile; fileRef = D1320AA0D1320AA0D1320AA5 /* ProgramaDockTilePlugin.plugin */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A5001400 /* Panel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001410 /* Panel.swift */; };
 		A5001401 /* TerminalPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001411 /* TerminalPanel.swift */; };
 		A5001402 /* BrowserPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001412 /* BrowserPanel.swift */; };
@@ -169,7 +169,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				D1320AA0D1320AA0D1320AA2 /* CmuxDockTilePlugin.plugin in Copy Dock Tile Plugin */,
+				D1320AA0D1320AA0D1320AA2 /* ProgramaDockTilePlugin.plugin in Copy Dock Tile Plugin */,
 			);
 			name = "Copy Dock Tile Plugin";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -202,8 +202,8 @@
 			isa = PBXContainerItemProxy;
 			containerPortal = A5001070 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = D1320AA0D1320AA0D1320AA8 /* CmuxDockTilePlugin */;
-			remoteInfo = CmuxDockTilePlugin;
+			remoteGlobalIDString = D1320AA0D1320AA0D1320AA8 /* ProgramaDockTilePlugin */;
+			remoteInfo = ProgramaDockTilePlugin;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -290,7 +290,7 @@
 		A5002001 /* THIRD_PARTY_LICENSES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_LICENSES.md; sourceTree = SOURCE_ROOT; };
 		B9000001A1B2C3D4E5F60719 /* programa.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = programa.swift; sourceTree = "<group>"; };
 		B9000004A1B2C3D4E5F60719 /* programa */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = programa; sourceTree = BUILT_PRODUCTS_DIR; };
-		D1320AA0D1320AA0D1320AA5 /* CmuxDockTilePlugin.plugin */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CmuxDockTilePlugin.plugin; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1320AA0D1320AA0D1320AA5 /* ProgramaDockTilePlugin.plugin */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProgramaDockTilePlugin.plugin; sourceTree = BUILT_PRODUCTS_DIR; };
 				B9000011A1B2C3D4E5F60719 /* AutomationSocketUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomationSocketUITests.swift; sourceTree = "<group>"; };
 					B9000013A1B2C3D4E5F60719 /* JumpToUnreadUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JumpToUnreadUITests.swift; sourceTree = "<group>"; };
 					B9000016A1B2C3D4E5F60719 /* MultiWindowNotificationsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiWindowNotificationsUITests.swift; sourceTree = "<group>"; };
@@ -555,7 +555,7 @@
 			children = (
 				A5001000 /* programa.app */,
 				B9000004A1B2C3D4E5F60719 /* programa */,
-				D1320AA0D1320AA0D1320AA5 /* CmuxDockTilePlugin.plugin */,
+				D1320AA0D1320AA0D1320AA5 /* ProgramaDockTilePlugin.plugin */,
 				7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */,
 				F1000002A1B2C3D4E5F60718 /* programaTests.xctest */,
 			);
@@ -658,9 +658,9 @@
 			productReference = A5001000 /* programa.app */;
 			productType = "com.apple.product-type.application";
 		};
-		D1320AA0D1320AA0D1320AA8 /* CmuxDockTilePlugin */ = {
+		D1320AA0D1320AA0D1320AA8 /* ProgramaDockTilePlugin */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D1320AA0D1320AA0D1320AB4 /* Build configuration list for PBXNativeTarget "CmuxDockTilePlugin" */;
+			buildConfigurationList = D1320AA0D1320AA0D1320AB4 /* Build configuration list for PBXNativeTarget "ProgramaDockTilePlugin" */;
 			buildPhases = (
 				D1320AA0D1320AA0D1320AB0 /* Sources */,
 				D1320AA0D1320AA0D1320AA7 /* Frameworks */,
@@ -670,9 +670,9 @@
 			);
 			dependencies = (
 			);
-			name = CmuxDockTilePlugin;
-			productName = CmuxDockTilePlugin;
-			productReference = D1320AA0D1320AA0D1320AA5 /* CmuxDockTilePlugin.plugin */;
+			name = ProgramaDockTilePlugin;
+			productName = ProgramaDockTilePlugin;
+			productReference = D1320AA0D1320AA0D1320AA5 /* ProgramaDockTilePlugin.plugin */;
 			productType = "com.apple.product-type.bundle";
 		};
 		B9000005A1B2C3D4E5F60719 /* programa-cli */ = {
@@ -761,7 +761,7 @@
 			projectRoot = "";
 			targets = (
 				A5001050 /* GhosttyTabs */,
-				D1320AA0D1320AA0D1320AA8 /* CmuxDockTilePlugin */,
+				D1320AA0D1320AA0D1320AA8 /* ProgramaDockTilePlugin */,
 				B9000005A1B2C3D4E5F60719 /* programa-cli */,
 				CB450DF0F0B3839599082C4D /* programaUITests */,
 				F1000004A1B2C3D4E5F60718 /* programaTests */,
@@ -939,7 +939,7 @@
 		};
 		D1320AA0D1320AA0D1320AB1 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = D1320AA0D1320AA0D1320AA8 /* CmuxDockTilePlugin */;
+			target = D1320AA0D1320AA0D1320AA8 /* ProgramaDockTilePlugin */;
 			targetProxy = D1320AA0D1320AA0D1320AA3 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -1323,7 +1323,7 @@
 		defaultConfigurationIsVisible = 0;
 		defaultConfigurationName = Release;
 	};
-	D1320AA0D1320AA0D1320AB4 /* Build configuration list for PBXNativeTarget "CmuxDockTilePlugin" */ = {
+	D1320AA0D1320AA0D1320AB4 /* Build configuration list for PBXNativeTarget "ProgramaDockTilePlugin" */ = {
 		isa = XCConfigurationList;
 		buildConfigurations = (
 			D1320AA0D1320AA0D1320AB2 /* Debug */,
