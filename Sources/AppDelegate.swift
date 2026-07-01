@@ -79,14 +79,14 @@ enum ProgramaTypingTiming {
             return true
         }
         let defaults = UserDefaults.standard
-        return defaults.bool(forKey: "cmuxTypingTimingLogs") || defaults.bool(forKey: "cmuxKeyLatencyProbe")
+        return defaults.bool(forKey: "programaTypingTimingLogs") || defaults.bool(forKey: "programaKeyLatencyProbe")
     }()
     static let isVerboseProbeEnabled: Bool = {
         let environment = ProcessInfo.processInfo.environment
         if environment["PROGRAMA_KEY_LATENCY_PROBE"] == "1" {
             return true
         }
-        return UserDefaults.standard.bool(forKey: "cmuxKeyLatencyProbe")
+        return UserDefaults.standard.bool(forKey: "programaKeyLatencyProbe")
     }()
     private static let delayLogThresholdMs: Double = 6.0
     private static let durationLogThresholdMs: Double = 1.0
@@ -10359,7 +10359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 ProgramaTypingTiming.logEventDelay(path: "appMonitor", event: event)
                 let shortcutMonitorTraceEnabled =
                     ProcessInfo.processInfo.environment["PROGRAMA_SHORTCUT_MONITOR_TRACE"] == "1"
-                    || UserDefaults.standard.bool(forKey: "cmuxShortcutMonitorTrace")
+                    || UserDefaults.standard.bool(forKey: "programaShortcutMonitorTrace")
                 if shortcutMonitorTraceEnabled {
                     let frType = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
                     dlog(

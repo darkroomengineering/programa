@@ -1343,7 +1343,7 @@ class GhosttyApp {
         if ProcessInfo.processInfo.environment["GHOSTTYTABS_DEBUG_BG"] == "1" {
             return true
         }
-        if UserDefaults.standard.bool(forKey: "cmuxDebugBG") {
+        if UserDefaults.standard.bool(forKey: "programaDebugBG") {
             return true
         }
         return UserDefaults.standard.bool(forKey: "GhosttyTabsDebugBG")
@@ -4967,7 +4967,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         if ProcessInfo.processInfo.environment["PROGRAMA_FOCUS_DEBUG"] == "1" {
             return true
         }
-        return UserDefaults.standard.bool(forKey: "cmuxFocusDebug")
+        return UserDefaults.standard.bool(forKey: "programaFocusDebug")
     }()
     internal enum DropPlan: Equatable {
         case insertText(String)
@@ -5104,7 +5104,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         if ProcessInfo.processInfo.environment["PROGRAMA_KEY_LATENCY_PROBE"] == "1" {
             return true
         }
-        return UserDefaults.standard.bool(forKey: "cmuxKeyLatencyProbe")
+        return UserDefaults.standard.bool(forKey: "programaKeyLatencyProbe")
     }()
     static var debugGhosttySurfaceKeyEventObserver: ((ghostty_input_key_s) -> Void)?
 #endif

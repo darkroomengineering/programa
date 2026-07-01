@@ -1326,7 +1326,7 @@ class TabManager: ObservableObject {
             if let raw = env["PROGRAMA_DEV_MUTATE_WORKSPACE_SELECTION_DURING_CREATION"] {
                 return raw == "1" || raw.caseInsensitiveCompare("true") == .orderedSame
             }
-            return UserDefaults.standard.bool(forKey: "cmuxDevMutateWorkspaceSelectionDuringCreation")
+            return UserDefaults.standard.bool(forKey: "programaDevMutateWorkspaceSelectionDuringCreation")
         }()
         guard isEnabled,
               let selectedTabId = snapshot.selectedTabId,

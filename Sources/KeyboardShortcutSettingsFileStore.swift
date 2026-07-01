@@ -24,7 +24,7 @@ final class ProgramaSettingsFileStore {
     static let schemaURLString = "https://raw.githubusercontent.com/darkroomengineering/programa/main/Resources/settings.schema.json"
 
     private static let releaseBundleIdentifier = "com.darkroom.programa"
-    private static let backupsDefaultsKey = "cmux.settingsFile.backups.v1"
+    private static let backupsDefaultsKey = "programa.settingsFile.backups.v1"
     fileprivate static let trustedDirectoriesBackupIdentifier = "customCommands.trustedDirectories"
     fileprivate static let socketPasswordBackupIdentifier = "automation.socketPassword"
 
