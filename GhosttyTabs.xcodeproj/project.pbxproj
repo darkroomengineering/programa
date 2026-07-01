@@ -80,7 +80,7 @@
 		A5001230 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A5001231 /* Sparkle */; };
 		B9000002A1B2C3D4E5F60719 /* programa.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000001A1B2C3D4E5F60719 /* programa.swift */; };
 		B9000027A1B2C3D4E5F60719 /* RemoteRelayZshBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001641 /* RemoteRelayZshBootstrap.swift */; };
-		B900000BA1B2C3D4E5F60719 /* cmux in Copy CLI */ = {isa = PBXBuildFile; fileRef = B9000004A1B2C3D4E5F60719 /* cmux */; };
+		B900000BA1B2C3D4E5F60719 /* programa in Copy CLI */ = {isa = PBXBuildFile; fileRef = B9000004A1B2C3D4E5F60719 /* programa */; };
 		C1ADE00002A1B2C3D4E5F719 /* claude in Copy CLI */ = {isa = PBXBuildFile; fileRef = C1ADE00001A1B2C3D4E5F719 /* claude */; };
 		D1BEF00002A1B2C3D4E5F719 /* open in Copy CLI */ = {isa = PBXBuildFile; fileRef = D1BEF00001A1B2C3D4E5F719 /* open */; };
 		84E00D47E4584162AE53BC8D /* xterm-ghostty in Resources */ = {isa = PBXBuildFile; fileRef = B2E7294509CC42FE9191870E /* xterm-ghostty */; };
@@ -156,7 +156,7 @@
 			dstPath = "bin";
 			dstSubfolderSpec = 7;
 			files = (
-				B900000BA1B2C3D4E5F60719 /* cmux in Copy CLI */,
+				B900000BA1B2C3D4E5F60719 /* programa in Copy CLI */,
 				C1ADE00002A1B2C3D4E5F719 /* claude in Copy CLI */,
 				D1BEF00002A1B2C3D4E5F719 /* open in Copy CLI */,
 			);
@@ -188,8 +188,8 @@
 			isa = PBXContainerItemProxy;
 			containerPortal = A5001070 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = B9000005A1B2C3D4E5F60719 /* cmux-cli */;
-			remoteInfo = "cmux-cli";
+			remoteGlobalIDString = B9000005A1B2C3D4E5F60719 /* programa-cli */;
+			remoteInfo = "programa-cli";
 		};
 		F1000008A1B2C3D4E5F60718 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -208,7 +208,7 @@
 /* End PBXContainerItemProxy section */
 
 		/* Begin PBXFileReference section */
-			A5001000 /* cmux.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cmux.app; sourceTree = BUILT_PRODUCTS_DIR; };
+			A5001000 /* programa.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = programa.app; sourceTree = BUILT_PRODUCTS_DIR; };
 			F1000002A1B2C3D4E5F60718 /* programaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			A5001011 /* ProgramaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaApp.swift; sourceTree = "<group>"; };
@@ -225,7 +225,7 @@
 		A5001545 /* TerminalSSHSessionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSSHSessionDetector.swift; sourceTree = "<group>"; };
 			A5001016 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GhosttyKit.xcframework; sourceTree = "<group>"; };
 		A5001017 /* ghostty.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ghostty.h; sourceTree = "<group>"; };
-		A5001018 /* cmux-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "cmux-Bridging-Header.h"; sourceTree = "<group>"; };
+		A5001018 /* programa-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "programa-Bridging-Header.h"; sourceTree = "<group>"; };
 		A5001019 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
 		A5001600 /* SentryHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentryHelper.swift; sourceTree = "<group>"; };
 		A5001620 /* AppleScriptSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleScriptSupport.swift; sourceTree = "<group>"; };
@@ -289,7 +289,7 @@
 		D1BEF00001A1B2C3D4E5F719 /* open */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "Resources/bin/open"; sourceTree = SOURCE_ROOT; };
 		A5002001 /* THIRD_PARTY_LICENSES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_LICENSES.md; sourceTree = SOURCE_ROOT; };
 		B9000001A1B2C3D4E5F60719 /* programa.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = programa.swift; sourceTree = "<group>"; };
-		B9000004A1B2C3D4E5F60719 /* cmux */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = cmux; sourceTree = BUILT_PRODUCTS_DIR; };
+		B9000004A1B2C3D4E5F60719 /* programa */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = programa; sourceTree = BUILT_PRODUCTS_DIR; };
 		D1320AA0D1320AA0D1320AA5 /* CmuxDockTilePlugin.plugin */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CmuxDockTilePlugin.plugin; sourceTree = BUILT_PRODUCTS_DIR; };
 				B9000011A1B2C3D4E5F60719 /* AutomationSocketUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomationSocketUITests.swift; sourceTree = "<group>"; };
 					B9000013A1B2C3D4E5F60719 /* JumpToUnreadUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JumpToUnreadUITests.swift; sourceTree = "<group>"; };
@@ -452,7 +452,7 @@
 				IC000002 /* AppIcon.icon */,
 				A5001016 /* GhosttyKit.xcframework */,
 				A5001017 /* ghostty.h */,
-				A5001018 /* cmux-Bridging-Header.h */,
+				A5001018 /* programa-Bridging-Header.h */,
 				3196C9C2D01F054C1D3385DD /* programaUITests */,
 				F1000003A1B2C3D4E5F60718 /* programaTests */,
 				A5001042 /* Products */,
@@ -553,8 +553,8 @@
 		A5001042 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A5001000 /* cmux.app */,
-				B9000004A1B2C3D4E5F60719 /* cmux */,
+				A5001000 /* programa.app */,
+				B9000004A1B2C3D4E5F60719 /* programa */,
 				D1320AA0D1320AA0D1320AA5 /* CmuxDockTilePlugin.plugin */,
 				7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */,
 				F1000002A1B2C3D4E5F60718 /* programaTests.xctest */,
@@ -655,7 +655,7 @@
 				);
 			name = GhosttyTabs;
 			productName = GhosttyTabs;
-			productReference = A5001000 /* cmux.app */;
+			productReference = A5001000 /* programa.app */;
 			productType = "com.apple.product-type.application";
 		};
 		D1320AA0D1320AA0D1320AA8 /* CmuxDockTilePlugin */ = {
@@ -675,9 +675,9 @@
 			productReference = D1320AA0D1320AA0D1320AA5 /* CmuxDockTilePlugin.plugin */;
 			productType = "com.apple.product-type.bundle";
 		};
-		B9000005A1B2C3D4E5F60719 /* cmux-cli */ = {
+		B9000005A1B2C3D4E5F60719 /* programa-cli */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B9000007A1B2C3D4E5F60719 /* Build configuration list for PBXNativeTarget "cmux-cli" */;
+			buildConfigurationList = B9000007A1B2C3D4E5F60719 /* Build configuration list for PBXNativeTarget "programa-cli" */;
 			buildPhases = (
 				B9000006A1B2C3D4E5F60719 /* Sources */,
 				B900000CA1B2C3D4E5F60719 /* Frameworks */,
@@ -689,9 +689,9 @@
 			packageProductDependencies = (
 				A5001251 /* Sentry */,
 			);
-			name = "cmux-cli";
-			productName = cmux;
-			productReference = B9000004A1B2C3D4E5F60719 /* cmux */;
+			name = "programa-cli";
+			productName = programa;
+			productReference = B9000004A1B2C3D4E5F60719 /* programa */;
 			productType = "com.apple.product-type.tool";
 		};
 		CB450DF0F0B3839599082C4D /* programaUITests */ = {
@@ -762,7 +762,7 @@
 			targets = (
 				A5001050 /* GhosttyTabs */,
 				D1320AA0D1320AA0D1320AA8 /* CmuxDockTilePlugin */,
-				B9000005A1B2C3D4E5F60719 /* cmux-cli */,
+				B9000005A1B2C3D4E5F60719 /* programa-cli */,
 				CB450DF0F0B3839599082C4D /* programaUITests */,
 				F1000004A1B2C3D4E5F60718 /* programaTests */,
 			);
@@ -934,7 +934,7 @@
 		};
 		B900000EA1B2C3D4E5F60719 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = B9000005A1B2C3D4E5F60719 /* cmux-cli */;
+			target = B9000005A1B2C3D4E5F60719 /* programa-cli */;
 			targetProxy = B900000DA1B2C3D4E5F60719 /* PBXContainerItemProxy */;
 		};
 		D1320AA0D1320AA0D1320AB1 /* PBXTargetDependency */ = {
@@ -1041,7 +1041,7 @@
 				PRODUCT_NAME = "Programa DEV";
 				SPARKLE_PUBLIC_KEY = "avjcgKibf1FTvhIjLBxhd+0HSpsXU4D0IGlVk8cgqRc=";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "cmux-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "programa-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -1081,7 +1081,7 @@
 				PRODUCT_NAME = Programa;
 				SPARKLE_PUBLIC_KEY = "avjcgKibf1FTvhIjLBxhd+0HSpsXU4D0IGlVk8cgqRc=";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "cmux-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "programa-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -1147,7 +1147,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_NAME = programa;
-				PRODUCT_MODULE_NAME = cmux_cli;
+				PRODUCT_MODULE_NAME = programa_cli;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -1166,7 +1166,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_NAME = programa;
-				PRODUCT_MODULE_NAME = cmux_cli;
+				PRODUCT_MODULE_NAME = programa_cli;
 				ONLY_ACTIVE_ARCH = NO;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -1350,7 +1350,7 @@
 		defaultConfigurationIsVisible = 0;
 		defaultConfigurationName = Release;
 	};
-	B9000007A1B2C3D4E5F60719 /* Build configuration list for PBXNativeTarget "cmux-cli" */ = {
+	B9000007A1B2C3D4E5F60719 /* Build configuration list for PBXNativeTarget "programa-cli" */ = {
 		isa = XCConfigurationList;
 		buildConfigurations = (
 			B9000008A1B2C3D4E5F60719 /* Debug */,

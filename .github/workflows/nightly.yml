@@ -202,7 +202,7 @@ jobs:
       - name: Build universal nightly app (Release)
         if: needs.decide.outputs.should_publish != 'true' || steps.current_head_prebuild.outputs.still_current == 'true'
         run: |
-          xcodebuild -scheme cmux -configuration Release -derivedDataPath build-universal \
+          xcodebuild -scheme programa -configuration Release -derivedDataPath build-universal \
             -destination 'generic/platform=macOS' \
             -clonedSourcePackagesDirPath .spm-cache \
             ARCHS="arm64 x86_64" \
