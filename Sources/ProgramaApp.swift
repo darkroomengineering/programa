@@ -386,7 +386,7 @@ struct cmuxApp: App {
             }
 
             CommandGroup(replacing: .appInfo) {
-                Button(String(localized: "menu.app.about", defaultValue: "About cmux")) {
+                Button(String(localized: "menu.app.about", defaultValue: "About Programa")) {
                     showAboutPanel()
                 }
 
@@ -397,7 +397,7 @@ struct cmuxApp: App {
             }
 
             CommandGroup(replacing: .appTermination) {
-                splitCommandButton(title: String(localized: "menu.quitPrograma", defaultValue: "Quit cmux"), shortcut: menuShortcut(for: .quit)) {
+                splitCommandButton(title: String(localized: "menu.quitPrograma", defaultValue: "Quit Programa"), shortcut: menuShortcut(for: .quit)) {
                     NSApp.terminate(nil)
                 }
             }
@@ -1555,7 +1555,7 @@ private struct SettingsAboutTitlebarDebugView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Toggle("Enable Debug Overrides", isOn: overridesEnabled)
 
-                Text("When disabled, cmux uses normal default titlebar behavior for this window.")
+                Text("When disabled, Programa uses normal default titlebar behavior for this window.")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -4236,12 +4236,12 @@ struct SettingsView: View {
         if paneFirstClickFocusEnabled {
             return String(
                 localized: "settings.app.paneFirstClickFocus.subtitleOn",
-                defaultValue: "When cmux is inactive, clicking a pane activates the window and focuses that pane in one click."
+                defaultValue: "When Programa is inactive, clicking a pane activates the window and focuses that pane in one click."
             )
         }
         return String(
             localized: "settings.app.paneFirstClickFocus.subtitleOff",
-            defaultValue: "When cmux is inactive, the first click only activates the window. Click again to focus the pane."
+            defaultValue: "When Programa is inactive, the first click only activates the window. Click again to focus the pane."
         )
     }
 
@@ -4613,7 +4613,7 @@ struct SettingsView: View {
                         SettingsCardRow(
                             String(localized: "settings.app.language", defaultValue: "Language"),
                             subtitle: appLanguage != LanguageSettings.languageAtLaunch.rawValue
-                                ? String(localized: "settings.app.language.restartSubtitle", defaultValue: "Restart cmux to apply")
+                                ? String(localized: "settings.app.language.restartSubtitle", defaultValue: "Restart Programa to apply")
                                 : nil,
                             controlWidth: pickerColumnWidth
                         ) {
@@ -4751,7 +4751,7 @@ struct SettingsView: View {
 
                         SettingsCardRow(
                             String(localized: "settings.app.showInMenuBar", defaultValue: "Show in Menu Bar"),
-                            subtitle: String(localized: "settings.app.showInMenuBar.subtitle", defaultValue: "Keep cmux in the menu bar for unread notifications and quick actions.")
+                            subtitle: String(localized: "settings.app.showInMenuBar.subtitle", defaultValue: "Keep Programa in the menu bar for unread notifications and quick actions.")
                         ) {
                             Toggle("", isOn: $showMenuBarExtra)
                                 .labelsHidden()
@@ -4779,7 +4779,7 @@ struct SettingsView: View {
 
                         SettingsCardRow(
                             String(localized: "settings.notifications.paneFlash.title", defaultValue: "Pane Flash"),
-                            subtitle: String(localized: "settings.notifications.paneFlash.subtitle", defaultValue: "Briefly flash a blue outline when cmux highlights a pane.")
+                            subtitle: String(localized: "settings.notifications.paneFlash.subtitle", defaultValue: "Briefly flash a blue outline when Programa highlights a pane.")
                         ) {
                             Toggle("", isOn: $notificationPaneFlashEnabled)
                                 .labelsHidden()
@@ -4898,7 +4898,7 @@ struct SettingsView: View {
                             String(localized: "settings.app.telemetry", defaultValue: "Send anonymous telemetry"),
                             subtitle: sendAnonymousTelemetry != telemetryValueAtLaunch
                                 ? String(localized: "settings.app.telemetry.subtitleChanged", defaultValue: "Change takes effect on next launch.")
-                                : String(localized: "settings.app.telemetry.subtitle", defaultValue: "Share anonymized crash and usage data to help improve cmux.")
+                                : String(localized: "settings.app.telemetry.subtitle", defaultValue: "Share anonymized crash and usage data to help improve Programa.")
                         ) {
                             Toggle("", isOn: $sendAnonymousTelemetry)
                                 .labelsHidden()
@@ -5028,9 +5028,9 @@ struct SettingsView: View {
                         SettingsCardDivider()
 
                         SettingsCardRow(
-                            String(localized: "settings.app.openSidebarPRLinks", defaultValue: "Open Sidebar PR Links in cmux Browser"),
+                            String(localized: "settings.app.openSidebarPRLinks", defaultValue: "Open Sidebar PR Links in Programa Browser"),
                             subtitle: openSidebarPullRequestLinksInProgramaBrowser
-                                ? String(localized: "settings.app.openSidebarPRLinks.subtitleOn", defaultValue: "Clicks open inside cmux browser.")
+                                ? String(localized: "settings.app.openSidebarPRLinks.subtitleOn", defaultValue: "Clicks open inside Programa browser.")
                                 : String(localized: "settings.app.openSidebarPRLinks.subtitleOff", defaultValue: "Clicks open in your default browser.")
                         ) {
                             Toggle("", isOn: $openSidebarPullRequestLinksInProgramaBrowser)
@@ -5042,9 +5042,9 @@ struct SettingsView: View {
                         SettingsCardDivider()
 
                         SettingsCardRow(
-                            String(localized: "settings.app.openSidebarPortLinks", defaultValue: "Open Sidebar Port Links in cmux Browser"),
+                            String(localized: "settings.app.openSidebarPortLinks", defaultValue: "Open Sidebar Port Links in Programa Browser"),
                             subtitle: openSidebarPortLinksInProgramaBrowser
-                                ? String(localized: "settings.app.openSidebarPortLinks.subtitleOn", defaultValue: "Port clicks open inside cmux browser.")
+                                ? String(localized: "settings.app.openSidebarPortLinks.subtitleOn", defaultValue: "Port clicks open inside Programa browser.")
                                 : String(localized: "settings.app.openSidebarPortLinks.subtitleOff", defaultValue: "Port clicks open in your default browser.")
                         ) {
                             Toggle("", isOn: $openSidebarPortLinksInProgramaBrowser)
@@ -5411,7 +5411,7 @@ struct SettingsView: View {
                             String(localized: "settings.automation.claudeCode", defaultValue: "Claude Code Integration"),
                             subtitle: claudeCodeHooksEnabled
                                 ? String(localized: "settings.automation.claudeCode.subtitleOn", defaultValue: "Sidebar shows Claude session status and notifications.")
-                                : String(localized: "settings.automation.claudeCode.subtitleOff", defaultValue: "Claude Code runs without cmux integration.")
+                                : String(localized: "settings.automation.claudeCode.subtitleOff", defaultValue: "Claude Code runs without Programa integration.")
                         ) {
                             Toggle("", isOn: $claudeCodeHooksEnabled)
                                 .labelsHidden()
@@ -5421,7 +5421,7 @@ struct SettingsView: View {
 
                         SettingsCardDivider()
 
-                        SettingsCardNote(String(localized: "settings.automation.claudeCode.note", defaultValue: "When enabled, cmux wraps the claude command to inject session tracking and notification hooks. Disable if you prefer to manage Claude Code hooks yourself."))
+                        SettingsCardNote(String(localized: "settings.automation.claudeCode.note", defaultValue: "When enabled, Programa wraps the claude command to inject session tracking and notification hooks. Disable if you prefer to manage Claude Code hooks yourself."))
                     }
 
                     SettingsCard {
@@ -5531,7 +5531,7 @@ struct SettingsView: View {
                         SettingsCardDivider()
 
                         SettingsCardRow(
-                            String(localized: "settings.browser.openTerminalLinks", defaultValue: "Open Terminal Links in cmux Browser"),
+                            String(localized: "settings.browser.openTerminalLinks", defaultValue: "Open Terminal Links in Programa Browser"),
                             subtitle: String(localized: "settings.browser.openTerminalLinks.subtitle", defaultValue: "When off, links clicked in terminal output open in your default browser.")
                         ) {
                             Toggle("", isOn: $openTerminalLinksInProgramaBrowser)
@@ -5556,7 +5556,7 @@ struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 SettingsCardRow(
                                     String(localized: "settings.browser.hostWhitelist", defaultValue: "Hosts to Open in Embedded Browser"),
-                                    subtitle: String(localized: "settings.browser.hostWhitelist.subtitle", defaultValue: "Applies to terminal link clicks and intercepted `open https://...` calls. Only these hosts open in cmux. Others open in your default browser. One host or wildcard per line (for example: example.com, *.internal.example). Leave empty to open all hosts in cmux.")
+                                    subtitle: String(localized: "settings.browser.hostWhitelist.subtitle", defaultValue: "Applies to terminal link clicks and intercepted `open https://...` calls. Only these hosts open in Programa. Others open in your default browser. One host or wildcard per line (for example: example.com, *.internal.example). Leave empty to open all hosts in Programa.")
                                 ) {
                                     EmptyView()
                                 }
@@ -5608,7 +5608,7 @@ struct SettingsView: View {
                             Text(String(localized: "settings.browser.httpAllowlist", defaultValue: "HTTP Hosts Allowed in Embedded Browser"))
                                 .font(.system(size: 13, weight: .semibold))
 
-                            Text(String(localized: "settings.browser.httpAllowlist.description", defaultValue: "Controls which HTTP (non-HTTPS) hosts can open in cmux without a warning prompt. Defaults include localhost, 127.0.0.1, ::1, 0.0.0.0, and *.localtest.me."))
+                            Text(String(localized: "settings.browser.httpAllowlist.description", defaultValue: "Controls which HTTP (non-HTTPS) hosts can open in Programa without a warning prompt. Defaults include localhost, 127.0.0.1, ::1, 0.0.0.0, and *.localtest.me."))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 

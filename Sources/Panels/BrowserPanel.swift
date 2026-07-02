@@ -3974,12 +3974,12 @@ final class BrowserPanel: Panel, ObservableObject {
         let alert = insecureHTTPAlertFactory()
         alert.alertStyle = .warning
         alert.messageText = String(localized: "browser.error.insecure.title", defaultValue: "Connection isn\u{2019}t secure")
-        alert.informativeText = String(localized: "browser.error.insecure.message", defaultValue: "\(host) uses plain HTTP, so traffic can be read or modified on the network.\n\nOpen this URL in your default browser, or proceed in cmux.")
+        alert.informativeText = String(localized: "browser.error.insecure.message", defaultValue: "\(host) uses plain HTTP, so traffic can be read or modified on the network.\n\nOpen this URL in your default browser, or proceed in Programa.")
         alert.addButton(withTitle: String(localized: "browser.openInDefaultBrowser", defaultValue: "Open in Default Browser"))
-        alert.addButton(withTitle: String(localized: "browser.proceedInPrograma", defaultValue: "Proceed in cmux"))
+        alert.addButton(withTitle: String(localized: "browser.proceedInPrograma", defaultValue: "Proceed in Programa"))
         alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
         alert.showsSuppressionButton = true
-        alert.suppressionButton?.title = String(localized: "browser.alwaysAllowHost", defaultValue: "Always allow this host in cmux")
+        alert.suppressionButton?.title = String(localized: "browser.alwaysAllowHost", defaultValue: "Always allow this host in Programa")
 
         let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self, weak alert] response in
             self?.handleInsecureHTTPAlertResponse(
@@ -7589,13 +7589,13 @@ enum BrowserImportPlanRealizationError: LocalizedError {
         case .missingDestinationProfile:
             return String(
                 localized: "browser.import.error.destinationMissing",
-                defaultValue: "The selected cmux browser profile no longer exists. Pick a destination profile again."
+                defaultValue: "The selected Programa browser profile no longer exists. Pick a destination profile again."
             )
         case .profileCreationFailed(let name):
             return String(
                 format: String(
                     localized: "browser.import.error.destinationCreateFailed",
-                    defaultValue: "cmux could not create the destination profile \"%@\"."
+                    defaultValue: "Programa could not create the destination profile \"%@\"."
                 ),
                 name
             )
@@ -7715,7 +7715,7 @@ enum BrowserImportOutcomeFormatter {
                 String(
                     format: String(
                         localized: "browser.import.complete.createdProfiles",
-                        defaultValue: "Created cmux profiles: %@"
+                        defaultValue: "Created Programa profiles: %@"
                     ),
                     outcome.createdDestinationProfileNames.joined(separator: ", ")
                 )
@@ -9133,7 +9133,7 @@ final class BrowserDataImportCoordinator {
             )
             alert.informativeText = String(
                 localized: "browser.import.noBrowsers.message",
-                defaultValue: "cmux could not find browser profiles to import from on this Mac."
+                defaultValue: "Programa could not find browser profiles to import from on this Mac."
             )
             alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
             alert.runModal()
@@ -9723,7 +9723,7 @@ final class BrowserDataImportCoordinator {
             sourceProfilesHelpLabel.preferredMaxLayoutWidth = 500
             sourceProfilesHelpLabel.stringValue = String(
                 localized: "browser.import.sourceProfiles.help",
-                defaultValue: "Choose one or more source profiles. Step 3 lets you keep them separate or merge them into one cmux profile."
+                defaultValue: "Choose one or more source profiles. Step 3 lets you keep them separate or merge them into one Programa profile."
             )
 
             sourceProfilesContainer.orientation = .vertical
@@ -9768,7 +9768,7 @@ final class BrowserDataImportCoordinator {
             )
             mergeProfilesRadio.title = String(
                 localized: "browser.import.destinationMode.merge",
-                defaultValue: "Merge all into one cmux profile"
+                defaultValue: "Merge all into one Programa profile"
             )
             separateProfilesRadio.target = self
             separateProfilesRadio.action = #selector(handleDestinationModeChanged(_:))
@@ -9810,7 +9810,7 @@ final class BrowserDataImportCoordinator {
             let destinationTitleLabel = NSTextField(
                 labelWithString: String(
                     localized: "browser.import.destination.cmux",
-                    defaultValue: "cmux destination"
+                    defaultValue: "Programa destination"
                 )
             )
             destinationTitleLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
@@ -10057,13 +10057,13 @@ final class BrowserDataImportCoordinator {
             if presentation.showsSeparateRows {
                 destinationHelpLabel.stringValue = String(
                     localized: "browser.import.destinationProfile.separateHelp",
-                    defaultValue: "Missing cmux profiles are created when import starts."
+                    defaultValue: "Missing Programa profiles are created when import starts."
                 )
                 destinationHelpLabel.isHidden = false
             } else if plan.entries.count > 1 {
                 destinationHelpLabel.stringValue = String(
                     localized: "browser.import.destinationProfile.mergeHelp",
-                    defaultValue: "All selected source profiles will be merged into the chosen cmux browser profile."
+                    defaultValue: "All selected source profiles will be merged into the chosen Programa browser profile."
                 )
                 destinationHelpLabel.isHidden = false
             } else {
