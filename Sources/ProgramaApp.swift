@@ -134,12 +134,12 @@ enum UITestLaunchManifest {
 }
 
 @main
-struct cmuxApp: App {
+struct programaApp: App {
     @StateObject private var tabManager: TabManager
     @StateObject private var notificationStore = TerminalNotificationStore.shared
     @StateObject private var sidebarState = SidebarState()
     @StateObject private var sidebarSelectionState = SidebarSelectionState()
-    @StateObject private var cmuxConfigStore = ProgramaConfigStore()
+    @StateObject private var programaConfigStore = ProgramaConfigStore()
     @StateObject private var keyboardShortcutSettingsObserver = KeyboardShortcutSettingsObserver.shared
     private let primaryWindowId = UUID()
     @AppStorage(AppearanceSettings.appearanceModeKey) private var appearanceMode = AppearanceSettings.defaultMode.rawValue
@@ -342,18 +342,18 @@ struct cmuxApp: App {
                 .environmentObject(notificationStore)
                 .environmentObject(sidebarState)
                 .environmentObject(sidebarSelectionState)
-                .environmentObject(cmuxConfigStore)
+                .environmentObject(programaConfigStore)
                 .onAppear {
 #if DEBUG
                     if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_MODE"] == "1" {
-                        UpdateLogStore.shared.append("ui test: cmuxApp onAppear")
+                        UpdateLogStore.shared.append("ui test: programaApp onAppear")
                     }
 #endif
                     // Start the Unix socket controller for programmatic access
                     updateSocketController()
                     appDelegate.configure(tabManager: tabManager, notificationStore: notificationStore, sidebarState: sidebarState)
-                    cmuxConfigStore.wireDirectoryTracking(tabManager: tabManager)
-                    cmuxConfigStore.loadAll()
+                    programaConfigStore.wireDirectoryTracking(tabManager: tabManager)
+                    programaConfigStore.loadAll()
                     applyAppearance()
                     if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_SHOW_SETTINGS"] == "1" {
                         DispatchQueue.main.async {
@@ -1127,7 +1127,7 @@ struct cmuxApp: App {
 
     private func closePanelOrWindow() {
         if let window = NSApp.keyWindow ?? NSApp.mainWindow,
-           cmuxWindowShouldOwnCloseShortcut(window) {
+           programaWindowShouldOwnCloseShortcut(window) {
             window.performClose(nil)
             return
         }
@@ -1156,25 +1156,25 @@ struct cmuxApp: App {
     }
 }
 
-private let cmuxAuxiliaryWindowIdentifiers: Set<String> = [
+private let programaAuxiliaryWindowIdentifiers: Set<String> = [
     "cmux.settings",
     "cmux.about",
-    "cmux.licenses",
-    "cmux.browser-popup",
-    "cmux.settingsAboutTitlebarDebug",
-    "cmux.debugWindowControls",
-    "cmux.browserImportHintDebug",
-    "cmux.sidebarDebug",
-    "cmux.menubarDebug",
-    "cmux.backgroundDebug",
+    "programa.licenses",
+    "programa.browser-popup",
+    "programa.settingsAboutTitlebarDebug",
+    "programa.debugWindowControls",
+    "programa.browserImportHintDebug",
+    "programa.sidebarDebug",
+    "programa.menubarDebug",
+    "programa.backgroundDebug",
 ]
 
 /// Returns whether the given window should handle the standard close shortcut
 /// as a standalone auxiliary window instead of routing it through workspace or
 /// panel-close behavior.
-func cmuxWindowShouldOwnCloseShortcut(_ window: NSWindow?) -> Bool {
+func programaWindowShouldOwnCloseShortcut(_ window: NSWindow?) -> Bool {
     guard let identifier = window?.identifier?.rawValue else { return false }
-    return cmuxAuxiliaryWindowIdentifiers.contains(identifier)
+    return programaAuxiliaryWindowIdentifiers.contains(identifier)
 }
 
 private enum SettingsAboutWindowKind: String, CaseIterable, Identifiable {
@@ -1454,7 +1454,7 @@ private final class SettingsAboutTitlebarDebugStore: ObservableObject {
 
     private func ensureToolbar(on window: NSWindow, kind: SettingsAboutWindowKind) {
         guard window.toolbar == nil else { return }
-        let identifier = NSToolbar.Identifier("cmux.debug.titlebar.\(kind.rawValue)")
+        let identifier = NSToolbar.Identifier("programa.debug.titlebar.\(kind.rawValue)")
         let toolbar = NSToolbar(identifier: identifier)
         toolbar.allowsUserCustomization = false
         toolbar.autosavesConfiguration = false
@@ -1491,7 +1491,7 @@ private final class SettingsAboutTitlebarDebugWindowController: NSWindowControll
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.settingsAboutTitlebarDebug")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.settingsAboutTitlebarDebug")
         window.center()
         window.contentView = NSHostingView(rootView: SettingsAboutTitlebarDebugView())
         AppDelegate.shared?.applyWindowDecorations(to: window)
@@ -1719,7 +1719,7 @@ private final class DebugWindowControlsWindowController: NSWindowController, NSW
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.debugWindowControls")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.debugWindowControls")
         window.center()
         window.contentView = NSHostingView(rootView: DebugWindowControlsView())
         AppDelegate.shared?.applyWindowDecorations(to: window)
@@ -2023,7 +2023,7 @@ private final class BrowserImportHintDebugWindowController: NSWindowController, 
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.browserImportHintDebug")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.browserImportHintDebug")
         window.center()
         window.contentView = NSHostingView(rootView: BrowserImportHintDebugView())
         AppDelegate.shared?.applyWindowDecorations(to: window)
@@ -2060,7 +2060,7 @@ private final class BrowserProfilePopoverDebugWindowController: NSWindowControll
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.browserProfilePopoverDebug")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.browserProfilePopoverDebug")
         window.center()
         window.contentView = NSHostingView(rootView: BrowserProfilePopoverDebugView())
         AppDelegate.shared?.applyWindowDecorations(to: window)
@@ -2458,7 +2458,7 @@ private final class AcknowledgmentsWindowController: NSWindowController, NSWindo
         )
         window.isReleasedWhenClosed = false
         window.title = String(localized: "about.licenses.windowTitle", defaultValue: "Third-Party Licenses")
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.licenses")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.licenses")
         window.center()
         window.contentView = NSHostingView(rootView: AcknowledgmentsView())
         super.init(window: window)
@@ -2638,7 +2638,7 @@ enum SettingsNavigationTarget: String {
 }
 
 enum SettingsNavigationRequest {
-    static let notificationName = Notification.Name("cmux.settings.navigate")
+    static let notificationName = Notification.Name("programa.settings.navigate")
     private static let targetKey = "target"
 
     static func post(_ target: SettingsNavigationTarget) {
@@ -2670,7 +2670,7 @@ private final class SidebarDebugWindowController: NSWindowController, NSWindowDe
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.sidebarDebug")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.sidebarDebug")
         window.center()
         window.contentView = NSHostingView(rootView: SidebarDebugView())
         AppDelegate.shared?.applyWindowDecorations(to: window)
@@ -2821,7 +2821,7 @@ private struct SidebarDebugView: View {
                 if let hex = sidebarSelectionColorHex, let nsColor = NSColor(hex: hex) {
                     return Color(nsColor: nsColor)
                 }
-                return cmuxAccentColor()
+                return programaAccentColor()
             },
             set: { newColor in
                 let nsColor = NSColor(newColor)
@@ -3100,7 +3100,7 @@ private final class MenuBarExtraDebugWindowController: NSWindowController, NSWin
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.menubarDebug")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.menubarDebug")
         window.center()
         window.contentView = NSHostingView(rootView: MenuBarExtraDebugView())
         AppDelegate.shared?.applyWindowDecorations(to: window)
@@ -3270,7 +3270,7 @@ private final class SplitButtonLayoutDebugWindowController: NSWindowController, 
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.splitButtonLayoutDebug")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.splitButtonLayoutDebug")
         window.center()
         window.contentView = NSHostingView(rootView: SplitButtonLayoutDebugView())
         AppDelegate.shared?.applyWindowDecorations(to: window)
@@ -3340,7 +3340,7 @@ private final class BackgroundDebugWindowController: NSWindowController, NSWindo
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.backgroundDebug")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.backgroundDebug")
         window.center()
         window.contentView = NSHostingView(rootView: BackgroundDebugView())
         AppDelegate.shared?.applyWindowDecorations(to: window)
@@ -4096,8 +4096,8 @@ struct SettingsView: View {
     @AppStorage(TelemetrySettings.sendAnonymousTelemetryKey)
     private var sendAnonymousTelemetry = TelemetrySettings.defaultSendAnonymousTelemetry
     @AppStorage(PreferredEditorSettings.key) private var preferredEditorCommand = ""
-    @AppStorage("cmuxPortBase") private var cmuxPortBase = 9100
-    @AppStorage("cmuxPortRange") private var cmuxPortRange = 10
+    @AppStorage("cmuxPortBase") private var programaPortBase = 9100
+    @AppStorage("cmuxPortRange") private var programaPortRange = 10
     @AppStorage(BrowserSearchSettings.searchEngineKey) private var browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
     @AppStorage(BrowserSearchSettings.searchSuggestionsEnabledKey) private var browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled
     @AppStorage(BrowserThemeSettings.modeKey) private var browserThemeMode = BrowserThemeSettings.defaultMode.rawValue
@@ -5142,7 +5142,7 @@ struct SettingsView: View {
 
                                 HexColorPicker(
                                     hex: sidebarSelectionColorHex,
-                                    fallback: cmuxAccentColor()
+                                    fallback: programaAccentColor()
                                 ) { newHex in
                                     sidebarSelectionColorHex = newHex
                                 }
@@ -5171,7 +5171,7 @@ struct SettingsView: View {
 
                                 HexColorPicker(
                                     hex: sidebarNotificationBadgeColorHex,
-                                    fallback: cmuxAccentColor()
+                                    fallback: programaAccentColor()
                                 ) { newHex in
                                     sidebarNotificationBadgeColorHex = newHex
                                 }
@@ -5440,7 +5440,7 @@ struct SettingsView: View {
 
                     SettingsCard {
                         SettingsCardRow(String(localized: "settings.automation.portBase", defaultValue: "Port Base"), subtitle: String(localized: "settings.automation.portBase.subtitle", defaultValue: "Starting port for PROGRAMA_PORT env var."), controlWidth: pickerColumnWidth) {
-                            TextField("", value: $cmuxPortBase, format: .number)
+                            TextField("", value: $programaPortBase, format: .number)
                                 .textFieldStyle(.roundedBorder)
                                 .multilineTextAlignment(.trailing)
                         }
@@ -5448,7 +5448,7 @@ struct SettingsView: View {
                         SettingsCardDivider()
 
                         SettingsCardRow(String(localized: "settings.automation.portRange", defaultValue: "Port Range Size"), subtitle: String(localized: "settings.automation.portRange.subtitle", defaultValue: "Number of ports per workspace."), controlWidth: pickerColumnWidth) {
-                            TextField("", value: $cmuxPortRange, format: .number)
+                            TextField("", value: $programaPortRange, format: .number)
                                 .textFieldStyle(.roundedBorder)
                                 .multilineTextAlignment(.trailing)
                         }

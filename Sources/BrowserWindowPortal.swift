@@ -4,11 +4,11 @@ import ObjectiveC
 import SwiftUI
 import WebKit
 
-private var cmuxWindowBrowserPortalKey: UInt8 = 0
-private var cmuxWindowBrowserPortalCloseObserverKey: UInt8 = 0
-private var cmuxBrowserSearchOverlayPanelIdAssociationKey: UInt8 = 0
-private var cmuxBrowserPortalNeedsRenderingStateReattachKey: UInt8 = 0
-private var cmuxWindowInteractiveSplitDividerDragKey: UInt8 = 0
+private var programaWindowBrowserPortalKey: UInt8 = 0
+private var programaWindowBrowserPortalCloseObserverKey: UInt8 = 0
+private var programaBrowserSearchOverlayPanelIdAssociationKey: UInt8 = 0
+private var programaBrowserPortalNeedsRenderingStateReattachKey: UInt8 = 0
+private var programaWindowInteractiveSplitDividerDragKey: UInt8 = 0
 
 #if DEBUG
 private func browserPortalDebugToken(_ view: NSView?) -> String {
@@ -49,13 +49,13 @@ private extension NSWindow {
     var browserPortalHasInteractiveSplitDividerDrag: Bool {
         get {
             let isActive =
-                (objc_getAssociatedObject(self, &cmuxWindowInteractiveSplitDividerDragKey) as? NSNumber)?
+                (objc_getAssociatedObject(self, &programaWindowInteractiveSplitDividerDragKey) as? NSNumber)?
                     .boolValue ?? false
             guard isActive else { return false }
             guard (NSEvent.pressedMouseButtons & 1) != 0 else {
                 objc_setAssociatedObject(
                     self,
-                    &cmuxWindowInteractiveSplitDividerDragKey,
+                    &programaWindowInteractiveSplitDividerDragKey,
                     NSNumber(value: false),
                     .OBJC_ASSOCIATION_RETAIN_NONATOMIC
                 )
@@ -66,7 +66,7 @@ private extension NSWindow {
         set {
             objc_setAssociatedObject(
                 self,
-                &cmuxWindowInteractiveSplitDividerDragKey,
+                &programaWindowInteractiveSplitDividerDragKey,
                 NSNumber(value: newValue),
                 .OBJC_ASSOCIATION_RETAIN_NONATOMIC
             )
@@ -77,13 +77,13 @@ private extension NSWindow {
 private extension WKWebView {
     private var browserPortalNeedsRenderingStateReattach: Bool {
         get {
-            (objc_getAssociatedObject(self, &cmuxBrowserPortalNeedsRenderingStateReattachKey) as? NSNumber)?
+            (objc_getAssociatedObject(self, &programaBrowserPortalNeedsRenderingStateReattachKey) as? NSNumber)?
                 .boolValue ?? false
         }
         set {
             objc_setAssociatedObject(
                 self,
-                &cmuxBrowserPortalNeedsRenderingStateReattachKey,
+                &programaBrowserPortalNeedsRenderingStateReattachKey,
                 NSNumber(value: newValue),
                 .OBJC_ASSOCIATION_RETAIN_NONATOMIC
             )
@@ -1647,8 +1647,8 @@ final class WindowBrowserSlotView: NSView {
         paneDropTargetView.slotView = self
 
         dropZoneOverlayView.wantsLayer = true
-        dropZoneOverlayView.layer?.backgroundColor = cmuxAccentNSColor().withAlphaComponent(0.25).cgColor
-        dropZoneOverlayView.layer?.borderColor = cmuxAccentNSColor().cgColor
+        dropZoneOverlayView.layer?.backgroundColor = programaAccentNSColor().withAlphaComponent(0.25).cgColor
+        dropZoneOverlayView.layer?.borderColor = programaAccentNSColor().cgColor
         dropZoneOverlayView.layer?.borderWidth = 2
         dropZoneOverlayView.layer?.cornerRadius = 8
         dropZoneOverlayView.isHidden = true
@@ -1754,7 +1754,7 @@ final class WindowBrowserSlotView: NSView {
             if let overlay = searchOverlayHostingView {
                 objc_setAssociatedObject(
                     overlay,
-                    &cmuxBrowserSearchOverlayPanelIdAssociationKey,
+                    &programaBrowserSearchOverlayPanelIdAssociationKey,
                     nil,
                     .OBJC_ASSOCIATION_RETAIN_NONATOMIC
                 )
@@ -1781,7 +1781,7 @@ final class WindowBrowserSlotView: NSView {
             overlay.rootView = rootView
             objc_setAssociatedObject(
                 overlay,
-                &cmuxBrowserSearchOverlayPanelIdAssociationKey,
+                &programaBrowserSearchOverlayPanelIdAssociationKey,
                 configuration.panelId,
                 .OBJC_ASSOCIATION_RETAIN_NONATOMIC
             )
@@ -1802,7 +1802,7 @@ final class WindowBrowserSlotView: NSView {
         overlay.translatesAutoresizingMaskIntoConstraints = false
         objc_setAssociatedObject(
             overlay,
-            &cmuxBrowserSearchOverlayPanelIdAssociationKey,
+            &programaBrowserSearchOverlayPanelIdAssociationKey,
             configuration.panelId,
             .OBJC_ASSOCIATION_RETAIN_NONATOMIC
         )
@@ -1836,7 +1836,7 @@ final class WindowBrowserSlotView: NSView {
     func searchOverlayPanelId(for responder: NSResponder) -> UUID? {
         guard let overlay = searchOverlayHostingView else { return nil }
 
-        let panelId = objc_getAssociatedObject(overlay, &cmuxBrowserSearchOverlayPanelIdAssociationKey) as? UUID
+        let panelId = objc_getAssociatedObject(overlay, &programaBrowserSearchOverlayPanelIdAssociationKey) as? UUID
 
         if let view = responder as? NSView,
            view === overlay || view.isDescendant(of: overlay) {
@@ -2609,7 +2609,7 @@ final class WindowBrowserPortal: NSObject {
 
         append(directTransferChild(of: sourceSuperview, containing: primaryWebView) ?? primaryWebView)
 
-        if let inspectorFrontend = primaryWebView.cmuxInspectorFrontendWebView() {
+        if let inspectorFrontend = primaryWebView.programaInspectorFrontendWebView() {
             append(directTransferChild(of: sourceSuperview, containing: inspectorFrontend) ?? inspectorFrontend)
         }
 
@@ -3114,7 +3114,7 @@ final class WindowBrowserPortal: NSObject {
         let anchorId = ObjectIdentifier(anchorView)
         let previousEntry = entriesByWebViewId[webViewId]
         let shouldPreserveExternalFullscreenHost =
-            webView.cmuxIsManagedByExternalFullscreenWindow(relativeTo: window)
+            webView.programaIsManagedByExternalFullscreenWindow(relativeTo: window)
         let containerView = ensureContainerView(
             for: previousEntry ?? Entry(
                 webView: nil,
@@ -3472,7 +3472,7 @@ final class WindowBrowserPortal: NSObject {
             refreshReasons.append("syncAttachContainer")
         }
         let shouldPreserveExternalFullscreenHost =
-            webView.cmuxIsManagedByExternalFullscreenWindow(relativeTo: window)
+            webView.programaIsManagedByExternalFullscreenWindow(relativeTo: window)
         let shouldPreserveExternalHostForHiddenEntry =
             !shouldPreserveExternalFullscreenHost &&
             !entry.visibleInUI &&
@@ -3969,7 +3969,7 @@ enum BrowserWindowPortalRegistry {
     }
 
     private static func installWindowCloseObserverIfNeeded(for window: NSWindow) {
-        guard objc_getAssociatedObject(window, &cmuxWindowBrowserPortalCloseObserverKey) == nil else { return }
+        guard objc_getAssociatedObject(window, &programaWindowBrowserPortalCloseObserverKey) == nil else { return }
         let windowId = ObjectIdentifier(window)
         let observer = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
@@ -3986,7 +3986,7 @@ enum BrowserWindowPortalRegistry {
         }
         objc_setAssociatedObject(
             window,
-            &cmuxWindowBrowserPortalCloseObserverKey,
+            &programaWindowBrowserPortalCloseObserverKey,
             observer,
             .OBJC_ASSOCIATION_RETAIN_NONATOMIC
         )
@@ -4003,11 +4003,11 @@ enum BrowserWindowPortalRegistry {
         webViewToWindowId = webViewToWindowId.filter { $0.value != windowId }
 
         guard let window else { return }
-        if let observer = objc_getAssociatedObject(window, &cmuxWindowBrowserPortalCloseObserverKey) {
+        if let observer = objc_getAssociatedObject(window, &programaWindowBrowserPortalCloseObserverKey) {
             NotificationCenter.default.removeObserver(observer)
         }
-        objc_setAssociatedObject(window, &cmuxWindowBrowserPortalCloseObserverKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        objc_setAssociatedObject(window, &cmuxWindowBrowserPortalKey, nil, .OBJC_ASSOCIATION_RETAIN)
+        objc_setAssociatedObject(window, &programaWindowBrowserPortalCloseObserverKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        objc_setAssociatedObject(window, &programaWindowBrowserPortalKey, nil, .OBJC_ASSOCIATION_RETAIN)
     }
 
     private static func pruneWebViewMappings(for windowId: ObjectIdentifier, validWebViewIds: Set<ObjectIdentifier>) {
@@ -4017,14 +4017,14 @@ enum BrowserWindowPortalRegistry {
     }
 
     private static func portal(for window: NSWindow) -> WindowBrowserPortal {
-        if let existing = objc_getAssociatedObject(window, &cmuxWindowBrowserPortalKey) as? WindowBrowserPortal {
+        if let existing = objc_getAssociatedObject(window, &programaWindowBrowserPortalKey) as? WindowBrowserPortal {
             portalsByWindowId[ObjectIdentifier(window)] = existing
             installWindowCloseObserverIfNeeded(for: window)
             return existing
         }
 
         let portal = WindowBrowserPortal(window: window)
-        objc_setAssociatedObject(window, &cmuxWindowBrowserPortalKey, portal, .OBJC_ASSOCIATION_RETAIN)
+        objc_setAssociatedObject(window, &programaWindowBrowserPortalKey, portal, .OBJC_ASSOCIATION_RETAIN)
         portalsByWindowId[ObjectIdentifier(window)] = portal
         installWindowCloseObserverIfNeeded(for: window)
         return portal

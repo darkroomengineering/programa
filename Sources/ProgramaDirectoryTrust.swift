@@ -6,7 +6,7 @@ import Foundation
 /// Global config (~/.config/programa/programa.json) is always trusted.
 final class ProgramaDirectoryTrust {
     static let shared = ProgramaDirectoryTrust()
-    static let didChangeNotification = Notification.Name("cmux.directoryTrustDidChange")
+    static let didChangeNotification = Notification.Name("programa.directoryTrustDidChange")
 
     private let storePath: String
     private var trustedPaths: Set<String>

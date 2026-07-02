@@ -161,7 +161,7 @@ class UpdateViewModel: ObservableObject {
 
     var iconColor: Color {
         if showsDetectedBackgroundUpdate {
-            return cmuxAccentColor()
+            return programaAccentColor()
         }
         switch effectiveState {
         case .idle:
@@ -171,7 +171,7 @@ class UpdateViewModel: ObservableObject {
         case .checking:
             return .secondary
         case .updateAvailable:
-            return cmuxAccentColor()
+            return programaAccentColor()
         case .downloading, .extracting, .installing:
             return .secondary
         case .notFound:
@@ -183,13 +183,13 @@ class UpdateViewModel: ObservableObject {
 
     var backgroundColor: Color {
         if showsDetectedBackgroundUpdate {
-            return cmuxAccentColor()
+            return programaAccentColor()
         }
         switch effectiveState {
         case .permissionRequest:
             return Color(nsColor: NSColor.systemBlue.blended(withFraction: 0.3, of: .black) ?? .systemBlue)
         case .updateAvailable:
-            return cmuxAccentColor()
+            return programaAccentColor()
         case .notFound:
             return Color(nsColor: NSColor.systemBlue.blended(withFraction: 0.5, of: .black) ?? .systemBlue)
         case .error:

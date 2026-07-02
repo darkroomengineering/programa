@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 import WebKit
 
 extension WKWebView {
-    var cmuxIsElementFullscreenActiveOrTransitioning: Bool {
+    var programaIsElementFullscreenActiveOrTransitioning: Bool {
         switch fullscreenState {
         case .notInFullscreen:
             return false
@@ -16,8 +16,8 @@ extension WKWebView {
         }
     }
 
-    func cmuxIsManagedByExternalFullscreenWindow(relativeTo expectedWindow: NSWindow?) -> Bool {
-        guard cmuxIsElementFullscreenActiveOrTransitioning else { return false }
+    func programaIsManagedByExternalFullscreenWindow(relativeTo expectedWindow: NSWindow?) -> Bool {
+        guard programaIsElementFullscreenActiveOrTransitioning else { return false }
         guard let expectedWindow else { return true }
         return window !== expectedWindow
     }

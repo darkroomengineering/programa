@@ -148,7 +148,7 @@ private final class CLISocketSentryTelemetry {
         for (key, value) in data {
             payload[key] = value
         }
-        let crumb = Breadcrumb(level: .info, category: "cmux.cli")
+        let crumb = Breadcrumb(level: .info, category: "programa.cli")
         crumb.message = message
         crumb.data = payload
         SentrySDK.addBreadcrumb(crumb)
@@ -8051,10 +8051,10 @@ struct CMUXCLI {
         return true
     }
 
-    private static let cmuxThemeOverrideBundleIdentifier = "com.darkroom.programa"
-    private static let cmuxThemesBlockStart = "# cmux themes start"
-    private static let cmuxThemesBlockEnd = "# cmux themes end"
-    private static let cmuxThemesReloadNotificationName = "com.darkroom.programa.themes.reload-config"
+    private static let programaThemeOverrideBundleIdentifier = "com.darkroom.programa"
+    private static let programaThemesBlockStart = "# cmux themes start"
+    private static let programaThemesBlockEnd = "# cmux themes end"
+    private static let programaThemesReloadNotificationName = "com.darkroom.programa.themes.reload-config"
 
     private struct ThemeSelection {
         let rawValue: String?
@@ -8086,8 +8086,8 @@ struct CMUXCLI {
 
         let selection = currentThemeSelection()
         var environment = ProcessInfo.processInfo.environment
-        environment["PROGRAMA_THEME_PICKER_CONFIG"] = try cmuxThemeOverrideConfigURL().path
-        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentProgramaAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
+        environment["PROGRAMA_THEME_PICKER_CONFIG"] = try programaThemeOverrideConfigURL().path
+        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentProgramaAppBundleIdentifier() ?? Self.programaThemeOverrideBundleIdentifier
         environment["PROGRAMA_THEME_PICKER_TARGET"] = defaultThemePickerTargetMode(current: selection).rawValue
         environment["PROGRAMA_THEME_PICKER_COLOR_SCHEME"] = defaultAppearancePrefersDarkThemes() ? "dark" : "light"
         if let light = selection.light {
@@ -8264,7 +8264,7 @@ struct CMUXCLI {
     private func printThemesList(jsonOutput: Bool) throws {
         let themes = availableThemeNames()
         let current = currentThemeSelection()
-        let configPath = try cmuxThemeOverrideConfigURL().path
+        let configPath = try programaThemeOverrideConfigURL().path
 
         if jsonOutput {
             let currentPayload: [String: Any] = [
@@ -8597,8 +8597,8 @@ struct CMUXCLI {
             "~/.config/ghostty/config.ghostty",
             "~/Library/Application Support/com.mitchellh.ghostty/config",
             "~/Library/Application Support/com.mitchellh.ghostty/config.ghostty",
-            "~/Library/Application Support/\(Self.cmuxThemeOverrideBundleIdentifier)/config",
-            "~/Library/Application Support/\(Self.cmuxThemeOverrideBundleIdentifier)/config.ghostty",
+            "~/Library/Application Support/\(Self.programaThemeOverrideBundleIdentifier)/config",
+            "~/Library/Application Support/\(Self.programaThemeOverrideBundleIdentifier)/config.ghostty",
         ]
 
         return rawPaths.map {
@@ -8630,18 +8630,18 @@ struct CMUXCLI {
         return lastValue
     }
 
-    private func cmuxThemeOverrideConfigURL() throws -> URL {
+    private func programaThemeOverrideConfigURL() throws -> URL {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             throw CLIError(message: "Unable to resolve Application Support directory")
         }
         return appSupport
-            .appendingPathComponent(Self.cmuxThemeOverrideBundleIdentifier, isDirectory: true)
+            .appendingPathComponent(Self.programaThemeOverrideBundleIdentifier, isDirectory: true)
             .appendingPathComponent("config.ghostty", isDirectory: false)
     }
 
     private func writeManagedThemeOverride(rawThemeValue: String) throws -> URL {
         let fileManager = FileManager.default
-        let configURL = try cmuxThemeOverrideConfigURL()
+        let configURL = try programaThemeOverrideConfigURL()
         let directoryURL = configURL.deletingLastPathComponent()
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true, attributes: nil)
 
@@ -8649,9 +8649,9 @@ struct CMUXCLI {
         let strippedContents = removingManagedThemeOverride(from: existingContents)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let block = """
-        \(Self.cmuxThemesBlockStart)
+        \(Self.programaThemesBlockStart)
         theme = \(rawThemeValue)
-        \(Self.cmuxThemesBlockEnd)
+        \(Self.programaThemesBlockEnd)
         """
 
         let nextContents = strippedContents.isEmpty ? "\(block)\n" : "\(strippedContents)\n\n\(block)\n"
@@ -8661,7 +8661,7 @@ struct CMUXCLI {
 
     private func clearManagedThemeOverride() throws -> URL {
         let fileManager = FileManager.default
-        let configURL = try cmuxThemeOverrideConfigURL()
+        let configURL = try programaThemeOverrideConfigURL()
         guard let existingContents = try readOptionalThemeOverrideContents(at: configURL) else {
             return configURL
         }
@@ -8717,9 +8717,9 @@ struct CMUXCLI {
     }
 
     private func reloadThemesIfPossible() -> ThemeReloadStatus {
-        let bundleIdentifier = currentProgramaAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
+        let bundleIdentifier = currentProgramaAppBundleIdentifier() ?? Self.programaThemeOverrideBundleIdentifier
         DistributedNotificationCenter.default().post(
-            name: Notification.Name(Self.cmuxThemesReloadNotificationName),
+            name: Notification.Name(Self.programaThemesReloadNotificationName),
             object: nil,
             userInfo: ["bundleIdentifier": bundleIdentifier]
         )
@@ -10297,7 +10297,7 @@ struct CMUXCLI {
         explicitPassword: String?,
         focusedContext: TmuxCompatFocusedContext?,
         tmuxPathPrefix: String,
-        cmuxBinEnvVar: String,
+        programaBinEnvVar: String,
         termOverrideEnvVar: String,
         extraEnvVars: [(key: String, value: String)] = []
     ) {
@@ -10317,7 +10317,7 @@ struct CMUXCLI {
             ?? "%1"
         let fakeTerm = processEnvironment[termOverrideEnvVar] ?? "screen-256color"
 
-        setenv(cmuxBinEnvVar, executablePath, 1)
+        setenv(programaBinEnvVar, executablePath, 1)
         setenv("PATH", updatedPath, 1)
         setenv("TMUX", fakeTmuxValue, 1)
         setenv("TMUX_PANE", fakeTmuxPane, 1)
@@ -10367,7 +10367,7 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-claude-teams",
-            cmuxBinEnvVar: "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
+            programaBinEnvVar: "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
             termOverrideEnvVar: "PROGRAMA_CLAUDE_TEAMS_TERM",
             extraEnvVars: [
                 (key: "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", value: "1"),
@@ -10945,7 +10945,7 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-omo",
-            cmuxBinEnvVar: "PROGRAMA_OMO_PROGRAMA_BIN",
+            programaBinEnvVar: "PROGRAMA_OMO_PROGRAMA_BIN",
             termOverrideEnvVar: "PROGRAMA_OMO_TERM",
             extraEnvVars: [(key: "OPENCODE_PORT", value: openCodePort)]
         )
@@ -11067,7 +11067,7 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-omx",
-            cmuxBinEnvVar: "PROGRAMA_OMX_PROGRAMA_BIN",
+            programaBinEnvVar: "PROGRAMA_OMX_PROGRAMA_BIN",
             termOverrideEnvVar: "PROGRAMA_OMX_TERM"
         )
     }
@@ -11170,7 +11170,7 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-omc",
-            cmuxBinEnvVar: "PROGRAMA_OMC_PROGRAMA_BIN",
+            programaBinEnvVar: "PROGRAMA_OMC_PROGRAMA_BIN",
             termOverrideEnvVar: "PROGRAMA_OMC_TERM"
         )
         // omc wraps Claude Code, so it needs the same NODE_OPTIONS restore module
@@ -13406,9 +13406,9 @@ struct CMUXCLI {
         }
 
         var hooks = existing["hooks"] as? [String: Any] ?? [:]
-        let cmuxHooks = Self.codexHooksJSON["hooks"] as! [String: Any]
-        for (eventName, cmuxGroups) in cmuxHooks {
-            guard let cmuxGroupArray = cmuxGroups as? [[String: Any]] else { continue }
+        let programaHooks = Self.codexHooksJSON["hooks"] as! [String: Any]
+        for (eventName, programaGroups) in programaHooks {
+            guard let programaGroupArray = programaGroups as? [[String: Any]] else { continue }
             var eventGroups = hooks[eventName] as? [[String: Any]] ?? []
             eventGroups.removeAll { group in
                 guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
@@ -13416,7 +13416,7 @@ struct CMUXCLI {
                     (hook["command"] as? String)?.contains(Self.codexHookCommandMarker) == true
                 }
             }
-            eventGroups.append(contentsOf: cmuxGroupArray)
+            eventGroups.append(contentsOf: programaGroupArray)
             hooks[eventName] = eventGroups
         }
         existing["hooks"] = hooks

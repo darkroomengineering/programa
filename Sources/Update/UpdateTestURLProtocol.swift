@@ -4,7 +4,7 @@ import Foundation
 final class UpdateTestURLProtocol: URLProtocol {
     static let host = "cmux.test"
     static let appcastPath = "/appcast.xml"
-    static let updatePath = "/cmux-test.zip"
+    static let updatePath = "/programa-test.zip"
 
     private static var isRegistered = false
     private static let registrationLock = NSLock()

@@ -40,7 +40,7 @@ func sidebarActiveForegroundNSColor(
     return baseColor.withAlphaComponent(clampedOpacity)
 }
 
-func cmuxAccentNSColor(for colorScheme: ColorScheme) -> NSColor {
+func programaAccentNSColor(for colorScheme: ColorScheme) -> NSColor {
     switch colorScheme {
     case .dark:
         return NSColor(
@@ -59,20 +59,20 @@ func cmuxAccentNSColor(for colorScheme: ColorScheme) -> NSColor {
     }
 }
 
-func cmuxAccentNSColor(for appAppearance: NSAppearance?) -> NSColor {
+func programaAccentNSColor(for appAppearance: NSAppearance?) -> NSColor {
     let bestMatch = appAppearance?.bestMatch(from: [.darkAqua, .aqua])
     let scheme: ColorScheme = (bestMatch == .darkAqua) ? .dark : .light
-    return cmuxAccentNSColor(for: scheme)
+    return programaAccentNSColor(for: scheme)
 }
 
-func cmuxAccentNSColor() -> NSColor {
+func programaAccentNSColor() -> NSColor {
     NSColor(name: nil) { appearance in
-        cmuxAccentNSColor(for: appearance)
+        programaAccentNSColor(for: appearance)
     }
 }
 
-func cmuxAccentColor() -> Color {
-    Color(nsColor: cmuxAccentNSColor())
+func programaAccentColor() -> Color {
+    Color(nsColor: programaAccentNSColor())
 }
 
 struct SidebarRemoteErrorCopyEntry: Equatable {
@@ -117,7 +117,7 @@ func sidebarSelectedWorkspaceBackgroundNSColor(for colorScheme: ColorScheme) -> 
        let parsed = NSColor(hex: hex) {
         return parsed
     }
-    return cmuxAccentNSColor(for: colorScheme)
+    return programaAccentNSColor(for: colorScheme)
 }
 
 func sidebarSelectedWorkspaceForegroundNSColor(opacity: CGFloat) -> NSColor {
@@ -956,8 +956,8 @@ final class FileDropOverlayView: NSView {
 var fileDropOverlayKey: UInt8 = 0
 private var commandPaletteWindowOverlayKey: UInt8 = 0
 private var tmuxWorkspacePaneWindowOverlayKey: UInt8 = 0
-let commandPaletteOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("cmux.commandPalette.overlay.container")
-let tmuxWorkspacePaneOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("cmux.tmuxWorkspacePane.overlay.container")
+let commandPaletteOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("programa.commandPalette.overlay.container")
+let tmuxWorkspacePaneOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("programa.tmuxWorkspacePane.overlay.container")
 
 enum CommandPaletteOverlayPromotionPolicy {
     static func shouldPromote(previouslyVisible: Bool, isVisible: Bool) -> Bool {
@@ -1798,7 +1798,7 @@ struct ContentView: View {
     @EnvironmentObject var notificationStore: TerminalNotificationStore
     @EnvironmentObject var sidebarState: SidebarState
     @EnvironmentObject var sidebarSelectionState: SidebarSelectionState
-    @EnvironmentObject var cmuxConfigStore: ProgramaConfigStore
+    @EnvironmentObject var programaConfigStore: ProgramaConfigStore
     @State private var sidebarWidth: CGFloat = 200
     @State private var hoveredResizerHandles: Set<SidebarResizerHandle> = []
     @State private var isResizerDragging = false
@@ -3988,7 +3988,7 @@ struct ContentView: View {
                             let isHovered = commandPaletteHoveredResultIndex == index
                             let trailingLabel = commandPaletteTrailingLabel(for: result.command)
                             let rowBackground: Color = isSelected
-                                ? cmuxAccentColor().opacity(0.12)
+                                ? programaAccentColor().opacity(0.12)
                                 : (isHovered ? Color.primary.opacity(0.08) : .clear)
 
                             Button {
@@ -5664,7 +5664,7 @@ struct ContentView: View {
     private func commandPaletteCommandsFingerprint(commandsContext: CommandPaletteCommandsContext) -> Int {
         var hasher = Hasher()
         hasher.combine(commandsContext.snapshot.fingerprint())
-        hasher.combine(cmuxConfigStore.configRevision)
+        hasher.combine(programaConfigStore.configRevision)
         return hasher.finalize()
     }
 
@@ -7073,13 +7073,13 @@ struct ContentView: View {
             )
         )
 
-        let cmuxConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "programa.json"))
-        for command in cmuxConfigStore.loadedCommands {
+        let programaConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "programa.json"))
+        for command in programaConfigStore.loadedCommands {
             let commandName = sanitizeProgramaConfigPaletteText(command.name)
             let subtitle = command.description
                 .map { sanitizeProgramaConfigPaletteText($0) }
                 .flatMap { $0.isEmpty ? nil : constant($0) }
-                ?? cmuxConfigDefaultSubtitle
+                ?? programaConfigDefaultSubtitle
             contributions.append(
                 CommandPaletteCommandContribution(
                     commandId: command.id,
@@ -7453,10 +7453,10 @@ struct ContentView: View {
             }
         }
 
-        for command in cmuxConfigStore.loadedCommands {
+        for command in programaConfigStore.loadedCommands {
             let captured = command
-            let sourcePath = cmuxConfigStore.commandSourcePaths[command.id]
-            let globalPath = cmuxConfigStore.globalConfigPath
+            let sourcePath = programaConfigStore.commandSourcePaths[command.id]
+            let globalPath = programaConfigStore.globalConfigPath
             registry.register(commandId: command.id) {
                 let rawCwd = tabManager.selectedWorkspace?.currentDirectory
                 let baseCwd = (rawCwd?.isEmpty == false) ? rawCwd!
@@ -10604,8 +10604,8 @@ private enum FeedbackComposerClient {
 }
 
 enum SidebarDragLifecycleNotification {
-    static let stateDidChange = Notification.Name("cmux.sidebarDragStateDidChange")
-    static let requestClear = Notification.Name("cmux.sidebarDragRequestClear")
+    static let stateDidChange = Notification.Name("programa.sidebarDragStateDidChange")
+    static let requestClear = Notification.Name("programa.sidebarDragRequestClear")
     static let tabIdKey = "tabId"
     static let reasonKey = "reason"
 
@@ -12266,7 +12266,7 @@ private struct SidebarEmptyArea: View {
             .overlay(alignment: .top) {
                 if shouldShowTopDropIndicator {
                     Rectangle()
-                        .fill(cmuxAccentColor())
+                        .fill(programaAccentColor())
                         .frame(height: 2)
                         .padding(.horizontal, 8)
                         .offset(y: -(rowSpacing / 2))
@@ -12552,7 +12552,7 @@ private struct TabItemView: View, Equatable {
         if let hex = sidebarNotificationBadgeColorHex, let nsColor = NSColor(hex: hex) {
             return Color(nsColor: nsColor)
         }
-        return usesInvertedActiveForeground ? Color.white.opacity(0.25) : cmuxAccentColor()
+        return usesInvertedActiveForeground ? Color.white.opacity(0.25) : programaAccentColor()
     }
 
     private var activeProgressTrackColor: Color {
@@ -12560,7 +12560,7 @@ private struct TabItemView: View, Equatable {
     }
 
     private var activeProgressFillColor: Color {
-        usesInvertedActiveForeground ? Color.white.opacity(0.8) : cmuxAccentColor()
+        usesInvertedActiveForeground ? Color.white.opacity(0.8) : programaAccentColor()
     }
 
     private var shortcutHintEmphasis: Double {
@@ -13013,7 +13013,7 @@ private struct TabItemView: View, Equatable {
         .overlay(alignment: .top) {
             if showsCenteredTopDropIndicator {
                 Rectangle()
-                    .fill(cmuxAccentColor())
+                    .fill(programaAccentColor())
                     .frame(height: 2)
                     .padding(.horizontal, 8)
                     .offset(y: index == 0 ? 0 : -(rowSpacing / 2))
@@ -13359,14 +13359,14 @@ private struct TabItemView: View, Equatable {
         if let hex = sidebarSelectionColorHex, let parsed = NSColor(hex: hex) {
             return parsed
         }
-        return cmuxAccentNSColor(for: colorScheme)
+        return programaAccentNSColor(for: colorScheme)
     }
 
     private var backgroundColor: Color {
         switch activeTabIndicatorStyle {
         case .leftRail:
             if isActive        { return Color(nsColor: selectionBackgroundColor) }
-            if isMultiSelected { return cmuxAccentColor().opacity(0.25) }
+            if isMultiSelected { return programaAccentColor().opacity(0.25) }
             return Color.clear
         case .solidFill:
             if isActive { return Color(nsColor: selectionBackgroundColor) }
@@ -13374,7 +13374,7 @@ private struct TabItemView: View, Equatable {
                 if isMultiSelected { return custom.opacity(0.35) }
                 return custom.opacity(0.7)
             }
-            if isMultiSelected { return cmuxAccentColor().opacity(0.25) }
+            if isMultiSelected { return programaAccentColor().opacity(0.25) }
             return Color.clear
         }
     }
@@ -14639,7 +14639,7 @@ private enum SidebarTabDragPayload {
     static let typeIdentifier = "com.darkroom.programa.sidebar-tab-reorder"
     static let dropContentType = UTType(exportedAs: typeIdentifier)
     static let dropContentTypes: [UTType] = [dropContentType]
-    private static let prefix = "cmux.sidebar-tab."
+    private static let prefix = "programa.sidebar-tab."
 
     static func provider(for tabId: UUID) -> NSItemProvider {
         let provider = NSItemProvider()

@@ -4,7 +4,7 @@ import WebKit
 import AppKit
 import ObjectiveC
 
-private var cmuxBrowserPanelNeedsRenderingStateReattachKey: UInt8 = 0
+private var programaBrowserPanelNeedsRenderingStateReattachKey: UInt8 = 0
 
 private func browserPanelViewObjectID(_ object: AnyObject?) -> String {
     guard let object else { return "nil" }
@@ -28,32 +28,32 @@ private extension NSObject {
 }
 
 private extension WKWebView {
-    private var cmuxBrowserPanelNeedsRenderingStateReattach: Bool {
+    private var programaBrowserPanelNeedsRenderingStateReattach: Bool {
         get {
-            (objc_getAssociatedObject(self, &cmuxBrowserPanelNeedsRenderingStateReattachKey) as? NSNumber)?
+            (objc_getAssociatedObject(self, &programaBrowserPanelNeedsRenderingStateReattachKey) as? NSNumber)?
                 .boolValue ?? false
         }
         set {
             objc_setAssociatedObject(
                 self,
-                &cmuxBrowserPanelNeedsRenderingStateReattachKey,
+                &programaBrowserPanelNeedsRenderingStateReattachKey,
                 NSNumber(value: newValue),
                 .OBJC_ASSOCIATION_RETAIN_NONATOMIC
             )
         }
     }
 
-    var cmuxBrowserPanelRequiresRenderingStateReattach: Bool {
-        cmuxBrowserPanelNeedsRenderingStateReattach
+    var programaBrowserPanelRequiresRenderingStateReattach: Bool {
+        programaBrowserPanelNeedsRenderingStateReattach
     }
 
-    private func cmuxBrowserPanelApplyRenderingStateRefresh(
+    private func programaBrowserPanelApplyRenderingStateRefresh(
         reason: String,
         force: Bool
     ) {
-        guard force || cmuxBrowserPanelNeedsRenderingStateReattach else { return }
+        guard force || programaBrowserPanelNeedsRenderingStateReattach else { return }
         guard window != nil else { return }
-        cmuxBrowserPanelNeedsRenderingStateReattach = false
+        programaBrowserPanelNeedsRenderingStateReattach = false
 
         let firedSelectors = [
             "viewDidUnhide",
@@ -87,8 +87,8 @@ private extension WKWebView {
 #endif
     }
 
-    func cmuxBrowserPanelNotifyHidden(reason: String) {
-        cmuxBrowserPanelNeedsRenderingStateReattach = true
+    func programaBrowserPanelNotifyHidden(reason: String) {
+        programaBrowserPanelNeedsRenderingStateReattach = true
         let firedSelectors = ["viewDidHide", "_exitInWindow"].filter {
             browserPanelCallVoidIfAvailable($0)
         }
@@ -102,12 +102,12 @@ private extension WKWebView {
 #endif
     }
 
-    func cmuxBrowserPanelReattachRenderingState(reason: String) {
-        cmuxBrowserPanelApplyRenderingStateRefresh(reason: reason, force: false)
+    func programaBrowserPanelReattachRenderingState(reason: String) {
+        programaBrowserPanelApplyRenderingStateRefresh(reason: reason, force: false)
     }
 
-    func cmuxBrowserPanelForceRenderingStateRefresh(reason: String) {
-        cmuxBrowserPanelApplyRenderingStateRefresh(reason: reason, force: true)
+    func programaBrowserPanelForceRenderingStateRefresh(reason: String) {
+        programaBrowserPanelApplyRenderingStateRefresh(reason: reason, force: true)
     }
 }
 
@@ -179,7 +179,7 @@ enum BrowserDevToolsIconColorOption: String, CaseIterable, Identifiable {
             // Matches Bonsplit tab icon tint for active tabs.
             return Color(nsColor: .labelColor)
         case .accent:
-            return cmuxAccentColor()
+            return programaAccentColor()
         case .tertiary:
             return Color(nsColor: .tertiaryLabelColor)
         }
@@ -303,7 +303,7 @@ private struct OmnibarAddressButtonStyleBody: View {
 }
 
 private extension View {
-    func cmuxFlatSymbolColorRendering() -> some View {
+    func programaFlatSymbolColorRendering() -> some View {
         // `symbolColorRenderingMode(.flat)` is not available in the current SDK
         // used by CI/local builds. Keep this modifier as a compatibility no-op.
         self
@@ -578,8 +578,8 @@ struct BrowserPanelView: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: FocusFlashPattern.ringCornerRadius)
-                .stroke(cmuxAccentColor().opacity(focusFlashOpacity), lineWidth: 3)
-                .shadow(color: cmuxAccentColor().opacity(focusFlashOpacity * 0.35), radius: 10)
+                .stroke(programaAccentColor().opacity(focusFlashOpacity), lineWidth: 3)
+                .shadow(color: programaAccentColor().opacity(focusFlashOpacity * 0.35), radius: 10)
                 .padding(FocusFlashPattern.ringInset)
                 .allowsHitTesting(false)
         }
@@ -946,7 +946,7 @@ struct BrowserPanelView: View {
         }) {
             Image(systemName: "cursorarrow.click.2")
                 .symbolRenderingMode(.monochrome)
-                .cmuxFlatSymbolColorRendering()
+                .programaFlatSymbolColorRendering()
                 .font(.system(size: devToolsButtonIconSize, weight: .medium))
                 .foregroundStyle(panel.isReactGrabActive ? Color.accentColor : Color.secondary)
                 .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
@@ -963,7 +963,7 @@ struct BrowserPanelView: View {
         }) {
             Image(systemName: devToolsIconOption.rawValue)
                 .symbolRenderingMode(.monochrome)
-                .cmuxFlatSymbolColorRendering()
+                .programaFlatSymbolColorRendering()
                 .font(.system(size: devToolsButtonIconSize, weight: .medium))
                 .foregroundStyle(devToolsColorOption.color)
                 .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
@@ -980,7 +980,7 @@ struct BrowserPanelView: View {
         }) {
             Image(systemName: "person.crop.circle")
                 .symbolRenderingMode(.monochrome)
-                .cmuxFlatSymbolColorRendering()
+                .programaFlatSymbolColorRendering()
                 .font(.system(size: devToolsButtonIconSize, weight: .medium))
                 .foregroundStyle(devToolsColorOption.color)
                 .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
@@ -1008,7 +1008,7 @@ struct BrowserPanelView: View {
         }) {
             Image(systemName: browserThemeMode.iconName)
                 .symbolRenderingMode(.monochrome)
-                .cmuxFlatSymbolColorRendering()
+                .programaFlatSymbolColorRendering()
                 .font(.system(size: devToolsButtonIconSize, weight: .medium))
                 .foregroundStyle(browserThemeModeIconColor)
                 .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
@@ -1230,7 +1230,7 @@ struct BrowserPanelView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: omnibarPillCornerRadius, style: .continuous)
-                .stroke(addressBarFocused ? cmuxAccentColor() : Color.clear, lineWidth: 1)
+                .stroke(addressBarFocused ? programaAccentColor() : Color.clear, lineWidth: 1)
         )
         .accessibilityElement(children: .contain)
         .background {
@@ -1357,20 +1357,20 @@ struct BrowserPanelView: View {
         reason: String,
         isPanelFocusedOverride: Bool? = nil
     ) {
-        guard let cmuxWebView = panel.webView as? ProgramaWebView else { return }
+        guard let programaWebView = panel.webView as? ProgramaWebView else { return }
         let isPanelFocused = isPanelFocusedOverride ?? isFocused
         let next = isPanelFocused && !panel.shouldSuppressWebViewFocus()
-        if cmuxWebView.allowsFirstResponderAcquisition != next {
+        if programaWebView.allowsFirstResponderAcquisition != next {
 #if DEBUG
             dlog(
                 "browser.focus.policy.resync panel=\(panel.id.uuidString.prefix(5)) " +
-                "web=\(ObjectIdentifier(cmuxWebView)) old=\(cmuxWebView.allowsFirstResponderAcquisition ? 1 : 0) " +
+                "web=\(ObjectIdentifier(programaWebView)) old=\(programaWebView.allowsFirstResponderAcquisition ? 1 : 0) " +
                 "new=\(next ? 1 : 0) reason=\(reason) " +
                 "panelFocusedUsed=\(isPanelFocused ? 1 : 0)"
             )
 #endif
         }
-        cmuxWebView.allowsFirstResponderAcquisition = next
+        programaWebView.allowsFirstResponderAcquisition = next
     }
 
     private func setAddressBarFocused(_ focused: Bool, reason: String) {
@@ -4868,7 +4868,7 @@ struct WebViewRepresentable: NSViewRepresentable {
 
         private func notifyHostedWebKitHidden(reason: String) {
             for webView in hostedWebKitSubviews {
-                webView.cmuxBrowserPanelNotifyHidden(reason: reason)
+                webView.programaBrowserPanelNotifyHidden(reason: reason)
             }
         }
 
@@ -4913,9 +4913,9 @@ struct WebViewRepresentable: NSViewRepresentable {
                 }
                 webView.layoutSubtreeIfNeeded()
                 if forceLifecycleRefresh {
-                    webView.cmuxBrowserPanelForceRenderingStateRefresh(reason: reason)
+                    webView.programaBrowserPanelForceRenderingStateRefresh(reason: reason)
                 } else {
-                    webView.cmuxBrowserPanelReattachRenderingState(reason: reason)
+                    webView.programaBrowserPanelReattachRenderingState(reason: reason)
                 }
                 webView.displayIfNeeded()
             }
@@ -6038,7 +6038,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         for webView: WKWebView,
         relativeTo expectedWindow: NSWindow?
     ) -> Bool {
-        webView.cmuxIsManagedByExternalFullscreenWindow(relativeTo: expectedWindow)
+        webView.programaIsManagedByExternalFullscreenWindow(relativeTo: expectedWindow)
     }
 
     private static func localInlineTransferRoot(for webView: WKWebView) -> NSView? {
@@ -6084,7 +6084,7 @@ struct WebViewRepresentable: NSViewRepresentable {
 
         append(directTransferChild(of: sourceSuperview, containing: primaryWebView) ?? primaryWebView)
 
-        if let inspectorFrontend = primaryWebView.cmuxInspectorFrontendWebView() {
+        if let inspectorFrontend = primaryWebView.programaInspectorFrontendWebView() {
             append(directTransferChild(of: sourceSuperview, containing: inspectorFrontend) ?? inspectorFrontend)
         }
 
@@ -6256,7 +6256,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             width: preferredAttachedWidthState.width,
             widthFraction: preferredAttachedWidthState.widthFraction
         )
-        host.setHostedInspectorFrontendWebView(webView.cmuxInspectorFrontendWebView())
+        host.setHostedInspectorFrontendWebView(webView.programaInspectorFrontendWebView())
         host.onPreferredHostedInspectorWidthChanged = { [weak browserPanel = panel] width, _ in
             guard let browserPanel else { return }
             browserPanel.recordPreferredAttachedDeveloperToolsWidth(
@@ -6313,7 +6313,7 @@ struct WebViewRepresentable: NSViewRepresentable {
                         : "localInline.reconcile.existingHost"
                 )
             }
-            host.setHostedInspectorFrontendWebView(webView.cmuxInspectorFrontendWebView())
+            host.setHostedInspectorFrontendWebView(webView.programaInspectorFrontendWebView())
             let didRevealDeveloperToolsAfterAttach =
                 !wasDeveloperToolsVisible && panel.isDeveloperToolsVisible()
             webView.needsLayout = true
@@ -6347,7 +6347,7 @@ struct WebViewRepresentable: NSViewRepresentable {
                         reason: "localInline.reconcile.async"
                     )
                 }
-                host.setHostedInspectorFrontendWebView(webView.cmuxInspectorFrontendWebView())
+                host.setHostedInspectorFrontendWebView(webView.programaInspectorFrontendWebView())
                 host.refreshHostedWebKitPresentation(
                     reason: didAttachWebViewToLocalHost
                         ? "localInline.update.async"
@@ -6714,19 +6714,19 @@ struct WebViewRepresentable: NSViewRepresentable {
         webView: WKWebView,
         isPanelFocused: Bool
     ) {
-        guard let cmuxWebView = webView as? ProgramaWebView else { return }
+        guard let programaWebView = webView as? ProgramaWebView else { return }
         let next = isPanelFocused && !panel.shouldSuppressWebViewFocus()
-        if cmuxWebView.allowsFirstResponderAcquisition != next {
+        if programaWebView.allowsFirstResponderAcquisition != next {
 #if DEBUG
             dlog(
                 "browser.focus.policy panel=\(panel.id.uuidString.prefix(5)) " +
-                "web=\(ObjectIdentifier(cmuxWebView)) old=\(cmuxWebView.allowsFirstResponderAcquisition ? 1 : 0) " +
+                "web=\(ObjectIdentifier(programaWebView)) old=\(programaWebView.allowsFirstResponderAcquisition ? 1 : 0) " +
                 "new=\(next ? 1 : 0) isPanelFocused=\(isPanelFocused ? 1 : 0) " +
                 "suppress=\(panel.shouldSuppressWebViewFocus() ? 1 : 0)"
             )
 #endif
         }
-        cmuxWebView.allowsFirstResponderAcquisition = next
+        programaWebView.allowsFirstResponderAcquisition = next
     }
 
     static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {

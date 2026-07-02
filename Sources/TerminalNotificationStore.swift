@@ -839,7 +839,7 @@ final class TerminalNotificationStore: ObservableObject {
             content.categoryIdentifier = Self.categoryIdentifier
 
             let request = UNNotificationRequest(
-                identifier: "cmux.settings.test.\(UUID().uuidString)",
+                identifier: "programa.settings.test.\(UUID().uuidString)",
                 content: content,
                 trigger: nil
             )

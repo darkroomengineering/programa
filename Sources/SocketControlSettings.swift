@@ -63,7 +63,7 @@ enum SocketControlMode: String, CaseIterable, Identifiable {
 enum SocketControlPasswordStore {
     static let directoryName = "programa"
     static let fileName = "socket-control-password"
-    static let didChangeNotification = Notification.Name("cmux.socketControlPasswordDidChange")
+    static let didChangeNotification = Notification.Name("programa.socketControlPasswordDidChange")
     private static let keychainMigrationDefaultsKey = "socketControlPasswordMigrationVersion"
     private static let keychainMigrationVersion = 1
     private static let legacyKeychainService = "com.darkroom.programa.socket-control"

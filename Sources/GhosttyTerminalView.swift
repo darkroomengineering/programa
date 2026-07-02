@@ -44,14 +44,14 @@ func cmuxShouldUseClearWindowBackground(for opacity: Double) -> Bool {
     cmuxShouldUseTransparentBackgroundWindow() || opacity < 0.999
 }
 
-private func cmuxTransparentWindowBaseColor() -> NSColor {
+private func programaTransparentWindowBaseColor() -> NSColor {
     // A tiny non-zero alpha matches Ghostty's window compositing behavior on macOS and
     // avoids visual artifacts that can happen with a fully clear window background.
     NSColor.white.withAlphaComponent(0.001)
 }
 #endif
 
-private func cmuxRuntimeReadClipboardCallback(
+private func programaRuntimeReadClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
     _ location: ghostty_clipboard_e,
     _ state: UnsafeMutableRawPointer?
@@ -60,7 +60,7 @@ private func cmuxRuntimeReadClipboardCallback(
 }
 
 #if DEBUG
-private func cmuxChildExitProbePath() -> String? {
+private func programaChildExitProbePath() -> String? {
     let env = ProcessInfo.processInfo.environment
     guard env["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_SETUP"] == "1",
           let path = env["PROGRAMA_UI_TEST_CHILD_EXIT_KEYBOARD_PATH"],
@@ -70,7 +70,7 @@ private func cmuxChildExitProbePath() -> String? {
     return path
 }
 
-private func cmuxLoadChildExitProbe(at path: String) -> [String: String] {
+private func programaLoadChildExitProbe(at path: String) -> [String: String] {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
           let object = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
         return [:]
@@ -78,9 +78,9 @@ private func cmuxLoadChildExitProbe(at path: String) -> [String: String] {
     return object
 }
 
-private func cmuxWriteChildExitProbe(_ updates: [String: String], increments: [String: Int] = [:]) {
-    guard let path = cmuxChildExitProbePath() else { return }
-    var payload = cmuxLoadChildExitProbe(at: path)
+private func programaWriteChildExitProbe(_ updates: [String: String], increments: [String: Int] = [:]) {
+    guard let path = programaChildExitProbePath() else { return }
+    var payload = programaLoadChildExitProbe(at: path)
     for (key, by) in increments {
         let current = Int(payload[key] ?? "") ?? 0
         payload[key] = String(current + by)
@@ -92,7 +92,7 @@ private func cmuxWriteChildExitProbe(_ updates: [String: String], increments: [S
     try? out.write(to: URL(fileURLWithPath: path), options: .atomic)
 }
 
-private func cmuxScalarHex(_ value: String?) -> String {
+private func programaScalarHex(_ value: String?) -> String {
     guard let value else { return "" }
     return value.unicodeScalars
         .map { String(format: "%04X", $0.value) }
@@ -470,12 +470,12 @@ func cmuxPasteboardImagePathForTesting(_ pasteboard: NSPasteboard) -> String? {
     GhosttyPasteboardHelper.saveClipboardImageIfNeeded(from: pasteboard)
 }
 
-func cmuxResolveQuicklookPathForTesting(
+func programaResolveQuicklookPathForTesting(
     _ rawText: String,
     cwd: String,
     existingPaths: Set<String>
 ) -> String? {
-    cmuxResolveQuicklookPath(
+    programaResolveQuicklookPath(
         rawText,
         cwd: cwd,
         fileExists: { path in
@@ -485,7 +485,7 @@ func cmuxResolveQuicklookPathForTesting(
 }
 #endif
 
-private func cmuxResolveQuicklookPath(
+private func programaResolveQuicklookPath(
     _ rawText: String,
     cwd: String?,
     fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
@@ -494,7 +494,7 @@ private func cmuxResolveQuicklookPath(
     guard !trimmed.isEmpty else { return nil }
 
     var seenPaths: Set<String> = []
-    for token in cmuxQuicklookPathCandidates(from: trimmed) {
+    for token in programaQuicklookPathCandidates(from: trimmed) {
         let normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedToken.isEmpty else { continue }
 
@@ -517,7 +517,7 @@ private func cmuxResolveQuicklookPath(
     return nil
 }
 
-private func cmuxQuicklookPathCandidates(from rawText: String) -> [String] {
+private func programaQuicklookPathCandidates(from rawText: String) -> [String] {
     var candidates: [String] = []
 
     func append(_ candidate: String?) {
@@ -529,14 +529,14 @@ private func cmuxQuicklookPathCandidates(from rawText: String) -> [String] {
 
     append(rawText)
 
-    let unescaped = cmuxUnescapeShellToken(rawText)
+    let unescaped = programaUnescapeShellToken(rawText)
     if unescaped != rawText {
         append(unescaped)
     }
 
-    if let unquoted = cmuxUnquoteShellToken(rawText) {
+    if let unquoted = programaUnquoteShellToken(rawText) {
         append(unquoted)
-        let unescapedUnquoted = cmuxUnescapeShellToken(unquoted)
+        let unescapedUnquoted = programaUnescapeShellToken(unquoted)
         if unescapedUnquoted != unquoted {
             append(unescapedUnquoted)
         }
@@ -545,7 +545,7 @@ private func cmuxQuicklookPathCandidates(from rawText: String) -> [String] {
     return candidates
 }
 
-private func cmuxUnquoteShellToken(_ token: String) -> String? {
+private func programaUnquoteShellToken(_ token: String) -> String? {
     guard token.count >= 2,
           let first = token.first,
           let last = token.last,
@@ -556,7 +556,7 @@ private func cmuxUnquoteShellToken(_ token: String) -> String? {
     return String(token.dropFirst().dropLast())
 }
 
-private func cmuxUnescapeShellToken(_ token: String) -> String {
+private func programaUnescapeShellToken(_ token: String) -> String {
     var output = String.UnicodeScalarView()
     output.reserveCapacity(token.unicodeScalars.count)
     var escaping = false
@@ -583,7 +583,7 @@ private func cmuxUnescapeShellToken(_ token: String) -> String {
     return String(output)
 }
 
-private func cmuxVisibleTerminalLines(from text: String, rows: Int) -> [String] {
+private func programaVisibleTerminalLines(from text: String, rows: Int) -> [String] {
     let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
     if lines.count > rows {
         return Array(lines.suffix(rows))
@@ -591,7 +591,7 @@ private func cmuxVisibleTerminalLines(from text: String, rows: Int) -> [String] 
     return lines
 }
 
-private func cmuxShellEscapedTokenContainingColumn(
+private func programaShellEscapedTokenContainingColumn(
     in line: String,
     column: Int
 ) -> String? {
@@ -635,7 +635,7 @@ private func cmuxShellEscapedTokenContainingColumn(
     return nil
 }
 
-private func cmuxIsHardPathDelimiter(
+private func programaIsHardPathDelimiter(
     in characters: [Character],
     at index: Int
 ) -> Bool {
@@ -650,21 +650,21 @@ private func cmuxIsHardPathDelimiter(
     return previousIsWhitespace || nextIsWhitespace
 }
 
-private func cmuxRawPathSegmentContainingColumn(
+private func programaRawPathSegmentContainingColumn(
     in line: String,
     column: Int
 ) -> String? {
     let characters = Array(line)
     guard !characters.isEmpty, column >= 0, column < characters.count else { return nil }
-    guard !cmuxIsHardPathDelimiter(in: characters, at: column) else { return nil }
+    guard !programaIsHardPathDelimiter(in: characters, at: column) else { return nil }
 
     var start = column
-    while start > 0, !cmuxIsHardPathDelimiter(in: characters, at: start - 1) {
+    while start > 0, !programaIsHardPathDelimiter(in: characters, at: start - 1) {
         start -= 1
     }
 
     var end = column
-    while (end + 1) < characters.count, !cmuxIsHardPathDelimiter(in: characters, at: end + 1) {
+    while (end + 1) < characters.count, !programaIsHardPathDelimiter(in: characters, at: end + 1) {
         end += 1
     }
 
@@ -672,7 +672,7 @@ private func cmuxRawPathSegmentContainingColumn(
     return candidate.isEmpty ? nil : candidate
 }
 
-private func cmuxPathCandidatesContainingColumn(
+private func programaPathCandidatesContainingColumn(
     in line: String,
     column: Int
 ) -> [String] {
@@ -685,20 +685,20 @@ private func cmuxPathCandidatesContainingColumn(
         candidates.append(trimmed)
     }
 
-    append(cmuxRawPathSegmentContainingColumn(in: line, column: column))
-    append(cmuxShellEscapedTokenContainingColumn(in: line, column: column))
+    append(programaRawPathSegmentContainingColumn(in: line, column: column))
+    append(programaShellEscapedTokenContainingColumn(in: line, column: column))
 
     return candidates
 }
 
-private func cmuxResolveVisibleLinePath(
+private func programaResolveVisibleLinePath(
     _ line: String,
     column: Int,
     cwd: String,
     fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
 ) -> (rawToken: String, path: String)? {
-    for rawToken in cmuxPathCandidatesContainingColumn(in: line, column: column) {
-        if let resolvedPath = cmuxResolveQuicklookPath(rawToken, cwd: cwd, fileExists: fileExists) {
+    for rawToken in programaPathCandidatesContainingColumn(in: line, column: column) {
+        if let resolvedPath = programaResolveQuicklookPath(rawToken, cwd: cwd, fileExists: fileExists) {
             return (rawToken, resolvedPath)
         }
     }
@@ -1283,7 +1283,7 @@ class GhosttyApp {
                         guard let workspace = MainActor.assumeIsolated({
                             callbackContext.terminalSurface?.owningWorkspace()
                         }) else {
-                            finish(.failure(NSError(domain: "cmux.remote.paste", code: 3)))
+                            finish(.failure(NSError(domain: "programa.remote.paste", code: 3)))
                             GhosttyPasteboardHelper.cleanupTransferredTemporaryImageFiles(fileURLs)
                             return
                         }
@@ -1514,7 +1514,7 @@ class GhosttyApp {
         // though the C ABI returns `bool`. Store the C-compatible shim explicitly so the
         // project compiles against both importer variants.
         runtimeConfig.read_clipboard_cb = unsafeBitCast(
-            cmuxRuntimeReadClipboardCallback as @convention(c) (
+            programaRuntimeReadClipboardCallback as @convention(c) (
                 UnsafeMutableRawPointer?,
                 ghostty_clipboard_e,
                 UnsafeMutableRawPointer?
@@ -1561,7 +1561,7 @@ class GhosttyApp {
             let callbackTabId = callbackContext.tabId
 
 #if DEBUG
-            cmuxWriteChildExitProbe(
+            programaWriteChildExitProbe(
                 [
                     "probeCloseSurfaceNeedsConfirm": needsConfirmClose ? "1" : "0",
                     "probeCloseSurfaceTabId": callbackTabId?.uuidString ?? "",
@@ -2784,7 +2784,7 @@ class GhosttyApp {
             )
 #endif
 #if DEBUG
-            cmuxWriteChildExitProbe(
+            programaWriteChildExitProbe(
                 [
                     "probeShowChildExitedTabId": callbackTabId?.uuidString ?? "",
                     "probeShowChildExitedSurfaceId": callbackSurfaceId?.uuidString ?? "",
@@ -3181,7 +3181,7 @@ class GhosttyApp {
     private func applyBackgroundToKeyWindow() {
         guard let window = activeMainWindow() else { return }
         if cmuxShouldUseClearWindowBackground(for: defaultBackgroundOpacity) {
-            window.backgroundColor = cmuxTransparentWindowBaseColor()
+            window.backgroundColor = programaTransparentWindowBaseColor()
             window.isOpaque = false
             applyWindowBlurIfNeeded(window)
             if backgroundLogEnabled {
@@ -3598,7 +3598,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
     }
 
     func debugSurfaceContextLabel() -> String {
-        cmuxSurfaceContextName(surfaceContext)
+        programaSurfaceContextName(surfaceContext)
     }
 
     func debugInitialCommand() -> String? {
@@ -3634,7 +3634,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let registry = TerminalSurfaceRegistry.shared
         let registeredOwnerId = registry.runtimeSurfaceOwnerId(surface)
         guard registeredOwnerId == id,
-              cmuxSurfacePointerAppearsLive(surface) else {
+              programaSurfacePointerAppearsLive(surface) else {
             let callbackContext = surfaceCallbackContext
             surfaceCallbackContext = nil
             registry.unregisterRuntimeSurface(surface, ownerId: id)
@@ -4065,7 +4065,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
 #if DEBUG
         let templateFontText = String(format: "%.2f", surfaceConfig.font_size)
         dlog(
-            "zoom.create surface=\(id.uuidString.prefix(5)) context=\(cmuxSurfaceContextName(surfaceContext)) " +
+            "zoom.create surface=\(id.uuidString.prefix(5)) context=\(programaSurfaceContextName(surfaceContext)) " +
             "templateFont=\(templateFontText)"
         )
 #endif
@@ -4317,7 +4317,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         // (new surface, split, new workspace) preserve zoom from the source terminal.
         if let inheritedFontPoints = configTemplate?.fontSize,
            inheritedFontPoints > 0 {
-            let currentFontPoints = cmuxCurrentSurfaceFontSizePoints(createdSurface)
+            let currentFontPoints = programaCurrentSurfaceFontSizePoints(createdSurface)
             let shouldReapply = {
                 guard let currentFontPoints else { return true }
                 return abs(currentFontPoints - inheritedFontPoints) > 0.05
@@ -4351,11 +4351,11 @@ final class TerminalSurface: Identifiable, ObservableObject {
         )
 
 #if DEBUG
-        let runtimeFontText = cmuxCurrentSurfaceFontSizePoints(createdSurface).map {
+        let runtimeFontText = programaCurrentSurfaceFontSizePoints(createdSurface).map {
             String(format: "%.2f", $0)
         } ?? "nil"
         dlog(
-            "zoom.create.done surface=\(id.uuidString.prefix(5)) context=\(cmuxSurfaceContextName(surfaceContext)) " +
+            "zoom.create.done surface=\(id.uuidString.prefix(5)) context=\(programaSurfaceContextName(surfaceContext)) " +
             "runtimeFont=\(runtimeFontText)"
         )
 #endif
@@ -5254,7 +5254,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         applySurfaceBackground()
         let color = effectiveBackgroundColor()
         if cmuxShouldUseClearWindowBackground(for: color.alphaComponent) {
-            window.backgroundColor = cmuxTransparentWindowBaseColor()
+            window.backgroundColor = programaTransparentWindowBaseColor()
             window.isOpaque = false
             GhosttyApp.shared.applyWindowBlurIfNeeded(window)
         } else {
@@ -6241,10 +6241,10 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
 #endif
 
 #if DEBUG
-        cmuxWriteChildExitProbe(
+        programaWriteChildExitProbe(
             [
-                "probePerformCharsHex": cmuxScalarHex(event.characters),
-                "probePerformCharsIgnoringHex": cmuxScalarHex(event.charactersIgnoringModifiers),
+                "probePerformCharsHex": programaScalarHex(event.characters),
+                "probePerformCharsIgnoringHex": programaScalarHex(event.charactersIgnoringModifiers),
                 "probePerformKeyCode": String(event.keyCode),
                 "probePerformModsRaw": String(event.modifierFlags.rawValue),
                 "probePerformSurfaceId": terminalSurface?.id.uuidString ?? "",
@@ -6423,10 +6423,10 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
 #endif
 
 #if DEBUG
-        cmuxWriteChildExitProbe(
+        programaWriteChildExitProbe(
             [
-                "probeKeyDownCharsHex": cmuxScalarHex(event.characters),
-                "probeKeyDownCharsIgnoringHex": cmuxScalarHex(event.charactersIgnoringModifiers),
+                "probeKeyDownCharsHex": programaScalarHex(event.characters),
+                "probeKeyDownCharsIgnoringHex": programaScalarHex(event.charactersIgnoringModifiers),
                 "probeKeyDownKeyCode": String(event.keyCode),
                 "probeKeyDownModsRaw": String(event.modifierFlags.rawValue),
                 "probeKeyDownSurfaceId": terminalSurface?.id.uuidString ?? "",
@@ -6490,8 +6490,8 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
 #if DEBUG
             dlog(
                 "key.ctrl path=ghostty surface=\(terminalSurface?.id.uuidString.prefix(5) ?? "nil") " +
-                "handled=\(handled ? 1 : 0) keyCode=\(event.keyCode) chars=\(cmuxScalarHex(event.characters)) " +
-                "ign=\(cmuxScalarHex(event.charactersIgnoringModifiers)) mods=\(event.modifierFlags.rawValue)"
+                "handled=\(handled ? 1 : 0) keyCode=\(event.keyCode) chars=\(programaScalarHex(event.characters)) " +
+                "ign=\(programaScalarHex(event.charactersIgnoringModifiers)) mods=\(event.modifierFlags.rawValue)"
             )
 #endif
             // If Ghostty handled the key (action/encoding), we're done.
@@ -7250,11 +7250,11 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
                 let wordData = Data(bytes: ptr, count: Int(text.text_len))
                 if let decodedWord = String(bytes: wordData, encoding: .utf8) {
 #if DEBUG
-                    let resolvedQuicklookWord = cmuxTerminalCmdClickQuicklookOverride(decodedWord)
+                    let resolvedQuicklookWord = programaTerminalCmdClickQuicklookOverride(decodedWord)
 #else
                     let resolvedQuicklookWord = decodedWord
 #endif
-                    if let resolvedPath = cmuxResolveQuicklookPath(resolvedQuicklookWord, cwd: cwd) {
+                    if let resolvedPath = programaResolveQuicklookPath(resolvedQuicklookWord, cwd: cwd) {
                         quicklookResolution = makeWordPathResolution(
                             path: resolvedPath,
                             source: .quicklook,
@@ -7267,7 +7267,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
             var viewportResolution: WordPathResolution?
             if text.offset_len > 0 {
 #if DEBUG
-                let viewportOffsetStart = cmuxTerminalCmdClickViewportOffsetDelta(Int(text.offset_start))
+                let viewportOffsetStart = programaTerminalCmdClickViewportOffsetDelta(Int(text.offset_start))
 #else
                 let viewportOffsetStart = Int(text.offset_start)
 #endif
@@ -7302,7 +7302,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
     }
 
     #if DEBUG
-    private func cmuxTerminalCmdClickQuicklookOverride(_ decodedWord: String) -> String {
+    private func programaTerminalCmdClickQuicklookOverride(_ decodedWord: String) -> String {
         let env = ProcessInfo.processInfo.environment
         guard let override = env["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_QUICKLOOK_OVERRIDE"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -7312,7 +7312,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         return override
     }
 
-    private func cmuxTerminalCmdClickViewportOffsetDelta(_ viewportOffsetStart: Int) -> Int {
+    private func programaTerminalCmdClickViewportOffsetDelta(_ viewportOffsetStart: Int) -> Int {
         let env = ProcessInfo.processInfo.environment
         guard let delta = env["PROGRAMA_UI_TEST_TERMINAL_CMD_CLICK_VIEWPORT_OFFSET_DELTA"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -7453,14 +7453,14 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
             terminalPanel: panel,
             lineLimit: max(200, rows * 4)
         ) ?? ""
-        let visibleLines = cmuxVisibleTerminalLines(from: visibleText, rows: rows)
+        let visibleLines = programaVisibleTerminalLines(from: visibleText, rows: rows)
         let rowOffset = max(0, rows - visibleLines.count)
         let rowFromTop = max(0, min(rows - 1, viewportOffsetStart / cols))
         let visibleRow = rowFromTop - rowOffset
         guard visibleRow >= 0, visibleRow < visibleLines.count else { return nil }
 
         let column = max(0, min(cols - 1, viewportOffsetStart % cols))
-        guard let resolution = cmuxResolveVisibleLinePath(
+        guard let resolution = programaResolveVisibleLinePath(
             visibleLines[visibleRow],
             column: column,
             cwd: cwd
@@ -7497,7 +7497,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
             terminalPanel: panel,
             lineLimit: max(200, rows * 4)
         ) ?? ""
-        let visibleLines = cmuxVisibleTerminalLines(from: visibleText, rows: rows)
+        let visibleLines = programaVisibleTerminalLines(from: visibleText, rows: rows)
         let rowOffset = max(0, rows - visibleLines.count)
         let xInset = max(0, (bounds.width - (CGFloat(cols) * resolvedCellWidth)) / 2)
         let yInset = max(0, (bounds.height - (CGFloat(rows) * resolvedCellHeight)) / 2)
@@ -7508,7 +7508,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         guard visibleRow >= 0, visibleRow < visibleLines.count else { return nil }
 
         let column = max(0, min(cols - 1, Int((point.x - xInset) / resolvedCellWidth)))
-        guard let resolution = cmuxResolveVisibleLinePath(
+        guard let resolution = programaResolveVisibleLinePath(
             visibleLines[visibleRow],
             column: column,
             cwd: cwd
@@ -8194,7 +8194,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
                 }
             },
             uploadDetectedSSH: { _, _, _, finish in
-                finish(.failure(NSError(domain: "cmux.remote.drop", code: 4)))
+                finish(.failure(NSError(domain: "programa.remote.drop", code: 4)))
             },
             insertText: sendText,
             onFailure: { _ in onFailure() }
@@ -8230,7 +8230,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
                 guard let workspace = MainActor.assumeIsolated({
                     self?.terminalSurface?.owningWorkspace()
                 }) else {
-                    finish(.failure(NSError(domain: "cmux.remote.drop", code: 3)))
+                    finish(.failure(NSError(domain: "programa.remote.drop", code: 3)))
                     GhosttyPasteboardHelper.cleanupTransferredTemporaryImageFiles(fileURLs)
                     return
                 }
@@ -8333,7 +8333,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
     fileprivate func debugSimulateFileDrop(paths: [String]) -> Bool {
         guard !paths.isEmpty else { return false }
         let urls = paths.map { URL(fileURLWithPath: $0) as NSURL }
-        let pbName = NSPasteboard.Name("cmux.debug.drop.\(UUID().uuidString)")
+        let pbName = NSPasteboard.Name("programa.debug.drop.\(UUID().uuidString)")
         let pasteboard = NSPasteboard(name: pbName)
         pasteboard.clearContents()
         pasteboard.writeObjects(urls)
@@ -8794,8 +8794,8 @@ final class GhosttySurfaceScrollView: NSView {
         inactiveOverlayView.isHidden = true
         addSubview(inactiveOverlayView)
         dropZoneOverlayView.wantsLayer = true
-        dropZoneOverlayView.layer?.backgroundColor = cmuxAccentNSColor().withAlphaComponent(0.25).cgColor
-        dropZoneOverlayView.layer?.borderColor = cmuxAccentNSColor().cgColor
+        dropZoneOverlayView.layer?.backgroundColor = programaAccentNSColor().withAlphaComponent(0.25).cgColor
+        dropZoneOverlayView.layer?.borderColor = programaAccentNSColor().cgColor
         dropZoneOverlayView.layer?.borderWidth = 2
         dropZoneOverlayView.layer?.cornerRadius = 8
         dropZoneOverlayView.isHidden = true
@@ -9983,7 +9983,7 @@ final class GhosttySurfaceScrollView: NSView {
                     return CAMediaTimingFunction(name: .easeOut)
                 }
             }
-            self.flashLayer.add(animation, forKey: "cmux.flash")
+            self.flashLayer.add(animation, forKey: "programa.flash")
         }
     }
 
@@ -11277,9 +11277,9 @@ extension GhosttyNSView: NSTextInputClient {
         let typingTimingStart = ProgramaTypingTiming.start()
 #endif
 #if DEBUG
-        cmuxWriteChildExitProbe(
+        programaWriteChildExitProbe(
             [
-                "probeInsertTextCharsHex": cmuxScalarHex(chars),
+                "probeInsertTextCharsHex": programaScalarHex(chars),
                 "probeInsertTextSurfaceId": terminalSurface?.id.uuidString ?? "",
             ],
             increments: ["probeInsertTextCount": 1]
