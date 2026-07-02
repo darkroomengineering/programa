@@ -29,7 +29,23 @@ ci-fix. **macos-26 compat timeout** 45→60m (cold DerivedData cache on slow run
 
 **PR: #48** — CI green modulo `tests-build-and-lag` (known runner flake) + `compat-tests(macos-26)` (now 60m).
 
-## Remaining (each = its own build-gated commit; runtime = CI/manual)
+6d. **shell-integration** ✅ — scripts renamed + `cmux_*`→`programa_*` protocol lockstep (scripts + embedded-shell Swift + CLI). Env vars were already `PROGRAMA_*`. Analytics events preserved.
+6f-func. **CLI functional** ✅ — bundled CLI resolves/installs as `programa` (was a pre-existing bin/cmux mismatch), `${_BIN:-cmux}`→`programa`, repo URLs, `/tmp/cmux*`→`/tmp/programa*` socket/hint paths.
+6-cosmetic. **internal identifiers** ✅ — ~90 `cmuxXxx` symbols + ~60 dotted `cmux.*` literals across 30 files; verified via build-for-testing (app + test targets).
+
+**Rebrand is functionally + user-visibly COMPLETE.** App/CLI run as programa, all UI + config + prefs migrated.
+
+## Remaining follow-ups (non-blocking; app works as-is)
+- **Test-coupled identifiers** — `SocketControlMode.cmuxOnly` (rawValue `"cmuxonly"`), `cmux*ForTesting` helpers,
+  `"cmux.main"`/`"cmux.settings"`/`"cmux.about"`/`"cmux.titlebarControls"` keys, `-cmuxUITestLaunchManifest`,
+  `"cmux DEV"` prefix, `cmux.test` feed host — all hard-coded in `programaTests`/`programaUITests`/`tests_v2`.
+  Need a coordinated app+test rename in lockstep.
+- **CLI temp/session strings** — `cmux-ssh-startup-*` (asserted in `test_ssh_remote_cli_metadata.py`),
+  `cmux-claude-teams`/`cmux-omo` shim session names, etc. — `tests_v2`-coupled.
+- **`cmux-relay-auth`** — JSON handshake shared with the Go remote daemon (`daemon/remote/`); needs both sides.
+- **`com.cmux.*` dispatch-queue labels** — optional (invisible).
+
+## Original remaining (superseded — see above)
 
 ### 6d — shell-integration lockstep (LARGE)
 - Files: `Resources/shell-integration/cmux-{bash,zsh}-integration.{bash,zsh}` (~100+ `cmux_*` shell
