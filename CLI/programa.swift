@@ -169,7 +169,7 @@ private final class CLISocketSentryTelemetry {
         let command = self.command
         _ = SentrySDK.capture(error: error) { scope in
             scope.setLevel(.error)
-            scope.setTag(value: "cmux-cli", key: "component")
+            scope.setTag(value: "programa-cli", key: "component")
             scope.setTag(value: command, key: "cli_command")
             scope.setTag(value: subcommand, key: "cli_subcommand")
             scope.setContext(value: context, key: "cli_socket")
@@ -670,10 +670,10 @@ private enum CLISocketPathResolver {
     private static let appSupportDirectoryName = "programa"
     private static let stableSocketFileName = "programa.sock"
     private static let lastSocketPathFileName = "last-socket-path"
-    static let legacyDefaultSocketPath = "/tmp/cmux.sock"
-    private static let fallbackSocketPath = "/tmp/cmux-debug.sock"
-    private static let stagingSocketPath = "/tmp/cmux-staging.sock"
-    private static let legacyLastSocketPathFile = "/tmp/cmux-last-socket-path"
+    static let legacyDefaultSocketPath = "/tmp/programa.sock"
+    private static let fallbackSocketPath = "/tmp/programa-debug.sock"
+    private static let stagingSocketPath = "/tmp/programa-staging.sock"
+    private static let legacyLastSocketPathFile = "/tmp/programa-last-socket-path"
 
     static var defaultSocketPath: String {
         let stablePath: String? = stableSocketDirectoryURL()?
@@ -715,8 +715,8 @@ private enum CLISocketPathResolver {
 
         if let tag = normalized(environment["PROGRAMA_TAG"]) {
             let slug = sanitizeTagSlug(tag)
-            candidates.append("/tmp/cmux-debug-\(slug).sock")
-            candidates.append("/tmp/cmux-\(slug).sock")
+            candidates.append("/tmp/programa-debug-\(slug).sock")
+            candidates.append("/tmp/programa-\(slug).sock")
         }
 
         candidates.append(requestedPath)
@@ -1317,7 +1317,7 @@ final class SocketClient {
             throw CLIError(message: "cmux app did not start in time (socket not found at \(path))")
         }
 
-        let queue = DispatchQueue(label: "com.cmux.cli.socket-watch.\(UUID().uuidString)")
+        let queue = DispatchQueue(label: "com.programa.cli.socket-watch.\(UUID().uuidString)")
         let semaphore = DispatchSemaphore(value: 0)
         var connected = false
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -1368,7 +1368,7 @@ final class SocketClient {
             throw CLIError(message: "Timed out waiting for \(path)")
         }
 
-        let queue = DispatchQueue(label: "com.cmux.cli.path-watch.\(UUID().uuidString)")
+        let queue = DispatchQueue(label: "com.programa.cli.path-watch.\(UUID().uuidString)")
         let semaphore = DispatchSemaphore(value: 0)
         var found = false
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -1566,7 +1566,7 @@ enum CLIProcessRunner {
 struct CMUXCLI {
     let args: [String]
 
-    private static let debugLastSocketHintPath = "/tmp/cmux-last-socket-path"
+    private static let debugLastSocketHintPath = "/tmp/programa-last-socket-path"
 
     private static func normalizedEnvValue(_ value: String?) -> String? {
         guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1588,7 +1588,7 @@ struct CMUXCLI {
             return nil
         }
         guard let hinted = normalizedEnvValue(raw),
-              hinted.hasPrefix("/tmp/cmux-debug"),
+              hinted.hasPrefix("/tmp/programa-debug"),
               hinted.hasSuffix(".sock"),
               pathIsSocket(hinted) else {
             return nil
@@ -1607,9 +1607,9 @@ struct CMUXCLI {
         if let hinted = debugSocketPathFromHintFile() {
             return hinted
         }
-        return "/tmp/cmux-debug.sock"
+        return "/tmp/programa-debug.sock"
 #else
-        return "/tmp/cmux.sock"
+        return "/tmp/programa.sock"
 #endif
     }
 
@@ -4995,13 +4995,13 @@ struct CMUXCLI {
         let downloadURL = entry?.downloadURL ?? "unknown"
         let checksumsAssetName = manifest?.checksumsAssetName ?? "unknown"
         let checksumsURL = manifest?.checksumsURL ?? "unknown"
-        let downloadCommand = "gh release download \(releaseTag) --repo manaflow-ai/cmux --pattern \(assetName)"
-        let downloadChecksumsCommand = "gh release download \(releaseTag) --repo manaflow-ai/cmux --pattern \(checksumsAssetName)"
+        let downloadCommand = "gh release download \(releaseTag) --repo darkroomengineering/programa --pattern \(assetName)"
+        let downloadChecksumsCommand = "gh release download \(releaseTag) --repo darkroomengineering/programa --pattern \(checksumsAssetName)"
         let checksumVerifyCommand = "shasum -a 256 -c \(checksumsAssetName) --ignore-missing"
         let signerWorkflow = releaseTag == "nightly"
-            ? "manaflow-ai/cmux/.github/workflows/nightly.yml"
-            : "manaflow-ai/cmux/.github/workflows/release.yml"
-        let verifyCommand = "gh attestation verify ./\(assetName) --repo manaflow-ai/cmux --signer-workflow \(signerWorkflow)"
+            ? "darkroomengineering/programa/.github/workflows/nightly.yml"
+            : "darkroomengineering/programa/.github/workflows/release.yml"
+        let verifyCommand = "gh attestation verify ./\(assetName) --repo darkroomengineering/programa --signer-workflow \(signerWorkflow)"
 
         let payload: [String: Any] = [
             "app_version": remoteDaemonVersionString(from: info),
@@ -5211,9 +5211,9 @@ struct CMUXCLI {
 
     private func defaultSSHControlPathTemplate(remoteRelayPort: Int? = nil) -> String {
         if let remoteRelayPort, remoteRelayPort > 0 {
-            return "/tmp/cmux-ssh-\(getuid())-\(remoteRelayPort)-%C"
+            return "/tmp/programa-ssh-\(getuid())-\(remoteRelayPort)-%C"
         }
-        return "/tmp/cmux-ssh-\(getuid())-%C"
+        return "/tmp/programa-ssh-\(getuid())-%C"
     }
 
     private func normalizedSSHIdentityPath(_ rawPath: String?) -> String? {
@@ -5265,7 +5265,7 @@ struct CMUXCLI {
             if let trimmedExplicit, !trimmedExplicit.isEmpty {
                 return trimmedExplicit
             }
-            guard let marker = try? String(contentsOfFile: "/tmp/cmux-last-debug-log-path", encoding: .utf8) else {
+            guard let marker = try? String(contentsOfFile: "/tmp/programa-last-debug-log-path", encoding: .utf8) else {
                 return nil
             }
             let trimmedMarker = marker.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5273,7 +5273,7 @@ struct CMUXCLI {
         }()
         guard let path else { return }
         let timestamp = ISO8601DateFormatter().string(from: Date())
-        let line = "\(timestamp) [cmux-cli] \(message())\n"
+        let line = "\(timestamp) [programa-cli] \(message())\n"
         guard let data = line.data(using: .utf8) else { return }
         if !FileManager.default.fileExists(atPath: path) {
             FileManager.default.createFile(atPath: path, contents: nil)
@@ -10413,7 +10413,7 @@ struct CMUXCLI {
         let script = """
         #!/usr/bin/env bash
         set -euo pipefail
-        exec "${PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
         """
         return try createTmuxCompatShimDirectory(
             directoryName: "claude-teams-bin",
@@ -10522,7 +10522,7 @@ struct CMUXCLI {
         case "${1:-}" in
           -V|-v) echo "tmux 3.4"; exit 0 ;;
         esac
-        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
         """
         let root = try createTmuxCompatShimDirectory(
             directoryName: "omo-bin",
@@ -10543,7 +10543,7 @@ struct CMUXCLI {
             *)        shift ;;
           esac
         done
-        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-cmux}" notify --title "${TITLE:-OpenCode}" --body "${BODY:-}"
+        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-programa}" notify --title "${TITLE:-OpenCode}" --body "${BODY:-}"
         """
         try writeShimIfChanged(notifierScript, to: notifierURL)
 
@@ -11043,7 +11043,7 @@ struct CMUXCLI {
         case "${1:-}" in
           -V|-v) echo "tmux 3.4"; exit 0 ;;
         esac
-        exec "${PROGRAMA_OMX_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_OMX_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
         """
         return try createTmuxCompatShimDirectory(
             directoryName: "omx-bin",
@@ -11146,7 +11146,7 @@ struct CMUXCLI {
         case "${1:-}" in
           -V|-v) echo "tmux 3.4"; exit 0 ;;
         esac
-        exec "${PROGRAMA_OMC_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_OMC_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
         """
         return try createTmuxCompatShimDirectory(
             directoryName: "omc-bin",
@@ -11948,7 +11948,7 @@ struct CMUXCLI {
     private func tmuxWaitForSignalURL(name: String) -> URL {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
         let sanitized = name.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" }
-        return URL(fileURLWithPath: "/tmp/cmux-wait-for-\(String(sanitized)).sig")
+        return URL(fileURLWithPath: "/tmp/programa-wait-for-\(String(sanitized)).sig")
     }
 
     private func runTmuxCompatCommand(
@@ -14058,7 +14058,7 @@ struct CMUXCLI {
         print()
         print("  \(bold)Docs\(reset)\(subdued)                https://cmux.com/docs\(reset)")
         print("  \(bold)Discord\(reset)\(subdued)             https://discord.gg/xsgFEVrWCZ\(reset)")
-        print("  \(bold)GitHub\(reset)\(subdued)              https://github.com/manaflow-ai/cmux (please leave a star ⭐)\(reset)")
+        print("  \(bold)GitHub\(reset)\(subdued)              https://github.com/darkroomengineering/programa (please leave a star ⭐)\(reset)")
         print("  \(bold)Email\(reset)\(subdued)               founders@manaflow.com\(reset)")
         print()
         print("  \(subdued)Run \(reset)\(bold)cmux --help\(reset)\(subdued) for all commands.\(reset)")
