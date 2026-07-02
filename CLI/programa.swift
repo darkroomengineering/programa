@@ -4403,19 +4403,19 @@ struct CMUXCLI {
             remoteBootstrapInstallShell(remoteRelayPort: options.remoteRelayPort)
         )
         var lines: [String] = [
-            "cmux_workspace_id=\"${PROGRAMA_WORKSPACE_ID:-}\"",
-            "cmux_surface_id=\"${PROGRAMA_SURFACE_ID:-}\"",
-            "cmux_remote_bootstrap_b64=\(shellQuote(encodedBootstrapScript))",
-            "cmux_remote_bootstrap=\"$(printf %s \"$cmux_remote_bootstrap_b64\" | base64 -d 2>/dev/null || printf %s \"$cmux_remote_bootstrap_b64\" | base64 -D 2>/dev/null)\"",
-            "cmux_remote_bootstrap=\"$(printf '%s' \"$cmux_remote_bootstrap\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$cmux_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$cmux_surface_id/g\")\"",
-            "if ! printf '%s' \"$cmux_remote_bootstrap\" | command \(installSSHPrefix) -T \(shellQuote(options.destination)) \(shellQuote(remoteBootstrapInstallCommand)); then",
+            "programa_workspace_id=\"${PROGRAMA_WORKSPACE_ID:-}\"",
+            "programa_surface_id=\"${PROGRAMA_SURFACE_ID:-}\"",
+            "programa_remote_bootstrap_b64=\(shellQuote(encodedBootstrapScript))",
+            "programa_remote_bootstrap=\"$(printf %s \"$programa_remote_bootstrap_b64\" | base64 -d 2>/dev/null || printf %s \"$programa_remote_bootstrap_b64\" | base64 -D 2>/dev/null)\"",
+            "programa_remote_bootstrap=\"$(printf '%s' \"$programa_remote_bootstrap\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$programa_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$programa_surface_id/g\")\"",
+            "if ! printf '%s' \"$programa_remote_bootstrap\" | command \(installSSHPrefix) -T \(shellQuote(options.destination)) \(shellQuote(remoteBootstrapInstallCommand)); then",
             "  exit 1",
             "fi",
-            "cmux_remote_command_template=\(shellQuote(remoteCommandTemplate))",
-            "cmux_remote_command=\"$(printf '%s' \"$cmux_remote_command_template\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$cmux_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$cmux_surface_id/g\")\"",
+            "programa_remote_command_template=\(shellQuote(remoteCommandTemplate))",
+            "programa_remote_command=\"$(printf '%s' \"$programa_remote_command_template\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$programa_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$programa_surface_id/g\")\"",
         ]
 
-        var sshInvocation = "command \(sessionSSHPrefix) -o \"RemoteCommand=$cmux_remote_command\""
+        var sshInvocation = "command \(sessionSSHPrefix) -o \"RemoteCommand=$programa_remote_command\""
         if !hasSSHOptionKey(options.sshOptions, key: "RequestTTY") {
             sshInvocation += " -tt"
         }
@@ -4436,10 +4436,10 @@ struct CMUXCLI {
         [
             "set -eu",
             "umask 077",
-            "cmux_bootstrap_path=\"$HOME/.programa/relay/\(remoteRelayPort).bootstrap.sh\"",
+            "programa_bootstrap_path=\"$HOME/.programa/relay/\(remoteRelayPort).bootstrap.sh\"",
             "mkdir -p \"$HOME/.programa/relay\"",
-            "cat > \"$cmux_bootstrap_path\"",
-            "chmod 700 \"$cmux_bootstrap_path\" >/dev/null 2>&1 || true",
+            "cat > \"$programa_bootstrap_path\"",
+            "chmod 700 \"$programa_bootstrap_path\" >/dev/null 2>&1 || true",
         ].joined(separator: "\n")
     }
 
@@ -4449,13 +4449,13 @@ struct CMUXCLI {
     ) -> String {
         var lines = remoteBootstrapTTYCaptureLines(remoteRelayPort: remoteRelayPort, includeRelayRPC: false)
         lines += [
-            "cmux_tmp=$(mktemp \"${TMPDIR:-/tmp}/cmux-ssh-bootstrap.XXXXXX\") || exit 1",
-            "(printf %s '\(base64Placeholder)' | base64 -d 2>/dev/null || printf %s '\(base64Placeholder)' | base64 -D 2>/dev/null) > \"$cmux_tmp\" || { rm -f \"$cmux_tmp\"; exit 1; }",
-            "chmod 700 \"$cmux_tmp\" >/dev/null 2>&1 || true",
-            "/bin/sh \"$cmux_tmp\"",
-            "cmux_status=$?",
-            "rm -f \"$cmux_tmp\"",
-            "exit $cmux_status",
+            "programa_tmp=$(mktemp \"${TMPDIR:-/tmp}/cmux-ssh-bootstrap.XXXXXX\") || exit 1",
+            "(printf %s '\(base64Placeholder)' | base64 -d 2>/dev/null || printf %s '\(base64Placeholder)' | base64 -D 2>/dev/null) > \"$programa_tmp\" || { rm -f \"$programa_tmp\"; exit 1; }",
+            "chmod 700 \"$programa_tmp\" >/dev/null 2>&1 || true",
+            "/bin/sh \"$programa_tmp\"",
+            "programa_status=$?",
+            "rm -f \"$programa_tmp\"",
+            "exit $programa_status",
         ]
         return lines.joined(separator: "\n")
     }
@@ -4467,28 +4467,28 @@ struct CMUXCLI {
         guard remoteRelayPort > 0 else { return [] }
 
         var lines: [String] = [
-            "cmux_bootstrap_tty=\"$(tty 2>/dev/null || true)\"",
-            "cmux_bootstrap_tty=\"${cmux_bootstrap_tty##*/}\"",
-            "if [ -n \"$cmux_bootstrap_tty\" ] && [ \"$cmux_bootstrap_tty\" != \"not a tty\" ]; then",
+            "programa_bootstrap_tty=\"$(tty 2>/dev/null || true)\"",
+            "programa_bootstrap_tty=\"${programa_bootstrap_tty##*/}\"",
+            "if [ -n \"$programa_bootstrap_tty\" ] && [ \"$programa_bootstrap_tty\" != \"not a tty\" ]; then",
             "  mkdir -p \"$HOME/.programa/relay\" >/dev/null 2>&1 || true",
-            "  printf '%s' \"$cmux_bootstrap_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
-            "  export PROGRAMA_BOOTSTRAP_TTY=\"$cmux_bootstrap_tty\"",
+            "  printf '%s' \"$programa_bootstrap_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
+            "  export PROGRAMA_BOOTSTRAP_TTY=\"$programa_bootstrap_tty\"",
         ]
 
         if includeRelayRPC {
             lines += [
-                "  cmux_relay_cli=\"$HOME/.programa/bin/programa\"",
-                "  if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
-                "  if [ -n \"$cmux_relay_cli\" ]; then",
-                "    cmux_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"tty_name\":\"'$cmux_bootstrap_tty'\"}'",
-                "    cmux_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"reason\":\"command\"}'",
+                "  programa_relay_cli=\"$HOME/.programa/bin/programa\"",
+                "  if [ ! -x \"$programa_relay_cli\" ]; then programa_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
+                "  if [ -n \"$programa_relay_cli\" ]; then",
+                "    programa_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"tty_name\":\"'$programa_bootstrap_tty'\"}'",
+                "    programa_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"reason\":\"command\"}'",
                 "    if [ -n \"__PROGRAMA_SURFACE_ID__\" ]; then",
-                "      cmux_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"tty_name\":\"'$cmux_bootstrap_tty'\"}'",
-                "      cmux_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"reason\":\"command\"}'",
+                "      programa_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"tty_name\":\"'$programa_bootstrap_tty'\"}'",
+                "      programa_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"reason\":\"command\"}'",
                 "    fi",
-                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$cmux_relay_cli\" rpc surface.report_tty \"$cmux_relay_report_tty\" >/dev/null 2>&1 || true",
-                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$cmux_relay_cli\" rpc surface.ports_kick \"$cmux_relay_ports_kick\" >/dev/null 2>&1 || true",
-                "    unset cmux_relay_cli cmux_relay_report_tty cmux_relay_ports_kick",
+                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$programa_relay_cli\" rpc surface.report_tty \"$programa_relay_report_tty\" >/dev/null 2>&1 || true",
+                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$programa_relay_cli\" rpc surface.ports_kick \"$programa_relay_ports_kick\" >/dev/null 2>&1 || true",
+                "    unset programa_relay_cli programa_relay_report_tty programa_relay_ports_kick",
                 "  fi",
             ]
         }
@@ -4535,19 +4535,19 @@ struct CMUXCLI {
         ])
         var zshShellLines = commonShellExportLines
         zshShellLines.append(
-            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh"; fi"#
+            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/programa-zsh-integration.zsh" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/programa-zsh-integration.zsh"; fi"#
         )
         var bashShellLines = commonShellExportLines
         bashShellLines.append(
-            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-bash-integration.bash" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-bash-integration.bash"; fi"#
+            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/programa-bash-integration.bash" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/programa-bash-integration.bash"; fi"#
         )
         let zshBootstrap = RemoteRelayZshBootstrap(shellStateDir: shellStateDir)
         let zshEnvLines = zshBootstrap.zshEnvLines
         let zshProfileLines = zshBootstrap.zshProfileLines
         let zshRCLines = zshBootstrap.zshRCLines(commonShellLines: zshShellLines)
         let zshLoginLines = zshBootstrap.zshLoginLines
-        let bundledZshIntegration = bundledShellIntegrationScript(named: "cmux-zsh-integration.zsh")
-        let bundledBashIntegration = bundledShellIntegrationScript(named: "cmux-bash-integration.bash")
+        let bundledZshIntegration = bundledShellIntegrationScript(named: "programa-zsh-integration.zsh")
+        let bundledBashIntegration = bundledShellIntegrationScript(named: "programa-bash-integration.bash")
         let bashRCLines = [
             "if [ -f \"$HOME/.bash_profile\" ]; then . \"$HOME/.bash_profile\"; elif [ -f \"$HOME/.bash_login\" ]; then . \"$HOME/.bash_login\"; elif [ -f \"$HOME/.profile\" ]; then . \"$HOME/.profile\"; fi",
             "[ -f \"$HOME/.bashrc\" ] && . \"$HOME/.bashrc\"",
@@ -4556,19 +4556,19 @@ struct CMUXCLI {
 
         var outerLines: [String] = [
             "mkdir -p \"$HOME/.programa/relay\"",
-            "cmux_shell_dir=\"\(shellStateDir)\"",
-            "mkdir -p \"$cmux_shell_dir\"",
+            "programa_shell_dir=\"\(shellStateDir)\"",
+            "mkdir -p \"$programa_shell_dir\"",
         ]
         if let bundledZshIntegration {
             outerLines += [
-                "cat > \"$cmux_shell_dir/cmux-zsh-integration.zsh\" <<'CMUXCMUXZSH'",
+                "cat > \"$programa_shell_dir/programa-zsh-integration.zsh\" <<'CMUXCMUXZSH'",
                 bundledZshIntegration,
                 "CMUXCMUXZSH",
             ]
         }
         if let bundledBashIntegration {
             outerLines += [
-                "cat > \"$cmux_shell_dir/cmux-bash-integration.bash\" <<'CMUXCMUXBASH'",
+                "cat > \"$programa_shell_dir/programa-bash-integration.bash\" <<'CMUXCMUXBASH'",
                 bundledBashIntegration,
                 "CMUXCMUXBASH",
             ]
@@ -4578,45 +4578,45 @@ struct CMUXCLI {
             "PROGRAMA_LOGIN_SHELL=\"${SHELL:-/bin/zsh}\"",
             "case \"${PROGRAMA_LOGIN_SHELL##*/}\" in",
             "  zsh)",
-            "    cat > \"$cmux_shell_dir/.zshenv\" <<'CMUXZSHENV'",
+            "    cat > \"$programa_shell_dir/.zshenv\" <<'CMUXZSHENV'",
         ]
         outerLines.append(contentsOf: zshEnvLines)
         outerLines += [
             "CMUXZSHENV",
-            "    cat > \"$cmux_shell_dir/.zprofile\" <<'CMUXZSHPROFILE'",
+            "    cat > \"$programa_shell_dir/.zprofile\" <<'CMUXZSHPROFILE'",
         ]
         outerLines.append(contentsOf: zshProfileLines)
         outerLines += [
             "CMUXZSHPROFILE",
-            "    cat > \"$cmux_shell_dir/.zshrc\" <<'CMUXZSHRC'",
+            "    cat > \"$programa_shell_dir/.zshrc\" <<'CMUXZSHRC'",
         ]
         outerLines.append(contentsOf: zshRCLines)
         outerLines += [
             "CMUXZSHRC",
-            "    cat > \"$cmux_shell_dir/.zlogin\" <<'CMUXZSHLOGIN'",
+            "    cat > \"$programa_shell_dir/.zlogin\" <<'CMUXZSHLOGIN'",
         ]
         outerLines.append(contentsOf: zshLoginLines)
         outerLines += [
             "CMUXZSHLOGIN",
-            "    chmod 600 \"$cmux_shell_dir/.zshenv\" \"$cmux_shell_dir/.zprofile\" \"$cmux_shell_dir/.zshrc\" \"$cmux_shell_dir/.zlogin\" >/dev/null 2>&1 || true",
+            "    chmod 600 \"$programa_shell_dir/.zshenv\" \"$programa_shell_dir/.zprofile\" \"$programa_shell_dir/.zshrc\" \"$programa_shell_dir/.zlogin\" >/dev/null 2>&1 || true",
         ]
         outerLines.append(contentsOf: relayWarmupLines.map { "    " + $0 })
         outerLines += [
             "    export PROGRAMA_REAL_ZDOTDIR=\"${ZDOTDIR:-$HOME}\"",
-            "    export ZDOTDIR=\"$cmux_shell_dir\"",
+            "    export ZDOTDIR=\"$programa_shell_dir\"",
             "    exec \"$PROGRAMA_LOGIN_SHELL\" -il",
             "    ;;",
             "  bash)",
-            "    cat > \"$cmux_shell_dir/.bashrc\" <<'CMUXBASHRC'",
+            "    cat > \"$programa_shell_dir/.bashrc\" <<'CMUXBASHRC'",
         ]
         outerLines.append(contentsOf: bashRCLines)
         outerLines += [
             "CMUXBASHRC",
-            "    chmod 600 \"$cmux_shell_dir/.bashrc\" >/dev/null 2>&1 || true",
+            "    chmod 600 \"$programa_shell_dir/.bashrc\" >/dev/null 2>&1 || true",
         ]
         outerLines.append(contentsOf: relayWarmupLines.map { "    " + $0 })
         outerLines += [
-            "    exec \"$PROGRAMA_LOGIN_SHELL\" --rcfile \"$cmux_shell_dir/.bashrc\" -i",
+            "    exec \"$PROGRAMA_LOGIN_SHELL\" --rcfile \"$programa_shell_dir/.bashrc\" -i",
             "    ;;",
             "  *)",
         ]
@@ -4704,17 +4704,17 @@ struct CMUXCLI {
 
     private func interactiveRemoteTerminalSetupLines(terminfoSource: String?) -> [String] {
         var lines: [String] = [
-            "cmux_term='xterm-256color'",
+            "programa_term='xterm-256color'",
             "if command -v infocmp >/dev/null 2>&1 && infocmp xterm-ghostty >/dev/null 2>&1; then",
-            "  cmux_term='xterm-ghostty'",
+            "  programa_term='xterm-ghostty'",
             "fi",
-            "export TERM=\"$cmux_term\"",
+            "export TERM=\"$programa_term\"",
         ]
         guard let terminfoSource else { return lines }
         let trimmedTerminfoSource = terminfoSource.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTerminfoSource.isEmpty else { return lines }
         lines += [
-            "if [ \"$cmux_term\" != 'xterm-ghostty' ]; then",
+            "if [ \"$programa_term\" != 'xterm-ghostty' ]; then",
             "  (",
             "    command -v tic >/dev/null 2>&1 || exit 0",
             "    mkdir -p \"$HOME/.terminfo\" 2>/dev/null || exit 0",
@@ -4754,26 +4754,26 @@ struct CMUXCLI {
             return []
         }
         return [
-            "cmux_relay_cli=\"${PROGRAMA_BUNDLED_CLI_PATH:-$HOME/.programa/bin/programa}\"",
-            "if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
-            "cmux_relay_tty=\"${PROGRAMA_BOOTSTRAP_TTY:-}\"",
-            "if [ -z \"$cmux_relay_tty\" ]; then cmux_relay_tty=\"$(tty 2>/dev/null || true)\"; fi",
-            "cmux_relay_tty=\"${cmux_relay_tty##*/}\"",
-            "if [ -n \"$cmux_relay_tty\" ] && [ \"$cmux_relay_tty\" != \"not a tty\" ]; then",
+            "programa_relay_cli=\"${PROGRAMA_BUNDLED_CLI_PATH:-$HOME/.programa/bin/programa}\"",
+            "if [ ! -x \"$programa_relay_cli\" ]; then programa_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
+            "programa_relay_tty=\"${PROGRAMA_BOOTSTRAP_TTY:-}\"",
+            "if [ -z \"$programa_relay_tty\" ]; then programa_relay_tty=\"$(tty 2>/dev/null || true)\"; fi",
+            "programa_relay_tty=\"${programa_relay_tty##*/}\"",
+            "if [ -n \"$programa_relay_tty\" ] && [ \"$programa_relay_tty\" != \"not a tty\" ]; then",
             "  mkdir -p \"$HOME/.programa/relay\" >/dev/null 2>&1 || true",
-            "  printf '%s' \"$cmux_relay_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
+            "  printf '%s' \"$programa_relay_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
             "fi",
-            "if [ -n \"$cmux_relay_cli\" ] && [ -n \"$PROGRAMA_WORKSPACE_ID\" ] && [ -n \"$cmux_relay_tty\" ] && [ \"$cmux_relay_tty\" != \"not a tty\" ]; then",
-            "  cmux_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"tty_name\\\":\\\"$cmux_relay_tty\\\"}\"",
-            "  cmux_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
+            "if [ -n \"$programa_relay_cli\" ] && [ -n \"$PROGRAMA_WORKSPACE_ID\" ] && [ -n \"$programa_relay_tty\" ] && [ \"$programa_relay_tty\" != \"not a tty\" ]; then",
+            "  programa_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"tty_name\\\":\\\"$programa_relay_tty\\\"}\"",
+            "  programa_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
             "  if [ -n \"$PROGRAMA_SURFACE_ID\" ]; then",
-            "    cmux_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"tty_name\\\":\\\"$cmux_relay_tty\\\"}\"",
-            "    cmux_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
+            "    programa_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"tty_name\\\":\\\"$programa_relay_tty\\\"}\"",
+            "    programa_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
             "  fi",
-            "  \"$cmux_relay_cli\" rpc surface.report_tty \"$cmux_relay_report_tty\" >/dev/null 2>&1 || true",
-            "  \"$cmux_relay_cli\" rpc surface.ports_kick \"$cmux_relay_ports_kick\" >/dev/null 2>&1 || true",
+            "  \"$programa_relay_cli\" rpc surface.report_tty \"$programa_relay_report_tty\" >/dev/null 2>&1 || true",
+            "  \"$programa_relay_cli\" rpc surface.ports_kick \"$programa_relay_ports_kick\" >/dev/null 2>&1 || true",
             "fi",
-            "unset PROGRAMA_BOOTSTRAP_TTY cmux_relay_cli cmux_relay_tty cmux_relay_report_tty cmux_relay_ports_kick",
+            "unset PROGRAMA_BOOTSTRAP_TTY programa_relay_cli programa_relay_tty programa_relay_report_tty programa_relay_ports_kick",
         ]
     }
 
@@ -4877,13 +4877,13 @@ struct CMUXCLI {
         let encodedLiteral = shellQuote(encodedScript)
         var lines = remoteBootstrapTTYCaptureLines(remoteRelayPort: remoteRelayPort, includeRelayRPC: false)
         lines += [
-            "cmux_tmp=$(mktemp \"${TMPDIR:-/tmp}/cmux-ssh-bootstrap.XXXXXX\") || exit 1",
-            "(printf %s \(encodedLiteral) | base64 -d 2>/dev/null || printf %s \(encodedLiteral) | base64 -D 2>/dev/null) > \"$cmux_tmp\" || { rm -f \"$cmux_tmp\"; exit 1; }",
-            "chmod 700 \"$cmux_tmp\" >/dev/null 2>&1 || true",
-            "/bin/sh \"$cmux_tmp\"",
-            "cmux_status=$?",
-            "rm -f \"$cmux_tmp\"",
-            "exit $cmux_status",
+            "programa_tmp=$(mktemp \"${TMPDIR:-/tmp}/cmux-ssh-bootstrap.XXXXXX\") || exit 1",
+            "(printf %s \(encodedLiteral) | base64 -d 2>/dev/null || printf %s \(encodedLiteral) | base64 -D 2>/dev/null) > \"$programa_tmp\" || { rm -f \"$programa_tmp\"; exit 1; }",
+            "chmod 700 \"$programa_tmp\" >/dev/null 2>&1 || true",
+            "/bin/sh \"$programa_tmp\"",
+            "programa_status=$?",
+            "rm -f \"$programa_tmp\"",
+            "exit $programa_status",
         ]
         return lines.joined(separator: "\n")
     }
@@ -4909,8 +4909,8 @@ struct CMUXCLI {
         }
         scriptLines += [
             "PROGRAMA_SSH_SESSION_ENDED=0",
-            "cmux_ssh_session_end() { if [ \"${PROGRAMA_SSH_SESSION_ENDED:-0}\" = 1 ]; then return; fi; PROGRAMA_SSH_SESSION_ENDED=1; \(lifecycleCleanup); }",
-            "trap 'cmux_ssh_session_end' EXIT HUP INT TERM",
+            "programa_ssh_session_end() { if [ \"${PROGRAMA_SSH_SESSION_ENDED:-0}\" = 1 ]; then return; fi; PROGRAMA_SSH_SESSION_ENDED=1; \(lifecycleCleanup); }",
+            "trap 'programa_ssh_session_end' EXIT HUP INT TERM",
         ]
         if isShellSnippet {
             scriptLines.append(sshCommand)
@@ -4918,10 +4918,10 @@ struct CMUXCLI {
             scriptLines.append("command \(sshCommand)")
         }
         scriptLines += [
-            "cmux_ssh_status=$?",
+            "programa_ssh_status=$?",
             "trap - EXIT HUP INT TERM",
-            "cmux_ssh_session_end",
-            "exit $cmux_ssh_status",
+            "programa_ssh_session_end",
+            "exit $programa_ssh_status",
         ]
         let script = scriptLines.joined(separator: "\n")
         return try writeSSHStartupScript(script, remoteRelayPort: remoteRelayPort)
@@ -5168,20 +5168,20 @@ struct CMUXCLI {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return [
-            preferredCLIPath.map { "cmux_reconnect_cli=\(shellQuote($0));" } ?? "cmux_reconnect_cli=\"\";",
-            "cmux_reconnect_socket=\"${PROGRAMA_SOCKET_PATH:-${PROGRAMA_SOCKET:-}}\";",
-            "if [ -z \"$cmux_reconnect_cli\" ] && [ -n \"${PROGRAMA_BUNDLED_CLI_PATH:-}\" ]; then cmux_reconnect_cli=\"$PROGRAMA_BUNDLED_CLI_PATH\"; fi;",
-            "if [ ! -x \"$cmux_reconnect_cli\" ]; then cmux_reconnect_cli=\"$(command -v cmux 2>/dev/null || true)\"; fi;",
+            preferredCLIPath.map { "programa_reconnect_cli=\(shellQuote($0));" } ?? "programa_reconnect_cli=\"\";",
+            "programa_reconnect_socket=\"${PROGRAMA_SOCKET_PATH:-${PROGRAMA_SOCKET:-}}\";",
+            "if [ -z \"$programa_reconnect_cli\" ] && [ -n \"${PROGRAMA_BUNDLED_CLI_PATH:-}\" ]; then programa_reconnect_cli=\"$PROGRAMA_BUNDLED_CLI_PATH\"; fi;",
+            "if [ ! -x \"$programa_reconnect_cli\" ]; then programa_reconnect_cli=\"$(command -v cmux 2>/dev/null || true)\"; fi;",
             "if [ -n \"${PROGRAMA_WORKSPACE_ID:-}\" ]; then",
-            "if [ -z \"$cmux_reconnect_socket\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux socket not found' >&2;",
-            "elif [ -z \"$cmux_reconnect_cli\" ] || [ ! -x \"$cmux_reconnect_cli\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux CLI not found' >&2;",
+            "if [ -z \"$programa_reconnect_socket\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux socket not found' >&2;",
+            "elif [ -z \"$programa_reconnect_cli\" ] || [ ! -x \"$programa_reconnect_cli\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux CLI not found' >&2;",
             "else",
-            "cmux_reconnect_payload=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"foreground_auth_token\\\":\\\"\(escapedForegroundAuthToken)\\\"}\";",
-            "\"$cmux_reconnect_cli\" --socket \"$cmux_reconnect_socket\" rpc workspace.remote.foreground_auth_ready \"$cmux_reconnect_payload\" >/dev/null 2>&1 || true;",
-            "unset cmux_reconnect_payload;",
+            "programa_reconnect_payload=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"foreground_auth_token\\\":\\\"\(escapedForegroundAuthToken)\\\"}\";",
+            "\"$programa_reconnect_cli\" --socket \"$programa_reconnect_socket\" rpc workspace.remote.foreground_auth_ready \"$programa_reconnect_payload\" >/dev/null 2>&1 || true;",
+            "unset programa_reconnect_payload;",
             "fi;",
             "fi;",
-            "unset cmux_reconnect_socket cmux_reconnect_cli;",
+            "unset programa_reconnect_socket programa_reconnect_cli;",
         ].joined(separator: " ")
     }
 

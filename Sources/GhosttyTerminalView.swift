@@ -4185,7 +4185,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 [[ -r "$_programa_ghostty_bash" ]] && source "$_programa_ghostty_bash"; \
                 fi; \
                 if [[ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" && -n "${PROGRAMA_SHELL_INTEGRATION_DIR:-}" ]]; then \
-                _programa_bash_integration="$PROGRAMA_SHELL_INTEGRATION_DIR/cmux-bash-integration.bash"; \
+                _programa_bash_integration="$PROGRAMA_SHELL_INTEGRATION_DIR/programa-bash-integration.bash"; \
                 [[ -r "$_programa_bash_integration" ]] && source "$_programa_bash_integration"; \
                 fi; \
                 unset _programa_ghostty_bash _programa_bash_integration; \

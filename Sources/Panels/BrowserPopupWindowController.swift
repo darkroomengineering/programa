@@ -43,7 +43,7 @@ func browserPopupContentRect(
 /// - The opener `BrowserPanel` also keeps a strong reference for deterministic
 ///   cleanup when the opener tab or workspace is closed.
 /// NSPanel subclass that intercepts Cmd+W before the swizzled
-/// `cmux_performKeyEquivalent` can dispatch it to the main menu's
+/// `programa_performKeyEquivalent` can dispatch it to the main menu's
 /// "Close Tab" action (which would close the parent browser tab).
 private class BrowserPopupPanel: NSPanel {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {

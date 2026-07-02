@@ -4405,22 +4405,22 @@ final class WorkspaceRemoteSessionController {
 
     private func probeRemoteBootstrapStateLocked(version: String) throws -> RemoteBootstrapState {
         let script = """
-        cmux_uname_os="$(uname -s)"
-        cmux_uname_arch="$(uname -m)"
-        printf '%s%s\\n' '\(Self.remotePlatformProbeOSMarker)' "$cmux_uname_os"
-        printf '%s%s\\n' '\(Self.remotePlatformProbeArchMarker)' "$cmux_uname_arch"
-        case "$(printf '%s' "$cmux_uname_os" | tr '[:upper:]' '[:lower:]')" in
-          linux|darwin|freebsd) cmux_go_os="$(printf '%s' "$cmux_uname_os" | tr '[:upper:]' '[:lower:]')" ;;
+        programa_uname_os="$(uname -s)"
+        programa_uname_arch="$(uname -m)"
+        printf '%s%s\\n' '\(Self.remotePlatformProbeOSMarker)' "$programa_uname_os"
+        printf '%s%s\\n' '\(Self.remotePlatformProbeArchMarker)' "$programa_uname_arch"
+        case "$(printf '%s' "$programa_uname_os" | tr '[:upper:]' '[:lower:]')" in
+          linux|darwin|freebsd) programa_go_os="$(printf '%s' "$programa_uname_os" | tr '[:upper:]' '[:lower:]')" ;;
           *) exit 70 ;;
         esac
-        case "$(printf '%s' "$cmux_uname_arch" | tr '[:upper:]' '[:lower:]')" in
-          x86_64|amd64) cmux_go_arch=amd64 ;;
-          aarch64|arm64) cmux_go_arch=arm64 ;;
-          armv7l) cmux_go_arch=arm ;;
+        case "$(printf '%s' "$programa_uname_arch" | tr '[:upper:]' '[:lower:]')" in
+          x86_64|amd64) programa_go_arch=amd64 ;;
+          aarch64|arm64) programa_go_arch=arm64 ;;
+          armv7l) programa_go_arch=arm ;;
           *) exit 71 ;;
         esac
-        cmux_remote_path="$HOME/.programa/bin/programad-remote/\(version)/${cmux_go_os}-${cmux_go_arch}/programad-remote"
-        if [ -x "$cmux_remote_path" ]; then
+        programa_remote_path="$HOME/.programa/bin/programad-remote/\(version)/${programa_go_os}-${programa_go_arch}/programad-remote"
+        if [ -x "$programa_remote_path" ]; then
           printf '%syes\\n' '\(Self.remotePlatformProbeExistsMarker)'
         else
           printf '%sno\\n' '\(Self.remotePlatformProbeExistsMarker)'
@@ -5761,35 +5761,35 @@ final class WorkspaceRemoteSessionController {
 
         return """
         set -eu
-        cmux_tracked_ttys=" \(ttySet) "
-        cmux_tty_csv='\(ttyCSV)'
-        cmux_excluded_ports=" \(excludedPorts) "
+        programa_tracked_ttys=" \(ttySet) "
+        programa_tty_csv='\(ttyCSV)'
+        programa_excluded_ports=" \(excludedPorts) "
 
-        cmux_emit_port() {
-          cmux_tty="$1"
-          cmux_port="$2"
-          case "$cmux_tracked_ttys" in
-            *" $cmux_tty "*) ;;
+        programa_emit_port() {
+          programa_tty="$1"
+          programa_port="$2"
+          case "$programa_tracked_ttys" in
+            *" $programa_tty "*) ;;
             *) return 0 ;;
           esac
-          case "$cmux_excluded_ports" in
-            *" $cmux_port "*) return 0 ;;
+          case "$programa_excluded_ports" in
+            *" $programa_port "*) return 0 ;;
           esac
-          [ "$cmux_port" -ge 1024 ] && [ "$cmux_port" -le 65535 ] || return 0
-          printf '%s\\t%s\\n' "$cmux_tty" "$cmux_port"
+          [ "$programa_port" -ge 1024 ] && [ "$programa_port" -le 65535 ] || return 0
+          printf '%s\\t%s\\n' "$programa_tty" "$programa_port"
         }
 
-        cmux_used_ss=0
+        programa_used_ss=0
         if [ -d /proc ] && command -v ss >/dev/null 2>&1; then
-          cmux_ss_output="$(ss -ltnpH 2>/dev/null || true)"
-          case "$cmux_ss_output" in
+          programa_ss_output="$(ss -ltnpH 2>/dev/null || true)"
+          case "$programa_ss_output" in
             *pid=*)
-              cmux_used_ss=1
-              printf '%s\\n' "$cmux_ss_output" | while IFS= read -r cmux_line; do
-                [ -n "$cmux_line" ] || continue
-                cmux_port="$(printf '%s\\n' "$cmux_line" | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ { print $1; exit }')"
-                [ -n "$cmux_port" ] || continue
-                printf '%s\\n' "$cmux_line" | awk '
+              programa_used_ss=1
+              printf '%s\\n' "$programa_ss_output" | while IFS= read -r programa_line; do
+                [ -n "$programa_line" ] || continue
+                programa_port="$(printf '%s\\n' "$programa_line" | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ { print $1; exit }')"
+                [ -n "$programa_port" ] || continue
+                printf '%s\\n' "$programa_line" | awk '
                   {
                     line = $0
                     while (match(line, /pid=[0-9]+/)) {
@@ -5797,34 +5797,34 @@ final class WorkspaceRemoteSessionController {
                       line = substr(line, RSTART + RLENGTH)
                     }
                   }
-                ' | while IFS= read -r cmux_pid; do
-                  [ -n "$cmux_pid" ] || continue
-                  cmux_tty_path="$(readlink "/proc/$cmux_pid/fd/0" 2>/dev/null || true)"
-                  [ -n "$cmux_tty_path" ] || continue
-                  cmux_tty="${cmux_tty_path##*/}"
-                  [ -n "$cmux_tty" ] || continue
-                  cmux_emit_port "$cmux_tty" "$cmux_port"
+                ' | while IFS= read -r programa_pid; do
+                  [ -n "$programa_pid" ] || continue
+                  programa_tty_path="$(readlink "/proc/$programa_pid/fd/0" 2>/dev/null || true)"
+                  [ -n "$programa_tty_path" ] || continue
+                  programa_tty="${programa_tty_path##*/}"
+                  [ -n "$programa_tty" ] || continue
+                  programa_emit_port "$programa_tty" "$programa_port"
                 done
               done
               ;;
           esac
         fi
 
-        if [ "$cmux_used_ss" -eq 0 ] && command -v lsof >/dev/null 2>&1 && [ -n "$cmux_tty_csv" ]; then
-          cmux_tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t programa-ports)"
-          trap 'rm -rf "$cmux_tmpdir"' EXIT INT TERM
-          cmux_pid_tty_map="$cmux_tmpdir/pid_tty"
-          ps -t "$cmux_tty_csv" -o pid=,tty= 2>/dev/null | awk '
+        if [ "$programa_used_ss" -eq 0 ] && command -v lsof >/dev/null 2>&1 && [ -n "$programa_tty_csv" ]; then
+          programa_tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t programa-ports)"
+          trap 'rm -rf "$programa_tmpdir"' EXIT INT TERM
+          programa_pid_tty_map="$programa_tmpdir/pid_tty"
+          ps -t "$programa_tty_csv" -o pid=,tty= 2>/dev/null | awk '
             NF >= 2 {
               tty = $2
               sub(/^.*\\//, "", tty)
               print $1 "\\t" tty
             }
-          ' > "$cmux_pid_tty_map"
-          [ -s "$cmux_pid_tty_map" ] || exit 0
-          cmux_pid_csv="$(awk '{print $1}' "$cmux_pid_tty_map" | paste -sd, -)"
-          [ -n "$cmux_pid_csv" ] || exit 0
-          lsof -nP -a -p "$cmux_pid_csv" -iTCP -sTCP:LISTEN -Fpn 2>/dev/null | awk -v map="$cmux_pid_tty_map" '
+          ' > "$programa_pid_tty_map"
+          [ -s "$programa_pid_tty_map" ] || exit 0
+          programa_pid_csv="$(awk '{print $1}' "$programa_pid_tty_map" | paste -sd, -)"
+          [ -n "$programa_pid_csv" ] || exit 0
+          lsof -nP -a -p "$programa_pid_csv" -iTCP -sTCP:LISTEN -Fpn 2>/dev/null | awk -v map="$programa_pid_tty_map" '
             BEGIN {
               while ((getline < map) > 0) {
                 pid_to_tty[$1] = $2
@@ -5845,10 +5845,10 @@ final class WorkspaceRemoteSessionController {
                 print tty "\\t" name
               }
             }
-          ' | while IFS=$'\\t' read -r cmux_tty cmux_port; do
-            [ -n "$cmux_tty" ] || continue
-            [ -n "$cmux_port" ] || continue
-            cmux_emit_port "$cmux_tty" "$cmux_port"
+          ' | while IFS=$'\\t' read -r programa_tty programa_port; do
+            [ -n "$programa_tty" ] || continue
+            [ -n "$programa_port" ] || continue
+            programa_emit_port "$programa_tty" "$programa_port"
           done
         fi
         """
@@ -5859,31 +5859,31 @@ final class WorkspaceRemoteSessionController {
 
         return """
         set -eu
-        cmux_excluded_ports=" \(excludedPorts) "
+        programa_excluded_ports=" \(excludedPorts) "
 
-        cmux_emit_port() {
-          cmux_port="$1"
-          case "$cmux_excluded_ports" in
-            *" $cmux_port "*) return 0 ;;
+        programa_emit_port() {
+          programa_port="$1"
+          case "$programa_excluded_ports" in
+            *" $programa_port "*) return 0 ;;
           esac
-          [ "$cmux_port" -ge 1024 ] && [ "$cmux_port" -le 65535 ] || return 0
-          printf '%s\\n' "$cmux_port"
+          [ "$programa_port" -ge 1024 ] && [ "$programa_port" -le 65535 ] || return 0
+          printf '%s\\n' "$programa_port"
         }
 
         if command -v ss >/dev/null 2>&1; then
-          ss -ltnH 2>/dev/null | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r cmux_port; do
-            [ -n "$cmux_port" ] || continue
-            cmux_emit_port "$cmux_port"
+          ss -ltnH 2>/dev/null | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r programa_port; do
+            [ -n "$programa_port" ] || continue
+            programa_emit_port "$programa_port"
           done
         elif command -v netstat >/dev/null 2>&1; then
-          netstat -lnt 2>/dev/null | awk 'NR > 2 {print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r cmux_port; do
-            [ -n "$cmux_port" ] || continue
-            cmux_emit_port "$cmux_port"
+          netstat -lnt 2>/dev/null | awk 'NR > 2 {print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r programa_port; do
+            [ -n "$programa_port" ] || continue
+            programa_emit_port "$programa_port"
           done
         elif command -v lsof >/dev/null 2>&1; then
-          lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 {print $9}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r cmux_port; do
-            [ -n "$cmux_port" ] || continue
-            cmux_emit_port "$cmux_port"
+          lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 {print $9}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r programa_port; do
+            [ -n "$programa_port" ] || continue
+            programa_emit_port "$programa_port"
           done
         fi
         """

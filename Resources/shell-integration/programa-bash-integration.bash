@@ -830,9 +830,9 @@ _cmux_preexec_command() {
     local cmd="${1:-${BASH_COMMAND:-}}"
     _cmux_tmux_sync_cmux_environment
 
-    local cmux_has_unix_socket=0
-    _cmux_socket_is_unix && cmux_has_unix_socket=1
-    (( cmux_has_unix_socket )) || _cmux_has_port_scan_transport || return 0
+    local programa_has_unix_socket=0
+    _cmux_socket_is_unix && programa_has_unix_socket=1
+    (( programa_has_unix_socket )) || _cmux_has_port_scan_transport || return 0
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
 
     if [[ -z "$_PROGRAMA_TTY_NAME" ]]; then
@@ -858,9 +858,9 @@ _cmux_bash_preexec_hook() {
 _cmux_prompt_command() {
     _cmux_tmux_sync_cmux_environment
 
-    local cmux_has_unix_socket=0
-    _cmux_socket_is_unix && cmux_has_unix_socket=1
-    (( cmux_has_unix_socket )) || _cmux_has_port_scan_transport || return 0
+    local programa_has_unix_socket=0
+    _cmux_socket_is_unix && programa_has_unix_socket=1
+    (( programa_has_unix_socket )) || _cmux_has_port_scan_transport || return 0
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
 
     if [[ -z "$_PROGRAMA_TTY_NAME" ]]; then
@@ -877,7 +877,7 @@ _cmux_prompt_command() {
 
     local now
     now="$(_cmux_now)"
-    if (( ! cmux_has_unix_socket )); then
+    if (( ! programa_has_unix_socket )); then
         if (( now - _PROGRAMA_PORTS_LAST_RUN >= 10 )); then
             _cmux_ports_kick refresh
         fi

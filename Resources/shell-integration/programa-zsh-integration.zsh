@@ -1017,9 +1017,9 @@ _cmux_precmd() {
     _cmux_stop_git_head_watch
     _cmux_tmux_sync_cmux_environment
 
-    local cmux_has_unix_socket=0
-    _cmux_socket_is_unix && cmux_has_unix_socket=1
-    (( cmux_has_unix_socket )) || _cmux_has_port_scan_transport || return 0
+    local programa_has_unix_socket=0
+    _cmux_socket_is_unix && programa_has_unix_socket=1
+    (( programa_has_unix_socket )) || _cmux_has_port_scan_transport || return 0
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     if [[ -n "$PROGRAMA_PANEL_ID" ]]; then
         _cmux_report_shell_activity_state prompt
@@ -1045,7 +1045,7 @@ _cmux_precmd() {
         cmd_dur=$(( now - cmd_start ))
     fi
 
-    if (( ! cmux_has_unix_socket )); then
+    if (( ! programa_has_unix_socket )); then
         if (( cmd_dur >= 2 || now - _PROGRAMA_PORTS_LAST_RUN >= 10 )); then
             _cmux_ports_kick refresh
         fi

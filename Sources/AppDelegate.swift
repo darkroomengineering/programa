@@ -2407,7 +2407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private static let didInstallWindowKeyEquivalentSwizzle: Void = {
         let targetClass: AnyClass = NSWindow.self
         let originalSelector = #selector(NSWindow.performKeyEquivalent(with:))
-        let swizzledSelector = #selector(NSWindow.cmux_performKeyEquivalent(with:))
+        let swizzledSelector = #selector(NSWindow.programa_performKeyEquivalent(with:))
         guard let originalMethod = class_getInstanceMethod(targetClass, originalSelector),
               let swizzledMethod = class_getInstanceMethod(targetClass, swizzledSelector) else {
             return
@@ -2417,7 +2417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private static let didInstallWindowFirstResponderSwizzle: Void = {
         let targetClass: AnyClass = NSWindow.self
         let originalSelector = #selector(NSWindow.makeFirstResponder(_:))
-        let swizzledSelector = #selector(NSWindow.cmux_makeFirstResponder(_:))
+        let swizzledSelector = #selector(NSWindow.programa_makeFirstResponder(_:))
         guard let originalMethod = class_getInstanceMethod(targetClass, originalSelector),
               let swizzledMethod = class_getInstanceMethod(targetClass, swizzledSelector) else {
             return
@@ -2427,7 +2427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private static let didInstallWindowSendEventSwizzle: Void = {
         let targetClass: AnyClass = NSWindow.self
         let originalSelector = #selector(NSWindow.sendEvent(_:))
-        let swizzledSelector = #selector(NSWindow.cmux_sendEvent(_:))
+        let swizzledSelector = #selector(NSWindow.programa_sendEvent(_:))
         guard let originalMethod = class_getInstanceMethod(targetClass, originalSelector),
               let swizzledMethod = class_getInstanceMethod(targetClass, swizzledSelector) else {
             return
@@ -2437,7 +2437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private static let didInstallApplicationSendEventSwizzle: Void = {
         let targetClass: AnyClass = NSApplication.self
         let originalSelector = #selector(NSApplication.sendEvent(_:))
-        let swizzledSelector = #selector(NSApplication.cmux_applicationSendEvent(_:))
+        let swizzledSelector = #selector(NSApplication.programa_applicationSendEvent(_:))
         guard let originalMethod = class_getInstanceMethod(targetClass, originalSelector),
               let swizzledMethod = class_getInstanceMethod(targetClass, swizzledSelector) else {
             return
@@ -14182,7 +14182,7 @@ private final class ProgramaFieldEditorOwningWebViewBox: NSObject {
 }
 
 private extension NSApplication {
-    @objc func cmux_applicationSendEvent(_ event: NSEvent) {
+    @objc func programa_applicationSendEvent(_ event: NSEvent) {
 #if DEBUG
         let typingTimingStart = event.type == .keyDown ? ProgramaTypingTiming.start() : nil
         let phaseTotalStart = event.type == .keyDown ? ProcessInfo.processInfo.systemUptime : 0
@@ -14207,7 +14207,7 @@ private extension NSApplication {
             }
         }
 #endif
-        cmux_applicationSendEvent(event)
+        programa_applicationSendEvent(event)
     }
 }
 
@@ -14220,7 +14220,7 @@ private extension AppDelegate {
 }
 
 private extension NSWindow {
-    @objc func cmux_makeFirstResponder(_ responder: NSResponder?) -> Bool {
+    @objc func programa_makeFirstResponder(_ responder: NSResponder?) -> Bool {
         if cmuxIsWindowFirstResponderBypassActive() {
 #if DEBUG
             dlog(
@@ -14301,10 +14301,10 @@ private extension NSWindow {
             // `NSWindow.makeFirstResponder` may run before `ProgramaWebView.mouseDown(with:)`.
             // Preserve pointer intent during this synchronous responder change.
             result = webView.withPointerFocusAllowance {
-                cmux_makeFirstResponder(responder)
+                programa_makeFirstResponder(responder)
             }
         } else {
-            result = cmux_makeFirstResponder(responder)
+            result = programa_makeFirstResponder(responder)
         }
         if result {
             if let fieldEditor = responder as? NSTextView, fieldEditor.isFieldEditor {
@@ -14316,7 +14316,7 @@ private extension NSWindow {
         return result
     }
 
-    @objc func cmux_sendEvent(_ event: NSEvent) {
+    @objc func programa_sendEvent(_ event: NSEvent) {
 #if DEBUG
         let typingTimingStart = event.type == .keyDown ? ProgramaTypingTiming.start() : nil
         let phaseTotalStart = event.type == .keyDown ? ProcessInfo.processInfo.systemUptime : 0
@@ -14407,12 +14407,12 @@ private extension NSWindow {
             if event.type == .keyDown {
                 folderGuardMs = (ProcessInfo.processInfo.systemUptime - folderGuardStart) * 1000.0
                 let originalDispatchStart = ProcessInfo.processInfo.systemUptime
-                cmux_sendEvent(event)
+                programa_sendEvent(event)
                 originalDispatchMs = (ProcessInfo.processInfo.systemUptime - originalDispatchStart) * 1000.0
                 return
             }
 #endif
-            cmux_sendEvent(event)
+            programa_sendEvent(event)
             return
         }
 #if DEBUG
@@ -14434,7 +14434,7 @@ private extension NSWindow {
         dlog("window.sendEvent.folderDown suppress=1 hit=\(hitDesc) wasMovable=\(previousMovableState)")
         #endif
 
-        cmux_sendEvent(event)
+        programa_sendEvent(event)
 #if DEBUG
         if event.type == .keyDown {
             originalDispatchMs = (ProcessInfo.processInfo.systemUptime - originalDispatchStart) * 1000.0
@@ -14450,7 +14450,7 @@ private extension NSWindow {
         #endif
     }
 
-    @objc func cmux_performKeyEquivalent(with event: NSEvent) -> Bool {
+    @objc func programa_performKeyEquivalent(with event: NSEvent) -> Bool {
 #if DEBUG
         let typingTimingStart = ProgramaTypingTiming.start()
         defer {
@@ -14490,7 +14490,7 @@ private extension NSWindow {
             // process it. Cmd-based shortcuts should still work during composition since
             // Cmd is never part of IME input sequences.
             if ghosttyView.hasMarkedText(), !event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command) {
-                return cmux_performKeyEquivalent(with: event)
+                return programa_performKeyEquivalent(with: event)
             }
 
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -14605,7 +14605,7 @@ private extension NSWindow {
             }
         }
 
-        let result = cmux_performKeyEquivalent(with: event)
+        let result = programa_performKeyEquivalent(with: event)
 #if DEBUG
         if result { dlog("  → consumed by original performKeyEquivalent") }
 #endif
