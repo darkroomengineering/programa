@@ -23,7 +23,7 @@ private func debugWorkspaceDescriptionPreview(_ text: String?, limit: Int = 120)
 }
 #endif
 
-struct CmuxSurfaceConfigTemplate {
+struct ProgramaSurfaceConfigTemplate {
     var fontSize: Float32 = 0
     var workingDirectory: String?
     var command: String?
@@ -57,7 +57,7 @@ struct CmuxSurfaceConfigTemplate {
     }
 }
 
-func cmuxSurfaceContextName(_ context: ghostty_surface_context_e) -> String {
+func programaSurfaceContextName(_ context: ghostty_surface_context_e) -> String {
     switch context {
     case GHOSTTY_SURFACE_CONTEXT_WINDOW:
         return "window"
@@ -70,7 +70,7 @@ func cmuxSurfaceContextName(_ context: ghostty_surface_context_e) -> String {
     }
 }
 
-private func cmuxPointerAppearsLive(_ pointer: UnsafeMutableRawPointer?) -> Bool {
+private func programaPointerAppearsLive(_ pointer: UnsafeMutableRawPointer?) -> Bool {
     guard let pointer,
           malloc_zone_from_ptr(pointer) != nil else {
         return false
@@ -78,15 +78,15 @@ private func cmuxPointerAppearsLive(_ pointer: UnsafeMutableRawPointer?) -> Bool
     return malloc_size(pointer) > 0
 }
 
-func cmuxSurfacePointerAppearsLive(_ surface: ghostty_surface_t) -> Bool {
+func programaSurfacePointerAppearsLive(_ surface: ghostty_surface_t) -> Bool {
     // Best-effort check: reject pointers that no longer belong to an active
     // malloc zone allocation. A Swift wrapper around `ghostty_surface_t` can
     // remain non-nil after the backing native surface has already been freed.
-    cmuxPointerAppearsLive(surface)
+    programaPointerAppearsLive(surface)
 }
 
-func cmuxCurrentSurfaceFontSizePoints(_ surface: ghostty_surface_t) -> Float? {
-    guard cmuxSurfacePointerAppearsLive(surface) else {
+func programaCurrentSurfaceFontSizePoints(_ surface: ghostty_surface_t) -> Float? {
+    guard programaSurfacePointerAppearsLive(surface) else {
         return nil
     }
 
@@ -100,16 +100,16 @@ func cmuxCurrentSurfaceFontSizePoints(_ surface: ghostty_surface_t) -> Float? {
     return points
 }
 
-func cmuxInheritedSurfaceConfig(
+func programaInheritedSurfaceConfig(
     sourceSurface: ghostty_surface_t,
     context: ghostty_surface_context_e
-) -> CmuxSurfaceConfigTemplate {
+) -> ProgramaSurfaceConfigTemplate {
     let inherited = ghostty_surface_inherited_config(sourceSurface, context)
-    var config = CmuxSurfaceConfigTemplate(cConfig: inherited)
+    var config = ProgramaSurfaceConfigTemplate(cConfig: inherited)
 
     // Make runtime zoom inheritance explicit, even when Ghostty's
     // inherit-font-size config is disabled.
-    let runtimePoints = cmuxCurrentSurfaceFontSizePoints(sourceSurface)
+    let runtimePoints = programaCurrentSurfaceFontSizePoints(sourceSurface)
     if let points = runtimePoints {
         config.fontSize = points
     }
@@ -119,7 +119,7 @@ func cmuxInheritedSurfaceConfig(
     let runtimeText = runtimePoints.map { String(format: "%.2f", $0) } ?? "nil"
     let finalText = String(format: "%.2f", config.fontSize)
     dlog(
-        "zoom.inherit context=\(cmuxSurfaceContextName(context)) " +
+        "zoom.inherit context=\(programaSurfaceContextName(context)) " +
         "inherited=\(inheritedText) runtime=\(runtimeText) final=\(finalText)"
     )
 #endif
@@ -756,14 +756,14 @@ extension Workspace {
     }
 }
 
-// MARK: - cmux.json custom layout
+// MARK: - programa.json custom layout
 
 extension Workspace {
 
-    func applyCustomLayout(_ layout: CmuxLayoutNode, baseCwd: String) {
+    func applyCustomLayout(_ layout: ProgramaLayoutNode, baseCwd: String) {
         guard let rootPaneId = bonsplitController.allPaneIds.first else { return }
 
-        var leaves: [(paneId: PaneID, surfaces: [CmuxSurfaceDefinition])] = []
+        var leaves: [(paneId: PaneID, surfaces: [ProgramaSurfaceDefinition])] = []
         buildCustomLayoutTree(layout, inPane: rootPaneId, leaves: &leaves)
 
         // First leaf reuses the initial terminal created by addWorkspace;
@@ -783,9 +783,9 @@ extension Workspace {
     }
 
     private func buildCustomLayoutTree(
-        _ node: CmuxLayoutNode,
+        _ node: ProgramaLayoutNode,
         inPane paneId: PaneID,
-        leaves: inout [(paneId: PaneID, surfaces: [CmuxSurfaceDefinition])]
+        leaves: inout [(paneId: PaneID, surfaces: [ProgramaSurfaceDefinition])]
     ) {
         switch node {
         case .pane(let pane):
@@ -793,7 +793,7 @@ extension Workspace {
 
         case .split(let split):
             guard split.children.count == 2 else {
-                NSLog("[CmuxConfig] split node requires exactly 2 children, got %d", split.children.count)
+                NSLog("[ProgramaConfig] split node requires exactly 2 children, got %d", split.children.count)
                 leaves.append((paneId: paneId, surfaces: []))
                 return
             }
@@ -826,7 +826,7 @@ extension Workspace {
 
     private func populateCustomPane(
         _ paneId: PaneID,
-        surfaces: [CmuxSurfaceDefinition],
+        surfaces: [ProgramaSurfaceDefinition],
         baseCwd: String,
         focusPanelId: inout UUID?
     ) {
@@ -860,14 +860,14 @@ extension Workspace {
     private func configureExistingSurface(
         panelId: UUID,
         inPane paneId: PaneID,
-        surface: CmuxSurfaceDefinition,
+        surface: ProgramaSurfaceDefinition,
         baseCwd: String,
         focusPanelId: inout UUID?
     ) {
         switch surface.type {
         case .terminal where surface.cwd != nil || surface.env != nil:
             // Placeholder can't change cwd/env — replace it
-            let resolvedCwd = CmuxConfigStore.resolveCwd(surface.cwd, relativeTo: baseCwd)
+            let resolvedCwd = ProgramaConfigStore.resolveCwd(surface.cwd, relativeTo: baseCwd)
             if let panel = newTerminalSurface(
                 inPane: paneId,
                 focus: false,
@@ -899,13 +899,13 @@ extension Workspace {
 
     private func createNewSurface(
         inPane paneId: PaneID,
-        surface: CmuxSurfaceDefinition,
+        surface: ProgramaSurfaceDefinition,
         baseCwd: String,
         focusPanelId: inout UUID?
     ) {
         switch surface.type {
         case .terminal:
-            let resolvedCwd = CmuxConfigStore.resolveCwd(surface.cwd, relativeTo: baseCwd)
+            let resolvedCwd = ProgramaConfigStore.resolveCwd(surface.cwd, relativeTo: baseCwd)
             if let panel = newTerminalSurface(
                 inPane: paneId,
                 focus: false,
@@ -927,7 +927,7 @@ extension Workspace {
     }
 
     private func applyCustomDividerPositions(
-        configNode: CmuxLayoutNode,
+        configNode: ProgramaLayoutNode,
         liveNode: ExternalTreeNode
     ) {
         switch (configNode, liveNode) {
@@ -972,7 +972,7 @@ extension Workspace {
             guard !resolved else { return }
             resolved = true
             if let observer { NotificationCenter.default.removeObserver(observer) }
-            NSLog("[CmuxConfig] surface not ready after 3s, dropping command (%d chars)", text.count)
+            NSLog("[ProgramaConfig] surface not ready after 3s, dropping command (%d chars)", text.count)
         }
     }
 }
@@ -1273,7 +1273,7 @@ private final class WorkspaceRemoteDaemonRPCClient {
         do {
             try process.run()
         } catch {
-            throw NSError(domain: "cmux.remote.daemon.rpc", code: 1, userInfo: [
+            throw NSError(domain: "programa.remote.daemon.rpc", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Failed to launch SSH daemon transport: \(error.localizedDescription)",
             ])
         }
@@ -1295,7 +1295,7 @@ private final class WorkspaceRemoteDaemonRPCClient {
             let hello = try call(method: "hello", params: [:], timeout: 8.0)
             let capabilities = (hello["capabilities"] as? [String]) ?? []
             guard capabilities.contains(Self.requiredProxyStreamCapability) else {
-                throw NSError(domain: "cmux.remote.daemon.rpc", code: 2, userInfo: [
+                throw NSError(domain: "programa.remote.daemon.rpc", code: 2, userInfo: [
                     NSLocalizedDescriptionKey: "remote daemon missing required capability \(Self.requiredProxyStreamCapability)",
                 ])
             }
@@ -1321,7 +1321,7 @@ private final class WorkspaceRemoteDaemonRPCClient {
         )
         let streamID = (result["stream_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !streamID.isEmpty else {
-            throw NSError(domain: "cmux.remote.daemon.rpc", code: 3, userInfo: [
+            throw NSError(domain: "programa.remote.daemon.rpc", code: 3, userInfo: [
                 NSLocalizedDescriptionKey: "proxy.open missing stream_id",
             ])
         }
@@ -1346,7 +1346,7 @@ private final class WorkspaceRemoteDaemonRPCClient {
     ) throws {
         let trimmedStreamID = streamID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedStreamID.isEmpty else {
-            throw NSError(domain: "cmux.remote.daemon.rpc", code: 17, userInfo: [
+            throw NSError(domain: "programa.remote.daemon.rpc", code: 17, userInfo: [
                 NSLocalizedDescriptionKey: "proxy.stream.subscribe requires stream_id",
             ])
         }
@@ -1397,7 +1397,7 @@ private final class WorkspaceRemoteDaemonRPCClient {
             ])
         } catch {
             pendingCalls.remove(pendingCall)
-            throw NSError(domain: "cmux.remote.daemon.rpc", code: 10, userInfo: [
+            throw NSError(domain: "programa.remote.daemon.rpc", code: 10, userInfo: [
                 NSLocalizedDescriptionKey: "failed to encode daemon RPC request \(method): \(error.localizedDescription)",
             ])
         }
@@ -1415,15 +1415,15 @@ private final class WorkspaceRemoteDaemonRPCClient {
         switch pendingCalls.wait(for: pendingCall, timeout: timeout) {
         case .timedOut:
             stop(suppressTerminationCallback: false)
-            throw NSError(domain: "cmux.remote.daemon.rpc", code: 11, userInfo: [
+            throw NSError(domain: "programa.remote.daemon.rpc", code: 11, userInfo: [
                 NSLocalizedDescriptionKey: "daemon RPC timeout waiting for \(method) response",
             ])
         case .failure(let failure):
-            throw NSError(domain: "cmux.remote.daemon.rpc", code: 12, userInfo: [
+            throw NSError(domain: "programa.remote.daemon.rpc", code: 12, userInfo: [
                 NSLocalizedDescriptionKey: failure,
             ])
         case .missing:
-            throw NSError(domain: "cmux.remote.daemon.rpc", code: 13, userInfo: [
+            throw NSError(domain: "programa.remote.daemon.rpc", code: 13, userInfo: [
                 NSLocalizedDescriptionKey: "daemon RPC \(method) returned empty response",
             ])
         case .response(let pendingResponse):
@@ -1438,7 +1438,7 @@ private final class WorkspaceRemoteDaemonRPCClient {
         let errorObject = (response["error"] as? [String: Any]) ?? [:]
         let code = (errorObject["code"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "rpc_error"
         let message = (errorObject["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "daemon RPC call failed"
-        throw NSError(domain: "cmux.remote.daemon.rpc", code: 14, userInfo: [
+        throw NSError(domain: "programa.remote.daemon.rpc", code: 14, userInfo: [
             NSLocalizedDescriptionKey: "\(method) failed (\(code)): \(message)",
         ])
     }
@@ -1448,7 +1448,7 @@ private final class WorkspaceRemoteDaemonRPCClient {
             self.stdinHandle ?? FileHandle.nullDevice
         }
         if stdinHandle === FileHandle.nullDevice {
-            throw NSError(domain: "cmux.remote.daemon.rpc", code: 15, userInfo: [
+            throw NSError(domain: "programa.remote.daemon.rpc", code: 15, userInfo: [
                 NSLocalizedDescriptionKey: "daemon transport is not connected",
             ])
         }
@@ -1457,7 +1457,7 @@ private final class WorkspaceRemoteDaemonRPCClient {
             try stdinHandle.write(contentsOf: Data([0x0A]))
         } catch {
             stop(suppressTerminationCallback: false)
-            throw NSError(domain: "cmux.remote.daemon.rpc", code: 16, userInfo: [
+            throw NSError(domain: "programa.remote.daemon.rpc", code: 16, userInfo: [
                 NSLocalizedDescriptionKey: "failed writing daemon RPC request: \(error.localizedDescription)",
             ])
         }
@@ -2098,7 +2098,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
             let bytes = [UInt8](data)
             guard bytes.count >= 4 else { return nil }
             guard bytes[0] == 0x05 else {
-                throw NSError(domain: "cmux.remote.proxy", code: 1, userInfo: [NSLocalizedDescriptionKey: "invalid SOCKS version"])
+                throw NSError(domain: "programa.remote.proxy", code: 1, userInfo: [NSLocalizedDescriptionKey: "invalid SOCKS version"])
             }
 
             let command = bytes[1]
@@ -2138,18 +2138,18 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
                 cursor += 16
 
             default:
-                throw NSError(domain: "cmux.remote.proxy", code: 2, userInfo: [NSLocalizedDescriptionKey: "invalid SOCKS address type"])
+                throw NSError(domain: "programa.remote.proxy", code: 2, userInfo: [NSLocalizedDescriptionKey: "invalid SOCKS address type"])
             }
 
             guard !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw NSError(domain: "cmux.remote.proxy", code: 3, userInfo: [NSLocalizedDescriptionKey: "empty SOCKS host"])
+                throw NSError(domain: "programa.remote.proxy", code: 3, userInfo: [NSLocalizedDescriptionKey: "empty SOCKS host"])
             }
             guard bytes.count >= cursor + 2 else { return nil }
             let port = Int(UInt16(bytes[cursor]) << 8 | UInt16(bytes[cursor + 1]))
             cursor += 2
 
             guard port > 0 && port <= 65535 else {
-                throw NSError(domain: "cmux.remote.proxy", code: 4, userInfo: [NSLocalizedDescriptionKey: "invalid SOCKS port"])
+                throw NSError(domain: "programa.remote.proxy", code: 4, userInfo: [NSLocalizedDescriptionKey: "invalid SOCKS port"])
             }
 
             return SocksRequest(host: host, port: port, command: command, consumedBytes: cursor)
@@ -2414,7 +2414,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         var capturedError: Error?
         queue.sync {
             guard !isStopped else {
-                capturedError = NSError(domain: "cmux.remote.proxy", code: 20, userInfo: [
+                capturedError = NSError(domain: "programa.remote.proxy", code: 20, userInfo: [
                     NSLocalizedDescriptionKey: "proxy tunnel already stopped",
                 ])
                 return
@@ -2521,7 +2521,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
 
     private static func makeLoopbackListener(port: Int) throws -> NWListener {
         guard let localPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
-            throw NSError(domain: "cmux.remote.proxy", code: 21, userInfo: [
+            throw NSError(domain: "programa.remote.proxy", code: 21, userInfo: [
                 NSLocalizedDescriptionKey: "invalid local proxy port \(port)",
             ])
         }
@@ -3035,7 +3035,7 @@ private final class WorkspaceRemoteCLIRelayServer {
         private static func roundTripUnixSocket(socketPath: String, request: Data) throws -> Data {
             let fd = socket(AF_UNIX, SOCK_STREAM, 0)
             guard fd >= 0 else {
-                throw NSError(domain: "cmux.remote.relay", code: 1, userInfo: [
+                throw NSError(domain: "programa.remote.relay", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "failed to create local relay socket",
                 ])
             }
@@ -3051,7 +3051,7 @@ private final class WorkspaceRemoteCLIRelayServer {
             address.sun_family = sa_family_t(AF_UNIX)
             let pathBytes = Array(socketPath.utf8CString)
             guard pathBytes.count <= MemoryLayout.size(ofValue: address.sun_path) else {
-                throw NSError(domain: "cmux.remote.relay", code: 2, userInfo: [
+                throw NSError(domain: "programa.remote.relay", code: 2, userInfo: [
                     NSLocalizedDescriptionKey: "local relay socket path is too long",
                 ])
             }
@@ -3070,7 +3070,7 @@ private final class WorkspaceRemoteCLIRelayServer {
                 }
             }
             guard connectResult == 0 else {
-                throw NSError(domain: "cmux.remote.relay", code: 3, userInfo: [
+                throw NSError(domain: "programa.remote.relay", code: 3, userInfo: [
                     NSLocalizedDescriptionKey: "failed to connect to local cmux socket",
                 ])
             }
@@ -3082,7 +3082,7 @@ private final class WorkspaceRemoteCLIRelayServer {
                 while bytesRemaining > 0 {
                     let written = Darwin.write(fd, pointer, bytesRemaining)
                     if written <= 0 {
-                        throw NSError(domain: "cmux.remote.relay", code: 4, userInfo: [
+                        throw NSError(domain: "programa.remote.relay", code: 4, userInfo: [
                             NSLocalizedDescriptionKey: "failed to write relay request",
                         ])
                     }
@@ -3108,11 +3108,11 @@ private final class WorkspaceRemoteCLIRelayServer {
                     if !response.isEmpty {
                         break
                     }
-                    throw NSError(domain: "cmux.remote.relay", code: 5, userInfo: [
+                    throw NSError(domain: "programa.remote.relay", code: 5, userInfo: [
                         NSLocalizedDescriptionKey: "timed out waiting for local cmux response",
                     ])
                 }
-                throw NSError(domain: "cmux.remote.relay", code: 6, userInfo: [
+                throw NSError(domain: "programa.remote.relay", code: 6, userInfo: [
                     NSLocalizedDescriptionKey: "failed to read local cmux response",
                 ])
             }
@@ -3132,7 +3132,7 @@ private final class WorkspaceRemoteCLIRelayServer {
 
     init(localSocketPath: String, relayID: String, relayTokenHex: String) throws {
         guard let relayToken = Session.hexData(from: relayTokenHex), !relayToken.isEmpty else {
-            throw NSError(domain: "cmux.remote.relay", code: 7, userInfo: [
+            throw NSError(domain: "programa.remote.relay", code: 7, userInfo: [
                 NSLocalizedDescriptionKey: "invalid relay token",
             ])
         }
@@ -3185,7 +3185,7 @@ private final class WorkspaceRemoteCLIRelayServer {
             listener.newConnectionHandler = nil
             listener.stateUpdateHandler = nil
             listener.cancel()
-            throw NSError(domain: "cmux.remote.relay", code: 8, userInfo: [
+            throw NSError(domain: "programa.remote.relay", code: 8, userInfo: [
                 NSLocalizedDescriptionKey: "timed out waiting for local relay listener",
             ])
         }
@@ -3199,7 +3199,7 @@ private final class WorkspaceRemoteCLIRelayServer {
             listener.newConnectionHandler = nil
             listener.stateUpdateHandler = nil
             listener.cancel()
-            throw NSError(domain: "cmux.remote.relay", code: 8, userInfo: [
+            throw NSError(domain: "programa.remote.relay", code: 8, userInfo: [
                 NSLocalizedDescriptionKey: "failed to bind local relay listener",
             ])
         }
@@ -3530,7 +3530,7 @@ final class WorkspaceRemoteSessionController {
         do {
             let hello = try bootstrapDaemonLocked()
             guard hello.capabilities.contains(WorkspaceRemoteDaemonRPCClient.requiredProxyStreamCapability) else {
-                throw NSError(domain: "cmux.remote.daemon", code: 43, userInfo: [
+                throw NSError(domain: "programa.remote.daemon", code: 43, userInfo: [
                     NSLocalizedDescriptionKey: "remote daemon missing required capability \(WorkspaceRemoteDaemonRPCClient.requiredProxyStreamCapability)",
                 ])
             }
@@ -4195,7 +4195,7 @@ final class WorkspaceRemoteSessionController {
 
         let stdoutHandle = stdoutPipe.fileHandleForReading
         let stderrHandle = stderrPipe.fileHandleForReading
-        let captureQueue = DispatchQueue(label: "cmux.remote.process.capture")
+        let captureQueue = DispatchQueue(label: "programa.remote.process.capture")
         let exitSemaphore = DispatchSemaphore(value: 0)
         var stdoutData = Data()
         var stderrData = Data()
@@ -4230,7 +4230,7 @@ final class WorkspaceRemoteSessionController {
                 "remote.proc.launchFailed exec=\(URL(fileURLWithPath: executable).lastPathComponent) " +
                 "error=\(error.localizedDescription)"
             )
-            throw NSError(domain: "cmux.remote.process", code: 1, userInfo: [
+            throw NSError(domain: "programa.remote.process", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Failed to launch \(URL(fileURLWithPath: executable).lastPathComponent): \(error.localizedDescription)",
             ])
         }
@@ -4268,7 +4268,7 @@ final class WorkspaceRemoteSessionController {
                 "remote.proc.timeout exec=\(URL(fileURLWithPath: executable).lastPathComponent) " +
                 "timeout=\(Int(timeout)) args=\(debugShellCommand(executable: executable, arguments: arguments))"
             )
-            throw NSError(domain: "cmux.remote.process", code: 2, userInfo: [
+            throw NSError(domain: "programa.remote.process", code: 2, userInfo: [
                 NSLocalizedDescriptionKey: "\(URL(fileURLWithPath: executable).lastPathComponent) timed out after \(Int(timeout))s",
             ])
         }
@@ -4375,7 +4375,7 @@ final class WorkspaceRemoteSessionController {
         let result = try sshExec(arguments: sshCommonArguments(batchMode: true) + [configuration.destination, command], timeout: 8)
         guard result.status == 0 else {
             let detail = Self.bestErrorLine(stderr: result.stderr, stdout: result.stdout) ?? "ssh exited \(result.status)"
-            throw NSError(domain: "cmux.remote.relay", code: 70, userInfo: [
+            throw NSError(domain: "programa.remote.relay", code: 70, userInfo: [
                 NSLocalizedDescriptionKey: "failed to install remote relay metadata: \(detail)",
             ])
         }
@@ -4405,22 +4405,22 @@ final class WorkspaceRemoteSessionController {
 
     private func probeRemoteBootstrapStateLocked(version: String) throws -> RemoteBootstrapState {
         let script = """
-        cmux_uname_os="$(uname -s)"
-        cmux_uname_arch="$(uname -m)"
-        printf '%s%s\\n' '\(Self.remotePlatformProbeOSMarker)' "$cmux_uname_os"
-        printf '%s%s\\n' '\(Self.remotePlatformProbeArchMarker)' "$cmux_uname_arch"
-        case "$(printf '%s' "$cmux_uname_os" | tr '[:upper:]' '[:lower:]')" in
-          linux|darwin|freebsd) cmux_go_os="$(printf '%s' "$cmux_uname_os" | tr '[:upper:]' '[:lower:]')" ;;
+        programa_uname_os="$(uname -s)"
+        programa_uname_arch="$(uname -m)"
+        printf '%s%s\\n' '\(Self.remotePlatformProbeOSMarker)' "$programa_uname_os"
+        printf '%s%s\\n' '\(Self.remotePlatformProbeArchMarker)' "$programa_uname_arch"
+        case "$(printf '%s' "$programa_uname_os" | tr '[:upper:]' '[:lower:]')" in
+          linux|darwin|freebsd) programa_go_os="$(printf '%s' "$programa_uname_os" | tr '[:upper:]' '[:lower:]')" ;;
           *) exit 70 ;;
         esac
-        case "$(printf '%s' "$cmux_uname_arch" | tr '[:upper:]' '[:lower:]')" in
-          x86_64|amd64) cmux_go_arch=amd64 ;;
-          aarch64|arm64) cmux_go_arch=arm64 ;;
-          armv7l) cmux_go_arch=arm ;;
+        case "$(printf '%s' "$programa_uname_arch" | tr '[:upper:]' '[:lower:]')" in
+          x86_64|amd64) programa_go_arch=amd64 ;;
+          aarch64|arm64) programa_go_arch=arm64 ;;
+          armv7l) programa_go_arch=arm ;;
           *) exit 71 ;;
         esac
-        cmux_remote_path="$HOME/.programa/bin/programad-remote/\(version)/${cmux_go_os}-${cmux_go_arch}/programad-remote"
-        if [ -x "$cmux_remote_path" ]; then
+        programa_remote_path="$HOME/.programa/bin/programad-remote/\(version)/${programa_go_os}-${programa_go_arch}/programad-remote"
+        if [ -x "$programa_remote_path" ]; then
           printf '%syes\\n' '\(Self.remotePlatformProbeExistsMarker)'
         else
           printf '%sno\\n' '\(Self.remotePlatformProbeExistsMarker)'
@@ -4439,14 +4439,14 @@ final class WorkspaceRemoteSessionController {
             .map { String($0.dropFirst(Self.remotePlatformProbeArchMarker.count)) }
         guard let unameOS, let unameArch else {
             let detail = Self.bestErrorLine(stderr: result.stderr, stdout: result.stdout) ?? "ssh exited \(result.status)"
-            throw NSError(domain: "cmux.remote.daemon", code: 11, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 11, userInfo: [
                 NSLocalizedDescriptionKey: "failed to query remote platform: \(detail)",
             ])
         }
 
         guard let goOS = Self.mapUnameOS(unameOS),
               let goArch = Self.mapUnameArch(unameArch) else {
-            throw NSError(domain: "cmux.remote.daemon", code: 12, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 12, userInfo: [
                 NSLocalizedDescriptionKey: "unsupported remote platform \(unameOS)/\(unameArch)",
             ])
         }
@@ -4455,7 +4455,7 @@ final class WorkspaceRemoteSessionController {
             .map { String($0.dropFirst(Self.remotePlatformProbeExistsMarker.count)) == "yes" }
         if result.status != 0, binaryExists == nil {
             let detail = Self.bestErrorLine(stderr: result.stderr, stdout: result.stdout) ?? "ssh exited \(result.status)"
-            throw NSError(domain: "cmux.remote.daemon", code: 13, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 13, userInfo: [
                 NSLocalizedDescriptionKey: "failed to query remote daemon state: \(detail)",
             ])
         }
@@ -4557,7 +4557,7 @@ final class WorkspaceRemoteSessionController {
 
     private func downloadRemoteDaemonBinaryLocked(entry: WorkspaceRemoteDaemonManifest.Entry, version: String, releaseURL: String? = nil) throws -> URL {
         guard let url = URL(string: entry.downloadURL) else {
-            throw NSError(domain: "cmux.remote.daemon", code: 25, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 25, userInfo: [
                 NSLocalizedDescriptionKey: "remote daemon manifest has an invalid download URL",
             ])
         }
@@ -4582,7 +4582,7 @@ final class WorkspaceRemoteSessionController {
             }
             if let httpResponse = response as? HTTPURLResponse,
                !(200...299).contains(httpResponse.statusCode) {
-                downloadError = NSError(domain: "cmux.remote.daemon", code: 26, userInfo: [
+                downloadError = NSError(domain: "programa.remote.daemon", code: 26, userInfo: [
                     NSLocalizedDescriptionKey: "remote daemon download failed with HTTP \(httpResponse.statusCode)",
                 ])
                 return
@@ -4596,7 +4596,7 @@ final class WorkspaceRemoteSessionController {
             throw downloadError
         }
         guard let downloadedURL else {
-            throw NSError(domain: "cmux.remote.daemon", code: 27, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 27, userInfo: [
                 NSLocalizedDescriptionKey: "remote daemon download did not produce a file",
             ])
         }
@@ -4613,7 +4613,7 @@ final class WorkspaceRemoteSessionController {
                downloadedSHA == liveEntry.sha256.lowercased() {
                 debugLog("remote.download.checksum-fallback: embedded manifest checksum stale, live manifest matched for \(entry.assetName)")
             } else {
-                throw NSError(domain: "cmux.remote.daemon", code: 28, userInfo: [
+                throw NSError(domain: "programa.remote.daemon", code: 28, userInfo: [
                     NSLocalizedDescriptionKey: "remote daemon checksum mismatch for \(entry.assetName)",
                 ])
             }
@@ -4655,25 +4655,25 @@ final class WorkspaceRemoteSessionController {
         }
 
         guard Self.allowLocalDaemonBuildFallback() else {
-            throw NSError(domain: "cmux.remote.daemon", code: 20, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 20, userInfo: [
                 NSLocalizedDescriptionKey: "this build does not include a verified programad-remote manifest for \(goOS)-\(goArch). Use a release/nightly build, or set PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 for a dev-only fallback.",
             ])
         }
 
         guard let repoRoot = Self.findRepoRoot() else {
-            throw NSError(domain: "cmux.remote.daemon", code: 20, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 20, userInfo: [
                 NSLocalizedDescriptionKey: "cannot locate cmux repo root for dev-only programad-remote build fallback",
             ])
         }
         let daemonRoot = repoRoot.appendingPathComponent("daemon/remote", isDirectory: true)
         let goModPath = daemonRoot.appendingPathComponent("go.mod").path
         guard FileManager.default.fileExists(atPath: goModPath) else {
-            throw NSError(domain: "cmux.remote.daemon", code: 21, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 21, userInfo: [
                 NSLocalizedDescriptionKey: "missing daemon module at \(goModPath)",
             ])
         }
         guard let goBinary = Self.which("go") else {
-            throw NSError(domain: "cmux.remote.daemon", code: 22, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 22, userInfo: [
                 NSLocalizedDescriptionKey: "go is required for the dev-only programad-remote build fallback",
             ])
         }
@@ -4696,12 +4696,12 @@ final class WorkspaceRemoteSessionController {
         )
         guard result.status == 0 else {
             let detail = Self.bestErrorLine(stderr: result.stderr, stdout: result.stdout) ?? "go build failed with status \(result.status)"
-            throw NSError(domain: "cmux.remote.daemon", code: 23, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 23, userInfo: [
                 NSLocalizedDescriptionKey: "failed to build programad-remote: \(detail)",
             ])
         }
         guard FileManager.default.isExecutableFile(atPath: output.path) else {
-            throw NSError(domain: "cmux.remote.daemon", code: 24, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 24, userInfo: [
                 NSLocalizedDescriptionKey: "programad-remote build output is not executable",
             ])
         }
@@ -4721,7 +4721,7 @@ final class WorkspaceRemoteSessionController {
         let mkdirResult = try sshExec(arguments: sshCommonArguments(batchMode: true) + [configuration.destination, mkdirCommand], timeout: 12)
         guard mkdirResult.status == 0 else {
             let detail = Self.bestErrorLine(stderr: mkdirResult.stderr, stdout: mkdirResult.stdout) ?? "ssh exited \(mkdirResult.status)"
-            throw NSError(domain: "cmux.remote.daemon", code: 30, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 30, userInfo: [
                 NSLocalizedDescriptionKey: "failed to create remote daemon directory: \(detail)",
             ])
         }
@@ -4746,7 +4746,7 @@ final class WorkspaceRemoteSessionController {
         let scpResult = try scpExec(arguments: scpArgs, timeout: 45)
         guard scpResult.status == 0 else {
             let detail = Self.bestErrorLine(stderr: scpResult.stderr, stdout: scpResult.stdout) ?? "scp exited \(scpResult.status)"
-            throw NSError(domain: "cmux.remote.daemon", code: 31, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 31, userInfo: [
                 NSLocalizedDescriptionKey: "failed to upload programad-remote: \(detail)",
             ])
         }
@@ -4759,7 +4759,7 @@ final class WorkspaceRemoteSessionController {
         let finalizeResult = try sshExec(arguments: sshCommonArguments(batchMode: true) + [configuration.destination, finalizeCommand], timeout: 12)
         guard finalizeResult.status == 0 else {
             let detail = Self.bestErrorLine(stderr: finalizeResult.stderr, stdout: finalizeResult.stdout) ?? "ssh exited \(finalizeResult.status)"
-            throw NSError(domain: "cmux.remote.daemon", code: 32, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 32, userInfo: [
                 NSLocalizedDescriptionKey: "failed to install remote daemon binary: \(detail)",
             ])
         }
@@ -4836,7 +4836,7 @@ final class WorkspaceRemoteSessionController {
         let result = try sshExec(arguments: sshCommonArguments(batchMode: true) + [configuration.destination, command], timeout: 12)
         guard result.status == 0 else {
             let detail = Self.bestErrorLine(stderr: result.stderr, stdout: result.stdout) ?? "ssh exited \(result.status)"
-            throw NSError(domain: "cmux.remote.daemon", code: 40, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 40, userInfo: [
                 NSLocalizedDescriptionKey: "failed to start remote daemon: \(detail)",
             ])
         }
@@ -4848,7 +4848,7 @@ final class WorkspaceRemoteSessionController {
         guard !responseLine.isEmpty,
               let data = responseLine.data(using: .utf8),
               let payload = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
-            throw NSError(domain: "cmux.remote.daemon", code: 41, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 41, userInfo: [
                 NSLocalizedDescriptionKey: "remote daemon hello returned invalid JSON",
             ])
         }
@@ -4862,7 +4862,7 @@ final class WorkspaceRemoteSessionController {
                 }
                 return "hello call failed"
             }()
-            throw NSError(domain: "cmux.remote.daemon", code: 42, userInfo: [
+            throw NSError(domain: "programa.remote.daemon", code: 42, userInfo: [
                 NSLocalizedDescriptionKey: "remote daemon hello failed: \(errorMessage)",
             ])
         }
@@ -5551,7 +5551,7 @@ final class WorkspaceRemoteSessionController {
         )
         guard result.status == 0 else {
             let detail = Self.bestErrorLine(stderr: result.stderr, stdout: result.stdout) ?? "ssh exited \(result.status)"
-            throw NSError(domain: "cmux.remote.ports", code: 90, userInfo: [
+            throw NSError(domain: "programa.remote.ports", code: 90, userInfo: [
                 NSLocalizedDescriptionKey: "remote port scan failed: \(detail)",
             ])
         }
@@ -5646,7 +5646,7 @@ final class WorkspaceRemoteSessionController {
             )
             guard result.status == 0 else {
                 let detail = Self.bestErrorLine(stderr: result.stderr, stdout: result.stdout) ?? "ssh exited \(result.status)"
-                throw NSError(domain: "cmux.remote.ports", code: 90, userInfo: [
+                throw NSError(domain: "programa.remote.ports", code: 90, userInfo: [
                     NSLocalizedDescriptionKey: "remote port scan failed: \(detail)",
                 ])
             }
@@ -5761,35 +5761,35 @@ final class WorkspaceRemoteSessionController {
 
         return """
         set -eu
-        cmux_tracked_ttys=" \(ttySet) "
-        cmux_tty_csv='\(ttyCSV)'
-        cmux_excluded_ports=" \(excludedPorts) "
+        programa_tracked_ttys=" \(ttySet) "
+        programa_tty_csv='\(ttyCSV)'
+        programa_excluded_ports=" \(excludedPorts) "
 
-        cmux_emit_port() {
-          cmux_tty="$1"
-          cmux_port="$2"
-          case "$cmux_tracked_ttys" in
-            *" $cmux_tty "*) ;;
+        programa_emit_port() {
+          programa_tty="$1"
+          programa_port="$2"
+          case "$programa_tracked_ttys" in
+            *" $programa_tty "*) ;;
             *) return 0 ;;
           esac
-          case "$cmux_excluded_ports" in
-            *" $cmux_port "*) return 0 ;;
+          case "$programa_excluded_ports" in
+            *" $programa_port "*) return 0 ;;
           esac
-          [ "$cmux_port" -ge 1024 ] && [ "$cmux_port" -le 65535 ] || return 0
-          printf '%s\\t%s\\n' "$cmux_tty" "$cmux_port"
+          [ "$programa_port" -ge 1024 ] && [ "$programa_port" -le 65535 ] || return 0
+          printf '%s\\t%s\\n' "$programa_tty" "$programa_port"
         }
 
-        cmux_used_ss=0
+        programa_used_ss=0
         if [ -d /proc ] && command -v ss >/dev/null 2>&1; then
-          cmux_ss_output="$(ss -ltnpH 2>/dev/null || true)"
-          case "$cmux_ss_output" in
+          programa_ss_output="$(ss -ltnpH 2>/dev/null || true)"
+          case "$programa_ss_output" in
             *pid=*)
-              cmux_used_ss=1
-              printf '%s\\n' "$cmux_ss_output" | while IFS= read -r cmux_line; do
-                [ -n "$cmux_line" ] || continue
-                cmux_port="$(printf '%s\\n' "$cmux_line" | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ { print $1; exit }')"
-                [ -n "$cmux_port" ] || continue
-                printf '%s\\n' "$cmux_line" | awk '
+              programa_used_ss=1
+              printf '%s\\n' "$programa_ss_output" | while IFS= read -r programa_line; do
+                [ -n "$programa_line" ] || continue
+                programa_port="$(printf '%s\\n' "$programa_line" | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ { print $1; exit }')"
+                [ -n "$programa_port" ] || continue
+                printf '%s\\n' "$programa_line" | awk '
                   {
                     line = $0
                     while (match(line, /pid=[0-9]+/)) {
@@ -5797,34 +5797,34 @@ final class WorkspaceRemoteSessionController {
                       line = substr(line, RSTART + RLENGTH)
                     }
                   }
-                ' | while IFS= read -r cmux_pid; do
-                  [ -n "$cmux_pid" ] || continue
-                  cmux_tty_path="$(readlink "/proc/$cmux_pid/fd/0" 2>/dev/null || true)"
-                  [ -n "$cmux_tty_path" ] || continue
-                  cmux_tty="${cmux_tty_path##*/}"
-                  [ -n "$cmux_tty" ] || continue
-                  cmux_emit_port "$cmux_tty" "$cmux_port"
+                ' | while IFS= read -r programa_pid; do
+                  [ -n "$programa_pid" ] || continue
+                  programa_tty_path="$(readlink "/proc/$programa_pid/fd/0" 2>/dev/null || true)"
+                  [ -n "$programa_tty_path" ] || continue
+                  programa_tty="${programa_tty_path##*/}"
+                  [ -n "$programa_tty" ] || continue
+                  programa_emit_port "$programa_tty" "$programa_port"
                 done
               done
               ;;
           esac
         fi
 
-        if [ "$cmux_used_ss" -eq 0 ] && command -v lsof >/dev/null 2>&1 && [ -n "$cmux_tty_csv" ]; then
-          cmux_tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t programa-ports)"
-          trap 'rm -rf "$cmux_tmpdir"' EXIT INT TERM
-          cmux_pid_tty_map="$cmux_tmpdir/pid_tty"
-          ps -t "$cmux_tty_csv" -o pid=,tty= 2>/dev/null | awk '
+        if [ "$programa_used_ss" -eq 0 ] && command -v lsof >/dev/null 2>&1 && [ -n "$programa_tty_csv" ]; then
+          programa_tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t programa-ports)"
+          trap 'rm -rf "$programa_tmpdir"' EXIT INT TERM
+          programa_pid_tty_map="$programa_tmpdir/pid_tty"
+          ps -t "$programa_tty_csv" -o pid=,tty= 2>/dev/null | awk '
             NF >= 2 {
               tty = $2
               sub(/^.*\\//, "", tty)
               print $1 "\\t" tty
             }
-          ' > "$cmux_pid_tty_map"
-          [ -s "$cmux_pid_tty_map" ] || exit 0
-          cmux_pid_csv="$(awk '{print $1}' "$cmux_pid_tty_map" | paste -sd, -)"
-          [ -n "$cmux_pid_csv" ] || exit 0
-          lsof -nP -a -p "$cmux_pid_csv" -iTCP -sTCP:LISTEN -Fpn 2>/dev/null | awk -v map="$cmux_pid_tty_map" '
+          ' > "$programa_pid_tty_map"
+          [ -s "$programa_pid_tty_map" ] || exit 0
+          programa_pid_csv="$(awk '{print $1}' "$programa_pid_tty_map" | paste -sd, -)"
+          [ -n "$programa_pid_csv" ] || exit 0
+          lsof -nP -a -p "$programa_pid_csv" -iTCP -sTCP:LISTEN -Fpn 2>/dev/null | awk -v map="$programa_pid_tty_map" '
             BEGIN {
               while ((getline < map) > 0) {
                 pid_to_tty[$1] = $2
@@ -5845,10 +5845,10 @@ final class WorkspaceRemoteSessionController {
                 print tty "\\t" name
               }
             }
-          ' | while IFS=$'\\t' read -r cmux_tty cmux_port; do
-            [ -n "$cmux_tty" ] || continue
-            [ -n "$cmux_port" ] || continue
-            cmux_emit_port "$cmux_tty" "$cmux_port"
+          ' | while IFS=$'\\t' read -r programa_tty programa_port; do
+            [ -n "$programa_tty" ] || continue
+            [ -n "$programa_port" ] || continue
+            programa_emit_port "$programa_tty" "$programa_port"
           done
         fi
         """
@@ -5859,31 +5859,31 @@ final class WorkspaceRemoteSessionController {
 
         return """
         set -eu
-        cmux_excluded_ports=" \(excludedPorts) "
+        programa_excluded_ports=" \(excludedPorts) "
 
-        cmux_emit_port() {
-          cmux_port="$1"
-          case "$cmux_excluded_ports" in
-            *" $cmux_port "*) return 0 ;;
+        programa_emit_port() {
+          programa_port="$1"
+          case "$programa_excluded_ports" in
+            *" $programa_port "*) return 0 ;;
           esac
-          [ "$cmux_port" -ge 1024 ] && [ "$cmux_port" -le 65535 ] || return 0
-          printf '%s\\n' "$cmux_port"
+          [ "$programa_port" -ge 1024 ] && [ "$programa_port" -le 65535 ] || return 0
+          printf '%s\\n' "$programa_port"
         }
 
         if command -v ss >/dev/null 2>&1; then
-          ss -ltnH 2>/dev/null | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r cmux_port; do
-            [ -n "$cmux_port" ] || continue
-            cmux_emit_port "$cmux_port"
+          ss -ltnH 2>/dev/null | awk '{print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r programa_port; do
+            [ -n "$programa_port" ] || continue
+            programa_emit_port "$programa_port"
           done
         elif command -v netstat >/dev/null 2>&1; then
-          netstat -lnt 2>/dev/null | awk 'NR > 2 {print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r cmux_port; do
-            [ -n "$cmux_port" ] || continue
-            cmux_emit_port "$cmux_port"
+          netstat -lnt 2>/dev/null | awk 'NR > 2 {print $4}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r programa_port; do
+            [ -n "$programa_port" ] || continue
+            programa_emit_port "$programa_port"
           done
         elif command -v lsof >/dev/null 2>&1; then
-          lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 {print $9}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r cmux_port; do
-            [ -n "$cmux_port" ] || continue
-            cmux_emit_port "$cmux_port"
+          lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 {print $9}' | sed -E 's/.*:([0-9]+)$/\\1/' | awk '/^[0-9]+$/ {print $1}' | while IFS= read -r programa_port; do
+            [ -n "$programa_port" ] || continue
+            programa_emit_port "$programa_port"
           done
         fi
         """
@@ -6872,7 +6872,7 @@ final class Workspace: Identifiable, ObservableObject {
         title: String = "Terminal",
         workingDirectory: String? = nil,
         portOrdinal: Int = 0,
-        configTemplate: CmuxSurfaceConfigTemplate? = nil,
+        configTemplate: ProgramaSurfaceConfigTemplate? = nil,
         initialTerminalCommand: String? = nil,
         initialTerminalEnvironment: [String: String] = [:]
     ) {
@@ -6985,7 +6985,7 @@ final class Workspace: Identifiable, ObservableObject {
         title: String = "Terminal",
         workingDirectory: String? = nil,
         portOrdinal: Int = 0,
-        configTemplate: CmuxSurfaceConfigTemplate? = nil
+        configTemplate: ProgramaSurfaceConfigTemplate? = nil
     ) {
         self.id = UUID()
         self.portOrdinal = portOrdinal
@@ -8752,7 +8752,7 @@ final class Workspace: Identifiable, ObservableObject {
 
     private func seedTerminalInheritanceFontPoints(
         panelId: UUID,
-        configTemplate: CmuxSurfaceConfigTemplate?
+        configTemplate: ProgramaSurfaceConfigTemplate?
     ) {
         guard let fontPoints = configTemplate?.fontSize, fontPoints > 0 else { return }
         terminalInheritanceFontPointsByPanelId[panelId] = fontPoints
@@ -8762,9 +8762,9 @@ final class Workspace: Identifiable, ObservableObject {
     private func resolvedTerminalInheritanceFontPoints(
         for terminalPanel: TerminalPanel,
         sourceSurface: ghostty_surface_t,
-        inheritedConfig: CmuxSurfaceConfigTemplate
+        inheritedConfig: ProgramaSurfaceConfigTemplate
     ) -> Float? {
-        let runtimePoints = cmuxCurrentSurfaceFontSizePoints(sourceSurface)
+        let runtimePoints = programaCurrentSurfaceFontSizePoints(sourceSurface)
         if let rooted = terminalInheritanceFontPointsByPanelId[terminalPanel.id], rooted > 0 {
             if let runtimePoints, abs(runtimePoints - rooted) > 0.05 {
                 // Runtime zoom changed after lineage was seeded (manual zoom on descendant);
@@ -8783,7 +8783,7 @@ final class Workspace: Identifiable, ObservableObject {
         lastTerminalConfigInheritancePanelId = terminalPanel.id
         if terminalPanel.surface.isSurfaceLive,
            let sourceSurface = terminalPanel.surface.surface,
-           let runtimePoints = cmuxCurrentSurfaceFontSizePoints(sourceSurface) {
+           let runtimePoints = programaCurrentSurfaceFontSizePoints(sourceSurface) {
             let existing = terminalInheritanceFontPointsByPanelId[terminalPanel.id]
             if existing == nil || abs((existing ?? runtimePoints) - runtimePoints) > 0.05 {
                 terminalInheritanceFontPointsByPanelId[terminalPanel.id] = runtimePoints
@@ -8873,7 +8873,7 @@ final class Workspace: Identifiable, ObservableObject {
     private func inheritedTerminalConfig(
         preferredPanelId: UUID? = nil,
         inPane preferredPaneId: PaneID? = nil
-    ) -> CmuxSurfaceConfigTemplate? {
+    ) -> ProgramaSurfaceConfigTemplate? {
         // Walk candidates in priority order and use the first panel that still exposes
         // a runtime surface pointer.
         for terminalPanel in terminalPanelConfigInheritanceCandidates(
@@ -8883,11 +8883,11 @@ final class Workspace: Identifiable, ObservableObject {
             // Pin the panel and its TerminalSurface wrapper for the duration of
             // this iteration. The raw ghostty_surface_t extracted below is owned
             // by `surface` (the TerminalSurface) — ARC must not release it while
-            // ghostty_surface_inherited_config or cmuxCurrentSurfaceFontSizePoints
+            // ghostty_surface_inherited_config or programaCurrentSurfaceFontSizePoints
             // is still reading through the pointer.
             let surface = terminalPanel.surface
             guard let sourceSurface = surface.surface else { continue }
-            var config = cmuxInheritedSurfaceConfig(
+            var config = programaInheritedSurfaceConfig(
                 sourceSurface: sourceSurface,
                 context: GHOSTTY_SURFACE_CONTEXT_SPLIT
             )
@@ -8909,7 +8909,7 @@ final class Workspace: Identifiable, ObservableObject {
         }
 
         if let fallbackFontPoints = lastTerminalConfigInheritanceFontPoints {
-            var config = CmuxSurfaceConfigTemplate()
+            var config = ProgramaSurfaceConfigTemplate()
             config.fontSize = fallbackFontPoints
 #if DEBUG
             dlog(
@@ -11235,7 +11235,7 @@ final class Workspace: Identifiable, ObservableObject {
             let failure = NSAlert()
             failure.alertStyle = .warning
             failure.messageText = String(localized: "alert.moveTab.failed.title", defaultValue: "Move Failed")
-            failure.informativeText = String(localized: "alert.moveTab.failed.message", defaultValue: "cmux could not move this tab to the selected destination.")
+            failure.informativeText = String(localized: "alert.moveTab.failed.message", defaultValue: "Programa could not move this tab to the selected destination.")
             failure.addButton(withTitle: String(localized: "alert.ok", defaultValue: "OK"))
             _ = failure.runModal()
         }

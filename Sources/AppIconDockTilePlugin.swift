@@ -1,7 +1,7 @@
 import AppKit
 
-private let cmuxAppIconDidChangeNotification = Notification.Name("com.darkroom.programa.appIconDidChange")
-private let cmuxAppIconModeKey = "appIconMode"
+private let programaAppIconDidChangeNotification = Notification.Name("com.darkroom.programa.appIconDidChange")
+private let programaAppIconModeKey = "appIconMode"
 
 private enum DockTileAppIconMode: String {
     case automatic
@@ -24,10 +24,10 @@ private enum DockTileAppIconMode: String {
     }
 }
 
-final class CmuxDockTilePlugin: NSObject, NSDockTilePlugIn {
+final class ProgramaDockTilePlugin: NSObject, NSDockTilePlugIn {
     // The plugin can stay alive while the app remains in the Dock, even after quit.
     // Keep the state minimal and derive everything from the enclosing app bundle.
-    private let pluginBundle = Bundle(for: CmuxDockTilePlugin.self)
+    private let pluginBundle = Bundle(for: ProgramaDockTilePlugin.self)
     private var iconChangeObserver: NSObjectProtocol?
 
     deinit {
@@ -46,7 +46,7 @@ final class CmuxDockTilePlugin: NSObject, NSDockTilePlugIn {
         updateDockTile(dockTile)
 
         iconChangeObserver = DistributedNotificationCenter.default().addObserver(
-            forName: cmuxAppIconDidChangeNotification,
+            forName: programaAppIconDidChangeNotification,
             object: nil,
             queue: nil
         ) { [weak self] _ in
@@ -70,7 +70,7 @@ final class CmuxDockTilePlugin: NSObject, NSDockTilePlugIn {
     }
 
     private func updateDockTile(_ dockTile: NSDockTile) {
-        let mode = DockTileAppIconMode(defaultsValue: appDefaults?.string(forKey: cmuxAppIconModeKey))
+        let mode = DockTileAppIconMode(defaultsValue: appDefaults?.string(forKey: programaAppIconModeKey))
         guard let imageName = mode.imageName,
               let icon = appBundle?.image(forResource: imageName) else {
             dockTile.showDefaultAppIcon()

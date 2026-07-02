@@ -120,7 +120,7 @@ final class TitlebarControlsViewModel: ObservableObject {
 }
 
 extension Notification.Name {
-    static let cmuxNotificationsPopoverVisibilityDidChange = Notification.Name("cmux.notificationsPopoverVisibilityDidChange")
+    static let programaNotificationsPopoverVisibilityDidChange = Notification.Name("programa.notificationsPopoverVisibilityDidChange")
 }
 
 private enum NotificationsPopoverVisibilityUserInfoKey {
@@ -129,7 +129,7 @@ private enum NotificationsPopoverVisibilityUserInfoKey {
 
 private func postNotificationsPopoverVisibilityDidChange(isShown: Bool) {
     NotificationCenter.default.post(
-        name: .cmuxNotificationsPopoverVisibilityDidChange,
+        name: .programaNotificationsPopoverVisibilityDidChange,
         object: nil,
         userInfo: [NotificationsPopoverVisibilityUserInfoKey.isShown: isShown]
     )
@@ -333,7 +333,7 @@ struct TitlebarControlsView: View {
             .onAppear {
                 isNotificationsPopoverShown = AppDelegate.shared?.isNotificationsPopoverShown() ?? false
             }
-            .onReceive(NotificationCenter.default.publisher(for: .cmuxNotificationsPopoverVisibilityDidChange)) { notification in
+            .onReceive(NotificationCenter.default.publisher(for: .programaNotificationsPopoverVisibilityDidChange)) { notification in
                 isNotificationsPopoverShown = (notification.userInfo?[NotificationsPopoverVisibilityUserInfoKey.isShown] as? Bool) ?? false
             }
             .onAppear {
@@ -384,7 +384,7 @@ struct TitlebarControlsView: View {
                             .foregroundColor(.white)
                             .frame(width: config.badgeSize, height: config.badgeSize)
                             .background(
-                                Circle().fill(cmuxAccentColor())
+                                Circle().fill(programaAccentColor())
                             )
                             .offset(x: config.badgeOffset.width, y: config.badgeOffset.height)
                     }
@@ -1155,11 +1155,11 @@ private struct NotificationPopoverRow: View {
             Button(action: onOpen) {
                 HStack(alignment: .top, spacing: 10) {
                     Circle()
-                        .fill(notification.isRead ? Color.clear : cmuxAccentColor())
+                        .fill(notification.isRead ? Color.clear : programaAccentColor())
                         .frame(width: 8, height: 8)
                         .overlay(
                             Circle()
-                                .stroke(cmuxAccentColor().opacity(notification.isRead ? 0.2 : 1), lineWidth: 1)
+                                .stroke(programaAccentColor().opacity(notification.isRead ? 0.2 : 1), lineWidth: 1)
                         )
                         .padding(.top, 6)
 

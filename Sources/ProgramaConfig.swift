@@ -2,16 +2,16 @@ import Bonsplit
 import Combine
 import Foundation
 
-struct CmuxConfigFile: Codable, Sendable {
-    var commands: [CmuxCommandDefinition]
+struct ProgramaConfigFile: Codable, Sendable {
+    var commands: [ProgramaCommandDefinition]
 }
 
-struct CmuxCommandDefinition: Codable, Sendable, Identifiable {
+struct ProgramaCommandDefinition: Codable, Sendable, Identifiable {
     var name: String
     var description: String?
     var keywords: [String]?
-    var restart: CmuxRestartBehavior?
-    var workspace: CmuxWorkspaceDefinition?
+    var restart: ProgramaRestartBehavior?
+    var workspace: ProgramaWorkspaceDefinition?
     var command: String?
     var confirm: Bool?
 
@@ -23,8 +23,8 @@ struct CmuxCommandDefinition: Codable, Sendable, Identifiable {
         name: String,
         description: String? = nil,
         keywords: [String]? = nil,
-        restart: CmuxRestartBehavior? = nil,
-        workspace: CmuxWorkspaceDefinition? = nil,
+        restart: ProgramaRestartBehavior? = nil,
+        workspace: ProgramaWorkspaceDefinition? = nil,
         command: String? = nil,
         confirm: Bool? = nil
     ) {
@@ -42,8 +42,8 @@ struct CmuxCommandDefinition: Codable, Sendable, Identifiable {
         name = try container.decode(String.self, forKey: .name)
         description = try container.decodeIfPresent(String.self, forKey: .description)
         keywords = try container.decodeIfPresent([String].self, forKey: .keywords)
-        restart = try container.decodeIfPresent(CmuxRestartBehavior.self, forKey: .restart)
-        workspace = try container.decodeIfPresent(CmuxWorkspaceDefinition.self, forKey: .workspace)
+        restart = try container.decodeIfPresent(ProgramaRestartBehavior.self, forKey: .restart)
+        workspace = try container.decodeIfPresent(ProgramaWorkspaceDefinition.self, forKey: .workspace)
         command = try container.decodeIfPresent(String.self, forKey: .command)
         confirm = try container.decodeIfPresent(Bool.self, forKey: .confirm)
 
@@ -84,19 +84,19 @@ struct CmuxCommandDefinition: Codable, Sendable, Identifiable {
     }
 }
 
-enum CmuxRestartBehavior: String, Codable, Sendable {
+enum ProgramaRestartBehavior: String, Codable, Sendable {
     case recreate
     case ignore
     case confirm
 }
 
-struct CmuxWorkspaceDefinition: Codable, Sendable {
+struct ProgramaWorkspaceDefinition: Codable, Sendable {
     var name: String?
     var cwd: String?
     var color: String?
-    var layout: CmuxLayoutNode?
+    var layout: ProgramaLayoutNode?
 
-    init(name: String? = nil, cwd: String? = nil, color: String? = nil, layout: CmuxLayoutNode? = nil) {
+    init(name: String? = nil, cwd: String? = nil, color: String? = nil, layout: ProgramaLayoutNode? = nil) {
         self.name = name
         self.cwd = cwd
         self.color = color
@@ -107,7 +107,7 @@ struct CmuxWorkspaceDefinition: Codable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decodeIfPresent(String.self, forKey: .name)
         cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
-        layout = try container.decodeIfPresent(CmuxLayoutNode.self, forKey: .layout)
+        layout = try container.decodeIfPresent(ProgramaLayoutNode.self, forKey: .layout)
 
         if let rawColor = try container.decodeIfPresent(String.self, forKey: .color) {
             guard let normalized = WorkspaceTabColorSettings.normalizedHex(rawColor) else {
@@ -124,9 +124,9 @@ struct CmuxWorkspaceDefinition: Codable, Sendable {
     }
 }
 
-indirect enum CmuxLayoutNode: Codable, Sendable {
-    case pane(CmuxPaneDefinition)
-    case split(CmuxSplitDefinition)
+indirect enum ProgramaLayoutNode: Codable, Sendable {
+    case pane(ProgramaPaneDefinition)
+    case split(ProgramaSplitDefinition)
 
     private enum CodingKeys: String, CodingKey {
         case pane
@@ -144,22 +144,22 @@ indirect enum CmuxLayoutNode: Codable, Sendable {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(
                     codingPath: decoder.codingPath,
-                    debugDescription: "CmuxLayoutNode must not contain both 'pane' and 'direction' keys"
+                    debugDescription: "ProgramaLayoutNode must not contain both 'pane' and 'direction' keys"
                 )
             )
         }
 
         if hasPane {
-            let pane = try container.decode(CmuxPaneDefinition.self, forKey: .pane)
+            let pane = try container.decode(ProgramaPaneDefinition.self, forKey: .pane)
             self = .pane(pane)
         } else if hasDirection {
-            let splitDef = try CmuxSplitDefinition(from: decoder)
+            let splitDef = try ProgramaSplitDefinition(from: decoder)
             self = .split(splitDef)
         } else {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(
                     codingPath: decoder.codingPath,
-                    debugDescription: "CmuxLayoutNode must contain either a 'pane' key or a 'direction' key"
+                    debugDescription: "ProgramaLayoutNode must contain either a 'pane' key or a 'direction' key"
                 )
             )
         }
@@ -176,12 +176,12 @@ indirect enum CmuxLayoutNode: Codable, Sendable {
     }
 }
 
-struct CmuxSplitDefinition: Codable, Sendable {
-    var direction: CmuxSplitDirection
+struct ProgramaSplitDefinition: Codable, Sendable {
+    var direction: ProgramaSplitDirection
     var split: Double?
-    var children: [CmuxLayoutNode]
+    var children: [ProgramaLayoutNode]
 
-    init(direction: CmuxSplitDirection, split: Double? = nil, children: [CmuxLayoutNode]) {
+    init(direction: ProgramaSplitDirection, split: Double? = nil, children: [ProgramaLayoutNode]) {
         self.direction = direction
         self.split = split
         self.children = children
@@ -189,9 +189,9 @@ struct CmuxSplitDefinition: Codable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        direction = try container.decode(CmuxSplitDirection.self, forKey: .direction)
+        direction = try container.decode(ProgramaSplitDirection.self, forKey: .direction)
         split = try container.decodeIfPresent(Double.self, forKey: .split)
-        children = try container.decode([CmuxLayoutNode].self, forKey: .children)
+        children = try container.decode([ProgramaLayoutNode].self, forKey: .children)
         if children.count != 2 {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(
@@ -215,21 +215,21 @@ struct CmuxSplitDefinition: Codable, Sendable {
     }
 }
 
-enum CmuxSplitDirection: String, Codable, Sendable {
+enum ProgramaSplitDirection: String, Codable, Sendable {
     case horizontal
     case vertical
 }
 
-struct CmuxPaneDefinition: Codable, Sendable {
-    var surfaces: [CmuxSurfaceDefinition]
+struct ProgramaPaneDefinition: Codable, Sendable {
+    var surfaces: [ProgramaSurfaceDefinition]
 
-    init(surfaces: [CmuxSurfaceDefinition]) {
+    init(surfaces: [ProgramaSurfaceDefinition]) {
         self.surfaces = surfaces
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        surfaces = try container.decode([CmuxSurfaceDefinition].self, forKey: .surfaces)
+        surfaces = try container.decode([ProgramaSurfaceDefinition].self, forKey: .surfaces)
         if surfaces.isEmpty {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(
@@ -241,8 +241,8 @@ struct CmuxPaneDefinition: Codable, Sendable {
     }
 }
 
-struct CmuxSurfaceDefinition: Codable, Sendable {
-    var type: CmuxSurfaceType
+struct ProgramaSurfaceDefinition: Codable, Sendable {
+    var type: ProgramaSurfaceType
     var name: String?
     var command: String?
     var cwd: String?
@@ -251,14 +251,14 @@ struct CmuxSurfaceDefinition: Codable, Sendable {
     var focus: Bool?
 }
 
-enum CmuxSurfaceType: String, Codable, Sendable {
+enum ProgramaSurfaceType: String, Codable, Sendable {
     case terminal
     case browser
 }
 
 @MainActor
-final class CmuxConfigStore: ObservableObject {
-    @Published private(set) var loadedCommands: [CmuxCommandDefinition] = []
+final class ProgramaConfigStore: ObservableObject {
+    @Published private(set) var loadedCommands: [ProgramaCommandDefinition] = []
     @Published private(set) var configRevision: UInt64 = 0
 
     /// Which config file each command came from, keyed by command id.
@@ -267,7 +267,14 @@ final class CmuxConfigStore: ObservableObject {
     private(set) var localConfigPath: String?
     let globalConfigPath: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return (home as NSString).appendingPathComponent(".config/cmux/cmux.json")
+        let newPath = (home as NSString).appendingPathComponent(".config/programa/programa.json")
+        let legacyPath = (home as NSString).appendingPathComponent(".config/cmux/cmux.json")
+        let fm = FileManager.default
+        // Prefer the new path; transparently fall back to the legacy cmux path so
+        // existing users' ~/.config/cmux/cmux.json keeps working after the rebrand.
+        if fm.fileExists(atPath: newPath) { return newPath }
+        if fm.fileExists(atPath: legacyPath) { return legacyPath }
+        return newPath
     }()
 
     private var cancellables = Set<AnyCancellable>()
@@ -319,8 +326,8 @@ final class CmuxConfigStore: ObservableObject {
     private func updateLocalConfigPath(_ directory: String?) {
         let newPath: String?
         if let directory, !directory.isEmpty {
-            newPath = findCmuxConfig(startingFrom: directory)
-                ?? (directory as NSString).appendingPathComponent("cmux.json")
+            newPath = findProgramaConfig(startingFrom: directory)
+                ?? (directory as NSString).appendingPathComponent("programa.json")
         } else {
             newPath = nil
         }
@@ -334,13 +341,16 @@ final class CmuxConfigStore: ObservableObject {
         loadAll()
     }
 
-    private func findCmuxConfig(startingFrom directory: String) -> String? {
+    private func findProgramaConfig(startingFrom directory: String) -> String? {
         var current = directory
         let fs = FileManager.default
         while true {
-            let candidate = (current as NSString).appendingPathComponent("cmux.json")
-            if fs.fileExists(atPath: candidate) {
-                return candidate
+            // Prefer programa.json; accept legacy cmux.json so existing project roots keep working.
+            for name in ["programa.json", "cmux.json"] {
+                let candidate = (current as NSString).appendingPathComponent(name)
+                if fs.fileExists(atPath: candidate) {
+                    return candidate
+                }
             }
             let parent = (current as NSString).deletingLastPathComponent
             if parent == current { break }
@@ -350,7 +360,7 @@ final class CmuxConfigStore: ObservableObject {
     }
 
     func loadAll() {
-        var commands: [CmuxCommandDefinition] = []
+        var commands: [ProgramaCommandDefinition] = []
         var seenNames = Set<String>()
         var sourcePaths: [String: String] = [:]
 
@@ -385,16 +395,16 @@ final class CmuxConfigStore: ObservableObject {
 
     // MARK: - Parsing
 
-    private func parseConfig(at path: String) -> CmuxConfigFile? {
+    private func parseConfig(at path: String) -> ProgramaConfigFile? {
         guard FileManager.default.fileExists(atPath: path),
               let data = FileManager.default.contents(atPath: path),
               !data.isEmpty else {
             return nil
         }
         do {
-            return try JSONDecoder().decode(CmuxConfigFile.self, from: data)
+            return try JSONDecoder().decode(ProgramaConfigFile.self, from: data)
         } catch {
-            NSLog("[CmuxConfig] parse error at %@: %@", path, String(describing: error))
+            NSLog("[ProgramaConfig] parse error at %@: %@", path, String(describing: error))
             return nil
         }
     }
@@ -599,7 +609,7 @@ final class CmuxConfigStore: ObservableObject {
     }
 }
 
-extension CmuxConfigStore {
+extension ProgramaConfigStore {
     static func resolveCwd(_ cwd: String?, relativeTo baseCwd: String) -> String {
         guard let cwd, !cwd.isEmpty, cwd != "." else {
             return baseCwd

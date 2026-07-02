@@ -27,8 +27,8 @@ struct MarkdownPanelView: View {
         .background(backgroundColor)
         .overlay {
             RoundedRectangle(cornerRadius: FocusFlashPattern.ringCornerRadius)
-                .stroke(cmuxAccentColor().opacity(focusFlashOpacity), lineWidth: 3)
-                .shadow(color: cmuxAccentColor().opacity(focusFlashOpacity * 0.35), radius: 10)
+                .stroke(programaAccentColor().opacity(focusFlashOpacity), lineWidth: 3)
+                .shadow(color: programaAccentColor().opacity(focusFlashOpacity * 0.35), radius: 10)
                 .padding(FocusFlashPattern.ringInset)
                 .allowsHitTesting(false)
         }
@@ -71,7 +71,7 @@ struct MarkdownPanelView: View {
 
                 // Rendered markdown
                 Markdown(panel.content)
-                    .markdownTheme(cmuxMarkdownTheme)
+                    .markdownTheme(programaMarkdownTheme)
                     .textSelection(.enabled)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 16)
@@ -123,7 +123,7 @@ struct MarkdownPanelView: View {
             : Color(nsColor: NSColor(white: 0.98, alpha: 1.0))
     }
 
-    private var cmuxMarkdownTheme: Theme {
+    private var programaMarkdownTheme: Theme {
         let isDark = colorScheme == .dark
 
         return Theme()

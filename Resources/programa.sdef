@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
 
-<dictionary title="cmux Scripting Dictionary">
-  <suite name="cmux Suite" code="Cmux" description="cmux scripting support.">
-    <class name="application" code="capp" description="The cmux application.">
+<dictionary title="Programa Scripting Dictionary">
+  <suite name="Programa Suite" code="Cmux" description="Programa scripting support.">
+    <class name="application" code="capp" description="The Programa application.">
       <cocoa class="NSApplication"/>
       <property name="name" code="pnam" type="text" access="r" description="The name of the application."/>
       <property name="frontmost" code="pisf" type="boolean" access="r" description="Is this the active application?">
         <cocoa key="isActive"/>
       </property>
-      <property name="front window" code="CMFW" type="window" access="r" description="The frontmost cmux window.">
+      <property name="front window" code="CMFW" type="window" access="r" description="The frontmost Programa window.">
         <cocoa key="frontWindow"/>
       </property>
       <property name="version" code="vers" type="text" access="r" description="The version number of the application."/>
@@ -35,8 +35,8 @@
       </element>
     </class>
 
-    <class name="window" code="CMwn" plural="windows" description="A cmux window containing one or more workspaces.">
-      <cocoa class="CmuxScriptWindow"/>
+    <class name="window" code="CMwn" plural="windows" description="A Programa window containing one or more workspaces.">
+      <cocoa class="ProgramaScriptWindow"/>
       <property name="id" code="ID  " type="text" access="r" description="Stable ID for this window."/>
       <property name="name" code="pnam" type="text" access="r" description="The title of the window.">
         <cocoa key="title"/>
@@ -58,8 +58,8 @@
       </element>
     </class>
 
-    <class name="tab" code="CMtb" plural="tabs" description="A cmux workspace.">
-      <cocoa class="CmuxScriptTab"/>
+    <class name="tab" code="CMtb" plural="tabs" description="A Programa workspace.">
+      <cocoa class="ProgramaScriptTab"/>
       <property name="id" code="ID  " type="text" access="r" description="Stable ID for this workspace."/>
       <property name="name" code="pnam" type="text" access="r" description="The title of the workspace.">
         <cocoa key="title"/>
@@ -81,7 +81,7 @@
     </class>
 
     <class name="terminal" code="CMtr" plural="terminals" description="An individual terminal panel.">
-      <cocoa class="CmuxScriptTerminal"/>
+      <cocoa class="ProgramaScriptTerminal"/>
       <property name="id" code="ID  " type="text" access="r" description="Stable ID for this terminal panel."/>
       <property name="name" code="pnam" type="text" access="r" description="Current terminal title.">
         <cocoa key="title"/>
@@ -115,7 +115,7 @@
       <result type="boolean" description="True when the action was performed."/>
     </command>
 
-    <command name="new window" code="CmuxNWin" description="Create a new cmux window.">
+    <command name="new window" code="CmuxNWin" description="Create a new Programa window.">
       <result type="window" description="The newly created window."/>
     </command>
 
@@ -142,7 +142,7 @@
       <direct-parameter type="specifier" description="The terminal to close."/>
     </command>
 
-    <command name="activate window" code="CmuxAcWn" description="Activate a cmux window, bringing it to the front.">
+    <command name="activate window" code="CmuxAcWn" description="Activate a Programa window, bringing it to the front.">
       <direct-parameter type="specifier" description="The window to activate."/>
     </command>
 
@@ -159,7 +159,7 @@
     </command>
 
     <command name="input text" code="CmuxInTx" description="Input text to a terminal as if it was pasted.">
-      <cocoa class="CmuxScriptInputTextCommand"/>
+      <cocoa class="ProgramaScriptInputTextCommand"/>
       <direct-parameter type="text" description="The text to input."/>
       <parameter name="to" code="CMiT" type="terminal" description="The terminal to input text to.">
         <cocoa key="terminal"/>

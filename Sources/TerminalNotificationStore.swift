@@ -839,7 +839,7 @@ final class TerminalNotificationStore: ObservableObject {
             content.categoryIdentifier = Self.categoryIdentifier
 
             let request = UNNotificationRequest(
-                identifier: "cmux.settings.test.\(UUID().uuidString)",
+                identifier: "programa.settings.test.\(UUID().uuidString)",
                 content: content,
                 trigger: nil
             )
@@ -1123,7 +1123,7 @@ final class TerminalNotificationStore: ObservableObject {
     private func resolvedNotificationTitle(for notification: TerminalNotification) -> String {
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? "cmux"
+            ?? "Programa"
         return notification.title.isEmpty ? appName : notification.title
     }
 
@@ -1278,8 +1278,8 @@ final class TerminalNotificationStore: ObservableObject {
         }
 
         let alert = notificationSettingsAlertFactory()
-        alert.messageText = String(localized: "dialog.enableNotifications.title", defaultValue: "Enable Notifications for cmux")
-        alert.informativeText = String(localized: "dialog.enableNotifications.message", defaultValue: "Notifications are disabled for cmux. Enable them in System Settings to see alerts.")
+        alert.messageText = String(localized: "dialog.enableNotifications.title", defaultValue: "Enable Notifications for Programa")
+        alert.informativeText = String(localized: "dialog.enableNotifications.message", defaultValue: "Notifications are disabled for Programa. Enable them in System Settings to see alerts.")
         alert.addButton(withTitle: String(localized: "dialog.enableNotifications.openSettings", defaultValue: "Open Settings"))
         alert.addButton(withTitle: String(localized: "dialog.enableNotifications.notNow", defaultValue: "Not Now"))
         alert.beginSheetModal(for: window) { [weak self] response in

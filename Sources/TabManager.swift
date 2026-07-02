@@ -637,7 +637,7 @@ fileprivate final class VsyncIOSurfaceTimelineState {
     }
 }
 
-fileprivate func cmuxVsyncIOSurfaceTimelineCallback(
+fileprivate func programaVsyncIOSurfaceTimelineCallback(
     _ displayLink: CVDisplayLink,
     _ inNow: UnsafePointer<CVTimeStamp>,
     _ inOutputTime: UnsafePointer<CVTimeStamp>,
@@ -1300,7 +1300,7 @@ class TabManager: ObservableObject {
         title: String,
         workingDirectory: String?,
         portOrdinal: Int,
-        configTemplate: CmuxSurfaceConfigTemplate?,
+        configTemplate: ProgramaSurfaceConfigTemplate?,
         initialTerminalCommand: String?,
         initialTerminalEnvironment: [String: String]
     ) -> Workspace {
@@ -1326,7 +1326,7 @@ class TabManager: ObservableObject {
             if let raw = env["PROGRAMA_DEV_MUTATE_WORKSPACE_SELECTION_DURING_CREATION"] {
                 return raw == "1" || raw.caseInsensitiveCompare("true") == .orderedSame
             }
-            return UserDefaults.standard.bool(forKey: "cmuxDevMutateWorkspaceSelectionDuringCreation")
+            return UserDefaults.standard.bool(forKey: "programaDevMutateWorkspaceSelectionDuringCreation")
         }()
         guard isEnabled,
               let selectedTabId = snapshot.selectedTabId,
@@ -1482,7 +1482,7 @@ class TabManager: ObservableObject {
            terminalPanel.surface.surface != nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 UserDefaults.standard.set(true, forKey: WelcomeSettings.shownKey)
-                terminalPanel.sendText("cmux welcome\n")
+                terminalPanel.sendText("programa welcome\n")
             }
             return
         }
@@ -1502,7 +1502,7 @@ class TabManager: ObservableObject {
             panelsCancellable?.cancel()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 UserDefaults.standard.set(true, forKey: WelcomeSettings.shownKey)
-                terminalPanel.sendText("cmux welcome\n")
+                terminalPanel.sendText("programa welcome\n")
             }
         }
 
@@ -2472,7 +2472,7 @@ class TabManager: ObservableObject {
         return candidates.first
     }
 
-    private func inheritedTerminalConfigForNewWorkspace() -> CmuxSurfaceConfigTemplate? {
+    private func inheritedTerminalConfigForNewWorkspace() -> ProgramaSurfaceConfigTemplate? {
         inheritedTerminalConfigForNewWorkspace(workspace: selectedWorkspace)
     }
 
@@ -2495,11 +2495,11 @@ class TabManager: ObservableObject {
 
     func inheritedTerminalConfigForNewWorkspace(
         workspace: Workspace?
-    ) -> CmuxSurfaceConfigTemplate? {
+    ) -> ProgramaSurfaceConfigTemplate? {
         guard let fontPoints = cachedInheritedTerminalFontPointsForNewWorkspace(workspace: workspace) else {
             return nil
         }
-        var config = CmuxSurfaceConfigTemplate()
+        var config = ProgramaSurfaceConfigTemplate()
         config.fontSize = fontPoints
         return config
     }
@@ -2516,13 +2516,13 @@ class TabManager: ObservableObject {
 
     private func workspaceCreationConfigTemplate(
         inheritedTerminalFontPoints: Float?
-    ) -> CmuxSurfaceConfigTemplate? {
+    ) -> ProgramaSurfaceConfigTemplate? {
         guard let inheritedTerminalFontPoints, inheritedTerminalFontPoints > 0 else {
             return nil
         }
         // Rebuild a clean Swift-owned template instead of carrying over any pointer-backed
         // inherited config state from the source workspace.
-        var config = CmuxSurfaceConfigTemplate()
+        var config = ProgramaSurfaceConfigTemplate()
         config.fontSize = inheritedTerminalFontPoints
         return config
     }
@@ -3642,13 +3642,13 @@ class TabManager: ObservableObject {
     }
 
     private func windowTitle(for tab: Workspace?) -> String {
-        guard let tab else { return "cmux" }
+        guard let tab else { return "Programa" }
         let trimmedTitle = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedTitle.isEmpty {
             return trimmedTitle
         }
         let trimmedDirectory = tab.currentDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedDirectory.isEmpty ? "cmux" : trimmedDirectory
+        return trimmedDirectory.isEmpty ? "Programa" : trimmedDirectory
     }
 
     func focusTab(_ tabId: UUID, surfaceId: UUID? = nil, suppressFlash: Bool = false) {
@@ -5191,7 +5191,7 @@ class TabManager: ObservableObject {
 	            }
 	            st.link = link
 
-	            CVDisplayLinkSetOutputCallback(link, cmuxVsyncIOSurfaceTimelineCallback, ctx)
+	            CVDisplayLinkSetOutputCallback(link, programaVsyncIOSurfaceTimelineCallback, ctx)
 	            CVDisplayLinkStart(link)
 	        }
 
@@ -5946,18 +5946,18 @@ enum ResizeDirection {
 }
 
 extension Notification.Name {
-    static let commandPaletteToggleRequested = Notification.Name("cmux.commandPaletteToggleRequested")
-    static let commandPaletteRequested = Notification.Name("cmux.commandPaletteRequested")
-    static let commandPaletteSwitcherRequested = Notification.Name("cmux.commandPaletteSwitcherRequested")
-    static let commandPaletteSubmitRequested = Notification.Name("cmux.commandPaletteSubmitRequested")
-    static let commandPaletteDismissRequested = Notification.Name("cmux.commandPaletteDismissRequested")
-    static let commandPaletteRenameTabRequested = Notification.Name("cmux.commandPaletteRenameTabRequested")
-    static let commandPaletteRenameWorkspaceRequested = Notification.Name("cmux.commandPaletteRenameWorkspaceRequested")
-    static let commandPaletteEditWorkspaceDescriptionRequested = Notification.Name("cmux.commandPaletteEditWorkspaceDescriptionRequested")
-    static let commandPaletteMoveSelection = Notification.Name("cmux.commandPaletteMoveSelection")
-    static let commandPaletteRenameInputInteractionRequested = Notification.Name("cmux.commandPaletteRenameInputInteractionRequested")
-    static let commandPaletteRenameInputDeleteBackwardRequested = Notification.Name("cmux.commandPaletteRenameInputDeleteBackwardRequested")
-    static let feedbackComposerRequested = Notification.Name("cmux.feedbackComposerRequested")
+    static let commandPaletteToggleRequested = Notification.Name("programa.commandPaletteToggleRequested")
+    static let commandPaletteRequested = Notification.Name("programa.commandPaletteRequested")
+    static let commandPaletteSwitcherRequested = Notification.Name("programa.commandPaletteSwitcherRequested")
+    static let commandPaletteSubmitRequested = Notification.Name("programa.commandPaletteSubmitRequested")
+    static let commandPaletteDismissRequested = Notification.Name("programa.commandPaletteDismissRequested")
+    static let commandPaletteRenameTabRequested = Notification.Name("programa.commandPaletteRenameTabRequested")
+    static let commandPaletteRenameWorkspaceRequested = Notification.Name("programa.commandPaletteRenameWorkspaceRequested")
+    static let commandPaletteEditWorkspaceDescriptionRequested = Notification.Name("programa.commandPaletteEditWorkspaceDescriptionRequested")
+    static let commandPaletteMoveSelection = Notification.Name("programa.commandPaletteMoveSelection")
+    static let commandPaletteRenameInputInteractionRequested = Notification.Name("programa.commandPaletteRenameInputInteractionRequested")
+    static let commandPaletteRenameInputDeleteBackwardRequested = Notification.Name("programa.commandPaletteRenameInputDeleteBackwardRequested")
+    static let feedbackComposerRequested = Notification.Name("programa.feedbackComposerRequested")
     static let ghosttyDidSetTitle = Notification.Name("ghosttyDidSetTitle")
     static let ghosttyDidFocusTab = Notification.Name("ghosttyDidFocusTab")
     static let ghosttyDidFocusSurface = Notification.Name("ghosttyDidFocusSurface")
@@ -5969,6 +5969,6 @@ extension Notification.Name {
     static let browserDidFocusAddressBar = Notification.Name("browserDidFocusAddressBar")
     static let browserDidBlurAddressBar = Notification.Name("browserDidBlurAddressBar")
     static let webViewDidReceiveClick = Notification.Name("webViewDidReceiveClick")
-    static let terminalPortalVisibilityDidChange = Notification.Name("cmux.terminalPortalVisibilityDidChange")
-    static let browserPortalRegistryDidChange = Notification.Name("cmux.browserPortalRegistryDidChange")
+    static let terminalPortalVisibilityDidChange = Notification.Name("programa.terminalPortalVisibilityDidChange")
+    static let browserPortalRegistryDidChange = Notification.Name("programa.browserPortalRegistryDidChange")
 }

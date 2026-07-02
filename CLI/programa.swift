@@ -148,7 +148,7 @@ private final class CLISocketSentryTelemetry {
         for (key, value) in data {
             payload[key] = value
         }
-        let crumb = Breadcrumb(level: .info, category: "cmux.cli")
+        let crumb = Breadcrumb(level: .info, category: "programa.cli")
         crumb.message = message
         crumb.data = payload
         SentrySDK.addBreadcrumb(crumb)
@@ -169,7 +169,7 @@ private final class CLISocketSentryTelemetry {
         let command = self.command
         _ = SentrySDK.capture(error: error) { scope in
             scope.setLevel(.error)
-            scope.setTag(value: "cmux-cli", key: "component")
+            scope.setTag(value: "programa-cli", key: "component")
             scope.setTag(value: command, key: "cli_command")
             scope.setTag(value: subcommand, key: "cli_subcommand")
             scope.setContext(value: context, key: "cli_socket")
@@ -670,10 +670,10 @@ private enum CLISocketPathResolver {
     private static let appSupportDirectoryName = "programa"
     private static let stableSocketFileName = "programa.sock"
     private static let lastSocketPathFileName = "last-socket-path"
-    static let legacyDefaultSocketPath = "/tmp/cmux.sock"
-    private static let fallbackSocketPath = "/tmp/cmux-debug.sock"
-    private static let stagingSocketPath = "/tmp/cmux-staging.sock"
-    private static let legacyLastSocketPathFile = "/tmp/cmux-last-socket-path"
+    static let legacyDefaultSocketPath = "/tmp/programa.sock"
+    private static let fallbackSocketPath = "/tmp/programa-debug.sock"
+    private static let stagingSocketPath = "/tmp/programa-staging.sock"
+    private static let legacyLastSocketPathFile = "/tmp/programa-last-socket-path"
 
     static var defaultSocketPath: String {
         let stablePath: String? = stableSocketDirectoryURL()?
@@ -715,8 +715,8 @@ private enum CLISocketPathResolver {
 
         if let tag = normalized(environment["PROGRAMA_TAG"]) {
             let slug = sanitizeTagSlug(tag)
-            candidates.append("/tmp/cmux-debug-\(slug).sock")
-            candidates.append("/tmp/cmux-\(slug).sock")
+            candidates.append("/tmp/programa-debug-\(slug).sock")
+            candidates.append("/tmp/programa-\(slug).sock")
         }
 
         candidates.append(requestedPath)
@@ -1317,7 +1317,7 @@ final class SocketClient {
             throw CLIError(message: "cmux app did not start in time (socket not found at \(path))")
         }
 
-        let queue = DispatchQueue(label: "com.cmux.cli.socket-watch.\(UUID().uuidString)")
+        let queue = DispatchQueue(label: "com.programa.cli.socket-watch.\(UUID().uuidString)")
         let semaphore = DispatchSemaphore(value: 0)
         var connected = false
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -1368,7 +1368,7 @@ final class SocketClient {
             throw CLIError(message: "Timed out waiting for \(path)")
         }
 
-        let queue = DispatchQueue(label: "com.cmux.cli.path-watch.\(UUID().uuidString)")
+        let queue = DispatchQueue(label: "com.programa.cli.path-watch.\(UUID().uuidString)")
         let semaphore = DispatchSemaphore(value: 0)
         var found = false
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -1566,7 +1566,7 @@ enum CLIProcessRunner {
 struct CMUXCLI {
     let args: [String]
 
-    private static let debugLastSocketHintPath = "/tmp/cmux-last-socket-path"
+    private static let debugLastSocketHintPath = "/tmp/programa-last-socket-path"
 
     private static func normalizedEnvValue(_ value: String?) -> String? {
         guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1588,7 +1588,7 @@ struct CMUXCLI {
             return nil
         }
         guard let hinted = normalizedEnvValue(raw),
-              hinted.hasPrefix("/tmp/cmux-debug"),
+              hinted.hasPrefix("/tmp/programa-debug"),
               hinted.hasSuffix(".sock"),
               pathIsSocket(hinted) else {
             return nil
@@ -1607,9 +1607,9 @@ struct CMUXCLI {
         if let hinted = debugSocketPathFromHintFile() {
             return hinted
         }
-        return "/tmp/cmux-debug.sock"
+        return "/tmp/programa-debug.sock"
 #else
-        return "/tmp/cmux.sock"
+        return "/tmp/programa.sock"
 #endif
     }
 
@@ -4403,19 +4403,19 @@ struct CMUXCLI {
             remoteBootstrapInstallShell(remoteRelayPort: options.remoteRelayPort)
         )
         var lines: [String] = [
-            "cmux_workspace_id=\"${PROGRAMA_WORKSPACE_ID:-}\"",
-            "cmux_surface_id=\"${PROGRAMA_SURFACE_ID:-}\"",
-            "cmux_remote_bootstrap_b64=\(shellQuote(encodedBootstrapScript))",
-            "cmux_remote_bootstrap=\"$(printf %s \"$cmux_remote_bootstrap_b64\" | base64 -d 2>/dev/null || printf %s \"$cmux_remote_bootstrap_b64\" | base64 -D 2>/dev/null)\"",
-            "cmux_remote_bootstrap=\"$(printf '%s' \"$cmux_remote_bootstrap\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$cmux_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$cmux_surface_id/g\")\"",
-            "if ! printf '%s' \"$cmux_remote_bootstrap\" | command \(installSSHPrefix) -T \(shellQuote(options.destination)) \(shellQuote(remoteBootstrapInstallCommand)); then",
+            "programa_workspace_id=\"${PROGRAMA_WORKSPACE_ID:-}\"",
+            "programa_surface_id=\"${PROGRAMA_SURFACE_ID:-}\"",
+            "programa_remote_bootstrap_b64=\(shellQuote(encodedBootstrapScript))",
+            "programa_remote_bootstrap=\"$(printf %s \"$programa_remote_bootstrap_b64\" | base64 -d 2>/dev/null || printf %s \"$programa_remote_bootstrap_b64\" | base64 -D 2>/dev/null)\"",
+            "programa_remote_bootstrap=\"$(printf '%s' \"$programa_remote_bootstrap\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$programa_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$programa_surface_id/g\")\"",
+            "if ! printf '%s' \"$programa_remote_bootstrap\" | command \(installSSHPrefix) -T \(shellQuote(options.destination)) \(shellQuote(remoteBootstrapInstallCommand)); then",
             "  exit 1",
             "fi",
-            "cmux_remote_command_template=\(shellQuote(remoteCommandTemplate))",
-            "cmux_remote_command=\"$(printf '%s' \"$cmux_remote_command_template\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$cmux_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$cmux_surface_id/g\")\"",
+            "programa_remote_command_template=\(shellQuote(remoteCommandTemplate))",
+            "programa_remote_command=\"$(printf '%s' \"$programa_remote_command_template\" | sed \"s/__PROGRAMA_WORKSPACE_ID__/$programa_workspace_id/g; s/__PROGRAMA_SURFACE_ID__/$programa_surface_id/g\")\"",
         ]
 
-        var sshInvocation = "command \(sessionSSHPrefix) -o \"RemoteCommand=$cmux_remote_command\""
+        var sshInvocation = "command \(sessionSSHPrefix) -o \"RemoteCommand=$programa_remote_command\""
         if !hasSSHOptionKey(options.sshOptions, key: "RequestTTY") {
             sshInvocation += " -tt"
         }
@@ -4436,10 +4436,10 @@ struct CMUXCLI {
         [
             "set -eu",
             "umask 077",
-            "cmux_bootstrap_path=\"$HOME/.programa/relay/\(remoteRelayPort).bootstrap.sh\"",
+            "programa_bootstrap_path=\"$HOME/.programa/relay/\(remoteRelayPort).bootstrap.sh\"",
             "mkdir -p \"$HOME/.programa/relay\"",
-            "cat > \"$cmux_bootstrap_path\"",
-            "chmod 700 \"$cmux_bootstrap_path\" >/dev/null 2>&1 || true",
+            "cat > \"$programa_bootstrap_path\"",
+            "chmod 700 \"$programa_bootstrap_path\" >/dev/null 2>&1 || true",
         ].joined(separator: "\n")
     }
 
@@ -4449,13 +4449,13 @@ struct CMUXCLI {
     ) -> String {
         var lines = remoteBootstrapTTYCaptureLines(remoteRelayPort: remoteRelayPort, includeRelayRPC: false)
         lines += [
-            "cmux_tmp=$(mktemp \"${TMPDIR:-/tmp}/cmux-ssh-bootstrap.XXXXXX\") || exit 1",
-            "(printf %s '\(base64Placeholder)' | base64 -d 2>/dev/null || printf %s '\(base64Placeholder)' | base64 -D 2>/dev/null) > \"$cmux_tmp\" || { rm -f \"$cmux_tmp\"; exit 1; }",
-            "chmod 700 \"$cmux_tmp\" >/dev/null 2>&1 || true",
-            "/bin/sh \"$cmux_tmp\"",
-            "cmux_status=$?",
-            "rm -f \"$cmux_tmp\"",
-            "exit $cmux_status",
+            "programa_tmp=$(mktemp \"${TMPDIR:-/tmp}/cmux-ssh-bootstrap.XXXXXX\") || exit 1",
+            "(printf %s '\(base64Placeholder)' | base64 -d 2>/dev/null || printf %s '\(base64Placeholder)' | base64 -D 2>/dev/null) > \"$programa_tmp\" || { rm -f \"$programa_tmp\"; exit 1; }",
+            "chmod 700 \"$programa_tmp\" >/dev/null 2>&1 || true",
+            "/bin/sh \"$programa_tmp\"",
+            "programa_status=$?",
+            "rm -f \"$programa_tmp\"",
+            "exit $programa_status",
         ]
         return lines.joined(separator: "\n")
     }
@@ -4467,28 +4467,28 @@ struct CMUXCLI {
         guard remoteRelayPort > 0 else { return [] }
 
         var lines: [String] = [
-            "cmux_bootstrap_tty=\"$(tty 2>/dev/null || true)\"",
-            "cmux_bootstrap_tty=\"${cmux_bootstrap_tty##*/}\"",
-            "if [ -n \"$cmux_bootstrap_tty\" ] && [ \"$cmux_bootstrap_tty\" != \"not a tty\" ]; then",
+            "programa_bootstrap_tty=\"$(tty 2>/dev/null || true)\"",
+            "programa_bootstrap_tty=\"${programa_bootstrap_tty##*/}\"",
+            "if [ -n \"$programa_bootstrap_tty\" ] && [ \"$programa_bootstrap_tty\" != \"not a tty\" ]; then",
             "  mkdir -p \"$HOME/.programa/relay\" >/dev/null 2>&1 || true",
-            "  printf '%s' \"$cmux_bootstrap_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
-            "  export PROGRAMA_BOOTSTRAP_TTY=\"$cmux_bootstrap_tty\"",
+            "  printf '%s' \"$programa_bootstrap_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
+            "  export PROGRAMA_BOOTSTRAP_TTY=\"$programa_bootstrap_tty\"",
         ]
 
         if includeRelayRPC {
             lines += [
-                "  cmux_relay_cli=\"$HOME/.programa/bin/programa\"",
-                "  if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
-                "  if [ -n \"$cmux_relay_cli\" ]; then",
-                "    cmux_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"tty_name\":\"'$cmux_bootstrap_tty'\"}'",
-                "    cmux_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"reason\":\"command\"}'",
+                "  programa_relay_cli=\"$HOME/.programa/bin/programa\"",
+                "  if [ ! -x \"$programa_relay_cli\" ]; then programa_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
+                "  if [ -n \"$programa_relay_cli\" ]; then",
+                "    programa_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"tty_name\":\"'$programa_bootstrap_tty'\"}'",
+                "    programa_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"reason\":\"command\"}'",
                 "    if [ -n \"__PROGRAMA_SURFACE_ID__\" ]; then",
-                "      cmux_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"tty_name\":\"'$cmux_bootstrap_tty'\"}'",
-                "      cmux_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"reason\":\"command\"}'",
+                "      programa_relay_report_tty='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"tty_name\":\"'$programa_bootstrap_tty'\"}'",
+                "      programa_relay_ports_kick='{\"workspace_id\":\"__PROGRAMA_WORKSPACE_ID__\",\"surface_id\":\"__PROGRAMA_SURFACE_ID__\",\"reason\":\"command\"}'",
                 "    fi",
-                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$cmux_relay_cli\" rpc surface.report_tty \"$cmux_relay_report_tty\" >/dev/null 2>&1 || true",
-                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$cmux_relay_cli\" rpc surface.ports_kick \"$cmux_relay_ports_kick\" >/dev/null 2>&1 || true",
-                "    unset cmux_relay_cli cmux_relay_report_tty cmux_relay_ports_kick",
+                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$programa_relay_cli\" rpc surface.report_tty \"$programa_relay_report_tty\" >/dev/null 2>&1 || true",
+                "    PROGRAMA_SOCKET_PATH=\"127.0.0.1:\(remoteRelayPort)\" PROGRAMA_SOCKET=\"127.0.0.1:\(remoteRelayPort)\" \"$programa_relay_cli\" rpc surface.ports_kick \"$programa_relay_ports_kick\" >/dev/null 2>&1 || true",
+                "    unset programa_relay_cli programa_relay_report_tty programa_relay_ports_kick",
                 "  fi",
             ]
         }
@@ -4535,19 +4535,19 @@ struct CMUXCLI {
         ])
         var zshShellLines = commonShellExportLines
         zshShellLines.append(
-            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh"; fi"#
+            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/programa-zsh-integration.zsh" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/programa-zsh-integration.zsh"; fi"#
         )
         var bashShellLines = commonShellExportLines
         bashShellLines.append(
-            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-bash-integration.bash" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-bash-integration.bash"; fi"#
+            #"if [ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" ] && [ -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/programa-bash-integration.bash" ]; then . "${PROGRAMA_SHELL_INTEGRATION_DIR}/programa-bash-integration.bash"; fi"#
         )
         let zshBootstrap = RemoteRelayZshBootstrap(shellStateDir: shellStateDir)
         let zshEnvLines = zshBootstrap.zshEnvLines
         let zshProfileLines = zshBootstrap.zshProfileLines
         let zshRCLines = zshBootstrap.zshRCLines(commonShellLines: zshShellLines)
         let zshLoginLines = zshBootstrap.zshLoginLines
-        let bundledZshIntegration = bundledShellIntegrationScript(named: "cmux-zsh-integration.zsh")
-        let bundledBashIntegration = bundledShellIntegrationScript(named: "cmux-bash-integration.bash")
+        let bundledZshIntegration = bundledShellIntegrationScript(named: "programa-zsh-integration.zsh")
+        let bundledBashIntegration = bundledShellIntegrationScript(named: "programa-bash-integration.bash")
         let bashRCLines = [
             "if [ -f \"$HOME/.bash_profile\" ]; then . \"$HOME/.bash_profile\"; elif [ -f \"$HOME/.bash_login\" ]; then . \"$HOME/.bash_login\"; elif [ -f \"$HOME/.profile\" ]; then . \"$HOME/.profile\"; fi",
             "[ -f \"$HOME/.bashrc\" ] && . \"$HOME/.bashrc\"",
@@ -4556,19 +4556,19 @@ struct CMUXCLI {
 
         var outerLines: [String] = [
             "mkdir -p \"$HOME/.programa/relay\"",
-            "cmux_shell_dir=\"\(shellStateDir)\"",
-            "mkdir -p \"$cmux_shell_dir\"",
+            "programa_shell_dir=\"\(shellStateDir)\"",
+            "mkdir -p \"$programa_shell_dir\"",
         ]
         if let bundledZshIntegration {
             outerLines += [
-                "cat > \"$cmux_shell_dir/cmux-zsh-integration.zsh\" <<'CMUXCMUXZSH'",
+                "cat > \"$programa_shell_dir/programa-zsh-integration.zsh\" <<'CMUXCMUXZSH'",
                 bundledZshIntegration,
                 "CMUXCMUXZSH",
             ]
         }
         if let bundledBashIntegration {
             outerLines += [
-                "cat > \"$cmux_shell_dir/cmux-bash-integration.bash\" <<'CMUXCMUXBASH'",
+                "cat > \"$programa_shell_dir/programa-bash-integration.bash\" <<'CMUXCMUXBASH'",
                 bundledBashIntegration,
                 "CMUXCMUXBASH",
             ]
@@ -4578,45 +4578,45 @@ struct CMUXCLI {
             "PROGRAMA_LOGIN_SHELL=\"${SHELL:-/bin/zsh}\"",
             "case \"${PROGRAMA_LOGIN_SHELL##*/}\" in",
             "  zsh)",
-            "    cat > \"$cmux_shell_dir/.zshenv\" <<'CMUXZSHENV'",
+            "    cat > \"$programa_shell_dir/.zshenv\" <<'CMUXZSHENV'",
         ]
         outerLines.append(contentsOf: zshEnvLines)
         outerLines += [
             "CMUXZSHENV",
-            "    cat > \"$cmux_shell_dir/.zprofile\" <<'CMUXZSHPROFILE'",
+            "    cat > \"$programa_shell_dir/.zprofile\" <<'CMUXZSHPROFILE'",
         ]
         outerLines.append(contentsOf: zshProfileLines)
         outerLines += [
             "CMUXZSHPROFILE",
-            "    cat > \"$cmux_shell_dir/.zshrc\" <<'CMUXZSHRC'",
+            "    cat > \"$programa_shell_dir/.zshrc\" <<'CMUXZSHRC'",
         ]
         outerLines.append(contentsOf: zshRCLines)
         outerLines += [
             "CMUXZSHRC",
-            "    cat > \"$cmux_shell_dir/.zlogin\" <<'CMUXZSHLOGIN'",
+            "    cat > \"$programa_shell_dir/.zlogin\" <<'CMUXZSHLOGIN'",
         ]
         outerLines.append(contentsOf: zshLoginLines)
         outerLines += [
             "CMUXZSHLOGIN",
-            "    chmod 600 \"$cmux_shell_dir/.zshenv\" \"$cmux_shell_dir/.zprofile\" \"$cmux_shell_dir/.zshrc\" \"$cmux_shell_dir/.zlogin\" >/dev/null 2>&1 || true",
+            "    chmod 600 \"$programa_shell_dir/.zshenv\" \"$programa_shell_dir/.zprofile\" \"$programa_shell_dir/.zshrc\" \"$programa_shell_dir/.zlogin\" >/dev/null 2>&1 || true",
         ]
         outerLines.append(contentsOf: relayWarmupLines.map { "    " + $0 })
         outerLines += [
             "    export PROGRAMA_REAL_ZDOTDIR=\"${ZDOTDIR:-$HOME}\"",
-            "    export ZDOTDIR=\"$cmux_shell_dir\"",
+            "    export ZDOTDIR=\"$programa_shell_dir\"",
             "    exec \"$PROGRAMA_LOGIN_SHELL\" -il",
             "    ;;",
             "  bash)",
-            "    cat > \"$cmux_shell_dir/.bashrc\" <<'CMUXBASHRC'",
+            "    cat > \"$programa_shell_dir/.bashrc\" <<'CMUXBASHRC'",
         ]
         outerLines.append(contentsOf: bashRCLines)
         outerLines += [
             "CMUXBASHRC",
-            "    chmod 600 \"$cmux_shell_dir/.bashrc\" >/dev/null 2>&1 || true",
+            "    chmod 600 \"$programa_shell_dir/.bashrc\" >/dev/null 2>&1 || true",
         ]
         outerLines.append(contentsOf: relayWarmupLines.map { "    " + $0 })
         outerLines += [
-            "    exec \"$PROGRAMA_LOGIN_SHELL\" --rcfile \"$cmux_shell_dir/.bashrc\" -i",
+            "    exec \"$PROGRAMA_LOGIN_SHELL\" --rcfile \"$programa_shell_dir/.bashrc\" -i",
             "    ;;",
             "  *)",
         ]
@@ -4704,17 +4704,17 @@ struct CMUXCLI {
 
     private func interactiveRemoteTerminalSetupLines(terminfoSource: String?) -> [String] {
         var lines: [String] = [
-            "cmux_term='xterm-256color'",
+            "programa_term='xterm-256color'",
             "if command -v infocmp >/dev/null 2>&1 && infocmp xterm-ghostty >/dev/null 2>&1; then",
-            "  cmux_term='xterm-ghostty'",
+            "  programa_term='xterm-ghostty'",
             "fi",
-            "export TERM=\"$cmux_term\"",
+            "export TERM=\"$programa_term\"",
         ]
         guard let terminfoSource else { return lines }
         let trimmedTerminfoSource = terminfoSource.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTerminfoSource.isEmpty else { return lines }
         lines += [
-            "if [ \"$cmux_term\" != 'xterm-ghostty' ]; then",
+            "if [ \"$programa_term\" != 'xterm-ghostty' ]; then",
             "  (",
             "    command -v tic >/dev/null 2>&1 || exit 0",
             "    mkdir -p \"$HOME/.terminfo\" 2>/dev/null || exit 0",
@@ -4754,26 +4754,26 @@ struct CMUXCLI {
             return []
         }
         return [
-            "cmux_relay_cli=\"${PROGRAMA_BUNDLED_CLI_PATH:-$HOME/.programa/bin/programa}\"",
-            "if [ ! -x \"$cmux_relay_cli\" ]; then cmux_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
-            "cmux_relay_tty=\"${PROGRAMA_BOOTSTRAP_TTY:-}\"",
-            "if [ -z \"$cmux_relay_tty\" ]; then cmux_relay_tty=\"$(tty 2>/dev/null || true)\"; fi",
-            "cmux_relay_tty=\"${cmux_relay_tty##*/}\"",
-            "if [ -n \"$cmux_relay_tty\" ] && [ \"$cmux_relay_tty\" != \"not a tty\" ]; then",
+            "programa_relay_cli=\"${PROGRAMA_BUNDLED_CLI_PATH:-$HOME/.programa/bin/programa}\"",
+            "if [ ! -x \"$programa_relay_cli\" ]; then programa_relay_cli=\"$(command -v programa 2>/dev/null || true)\"; fi",
+            "programa_relay_tty=\"${PROGRAMA_BOOTSTRAP_TTY:-}\"",
+            "if [ -z \"$programa_relay_tty\" ]; then programa_relay_tty=\"$(tty 2>/dev/null || true)\"; fi",
+            "programa_relay_tty=\"${programa_relay_tty##*/}\"",
+            "if [ -n \"$programa_relay_tty\" ] && [ \"$programa_relay_tty\" != \"not a tty\" ]; then",
             "  mkdir -p \"$HOME/.programa/relay\" >/dev/null 2>&1 || true",
-            "  printf '%s' \"$cmux_relay_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
+            "  printf '%s' \"$programa_relay_tty\" > \"$HOME/.programa/relay/\(remoteRelayPort).tty\" 2>/dev/null || true",
             "fi",
-            "if [ -n \"$cmux_relay_cli\" ] && [ -n \"$PROGRAMA_WORKSPACE_ID\" ] && [ -n \"$cmux_relay_tty\" ] && [ \"$cmux_relay_tty\" != \"not a tty\" ]; then",
-            "  cmux_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"tty_name\\\":\\\"$cmux_relay_tty\\\"}\"",
-            "  cmux_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
+            "if [ -n \"$programa_relay_cli\" ] && [ -n \"$PROGRAMA_WORKSPACE_ID\" ] && [ -n \"$programa_relay_tty\" ] && [ \"$programa_relay_tty\" != \"not a tty\" ]; then",
+            "  programa_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"tty_name\\\":\\\"$programa_relay_tty\\\"}\"",
+            "  programa_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
             "  if [ -n \"$PROGRAMA_SURFACE_ID\" ]; then",
-            "    cmux_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"tty_name\\\":\\\"$cmux_relay_tty\\\"}\"",
-            "    cmux_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
+            "    programa_relay_report_tty=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"tty_name\\\":\\\"$programa_relay_tty\\\"}\"",
+            "    programa_relay_ports_kick=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"surface_id\\\":\\\"$PROGRAMA_SURFACE_ID\\\",\\\"reason\\\":\\\"command\\\"}\"",
             "  fi",
-            "  \"$cmux_relay_cli\" rpc surface.report_tty \"$cmux_relay_report_tty\" >/dev/null 2>&1 || true",
-            "  \"$cmux_relay_cli\" rpc surface.ports_kick \"$cmux_relay_ports_kick\" >/dev/null 2>&1 || true",
+            "  \"$programa_relay_cli\" rpc surface.report_tty \"$programa_relay_report_tty\" >/dev/null 2>&1 || true",
+            "  \"$programa_relay_cli\" rpc surface.ports_kick \"$programa_relay_ports_kick\" >/dev/null 2>&1 || true",
             "fi",
-            "unset PROGRAMA_BOOTSTRAP_TTY cmux_relay_cli cmux_relay_tty cmux_relay_report_tty cmux_relay_ports_kick",
+            "unset PROGRAMA_BOOTSTRAP_TTY programa_relay_cli programa_relay_tty programa_relay_report_tty programa_relay_ports_kick",
         ]
     }
 
@@ -4877,13 +4877,13 @@ struct CMUXCLI {
         let encodedLiteral = shellQuote(encodedScript)
         var lines = remoteBootstrapTTYCaptureLines(remoteRelayPort: remoteRelayPort, includeRelayRPC: false)
         lines += [
-            "cmux_tmp=$(mktemp \"${TMPDIR:-/tmp}/cmux-ssh-bootstrap.XXXXXX\") || exit 1",
-            "(printf %s \(encodedLiteral) | base64 -d 2>/dev/null || printf %s \(encodedLiteral) | base64 -D 2>/dev/null) > \"$cmux_tmp\" || { rm -f \"$cmux_tmp\"; exit 1; }",
-            "chmod 700 \"$cmux_tmp\" >/dev/null 2>&1 || true",
-            "/bin/sh \"$cmux_tmp\"",
-            "cmux_status=$?",
-            "rm -f \"$cmux_tmp\"",
-            "exit $cmux_status",
+            "programa_tmp=$(mktemp \"${TMPDIR:-/tmp}/cmux-ssh-bootstrap.XXXXXX\") || exit 1",
+            "(printf %s \(encodedLiteral) | base64 -d 2>/dev/null || printf %s \(encodedLiteral) | base64 -D 2>/dev/null) > \"$programa_tmp\" || { rm -f \"$programa_tmp\"; exit 1; }",
+            "chmod 700 \"$programa_tmp\" >/dev/null 2>&1 || true",
+            "/bin/sh \"$programa_tmp\"",
+            "programa_status=$?",
+            "rm -f \"$programa_tmp\"",
+            "exit $programa_status",
         ]
         return lines.joined(separator: "\n")
     }
@@ -4909,8 +4909,8 @@ struct CMUXCLI {
         }
         scriptLines += [
             "PROGRAMA_SSH_SESSION_ENDED=0",
-            "cmux_ssh_session_end() { if [ \"${PROGRAMA_SSH_SESSION_ENDED:-0}\" = 1 ]; then return; fi; PROGRAMA_SSH_SESSION_ENDED=1; \(lifecycleCleanup); }",
-            "trap 'cmux_ssh_session_end' EXIT HUP INT TERM",
+            "programa_ssh_session_end() { if [ \"${PROGRAMA_SSH_SESSION_ENDED:-0}\" = 1 ]; then return; fi; PROGRAMA_SSH_SESSION_ENDED=1; \(lifecycleCleanup); }",
+            "trap 'programa_ssh_session_end' EXIT HUP INT TERM",
         ]
         if isShellSnippet {
             scriptLines.append(sshCommand)
@@ -4918,10 +4918,10 @@ struct CMUXCLI {
             scriptLines.append("command \(sshCommand)")
         }
         scriptLines += [
-            "cmux_ssh_status=$?",
+            "programa_ssh_status=$?",
             "trap - EXIT HUP INT TERM",
-            "cmux_ssh_session_end",
-            "exit $cmux_ssh_status",
+            "programa_ssh_session_end",
+            "exit $programa_ssh_status",
         ]
         let script = scriptLines.joined(separator: "\n")
         return try writeSSHStartupScript(script, remoteRelayPort: remoteRelayPort)
@@ -4995,18 +4995,18 @@ struct CMUXCLI {
         let downloadURL = entry?.downloadURL ?? "unknown"
         let checksumsAssetName = manifest?.checksumsAssetName ?? "unknown"
         let checksumsURL = manifest?.checksumsURL ?? "unknown"
-        let downloadCommand = "gh release download \(releaseTag) --repo manaflow-ai/cmux --pattern \(assetName)"
-        let downloadChecksumsCommand = "gh release download \(releaseTag) --repo manaflow-ai/cmux --pattern \(checksumsAssetName)"
+        let downloadCommand = "gh release download \(releaseTag) --repo darkroomengineering/programa --pattern \(assetName)"
+        let downloadChecksumsCommand = "gh release download \(releaseTag) --repo darkroomengineering/programa --pattern \(checksumsAssetName)"
         let checksumVerifyCommand = "shasum -a 256 -c \(checksumsAssetName) --ignore-missing"
         let signerWorkflow = releaseTag == "nightly"
-            ? "manaflow-ai/cmux/.github/workflows/nightly.yml"
-            : "manaflow-ai/cmux/.github/workflows/release.yml"
-        let verifyCommand = "gh attestation verify ./\(assetName) --repo manaflow-ai/cmux --signer-workflow \(signerWorkflow)"
+            ? "darkroomengineering/programa/.github/workflows/nightly.yml"
+            : "darkroomengineering/programa/.github/workflows/release.yml"
+        let verifyCommand = "gh attestation verify ./\(assetName) --repo darkroomengineering/programa --signer-workflow \(signerWorkflow)"
 
         let payload: [String: Any] = [
             "app_version": remoteDaemonVersionString(from: info),
             "build": info["CFBundleVersion"] ?? NSNull(),
-            "commit": info["CMUXCommit"] ?? NSNull(),
+            "commit": info["ProgramaCommit"] ?? NSNull(),
             "manifest_present": manifest != nil,
             "release_tag": releaseTag,
             "release_url": manifest?.releaseURL ?? NSNull(),
@@ -5168,20 +5168,20 @@ struct CMUXCLI {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return [
-            preferredCLIPath.map { "cmux_reconnect_cli=\(shellQuote($0));" } ?? "cmux_reconnect_cli=\"\";",
-            "cmux_reconnect_socket=\"${PROGRAMA_SOCKET_PATH:-${PROGRAMA_SOCKET:-}}\";",
-            "if [ -z \"$cmux_reconnect_cli\" ] && [ -n \"${PROGRAMA_BUNDLED_CLI_PATH:-}\" ]; then cmux_reconnect_cli=\"$PROGRAMA_BUNDLED_CLI_PATH\"; fi;",
-            "if [ ! -x \"$cmux_reconnect_cli\" ]; then cmux_reconnect_cli=\"$(command -v cmux 2>/dev/null || true)\"; fi;",
+            preferredCLIPath.map { "programa_reconnect_cli=\(shellQuote($0));" } ?? "programa_reconnect_cli=\"\";",
+            "programa_reconnect_socket=\"${PROGRAMA_SOCKET_PATH:-${PROGRAMA_SOCKET:-}}\";",
+            "if [ -z \"$programa_reconnect_cli\" ] && [ -n \"${PROGRAMA_BUNDLED_CLI_PATH:-}\" ]; then programa_reconnect_cli=\"$PROGRAMA_BUNDLED_CLI_PATH\"; fi;",
+            "if [ ! -x \"$programa_reconnect_cli\" ]; then programa_reconnect_cli=\"$(command -v cmux 2>/dev/null || true)\"; fi;",
             "if [ -n \"${PROGRAMA_WORKSPACE_ID:-}\" ]; then",
-            "if [ -z \"$cmux_reconnect_socket\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux socket not found' >&2;",
-            "elif [ -z \"$cmux_reconnect_cli\" ] || [ ! -x \"$cmux_reconnect_cli\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux CLI not found' >&2;",
+            "if [ -z \"$programa_reconnect_socket\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux socket not found' >&2;",
+            "elif [ -z \"$programa_reconnect_cli\" ] || [ ! -x \"$programa_reconnect_cli\" ]; then printf '%s\\n' 'cmux: deferred SSH reconnect skipped, local cmux CLI not found' >&2;",
             "else",
-            "cmux_reconnect_payload=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"foreground_auth_token\\\":\\\"\(escapedForegroundAuthToken)\\\"}\";",
-            "\"$cmux_reconnect_cli\" --socket \"$cmux_reconnect_socket\" rpc workspace.remote.foreground_auth_ready \"$cmux_reconnect_payload\" >/dev/null 2>&1 || true;",
-            "unset cmux_reconnect_payload;",
+            "programa_reconnect_payload=\"{\\\"workspace_id\\\":\\\"$PROGRAMA_WORKSPACE_ID\\\",\\\"foreground_auth_token\\\":\\\"\(escapedForegroundAuthToken)\\\"}\";",
+            "\"$programa_reconnect_cli\" --socket \"$programa_reconnect_socket\" rpc workspace.remote.foreground_auth_ready \"$programa_reconnect_payload\" >/dev/null 2>&1 || true;",
+            "unset programa_reconnect_payload;",
             "fi;",
             "fi;",
-            "unset cmux_reconnect_socket cmux_reconnect_cli;",
+            "unset programa_reconnect_socket programa_reconnect_cli;",
         ].joined(separator: " ")
     }
 
@@ -5211,9 +5211,9 @@ struct CMUXCLI {
 
     private func defaultSSHControlPathTemplate(remoteRelayPort: Int? = nil) -> String {
         if let remoteRelayPort, remoteRelayPort > 0 {
-            return "/tmp/cmux-ssh-\(getuid())-\(remoteRelayPort)-%C"
+            return "/tmp/programa-ssh-\(getuid())-\(remoteRelayPort)-%C"
         }
-        return "/tmp/cmux-ssh-\(getuid())-%C"
+        return "/tmp/programa-ssh-\(getuid())-%C"
     }
 
     private func normalizedSSHIdentityPath(_ rawPath: String?) -> String? {
@@ -5265,7 +5265,7 @@ struct CMUXCLI {
             if let trimmedExplicit, !trimmedExplicit.isEmpty {
                 return trimmedExplicit
             }
-            guard let marker = try? String(contentsOfFile: "/tmp/cmux-last-debug-log-path", encoding: .utf8) else {
+            guard let marker = try? String(contentsOfFile: "/tmp/programa-last-debug-log-path", encoding: .utf8) else {
                 return nil
             }
             let trimmedMarker = marker.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5273,7 +5273,7 @@ struct CMUXCLI {
         }()
         guard let path else { return }
         let timestamp = ISO8601DateFormatter().string(from: Date())
-        let line = "\(timestamp) [cmux-cli] \(message())\n"
+        let line = "\(timestamp) [programa-cli] \(message())\n"
         guard let data = line.data(using: .utf8) else { return }
         if !FileManager.default.fileExists(atPath: path) {
             FileManager.default.createFile(atPath: path, contents: nil)
@@ -5406,7 +5406,7 @@ struct CMUXCLI {
 
         func displayBrowserValue(_ value: Any) -> String {
             if let dict = value as? [String: Any],
-               let type = dict["__cmux_t"] as? String,
+               let type = dict["__programa_t"] as? String,
                type == "undefined" {
                 return "undefined"
             }
@@ -7347,7 +7347,7 @@ struct CMUXCLI {
             Usage: cmux reload-config
 
             Run the same configuration reload as the Reload Configuration shortcut.
-            This reloads Ghostty config, re-reads ~/.config/cmux/settings.json, and refreshes terminals.
+            This reloads Ghostty config, re-reads ~/.config/programa/settings.json, and refreshes terminals.
 
             Example:
               cmux reload-config
@@ -8051,10 +8051,10 @@ struct CMUXCLI {
         return true
     }
 
-    private static let cmuxThemeOverrideBundleIdentifier = "com.darkroom.programa"
-    private static let cmuxThemesBlockStart = "# cmux themes start"
-    private static let cmuxThemesBlockEnd = "# cmux themes end"
-    private static let cmuxThemesReloadNotificationName = "com.darkroom.programa.themes.reload-config"
+    private static let programaThemeOverrideBundleIdentifier = "com.darkroom.programa"
+    private static let programaThemesBlockStart = "# cmux themes start"
+    private static let programaThemesBlockEnd = "# cmux themes end"
+    private static let programaThemesReloadNotificationName = "com.darkroom.programa.themes.reload-config"
 
     private struct ThemeSelection {
         let rawValue: String?
@@ -8086,8 +8086,8 @@ struct CMUXCLI {
 
         let selection = currentThemeSelection()
         var environment = ProcessInfo.processInfo.environment
-        environment["PROGRAMA_THEME_PICKER_CONFIG"] = try cmuxThemeOverrideConfigURL().path
-        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentCmuxAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
+        environment["PROGRAMA_THEME_PICKER_CONFIG"] = try programaThemeOverrideConfigURL().path
+        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentProgramaAppBundleIdentifier() ?? Self.programaThemeOverrideBundleIdentifier
         environment["PROGRAMA_THEME_PICKER_TARGET"] = defaultThemePickerTargetMode(current: selection).rawValue
         environment["PROGRAMA_THEME_PICKER_COLOR_SCHEME"] = defaultAppearancePrefersDarkThemes() ? "dark" : "light"
         if let light = selection.light {
@@ -8264,7 +8264,7 @@ struct CMUXCLI {
     private func printThemesList(jsonOutput: Bool) throws {
         let themes = availableThemeNames()
         let current = currentThemeSelection()
-        let configPath = try cmuxThemeOverrideConfigURL().path
+        let configPath = try programaThemeOverrideConfigURL().path
 
         if jsonOutput {
             let currentPayload: [String: Any] = [
@@ -8597,8 +8597,8 @@ struct CMUXCLI {
             "~/.config/ghostty/config.ghostty",
             "~/Library/Application Support/com.mitchellh.ghostty/config",
             "~/Library/Application Support/com.mitchellh.ghostty/config.ghostty",
-            "~/Library/Application Support/\(Self.cmuxThemeOverrideBundleIdentifier)/config",
-            "~/Library/Application Support/\(Self.cmuxThemeOverrideBundleIdentifier)/config.ghostty",
+            "~/Library/Application Support/\(Self.programaThemeOverrideBundleIdentifier)/config",
+            "~/Library/Application Support/\(Self.programaThemeOverrideBundleIdentifier)/config.ghostty",
         ]
 
         return rawPaths.map {
@@ -8630,18 +8630,18 @@ struct CMUXCLI {
         return lastValue
     }
 
-    private func cmuxThemeOverrideConfigURL() throws -> URL {
+    private func programaThemeOverrideConfigURL() throws -> URL {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             throw CLIError(message: "Unable to resolve Application Support directory")
         }
         return appSupport
-            .appendingPathComponent(Self.cmuxThemeOverrideBundleIdentifier, isDirectory: true)
+            .appendingPathComponent(Self.programaThemeOverrideBundleIdentifier, isDirectory: true)
             .appendingPathComponent("config.ghostty", isDirectory: false)
     }
 
     private func writeManagedThemeOverride(rawThemeValue: String) throws -> URL {
         let fileManager = FileManager.default
-        let configURL = try cmuxThemeOverrideConfigURL()
+        let configURL = try programaThemeOverrideConfigURL()
         let directoryURL = configURL.deletingLastPathComponent()
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true, attributes: nil)
 
@@ -8649,9 +8649,9 @@ struct CMUXCLI {
         let strippedContents = removingManagedThemeOverride(from: existingContents)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let block = """
-        \(Self.cmuxThemesBlockStart)
+        \(Self.programaThemesBlockStart)
         theme = \(rawThemeValue)
-        \(Self.cmuxThemesBlockEnd)
+        \(Self.programaThemesBlockEnd)
         """
 
         let nextContents = strippedContents.isEmpty ? "\(block)\n" : "\(strippedContents)\n\n\(block)\n"
@@ -8661,7 +8661,7 @@ struct CMUXCLI {
 
     private func clearManagedThemeOverride() throws -> URL {
         let fileManager = FileManager.default
-        let configURL = try cmuxThemeOverrideConfigURL()
+        let configURL = try programaThemeOverrideConfigURL()
         guard let existingContents = try readOptionalThemeOverrideContents(at: configURL) else {
             return configURL
         }
@@ -8717,16 +8717,16 @@ struct CMUXCLI {
     }
 
     private func reloadThemesIfPossible() -> ThemeReloadStatus {
-        let bundleIdentifier = currentCmuxAppBundleIdentifier() ?? Self.cmuxThemeOverrideBundleIdentifier
+        let bundleIdentifier = currentProgramaAppBundleIdentifier() ?? Self.programaThemeOverrideBundleIdentifier
         DistributedNotificationCenter.default().post(
-            name: Notification.Name(Self.cmuxThemesReloadNotificationName),
+            name: Notification.Name(Self.programaThemesReloadNotificationName),
             object: nil,
             userInfo: ["bundleIdentifier": bundleIdentifier]
         )
         return ThemeReloadStatus(requested: true, targetBundleIdentifier: bundleIdentifier)
     }
 
-    private func currentCmuxAppBundleIdentifier() -> String? {
+    private func currentProgramaAppBundleIdentifier() -> String? {
         if let bundleIdentifier = ProcessInfo.processInfo.environment["PROGRAMA_BUNDLE_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !bundleIdentifier.isEmpty {
             return bundleIdentifier
@@ -10244,7 +10244,7 @@ struct CMUXCLI {
         }
     }
 
-    private func isCmuxClaudeWrapper(at path: String) -> Bool {
+    private func isProgramaClaudeWrapper(at path: String) -> Bool {
         guard let data = FileManager.default.contents(atPath: path) else { return false }
         let prefixData = data.prefix(512)
         guard let prefix = String(data: prefixData, encoding: .utf8) else { return false }
@@ -10272,7 +10272,7 @@ struct CMUXCLI {
         resolveExecutableInSearchPath(
             "claude",
             searchPath: searchPath,
-            skip: { self.isCmuxClaudeWrapper(at: $0) }
+            skip: { self.isProgramaClaudeWrapper(at: $0) }
         )
     }
 
@@ -10297,7 +10297,7 @@ struct CMUXCLI {
         explicitPassword: String?,
         focusedContext: TmuxCompatFocusedContext?,
         tmuxPathPrefix: String,
-        cmuxBinEnvVar: String,
+        programaBinEnvVar: String,
         termOverrideEnvVar: String,
         extraEnvVars: [(key: String, value: String)] = []
     ) {
@@ -10317,7 +10317,7 @@ struct CMUXCLI {
             ?? "%1"
         let fakeTerm = processEnvironment[termOverrideEnvVar] ?? "screen-256color"
 
-        setenv(cmuxBinEnvVar, executablePath, 1)
+        setenv(programaBinEnvVar, executablePath, 1)
         setenv("PATH", updatedPath, 1)
         setenv("TMUX", fakeTmuxValue, 1)
         setenv("TMUX_PANE", fakeTmuxPane, 1)
@@ -10367,7 +10367,7 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-claude-teams",
-            cmuxBinEnvVar: "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
+            programaBinEnvVar: "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
             termOverrideEnvVar: "PROGRAMA_CLAUDE_TEAMS_TERM",
             extraEnvVars: [
                 (key: "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", value: "1"),
@@ -10413,7 +10413,7 @@ struct CMUXCLI {
         let script = """
         #!/usr/bin/env bash
         set -euo pipefail
-        exec "${PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
         """
         return try createTmuxCompatShimDirectory(
             directoryName: "claude-teams-bin",
@@ -10467,7 +10467,7 @@ struct CMUXCLI {
                 guard FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDir),
                       !isDir.boolValue,
                       FileManager.default.isExecutableFile(atPath: trimmed),
-                      !isCmuxClaudeWrapper(at: trimmed) else { continue }
+                      !isProgramaClaudeWrapper(at: trimmed) else { continue }
                 return trimmed
             }
             return resolveClaudeExecutable(searchPath: launcherEnvironment["PATH"])
@@ -10522,7 +10522,7 @@ struct CMUXCLI {
         case "${1:-}" in
           -V|-v) echo "tmux 3.4"; exit 0 ;;
         esac
-        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
         """
         let root = try createTmuxCompatShimDirectory(
             directoryName: "omo-bin",
@@ -10543,7 +10543,7 @@ struct CMUXCLI {
             *)        shift ;;
           esac
         done
-        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-cmux}" notify --title "${TITLE:-OpenCode}" --body "${BODY:-}"
+        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-programa}" notify --title "${TITLE:-OpenCode}" --body "${BODY:-}"
         """
         try writeShimIfChanged(notifierScript, to: notifierURL)
 
@@ -10945,7 +10945,7 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-omo",
-            cmuxBinEnvVar: "PROGRAMA_OMO_PROGRAMA_BIN",
+            programaBinEnvVar: "PROGRAMA_OMO_PROGRAMA_BIN",
             termOverrideEnvVar: "PROGRAMA_OMO_TERM",
             extraEnvVars: [(key: "OPENCODE_PORT", value: openCodePort)]
         )
@@ -11043,7 +11043,7 @@ struct CMUXCLI {
         case "${1:-}" in
           -V|-v) echo "tmux 3.4"; exit 0 ;;
         esac
-        exec "${PROGRAMA_OMX_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_OMX_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
         """
         return try createTmuxCompatShimDirectory(
             directoryName: "omx-bin",
@@ -11067,7 +11067,7 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-omx",
-            cmuxBinEnvVar: "PROGRAMA_OMX_PROGRAMA_BIN",
+            programaBinEnvVar: "PROGRAMA_OMX_PROGRAMA_BIN",
             termOverrideEnvVar: "PROGRAMA_OMX_TERM"
         )
     }
@@ -11146,7 +11146,7 @@ struct CMUXCLI {
         case "${1:-}" in
           -V|-v) echo "tmux 3.4"; exit 0 ;;
         esac
-        exec "${PROGRAMA_OMC_PROGRAMA_BIN:-cmux}" __tmux-compat "$@"
+        exec "${PROGRAMA_OMC_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
         """
         return try createTmuxCompatShimDirectory(
             directoryName: "omc-bin",
@@ -11170,7 +11170,7 @@ struct CMUXCLI {
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
             tmuxPathPrefix: "cmux-omc",
-            cmuxBinEnvVar: "PROGRAMA_OMC_PROGRAMA_BIN",
+            programaBinEnvVar: "PROGRAMA_OMC_PROGRAMA_BIN",
             termOverrideEnvVar: "PROGRAMA_OMC_TERM"
         )
         // omc wraps Claude Code, so it needs the same NODE_OPTIONS restore module
@@ -11948,7 +11948,7 @@ struct CMUXCLI {
     private func tmuxWaitForSignalURL(name: String) -> URL {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
         let sanitized = name.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" }
-        return URL(fileURLWithPath: "/tmp/cmux-wait-for-\(String(sanitized)).sig")
+        return URL(fileURLWithPath: "/tmp/programa-wait-for-\(String(sanitized)).sig")
     }
 
     private func runTmuxCompatCommand(
@@ -13406,9 +13406,9 @@ struct CMUXCLI {
         }
 
         var hooks = existing["hooks"] as? [String: Any] ?? [:]
-        let cmuxHooks = Self.codexHooksJSON["hooks"] as! [String: Any]
-        for (eventName, cmuxGroups) in cmuxHooks {
-            guard let cmuxGroupArray = cmuxGroups as? [[String: Any]] else { continue }
+        let programaHooks = Self.codexHooksJSON["hooks"] as! [String: Any]
+        for (eventName, programaGroups) in programaHooks {
+            guard let programaGroupArray = programaGroups as? [[String: Any]] else { continue }
             var eventGroups = hooks[eventName] as? [[String: Any]] ?? []
             eventGroups.removeAll { group in
                 guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
@@ -13416,7 +13416,7 @@ struct CMUXCLI {
                     (hook["command"] as? String)?.contains(Self.codexHookCommandMarker) == true
                 }
             }
-            eventGroups.append(contentsOf: cmuxGroupArray)
+            eventGroups.append(contentsOf: programaGroupArray)
             hooks[eventName] = eventGroups
         }
         existing["hooks"] = hooks
@@ -13984,7 +13984,7 @@ struct CMUXCLI {
 
     private func versionSummary() -> String {
         let info = resolvedVersionInfo()
-        let commit = info["CMUXCommit"].flatMap { normalizedCommitHash($0) }
+        let commit = info["ProgramaCommit"].flatMap { normalizedCommitHash($0) }
         let baseSummary: String
         if let version = info["CFBundleShortVersionString"], let build = info["CFBundleVersion"] {
             baseSummary = "cmux \(version) (\(build))"
@@ -14058,7 +14058,7 @@ struct CMUXCLI {
         print()
         print("  \(bold)Docs\(reset)\(subdued)                https://cmux.com/docs\(reset)")
         print("  \(bold)Discord\(reset)\(subdued)             https://discord.gg/xsgFEVrWCZ\(reset)")
-        print("  \(bold)GitHub\(reset)\(subdued)              https://github.com/manaflow-ai/cmux (please leave a star ⭐)\(reset)")
+        print("  \(bold)GitHub\(reset)\(subdued)              https://github.com/darkroomengineering/programa (please leave a star ⭐)\(reset)")
         print("  \(bold)Email\(reset)\(subdued)               founders@manaflow.com\(reset)")
         print()
         print("  \(subdued)Run \(reset)\(bold)cmux --help\(reset)\(subdued) for all commands.\(reset)")
@@ -14076,7 +14076,7 @@ struct CMUXCLI {
         let needsPlistFallback =
             info["CFBundleShortVersionString"] == nil ||
             info["CFBundleVersion"] == nil ||
-            info["CMUXCommit"] == nil
+            info["ProgramaCommit"] == nil
         if needsPlistFallback {
             for plistURL in candidateInfoPlistURLs() {
                 guard let data = try? Data(contentsOf: plistURL),
@@ -14089,7 +14089,7 @@ struct CMUXCLI {
                 info.merge(parsed, uniquingKeysWith: { current, _ in current })
                 if info["CFBundleShortVersionString"] != nil,
                    info["CFBundleVersion"] != nil,
-                   info["CMUXCommit"] != nil {
+                   info["ProgramaCommit"] != nil {
                     break
                 }
             }
@@ -14098,14 +14098,14 @@ struct CMUXCLI {
         let needsProjectFallback =
             info["CFBundleShortVersionString"] == nil ||
             info["CFBundleVersion"] == nil ||
-            info["CMUXCommit"] == nil
+            info["ProgramaCommit"] == nil
         if needsProjectFallback, let fromProject = versionInfoFromProjectFile() {
             info.merge(fromProject, uniquingKeysWith: { current, _ in current })
         }
 
-        if info["CMUXCommit"] == nil,
+        if info["ProgramaCommit"] == nil,
            let commit = normalizedCommitHash(ProcessInfo.processInfo.environment["PROGRAMA_COMMIT"]) {
-            info["CMUXCommit"] = commit
+            info["ProgramaCommit"] = commit
         }
 
         return info
@@ -14127,9 +14127,9 @@ struct CMUXCLI {
                 info["CFBundleVersion"] = trimmed
             }
         }
-        if let commit = dictionary["CMUXCommit"] as? String,
+        if let commit = dictionary["ProgramaCommit"] as? String,
            let normalizedCommit = normalizedCommitHash(commit) {
-            info["CMUXCommit"] = normalizedCommit
+            info["ProgramaCommit"] = normalizedCommit
         }
         return info.isEmpty ? nil : info
     }
@@ -14154,7 +14154,7 @@ struct CMUXCLI {
                     info["CFBundleVersion"] = build
                 }
                 if let commit = gitCommitHash(at: current) {
-                    info["CMUXCommit"] = commit
+                    info["ProgramaCommit"] = commit
                 }
                 if !info.isEmpty {
                     return info

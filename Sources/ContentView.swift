@@ -40,7 +40,7 @@ func sidebarActiveForegroundNSColor(
     return baseColor.withAlphaComponent(clampedOpacity)
 }
 
-func cmuxAccentNSColor(for colorScheme: ColorScheme) -> NSColor {
+func programaAccentNSColor(for colorScheme: ColorScheme) -> NSColor {
     switch colorScheme {
     case .dark:
         return NSColor(
@@ -59,20 +59,20 @@ func cmuxAccentNSColor(for colorScheme: ColorScheme) -> NSColor {
     }
 }
 
-func cmuxAccentNSColor(for appAppearance: NSAppearance?) -> NSColor {
+func programaAccentNSColor(for appAppearance: NSAppearance?) -> NSColor {
     let bestMatch = appAppearance?.bestMatch(from: [.darkAqua, .aqua])
     let scheme: ColorScheme = (bestMatch == .darkAqua) ? .dark : .light
-    return cmuxAccentNSColor(for: scheme)
+    return programaAccentNSColor(for: scheme)
 }
 
-func cmuxAccentNSColor() -> NSColor {
+func programaAccentNSColor() -> NSColor {
     NSColor(name: nil) { appearance in
-        cmuxAccentNSColor(for: appearance)
+        programaAccentNSColor(for: appearance)
     }
 }
 
-func cmuxAccentColor() -> Color {
-    Color(nsColor: cmuxAccentNSColor())
+func programaAccentColor() -> Color {
+    Color(nsColor: programaAccentNSColor())
 }
 
 struct SidebarRemoteErrorCopyEntry: Equatable {
@@ -117,7 +117,7 @@ func sidebarSelectedWorkspaceBackgroundNSColor(for colorScheme: ColorScheme) -> 
        let parsed = NSColor(hex: hex) {
         return parsed
     }
-    return cmuxAccentNSColor(for: colorScheme)
+    return programaAccentNSColor(for: colorScheme)
 }
 
 func sidebarSelectedWorkspaceForegroundNSColor(opacity: CGFloat) -> NSColor {
@@ -956,8 +956,8 @@ final class FileDropOverlayView: NSView {
 var fileDropOverlayKey: UInt8 = 0
 private var commandPaletteWindowOverlayKey: UInt8 = 0
 private var tmuxWorkspacePaneWindowOverlayKey: UInt8 = 0
-let commandPaletteOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("cmux.commandPalette.overlay.container")
-let tmuxWorkspacePaneOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("cmux.tmuxWorkspacePane.overlay.container")
+let commandPaletteOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("programa.commandPalette.overlay.container")
+let tmuxWorkspacePaneOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("programa.tmuxWorkspacePane.overlay.container")
 
 enum CommandPaletteOverlayPromotionPolicy {
     static func shouldPromote(previouslyVisible: Bool, isVisible: Bool) -> Bool {
@@ -1798,7 +1798,7 @@ struct ContentView: View {
     @EnvironmentObject var notificationStore: TerminalNotificationStore
     @EnvironmentObject var sidebarState: SidebarState
     @EnvironmentObject var sidebarSelectionState: SidebarSelectionState
-    @EnvironmentObject var cmuxConfigStore: CmuxConfigStore
+    @EnvironmentObject var programaConfigStore: ProgramaConfigStore
     @State private var sidebarWidth: CGFloat = 200
     @State private var hoveredResizerHandles: Set<SidebarResizerHandle> = []
     @State private var isResizerDragging = false
@@ -1863,8 +1863,8 @@ struct ContentView: View {
     private var commandPaletteRenameSelectAllOnFocus = CommandPaletteRenameSelectionSettings.defaultSelectAllOnFocus
     @AppStorage(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey)
     private var commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
-    @AppStorage(BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowserKey)
-    private var openSidebarPullRequestLinksInCmuxBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInCmuxBrowser
+    @AppStorage(BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey)
+    private var openSidebarPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser
     @State private var commandPaletteShouldFocusWorkspaceDescriptionEditor = false
     @FocusState private var isCommandPaletteSearchFocused: Bool
     @FocusState private var isCommandPaletteRenameFocused: Bool
@@ -3988,7 +3988,7 @@ struct ContentView: View {
                             let isHovered = commandPaletteHoveredResultIndex == index
                             let trailingLabel = commandPaletteTrailingLabel(for: result.command)
                             let rowBackground: Color = isSelected
-                                ? cmuxAccentColor().opacity(0.12)
+                                ? programaAccentColor().opacity(0.12)
                                 : (isHovered ? Color.primary.opacity(0.08) : .clear)
 
                             Button {
@@ -5664,7 +5664,7 @@ struct ContentView: View {
     private func commandPaletteCommandsFingerprint(commandsContext: CommandPaletteCommandsContext) -> Int {
         var hasher = Hasher()
         hasher.combine(commandsContext.snapshot.fingerprint())
-        hasher.combine(cmuxConfigStore.configRevision)
+        hasher.combine(programaConfigStore.configRevision)
         return hasher.finalize()
     }
 
@@ -6077,7 +6077,7 @@ struct ContentView: View {
     private func commandPaletteCommandsContext(
         terminalOpenTargets: Set<TerminalDirectoryOpenTarget>
     ) -> CommandPaletteCommandsContext {
-        let cliInstalledInPATH = AppDelegate.shared?.isCmuxCLIInstalledInPATH() ?? false
+        let cliInstalledInPATH = AppDelegate.shared?.isProgramaCLIInstalledInPATH() ?? false
         var snapshot = commandPaletteContextSnapshot(terminalOpenTargets: terminalOpenTargets)
         snapshot.setBool(CommandPaletteContextKeys.cliInstalledInPATH, cliInstalledInPATH)
         return CommandPaletteCommandsContext(
@@ -6364,7 +6364,7 @@ struct ContentView: View {
         contributions.append(
             CommandPaletteCommandContribution(
                 commandId: "palette.installCLI",
-                title: constant(String(localized: "command.installCLI.title", defaultValue: "Shell Command: Install 'cmux' in PATH")),
+                title: constant(String(localized: "command.installCLI.title", defaultValue: "Shell Command: Install 'programa' in PATH")),
                 subtitle: constant(String(localized: "command.installCLI.subtitle", defaultValue: "CLI")),
                 keywords: ["install", "cli", "path", "shell", "command", "symlink"],
                 when: { !$0.bool(CommandPaletteContextKeys.cliInstalledInPATH) }
@@ -6373,7 +6373,7 @@ struct ContentView: View {
         contributions.append(
             CommandPaletteCommandContribution(
                 commandId: "palette.uninstallCLI",
-                title: constant(String(localized: "command.uninstallCLI.title", defaultValue: "Shell Command: Uninstall 'cmux' from PATH")),
+                title: constant(String(localized: "command.uninstallCLI.title", defaultValue: "Shell Command: Uninstall 'programa' from PATH")),
                 subtitle: constant(String(localized: "command.uninstallCLI.subtitle", defaultValue: "CLI")),
                 keywords: ["uninstall", "remove", "cli", "path", "shell", "command", "symlink"],
                 when: { $0.bool(CommandPaletteContextKeys.cliInstalledInPATH) }
@@ -7073,13 +7073,13 @@ struct ContentView: View {
             )
         )
 
-        let cmuxConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "cmux.json"))
-        for command in cmuxConfigStore.loadedCommands {
-            let commandName = sanitizeCmuxConfigPaletteText(command.name)
+        let programaConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "programa.json"))
+        for command in programaConfigStore.loadedCommands {
+            let commandName = sanitizeProgramaConfigPaletteText(command.name)
             let subtitle = command.description
-                .map { sanitizeCmuxConfigPaletteText($0) }
+                .map { sanitizeProgramaConfigPaletteText($0) }
                 .flatMap { $0.isEmpty ? nil : constant($0) }
-                ?? cmuxConfigDefaultSubtitle
+                ?? programaConfigDefaultSubtitle
             contributions.append(
                 CommandPaletteCommandContribution(
                     commandId: command.id,
@@ -7093,7 +7093,7 @@ struct ContentView: View {
         return contributions
     }
 
-    private func sanitizeCmuxConfigPaletteText(_ text: String) -> String {
+    private func sanitizeProgramaConfigPaletteText(_ text: String) -> String {
         let dangerous: Set<Unicode.Scalar> = [
             "\u{200B}", "\u{200C}", "\u{200D}", "\u{200E}", "\u{200F}",
             "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{202E}",
@@ -7131,10 +7131,10 @@ struct ContentView: View {
             AppDelegate.shared?.openNewMainWindow(nil)
         }
         registry.register(commandId: "palette.installCLI") {
-            AppDelegate.shared?.installCmuxCLIInPath(nil)
+            AppDelegate.shared?.installProgramaCLIInPath(nil)
         }
         registry.register(commandId: "palette.uninstallCLI") {
-            AppDelegate.shared?.uninstallCmuxCLIInPath(nil)
+            AppDelegate.shared?.uninstallProgramaCLIInPath(nil)
         }
         registry.register(commandId: "palette.newTerminalTab") {
             tabManager.newSurface()
@@ -7453,15 +7453,15 @@ struct ContentView: View {
             }
         }
 
-        for command in cmuxConfigStore.loadedCommands {
+        for command in programaConfigStore.loadedCommands {
             let captured = command
-            let sourcePath = cmuxConfigStore.commandSourcePaths[command.id]
-            let globalPath = cmuxConfigStore.globalConfigPath
+            let sourcePath = programaConfigStore.commandSourcePaths[command.id]
+            let globalPath = programaConfigStore.globalConfigPath
             registry.register(commandId: command.id) {
                 let rawCwd = tabManager.selectedWorkspace?.currentDirectory
                 let baseCwd = (rawCwd?.isEmpty == false) ? rawCwd!
                     : FileManager.default.homeDirectoryForCurrentUser.path
-                CmuxConfigExecutor.execute(
+                ProgramaConfigExecutor.execute(
                     command: captured,
                     tabManager: tabManager,
                     baseCwd: baseCwd,
@@ -8679,7 +8679,7 @@ struct ContentView: View {
         guard !pullRequests.isEmpty else { return false }
 
         var openedCount = 0
-        if openSidebarPullRequestLinksInCmuxBrowser {
+        if openSidebarPullRequestLinksInProgramaBrowser {
             for pullRequest in pullRequests {
                 if tabManager.openBrowser(url: pullRequest.url, insertAtEnd: true) != nil {
                     openedCount += 1
@@ -9778,8 +9778,8 @@ private struct SidebarTabItemSettingsSnapshot: Equatable {
     let usesVerticalBranchLayout: Bool
     let showsGitBranchIcon: Bool
     let showsSSH: Bool
-    let openPullRequestLinksInCmuxBrowser: Bool
-    let openPortLinksInCmuxBrowser: Bool
+    let openPullRequestLinksInProgramaBrowser: Bool
+    let openPortLinksInProgramaBrowser: Bool
     let showsNotificationMessage: Bool
     let activeTabIndicatorStyle: SidebarActiveTabIndicatorStyle
     let selectionColorHex: String?
@@ -9806,10 +9806,10 @@ private struct SidebarTabItemSettingsSnapshot: Equatable {
         usesVerticalBranchLayout = SidebarBranchLayoutSettings.usesVerticalLayout(defaults: defaults)
         showsGitBranchIcon = Self.bool(defaults: defaults, key: "sidebarShowGitBranchIcon", defaultValue: false)
         showsSSH = Self.bool(defaults: defaults, key: "sidebarShowSSH", defaultValue: true)
-        openPullRequestLinksInCmuxBrowser = BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowser(
+        openPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowser(
             defaults: defaults
         )
-        openPortLinksInCmuxBrowser = BrowserLinkOpenSettings.openSidebarPortLinksInCmuxBrowser(
+        openPortLinksInProgramaBrowser = BrowserLinkOpenSettings.openSidebarPortLinksInProgramaBrowser(
             defaults: defaults
         )
 
@@ -10303,7 +10303,7 @@ private struct FeedbackComposerAppMetadata {
     static var current: FeedbackComposerAppMetadata {
         let infoDictionary = Bundle.main.infoDictionary ?? [:]
         let env = ProcessInfo.processInfo.environment
-        let commit = (infoDictionary["CMUXCommit"] as? String).flatMap { value in
+        let commit = (infoDictionary["ProgramaCommit"] as? String).flatMap { value in
             value.isEmpty ? nil : value
         } ?? env["PROGRAMA_COMMIT"]
 
@@ -10604,8 +10604,8 @@ private enum FeedbackComposerClient {
 }
 
 enum SidebarDragLifecycleNotification {
-    static let stateDidChange = Notification.Name("cmux.sidebarDragStateDidChange")
-    static let requestClear = Notification.Name("cmux.sidebarDragRequestClear")
+    static let stateDidChange = Notification.Name("programa.sidebarDragStateDidChange")
+    static let requestClear = Notification.Name("programa.sidebarDragRequestClear")
     static let tabIdKey = "tabId"
     static let reasonKey = "reason"
 
@@ -11776,7 +11776,7 @@ private struct SidebarHelpMenuButton: View {
     private var helpPopover: some View {
         VStack(alignment: .leading, spacing: 2) {
             helpOptionButton(
-                title: String(localized: "sidebar.help.welcome", defaultValue: "Welcome to cmux!"),
+                title: String(localized: "sidebar.help.welcome", defaultValue: "Welcome to Programa!"),
                 action: .welcome,
                 accessibilityIdentifier: "SidebarHelpMenuOptionWelcome",
                 isExternalLink: false
@@ -12266,7 +12266,7 @@ private struct SidebarEmptyArea: View {
             .overlay(alignment: .top) {
                 if shouldShowTopDropIndicator {
                     Rectangle()
-                        .fill(cmuxAccentColor())
+                        .fill(programaAccentColor())
                         .frame(height: 2)
                         .padding(.horizontal, 8)
                         .offset(y: -(rowSpacing / 2))
@@ -12497,12 +12497,12 @@ private struct TabItemView: View, Equatable {
         settings.notificationBadgeColorHex
     }
 
-    private var openSidebarPullRequestLinksInCmuxBrowser: Bool {
-        settings.openPullRequestLinksInCmuxBrowser
+    private var openSidebarPullRequestLinksInProgramaBrowser: Bool {
+        settings.openPullRequestLinksInProgramaBrowser
     }
 
-    private var openSidebarPortLinksInCmuxBrowser: Bool {
-        settings.openPortLinksInCmuxBrowser
+    private var openSidebarPortLinksInProgramaBrowser: Bool {
+        settings.openPortLinksInProgramaBrowser
     }
 
     private var titleFontWeight: Font.Weight {
@@ -12552,7 +12552,7 @@ private struct TabItemView: View, Equatable {
         if let hex = sidebarNotificationBadgeColorHex, let nsColor = NSColor(hex: hex) {
             return Color(nsColor: nsColor)
         }
-        return usesInvertedActiveForeground ? Color.white.opacity(0.25) : cmuxAccentColor()
+        return usesInvertedActiveForeground ? Color.white.opacity(0.25) : programaAccentColor()
     }
 
     private var activeProgressTrackColor: Color {
@@ -12560,7 +12560,7 @@ private struct TabItemView: View, Equatable {
     }
 
     private var activeProgressFillColor: Color {
-        usesInvertedActiveForeground ? Color.white.opacity(0.8) : cmuxAccentColor()
+        usesInvertedActiveForeground ? Color.white.opacity(0.8) : programaAccentColor()
     }
 
     private var shortcutHintEmphasis: Double {
@@ -13013,7 +13013,7 @@ private struct TabItemView: View, Equatable {
         .overlay(alignment: .top) {
             if showsCenteredTopDropIndicator {
                 Rectangle()
-                    .fill(cmuxAccentColor())
+                    .fill(programaAccentColor())
                     .frame(height: 2)
                     .padding(.horizontal, 8)
                     .offset(y: index == 0 ? 0 : -(rowSpacing / 2))
@@ -13359,14 +13359,14 @@ private struct TabItemView: View, Equatable {
         if let hex = sidebarSelectionColorHex, let parsed = NSColor(hex: hex) {
             return parsed
         }
-        return cmuxAccentNSColor(for: colorScheme)
+        return programaAccentNSColor(for: colorScheme)
     }
 
     private var backgroundColor: Color {
         switch activeTabIndicatorStyle {
         case .leftRail:
             if isActive        { return Color(nsColor: selectionBackgroundColor) }
-            if isMultiSelected { return cmuxAccentColor().opacity(0.25) }
+            if isMultiSelected { return programaAccentColor().opacity(0.25) }
             return Color.clear
         case .solidFill:
             if isActive { return Color(nsColor: selectionBackgroundColor) }
@@ -13374,7 +13374,7 @@ private struct TabItemView: View, Equatable {
                 if isMultiSelected { return custom.opacity(0.35) }
                 return custom.opacity(0.7)
             }
-            if isMultiSelected { return cmuxAccentColor().opacity(0.25) }
+            if isMultiSelected { return programaAccentColor().opacity(0.25) }
             return Color.clear
         }
     }
@@ -13763,7 +13763,7 @@ private struct TabItemView: View, Equatable {
 
     private func openPullRequestLink(_ url: URL) {
         updateSelection()
-        if openSidebarPullRequestLinksInCmuxBrowser {
+        if openSidebarPullRequestLinksInProgramaBrowser {
             if tabManager.openBrowser(
                 inWorkspace: tab.id,
                 url: url,
@@ -13780,7 +13780,7 @@ private struct TabItemView: View, Equatable {
     private func openPortLink(_ port: Int) {
         guard let url = URL(string: "http://localhost:\(port)") else { return }
         updateSelection()
-        if openSidebarPortLinksInCmuxBrowser {
+        if openSidebarPortLinksInProgramaBrowser {
             if tabManager.openBrowser(
                 inWorkspace: tab.id,
                 url: url,
@@ -14639,7 +14639,7 @@ private enum SidebarTabDragPayload {
     static let typeIdentifier = "com.darkroom.programa.sidebar-tab-reorder"
     static let dropContentType = UTType(exportedAs: typeIdentifier)
     static let dropContentTypes: [UTType] = [dropContentType]
-    private static let prefix = "cmux.sidebar-tab."
+    private static let prefix = "programa.sidebar-tab."
 
     static func provider(for tabId: UUID) -> NSItemProvider {
         let provider = NSItemProvider()

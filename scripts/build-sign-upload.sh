@@ -47,7 +47,7 @@ fi
 
 TAG="$1"
 SIGN_HASH="A050CC7E193C8221BDBA204E731B046CDCCC1B30"
-ENTITLEMENTS="cmux.entitlements"
+ENTITLEMENTS="programa.entitlements"
 APP_PATH="build/Build/Products/Release/Programa.app"
 
 # --- Pre-flight ---
@@ -71,7 +71,7 @@ fi
 # --- Build app (Release, unsigned) ---
 echo "Building app..."
 rm -rf build/
-xcodebuild -scheme cmux -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tail -5
+xcodebuild -scheme programa -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tail -5
 echo "Build succeeded"
 
 HELPER_PATH="$APP_PATH/Contents/Resources/bin/ghostty"

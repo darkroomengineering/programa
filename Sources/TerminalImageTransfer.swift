@@ -320,7 +320,7 @@ enum TerminalImageTransferPlanner {
                 .map(escapeForShell)
                 .joined(separator: " ")
             guard !content.isEmpty else {
-                onFailure(NSError(domain: "cmux.remote.drop", code: 5))
+                onFailure(NSError(domain: "programa.remote.drop", code: 5))
                 return
             }
             insertText(content)

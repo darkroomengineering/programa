@@ -270,7 +270,7 @@ final class NotificationDockBadgeTests: XCTestCase {
         XCTAssertTrue(NotificationSoundSettings.isCustomFileSelected(defaults: defaults))
     }
 
-    func testNotificationCustomStagingPreservesSourceFileWithCmuxPrefix() {
+    func testNotificationCustomStagingPreservesSourceFileWithProgramaPrefix() {
         let suiteName = "NotificationDockBadgeTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             XCTFail("Failed to create isolated UserDefaults suite")

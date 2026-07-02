@@ -229,7 +229,7 @@ extension NSApplication {
 }
 
 @MainActor
-@objc(CmuxScriptWindow)
+@objc(ProgramaScriptWindow)
 final class ScriptWindow: NSObject {
     let windowId: UUID
 
@@ -362,7 +362,7 @@ final class ScriptWindow: NSObject {
 }
 
 @MainActor
-@objc(CmuxScriptTab)
+@objc(ProgramaScriptTab)
 final class ScriptTab: NSObject {
     let windowId: UUID
     let tabId: UUID
@@ -501,7 +501,7 @@ final class ScriptTab: NSObject {
 }
 
 @MainActor
-@objc(CmuxScriptTerminal)
+@objc(ProgramaScriptTerminal)
 final class ScriptTerminal: NSObject {
     let workspaceId: UUID
     let terminalId: UUID
@@ -661,7 +661,7 @@ final class ScriptTerminal: NSObject {
 }
 
 @MainActor
-@objc(CmuxScriptInputTextCommand)
+@objc(ProgramaScriptInputTextCommand)
 final class ScriptInputTextCommand: NSScriptCommand {
     override func performDefaultImplementation() -> Any? {
         guard NSApp.validateScript(command: self) else { return nil }

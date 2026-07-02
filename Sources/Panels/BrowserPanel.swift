@@ -532,59 +532,59 @@ final class BrowserProfileStore: ObservableObject {
 }
 
 enum BrowserLinkOpenSettings {
-    static let openTerminalLinksInCmuxBrowserKey = "browserOpenTerminalLinksInCmuxBrowser"
-    static let defaultOpenTerminalLinksInCmuxBrowser: Bool = true
+    static let openTerminalLinksInProgramaBrowserKey = "browserOpenTerminalLinksInProgramaBrowser"
+    static let defaultOpenTerminalLinksInProgramaBrowser: Bool = true
 
-    static let openSidebarPullRequestLinksInCmuxBrowserKey = "browserOpenSidebarPullRequestLinksInCmuxBrowser"
-    static let defaultOpenSidebarPullRequestLinksInCmuxBrowser: Bool = true
+    static let openSidebarPullRequestLinksInProgramaBrowserKey = "browserOpenSidebarPullRequestLinksInProgramaBrowser"
+    static let defaultOpenSidebarPullRequestLinksInProgramaBrowser: Bool = true
 
-    static let openSidebarPortLinksInCmuxBrowserKey = "browserOpenSidebarPortLinksInCmuxBrowser"
-    static let defaultOpenSidebarPortLinksInCmuxBrowser: Bool = true
+    static let openSidebarPortLinksInProgramaBrowserKey = "browserOpenSidebarPortLinksInProgramaBrowser"
+    static let defaultOpenSidebarPortLinksInProgramaBrowser: Bool = true
 
-    static let interceptTerminalOpenCommandInCmuxBrowserKey = "browserInterceptTerminalOpenCommandInCmuxBrowser"
-    static let defaultInterceptTerminalOpenCommandInCmuxBrowser: Bool = true
+    static let interceptTerminalOpenCommandInProgramaBrowserKey = "browserInterceptTerminalOpenCommandInProgramaBrowser"
+    static let defaultInterceptTerminalOpenCommandInProgramaBrowser: Bool = true
 
     static let browserHostWhitelistKey = "browserHostWhitelist"
     static let defaultBrowserHostWhitelist: String = ""
     static let browserExternalOpenPatternsKey = "browserExternalOpenPatterns"
     static let defaultBrowserExternalOpenPatterns: String = ""
 
-    static func openTerminalLinksInCmuxBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openTerminalLinksInCmuxBrowserKey) == nil {
-            return defaultOpenTerminalLinksInCmuxBrowser
+    static func openTerminalLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: openTerminalLinksInProgramaBrowserKey) == nil {
+            return defaultOpenTerminalLinksInProgramaBrowser
         }
-        return defaults.bool(forKey: openTerminalLinksInCmuxBrowserKey)
+        return defaults.bool(forKey: openTerminalLinksInProgramaBrowserKey)
     }
 
-    static func openSidebarPullRequestLinksInCmuxBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openSidebarPullRequestLinksInCmuxBrowserKey) == nil {
-            return defaultOpenSidebarPullRequestLinksInCmuxBrowser
+    static func openSidebarPullRequestLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: openSidebarPullRequestLinksInProgramaBrowserKey) == nil {
+            return defaultOpenSidebarPullRequestLinksInProgramaBrowser
         }
-        return defaults.bool(forKey: openSidebarPullRequestLinksInCmuxBrowserKey)
+        return defaults.bool(forKey: openSidebarPullRequestLinksInProgramaBrowserKey)
     }
 
-    static func openSidebarPortLinksInCmuxBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openSidebarPortLinksInCmuxBrowserKey) == nil {
-            return defaultOpenSidebarPortLinksInCmuxBrowser
+    static func openSidebarPortLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: openSidebarPortLinksInProgramaBrowserKey) == nil {
+            return defaultOpenSidebarPortLinksInProgramaBrowser
         }
-        return defaults.bool(forKey: openSidebarPortLinksInCmuxBrowserKey)
+        return defaults.bool(forKey: openSidebarPortLinksInProgramaBrowserKey)
     }
 
-    static func interceptTerminalOpenCommandInCmuxBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: interceptTerminalOpenCommandInCmuxBrowserKey) != nil {
-            return defaults.bool(forKey: interceptTerminalOpenCommandInCmuxBrowserKey)
+    static func interceptTerminalOpenCommandInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: interceptTerminalOpenCommandInProgramaBrowserKey) != nil {
+            return defaults.bool(forKey: interceptTerminalOpenCommandInProgramaBrowserKey)
         }
 
         // Migrate existing behavior for users who only had the link-click toggle.
-        if defaults.object(forKey: openTerminalLinksInCmuxBrowserKey) != nil {
-            return defaults.bool(forKey: openTerminalLinksInCmuxBrowserKey)
+        if defaults.object(forKey: openTerminalLinksInProgramaBrowserKey) != nil {
+            return defaults.bool(forKey: openTerminalLinksInProgramaBrowserKey)
         }
 
-        return defaultInterceptTerminalOpenCommandInCmuxBrowser
+        return defaultInterceptTerminalOpenCommandInProgramaBrowser
     }
 
-    static func initialInterceptTerminalOpenCommandInCmuxBrowserValue(defaults: UserDefaults = .standard) -> Bool {
-        interceptTerminalOpenCommandInCmuxBrowser(defaults: defaults)
+    static func initialInterceptTerminalOpenCommandInProgramaBrowserValue(defaults: UserDefaults = .standard) -> Bool {
+        interceptTerminalOpenCommandInProgramaBrowser(defaults: defaults)
     }
 
     static func hostWhitelist(defaults: UserDefaults = .standard) -> [String] {
@@ -1746,19 +1746,19 @@ final class BrowserPanel: Panel, ObservableObject {
 
     static let telemetryHookBootstrapScriptSource = """
     (() => {
-      if (window.__cmuxHooksInstalled) return true;
-      window.__cmuxHooksInstalled = true;
+      if (window.__programaHooksInstalled) return true;
+      window.__programaHooksInstalled = true;
 
-      window.__cmuxConsoleLog = window.__cmuxConsoleLog || [];
+      window.__programaConsoleLog = window.__programaConsoleLog || [];
       const __pushConsole = (level, args) => {
         try {
           const text = Array.from(args || []).map((x) => {
             if (typeof x === 'string') return x;
             try { return JSON.stringify(x); } catch (_) { return String(x); }
           }).join(' ');
-          window.__cmuxConsoleLog.push({ level, text, timestamp_ms: Date.now() });
-          if (window.__cmuxConsoleLog.length > 512) {
-            window.__cmuxConsoleLog.splice(0, window.__cmuxConsoleLog.length - 512);
+          window.__programaConsoleLog.push({ level, text, timestamp_ms: Date.now() });
+          if (window.__programaConsoleLog.length > 512) {
+            window.__programaConsoleLog.splice(0, window.__programaConsoleLog.length - 512);
           }
         } catch (_) {}
       };
@@ -1772,16 +1772,16 @@ final class BrowserPanel: Panel, ObservableObject {
         };
       }
 
-      window.__cmuxErrorLog = window.__cmuxErrorLog || [];
+      window.__programaErrorLog = window.__programaErrorLog || [];
       window.addEventListener('error', (ev) => {
         try {
           const message = String((ev && ev.message) || '');
           const source = String((ev && ev.filename) || '');
           const line = Number((ev && ev.lineno) || 0);
           const col = Number((ev && ev.colno) || 0);
-          window.__cmuxErrorLog.push({ message, source, line, column: col, timestamp_ms: Date.now() });
-          if (window.__cmuxErrorLog.length > 512) {
-            window.__cmuxErrorLog.splice(0, window.__cmuxErrorLog.length - 512);
+          window.__programaErrorLog.push({ message, source, line, column: col, timestamp_ms: Date.now() });
+          if (window.__programaErrorLog.length > 512) {
+            window.__programaErrorLog.splice(0, window.__programaErrorLog.length - 512);
           }
         } catch (_) {}
       });
@@ -1789,9 +1789,9 @@ final class BrowserPanel: Panel, ObservableObject {
         try {
           const reason = ev && ev.reason;
           const message = typeof reason === 'string' ? reason : (reason && reason.message ? String(reason.message) : String(reason));
-          window.__cmuxErrorLog.push({ message, source: 'unhandledrejection', line: 0, column: 0, timestamp_ms: Date.now() });
-          if (window.__cmuxErrorLog.length > 512) {
-            window.__cmuxErrorLog.splice(0, window.__cmuxErrorLog.length - 512);
+          window.__programaErrorLog.push({ message, source: 'unhandledrejection', line: 0, column: 0, timestamp_ms: Date.now() });
+          if (window.__programaErrorLog.length > 512) {
+            window.__programaErrorLog.splice(0, window.__programaErrorLog.length - 512);
           }
         } catch (_) {}
       });
@@ -1802,20 +1802,20 @@ final class BrowserPanel: Panel, ObservableObject {
 
     static let dialogTelemetryHookBootstrapScriptSource = """
     (() => {
-      if (window.__cmuxDialogHooksInstalled) return true;
-      window.__cmuxDialogHooksInstalled = true;
+      if (window.__programaDialogHooksInstalled) return true;
+      window.__programaDialogHooksInstalled = true;
 
-      window.__cmuxDialogQueue = window.__cmuxDialogQueue || [];
-      window.__cmuxDialogDefaults = window.__cmuxDialogDefaults || { confirm: false, prompt: null };
+      window.__programaDialogQueue = window.__programaDialogQueue || [];
+      window.__programaDialogDefaults = window.__programaDialogDefaults || { confirm: false, prompt: null };
       const __pushDialog = (type, message, defaultText) => {
-        window.__cmuxDialogQueue.push({
+        window.__programaDialogQueue.push({
           type,
           message: String(message || ''),
           default_text: defaultText == null ? null : String(defaultText),
           timestamp_ms: Date.now()
         });
-        if (window.__cmuxDialogQueue.length > 128) {
-          window.__cmuxDialogQueue.splice(0, window.__cmuxDialogQueue.length - 128);
+        if (window.__programaDialogQueue.length > 128) {
+          window.__programaDialogQueue.splice(0, window.__programaDialogQueue.length - 128);
         }
       };
 
@@ -1824,11 +1824,11 @@ final class BrowserPanel: Panel, ObservableObject {
       };
       window.confirm = function(message) {
         __pushDialog('confirm', message, null);
-        return !!window.__cmuxDialogDefaults.confirm;
+        return !!window.__programaDialogDefaults.confirm;
       };
       window.prompt = function(message, defaultValue) {
         __pushDialog('prompt', message, defaultValue == null ? null : defaultValue);
-        const v = window.__cmuxDialogDefaults.prompt;
+        const v = window.__programaDialogDefaults.prompt;
         if (v === null || v === undefined) {
           return defaultValue == null ? '' : String(defaultValue);
         }
@@ -1908,12 +1908,12 @@ final class BrowserPanel: Panel, ObservableObject {
     (() => {
       try {
         const syncState = (state) => {
-          window.__cmuxAddressBarFocusState = state;
+          window.__programaAddressBarFocusState = state;
           try {
             if (window.top && window.top !== window) {
-              window.top.postMessage({ cmuxAddressBarFocusState: state }, "*");
+              window.top.postMessage({ programaAddressBarFocusState: state }, "*");
             } else if (window.top) {
-              window.top.__cmuxAddressBarFocusState = state;
+              window.top.__programaAddressBarFocusState = state;
             }
           } catch (_) {}
         };
@@ -1956,27 +1956,27 @@ final class BrowserPanel: Panel, ObservableObject {
     private static let addressBarFocusTrackingBootstrapScript = """
     (() => {
       try {
-        if (window.__cmuxAddressBarFocusTrackerInstalled) return true;
-        window.__cmuxAddressBarFocusTrackerInstalled = true;
+        if (window.__programaAddressBarFocusTrackerInstalled) return true;
+        window.__programaAddressBarFocusTrackerInstalled = true;
 
         const syncState = (state) => {
-          window.__cmuxAddressBarFocusState = state;
+          window.__programaAddressBarFocusState = state;
           try {
             if (window.top && window.top !== window) {
-              window.top.postMessage({ cmuxAddressBarFocusState: state }, "*");
+              window.top.postMessage({ programaAddressBarFocusState: state }, "*");
             } else if (window.top) {
-              window.top.__cmuxAddressBarFocusState = state;
+              window.top.__programaAddressBarFocusState = state;
             }
           } catch (_) {}
         };
 
-        if (window.top === window && !window.__cmuxAddressBarFocusMessageBridgeInstalled) {
-          window.__cmuxAddressBarFocusMessageBridgeInstalled = true;
+        if (window.top === window && !window.__programaAddressBarFocusMessageBridgeInstalled) {
+          window.__programaAddressBarFocusMessageBridgeInstalled = true;
           window.addEventListener("message", (ev) => {
             try {
               const data = ev ? ev.data : null;
-              if (!data || !Object.prototype.hasOwnProperty.call(data, "cmuxAddressBarFocusState")) return;
-              window.__cmuxAddressBarFocusState = data.cmuxAddressBarFocusState || null;
+              if (!data || !Object.prototype.hasOwnProperty.call(data, "programaAddressBarFocusState")) return;
+              window.__programaAddressBarFocusState = data.programaAddressBarFocusState || null;
             } catch (_) {}
           }, true);
         }
@@ -2042,15 +2042,15 @@ final class BrowserPanel: Panel, ObservableObject {
     """
 
     /// JS bridge that posts `compositionstart`/`compositionend` events to the native layer
-    /// via `webkit.messageHandlers.cmuxIMEState`. This lets the native `performKeyEquivalent`
+    /// via `webkit.messageHandlers.programaIMEState`. This lets the native `performKeyEquivalent`
     /// detect when an Enter key is committing a CJK composition rather than submitting a form,
     /// even though WKWebView clears marked text before the key event fires (#2626).
     private static let imeCompositionTrackingScript = """
     (() => {
       try {
-        if (window.__cmuxIMETrackerInstalled) return;
-        window.__cmuxIMETrackerInstalled = true;
-        const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.cmuxIMEState;
+        if (window.__programaIMETrackerInstalled) return;
+        window.__programaIMETrackerInstalled = true;
+        const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.programaIMEState;
         if (!handler) return;
         document.addEventListener('compositionstart', () => {
           handler.postMessage({ composing: true });
@@ -2062,9 +2062,9 @@ final class BrowserPanel: Panel, ObservableObject {
     })();
     """
 
-    private static let imeCompositionHandlerName = "cmuxIMEState"
+    private static let imeCompositionHandlerName = "programaIMEState"
 
-    private func setupIMECompositionTracking(for webView: CmuxWebView) {
+    private func setupIMECompositionTracking(for webView: ProgramaWebView) {
         let handler = IMECompositionMessageHandler { [weak webView] composing in
             guard let webView else { return }
             if composing {
@@ -2085,23 +2085,23 @@ final class BrowserPanel: Panel, ObservableObject {
     (() => {
       try {
         const readState = () => {
-          let state = window.__cmuxAddressBarFocusState;
+          let state = window.__programaAddressBarFocusState;
           try {
             if ((!state || typeof state.id !== "string" || !state.id) &&
-                window.top && window.top.__cmuxAddressBarFocusState) {
-              state = window.top.__cmuxAddressBarFocusState;
+                window.top && window.top.__programaAddressBarFocusState) {
+              state = window.top.__programaAddressBarFocusState;
             }
           } catch (_) {}
           return state;
         };
 
         const clearState = () => {
-          window.__cmuxAddressBarFocusState = null;
+          window.__programaAddressBarFocusState = null;
           try {
             if (window.top && window.top !== window) {
-              window.top.postMessage({ cmuxAddressBarFocusState: null }, "*");
+              window.top.postMessage({ programaAddressBarFocusState: null }, "*");
             } else if (window.top) {
-              window.top.__cmuxAddressBarFocusState = null;
+              window.top.__programaAddressBarFocusState = null;
             }
           } catch (_) {}
         };
@@ -2303,7 +2303,7 @@ final class BrowserPanel: Panel, ObservableObject {
     var reactGrabMessageHandler: ReactGrabMessageHandler?
     var pendingReactGrabReturnTargetPanelId: UUID?
     var pendingReactGrabRoundTripToken: String?
-    let reactGrabBridgeSessionUpdaterName = "__cmuxReactGrabBridgeSync_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+    let reactGrabBridgeSessionUpdaterName = "__programaReactGrabBridgeSync_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
     private var preferredDeveloperToolsPresentation: DeveloperToolsPresentation = .unknown
     private var forceDeveloperToolsRefreshOnNextAttach: Bool = false
     private var developerToolsRestoreRetryWorkItem: DispatchWorkItem?
@@ -2530,14 +2530,14 @@ final class BrowserPanel: Panel, ObservableObject {
     private static func makeWebView(
         profileID: UUID,
         websiteDataStore: WKWebsiteDataStore? = nil
-    ) -> CmuxWebView {
+    ) -> ProgramaWebView {
         let config = WKWebViewConfiguration()
         configureWebViewConfiguration(
             config,
             websiteDataStore: websiteDataStore ?? BrowserProfileStore.shared.websiteDataStore(for: profileID)
         )
 
-        let webView = CmuxWebView(frame: .zero, configuration: config)
+        let webView = ProgramaWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
         if #available(macOS 13.3, *) {
             webView.isInspectable = true
@@ -2571,7 +2571,7 @@ final class BrowserPanel: Panel, ObservableObject {
         // Keep browser console/error/dialog telemetry active from document start on every navigation.
         // Main frame only — injecting into cross-origin iframes causes CAPTCHA providers
         // (reCAPTCHA, hCaptcha, Cloudflare Turnstile) to detect the overridden console.*
-        // methods and __cmux* globals as environment tampering, failing the challenge.
+        // methods and __programa* globals as environment tampering, failing the challenge.
         configuration.userContentController.addUserScript(
             WKUserScript(
                 source: Self.telemetryHookBootstrapScriptSource,
@@ -2602,7 +2602,7 @@ final class BrowserPanel: Panel, ObservableObject {
         )
     }
 
-    private func bindWebView(_ webView: CmuxWebView) {
+    private func bindWebView(_ webView: ProgramaWebView) {
         webView.onContextMenuDownloadStateChanged = { [weak self] downloading in
             if downloading {
                 self?.beginDownloadActivity()
@@ -2933,8 +2933,8 @@ final class BrowserPanel: Panel, ObservableObject {
         previousWebView.stopLoading()
         previousWebView.navigationDelegate = nil
         previousWebView.uiDelegate = nil
-        if let previousCmuxWebView = previousWebView as? CmuxWebView {
-            previousCmuxWebView.onContextMenuDownloadStateChanged = nil
+        if let previousProgramaWebView = previousWebView as? ProgramaWebView {
+            previousProgramaWebView.onContextMenuDownloadStateChanged = nil
         }
 
         profileID = resolvedProfileID
@@ -3211,7 +3211,7 @@ final class BrowserPanel: Panel, ObservableObject {
         webViewObservers.append(progressObserver)
 
         let fullscreenObserver = webView.observe(\.fullscreenState, options: [.initial, .new]) { [weak self] webView, _ in
-            let isElementFullscreenActive = webView.cmuxIsElementFullscreenActiveOrTransitioning
+            let isElementFullscreenActive = webView.programaIsElementFullscreenActiveOrTransitioning
             let fullscreenState = webView.fullscreenState
             Task { @MainActor in
                 guard let self, self.isCurrentWebView(webView, instanceID: observedWebViewInstanceID) else { return }
@@ -3282,8 +3282,8 @@ final class BrowserPanel: Panel, ObservableObject {
         oldWebView.stopLoading()
         oldWebView.navigationDelegate = nil
         oldWebView.uiDelegate = nil
-        if let oldCmuxWebView = oldWebView as? CmuxWebView {
-            oldCmuxWebView.onContextMenuDownloadStateChanged = nil
+        if let oldProgramaWebView = oldWebView as? ProgramaWebView {
+            oldProgramaWebView.onContextMenuDownloadStateChanged = nil
         }
 
         let replacement = Self.makeWebView(
@@ -3974,12 +3974,12 @@ final class BrowserPanel: Panel, ObservableObject {
         let alert = insecureHTTPAlertFactory()
         alert.alertStyle = .warning
         alert.messageText = String(localized: "browser.error.insecure.title", defaultValue: "Connection isn\u{2019}t secure")
-        alert.informativeText = String(localized: "browser.error.insecure.message", defaultValue: "\(host) uses plain HTTP, so traffic can be read or modified on the network.\n\nOpen this URL in your default browser, or proceed in cmux.")
+        alert.informativeText = String(localized: "browser.error.insecure.message", defaultValue: "\(host) uses plain HTTP, so traffic can be read or modified on the network.\n\nOpen this URL in your default browser, or proceed in Programa.")
         alert.addButton(withTitle: String(localized: "browser.openInDefaultBrowser", defaultValue: "Open in Default Browser"))
-        alert.addButton(withTitle: String(localized: "browser.proceedInCmux", defaultValue: "Proceed in cmux"))
+        alert.addButton(withTitle: String(localized: "browser.proceedInPrograma", defaultValue: "Proceed in Programa"))
         alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
         alert.showsSuppressionButton = true
-        alert.suppressionButton?.title = String(localized: "browser.alwaysAllowHost", defaultValue: "Always allow this host in cmux")
+        alert.suppressionButton?.title = String(localized: "browser.alwaysAllowHost", defaultValue: "Always allow this host in Programa")
 
         let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self, weak alert] response in
             self?.handleInsecureHTTPAlertResponse(
@@ -4139,8 +4139,8 @@ extension BrowserPanel {
         oldWebView.stopLoading()
         oldWebView.navigationDelegate = nil
         oldWebView.uiDelegate = nil
-        if let oldCmuxWebView = oldWebView as? CmuxWebView {
-            oldCmuxWebView.onContextMenuDownloadStateChanged = nil
+        if let oldProgramaWebView = oldWebView as? ProgramaWebView {
+            oldProgramaWebView.onContextMenuDownloadStateChanged = nil
         }
 
         let replacement = Self.makeWebView(
@@ -4449,13 +4449,13 @@ extension BrowserPanel {
         guard preferredDeveloperToolsPresentation == .unknown else { return }
         let attachSelector = NSSelectorFromString("attach")
         guard inspector.responds(to: attachSelector) else { return }
-        inspector.cmuxCallVoid(selector: attachSelector)
+        inspector.programaCallVoid(selector: attachSelector)
     }
 
     @discardableResult
     private func revealDeveloperTools(_ inspector: NSObject) -> Bool {
         let isVisibleSelector = NSSelectorFromString("isVisible")
-        if inspector.cmuxCallBool(selector: isVisibleSelector) ?? false {
+        if inspector.programaCallBool(selector: isVisibleSelector) ?? false {
             developerToolsDetachedOpenGraceDeadline = nil
             developerToolsLastKnownVisibleAt = Date()
             return true
@@ -4465,8 +4465,8 @@ extension BrowserPanel {
 
         let showSelector = NSSelectorFromString("show")
         guard inspector.responds(to: showSelector) else { return false }
-        inspector.cmuxCallVoid(selector: showSelector)
-        let visibleAfterShow = inspector.cmuxCallBool(selector: isVisibleSelector) ?? false
+        inspector.programaCallVoid(selector: showSelector)
+        let visibleAfterShow = inspector.programaCallBool(selector: isVisibleSelector) ?? false
         if visibleAfterShow {
             developerToolsLastKnownVisibleAt = Date()
         }
@@ -4483,21 +4483,21 @@ extension BrowserPanel {
     @discardableResult
     private func concealDeveloperTools(_ inspector: NSObject) -> Bool {
         let isVisibleSelector = NSSelectorFromString("isVisible")
-        guard inspector.cmuxCallBool(selector: isVisibleSelector) ?? false else { return true }
+        guard inspector.programaCallBool(selector: isVisibleSelector) ?? false else { return true }
 
         var invokedSelector = false
         for rawSelector in ["hide", "close"] {
             let selector = NSSelectorFromString(rawSelector)
             guard inspector.responds(to: selector) else { continue }
             invokedSelector = true
-            inspector.cmuxCallVoid(selector: selector)
-            if !(inspector.cmuxCallBool(selector: isVisibleSelector) ?? false) {
+            inspector.programaCallVoid(selector: selector)
+            if !(inspector.programaCallBool(selector: isVisibleSelector) ?? false) {
                 return true
             }
         }
 
         guard invokedSelector else { return false }
-        return !(inspector.cmuxCallBool(selector: isVisibleSelector) ?? false)
+        return !(inspector.programaCallBool(selector: isVisibleSelector) ?? false)
     }
 
     private var isDeveloperToolsTransitionInFlight: Bool {
@@ -4564,10 +4564,10 @@ extension BrowserPanel {
         to targetVisible: Bool,
         source: String
     ) -> Bool {
-        guard let inspector = webView.cmuxInspectorObject() else { return false }
+        guard let inspector = webView.programaInspectorObject() else { return false }
 
         let isVisibleSelector = NSSelectorFromString("isVisible")
-        let visible = inspector.cmuxCallBool(selector: isVisibleSelector) ?? false
+        let visible = inspector.programaCallBool(selector: isVisibleSelector) ?? false
         setPreferredDeveloperToolsVisible(targetVisible)
         developerToolsTransitionTargetVisible = targetVisible
 
@@ -4589,7 +4589,7 @@ extension BrowserPanel {
         }
 
         if targetVisible {
-            let visibleAfterTransition = inspector.cmuxCallBool(selector: isVisibleSelector) ?? false
+            let visibleAfterTransition = inspector.programaCallBool(selector: isVisibleSelector) ?? false
             if visibleAfterTransition {
                 syncDeveloperToolsPresentationPreferenceFromUI()
                 cancelDeveloperToolsRestoreRetry()
@@ -4647,7 +4647,7 @@ extension BrowserPanel {
     func showDeveloperToolsConsole() -> Bool {
         guard showDeveloperTools() else { return false }
         guard !isDeveloperToolsTransitionInFlight else { return true }
-        guard let inspector = webView.cmuxInspectorObject() else { return true }
+        guard let inspector = webView.programaInspectorObject() else { return true }
         // WebKit private inspector API differs by OS; try known console selectors.
         let consoleSelectors = [
             "showConsole",
@@ -4657,7 +4657,7 @@ extension BrowserPanel {
         for raw in consoleSelectors {
             let selector = NSSelectorFromString(raw)
             if inspector.responds(to: selector) {
-                inspector.cmuxCallVoid(selector: selector)
+                inspector.programaCallVoid(selector: selector)
                 break
             }
         }
@@ -4666,8 +4666,8 @@ extension BrowserPanel {
 
     /// Called before WKWebView detaches so manual inspector closes are respected.
     func syncDeveloperToolsPreferenceFromInspector(preserveVisibleIntent: Bool = false) {
-        guard let inspector = webView.cmuxInspectorObject() else { return }
-        guard let visible = inspector.cmuxCallBool(selector: NSSelectorFromString("isVisible")) else { return }
+        guard let inspector = webView.programaInspectorObject() else { return }
+        guard let visible = inspector.programaCallBool(selector: NSSelectorFromString("isVisible")) else { return }
         if isDeveloperToolsTransitionInFlight {
             let targetVisible = pendingDeveloperToolsTransitionTargetVisible ?? developerToolsTransitionTargetVisible ?? visible
             setPreferredDeveloperToolsVisible(targetVisible)
@@ -4741,8 +4741,8 @@ extension BrowserPanel {
             return false
         }
         guard developerToolsLastKnownVisibleAt != nil else { return false }
-        guard let inspector = inspector ?? webView.cmuxInspectorObject() else { return false }
-        guard let visible = inspector.cmuxCallBool(selector: NSSelectorFromString("isVisible")) else { return false }
+        guard let inspector = inspector ?? webView.programaInspectorObject() else { return false }
+        guard let visible = inspector.programaCallBool(selector: NSSelectorFromString("isVisible")) else { return false }
         guard !visible else {
             developerToolsLastKnownVisibleAt = Date()
             return false
@@ -4770,7 +4770,7 @@ extension BrowserPanel {
             return
         }
         guard !isDeveloperToolsTransitionInFlight else { return }
-        guard let inspector = webView.cmuxInspectorObject() else {
+        guard let inspector = webView.programaInspectorObject() else {
             scheduleDeveloperToolsRestoreRetry()
             return
         }
@@ -4778,7 +4778,7 @@ extension BrowserPanel {
         let shouldForceRefresh = forceDeveloperToolsRefreshOnNextAttach
         forceDeveloperToolsRefreshOnNextAttach = false
 
-        let visible = inspector.cmuxCallBool(selector: NSSelectorFromString("isVisible")) ?? false
+        let visible = inspector.programaCallBool(selector: NSSelectorFromString("isVisible")) ?? false
         if visible {
             developerToolsDetachedOpenGraceDeadline = nil
             syncDeveloperToolsPresentationPreferenceFromUI()
@@ -4822,7 +4822,7 @@ extension BrowserPanel {
             _ = revealDeveloperTools(inspector)
         }
         setPreferredDeveloperToolsVisible(true)
-        let visibleAfterShow = inspector.cmuxCallBool(selector: NSSelectorFromString("isVisible")) ?? false
+        let visibleAfterShow = inspector.programaCallBool(selector: NSSelectorFromString("isVisible")) ?? false
         if visibleAfterShow {
             syncDeveloperToolsPresentationPreferenceFromUI()
             developerToolsLastKnownVisibleAt = Date()
@@ -4835,8 +4835,8 @@ extension BrowserPanel {
 
     @discardableResult
     func isDeveloperToolsVisible() -> Bool {
-        guard let inspector = webView.cmuxInspectorObject() else { return false }
-        return inspector.cmuxCallBool(selector: NSSelectorFromString("isVisible")) ?? false
+        guard let inspector = webView.programaInspectorObject() else { return false }
+        return inspector.programaCallBool(selector: NSSelectorFromString("isVisible")) ?? false
     }
 
     @discardableResult
@@ -5662,7 +5662,7 @@ extension BrowserPanel {
     func debugDeveloperToolsStateSummary() -> String {
         let preferred = preferredDeveloperToolsVisible ? 1 : 0
         let visible = isDeveloperToolsVisible() ? 1 : 0
-        let inspector = webView.cmuxInspectorObject() == nil ? 0 : 1
+        let inspector = webView.programaInspectorObject() == nil ? 0 : 1
         let attached = webView.superview == nil ? 0 : 1
         let inWindow = webView.window == nil ? 0 : 1
         let forceRefresh = forceDeveloperToolsRefreshOnNextAttach ? 1 : 0
@@ -5784,7 +5784,7 @@ extension BrowserPanel {
 }
 
 extension WKWebView {
-    func cmuxInspectorObject() -> NSObject? {
+    func programaInspectorObject() -> NSObject? {
         let selector = NSSelectorFromString("_inspector")
         guard responds(to: selector),
               let inspector = perform(selector)?.takeUnretainedValue() as? NSObject else {
@@ -5793,8 +5793,8 @@ extension WKWebView {
         return inspector
     }
 
-    func cmuxInspectorFrontendWebView() -> WKWebView? {
-        guard let inspector = cmuxInspectorObject() else { return nil }
+    func programaInspectorFrontendWebView() -> WKWebView? {
+        guard let inspector = programaInspectorObject() else { return nil }
         let selector = NSSelectorFromString("inspectorWebView")
         guard inspector.responds(to: selector),
               let inspectorWebView = inspector.perform(selector)?.takeUnretainedValue() as? WKWebView else {
@@ -5805,14 +5805,14 @@ extension WKWebView {
 }
 
 private extension NSObject {
-    func cmuxCallBool(selector: Selector) -> Bool? {
+    func programaCallBool(selector: Selector) -> Bool? {
         guard responds(to: selector) else { return nil }
         typealias Fn = @convention(c) (AnyObject, Selector) -> Bool
         let fn = unsafeBitCast(method(for: selector), to: Fn.self)
         return fn(self, selector)
     }
 
-    func cmuxCallVoid(selector: Selector) {
+    func programaCallVoid(selector: Selector) {
         guard responds(to: selector) else { return }
         typealias Fn = @convention(c) (AnyObject, Selector) -> Void
         let fn = unsafeBitCast(method(for: selector), to: Fn.self)
@@ -6189,7 +6189,7 @@ private class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        let hasRecentMiddleClickIntent = CmuxWebView.hasRecentMiddleClickIntent(for: webView)
+        let hasRecentMiddleClickIntent = ProgramaWebView.hasRecentMiddleClickIntent(for: webView)
         let shouldOpenInNewTab = browserNavigationShouldOpenInNewTab(
             navigationType: navigationAction.navigationType,
             modifierFlags: navigationAction.modifierFlags,
@@ -6429,7 +6429,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
             navigationType: navigationAction.navigationType,
             modifierFlags: navigationAction.modifierFlags,
             buttonNumber: navigationAction.buttonNumber,
-            hasRecentMiddleClickIntent: CmuxWebView.hasRecentMiddleClickIntent(for: webView)
+            hasRecentMiddleClickIntent: ProgramaWebView.hasRecentMiddleClickIntent(for: webView)
         )
 
         if isScriptedPopup, let popupWebView = openPopup?(configuration, windowFeatures) {
@@ -7589,13 +7589,13 @@ enum BrowserImportPlanRealizationError: LocalizedError {
         case .missingDestinationProfile:
             return String(
                 localized: "browser.import.error.destinationMissing",
-                defaultValue: "The selected cmux browser profile no longer exists. Pick a destination profile again."
+                defaultValue: "The selected Programa browser profile no longer exists. Pick a destination profile again."
             )
         case .profileCreationFailed(let name):
             return String(
                 format: String(
                     localized: "browser.import.error.destinationCreateFailed",
-                    defaultValue: "cmux could not create the destination profile \"%@\"."
+                    defaultValue: "Programa could not create the destination profile \"%@\"."
                 ),
                 name
             )
@@ -7715,7 +7715,7 @@ enum BrowserImportOutcomeFormatter {
                 String(
                     format: String(
                         localized: "browser.import.complete.createdProfiles",
-                        defaultValue: "Created cmux profiles: %@"
+                        defaultValue: "Created Programa profiles: %@"
                     ),
                     outcome.createdDestinationProfileNames.joined(separator: ", ")
                 )
@@ -9133,7 +9133,7 @@ final class BrowserDataImportCoordinator {
             )
             alert.informativeText = String(
                 localized: "browser.import.noBrowsers.message",
-                defaultValue: "cmux could not find browser profiles to import from on this Mac."
+                defaultValue: "Programa could not find browser profiles to import from on this Mac."
             )
             alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
             alert.runModal()
@@ -9723,7 +9723,7 @@ final class BrowserDataImportCoordinator {
             sourceProfilesHelpLabel.preferredMaxLayoutWidth = 500
             sourceProfilesHelpLabel.stringValue = String(
                 localized: "browser.import.sourceProfiles.help",
-                defaultValue: "Choose one or more source profiles. Step 3 lets you keep them separate or merge them into one cmux profile."
+                defaultValue: "Choose one or more source profiles. Step 3 lets you keep them separate or merge them into one Programa profile."
             )
 
             sourceProfilesContainer.orientation = .vertical
@@ -9768,7 +9768,7 @@ final class BrowserDataImportCoordinator {
             )
             mergeProfilesRadio.title = String(
                 localized: "browser.import.destinationMode.merge",
-                defaultValue: "Merge all into one cmux profile"
+                defaultValue: "Merge all into one Programa profile"
             )
             separateProfilesRadio.target = self
             separateProfilesRadio.action = #selector(handleDestinationModeChanged(_:))
@@ -9810,7 +9810,7 @@ final class BrowserDataImportCoordinator {
             let destinationTitleLabel = NSTextField(
                 labelWithString: String(
                     localized: "browser.import.destination.cmux",
-                    defaultValue: "cmux destination"
+                    defaultValue: "Programa destination"
                 )
             )
             destinationTitleLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
@@ -10057,13 +10057,13 @@ final class BrowserDataImportCoordinator {
             if presentation.showsSeparateRows {
                 destinationHelpLabel.stringValue = String(
                     localized: "browser.import.destinationProfile.separateHelp",
-                    defaultValue: "Missing cmux profiles are created when import starts."
+                    defaultValue: "Missing Programa profiles are created when import starts."
                 )
                 destinationHelpLabel.isHidden = false
             } else if plan.entries.count > 1 {
                 destinationHelpLabel.stringValue = String(
                     localized: "browser.import.destinationProfile.mergeHelp",
-                    defaultValue: "All selected source profiles will be merged into the chosen cmux browser profile."
+                    defaultValue: "All selected source profiles will be merged into the chosen Programa browser profile."
                 )
                 destinationHelpLabel.isHidden = false
             } else {
@@ -10384,7 +10384,7 @@ enum BrowserUserProxySettings {
 }
 
 /// Receives `compositionstart`/`compositionend` bridge messages from the web view's
-/// JS IME tracking script and forwards them to the native `CmuxWebView`.
+/// JS IME tracking script and forwards them to the native `ProgramaWebView`.
 private final class IMECompositionMessageHandler: NSObject, WKScriptMessageHandler {
     private let onCompositionStateChanged: (Bool) -> Void
 

@@ -17,7 +17,7 @@ jobs:
             smoke: true
             skip_zig: false
           - os: macos-26
-            timeout: 45
+            timeout: 60  # macos-26 runner is ~2x slower than macos-15; 45m was too tight on a cold DerivedData cache (see cache key on project.pbxproj)
             smoke: false
             skip_zig: true  # zig 0.15.2 MachO linker can't resolve libSystem on macOS 26
     runs-on: ${{ matrix.os }}
@@ -105,7 +105,7 @@ jobs:
           mkdir -p "$SOURCE_PACKAGES_DIR"
 
           for attempt in 1 2 3; do
-            if xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux-unit -configuration Debug \
+            if xcodebuild -project GhosttyTabs.xcodeproj -scheme programa-unit -configuration Debug \
               -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
               -resolvePackageDependencies; then
               exit 0
@@ -125,11 +125,11 @@ jobs:
           set -euo pipefail
           SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
           run_unit_tests() {
-            xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux-unit -configuration Debug \
+            xcodebuild -project GhosttyTabs.xcodeproj -scheme programa-unit -configuration Debug \
               -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
               -disableAutomaticPackageResolution \
               -destination "platform=macOS" \
-              -skip-testing:cmuxTests/AppDelegateShortcutRoutingTests/testCmdWClosesWindowWhenClosingLastSurfaceInLastWorkspace \
+              -skip-testing:programaTests/AppDelegateShortcutRoutingTests/testCmdWClosesWindowWhenClosingLastSurfaceInLastWorkspace \
               test 2>&1
           }
 
@@ -184,7 +184,7 @@ jobs:
         run: |
           set -euo pipefail
           SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
-          xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Debug \
+          xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
             -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
             -disableAutomaticPackageResolution \
             -destination "platform=macOS" build

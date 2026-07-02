@@ -34,7 +34,7 @@ final class SurfacePool {
 
     /// Whether the pool is enabled. Reads user default, defaulting to true.
     var isEnabled: Bool {
-        UserDefaults.standard.object(forKey: "cmuxSurfacePoolEnabled") as? Bool ?? true
+        UserDefaults.standard.object(forKey: "programaSurfacePoolEnabled") as? Bool ?? true
     }
 
     #if DEBUG
@@ -72,7 +72,7 @@ final class SurfacePool {
         workspaceId: UUID,
         portOrdinal: Int,
         workingDirectory: String?,
-        configTemplate: CmuxSurfaceConfigTemplate?
+        configTemplate: ProgramaSurfaceConfigTemplate?
     ) -> ClaimedSurface? {
         guard isEnabled else { return nil }
 

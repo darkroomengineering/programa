@@ -92,7 +92,7 @@ struct DetectedSSHSession: Equatable {
                 try operation.throwIfCancelled()
                 let normalizedLocalURL = localURL.standardizedFileURL
                 guard normalizedLocalURL.isFileURL else {
-                    throw NSError(domain: "cmux.detected-ssh.drop", code: 1, userInfo: [
+                    throw NSError(domain: "programa.detected-ssh.drop", code: 1, userInfo: [
                         NSLocalizedDescriptionKey: "dropped item is not a file URL",
                     ])
                 }
@@ -107,7 +107,7 @@ struct DetectedSSHSession: Equatable {
                 guard result.status == 0 else {
                     let detail = Self.bestErrorLine(stderr: result.stderr, stdout: result.stdout) ??
                         "scp exited \(result.status)"
-                    throw NSError(domain: "cmux.detected-ssh.drop", code: 2, userInfo: [
+                    throw NSError(domain: "programa.detected-ssh.drop", code: 2, userInfo: [
                         NSLocalizedDescriptionKey: "failed to upload dropped file: \(detail)",
                     ])
                 }
@@ -297,7 +297,7 @@ struct DetectedSSHSession: Equatable {
                 throw TerminalImageTransferExecutionError.cancelled
             }
             terminateProcessAndWait()
-            throw NSError(domain: "cmux.detected-ssh.drop", code: 3, userInfo: [
+            throw NSError(domain: "programa.detected-ssh.drop", code: 3, userInfo: [
                 NSLocalizedDescriptionKey: "scp timed out",
             ])
         }
