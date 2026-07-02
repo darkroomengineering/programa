@@ -4099,7 +4099,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         setManagedEnvironmentValue("PROGRAMA_SOCKET_PATH", socketPath)
         // Backward-compatible alias expected by older scripts and third-party integrations.
         setManagedEnvironmentValue("PROGRAMA_SOCKET", socketPath)
-        if let bundledCLIURL = Bundle.main.resourceURL?.appendingPathComponent("bin/cmux"),
+        if let bundledCLIURL = Bundle.main.resourceURL?.appendingPathComponent("bin/programa"),
            FileManager.default.isExecutableFile(atPath: bundledCLIURL.path) {
             setManagedEnvironmentValue("PROGRAMA_BUNDLED_CLI_PATH", bundledCLIURL.path)
         }

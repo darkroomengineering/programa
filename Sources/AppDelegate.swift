@@ -1346,7 +1346,7 @@ struct ProgramaCLIPathInstaller {
             case .destinationIsDirectory(let path):
                 return "\(path) is a directory. Remove or rename it and try again."
             case .installVerificationFailed(let path):
-                return "Installed symlink at \(path) did not point to the bundled cmux CLI."
+                return "Installed symlink at \(path) did not point to the bundled programa CLI."
             case .uninstallVerificationFailed(let path):
                 return "Failed to remove \(path)."
             case .privilegedCommandFailed(let message):
@@ -1367,7 +1367,7 @@ struct ProgramaCLIPathInstaller {
 
     init(
         fileManager: FileManager = .default,
-        destinationURL: URL = URL(fileURLWithPath: "/usr/local/bin/cmux"),
+        destinationURL: URL = URL(fileURLWithPath: "/usr/local/bin/programa"),
         bundledCLIURLProvider: @escaping () -> URL? = {
             ProgramaCLIPathInstaller.defaultBundledCLIURL()
         },
@@ -1543,12 +1543,12 @@ struct ProgramaCLIPathInstaller {
     }
 
     private static func defaultBundledCLIURL(bundle: Bundle = .main) -> URL? {
-        bundle.resourceURL?.appendingPathComponent("bin/cmux", isDirectory: false)
+        bundle.resourceURL?.appendingPathComponent("bin/programa", isDirectory: false)
     }
 
     private static func defaultBundledCLIExpectedPath(bundle: Bundle = .main) -> String {
         bundle.bundleURL
-            .appendingPathComponent("Contents/Resources/bin/cmux", isDirectory: false)
+            .appendingPathComponent("Contents/Resources/bin/programa", isDirectory: false)
             .path
     }
 
@@ -7336,7 +7336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func sendWelcomeCommandWhenReady(to workspace: Workspace, markShownOnSend: Bool = false) {
-        sendTextWhenReady("cmux welcome\n", to: workspace) {
+        sendTextWhenReady("programa welcome\n", to: workspace) {
             if markShownOnSend {
                 UserDefaults.standard.set(true, forKey: WelcomeSettings.shownKey)
             }
@@ -12864,7 +12864,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func observeDuplicateLaunches() {
         guard let bundleId = Bundle.main.bundleIdentifier else { return }
         let embeddedCLIURL = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/Resources/bin/cmux", isDirectory: false)
+            .appendingPathComponent("Contents/Resources/bin/programa", isDirectory: false)
             .standardizedFileURL
             .resolvingSymlinksInPath()
         let currentPid = ProcessInfo.processInfo.processIdentifier
@@ -13491,7 +13491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 @MainActor
 final class MenuBarExtraController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
-    private let menu = NSMenu(title: "cmux")
+    private let menu = NSMenu(title: "Programa")
     private let notificationStore: TerminalNotificationStore
     private let onShowNotifications: () -> Void
     private let onOpenNotification: (TerminalNotification) -> Void
@@ -13543,7 +13543,7 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleProportionallyDown
             button.image = MenuBarIconRenderer.makeImage(unreadCount: 0)
-            button.toolTip = "cmux"
+            button.toolTip = "Programa"
         }
 
         notificationsCancellable = notificationStore.$notifications
@@ -13647,7 +13647,7 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
         if let button = statusItem.button {
             button.image = MenuBarIconRenderer.makeImage(unreadCount: displayedUnreadCount)
             button.toolTip = displayedUnreadCount == 0
-                ? "cmux"
+                ? "Programa"
                 : displayedUnreadCount == 1
                     ? "Programa: " + String(localized: "statusMenu.tooltip.unread.one", defaultValue: "1 unread notification")
                     : "Programa: " + String(localized: "statusMenu.tooltip.unread.other", defaultValue: "\(displayedUnreadCount) unread notifications")
