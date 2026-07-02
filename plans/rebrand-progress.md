@@ -24,7 +24,10 @@ contracts compile but need CI/manual verification before merge.
 6h. **release artifacts** — `cmux.entitlements`→`programa.entitlements` (git mv + 3 signing refs), nightly DMG/artifact names `cmux-nightly-*`→`programa-nightly-*`. Homebrew left (external/deprecated).
 CI-fix. **tests/ guard scripts** — `test_ci_scheme_testaction_debug.sh` + `test_bundled_ghostty_theme_picker_helper.sh` pointed at the old `cmux.xcscheme`/`-scheme cmux` (Phase 4 miss). Fixed.
 
-**PR: #48** — CI green except `tests-build-and-lag` (known runner flake; re-running).
+6g. **UI brand strings** — `Localizable.xcstrings` (50 EN; JA had none) + Swift `defaultValue`/`Text` fallbacks. Brand→`Programa`, command→lowercase `programa`; keys with lowercase cmux preserved.
+ci-fix. **macos-26 compat timeout** 45→60m (cold DerivedData cache on slow runner).
+
+**PR: #48** — CI green modulo `tests-build-and-lag` (known runner flake) + `compat-tests(macos-26)` (now 60m).
 
 ## Remaining (each = its own build-gated commit; runtime = CI/manual)
 
@@ -49,12 +52,9 @@ CI-fix. **tests/ guard scripts** — `test_ci_scheme_testaction_debug.sh` + `tes
   - DO NOT blanket-sed (hits socket paths, env vars, remote tokens). Categorize per-occurrence.
 - Verify: `tests_v2/test_ssh_remote_*.py` on CI.
 
-### 6g — user-facing brand strings (`Resources/Localizable.xcstrings` + a few Swift defaults)
-- Brand noun `cmux`→`Programa` ("Quit cmux", "About cmux", "cmux CLI", notifications, error text).
-- CLI usage strings inside xcstrings ("Usage: cmux claude-teams", "Install 'cmux' in PATH") → `programa` (lowercase command).
-- EN + JA. Distinguish brand (Programa) vs command (programa) per string — NOT a blanket sed.
+### ~~6g — user-facing brand strings~~ ✅ DONE (commit e05126b9)
 
-### 6h — release artifacts
+### ~~6h — release artifacts~~ ✅ DONE
 - `cmux.entitlements` → `programa.entitlements` (git mv + pbxproj `CODE_SIGN_ENTITLEMENTS` + `build-sign-upload.sh` + release/nightly yml).
 - DMG names `cmux-nightly-macos*.dmg`/`cmux-release-*` → `programa-*` (release.yml, nightly.yml) so README's `programa-macos.dmg` link resolves.
 - homebrew cask refs in `build-sign-upload.sh` (or delete per the board-sweep plan #7).
