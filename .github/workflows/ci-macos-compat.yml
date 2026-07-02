@@ -17,7 +17,7 @@ jobs:
             smoke: true
             skip_zig: false
           - os: macos-26
-            timeout: 45
+            timeout: 60  # macos-26 runner is ~2x slower than macos-15; 45m was too tight on a cold DerivedData cache (see cache key on project.pbxproj)
             smoke: false
             skip_zig: true  # zig 0.15.2 MachO linker can't resolve libSystem on macOS 26
     runs-on: ${{ matrix.os }}
