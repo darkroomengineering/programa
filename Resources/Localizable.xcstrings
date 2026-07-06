@@ -6663,39 +6663,6 @@
         }
       }
     },
-    "settings.app.telemetry": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send anonymous telemetry"
-          }
-        }
-      }
-    },
-    "settings.app.telemetry.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Share anonymized crash and usage data to help improve Programa."
-          }
-        }
-      }
-    },
-    "settings.app.telemetry.subtitleChanged": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Change takes effect on next launch."
-          }
-        }
-      }
-    },
     "settings.app.theme": {
       "extractionState": "manual",
       "localizations": {

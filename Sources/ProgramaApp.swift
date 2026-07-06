@@ -564,12 +564,6 @@ struct programaApp: App {
                 Button(String(localized: "menu.updateLogs.copyFocusLogs", defaultValue: "Copy Focus Logs")) {
                     appDelegate.copyFocusLogs(nil)
                 }
-
-                Divider()
-
-                Button("Trigger Sentry Test Crash") {
-                    appDelegate.triggerSentryTestCrash(nil)
-                }
             }
 #endif
 
@@ -3850,21 +3844,6 @@ enum WelcomeSettings {
     static let shownKey = "programaWelcomeShown"
 }
 
-enum TelemetrySettings {
-    static let sendAnonymousTelemetryKey = "sendAnonymousTelemetry"
-    static let defaultSendAnonymousTelemetry = true
-
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: sendAnonymousTelemetryKey) == nil {
-            return defaultSendAnonymousTelemetry
-        }
-        return defaults.bool(forKey: sendAnonymousTelemetryKey)
-    }
-
-    // Freeze telemetry enablement once per launch. Settings changes apply on next restart.
-    static let enabledForCurrentLaunch = isEnabled()
-}
-
 enum PreferredEditorSettings {
     static let key = "preferredEditorCommand"
 
@@ -4093,8 +4072,6 @@ struct SettingsView: View {
     private var claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
     @AppStorage(ClaudeCodeIntegrationSettings.customClaudePathKey)
     private var customClaudePath = ""
-    @AppStorage(TelemetrySettings.sendAnonymousTelemetryKey)
-    private var sendAnonymousTelemetry = TelemetrySettings.defaultSendAnonymousTelemetry
     @AppStorage(PreferredEditorSettings.key) private var preferredEditorCommand = ""
     @AppStorage("cmuxPortBase") private var programaPortBase = 9100
     @AppStorage("cmuxPortRange") private var programaPortRange = 10
@@ -4181,7 +4158,6 @@ struct SettingsView: View {
     @State private var notificationCustomSoundStatusIsError = false
     @State private var showNotificationCustomSoundErrorAlert = false
     @State private var notificationCustomSoundErrorAlertMessage = ""
-    @State private var telemetryValueAtLaunch = TelemetrySettings.enabledForCurrentLaunch
     @State private var showLanguageRestartAlert = false
     @State private var isResettingSettings = false
     @State private var workspaceTabPaletteEntries = WorkspaceTabColorSettings.palette()
@@ -4890,19 +4866,6 @@ struct SettingsView: View {
                             TextField("say \"done\"", text: $notificationCustomCommand)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 200)
-                        }
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.telemetry", defaultValue: "Send anonymous telemetry"),
-                            subtitle: sendAnonymousTelemetry != telemetryValueAtLaunch
-                                ? String(localized: "settings.app.telemetry.subtitleChanged", defaultValue: "Change takes effect on next launch.")
-                                : String(localized: "settings.app.telemetry.subtitle", defaultValue: "Share anonymized crash and usage data to help improve Programa.")
-                        ) {
-                            Toggle("", isOn: $sendAnonymousTelemetry)
-                                .labelsHidden()
-                                .controlSize(.small)
                         }
 
                         SettingsCardDivider()
@@ -6029,7 +5992,6 @@ struct SettingsView: View {
         socketControlMode = SocketControlSettings.defaultMode.rawValue
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
         customClaudePath = ""
-        sendAnonymousTelemetry = TelemetrySettings.defaultSendAnonymousTelemetry
         preferredEditorCommand = ""
         browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
         browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled

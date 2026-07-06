@@ -492,74 +492,6 @@ final class GhosttyConfigTests: XCTestCase {
         )
     }
 
-    func testScrollLagCaptureRequiresSustainedLag() {
-        XCTAssertFalse(
-            GhosttyApp.shouldCaptureScrollLagEvent(
-                samples: 4,
-                averageMs: 18,
-                maxMs: 85,
-                thresholdMs: 40,
-                nowUptime: 1000,
-                lastReportedUptime: nil
-            )
-        )
-        XCTAssertFalse(
-            GhosttyApp.shouldCaptureScrollLagEvent(
-                samples: 10,
-                averageMs: 6,
-                maxMs: 85,
-                thresholdMs: 40,
-                nowUptime: 1000,
-                lastReportedUptime: nil
-            )
-        )
-        XCTAssertFalse(
-            GhosttyApp.shouldCaptureScrollLagEvent(
-                samples: 10,
-                averageMs: 18,
-                maxMs: 35,
-                thresholdMs: 40,
-                nowUptime: 1000,
-                lastReportedUptime: nil
-            )
-        )
-        XCTAssertTrue(
-            GhosttyApp.shouldCaptureScrollLagEvent(
-                samples: 10,
-                averageMs: 18,
-                maxMs: 85,
-                thresholdMs: 40,
-                nowUptime: 1000,
-                lastReportedUptime: nil
-            )
-        )
-    }
-
-    func testScrollLagCaptureRespectsCooldownWindow() {
-        XCTAssertFalse(
-            GhosttyApp.shouldCaptureScrollLagEvent(
-                samples: 12,
-                averageMs: 22,
-                maxMs: 90,
-                thresholdMs: 40,
-                nowUptime: 1200,
-                lastReportedUptime: 1005,
-                cooldown: 300
-            )
-        )
-        XCTAssertTrue(
-            GhosttyApp.shouldCaptureScrollLagEvent(
-                samples: 12,
-                averageMs: 22,
-                maxMs: 90,
-                thresholdMs: 40,
-                nowUptime: 1406,
-                lastReportedUptime: 1005,
-                cooldown: 300
-            )
-        )
-    }
-
     func testClaudeCodeIntegrationDefaultsToEnabledWhenUnset() {
         let suiteName = "cmux.tests.claude-hooks.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -589,37 +521,6 @@ final class GhosttyConfigTests: XCTestCase {
 
         defaults.set(false, forKey: ClaudeCodeIntegrationSettings.hooksEnabledKey)
         XCTAssertFalse(ClaudeCodeIntegrationSettings.hooksEnabled(defaults: defaults))
-    }
-
-    func testTelemetryDefaultsToEnabledWhenUnset() {
-        let suiteName = "cmux.tests.telemetry.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated user defaults suite")
-            return
-        }
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        defaults.removeObject(forKey: TelemetrySettings.sendAnonymousTelemetryKey)
-        XCTAssertTrue(TelemetrySettings.isEnabled(defaults: defaults))
-    }
-
-    func testTelemetryRespectsStoredPreference() {
-        let suiteName = "cmux.tests.telemetry.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated user defaults suite")
-            return
-        }
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        defaults.set(true, forKey: TelemetrySettings.sendAnonymousTelemetryKey)
-        XCTAssertTrue(TelemetrySettings.isEnabled(defaults: defaults))
-
-        defaults.set(false, forKey: TelemetrySettings.sendAnonymousTelemetryKey)
-        XCTAssertFalse(TelemetrySettings.isEnabled(defaults: defaults))
     }
 
     private func rgb255(_ color: NSColor) -> RGB {
@@ -2070,89 +1971,6 @@ final class UITestLaunchManifestTests: XCTestCase {
 
         XCTAssertEqual(applied["PROGRAMA_TAG"], "ui-tests-display")
         XCTAssertEqual(applied["PROGRAMA_SOCKET_PATH"], "/tmp/programa-ui-tests.sock")
-    }
-}
-
-final class PostHogAnalyticsPropertiesTests: XCTestCase {
-    func testDailyActivePropertiesIncludeVersionAndBuild() {
-        let properties = PostHogAnalytics.dailyActiveProperties(
-            dayUTC: "2026-02-21",
-            reason: "didBecomeActive",
-            infoDictionary: [
-                "CFBundleShortVersionString": "0.31.0",
-                "CFBundleVersion": "230",
-            ]
-        )
-
-        XCTAssertEqual(properties["day_utc"] as? String, "2026-02-21")
-        XCTAssertEqual(properties["reason"] as? String, "didBecomeActive")
-        XCTAssertEqual(properties["app_version"] as? String, "0.31.0")
-        XCTAssertEqual(properties["app_build"] as? String, "230")
-    }
-
-    func testSuperPropertiesIncludePlatformVersionAndBuild() {
-        let properties = PostHogAnalytics.superProperties(
-            infoDictionary: [
-                "CFBundleShortVersionString": "0.31.0",
-                "CFBundleVersion": "230",
-            ]
-        )
-
-        XCTAssertEqual(properties["platform"] as? String, "cmuxterm")
-        XCTAssertEqual(properties["app_version"] as? String, "0.31.0")
-        XCTAssertEqual(properties["app_build"] as? String, "230")
-    }
-
-    func testHourlyActivePropertiesIncludeVersionAndBuild() {
-        let properties = PostHogAnalytics.hourlyActiveProperties(
-            hourUTC: "2026-02-21T14",
-            reason: "didBecomeActive",
-            infoDictionary: [
-                "CFBundleShortVersionString": "0.31.0",
-                "CFBundleVersion": "230",
-            ]
-        )
-
-        XCTAssertEqual(properties["hour_utc"] as? String, "2026-02-21T14")
-        XCTAssertEqual(properties["reason"] as? String, "didBecomeActive")
-        XCTAssertEqual(properties["app_version"] as? String, "0.31.0")
-        XCTAssertEqual(properties["app_build"] as? String, "230")
-    }
-
-    func testHourlyPropertiesOmitVersionFieldsWhenUnavailable() {
-        let properties = PostHogAnalytics.hourlyActiveProperties(
-            hourUTC: "2026-02-21T14",
-            reason: "activeTimer",
-            infoDictionary: [:]
-        )
-
-        XCTAssertEqual(properties["hour_utc"] as? String, "2026-02-21T14")
-        XCTAssertEqual(properties["reason"] as? String, "activeTimer")
-        XCTAssertNil(properties["app_version"])
-        XCTAssertNil(properties["app_build"])
-    }
-
-    func testPropertiesOmitVersionFieldsWhenUnavailable() {
-        let superProperties = PostHogAnalytics.superProperties(infoDictionary: [:])
-        XCTAssertEqual(superProperties["platform"] as? String, "cmuxterm")
-        XCTAssertNil(superProperties["app_version"])
-        XCTAssertNil(superProperties["app_build"])
-
-        let dailyProperties = PostHogAnalytics.dailyActiveProperties(
-            dayUTC: "2026-02-21",
-            reason: "activeTimer",
-            infoDictionary: [:]
-        )
-        XCTAssertEqual(dailyProperties["day_utc"] as? String, "2026-02-21")
-        XCTAssertEqual(dailyProperties["reason"] as? String, "activeTimer")
-        XCTAssertNil(dailyProperties["app_version"])
-        XCTAssertNil(dailyProperties["app_build"])
-    }
-
-    func testFlushPolicyIncludesDailyAndHourlyActiveEvents() {
-        XCTAssertTrue(PostHogAnalytics.shouldFlushAfterCapture(event: "cmux_daily_active"))
-        XCTAssertTrue(PostHogAnalytics.shouldFlushAfterCapture(event: "cmux_hourly_active"))
-        XCTAssertFalse(PostHogAnalytics.shouldFlushAfterCapture(event: "cmux_other_event"))
     }
 }
 

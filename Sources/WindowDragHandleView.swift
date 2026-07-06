@@ -6,59 +6,6 @@ private func windowDragHandleFormatPoint(_ point: NSPoint) -> String {
     String(format: "(%.1f,%.1f)", point.x, point.y)
 }
 
-private func windowDragHandleEventTypeDescription(_ eventType: NSEvent.EventType?) -> String {
-    eventType.map { String(describing: $0) } ?? "nil"
-}
-
-private enum WindowDragHandleBreadcrumbLimiter {
-    private static let lock = NSLock()
-    private static var lastEmissionByKey: [String: CFAbsoluteTime] = [:]
-
-    static func shouldEmit(key: String, minInterval: CFTimeInterval) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-
-        let now = CFAbsoluteTimeGetCurrent()
-        if let previous = lastEmissionByKey[key], (now - previous) < minInterval {
-            return false
-        }
-        lastEmissionByKey[key] = now
-        if lastEmissionByKey.count > 128 {
-            let staleThreshold = now - max(minInterval * 4, 60)
-            lastEmissionByKey = lastEmissionByKey.filter { _, timestamp in
-                timestamp >= staleThreshold
-            }
-        }
-        return true
-    }
-}
-
-private func windowDragHandleEmitBreadcrumb(
-    _ message: String,
-    window: NSWindow?,
-    eventType: NSEvent.EventType?,
-    point: NSPoint,
-    minInterval: CFTimeInterval = 10,
-    extraData: [String: Any] = [:]
-) {
-    let windowNumber = window?.windowNumber ?? -1
-    let key = "\(message):\(windowNumber)"
-    guard WindowDragHandleBreadcrumbLimiter.shouldEmit(key: key, minInterval: minInterval) else {
-        return
-    }
-
-    var data: [String: Any] = [
-        "event_type": windowDragHandleEventTypeDescription(eventType),
-        "point": windowDragHandleFormatPoint(point),
-        "window_number": windowNumber,
-        "window_present": window != nil
-    ]
-    for (name, value) in extraData {
-        data[name] = value
-    }
-    sentryBreadcrumb(message, category: "titlebar.drag", data: data)
-}
-
 private func windowDragHandleShouldResolveActiveHitCapture(
     for eventType: NSEvent.EventType?,
     eventWindow: NSWindow?,
@@ -260,16 +207,6 @@ func windowDragHandleShouldCaptureHit(
         // We only keep suppression active while the left mouse button is down.
         if (NSEvent.pressedMouseButtons & 0x1) == 0 {
             let clearedDepth = clearWindowDragSuppression(window: dragHandleWindow)
-            windowDragHandleEmitBreadcrumb(
-                "titlebar.dragHandle.suppression.recovered",
-                window: dragHandleWindow,
-                eventType: eventType,
-                point: point,
-                minInterval: 20,
-                extraData: [
-                    "cleared_depth": clearedDepth
-                ]
-            )
             #if DEBUG
             dlog(
                 "titlebar.dragHandle.hitTest suppressionRecovered clearedDepth=\(clearedDepth) point=\(windowDragHandleFormatPoint(point))"
@@ -358,17 +295,6 @@ func windowDragHandleShouldCaptureHit(
                 "titlebar.dragHandle.hitTest capture=false point=\(windowDragHandleFormatPoint(point)) siblingCount=\(siblingCount) sibling=\(type(of: sibling)) hit=\(type(of: hitView)) passiveHost=false"
             )
             #endif
-            windowDragHandleEmitBreadcrumb(
-                "titlebar.dragHandle.hitTest.blockedBySiblingHit",
-                window: dragHandleWindow,
-                eventType: eventType,
-                point: point,
-                minInterval: 8,
-                extraData: [
-                    "sibling_type": String(describing: type(of: sibling)),
-                    "hit_type": String(describing: type(of: hitView))
-                ]
-            )
             return false
         }
     }
