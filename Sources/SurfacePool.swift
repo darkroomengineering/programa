@@ -32,9 +32,13 @@ final class SurfacePool {
     /// Keyed by surface.id
     private var entries: [UUID: PoolEntry] = [:]
 
-    /// Whether the pool is enabled. Reads user default, defaulting to true.
+    /// Whether the pool is enabled. Reads user default, defaulting to false.
+    /// Default-off: claiming races the pre-warmed shell — `patchClaimedSurface` types
+    /// into the pty before the shell reaches a prompt, and the trailing
+    /// `clear && printf '\e[3J'` can wipe the screen with no prompt redraw,
+    /// leaving new tabs blank. Re-enable only once claim waits for a shell-ready signal.
     var isEnabled: Bool {
-        UserDefaults.standard.object(forKey: "programaSurfacePoolEnabled") as? Bool ?? true
+        UserDefaults.standard.object(forKey: "programaSurfacePoolEnabled") as? Bool ?? false
     }
 
     #if DEBUG
