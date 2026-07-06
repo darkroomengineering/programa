@@ -474,21 +474,6 @@ jobs:
             "programa-nightly-macos.dmg" \
             "$NIGHTLY_DMG_IMMUTABLE"
 
-      - name: Upload dSYMs to Sentry
-        if: needs.decide.outputs.should_publish != 'true' || (steps.current_head_prebuild.outputs.still_current == 'true' && steps.current_head_postbuild.outputs.still_current == 'true')
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: manaflow
-          SENTRY_PROJECT: cmuxterm-macos
-        run: |
-          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
-            echo "SENTRY_AUTH_TOKEN not set, skipping dSYM upload"
-            exit 0
-          fi
-          brew install getsentry/tools/sentry-cli || true
-          sentry-cli debug-files upload --include-sources \
-            build-universal/Build/Products/Release/
-
       - name: Generate Sparkle appcasts (nightly)
         if: needs.decide.outputs.should_publish != 'true' || (steps.current_head_prebuild.outputs.still_current == 'true' && steps.current_head_postbuild.outputs.still_current == 'true')
         env:
