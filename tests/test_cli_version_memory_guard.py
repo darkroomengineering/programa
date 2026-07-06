@@ -19,7 +19,7 @@ import time
 JUNK_APP_COUNT = 40000
 RSS_LIMIT_KB = 64 * 1024
 TIMEOUT_SECONDS = 10.0
-EXPECTED_STDOUT = "cmux 9.9.9 (999)"
+EXPECTED_STDOUT = "programa 9.9.9 (999)"
 
 
 def resolve_cmux_cli() -> str:
