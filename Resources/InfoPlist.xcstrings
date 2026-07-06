@@ -7,7 +7,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A program running within cmux would like to use your camera."
+            "value": "A program running within Programa would like to use your camera."
           }
         }
       }
@@ -18,7 +18,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A program running within cmux would like to use your microphone."
+            "value": "A program running within Programa would like to use your microphone."
           }
         }
       }

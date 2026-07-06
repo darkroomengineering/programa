@@ -450,24 +450,14 @@ if [[ -x "$CLI_PATH" ]]; then
   fi
 fi
 
-# Build programad and ghostty helper binaries (needed for both launch and no-launch).
-PROGRAMAD_SRC="$PWD/cmuxd/zig-out/bin/cmuxd"
+# Build the ghostty helper binary (needed for both launch and no-launch).
 GHOSTTY_HELPER_SRC="$PWD/ghostty/zig-out/bin/ghostty"
-if [[ -d "$PWD/cmuxd" ]]; then
-  (cd "$PWD/cmuxd" && zig build -Doptimize=ReleaseFast)
-fi
 if [[ -d "$PWD/ghostty" ]]; then
   if [[ "${PROGRAMA_SKIP_ZIG_BUILD:-}" == "1" ]]; then
     echo "Skipping direct ghostty CLI helper zig build (PROGRAMA_SKIP_ZIG_BUILD=1)"
   else
     (cd "$PWD/ghostty" && zig build cli-helper -Dapp-runtime=none -Demit-macos-app=false -Demit-xcframework=false -Doptimize=ReleaseFast)
   fi
-fi
-if [[ -x "$PROGRAMAD_SRC" ]]; then
-  BIN_DIR="$APP_PATH/Contents/Resources/bin"
-  mkdir -p "$BIN_DIR"
-  cp "$PROGRAMAD_SRC" "$BIN_DIR/cmuxd"
-  chmod +x "$BIN_DIR/cmuxd"
 fi
 if [[ -x "$GHOSTTY_HELPER_SRC" ]]; then
   BIN_DIR="$APP_PATH/Contents/Resources/bin"

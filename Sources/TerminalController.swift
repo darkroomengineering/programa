@@ -6961,7 +6961,7 @@ class TerminalController {
                 }
             }
 
-            FeedbackComposerBridge.openComposer(in: targetWindow)
+            NSWorkspace.shared.open(URL(string: "https://github.com/darkroomengineering/programa/issues")!)
         }
         return .ok(["opened": true])
     }
@@ -6994,51 +6994,11 @@ class TerminalController {
     }
 
     private func v2FeedbackSubmit(params: [String: Any]) -> V2CallResult {
-        guard let email = params["email"] as? String else {
-            return .err(code: "invalid_params", message: "Missing email", data: ["field": "email"])
-        }
-        guard let body = params["body"] as? String else {
-            return .err(code: "invalid_params", message: "Missing body", data: ["field": "body"])
-        }
-        let imagePaths = params["image_paths"] as? [String] ?? []
-
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: V2CallResult = .err(code: "internal_error", message: "Feedback submission failed", data: nil)
-
-        Task {
-            let resolved: V2CallResult
-            do {
-                let attachmentCount = try await FeedbackComposerBridge.submit(
-                    email: email,
-                    message: body,
-                    imagePaths: imagePaths
-                )
-                resolved = .ok([
-                    "submitted": true,
-                    "attachment_count": attachmentCount,
-                ])
-            } catch let error as FeedbackComposerBridgeError {
-                let code: String
-                switch error {
-                case .invalidEmail, .emptyMessage, .messageTooLong, .tooManyImages, .invalidImagePath:
-                    code = "invalid_params"
-                case .submissionFailed:
-                    code = "request_failed"
-                }
-                resolved = .err(code: code, message: error.localizedDescription, data: nil)
-            } catch {
-                resolved = .err(code: "internal_error", message: error.localizedDescription, data: nil)
-            }
-
-            result = resolved
-            semaphore.signal()
-        }
-
-        if semaphore.wait(timeout: .now() + 35) == .timedOut {
-            return .err(code: "timeout", message: "Feedback submission timed out", data: nil)
-        }
-
-        return result
+        return .err(
+            code: "feedback_disabled",
+            message: "feedback submission is disabled; report issues at https://github.com/darkroomengineering/programa/issues",
+            data: nil
+        )
     }
 
     // MARK: - V2 App Focus Methods

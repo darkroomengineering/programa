@@ -1310,11 +1310,11 @@ final class SocketClient {
         }
 
         guard let watchDirectory = existingWatchDirectory(forPath: path) else {
-            throw CLIError(message: "cmux app did not start in time (socket not found at \(path))")
+            throw CLIError(message: "programa app did not start in time (socket not found at \(path))")
         }
         let watchFD = open(watchDirectory, O_EVTONLY)
         guard watchFD >= 0 else {
-            throw CLIError(message: "cmux app did not start in time (socket not found at \(path))")
+            throw CLIError(message: "programa app did not start in time (socket not found at \(path))")
         }
 
         let queue = DispatchQueue(label: "com.programa.cli.socket-watch.\(UUID().uuidString)")
@@ -1348,7 +1348,7 @@ final class SocketClient {
         guard semaphore.wait(timeout: .now() + timeout) == .success else {
             source.cancel()
             client.close()
-            throw CLIError(message: "cmux app did not start in time (socket not found at \(path))")
+            throw CLIError(message: "programa app did not start in time (socket not found at \(path))")
         }
 
         source.cancel()
@@ -1725,7 +1725,7 @@ struct CMUXCLI {
         }
 
         // Check for --help/-h on subcommands before connecting to the socket,
-        // so help text is available even when cmux is not running.
+        // so help text is available even when programa is not running.
         if command != "__tmux-compat",
            command != "claude-teams",
            command != "codex",
@@ -1733,7 +1733,7 @@ struct CMUXCLI {
             if dispatchSubcommandHelp(command: command, commandArgs: commandArgs) {
                 return
             }
-            print("Unknown command '\(command)'. Run 'cmux help' to see available commands.")
+            print("Unknown command '\(command)'. Run 'programa help' to see available commands.")
             return
         }
 
@@ -1818,7 +1818,7 @@ struct CMUXCLI {
             }
         }
 
-        // Codex hook handler: gracefully no-op when not inside cmux
+        // Codex hook handler: gracefully no-op when not inside programa
         // (before socket connection, so it doesn't fail when no socket exists)
         if command == "codex-hook" {
             guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else {
@@ -1880,7 +1880,7 @@ struct CMUXCLI {
         case "rpc":
             guard let method = commandArgs.first?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !method.isEmpty else {
-                throw CLIError(message: "Usage: cmux rpc <method> [json-params]")
+                throw CLIError(message: "Usage: programa rpc <method> [json-params]")
             }
             let params = try parseRPCParams(Array(commandArgs.dropFirst()))
             let response = try client.sendV2(method: method, params: params)
@@ -2833,31 +2833,31 @@ struct CMUXCLI {
             if let first = args.first, first.hasPrefix("-") {
                 throw CLIError(
                     message:
-                        "markdown open: unknown flag '\(first)'. Usage: cmux markdown open <path> [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] [--direction right|down|left|up]"
+                        "markdown open: unknown flag '\(first)'. Usage: programa markdown open <path> [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] [--direction right|down|left|up]"
                 )
             } else if let first = args.first, looksLikePath(first) || first.contains(".") {
                 subArgs = args
             } else if let first = args.first {
-                throw CLIError(message: "Unknown markdown subcommand: \(first). Usage: cmux markdown open <path>")
+                throw CLIError(message: "Unknown markdown subcommand: \(first). Usage: programa markdown open <path>")
             } else {
                 subArgs = []
             }
         }
 
         guard let rawPath = subArgs.first, !rawPath.isEmpty else {
-            throw CLIError(message: "markdown open requires a file path. Usage: cmux markdown open <path>")
+            throw CLIError(message: "markdown open requires a file path. Usage: programa markdown open <path>")
         }
         let trailingArgs = Array(subArgs.dropFirst())
         if let unknownFlag = trailingArgs.first(where: { $0.hasPrefix("-") }) {
             throw CLIError(
                 message:
-                    "markdown open: unknown flag '\(unknownFlag)'. Usage: cmux markdown open <path> [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] [--direction right|down|left|up]"
+                    "markdown open: unknown flag '\(unknownFlag)'. Usage: programa markdown open <path> [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] [--direction right|down|left|up]"
             )
         }
         if let extraArg = trailingArgs.first {
             throw CLIError(
                 message:
-                    "markdown open: unexpected argument '\(extraArg)'. Usage: cmux markdown open <path> [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] [--direction right|down|left|up]"
+                    "markdown open: unexpected argument '\(extraArg)'. Usage: programa markdown open <path> [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] [--direction right|down|left|up]"
             )
         }
 
@@ -2903,7 +2903,7 @@ struct CMUXCLI {
         return false
     }
 
-    /// Open a path in cmux by creating a new workspace with the given directory.
+    /// Open a path in programa by creating a new workspace with the given directory.
     /// Launches the app if it isn't already running.
     private func openPath(_ path: String, socketPath: String) throws {
         let resolved = resolvePath(path)
@@ -4159,7 +4159,7 @@ struct CMUXCLI {
             if let workspaceWindowId, !workspaceWindowId.isEmpty {
                 selectParams["window_id"] = workspaceWindowId
             }
-            // `cmux ssh` is an explicit "open this remote workspace now" action,
+            // `programa ssh` is an explicit "open this remote workspace now" action,
             // so we intentionally select the newly created workspace after wiring
             // up the remote connection — unless --no-focus is passed.
             if !sshOptions.noFocus {
@@ -4282,7 +4282,7 @@ struct CMUXCLI {
         }
 
         guard let destination else {
-            throw CLIError(message: "ssh requires a destination (example: cmux ssh user@host)")
+            throw CLIError(message: "ssh requires a destination (example: programa ssh user@host)")
         }
 
         // #4948: accept bracketed IPv6 destinations (e.g. `[::1]`, `user@[2001:db8::1]:2222`).
@@ -5398,7 +5398,7 @@ struct CMUXCLI {
                 lines.append("ready_state: \(readyState)")
             }
             if url.isEmpty || url == "about:blank" {
-                lines.append("hint: run 'cmux browser <surface> get url' to verify navigation")
+                lines.append("hint: run 'programa browser <surface> get url' to verify navigation")
             }
 
             return lines.joined(separator: "\n")
@@ -5933,7 +5933,7 @@ struct CMUXCLI {
                 syncScreenshotLocationFields()
                 if !hasText(screenshotPath) && !hasText(screenshotURL) {
                     let outputDir = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("cmux-browser-screenshots-cli", isDirectory: true)
+                        .appendingPathComponent("programa-browser-screenshots-cli", isDirectory: true)
                     if (try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)) != nil {
                         bestEffortPruneTemporaryFiles(in: outputDir)
                         let timestampMs = Int(Date().timeIntervalSince1970 * 1000)
@@ -6737,73 +6737,70 @@ struct CMUXCLI {
         switch command {
         case "ping":
             return """
-            Usage: cmux ping
+            Usage: programa ping
 
-            Check connectivity to the cmux socket server.
+            Check connectivity to the programa socket server.
             """
         case "capabilities":
             return """
-            Usage: cmux capabilities
+            Usage: programa capabilities
 
             Print server capabilities as JSON.
             """
         case "rpc":
             return """
-            Usage: cmux rpc <method> [json-params]
+            Usage: programa rpc <method> [json-params]
 
             Call a raw v2 method with an optional JSON object for params.
-            Example: cmux rpc surface.report_tty '{"workspace_id":"...","surface_id":"...","tty_name":"ttys001"}'
+            Example: programa rpc surface.report_tty '{"workspace_id":"...","surface_id":"...","tty_name":"ttys001"}'
             """
         case "help":
             return """
-            Usage: cmux help
+            Usage: programa help
 
             Show top-level CLI usage and command list.
             """
         case "welcome":
             return """
-            Usage: cmux welcome
+            Usage: programa welcome
 
-            Show a welcome screen with the cmux logo and useful shortcuts.
+            Show a welcome screen with the programa logo and useful shortcuts.
             Auto-runs once on first launch.
             """
         case "shortcuts":
             return """
-            Usage: cmux shortcuts
+            Usage: programa shortcuts
 
             Open the Settings window to Keyboard Shortcuts.
             """
         case "feedback":
             return """
-            Usage: cmux feedback
-                   cmux feedback --email <email> --body <text> [--image <path> ...]
+            Usage: programa feedback
+                   programa feedback --email <email> --body <text> [--image <path> ...]
 
-            Without args, open the Send Feedback modal in the running app.
+            Without args, opens the GitHub issues page (https://github.com/darkroomengineering/programa/issues) in your browser.
 
-            With args, submit feedback through the app using the same feedback pipeline as the modal.
+            Direct feedback submission is disabled; --email/--body/--image are accepted but the app will
+            return an error telling you to report the issue on GitHub instead.
 
             Flags:
-              --email <email>   Contact email for follow-up
-              --body <text>     Feedback body
-              --image <path>    Attach an image file, repeat for multiple images
-
-            Coding agents:
-              Double check with the end user before sending anything. Review the message and attachments for secrets,
-              private code, credentials, tokens, and other sensitive information first.
+              --email <email>   Contact email for follow-up (submission disabled)
+              --body <text>     Feedback body (submission disabled)
+              --image <path>    Attach an image file, repeat for multiple images (submission disabled)
             """
         case "themes":
             return """
-            Usage: cmux themes
-                   cmux themes list
-                   cmux themes set <theme>
-                   cmux themes set --light <theme> [--dark <theme>]
-                   cmux themes set --dark <theme> [--light <theme>]
-                   cmux themes clear
+            Usage: programa themes
+                   programa themes list
+                   programa themes set <theme>
+                   programa themes set --light <theme> [--dark <theme>]
+                   programa themes set --dark <theme> [--light <theme>]
+                   programa themes clear
 
-            When run in a TTY, `cmux themes` opens an interactive theme picker with
-            live app preview. Use `cmux themes list` for a plain listing.
+            When run in a TTY, `programa themes` opens an interactive theme picker with
+            live app preview. Use `programa themes list` for a plain listing.
 
-            The picker previews the selected theme across the running cmux app and
+            The picker previews the selected theme across the running programa app and
             lets you apply it to the light theme, dark theme, or both defaults.
 
             Commands:
@@ -6811,94 +6808,94 @@ struct CMUXCLI {
               set <theme>               Set the same theme for both light and dark appearance
               set --light <theme>       Set the light appearance theme
               set --dark <theme>        Set the dark appearance theme
-              clear                     Remove the cmux theme override and fall back to other config
+              clear                     Remove the programa theme override and fall back to other config
 
             Examples:
-              cmux themes
-              cmux themes list
-              cmux themes set "Catppuccin Mocha"
-              cmux themes set --light "Catppuccin Latte" --dark "Catppuccin Mocha"
-              cmux themes clear
+              programa themes
+              programa themes list
+              programa themes set "Catppuccin Mocha"
+              programa themes set --light "Catppuccin Latte" --dark "Catppuccin Mocha"
+              programa themes clear
             """
         case "claude-teams":
             return String(localized: "cli.claude-teams.usage", defaultValue: """
-            Usage: cmux claude-teams [claude-args...]
+            Usage: programa claude-teams [claude-args...]
 
             Launch Claude Code with agent teams enabled.
 
             This command:
               - defaults Claude teammate mode to auto
-              - sets a tmux-like environment so Claude auto mode uses cmux splits
+              - sets a tmux-like environment so Claude auto mode uses programa splits
               - sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
               - prepends a private tmux shim to PATH
               - forwards all remaining arguments to claude
 
-            The tmux shim translates supported tmux window/pane commands into cmux
-            workspace and split operations in the current cmux session.
+            The tmux shim translates supported tmux window/pane commands into programa
+            workspace and split operations in the current programa session.
 
             Examples:
-              cmux claude-teams
-              cmux claude-teams --continue
-              cmux claude-teams --model sonnet
+              programa claude-teams
+              programa claude-teams --continue
+              programa claude-teams --model sonnet
             """)
         case "omo":
             return String(localized: "cli.omo.usage", defaultValue: """
-            Usage: cmux omo [opencode-args...]
+            Usage: programa omo [opencode-args...]
 
-            Launch OpenCode with oh-my-openagent in a cmux-aware environment.
+            Launch OpenCode with oh-my-openagent in a programa-aware environment.
 
             oh-my-openagent orchestrates multiple AI models as specialized agents in
             parallel. This command sets up a tmux shim so agent panes become native
-            cmux splits with sidebar metadata and notifications.
+            programa splits with sidebar metadata and notifications.
 
             This command:
-              - sets a tmux-like environment so oh-my-openagent uses cmux splits
+              - sets a tmux-like environment so oh-my-openagent uses programa splits
               - prepends a private tmux shim to PATH
               - forwards all remaining arguments to opencode
 
-            The tmux shim translates tmux window/pane commands into cmux workspace
-            and split operations in the current cmux session.
+            The tmux shim translates tmux window/pane commands into programa workspace
+            and split operations in the current programa session.
 
             Examples:
-              cmux omo
-              cmux omo --continue
-              cmux omo --model claude-sonnet-4-6
+              programa omo
+              programa omo --continue
+              programa omo --model claude-sonnet-4-6
             """)
         case "omx":
             return String(localized: "cli.omx.usage", defaultValue: """
-            Usage: cmux omx [omx-args...]
+            Usage: programa omx [omx-args...]
 
-            Launch Oh My Codex (OMX) with native cmux pane integration.
+            Launch Oh My Codex (OMX) with native programa pane integration.
 
             OMX is a multi-agent orchestration layer for OpenAI Codex CLI. This
             command sets up a tmux shim so OMX team mode, HUD, and agent panes
-            become native cmux splits.
+            become native programa splits.
 
             This command:
-              - sets a tmux-like environment so OMX uses cmux splits
+              - sets a tmux-like environment so OMX uses programa splits
               - prepends a private tmux shim to PATH
               - forwards all remaining arguments to omx
 
             Install: npm install -g oh-my-codex
 
             Examples:
-              cmux omx
-              cmux omx --madmax --high
-              cmux omx team
+              programa omx
+              programa omx --madmax --high
+              programa omx team
             """)
         case "omc":
             return String(localized: "cli.omc.usage", defaultValue: """
-            Usage: cmux omc [omc-args...]
+            Usage: programa omc [omc-args...]
 
-            Launch Oh My Claude Code (OMC) with native cmux pane integration.
+            Launch Oh My Claude Code (OMC) with native programa pane integration.
 
             OMC is a multi-agent orchestration system for Claude Code with
             specialized agents, smart model routing, and team pipelines. This
             command sets up a tmux shim so OMC team mode and agent panes become
-            native cmux splits.
+            native programa splits.
 
             This command:
-              - sets a tmux-like environment so OMC uses cmux splits
+              - sets a tmux-like environment so OMC uses programa splits
               - prepends a private tmux shim to PATH
               - injects NODE_OPTIONS restore module for Claude compatibility
               - forwards all remaining arguments to omc
@@ -6906,13 +6903,13 @@ struct CMUXCLI {
             Install: npm install -g oh-my-claude-sisyphus
 
             Examples:
-              cmux omc
-              cmux omc team 3:claude "implement feature"
-              cmux omc --watch
+              programa omc
+              programa omc team 3:claude "implement feature"
+              programa omc --watch
             """)
         case "identify":
             return """
-            Usage: cmux identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]
+            Usage: programa identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]
 
             Print server identity and caller context details.
 
@@ -6923,28 +6920,28 @@ struct CMUXCLI {
             """
         case "list-windows":
             return """
-            Usage: cmux list-windows
+            Usage: programa list-windows
 
             List open windows.
             """
         case "current-window":
             return """
-            Usage: cmux current-window
+            Usage: programa current-window
 
             Print the currently selected window ID.
             """
         case "new-window":
             return """
-            Usage: cmux new-window
+            Usage: programa new-window
 
             Create a new window.
 
             Example:
-              cmux new-window
+              programa new-window
             """
         case "focus-window":
             return """
-            Usage: cmux focus-window --window <id|ref|index>
+            Usage: programa focus-window --window <id|ref|index>
 
             Focus (bring to front) the specified window.
 
@@ -6952,12 +6949,12 @@ struct CMUXCLI {
               --window <id|ref|index>   Window to focus (required)
 
             Example:
-              cmux focus-window --window 0
-              cmux focus-window --window window:1
+              programa focus-window --window 0
+              programa focus-window --window window:1
             """
         case "close-window":
             return """
-            Usage: cmux close-window --window <id|ref|index>
+            Usage: programa close-window --window <id|ref|index>
 
             Close the specified window.
 
@@ -6965,12 +6962,12 @@ struct CMUXCLI {
               --window <id|ref|index>   Window to close (required)
 
             Example:
-              cmux close-window --window 0
-              cmux close-window --window window:1
+              programa close-window --window 0
+              programa close-window --window window:1
             """
         case "move-workspace-to-window":
             return """
-            Usage: cmux move-workspace-to-window --workspace <id|ref|index> --window <id|ref|index>
+            Usage: programa move-workspace-to-window --workspace <id|ref|index> --window <id|ref|index>
 
             Move a workspace to a different window.
 
@@ -6979,11 +6976,11 @@ struct CMUXCLI {
               --window <id|ref|index>      Target window (required)
 
             Example:
-              cmux move-workspace-to-window --workspace workspace:2 --window window:1
+              programa move-workspace-to-window --workspace workspace:2 --window window:1
             """
         case "move-surface":
             return """
-            Usage: cmux move-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
+            Usage: programa move-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
 
             Move a surface to a different pane, workspace, or window.
 
@@ -7002,12 +6999,12 @@ struct CMUXCLI {
               --focus <true|false>       Focus the surface after moving
 
             Example:
-              cmux move-surface --surface surface:1 --workspace workspace:2
-              cmux move-surface surface:1 --pane pane:2 --index 0
+              programa move-surface --surface surface:1 --workspace workspace:2
+              programa move-surface surface:1 --pane pane:2 --index 0
             """
         case "reorder-surface":
             return """
-            Usage: cmux reorder-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
+            Usage: programa reorder-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
 
             Reorder a surface within its pane.
 
@@ -7023,12 +7020,12 @@ struct CMUXCLI {
               --index <n>                Place at this index
 
             Example:
-              cmux reorder-surface --surface surface:1 --index 0
-              cmux reorder-surface --surface surface:3 --after surface:1
+              programa reorder-surface --surface surface:1 --index 0
+              programa reorder-surface --surface surface:3 --after surface:1
             """
         case "reorder-workspace":
             return """
-            Usage: cmux reorder-workspace [--workspace <id|ref|index> | <id|ref|index>] [flags]
+            Usage: programa reorder-workspace [--workspace <id|ref|index> | <id|ref|index>] [flags]
 
             Reorder a workspace within its window.
 
@@ -7044,12 +7041,12 @@ struct CMUXCLI {
               --window <id|ref|index>      Window context
 
             Example:
-              cmux reorder-workspace --workspace workspace:2 --index 0
-              cmux reorder-workspace --workspace workspace:3 --after workspace:1
+              programa reorder-workspace --workspace workspace:2 --index 0
+              programa reorder-workspace --workspace workspace:3 --after workspace:1
             """
         case "workspace-action":
             return """
-            Usage: cmux workspace-action --action <name> [flags]
+            Usage: programa workspace-action --action <name> [flags]
 
             Perform workspace context-menu actions from CLI/socket.
 
@@ -7074,19 +7071,19 @@ struct CMUXCLI {
               Blue, Navy, Indigo, Purple, Magenta, Rose, Brown, Charcoal
 
             Example:
-              cmux workspace-action --workspace workspace:2 --action pin
-              cmux workspace-action --action rename --title "infra"
-              cmux workspace-action close-others
-              cmux workspace-action --action set-color --color blue
-              cmux workspace-action --action set-color --color "#C0392B"
-              cmux workspace-action set-color Amber
-              cmux workspace-action --action set-description --description "Ship checklist"
-              cmux workspace-action --action set-description $'Ship checklist\n- verify build\n- post notes'
-              cmux workspace-action clear-color
+              programa workspace-action --workspace workspace:2 --action pin
+              programa workspace-action --action rename --title "infra"
+              programa workspace-action close-others
+              programa workspace-action --action set-color --color blue
+              programa workspace-action --action set-color --color "#C0392B"
+              programa workspace-action set-color Amber
+              programa workspace-action --action set-description --description "Ship checklist"
+              programa workspace-action --action set-description $'Ship checklist\n- verify build\n- post notes'
+              programa workspace-action clear-color
             """
         case "tab-action":
             return """
-            Usage: cmux tab-action --action <name> [flags]
+            Usage: programa tab-action --action <name> [flags]
 
             Perform horizontal tab context-menu actions from CLI/socket.
 
@@ -7107,13 +7104,13 @@ struct CMUXCLI {
               --url <url>                  Optional URL for new-browser-right
 
             Example:
-              cmux tab-action --tab tab:3 --action pin
-              cmux tab-action --action close-right
-              cmux tab-action --tab tab:2 --action rename --title "build logs"
+              programa tab-action --tab tab:3 --action pin
+              programa tab-action --action close-right
+              programa tab-action --tab tab:2 --action rename --title "build logs"
             """
         case "rename-tab":
             return """
-            Usage: cmux rename-tab [--workspace <id|ref>] [--tab <id|ref>] [--surface <id|ref>] [--] <title>
+            Usage: programa rename-tab [--workspace <id|ref>] [--tab <id|ref>] [--surface <id|ref>] [--] <title>
 
             Compatibility alias for tab-action rename.
 
@@ -7130,13 +7127,13 @@ struct CMUXCLI {
               --title <text>         Explicit title (or use trailing positional title)
 
             Examples:
-              cmux rename-tab "build logs"
-              cmux rename-tab --tab tab:3 "staging server"
-              cmux rename-tab --workspace workspace:2 --surface surface:5 --title "agent run"
+              programa rename-tab "build logs"
+              programa rename-tab --tab tab:3 "staging server"
+              programa rename-tab --workspace workspace:2 --surface surface:5 --title "agent run"
             """
         case "new-workspace":
             return """
-            Usage: cmux new-workspace [--name <title>] [--description <text>] [--cwd <path>] [--command <text>]
+            Usage: programa new-workspace [--name <title>] [--description <text>] [--cwd <path>] [--command <text>]
 
             Create a new workspace in the current window.
 
@@ -7147,27 +7144,27 @@ struct CMUXCLI {
               --command <text>   Send text+Enter to the new workspace after creation
 
             Example:
-              cmux new-workspace
-              cmux new-workspace --name "Build Server"
-              cmux new-workspace --name "Launch" --description "Ship checklist"
-              cmux new-workspace --cwd ~/projects/myapp
-              cmux new-workspace --cwd . --command "npm test"
+              programa new-workspace
+              programa new-workspace --name "Build Server"
+              programa new-workspace --name "Launch" --description "Ship checklist"
+              programa new-workspace --cwd ~/projects/myapp
+              programa new-workspace --cwd . --command "npm test"
             """
         case "list-workspaces":
             return """
-            Usage: cmux list-workspaces
+            Usage: programa list-workspaces
 
             List workspaces in the current window.
 
             Example:
-              cmux list-workspaces
+              programa list-workspaces
             """
         case "ssh":
             return """
-            Usage: cmux ssh <destination> [flags] [-- <remote-command-args>]
+            Usage: programa ssh <destination> [flags] [-- <remote-command-args>]
 
             Create a new workspace, mark it as remote-SSH, and start an SSH session in that workspace.
-            cmux will also establish a local SSH proxy endpoint so browser traffic can egress from the remote host.
+            programa will also establish a local SSH proxy endpoint so browser traffic can egress from the remote host.
 
             Flags:
               --name <title>          Optional workspace title
@@ -7177,24 +7174,24 @@ struct CMUXCLI {
               --no-focus              Create workspace without switching to it
 
             Example:
-              cmux ssh dev@my-host
-              cmux ssh dev@my-host --name "gpu-box" --port 2222 --identity ~/.ssh/id_ed25519
-              cmux ssh dev@my-host --ssh-option UserKnownHostsFile=/dev/null --ssh-option StrictHostKeyChecking=no
+              programa ssh dev@my-host
+              programa ssh dev@my-host --name "gpu-box" --port 2222 --identity ~/.ssh/id_ed25519
+              programa ssh dev@my-host --ssh-option UserKnownHostsFile=/dev/null --ssh-option StrictHostKeyChecking=no
             """
         case "remote-daemon-status":
             return """
-            Usage: cmux remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]
+            Usage: programa remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]
 
             Show the embedded programad-remote release manifest, local cache status, checksum verification state,
             and the GitHub attestation verification command for a target platform.
 
             Example:
-              cmux remote-daemon-status
-              cmux remote-daemon-status --os linux --arch arm64
+              programa remote-daemon-status
+              programa remote-daemon-status --os linux --arch arm64
             """
         case "new-split":
             return """
-            Usage: cmux new-split <left|right|up|down> [flags]
+            Usage: programa new-split <left|right|up|down> [flags]
 
             Split the current pane in the given direction.
 
@@ -7204,12 +7201,12 @@ struct CMUXCLI {
               --panel <id|ref>       Alias for --surface
 
             Example:
-              cmux new-split right
-              cmux new-split down --workspace workspace:1
+              programa new-split right
+              programa new-split down --workspace workspace:1
             """
         case "list-panes":
             return """
-            Usage: cmux list-panes [--workspace <id|ref>]
+            Usage: programa list-panes [--workspace <id|ref>]
 
             List panes in a workspace.
 
@@ -7217,12 +7214,12 @@ struct CMUXCLI {
               --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux list-panes
-              cmux list-panes --workspace workspace:2
+              programa list-panes
+              programa list-panes --workspace workspace:2
             """
         case "list-pane-surfaces":
             return """
-            Usage: cmux list-pane-surfaces [--workspace <id|ref>] [--pane <id|ref>]
+            Usage: programa list-pane-surfaces [--workspace <id|ref>] [--pane <id|ref>]
 
             List surfaces in a pane.
 
@@ -7231,12 +7228,12 @@ struct CMUXCLI {
               --pane <id|ref>        Restrict to a specific pane (default: focused pane)
 
             Example:
-              cmux list-pane-surfaces
-              cmux list-pane-surfaces --workspace workspace:2 --pane pane:1
+              programa list-pane-surfaces
+              programa list-pane-surfaces --workspace workspace:2 --pane pane:1
             """
         case "tree":
             return """
-            Usage: cmux tree [flags]
+            Usage: programa tree [flags]
 
             Print the hierarchy of windows, workspaces, panes, and surfaces.
 
@@ -7248,21 +7245,21 @@ struct CMUXCLI {
             Output:
               Text mode prints a box-drawing tree with markers:
               - ◀ active (true focused window/workspace/pane/surface path)
-              - ◀ here (caller surface where `cmux tree` was invoked)
+              - ◀ here (caller surface where `programa tree` was invoked)
               - workspace [selected]
               - pane [focused]
               - surface [selected]
               Browser surfaces also include their current URL.
 
             Example:
-              cmux tree
-              cmux tree --all
-              cmux tree --workspace workspace:2
-              cmux --json tree --all
+              programa tree
+              programa tree --all
+              programa tree --workspace workspace:2
+              programa --json tree --all
             """
         case "focus-pane":
             return """
-            Usage: cmux focus-pane [--pane <id|ref> | <id|ref>] [flags]
+            Usage: programa focus-pane [--pane <id|ref> | <id|ref>] [flags]
 
             Focus the specified pane.
 
@@ -7271,13 +7268,13 @@ struct CMUXCLI {
               --workspace <id|ref>     Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux focus-pane --pane pane:2
-              cmux focus-pane pane:1
-              cmux focus-pane --pane pane:1 --workspace workspace:2
+              programa focus-pane --pane pane:2
+              programa focus-pane pane:1
+              programa focus-pane --pane pane:1 --workspace workspace:2
             """
         case "new-pane":
             return """
-            Usage: cmux new-pane [flags]
+            Usage: programa new-pane [flags]
 
             Create a new pane in the workspace.
 
@@ -7288,12 +7285,12 @@ struct CMUXCLI {
               --url <url>                         URL for browser panes
 
             Example:
-              cmux new-pane
-              cmux new-pane --type browser --direction down --url https://example.com
+              programa new-pane
+              programa new-pane --type browser --direction down --url https://example.com
             """
         case "new-surface":
             return """
-            Usage: cmux new-surface [flags]
+            Usage: programa new-surface [flags]
 
             Create a new surface (tab) in a pane.
 
@@ -7304,12 +7301,12 @@ struct CMUXCLI {
               --url <url>                 URL for browser surfaces
 
             Example:
-              cmux new-surface
-              cmux new-surface --type browser --pane pane:1 --url https://example.com
+              programa new-surface
+              programa new-surface --type browser --pane pane:1 --url https://example.com
             """
         case "close-surface":
             return """
-            Usage: cmux close-surface [flags]
+            Usage: programa close-surface [flags]
 
             Close a surface. Defaults to the focused surface if none specified.
 
@@ -7319,12 +7316,12 @@ struct CMUXCLI {
               --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux close-surface
-              cmux close-surface --surface surface:3
+              programa close-surface
+              programa close-surface --surface surface:3
             """
         case "drag-surface-to-split":
             return """
-            Usage: cmux drag-surface-to-split --surface <id|ref> <left|right|up|down>
+            Usage: programa drag-surface-to-split --surface <id|ref> <left|right|up|down>
 
             Drag a surface into a new split in the given direction.
 
@@ -7333,28 +7330,28 @@ struct CMUXCLI {
               --panel <id|ref>     Alias for --surface
 
             Example:
-              cmux drag-surface-to-split --surface surface:1 right
-              cmux drag-surface-to-split --panel surface:2 down
+              programa drag-surface-to-split --surface surface:1 right
+              programa drag-surface-to-split --panel surface:2 down
             """
         case "refresh-surfaces":
             return """
-            Usage: cmux refresh-surfaces
+            Usage: programa refresh-surfaces
 
             Refresh surface snapshots for the focused workspace.
             """
         case "reload-config":
             return """
-            Usage: cmux reload-config
+            Usage: programa reload-config
 
             Run the same configuration reload as the Reload Configuration shortcut.
             This reloads Ghostty config, re-reads ~/.config/programa/settings.json, and refreshes terminals.
 
             Example:
-              cmux reload-config
+              programa reload-config
             """
         case "surface-health":
             return """
-            Usage: cmux surface-health [--workspace <id|ref>]
+            Usage: programa surface-health [--workspace <id|ref>]
 
             List health details for surfaces in a workspace.
 
@@ -7362,19 +7359,19 @@ struct CMUXCLI {
               --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux surface-health
-              cmux surface-health --workspace workspace:2
+              programa surface-health
+              programa surface-health --workspace workspace:2
             """
         case "debug-terminals":
             return """
-            Usage: cmux debug-terminals
+            Usage: programa debug-terminals
 
             Print live Ghostty terminal runtime metadata across all windows and workspaces.
             Intended for debugging stray or detached terminal views.
             """
         case "trigger-flash":
             return """
-            Usage: cmux trigger-flash [--workspace <id|ref>] [--surface <id|ref>] [--panel <id|ref>]
+            Usage: programa trigger-flash [--workspace <id|ref>] [--surface <id|ref>] [--panel <id|ref>]
 
             Trigger the unread flash indicator for a surface.
 
@@ -7384,12 +7381,12 @@ struct CMUXCLI {
               --panel <id|ref>       Alias for --surface
 
             Example:
-              cmux trigger-flash
-              cmux trigger-flash --workspace workspace:2 --surface surface:3
+              programa trigger-flash
+              programa trigger-flash --workspace workspace:2 --surface surface:3
             """
         case "list-panels":
             return """
-            Usage: cmux list-panels [--workspace <id|ref>]
+            Usage: programa list-panels [--workspace <id|ref>]
 
             List surfaces (panels) in a workspace.
 
@@ -7397,12 +7394,12 @@ struct CMUXCLI {
               --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux list-panels
-              cmux list-panels --workspace workspace:2
+              programa list-panels
+              programa list-panels --workspace workspace:2
             """
         case "focus-panel":
             return """
-            Usage: cmux focus-panel --panel <id|ref> [--workspace <id|ref>]
+            Usage: programa focus-panel --panel <id|ref> [--workspace <id|ref>]
 
             Focus a specific panel (surface).
 
@@ -7411,12 +7408,12 @@ struct CMUXCLI {
               --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux focus-panel --panel surface:2
-              cmux focus-panel --panel surface:5 --workspace workspace:2
+              programa focus-panel --panel surface:2
+              programa focus-panel --panel surface:5 --workspace workspace:2
             """
         case "close-workspace":
             return """
-            Usage: cmux close-workspace --workspace <id|ref|index>
+            Usage: programa close-workspace --workspace <id|ref|index>
 
             Close the specified workspace.
 
@@ -7424,11 +7421,11 @@ struct CMUXCLI {
               --workspace <id|ref|index>   Workspace to close (required)
 
             Example:
-              cmux close-workspace --workspace workspace:2
+              programa close-workspace --workspace workspace:2
             """
         case "select-workspace":
             return """
-            Usage: cmux select-workspace --workspace <id|ref|index>
+            Usage: programa select-workspace --workspace <id|ref|index>
 
             Select (switch to) the specified workspace.
 
@@ -7436,12 +7433,12 @@ struct CMUXCLI {
               --workspace <id|ref|index>   Workspace to select (required)
 
             Example:
-              cmux select-workspace --workspace workspace:2
-              cmux select-workspace --workspace 0
+              programa select-workspace --workspace workspace:2
+              programa select-workspace --workspace 0
             """
         case "rename-workspace", "rename-window":
             return """
-            Usage: cmux rename-workspace [--workspace <id|ref|index>] [--] <title>
+            Usage: programa rename-workspace [--workspace <id|ref|index>] [--] <title>
 
             Rename a workspace. Defaults to the current workspace.
             tmux-compatible alias: rename-window
@@ -7450,18 +7447,18 @@ struct CMUXCLI {
               --workspace <id|ref|index>   Workspace to rename (default: current/$PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux rename-workspace "backend logs"
-              cmux rename-window --workspace workspace:2 "agent run"
+              programa rename-workspace "backend logs"
+              programa rename-window --workspace workspace:2 "agent run"
             """
         case "current-workspace":
             return """
-            Usage: cmux current-workspace
+            Usage: programa current-workspace
 
             Print the currently selected workspace ID.
             """
         case "capture-pane":
             return """
-            Usage: cmux capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]
+            Usage: programa capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]
 
             tmux-compatible alias for reading terminal text from a pane.
 
@@ -7472,11 +7469,11 @@ struct CMUXCLI {
               --lines <n>            Return only the last N lines (implies --scrollback)
 
             Example:
-              cmux capture-pane --workspace workspace:2 --surface surface:1 --scrollback --lines 200
+              programa capture-pane --workspace workspace:2 --surface surface:1 --scrollback --lines 200
             """
         case "resize-pane":
             return """
-            Usage: cmux resize-pane [--pane <id|ref>] [--workspace <id|ref>] [-L|-R|-U|-D] [--amount <n>]
+            Usage: programa resize-pane [--pane <id|ref>] [--workspace <id|ref>] [-L|-R|-U|-D] [--amount <n>]
 
             tmux-compatible pane resize command.
 
@@ -7488,7 +7485,7 @@ struct CMUXCLI {
             """
         case "pipe-pane":
             return """
-            Usage: cmux pipe-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <shell-command> | <shell-command>]
+            Usage: programa pipe-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <shell-command> | <shell-command>]
 
             Capture pane text and pipe it to a shell command via stdin.
 
@@ -7499,7 +7496,7 @@ struct CMUXCLI {
             """
         case "wait-for":
             return """
-            Usage: cmux wait-for [-S|--signal] <name> [--timeout <seconds>]
+            Usage: programa wait-for [-S|--signal] <name> [--timeout <seconds>]
 
             Wait for or signal a named synchronization token.
 
@@ -7509,7 +7506,7 @@ struct CMUXCLI {
             """
         case "swap-pane":
             return """
-            Usage: cmux swap-pane --pane <id|ref> --target-pane <id|ref> [--workspace <id|ref>]
+            Usage: programa swap-pane --pane <id|ref> --target-pane <id|ref> [--workspace <id|ref>]
 
             Swap two panes.
 
@@ -7520,7 +7517,7 @@ struct CMUXCLI {
             """
         case "break-pane":
             return """
-            Usage: cmux break-pane [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
+            Usage: programa break-pane [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
 
             Move a pane/surface out into its own pane context.
 
@@ -7532,7 +7529,7 @@ struct CMUXCLI {
             """
         case "join-pane":
             return """
-            Usage: cmux join-pane --target-pane <id|ref> [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
+            Usage: programa join-pane --target-pane <id|ref> [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
 
             Join a pane/surface into another pane.
 
@@ -7545,13 +7542,13 @@ struct CMUXCLI {
             """
         case "next-window", "previous-window", "last-window":
             return """
-            Usage: cmux \(command)
+            Usage: programa \(command)
 
             Switch workspace selection (next/previous/last) in the current window.
             """
         case "last-pane":
             return """
-            Usage: cmux last-pane [--workspace <id|ref>]
+            Usage: programa last-pane [--workspace <id|ref>]
 
             Focus the previously focused pane in a workspace.
 
@@ -7560,7 +7557,7 @@ struct CMUXCLI {
             """
         case "find-window":
             return """
-            Usage: cmux find-window [--content] [--select] [query]
+            Usage: programa find-window [--content] [--select] [query]
 
             Find workspaces by title (and optionally terminal content).
 
@@ -7570,7 +7567,7 @@ struct CMUXCLI {
             """
         case "clear-history":
             return """
-            Usage: cmux clear-history [--workspace <id|ref>] [--surface <id|ref>]
+            Usage: programa clear-history [--workspace <id|ref>] [--surface <id|ref>]
 
             Clear terminal scrollback history.
 
@@ -7580,7 +7577,7 @@ struct CMUXCLI {
             """
         case "set-hook":
             return """
-            Usage: cmux set-hook [--list] [--unset <event>] | <event> <command>
+            Usage: programa set-hook [--list] [--unset <event>] | <event> <command>
 
             Manage tmux-compat hook definitions.
 
@@ -7590,19 +7587,19 @@ struct CMUXCLI {
             """
         case "popup":
             return """
-            Usage: cmux popup
+            Usage: programa popup
 
             tmux compatibility placeholder. This command is currently not supported.
             """
         case "bind-key", "unbind-key", "copy-mode":
             return """
-            Usage: cmux \(command)
+            Usage: programa \(command)
 
             tmux compatibility placeholder. This command is currently not supported.
             """
         case "set-buffer":
             return """
-            Usage: cmux set-buffer [--name <name>] [--] <text>
+            Usage: programa set-buffer [--name <name>] [--] <text>
 
             Save text into a named tmux-compat buffer.
 
@@ -7611,7 +7608,7 @@ struct CMUXCLI {
             """
         case "paste-buffer":
             return """
-            Usage: cmux paste-buffer [--name <name>] [--workspace <id|ref>] [--surface <id|ref>]
+            Usage: programa paste-buffer [--name <name>] [--workspace <id|ref>] [--surface <id|ref>]
 
             Paste a named tmux-compat buffer into a surface.
 
@@ -7622,13 +7619,13 @@ struct CMUXCLI {
             """
         case "list-buffers":
             return """
-            Usage: cmux list-buffers
+            Usage: programa list-buffers
 
             List tmux-compat buffers.
             """
         case "respawn-pane":
             return """
-            Usage: cmux respawn-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <cmd> | <cmd>]
+            Usage: programa respawn-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <cmd> | <cmd>]
 
             Send a command (or default shell restart command) to a surface.
 
@@ -7639,7 +7636,7 @@ struct CMUXCLI {
             """
         case "display-message":
             return """
-            Usage: cmux display-message [-p|--print] <text>
+            Usage: programa display-message [-p|--print] <text>
 
             Print text (or show it via notification bridge in parity mode).
 
@@ -7648,7 +7645,7 @@ struct CMUXCLI {
             """
         case "read-screen":
             return """
-            Usage: cmux read-screen [flags]
+            Usage: programa read-screen [flags]
 
             Read terminal text from a surface as plain text.
 
@@ -7659,12 +7656,12 @@ struct CMUXCLI {
               --lines <n>            Limit to the last n lines (implies --scrollback)
 
             Example:
-              cmux read-screen
-              cmux read-screen --surface surface:2 --scrollback --lines 200
+              programa read-screen
+              programa read-screen --surface surface:2 --scrollback --lines 200
             """
         case "send":
             return """
-            Usage: cmux send [flags] [--] <text>
+            Usage: programa send [flags] [--] <text>
 
             Send text to a terminal surface. Escape sequences: \\n and \\r send Enter, \\t sends Tab.
 
@@ -7673,12 +7670,12 @@ struct CMUXCLI {
               --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
 
             Example:
-              cmux send "echo hello"
-              cmux send --surface surface:2 "ls -la\\n"
+              programa send "echo hello"
+              programa send --surface surface:2 "ls -la\\n"
             """
         case "send-key":
             return """
-            Usage: cmux send-key [flags] [--] <key>
+            Usage: programa send-key [flags] [--] <key>
 
             Send a key event to a terminal surface.
 
@@ -7687,12 +7684,12 @@ struct CMUXCLI {
               --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
 
             Example:
-              cmux send-key enter
-              cmux send-key --surface surface:2 ctrl+c
+              programa send-key enter
+              programa send-key --surface surface:2 ctrl+c
             """
         case "send-panel":
             return """
-            Usage: cmux send-panel --panel <id|ref> [flags] [--] <text>
+            Usage: programa send-panel --panel <id|ref> [flags] [--] <text>
 
             Send text to a specific panel (surface). Escape sequences: \\n and \\r send Enter, \\t sends Tab.
 
@@ -7701,11 +7698,11 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux send-panel --panel surface:2 "echo hello\\n"
+              programa send-panel --panel surface:2 "echo hello\\n"
             """
         case "send-key-panel":
             return """
-            Usage: cmux send-key-panel --panel <id|ref> [flags] [--] <key>
+            Usage: programa send-key-panel --panel <id|ref> [flags] [--] <key>
 
             Send a key event to a specific panel (surface).
 
@@ -7714,12 +7711,12 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux send-key-panel --panel surface:2 enter
-              cmux send-key-panel --panel surface:2 ctrl+c
+              programa send-key-panel --panel surface:2 enter
+              programa send-key-panel --panel surface:2 ctrl+c
             """
         case "notify":
             return """
-            Usage: cmux notify [flags]
+            Usage: programa notify [flags]
 
             Send a notification to a workspace/surface.
 
@@ -7731,24 +7728,24 @@ struct CMUXCLI {
               --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
 
             Example:
-              cmux notify --title "Build done" --body "All tests passed"
-              cmux notify --title "Error" --subtitle "test.swift" --body "Line 42: syntax error"
+              programa notify --title "Build done" --body "All tests passed"
+              programa notify --title "Error" --subtitle "test.swift" --body "Line 42: syntax error"
             """
         case "list-notifications":
             return """
-            Usage: cmux list-notifications
+            Usage: programa list-notifications
 
             List queued notifications.
             """
         case "clear-notifications":
             return """
-            Usage: cmux clear-notifications
+            Usage: programa clear-notifications
 
             Clear all queued notifications.
             """
         case "set-status":
             return """
-            Usage: cmux set-status <key> <value> [flags]
+            Usage: programa set-status <key> <value> [flags]
 
             Set a sidebar status entry for a workspace. Status entries appear as
             pills in the sidebar tab row. Use a unique key so different tools
@@ -7760,12 +7757,12 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux set-status build "compiling" --icon hammer --color "#ff9500"
-              cmux set-status deploy "v1.2.3" --workspace workspace:2
+              programa set-status build "compiling" --icon hammer --color "#ff9500"
+              programa set-status deploy "v1.2.3" --workspace workspace:2
             """
         case "clear-status":
             return """
-            Usage: cmux clear-status <key> [flags]
+            Usage: programa clear-status <key> [flags]
 
             Remove a sidebar status entry by key.
 
@@ -7773,11 +7770,11 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux clear-status build
+              programa clear-status build
             """
         case "list-status":
             return """
-            Usage: cmux list-status [flags]
+            Usage: programa list-status [flags]
 
             List all sidebar status entries for a workspace.
 
@@ -7785,12 +7782,12 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux list-status
-              cmux list-status --workspace workspace:2
+              programa list-status
+              programa list-status --workspace workspace:2
             """
         case "set-progress":
             return """
-            Usage: cmux set-progress <0.0-1.0> [flags]
+            Usage: programa set-progress <0.0-1.0> [flags]
 
             Set a progress bar in the sidebar for a workspace.
 
@@ -7799,12 +7796,12 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux set-progress 0.5 --label "Building..."
-              cmux set-progress 1.0 --label "Done"
+              programa set-progress 0.5 --label "Building..."
+              programa set-progress 1.0 --label "Done"
             """
         case "clear-progress":
             return """
-            Usage: cmux clear-progress [flags]
+            Usage: programa clear-progress [flags]
 
             Clear the sidebar progress bar for a workspace.
 
@@ -7812,11 +7809,11 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux clear-progress
+              programa clear-progress
             """
         case "log":
             return """
-            Usage: cmux log [flags] [--] <message>
+            Usage: programa log [flags] [--] <message>
 
             Append a log entry to the sidebar for a workspace.
 
@@ -7826,13 +7823,13 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux log "Build started"
-              cmux log --level error --source build "Compilation failed"
-              cmux log --level success -- "All 42 tests passed"
+              programa log "Build started"
+              programa log --level error --source build "Compilation failed"
+              programa log --level success -- "All 42 tests passed"
             """
         case "clear-log":
             return """
-            Usage: cmux clear-log [flags]
+            Usage: programa clear-log [flags]
 
             Clear all sidebar log entries for a workspace.
 
@@ -7840,11 +7837,11 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux clear-log
+              programa clear-log
             """
         case "list-log":
             return """
-            Usage: cmux list-log [flags]
+            Usage: programa list-log [flags]
 
             List sidebar log entries for a workspace.
 
@@ -7853,12 +7850,12 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux list-log
-              cmux list-log --limit 5
+              programa list-log
+              programa list-log --limit 5
             """
         case "sidebar-state":
             return """
-            Usage: cmux sidebar-state [flags]
+            Usage: programa sidebar-state [flags]
 
             Dump all sidebar metadata for a workspace (cwd, git branch, ports,
             status entries, progress, log entries).
@@ -7867,28 +7864,28 @@ struct CMUXCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
             Example:
-              cmux sidebar-state
-              cmux sidebar-state --workspace workspace:2
+              programa sidebar-state
+              programa sidebar-state --workspace workspace:2
             """
         case "set-app-focus":
             return """
-            Usage: cmux set-app-focus <active|inactive|clear>
+            Usage: programa set-app-focus <active|inactive|clear>
 
             Override app focus state for notification routing tests.
 
             Example:
-              cmux set-app-focus inactive
-              cmux set-app-focus clear
+              programa set-app-focus inactive
+              programa set-app-focus clear
             """
         case "simulate-app-active":
             return """
-            Usage: cmux simulate-app-active
+            Usage: programa simulate-app-active
 
             Trigger the app-active handler used by notification focus tests.
             """
         case "claude-hook":
             return """
-            Usage: cmux claude-hook <session-start|active|stop|idle|notification|notify|prompt-submit> [flags]
+            Usage: programa claude-hook <session-start|active|stop|idle|notification|notify|prompt-submit> [flags]
 
             Hook for Claude Code integration. Reads JSON from stdin.
 
@@ -7906,25 +7903,25 @@ struct CMUXCLI {
               --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
 
             Example:
-              echo '{"session_id":"abc"}' | cmux claude-hook session-start
-              echo '{}' | cmux claude-hook stop
+              echo '{"session_id":"abc"}' | programa claude-hook session-start
+              echo '{}' | programa claude-hook stop
             """
         case "codex":
             return """
-            Usage: cmux codex <install-hooks|uninstall-hooks>
+            Usage: programa codex <install-hooks|uninstall-hooks>
 
             Manage Codex CLI hooks integration.
 
             Subcommands:
-              install-hooks     Install cmux hooks into ~/.codex/hooks.json
-              uninstall-hooks   Remove cmux hooks from ~/.codex/hooks.json
+              install-hooks     Install programa hooks into ~/.codex/hooks.json
+              uninstall-hooks   Remove programa hooks from ~/.codex/hooks.json
             """
         case "codex-hook":
             return """
-            Usage: cmux codex-hook <session-start|prompt-submit|stop> [flags]
+            Usage: programa codex-hook <session-start|prompt-submit|stop> [flags]
 
             Hook for Codex CLI integration. Reads JSON from stdin.
-            Gracefully no-ops when not running inside cmux.
+            Gracefully no-ops when not running inside programa.
 
             Subcommands:
               session-start   Register a Codex session
@@ -7937,7 +7934,7 @@ struct CMUXCLI {
             """
         case "browser":
             return """
-            Usage: cmux browser [--surface <id|ref|index> | <surface>] <subcommand> [args]
+            Usage: programa browser [--surface <id|ref|index> | <surface>] <subcommand> [args]
 
             Browser automation commands. Most subcommands require a surface handle.
             A surface can be passed as `--surface <handle>` or as the first positional token.
@@ -7994,31 +7991,31 @@ struct CMUXCLI {
               identify [--surface <id|ref|index>]
 
             Example:
-              cmux browser open https://example.com
-              cmux browser surface:1 navigate https://google.com
-              cmux browser --surface surface:1 snapshot --interactive
+              programa browser open https://example.com
+              programa browser surface:1 navigate https://google.com
+              programa browser --surface surface:1 snapshot --interactive
             """
-        // Legacy browser aliases — point users to `cmux browser --help`
+        // Legacy browser aliases — point users to `programa browser --help`
         case "open-browser":
-            return "Legacy alias for 'cmux browser open'. Run 'cmux browser --help' for details."
+            return "Legacy alias for 'programa browser open'. Run 'programa browser --help' for details."
         case "navigate":
-            return "Legacy alias for 'cmux browser navigate'. Run 'cmux browser --help' for details."
+            return "Legacy alias for 'programa browser navigate'. Run 'programa browser --help' for details."
         case "browser-back":
-            return "Legacy alias for 'cmux browser back'. Run 'cmux browser --help' for details."
+            return "Legacy alias for 'programa browser back'. Run 'programa browser --help' for details."
         case "browser-forward":
-            return "Legacy alias for 'cmux browser forward'. Run 'cmux browser --help' for details."
+            return "Legacy alias for 'programa browser forward'. Run 'programa browser --help' for details."
         case "browser-reload":
-            return "Legacy alias for 'cmux browser reload'. Run 'cmux browser --help' for details."
+            return "Legacy alias for 'programa browser reload'. Run 'programa browser --help' for details."
         case "get-url":
-            return "Legacy alias for 'cmux browser get-url'. Run 'cmux browser --help' for details."
+            return "Legacy alias for 'programa browser get-url'. Run 'programa browser --help' for details."
         case "focus-webview":
-            return "Legacy alias for 'cmux browser focus-webview'. Run 'cmux browser --help' for details."
+            return "Legacy alias for 'programa browser focus-webview'. Run 'programa browser --help' for details."
         case "is-webview-focused":
-            return "Legacy alias for 'cmux browser is-webview-focused'. Run 'cmux browser --help' for details."
+            return "Legacy alias for 'programa browser is-webview-focused'. Run 'programa browser --help' for details."
         case "markdown":
             return """
-            Usage: cmux markdown open <path> [options]
-                   cmux markdown <path>       (shorthand for 'open')
+            Usage: programa markdown open <path> [options]
+                   programa markdown <path>       (shorthand for 'open')
 
             Open a markdown file in a formatted viewer panel with live file watching.
             The file is rendered with rich formatting (headings, code blocks, tables,
@@ -8031,10 +8028,10 @@ struct CMUXCLI {
               --direction <left|right|up|down>  Split direction (default: right)
 
             Examples:
-              cmux markdown open plan.md
-              cmux markdown ~/project/CHANGELOG.md
-              cmux markdown open ./docs/design.md --workspace 0
-              cmux markdown open plan.md --direction down
+              programa markdown open plan.md
+              programa markdown ~/project/CHANGELOG.md
+              programa markdown open ./docs/design.md --workspace 0
+              programa markdown open plan.md --direction down
             """
         default:
             return nil
@@ -8045,15 +8042,15 @@ struct CMUXCLI {
     private func dispatchSubcommandHelp(command: String, commandArgs: [String]) -> Bool {
         guard commandArgs.contains("--help") || commandArgs.contains("-h") else { return false }
         guard let text = subcommandUsage(command) else { return false }
-        print("cmux \(command)")
+        print("programa \(command)")
         print("")
         print(text)
         return true
     }
 
     private static let programaThemeOverrideBundleIdentifier = "com.darkroom.programa"
-    private static let programaThemesBlockStart = "# cmux themes start"
-    private static let programaThemesBlockEnd = "# cmux themes end"
+    private static let programaThemesBlockStart = "# programa themes start"
+    private static let programaThemesBlockEnd = "# programa themes end"
     private static let programaThemesReloadNotificationName = "com.darkroom.programa.themes.reload-config"
 
     private struct ThemeSelection {
@@ -8251,7 +8248,7 @@ struct CMUXCLI {
             try runThemesClear(jsonOutput: jsonOutput)
         default:
             if subcommand.hasPrefix("-") {
-                throw CLIError(message: "Unknown themes subcommand '\(subcommand)'. Run 'cmux themes --help'.")
+                throw CLIError(message: "Unknown themes subcommand '\(subcommand)'. Run 'programa themes --help'.")
             }
 
             try runThemesSet(
@@ -8588,7 +8585,7 @@ struct CMUXCLI {
         if availableThemes.isEmpty {
             return trimmed
         }
-        throw CLIError(message: "Unknown theme '\(trimmed)'. Run 'cmux themes' to list available themes.")
+        throw CLIError(message: "Unknown theme '\(trimmed)'. Run 'programa themes' to list available themes.")
     }
 
     private func themeConfigSearchURLs() -> [URL] {
@@ -8708,7 +8705,7 @@ struct CMUXCLI {
     }
 
     private func removingManagedThemeOverride(from contents: String) -> String {
-        let pattern = #"(?ms)\n?# cmux themes start\n.*?\n# cmux themes end\n?"#
+        let pattern = #"(?ms)\n?# programa themes start\n.*?\n# programa themes end\n?"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             return contents
         }
@@ -10505,14 +10502,14 @@ struct CMUXCLI {
         throw CLIError(message: "Failed to launch claude: \(String(cString: strerror(code)))")
     }
 
-    // MARK: - cmux omo (OpenCode + oh-my-openagent)
+    // MARK: - programa omo (OpenCode + oh-my-openagent)
 
     private func resolveOpenCodeExecutable(searchPath: String?) -> String? {
         resolveExecutableInSearchPath("opencode", searchPath: searchPath)
     }
 
     private func createOMOShimDirectory() throws -> URL {
-        // tmux shim: redirects tmux commands to cmux __tmux-compat
+        // tmux shim: redirects tmux commands to programa __tmux-compat
         // Handle -V locally (no socket needed) since __tmux-compat requires a connection.
         let tmuxScript = """
         #!/usr/bin/env bash
@@ -10529,11 +10526,11 @@ struct CMUXCLI {
             tmuxShimScript: tmuxScript
         )
 
-        // terminal-notifier shim: intercepts macOS notifications and routes to cmux notify
+        // terminal-notifier shim: intercepts macOS notifications and routes to programa notify
         let notifierURL = root.appendingPathComponent("terminal-notifier", isDirectory: false)
         let notifierScript = """
         #!/usr/bin/env bash
-        # Intercept terminal-notifier calls and route through cmux notify.
+        # Intercept terminal-notifier calls and route through programa notify.
         # oh-my-openagent calls: terminal-notifier -title <t> -message <m> [-activate <id>]
         TITLE="" BODY=""
         while [[ $# -gt 0 ]]; do
@@ -10976,7 +10973,7 @@ struct CMUXCLI {
             try? checkProcess.run()
             checkProcess.waitUntilExit()
             if checkProcess.terminationStatus != 0 {
-                throw CLIError(message: "opencode is not installed. Install it first:\n  npm install -g opencode-ai\n  # or\n  bun install -g opencode-ai\n\nThen run: cmux omo")
+                throw CLIError(message: "opencode is not installed. Install it first:\n  npm install -g opencode-ai\n  # or\n  bun install -g opencode-ai\n\nThen run: programa omo")
             }
         }
 
@@ -11030,7 +11027,7 @@ struct CMUXCLI {
         throw CLIError(message: "Failed to launch opencode: \(String(cString: strerror(code)))\n\nIs opencode installed? Install with:\n  npm install -g opencode-ai")
     }
 
-    // MARK: - cmux omx (Oh My Codex)
+    // MARK: - programa omx (Oh My Codex)
 
     private func resolveOMXExecutable(searchPath: String?) -> String? {
         resolveExecutableInSearchPath("omx", searchPath: searchPath)
@@ -11096,7 +11093,7 @@ struct CMUXCLI {
             try? checkProcess.run()
             checkProcess.waitUntilExit()
             if checkProcess.terminationStatus != 0 {
-                throw CLIError(message: "omx is not installed. Install it first:\n  npm install -g oh-my-codex\n\nThen run: cmux omx")
+                throw CLIError(message: "omx is not installed. Install it first:\n  npm install -g oh-my-codex\n\nThen run: programa omx")
             }
         }
 
@@ -11133,7 +11130,7 @@ struct CMUXCLI {
         throw CLIError(message: "Failed to launch omx: \(String(cString: strerror(code)))\n\nIs oh-my-codex installed? Install with:\n  npm install -g oh-my-codex")
     }
 
-    // MARK: - cmux omc (Oh My Claude Code)
+    // MARK: - programa omc (Oh My Claude Code)
 
     private func resolveOMCExecutable(searchPath: String?) -> String? {
         resolveExecutableInSearchPath("omc", searchPath: searchPath)
@@ -11220,7 +11217,7 @@ struct CMUXCLI {
             try? checkProcess.run()
             checkProcess.waitUntilExit()
             if checkProcess.terminationStatus != 0 {
-                throw CLIError(message: "omc is not installed. Install it first:\n  npm install -g oh-my-claude-sisyphus\n\nThen run: cmux omc")
+                throw CLIError(message: "omc is not installed. Install it first:\n  npm install -g oh-my-claude-sisyphus\n\nThen run: programa omc")
             }
         }
 
@@ -11274,7 +11271,7 @@ struct CMUXCLI {
                 boolFlags: ["-A", "-d", "-P"]
             )
             if parsed.hasFlag("-A") {
-                throw CLIError(message: "new-session -A is not supported in cmux claude-teams mode")
+                throw CLIError(message: "new-session -A is not supported in programa claude-teams mode")
             }
             var params: [String: Any] = ["focus": false]
             if let cwd = parsed.value("-c") {
@@ -11311,7 +11308,7 @@ struct CMUXCLI {
                 boolFlags: ["-d", "-P"]
             )
             if parsed.value("-t") != nil {
-                throw CLIError(message: "new-window -t is not supported in cmux claude-teams mode")
+                throw CLIError(message: "new-window -t is not supported in programa claude-teams mode")
             }
             var params: [String: Any] = ["focus": false]
             if let cwd = parsed.value("-c") {
@@ -12244,10 +12241,10 @@ struct CMUXCLI {
             print("OK")
 
         case "popup":
-            throw CLIError(message: "popup is not supported yet in cmux CLI parity mode")
+            throw CLIError(message: "popup is not supported yet in programa CLI parity mode")
 
         case "bind-key", "unbind-key", "copy-mode":
-            throw CLIError(message: "\(command) is not supported yet in cmux CLI parity mode")
+            throw CLIError(message: "\(command) is not supported yet in programa CLI parity mode")
 
         case "set-buffer":
             let (nameArg, rem0) = parseOption(commandArgs, name: "--name")
@@ -12617,7 +12614,7 @@ struct CMUXCLI {
             telemetry.breadcrumb("claude-hook.help")
             print(
                 """
-                cmux claude-hook <session-start|stop|session-end|notification|prompt-submit|pre-tool-use> [--workspace <id|index>] [--surface <id|index>]
+                programa claude-hook <session-start|stop|session-end|notification|prompt-submit|pre-tool-use> [--workspace <id|index>] [--surface <id|index>]
                 """
             )
 
@@ -13342,13 +13339,13 @@ struct CMUXCLI {
 
     // MARK: - Codex hooks
 
-    /// The hooks.json content that cmux installs into ~/.codex/.
-    /// Each hook calls `cmux codex-hook <event>` which gracefully no-ops
-    /// when not running inside cmux. The command checks for cmux on PATH
-    /// first so it silently succeeds even when cmux is not installed
-    /// (e.g. user opened codex in a non-cmux terminal).
+    /// The hooks.json content that programa installs into ~/.codex/.
+    /// Each hook calls `programa codex-hook <event>` which gracefully no-ops
+    /// when not running inside programa. The command checks for programa on PATH
+    /// first so it silently succeeds even when programa is not installed
+    /// (e.g. user opened codex in a non-programa terminal).
     private static func codexHookCommand(_ event: String) -> String {
-        "[ -n \"$PROGRAMA_SURFACE_ID\" ] && command -v cmux >/dev/null 2>&1 && cmux codex-hook \(event) || echo '{}'"
+        "[ -n \"$PROGRAMA_SURFACE_ID\" ] && command -v programa >/dev/null 2>&1 && programa codex-hook \(event) || echo '{}'"
     }
 
     private static let codexHooksJSON: [String: Any] = [
@@ -13377,8 +13374,8 @@ struct CMUXCLI {
         ] as [String: Any]
     ]
 
-    /// Identifier used to detect cmux-owned hooks during uninstall.
-    private static let codexHookCommandMarker = "cmux codex-hook"
+    /// Identifier used to detect programa-owned hooks during uninstall.
+    private static let codexHookCommandMarker = "programa codex-hook"
 
     private func runCodexInstallHooks() throws {
         let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
@@ -13434,7 +13431,7 @@ struct CMUXCLI {
         let configChanged = existingConfigContent != newConfigContent
 
         if !hooksChanged && !configChanged {
-            print("cmux hooks are already installed. Nothing to change.")
+            print("programa hooks are already installed. Nothing to change.")
             return
         }
 
@@ -13487,8 +13484,8 @@ struct CMUXCLI {
         }
 
         print("")
-        print("Installed. Hooks activate inside cmux and silently no-op elsewhere.")
-        print("To remove: cmux codex uninstall-hooks")
+        print("Installed. Hooks activate inside programa and silently no-op elsewhere.")
+        print("To remove: programa codex uninstall-hooks")
     }
 
     private func runCodexUninstallHooks() throws {
@@ -13512,7 +13509,7 @@ struct CMUXCLI {
             return
         }
 
-        // Build the new state without cmux hooks
+        // Build the new state without programa hooks
         var removedCount = 0
         for eventName in hooks.keys {
             guard var eventGroups = hooks[eventName] as? [[String: Any]] else { continue }
@@ -13539,7 +13536,7 @@ struct CMUXCLI {
         let configChanged = existingConfigContent != newConfigContent
 
         if removedCount == 0 && !configChanged {
-            print("No cmux hooks found.")
+            print("No programa hooks found.")
             return
         }
 
@@ -13576,7 +13573,7 @@ struct CMUXCLI {
         if configChanged {
             try newConfigContent.write(toFile: configPath, atomically: true, encoding: .utf8)
         }
-        print("Removed cmux Codex hooks.")
+        print("Removed programa Codex hooks.")
     }
 
     /// Print a unified-diff-style view with context lines and line numbers.
@@ -13725,7 +13722,7 @@ struct CMUXCLI {
         return rest.hasPrefix("=")
     }
 
-    /// Codex hook handler. Gracefully no-ops when not running inside cmux.
+    /// Codex hook handler. Gracefully no-ops when not running inside programa.
     private func runCodexHook(
         commandArgs: [String],
         client: SocketClient,
@@ -13733,7 +13730,7 @@ struct CMUXCLI {
     ) throws {
         let env = ProcessInfo.processInfo.environment
 
-        // Graceful no-op: if not inside cmux, exit silently with valid JSON
+        // Graceful no-op: if not inside programa, exit silently with valid JSON
         guard env["PROGRAMA_SURFACE_ID"] != nil else {
             print("{}")
             return
@@ -13903,7 +13900,7 @@ struct CMUXCLI {
             }
 
         case "help", "--help", "-h":
-            print("cmux codex-hook <session-start|prompt-submit|stop> [--workspace <id>] [--surface <id>]")
+            print("programa codex-hook <session-start|prompt-submit|stop> [--workspace <id>] [--surface <id>]")
 
         default:
             throw CLIError(message: "Unknown codex-hook subcommand: \(subcommand)")
@@ -13987,13 +13984,13 @@ struct CMUXCLI {
         let commit = info["ProgramaCommit"].flatMap { normalizedCommitHash($0) }
         let baseSummary: String
         if let version = info["CFBundleShortVersionString"], let build = info["CFBundleVersion"] {
-            baseSummary = "cmux \(version) (\(build))"
+            baseSummary = "programa \(version) (\(build))"
         } else if let version = info["CFBundleShortVersionString"] {
-            baseSummary = "cmux \(version)"
+            baseSummary = "programa \(version)"
         } else if let build = info["CFBundleVersion"] {
-            baseSummary = "cmux build \(build)"
+            baseSummary = "programa build \(build)"
         } else {
-            baseSummary = "cmux version unknown"
+            baseSummary = "programa version unknown"
         }
         guard let commit else { return baseSummary }
         return "\(baseSummary) [\(commit)]"
@@ -14029,7 +14026,7 @@ struct CMUXCLI {
 
         let logo = """
         \(c1)  ::\(reset)
-        \(c2)    ::::\(reset)              \(c1)c\(c2)m\(c3)u\(c7)x\(reset)
+        \(c2)    ::::\(reset)              \(c1)p\(c2)r\(c3)o\(c4)g\(c5)r\(c6)a\(c7)m\(c7)a\(reset)
         \(c3)      ::::::\(reset)
         \(c4)        ::::::\(reset)        \(tagline)the open source terminal\(reset)
         \(c5)      ::::::\(reset)          \(tagline)built for coding agents\(reset)
@@ -14056,14 +14053,14 @@ struct CMUXCLI {
         print()
         print(shortcuts)
         print()
-        print("  \(bold)Docs\(reset)\(subdued)                https://cmux.com/docs\(reset)")
+        print("  \(bold)Docs\(reset)\(subdued)                https://github.com/darkroomengineering/programa/tree/main/docs\(reset)")
         print("  \(bold)Discord\(reset)\(subdued)             https://discord.gg/xsgFEVrWCZ\(reset)")
         print("  \(bold)GitHub\(reset)\(subdued)              https://github.com/darkroomengineering/programa (please leave a star ⭐)\(reset)")
-        print("  \(bold)Email\(reset)\(subdued)               founders@manaflow.com\(reset)")
+        print("  \(bold)Issues\(reset)\(subdued)              https://github.com/darkroomengineering/programa/issues\(reset)")
         print()
-        print("  \(subdued)Run \(reset)\(bold)cmux --help\(reset)\(subdued) for all commands.\(reset)")
-        print("  \(subdued)Run \(reset)\(bold)cmux shortcuts\(reset)\(subdued) to edit shortcuts.\(reset)")
-        print("  \(subdued)Run \(reset)\(bold)cmux feedback\(reset)\(subdued) to report a bug.\(reset)")
+        print("  \(subdued)Run \(reset)\(bold)programa --help\(reset)\(subdued) for all commands.\(reset)")
+        print("  \(subdued)Run \(reset)\(bold)programa shortcuts\(reset)\(subdued) to edit shortcuts.\(reset)")
+        print("  \(subdued)Run \(reset)\(bold)programa feedback\(reset)\(subdued) to report a bug.\(reset)")
         print()
     }
 
@@ -14344,11 +14341,11 @@ struct CMUXCLI {
 
     private func usage() -> String {
         return """
-        cmux - control cmux via Unix socket
+        programa - control programa via Unix socket
 
         Usage:
-          cmux <path>                Open a directory in a new workspace (launches cmux if needed)
-          cmux [global-options] <command> [options]
+          programa <path>                Open a directory in a new workspace (launches programa if needed)
+          programa [global-options] <command> [options]
 
         Handle Inputs:
           Use UUIDs, short refs (window:1/workspace:2/pane:3/surface:4), or indexes where commands accept window, workspace, pane, or surface inputs.
@@ -14361,7 +14358,7 @@ struct CMUXCLI {
         Commands:
           welcome
           shortcuts
-          feedback [--email <email> --body <text> [--image <path> ...]]
+          feedback [--email <email> --body <text> [--image <path> ...]]  (opens GitHub issues; direct submission disabled)
           themes [list|set|clear]
           claude-teams [claude-args...]
           omo [opencode-args...]
@@ -14480,12 +14477,12 @@ struct CMUXCLI {
           help
 
         Environment:
-          PROGRAMA_WORKSPACE_ID   Auto-set in cmux terminals. Used as default --workspace for
+          PROGRAMA_WORKSPACE_ID   Auto-set in programa terminals. Used as default --workspace for
                               ALL commands (send, list-panels, new-split, notify, etc.).
           PROGRAMA_TAB_ID         Optional alias used by `tab-action`/`rename-tab` as default --tab.
-          PROGRAMA_SURFACE_ID     Auto-set in cmux terminals. Used as default --surface.
+          PROGRAMA_SURFACE_ID     Auto-set in programa terminals. Used as default --surface.
           PROGRAMA_SOCKET_PATH    Override the Unix socket path. Without this, the CLI defaults
-                              to ~/Library/Application Support/cmux/cmux.sock and auto-discovers tagged/debug sockets.
+                              to ~/Library/Application Support/programa/programa.sock and auto-discovers tagged/debug sockets.
         """
     }
 
