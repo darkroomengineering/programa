@@ -1725,7 +1725,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         )
     }
 
-    func testWorkspaceMinimalModeDefaultsToStandardPresentation() {
+    func testWorkspaceMinimalModeDefaultsToMinimalPresentation() {
         let defaults = UserDefaults.standard
         let savedMode = defaults.object(forKey: WorkspacePresentationModeSettings.modeKey)
         let savedLegacyTitlebar = defaults.object(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
@@ -1742,7 +1742,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
         XCTAssertEqual(
             WorkspacePresentationModeSettings.mode(defaults: defaults),
-            .standard
+            .minimal
         )
     }
 
