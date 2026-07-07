@@ -15011,6 +15011,21 @@ class TerminalController {
             ports.append(port)
         }
 
+        if let scope = Self.explicitSocketScope(options: parsed.options) {
+            DispatchQueue.main.async {
+                guard let tabManager = AppDelegate.shared?.tabManagerFor(tabId: scope.workspaceId),
+                      let tab = tabManager.tabs.first(where: { $0.id == scope.workspaceId }) else {
+                    return
+                }
+                let validSurfaceIds = Set(tab.panels.keys)
+                tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
+                guard validSurfaceIds.contains(scope.panelId) else { return }
+                tab.surfaceListeningPorts[scope.panelId] = ports
+                tab.recomputeListeningPorts()
+            }
+            return "OK"
+        }
+
         var result = "OK"
         DispatchQueue.main.sync {
             guard let tab = resolveTabForReport(args) else {
@@ -15200,6 +15215,20 @@ class TerminalController {
 
     private func clearPorts(_ args: String) -> String {
         let parsed = parseOptions(args)
+        if let scope = Self.explicitSocketScope(options: parsed.options) {
+            DispatchQueue.main.async {
+                guard let tabManager = AppDelegate.shared?.tabManagerFor(tabId: scope.workspaceId),
+                      let tab = tabManager.tabs.first(where: { $0.id == scope.workspaceId }) else {
+                    return
+                }
+                let validSurfaceIds = Set(tab.panels.keys)
+                tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
+                guard validSurfaceIds.contains(scope.panelId) else { return }
+                tab.surfaceListeningPorts.removeValue(forKey: scope.panelId)
+                tab.recomputeListeningPorts()
+            }
+            return "OK"
+        }
         var result = "OK"
         DispatchQueue.main.sync {
             guard let tab = resolveTabForReport(args) else {
