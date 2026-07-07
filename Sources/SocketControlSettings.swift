@@ -473,9 +473,6 @@ struct SocketControlSettings {
         if let taggedDebugPath = taggedDebugSocketPath(bundleIdentifier: bundleIdentifier, environment: [:]) {
             return taggedDebugPath
         }
-        if bundleIdentifier == "com.darkroom.programa.nightly" {
-            return "/tmp/programa-nightly.sock"
-        }
         if isDebugLikeBundleIdentifier(bundleIdentifier) || isDebugBuild {
             return "/tmp/programa-debug.sock"
         }

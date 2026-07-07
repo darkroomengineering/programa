@@ -4604,7 +4604,7 @@ final class WorkspaceRemoteSessionController {
         let downloadedSHA = try Self.sha256Hex(forFile: downloadedURL)
         if downloadedSHA != entry.sha256.lowercased() {
             // The embedded manifest's checksum doesn't match the downloaded binary.
-            // This can happen when a newer nightly overwrites the shared release
+            // This can happen when a newer build overwrites the shared release
             // asset after this build's manifest was embedded. As a fallback, fetch
             // the live manifest from the release and verify against that.
             if let releaseURL,
@@ -4656,7 +4656,7 @@ final class WorkspaceRemoteSessionController {
 
         guard Self.allowLocalDaemonBuildFallback() else {
             throw NSError(domain: "programa.remote.daemon", code: 20, userInfo: [
-                NSLocalizedDescriptionKey: "this build does not include a verified programad-remote manifest for \(goOS)-\(goArch). Use a release/nightly build, or set PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 for a dev-only fallback.",
+                NSLocalizedDescriptionKey: "this build does not include a verified programad-remote manifest for \(goOS)-\(goArch). Use a release build, or set PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 for a dev-only fallback.",
             ])
         }
 

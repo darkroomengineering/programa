@@ -161,14 +161,13 @@ fi
 # --- Verify ---
 gh release view "$TAG"
 
-# --- Update Homebrew cask (skip for nightlies) ---
-if [[ "$TAG" != *"-nightly"* ]]; then
-  VERSION="${TAG#v}"
-  DMG_SHA256=$(shasum -a 256 programa-macos.dmg | cut -d' ' -f1)
-  echo "Updating homebrew cask to $VERSION (SHA: $DMG_SHA256)..."
-  CASK_FILE="homebrew-cmux/Casks/cmux.rb"
-  if [ -f "$CASK_FILE" ]; then
-    cat > "$CASK_FILE" << CASKEOF
+# --- Update Homebrew cask ---
+VERSION="${TAG#v}"
+DMG_SHA256=$(shasum -a 256 programa-macos.dmg | cut -d' ' -f1)
+echo "Updating homebrew cask to $VERSION (SHA: $DMG_SHA256)..."
+CASK_FILE="homebrew-cmux/Casks/cmux.rb"
+if [ -f "$CASK_FILE" ]; then
+  cat > "$CASK_FILE" << CASKEOF
 cask "cmux" do
   version "${VERSION}"
   sha256 "${DMG_SHA256}"
@@ -195,19 +194,18 @@ cask "cmux" do
   ]
 end
 CASKEOF
-    cd homebrew-cmux
-    git add Casks/cmux.rb
-    if git diff --staged --quiet; then
-      echo "Homebrew cask already up to date"
-    else
-      git commit -m "Update cmux to ${VERSION}"
-      git push
-      echo "Homebrew cask updated"
-    fi
-    cd ..
+  cd homebrew-cmux
+  git add Casks/cmux.rb
+  if git diff --staged --quiet; then
+    echo "Homebrew cask already up to date"
   else
-    echo "WARNING: homebrew-cmux submodule not found, skipping cask update"
+    git commit -m "Update cmux to ${VERSION}"
+    git push
+    echo "Homebrew cask updated"
   fi
+  cd ..
+else
+  echo "WARNING: homebrew-cmux submodule not found, skipping cask update"
 fi
 
 # --- Cleanup ---

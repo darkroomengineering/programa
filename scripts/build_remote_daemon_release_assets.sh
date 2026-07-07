@@ -16,7 +16,7 @@ Builds programad-remote release assets for the supported remote platforms and em
   programad-remote-manifest[-<suffix>].json
 
 When --asset-suffix is provided, all output filenames and manifest download URLs
-include the suffix, making each build's assets immutable (used by nightly builds
+include the suffix, making each build's assets immutable (used by CI builds
 to avoid checksum mismatches when assets are overwritten by later builds).
 EOF
 }
