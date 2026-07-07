@@ -7,7 +7,6 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 WORKFLOWS=(
   "$ROOT_DIR/.github/workflows/release.yml"
-  "$ROOT_DIR/.github/workflows/nightly.yml"
 )
 
 for workflow in "${WORKFLOWS[@]}"; do

@@ -4,11 +4,11 @@ import Cocoa
 enum UpdateFeedResolver {
     static let fallbackFeedURL = "https://github.com/darkroomengineering/programa/releases/latest/download/appcast.xml"
 
-    static func resolvedFeedURLString(infoFeedURL: String?) -> (url: String, isNightly: Bool, usedFallback: Bool) {
+    static func resolvedFeedURLString(infoFeedURL: String?) -> (url: String, usedFallback: Bool) {
         guard let infoFeedURL, !infoFeedURL.isEmpty else {
-            return (fallbackFeedURL, false, true)
+            return (fallbackFeedURL, true)
         }
-        return (infoFeedURL, infoFeedURL.contains("/nightly/"), false)
+        return (infoFeedURL, false)
     }
 }
 
@@ -26,12 +26,9 @@ extension UpdateDriver: SPUUpdaterDelegate {
             return override
         }
 #endif
-        // The feed URL is baked into Info.plist at build time:
-        // - Stable releases use the stable appcast URL
-        // - cmux NIGHTLY has the nightly appcast URL injected by CI
+        // The stable feed URL is baked into Info.plist at build time.
         let infoFeedURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String
         let resolved = UpdateFeedResolver.resolvedFeedURLString(infoFeedURL: infoFeedURL)
-        UpdateLogStore.shared.append("update channel: \(resolved.isNightly ? "nightly" : "stable")")
         recordFeedURLString(resolved.url, usedFallback: resolved.usedFallback)
         return resolved.url
     }

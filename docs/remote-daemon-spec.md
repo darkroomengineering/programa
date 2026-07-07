@@ -56,8 +56,8 @@ This is a **living implementation spec** (also called an **execution spec**): a 
 - `DONE` orphaned relay SSH processes from previous app sessions are cleaned up before starting a new relay.
 
 ### 3.6 Artifact Trust
-- `DONE` release and nightly workflows publish `programad-remote` assets for `darwin/linux × arm64/amd64`.
-- `DONE` release and nightly apps embed a compact `PROGRAMARemoteDaemonManifestJSON` in `Info.plist` with exact asset URLs and SHA-256 digests.
+- `DONE` the release workflow publishes `programad-remote` assets for `darwin/linux × arm64/amd64`.
+- `DONE` release apps embed a compact `PROGRAMARemoteDaemonManifestJSON` in `Info.plist` with exact asset URLs and SHA-256 digests.
 - `DONE` `programa remote-daemon-status` exposes the current manifest entry, local cache verification state, release download command, and GitHub attestation verification command.
 
 ### 3.3 Error Surfacing
