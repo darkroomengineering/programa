@@ -40,7 +40,7 @@ Current integration in programa:
 
 ## Distribution
 
-Release and nightly builds publish prebuilt `programad-remote` binaries on GitHub Releases for:
+Release builds publish prebuilt `programad-remote` binaries on GitHub Releases for:
 1. `darwin/arm64`
 2. `darwin/amd64`
 3. `linux/arm64`
@@ -51,7 +51,7 @@ The app embeds a compact manifest in `Info.plist` with:
 2. pinned SHA-256 digests
 3. release tag and checksums asset URL
 
-Release and nightly apps download and cache the matching binary locally, verify its SHA-256, then upload it to the remote host if needed. Dev builds can opt into a local `go build` fallback with `PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1`.
+Release apps download and cache the matching binary locally, verify its SHA-256, then upload it to the remote host if needed. Dev builds can opt into a local `go build` fallback with `PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1`.
 
 To inspect what a given app build trusts, run:
 1. `programa remote-daemon-status`

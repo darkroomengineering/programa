@@ -3,6 +3,7 @@
 Cross-project tracking (features, bugs, backlog) for Programa.
 
 ## Done
+- 2026-07-07: Collapsed the stable/nightly release split into a single lane: `.github/workflows/nightly.yml` is deleted, and `.github/workflows/release.yml` now auto-ships from `main` on green CI (via a `workflow_run` trigger on the "CI" workflow) in addition to the existing `v*` tag push for milestone releases. Removed the nightly Sparkle feed detection from `UpdateDelegate.swift`, the nightly dropdown from the bug report template, and stale nightly references across CI test scripts and daemon docs. The nightly channel had no users, so it was deleted outright rather than migrated.
 - 2026-02-14: Fixed updater release regression path: made `.github/workflows/release.yml` Sparkle Info.plist key injection idempotent (re-running tags no longer fails with "Entry Already Exists"), and hardened `scripts/bump-version.sh` to keep `CURRENT_PROJECT_VERSION` above the latest published Sparkle appcast build number so upgrades from `0.27.0` can be detected.
 - 2026-02-14: Relicensed the repository to strong copyleft (`AGPL-3.0-or-later`), added canonical `LICENSE` text, and updated project/package metadata to advertise AGPL consistently.
 - 2026-02-14: Added an opt-in nightly update channel in Settings (`Receive nightly builds`) that routes Sparkle feed selection between stable and nightly appcasts, plus a scheduled GitHub Actions nightly pipeline (`.github/workflows/nightly.yml`) that only rebuilds when `main` has new commits since `nightly` (or when manually forced).

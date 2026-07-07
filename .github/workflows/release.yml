@@ -1,9 +1,18 @@
 name: Release macOS app
 
+# Single-lane release pipeline: this is the ONLY macOS release lane.
+# - workflow_run: auto-ships from `main` after the "CI" workflow succeeds (green CI on main),
+#     publishing to a single reused `rolling` release that is overwritten each ship.
+# - push tags v*: milestone marketing-version releases (manual `scripts/bump-version.sh` + tag).
+# - workflow_dispatch: dry-run build that uploads an artifact instead of publishing.
 on:
   push:
     tags:
       - "v*"
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,21 +25,74 @@ env:
 
 jobs:
   build-sign-notarize:
+    # Only build for workflow_run events when the upstream CI run actually succeeded.
+    # Tag pushes and manual dispatch always run.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: macos-15
     timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          # For workflow_run, github.ref/github.sha resolve to the default branch's
+          # workflow definition, not the commit that triggered CI. Pin to the exact
+          # commit CI validated.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
           submodules: recursive
+
+      - name: Determine release tag and effective build number
+        id: version
+        run: |
+          set -euo pipefail
+          PROJECT_FILE="GhosttyTabs.xcodeproj/project.pbxproj"
+          MARKETING_VERSION=$(grep -m1 'MARKETING_VERSION = ' "$PROJECT_FILE" | sed 's/.*= //;s/;.*//')
+
+          # Sparkle build number (CFBundleVersion) is ALWAYS derived from the monotonic
+          # GitHub run ID — for BOTH auto-ship and milestone-tag releases — so there is a
+          # single strictly-increasing build-number sequence across the one feed. The
+          # committed CURRENT_PROJECT_VERSION is only a local-dev default and is
+          # intentionally NOT used for shipping: mixing a small committed build with
+          # run-ID builds would make the first milestone tag after any auto-ship fail the
+          # monotonic guard below (and Sparkle would never offer it). Marketing version
+          # (CFBundleShortVersionString, baked in at build time) carries the human semver.
+          RUN_ATTEMPT="$(printf '%02d' "${GITHUB_RUN_ATTEMPT:-1}")"
+          EFFECTIVE_BUILD="${GITHUB_RUN_ID}${RUN_ATTEMPT}"
+
+          if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+            # Milestone tag release: semver comes from the committed MARKETING_VERSION/tag.
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+            IS_AUTO_SHIP="false"
+          else
+            # Auto-ship from main (workflow_run) or dry-run (workflow_dispatch): publish to a
+            # single reused "rolling" release that is overwritten each ship, so the releases
+            # page stays clean (one rolling entry + permanent milestone v* tags) instead of
+            # accumulating one release per commit.
+            RELEASE_TAG="rolling"
+            IS_AUTO_SHIP="true"
+          fi
+
+          echo "MARKETING_VERSION=${MARKETING_VERSION}" >> "$GITHUB_ENV"
+          echo "EFFECTIVE_BUILD=${EFFECTIVE_BUILD}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
+          echo "IS_AUTO_SHIP=${IS_AUTO_SHIP}" >> "$GITHUB_ENV"
+
+          echo "Marketing version: ${MARKETING_VERSION}"
+          echo "Effective build: ${EFFECTIVE_BUILD}"
+          echo "Release tag: ${RELEASE_TAG}"
+          echo "Auto-ship: ${IS_AUTO_SHIP}"
 
       - name: Guard immutable release assets
         id: guard_release_assets
+        # Only milestone v* tag releases are immutable — this guard prevents a re-run from
+        # clobbering already-signed milestone artifacts. Auto-ship publishes to the reused
+        # "rolling" release and intentionally overwrites, so it skips this guard entirely
+        # (when skipped, the empty skip_all/skip_upload outputs let the build/publish run).
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const { evaluateReleaseAssetGuard } = require('./scripts/release_asset_guard');
-            const tag = context.ref.replace('refs/tags/', '');
+            const tag = process.env.RELEASE_TAG;
             core.setOutput('skip_all', 'false');
             core.setOutput('skip_upload', 'false');
             core.setOutput('release_state', 'clear');
@@ -83,20 +145,15 @@ jobs:
         if: steps.guard_release_assets.outputs.skip_all != 'true'
         run: |
           set -euo pipefail
-          LOCAL_BUILD=$(grep -m1 'CURRENT_PROJECT_VERSION = ' GhosttyTabs.xcodeproj/project.pbxproj | sed 's/.*= //;s/;.*//')
-          if ! [[ "$LOCAL_BUILD" =~ ^[0-9]+$ ]]; then
-            echo "Could not parse CURRENT_PROJECT_VERSION (got '$LOCAL_BUILD')" >&2
-            exit 1
-          fi
-          echo "Local CURRENT_PROJECT_VERSION=$LOCAL_BUILD"
+          echo "Effective CURRENT_PROJECT_VERSION=$EFFECTIVE_BUILD"
           PUBLISHED_BUILD=$(curl -fsSL --max-time 15 \
             https://github.com/darkroomengineering/programa/releases/latest/download/appcast.xml 2>/dev/null \
             | sed -n 's#.*<sparkle:version>\([0-9][0-9]*\)</sparkle:version>.*#\1#p' \
             | head -n1 || true)
           if [[ "$PUBLISHED_BUILD" =~ ^[0-9]+$ ]]; then
             echo "Latest published Sparkle build=$PUBLISHED_BUILD"
-            if (( LOCAL_BUILD <= PUBLISHED_BUILD )); then
-              echo "::error::CURRENT_PROJECT_VERSION ($LOCAL_BUILD) must be > latest published Sparkle build ($PUBLISHED_BUILD). Run scripts/bump-version.sh to bump the build number before tagging." >&2
+            if (( EFFECTIVE_BUILD <= PUBLISHED_BUILD )); then
+              echo "::error::Effective build number ($EFFECTIVE_BUILD) must be > latest published Sparkle build ($PUBLISHED_BUILD). Build numbers derive from the monotonic GitHub run ID, so this is unexpected — likely a re-run of an older run or a stale published appcast." >&2
               exit 1
             fi
           else
@@ -208,7 +265,7 @@ jobs:
           APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST")
           ./scripts/build_remote_daemon_release_assets.sh \
             --version "$APP_VERSION" \
-            --release-tag "$GITHUB_REF_NAME" \
+            --release-tag "$RELEASE_TAG" \
             --repo "darkroomengineering/programa" \
             --output-dir "remote-daemon-assets"
           MANIFEST_JSON="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8")), separators=(",",":")))' remote-daemon-assets/programad-remote-manifest.json)"
@@ -229,6 +286,16 @@ jobs:
           set -euo pipefail
           HELPER_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/ghostty"
           [ -x "$HELPER_BINARY" ] || { echo "Ghostty theme picker helper not found at $HELPER_BINARY" >&2; exit 1; }
+
+      - name: Set effective build number in Info.plist
+        if: steps.guard_release_assets.outputs.skip_all != 'true'
+        run: |
+          set -euo pipefail
+          APP_PLIST="build-universal/Build/Products/Release/Programa.app/Contents/Info.plist"
+          # No-op for tag releases (EFFECTIVE_BUILD already matches the committed value).
+          # For auto-ship runs this stamps the monotonic run-derived build number without
+          # committing anything back to the repo.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${EFFECTIVE_BUILD}" "$APP_PLIST"
 
       - name: Inject Sparkle keys into Info.plist
         if: steps.guard_release_assets.outputs.skip_all != 'true'
@@ -347,7 +414,7 @@ jobs:
             echo "Missing SPARKLE_PRIVATE_KEY secret" >&2
             exit 1
           fi
-          ./scripts/sparkle_generate_appcast.sh programa-macos.dmg "$GITHUB_REF_NAME" appcast.xml
+          ./scripts/sparkle_generate_appcast.sh programa-macos.dmg "$RELEASE_TAG" appcast.xml
 
       - name: Attest remote daemon release assets
         if: steps.guard_release_assets.outputs.skip_all != 'true'
@@ -372,10 +439,22 @@ jobs:
             remote-daemon-assets/programad-remote-*
           if-no-files-found: error
 
+      - name: Move rolling tag to shipped commit
+        if: github.event_name == 'workflow_run' && steps.guard_release_assets.outputs.skip_all != 'true'
+        run: |
+          set -euo pipefail
+          # Reuse a single "rolling" release: point its tag at the commit we just shipped so
+          # the release page reflects the actual build. Assets are overwritten below.
+          git tag -f rolling "${{ github.event.workflow_run.head_sha }}"
+          git push origin refs/tags/rolling --force
+
       - name: Upload release asset
-        if: steps.guard_release_assets.outputs.skip_upload != 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        if: steps.guard_release_assets.outputs.skip_upload != 'true' && (github.event_name == 'workflow_run' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')))
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.IS_AUTO_SHIP == 'true' && 'Rolling (latest main)' || env.RELEASE_TAG }}
+          make_latest: true
           files: |
             programa-macos.dmg
             appcast.xml
@@ -386,7 +465,7 @@ jobs:
             remote-daemon-assets/programad-remote-checksums.txt
             remote-daemon-assets/programad-remote-manifest.json
           generate_release_notes: true
-          overwrite_files: false
+          overwrite_files: true
 
       - name: Cleanup keychain
         if: always()

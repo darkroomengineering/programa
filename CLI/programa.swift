@@ -4675,9 +4675,7 @@ struct CMUXCLI {
         let downloadCommand = "gh release download \(releaseTag) --repo darkroomengineering/programa --pattern \(assetName)"
         let downloadChecksumsCommand = "gh release download \(releaseTag) --repo darkroomengineering/programa --pattern \(checksumsAssetName)"
         let checksumVerifyCommand = "shasum -a 256 -c \(checksumsAssetName) --ignore-missing"
-        let signerWorkflow = releaseTag == "nightly"
-            ? "darkroomengineering/programa/.github/workflows/nightly.yml"
-            : "darkroomengineering/programa/.github/workflows/release.yml"
+        let signerWorkflow = "darkroomengineering/programa/.github/workflows/release.yml"
         let verifyCommand = "gh attestation verify ./\(assetName) --repo darkroomengineering/programa --signer-workflow \(signerWorkflow)"
 
         let payload: [String: Any] = [

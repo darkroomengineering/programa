@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fails fast when the checked-in ghostty submodule SHA lacks a pinned
 # GhosttyKit archive checksum. This prevents new ghostty bumps from merging
-# without the checksum entry that nightly/release workflows require.
+# without the checksum entry that the release workflow requires.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

@@ -230,14 +230,18 @@ git commit -m "Update ghostty submodule"
 
 ## Release
 
-Use the `/release` command to prepare a new release. This will:
-1. Determine the new version (bumps minor by default)
-2. Gather commits since the last tag and update the changelog
-3. Update `CHANGELOG.md` (the docs changelog page at `web/app/docs/changelog/page.tsx` reads from it)
-4. Run `./scripts/bump-version.sh` to update both versions
-5. Commit, tag, and push
+Single lane: every commit on `main` that passes the `CI` workflow is automatically built,
+signed, notarized, and published as the latest GitHub release via `.github/workflows/release.yml`
+(triggered by `workflow_run` on `CI` completing with `conclusion: success`, on `branches: [main]`).
+There is no nightly/beta channel — if something ships broken, fix it forward on `main` and the
+next green CI run auto-ships the fix. Auto-ship builds get a monotonic build number derived from
+the run ID (injected into `Info.plist` at build time, never committed) and publish to a single,
+reused `rolling` GitHub release that is overwritten each ship and marked "latest" — so the
+releases page stays clean (one `rolling` entry plus permanent milestone `v*` tags) and
+`releases/latest/download/*` always resolves to the newest green build.
 
-Version bumping:
+Milestone marketing-version bumps (e.g. `0.15.0` → `0.16.0`) are still done manually and can
+optionally be tagged as a `vX.Y.Z` marker, which the same `release.yml` also builds on tag push:
 
 ```bash
 ./scripts/bump-version.sh          # bump minor (0.15.0 → 0.16.0)
@@ -246,9 +250,9 @@ Version bumping:
 ./scripts/bump-version.sh 1.0.0    # set specific version
 ```
 
-This updates both `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (build number). The build number is auto-incremented and is required for Sparkle auto-update to work.
-
-Manual release steps (if not using the command):
+This updates both `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (build number). Then update
+`CHANGELOG.md` (the docs changelog page at `web/app/docs/changelog/page.tsx` reads from it), commit,
+and optionally tag:
 
 ```bash
 git tag vX.Y.Z
@@ -256,10 +260,15 @@ git push origin vX.Y.Z
 gh run watch --repo darkroomengineering/programa
 ```
 
+Tagging is now optional — it exists only to mark a milestone version in the release history; it is
+not required to ship. Regular pushes to `main` ship automatically.
+
 Notes:
 - Requires GitHub secrets: `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD`,
   `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
-- The release asset is `programa-macos.dmg` attached to the tag.
+- The release asset is `programa-macos.dmg` attached to each release.
 - README download button points to `releases/latest/download/programa-macos.dmg`.
-- Versioning: bump the minor version for updates unless explicitly asked otherwise.
+- Versioning: bump the minor version for milestone tags unless explicitly asked otherwise.
 - Changelog: update `CHANGELOG.md`; docs changelog is rendered from it.
+- `workflow_dispatch` on `release.yml` still runs a dry-run build that uploads an artifact instead
+  of publishing.

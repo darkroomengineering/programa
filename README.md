@@ -228,13 +228,11 @@ Browser developer-tool shortcuts follow Safari defaults and are customizable in 
 | ⌘ ⇧ , | Reload configuration |
 | ⌘ Q | Quit |
 
-## Nightly Builds
+## Releases
 
-[Download Programa NIGHTLY](https://github.com/darkroomengineering/programa/releases/download/nightly/programa-nightly-macos.dmg)
+Programa ships from a single continuously-updating lane: every commit on `main` that passes CI is automatically built, signed, notarized, and published as the latest release. There is no separate nightly/beta channel — `main` is always the shipping branch, and the app auto-updates via Sparkle to whatever was most recently published.
 
-Programa NIGHTLY is a separate app with its own bundle ID, so it runs alongside the stable version. Built automatically from the latest `main` commit and auto-updates via its own Sparkle feed.
-
-Report nightly bugs on [GitHub Issues](https://github.com/darkroomengineering/programa/issues) or in [#nightly-bugs on Discord](https://discord.gg/xsgFEVrWCZ).
+Report bugs on [GitHub Issues](https://github.com/darkroomengineering/programa/issues) or on [Discord](https://discord.gg/xsgFEVrWCZ).
 
 ## Session restore (current behavior)
 
