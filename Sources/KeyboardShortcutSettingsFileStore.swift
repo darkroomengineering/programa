@@ -1286,7 +1286,7 @@ final class ProgramaSettingsFileStore {
                     "appearance": AppearanceSettings.defaultMode.rawValue,
                     "appIcon": AppIconSettings.defaultMode.rawValue,
                     "newWorkspacePlacement": WorkspacePlacementSettings.defaultPlacement.rawValue,
-                    "minimalMode": false,
+                    "minimalMode": WorkspacePresentationModeSettings.defaultMode == .minimal,
                     "keepWorkspaceOpenWhenClosingLastSurface": !LastSurfaceCloseShortcutSettings.defaultValue,
                     "focusPaneOnFirstClick": PaneFirstClickFocusSettings.defaultEnabled,
                     "preferredEditor": "",

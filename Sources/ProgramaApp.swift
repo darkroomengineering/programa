@@ -24,7 +24,7 @@ enum WorkspacePresentationModeSettings {
         case minimal
     }
 
-    static let defaultMode: Mode = .standard
+    static let defaultMode: Mode = .minimal
 
     static func mode(for rawValue: String?) -> Mode {
         Mode(rawValue: rawValue ?? "") ?? defaultMode
