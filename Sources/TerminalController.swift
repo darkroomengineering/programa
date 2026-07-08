@@ -1916,6 +1916,26 @@ class TerminalController {
             return v2Result(id: id, self.v2WorkspaceRemoteStatus(params: params))
         case "workspace.remote.terminal_session_end":
             return v2Result(id: id, self.v2WorkspaceRemoteTerminalSessionEnd(params: params))
+        case "workspace.set_status":
+            return v2Result(id: id, self.v2WorkspaceSetStatus(params: params))
+        case "workspace.clear_status":
+            return v2Result(id: id, self.v2WorkspaceClearStatus(params: params))
+        case "workspace.list_status":
+            return v2Result(id: id, self.v2WorkspaceListStatus(params: params))
+        case "workspace.log":
+            return v2Result(id: id, self.v2WorkspaceLog(params: params))
+        case "workspace.clear_log":
+            return v2Result(id: id, self.v2WorkspaceClearLog(params: params))
+        case "workspace.list_log":
+            return v2Result(id: id, self.v2WorkspaceListLog(params: params))
+        case "workspace.set_progress":
+            return v2Result(id: id, self.v2WorkspaceSetProgress(params: params))
+        case "workspace.clear_progress":
+            return v2Result(id: id, self.v2WorkspaceClearProgress(params: params))
+        case "workspace.sidebar_state":
+            return v2Result(id: id, self.v2WorkspaceSidebarState(params: params))
+        case "workspace.clear_agent_pid":
+            return v2Result(id: id, self.v2WorkspaceClearAgentPID(params: params))
 
         // Settings
         case "settings.open":
@@ -1969,6 +1989,22 @@ class TerminalController {
             return v2Result(id: id, self.v2SurfaceClearHistory(params: params))
         case "surface.trigger_flash":
             return v2Result(id: id, self.v2SurfaceTriggerFlash(params: params))
+        case "surface.report_pwd":
+            return v2Result(id: id, self.v2SurfaceReportPwd(params: params))
+        case "surface.report_shell_state":
+            return v2Result(id: id, self.v2SurfaceReportShellState(params: params))
+        case "surface.report_git_branch":
+            return v2Result(id: id, self.v2SurfaceReportGitBranch(params: params))
+        case "surface.clear_git_branch":
+            return v2Result(id: id, self.v2SurfaceClearGitBranch(params: params))
+        case "surface.report_pr":
+            return v2Result(id: id, self.v2SurfaceReportPullRequest(params: params))
+        case "surface.clear_pr":
+            return v2Result(id: id, self.v2SurfaceClearPullRequest(params: params))
+        case "surface.report_ports":
+            return v2Result(id: id, self.v2SurfaceReportPorts(params: params))
+        case "surface.clear_ports":
+            return v2Result(id: id, self.v2SurfaceClearPorts(params: params))
 
         // Panes
         case "pane.list":
@@ -2007,6 +2043,8 @@ class TerminalController {
             return v2Result(id: id, self.v2AppFocusOverride(params: params))
         case "app.simulate_active":
             return v2Result(id: id, self.v2AppSimulateActive())
+        case "app.reload_config":
+            return v2Result(id: id, self.v2AppReloadConfig(params: params))
 
         // Browser
         case "browser.open_split":
@@ -2289,6 +2327,16 @@ class TerminalController {
             "workspace.remote.disconnect",
             "workspace.remote.status",
             "workspace.remote.terminal_session_end",
+            "workspace.set_status",
+            "workspace.clear_status",
+            "workspace.list_status",
+            "workspace.log",
+            "workspace.clear_log",
+            "workspace.list_log",
+            "workspace.set_progress",
+            "workspace.clear_progress",
+            "workspace.sidebar_state",
+            "workspace.clear_agent_pid",
             "settings.open",
             "feedback.open",
             "feedback.submit",
@@ -2313,6 +2361,14 @@ class TerminalController {
             "surface.read_text",
             "surface.clear_history",
             "surface.trigger_flash",
+            "surface.report_pwd",
+            "surface.report_shell_state",
+            "surface.report_git_branch",
+            "surface.clear_git_branch",
+            "surface.report_pr",
+            "surface.clear_pr",
+            "surface.report_ports",
+            "surface.clear_ports",
             "pane.list",
             "pane.focus",
             "pane.surfaces",
@@ -2329,6 +2385,7 @@ class TerminalController {
             "notification.clear",
             "app.focus_override.set",
             "app.simulate_active",
+            "app.reload_config",
             "markdown.open",
             "browser.open_split",
             "browser.navigate",
@@ -2974,6 +3031,70 @@ class TerminalController {
         if let n = params[key] as? NSNumber { return n.intValue }
         if let s = params[key] as? String { return Int(s) }
         return nil
+    }
+
+    private func v2Double(_ params: [String: Any], _ key: String) -> Double? {
+        if let d = params[key] as? Double { return d }
+        if let n = params[key] as? NSNumber { return n.doubleValue }
+        if let s = params[key] as? String { return Double(s) }
+        return nil
+    }
+
+    /// Parses an array-of-integers param (e.g. `ports`), also accepting a single scalar value.
+    /// Returns `nil` if the param is present but contains a non-integer element.
+    private func v2IntArray(_ params: [String: Any], _ key: String) -> [Int]? {
+        guard let raw = params[key] as? [Any] else {
+            if let single = v2Int(params, key) { return [single] }
+            return nil
+        }
+        var result: [Int] = []
+        result.reserveCapacity(raw.count)
+        for element in raw {
+            if let i = element as? Int {
+                result.append(i)
+            } else if let n = element as? NSNumber {
+                result.append(n.intValue)
+            } else if let s = element as? String, let i = Int(s) {
+                result.append(i)
+            } else {
+                return nil
+            }
+        }
+        return result
+    }
+
+    // MARK: - V2 Telemetry Scheduling (off-main parse, main.async mutate)
+    //
+    // Mirrors the socket command threading policy (see CLAUDE.md "Socket command threading
+    // policy"): high-frequency telemetry commands (report_*/ports/log/progress/status) must not
+    // block their calling thread with `DispatchQueue.main.sync`. These helpers resolve the
+    // workspace/surface the same way the v1 explicit-scope fast paths do (`AppDelegate.shared?
+    // .tabManagerFor(tabId:)` + linear tab lookup) but dispatch the mutation asynchronously and
+    // return an optimistic `ok` result immediately, matching v1's fire-and-forget "OK" semantics.
+    private func v2ScheduleTelemetryMutation(
+        workspaceId: UUID,
+        _ mutation: @escaping (TabManager, Workspace) -> Void
+    ) {
+        DispatchQueue.main.async {
+            guard let tabManager = AppDelegate.shared?.tabManagerFor(tabId: workspaceId),
+                  let tab = tabManager.tabs.first(where: { $0.id == workspaceId }) else {
+                return
+            }
+            mutation(tabManager, tab)
+        }
+    }
+
+    private func v2ScheduleSurfaceTelemetryMutation(
+        workspaceId: UUID,
+        surfaceId: UUID,
+        _ mutation: @escaping (TabManager, Workspace, UUID) -> Void
+    ) {
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { tabManager, tab in
+            let validSurfaceIds = Set(tab.panels.keys)
+            tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
+            guard validSurfaceIds.contains(surfaceId) else { return }
+            mutation(tabManager, tab, surfaceId)
+        }
     }
 
     private func v2HasNonNullParam(_ params: [String: Any], _ key: String) -> Bool {
@@ -4082,6 +4203,287 @@ class TerminalController {
         return result
     }
 
+    // MARK: - V2 Surface Telemetry (report_*/ports/git/pr) — off-main parse, main.async mutate.
+    //
+    // These adapt v1's explicit-scope ("shell integration always includes explicit
+    // workspace/panel IDs") fast paths — see reportPwd/reportShellState/reportGitBranch/
+    // clearGitBranch/reportPullRequest/clearPullRequest/reportPorts/clearPorts in the v1
+    // section below — to the v2 handle-based protocol. v2 always requires explicit
+    // workspace_id + surface_id (no implicit "selected tab" fallback), so they always take
+    // the async fast path v1 takes when both --tab and --panel are supplied explicitly.
+
+    private func v2SurfaceReportPwd(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let surfaceId = v2UUID(params, "surface_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+        }
+        guard let path = v2RawString(params, "path")?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !path.isEmpty else {
+            return .err(code: "invalid_params", message: "Missing path", data: nil)
+        }
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+            tabManager.updateSurfaceDirectory(tabId: workspaceId, surfaceId: sid, directory: path)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "path": path,
+        ])
+    }
+
+    private func v2SurfaceReportShellState(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let surfaceId = v2UUID(params, "surface_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+        }
+        guard let rawState = v2RawString(params, "state"),
+              let state = Self.parseReportedShellActivityState(rawState) else {
+            return .err(code: "invalid_params", message: "Invalid shell state — expected prompt or running", data: nil)
+        }
+
+        let baseResult: [String: Any] = [
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "state": rawState.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+        ]
+
+        // Fast-path dedup check, mirroring v1's reportShellState: skip dispatch if we
+        // already know this state is current. Only READ here; recording happens after
+        // the update is confirmed applied on the main thread (see recordShellActivity below).
+        guard Self.socketFastPathState.shouldPublishShellActivity(
+            workspaceId: workspaceId,
+            panelId: surfaceId,
+            state: state
+        ) else {
+            var deduped = baseResult
+            deduped["deduped"] = true
+            return .ok(deduped)
+        }
+
+        let fastPathState = Self.socketFastPathState
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+            let applied = tabManager.updateSurfaceShellActivity(tabId: workspaceId, surfaceId: sid, state: state)
+            // Only record in the dedup dict when the update actually applied (panel was
+            // registered); otherwise the next identical report must not be suppressed.
+            if applied {
+                fastPathState.recordShellActivity(workspaceId: workspaceId, panelId: sid, state: state)
+            }
+        }
+
+        return .ok(baseResult)
+    }
+
+    private func v2SurfaceReportGitBranch(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let surfaceId = v2UUID(params, "surface_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+        }
+        guard let branch = v2RawString(params, "branch")?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !branch.isEmpty else {
+            return .err(code: "invalid_params", message: "Missing branch", data: nil)
+        }
+        let isDirty = v2Bool(params, "dirty") ?? false
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+            tabManager.updateSurfaceGitBranch(tabId: workspaceId, surfaceId: sid, branch: branch, isDirty: isDirty)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "branch": branch,
+            "dirty": isDirty,
+        ])
+    }
+
+    private func v2SurfaceClearGitBranch(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let surfaceId = v2UUID(params, "surface_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+        }
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+            tabManager.clearSurfaceGitBranch(tabId: workspaceId, surfaceId: sid)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+        ])
+    }
+
+    private func v2SurfaceReportPullRequest(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let surfaceId = v2UUID(params, "surface_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+        }
+        guard let number = v2Int(params, "number"), number > 0 else {
+            return .err(code: "invalid_params", message: "Missing or invalid number", data: nil)
+        }
+        guard let rawURL = v2RawString(params, "url")?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let url = URL(string: rawURL),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return .err(code: "invalid_params", message: "Missing or invalid url", data: nil)
+        }
+        let statusRaw = (v2String(params, "state") ?? "open").lowercased()
+        guard let status = SidebarPullRequestStatus(rawValue: statusRaw) else {
+            return .err(code: "invalid_params", message: "Invalid state — use: open, merged, closed", data: nil)
+        }
+        let branch = v2String(params, "branch")
+
+        var checks: SidebarPullRequestChecksStatus?
+        if let rawChecks = v2String(params, "checks") {
+            guard let parsedChecks = SidebarPullRequestChecksStatus(rawValue: rawChecks.lowercased()) else {
+                return .err(code: "invalid_params", message: "Invalid checks — use: pass, fail, pending", data: nil)
+            }
+            checks = parsedChecks
+        }
+
+        let labelRaw = v2String(params, "label") ?? "PR"
+        guard !labelRaw.isEmpty else {
+            return .err(code: "invalid_params", message: "Invalid label", data: nil)
+        }
+        let label = String(labelRaw.prefix(16))
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { _, tab, sid in
+            guard Self.shouldReplacePullRequest(
+                current: tab.panelPullRequests[sid],
+                number: number,
+                label: label,
+                url: url,
+                status: status,
+                branch: branch,
+                checks: checks
+            ) else {
+                return
+            }
+            tab.updatePanelPullRequest(
+                panelId: sid,
+                number: number,
+                label: label,
+                url: url,
+                status: status,
+                branch: branch,
+                checks: checks
+            )
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "number": number,
+            "url": url.absoluteString,
+            "label": label,
+            "state": status.rawValue,
+            "branch": v2OrNull(branch),
+            "checks": v2OrNull(checks?.rawValue),
+        ])
+    }
+
+    private func v2SurfaceClearPullRequest(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let surfaceId = v2UUID(params, "surface_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+        }
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { _, tab, sid in
+            tab.clearPanelPullRequest(panelId: sid)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+        ])
+    }
+
+    private func v2SurfaceReportPorts(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let surfaceId = v2UUID(params, "surface_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+        }
+        guard let rawPorts = v2IntArray(params, "ports"), !rawPorts.isEmpty else {
+            return .err(code: "invalid_params", message: "Missing or invalid ports", data: nil)
+        }
+        guard rawPorts.allSatisfy({ $0 > 0 && $0 <= 65535 }) else {
+            return .err(code: "invalid_params", message: "Invalid port — must be 1-65535", data: nil)
+        }
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { _, tab, sid in
+            tab.surfaceListeningPorts[sid] = rawPorts
+            tab.recomputeListeningPorts()
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "ports": rawPorts,
+        ])
+    }
+
+    private func v2SurfaceClearPorts(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        let requestedSurfaceId = v2UUID(params, "surface_id")
+        if v2HasNonNullParam(params, "surface_id"), requestedSurfaceId == nil {
+            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+        }
+
+        if let surfaceId = requestedSurfaceId {
+            v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { _, tab, sid in
+                tab.surfaceListeningPorts.removeValue(forKey: sid)
+                tab.recomputeListeningPorts()
+            }
+        } else {
+            // No surface_id means "clear ALL ports for the workspace" — mirrors v1's
+            // clearPorts special case when no --panel is supplied.
+            v2ScheduleTelemetryMutation(workspaceId: workspaceId) { _, tab in
+                let validSurfaceIds = Set(tab.panels.keys)
+                tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
+                tab.surfaceListeningPorts.removeAll()
+                tab.recomputeListeningPorts()
+            }
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": v2OrNull(requestedSurfaceId?.uuidString),
+            "surface_ref": v2Ref(kind: .surface, uuid: requestedSurfaceId),
+        ])
+    }
+
     @MainActor
     private func resolveReportedSurfaceId(
         in workspace: Workspace,
@@ -4111,6 +4513,370 @@ class TerminalController {
         }
 
         return nil
+    }
+
+    // MARK: - V2 Workspace Sidebar Metadata (set_status/log/progress/sidebar_state)
+    //
+    // v1's set_status/clear_status/list_status/log/clear_log/list_log/set_progress/
+    // clear_progress/sidebar_state verbs are workspace(tab)-scoped, not surface-scoped (see
+    // upsertSidebarMetadata/clearSidebarMetadata/appendLog/setProgress/sidebarState in the v1
+    // section below, all of which resolve a `Tab` via resolveTabForReport /
+    // scheduleSidebarMutation rather than a specific panel). Mutations follow the same
+    // off-main-parse + main.async-mutate telemetry policy as the surface.report_* family;
+    // reads (list_status/list_log/sidebar_state) are exact-snapshot queries and use the
+    // v2MainSync pattern shared by sibling v2 read methods.
+
+    private func v2WorkspaceSetStatus(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let key = v2String(params, "key") else {
+            return .err(code: "invalid_params", message: "Missing key", data: nil)
+        }
+        guard let value = v2RawString(params, "value") else {
+            return .err(code: "invalid_params", message: "Missing value", data: nil)
+        }
+        let icon = v2String(params, "icon")
+        let color = v2String(params, "color")
+
+        let formatRaw = v2String(params, "format") ?? SidebarMetadataFormat.plain.rawValue
+        guard let format = parseSidebarMetadataFormat(formatRaw) else {
+            return .err(code: "invalid_params", message: "Invalid format — use: plain, markdown", data: nil)
+        }
+
+        var priority = 0
+        if v2HasNonNullParam(params, "priority") {
+            guard let rawPriority = v2Int(params, "priority") else {
+                return .err(code: "invalid_params", message: "Invalid priority — must be an integer", data: nil)
+            }
+            priority = max(-9999, min(9999, rawPriority))
+        }
+
+        var url: URL?
+        if let rawURL = v2String(params, "url") {
+            guard let candidate = URL(string: rawURL),
+                  let scheme = candidate.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https" else {
+                return .err(code: "invalid_params", message: "Invalid url — expected http(s) URL", data: nil)
+            }
+            url = candidate
+        }
+
+        var pidValue: pid_t?
+        if let rawPid = v2Int(params, "pid"), rawPid > 0 {
+            pidValue = pid_t(rawPid)
+        }
+
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { [weak self] _, tab in
+            guard let self else { return }
+            guard Self.shouldReplaceStatusEntry(
+                current: tab.statusEntries[key],
+                key: key,
+                value: value,
+                icon: icon,
+                color: color,
+                url: url,
+                priority: priority,
+                format: format
+            ) else {
+                if let pidValue {
+                    tab.agentPIDs[key] = pidValue
+                    self.refreshTrackedAgentPorts(for: tab)
+                }
+                return
+            }
+            tab.statusEntries[key] = SidebarStatusEntry(
+                key: key,
+                value: value,
+                icon: icon,
+                color: color,
+                url: url,
+                priority: priority,
+                format: format,
+                timestamp: Date()
+            )
+            if let pidValue {
+                tab.agentPIDs[key] = pidValue
+                self.refreshTrackedAgentPorts(for: tab)
+            }
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "key": key,
+            "value": value,
+        ])
+    }
+
+    private func v2WorkspaceClearStatus(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let key = v2String(params, "key") else {
+            return .err(code: "invalid_params", message: "Missing key", data: nil)
+        }
+
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { [weak self] _, tab in
+            guard let self else { return }
+            _ = tab.statusEntries.removeValue(forKey: key)
+            if tab.agentPIDs.removeValue(forKey: key) != nil {
+                self.refreshTrackedAgentPorts(for: tab)
+            }
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "key": key,
+        ])
+    }
+
+    private func v2WorkspaceListStatus(params: [String: Any]) -> V2CallResult {
+        guard let tabManager = v2ResolveTabManager(params: params) else {
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        }
+
+        var result: V2CallResult = .err(code: "not_found", message: "Workspace not found", data: nil)
+        v2MainSync {
+            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else { return }
+            let entries: [[String: Any]] = ws.sidebarStatusEntriesInDisplayOrder().map { entry in
+                [
+                    "key": entry.key,
+                    "value": entry.value,
+                    "icon": v2OrNull(entry.icon),
+                    "color": v2OrNull(entry.color),
+                    "url": v2OrNull(entry.url?.absoluteString),
+                    "priority": entry.priority,
+                    "format": entry.format.rawValue,
+                ]
+            }
+            result = .ok([
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+                "entries": entries,
+            ])
+        }
+        return result
+    }
+
+    private func v2WorkspaceLog(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let message = v2RawString(params, "message"), !message.isEmpty else {
+            return .err(code: "invalid_params", message: "Missing message", data: nil)
+        }
+        let levelRaw = v2String(params, "level") ?? SidebarLogLevel.info.rawValue
+        guard let level = SidebarLogLevel(rawValue: levelRaw) else {
+            return .err(
+                code: "invalid_params",
+                message: "Unknown log level — use: info, progress, success, warning, error",
+                data: nil
+            )
+        }
+        let source = v2String(params, "source")
+
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { _, tab in
+            tab.logEntries.append(SidebarLogEntry(message: message, level: level, source: source, timestamp: Date()))
+            let configuredLimit = UserDefaults.standard.object(forKey: "sidebarMaxLogEntries") as? Int ?? 50
+            let limit = max(1, min(500, configuredLimit))
+            if tab.logEntries.count > limit {
+                tab.logEntries.removeFirst(tab.logEntries.count - limit)
+            }
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "message": message,
+            "level": level.rawValue,
+            "source": v2OrNull(source),
+        ])
+    }
+
+    private func v2WorkspaceClearLog(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { _, tab in
+            tab.logEntries.removeAll()
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+        ])
+    }
+
+    private func v2WorkspaceListLog(params: [String: Any]) -> V2CallResult {
+        guard let tabManager = v2ResolveTabManager(params: params) else {
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        }
+
+        var limit: Int?
+        if v2HasNonNullParam(params, "limit") {
+            guard let parsedLimit = v2Int(params, "limit"), parsedLimit >= 0 else {
+                return .err(code: "invalid_params", message: "Invalid limit — must be >= 0", data: nil)
+            }
+            limit = parsedLimit
+        }
+
+        var result: V2CallResult = .err(code: "not_found", message: "Workspace not found", data: nil)
+        v2MainSync {
+            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else { return }
+            let source = limit.map { Array(ws.logEntries.suffix($0)) } ?? ws.logEntries
+            let entries: [[String: Any]] = source.map { entry in
+                [
+                    "message": entry.message,
+                    "level": entry.level.rawValue,
+                    "source": v2OrNull(entry.source),
+                    "timestamp": entry.timestamp.timeIntervalSince1970,
+                ]
+            }
+            result = .ok([
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+                "entries": entries,
+            ])
+        }
+        return result
+    }
+
+    private func v2WorkspaceSetProgress(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let rawValue = v2Double(params, "value"), rawValue.isFinite else {
+            return .err(code: "invalid_params", message: "Invalid progress value — must be 0.0 to 1.0", data: nil)
+        }
+        let clamped = min(1.0, max(0.0, rawValue))
+        let label = v2String(params, "label")
+
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { _, tab in
+            tab.progress = SidebarProgressState(value: clamped, label: label)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "value": clamped,
+            "label": v2OrNull(label),
+        ])
+    }
+
+    private func v2WorkspaceClearProgress(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { _, tab in
+            tab.progress = nil
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+        ])
+    }
+
+    private func v2WorkspaceSidebarState(params: [String: Any]) -> V2CallResult {
+        guard let tabManager = v2ResolveTabManager(params: params) else {
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        }
+
+        var result: V2CallResult = .err(code: "not_found", message: "Workspace not found", data: nil)
+        v2MainSync {
+            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else { return }
+
+            var focusedCwd: Any = NSNull()
+            if let focused = ws.focusedPanelId, let focusedDir = ws.panelDirectories[focused] {
+                focusedCwd = focusedDir
+            }
+
+            var gitBranchPayload: Any = NSNull()
+            if let git = ws.gitBranch {
+                gitBranchPayload = ["branch": git.branch, "dirty": git.isDirty]
+            }
+
+            var pullRequestPayload: Any = NSNull()
+            if let pr = ws.sidebarPullRequestsInDisplayOrder().first {
+                pullRequestPayload = [
+                    "number": pr.number,
+                    "label": pr.label,
+                    "url": pr.url.absoluteString,
+                    "state": pr.status.rawValue,
+                    "branch": v2OrNull(pr.branch),
+                    "checks": v2OrNull(pr.checks?.rawValue),
+                ]
+            }
+
+            var progressPayload: Any = NSNull()
+            if let progress = ws.progress {
+                progressPayload = ["value": progress.value, "label": v2OrNull(progress.label)]
+            }
+
+            let statusEntries: [[String: Any]] = ws.sidebarStatusEntriesInDisplayOrder().map { entry in
+                [
+                    "key": entry.key,
+                    "value": entry.value,
+                    "icon": v2OrNull(entry.icon),
+                    "color": v2OrNull(entry.color),
+                    "url": v2OrNull(entry.url?.absoluteString),
+                    "priority": entry.priority,
+                    "format": entry.format.rawValue,
+                ]
+            }
+
+            let metadataBlocks: [[String: Any]] = ws.sidebarMetadataBlocksInDisplayOrder().map { block in
+                ["key": block.key, "markdown": block.markdown, "priority": block.priority]
+            }
+
+            let recentLogEntries: [[String: Any]] = ws.logEntries.suffix(5).map { entry in
+                ["message": entry.message, "level": entry.level.rawValue, "source": v2OrNull(entry.source)]
+            }
+
+            result = .ok([
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+                "color": v2OrNull(ws.customColor),
+                "cwd": ws.currentDirectory,
+                "focused_cwd": focusedCwd,
+                "focused_surface_id": v2OrNull(ws.focusedPanelId?.uuidString),
+                "focused_surface_ref": v2Ref(kind: .surface, uuid: ws.focusedPanelId),
+                "git_branch": gitBranchPayload,
+                "pull_request": pullRequestPayload,
+                "ports": ws.listeningPorts,
+                "progress": progressPayload,
+                "status_entries": statusEntries,
+                "metadata_blocks": metadataBlocks,
+                "log_count": ws.logEntries.count,
+                "recent_log_entries": recentLogEntries,
+            ])
+        }
+        return result
+    }
+
+    private func v2WorkspaceClearAgentPID(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let key = v2String(params, "key") else {
+            return .err(code: "invalid_params", message: "Missing key", data: nil)
+        }
+
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { [weak self] _, tab in
+            guard let self else { return }
+            tab.agentPIDs.removeValue(forKey: key)
+            self.refreshTrackedAgentPorts(for: tab)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "key": key,
+        ])
     }
 
     private func v2WorkspaceAction(params: [String: Any]) -> V2CallResult {
@@ -6818,6 +7584,16 @@ class TerminalController {
             )
         }
         return .ok([:])
+    }
+
+    /// Mirrors v1's `reload_config`: this is a rare, user/agent-triggered configuration
+    /// reload rather than high-frequency telemetry, so — matching the v1 handler, which
+    /// itself calls `v2MainSync` directly — it is allowed to synchronize with the main actor.
+    private func v2AppReloadConfig(params: [String: Any]) -> V2CallResult {
+        v2MainSync {
+            GhosttyApp.shared.reloadConfiguration(source: "socket.v2.app.reload_config")
+        }
+        return .ok(["reloaded": true])
     }
 
 #if DEBUG
