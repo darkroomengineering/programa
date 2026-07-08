@@ -1169,3 +1169,86 @@ final class MenuBarIconRendererTests: XCTestCase {
         XCTAssertEqual(withBadge.size.width, 18, accuracy: 0.001)
     }
 }
+
+@MainActor
+final class MultiWindowNotificationFocusTests: XCTestCase {
+    private func makeMainWindow() -> NSWindow {
+        NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 320),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+    }
+
+    func testNotificationSuppressedForFocusedTabInSecondaryWindow() {
+        _ = NSApplication.shared
+        let originalShared = AppDelegate.shared
+        let originalAppFocusOverride = AppFocusState.overrideIsFocused
+        let app = AppDelegate()
+        AppDelegate.shared = app
+        let store = TerminalNotificationStore.shared
+
+        let windowA = makeMainWindow()
+        let windowB = makeMainWindow()
+        let managerA = TabManager()
+        let managerB = TabManager()
+        app.tabManager = managerA
+        app.registerMainWindow(
+            windowA,
+            windowId: UUID(),
+            tabManager: managerA,
+            sidebarState: SidebarState(),
+            sidebarSelectionState: SidebarSelectionState()
+        )
+        app.registerMainWindow(
+            windowB,
+            windowId: UUID(),
+            tabManager: managerB,
+            sidebarState: SidebarState(),
+            sidebarSelectionState: SidebarSelectionState()
+        )
+
+        var deliveredCount = 0
+        var suppressedCount = 0
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in deliveredCount += 1 }
+        store.configureSuppressedNotificationFeedbackHandlerForTesting { _, _ in suppressedCount += 1 }
+
+        defer {
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            store.resetSuppressedNotificationFeedbackHandlerForTesting()
+            AppFocusState.overrideIsFocused = originalAppFocusOverride
+            AppDelegate.shared = originalShared
+            windowA.orderOut(nil)
+            windowB.orderOut(nil)
+        }
+
+        guard let workspaceB = managerB.selectedWorkspace else {
+            XCTFail("Expected managerB to have a selected workspace")
+            return
+        }
+        guard let focusedPanelId = managerB.focusedSurfaceId(for: workspaceB.id) else {
+            XCTFail("Expected a focused panel in managerB's selected workspace")
+            return
+        }
+
+        AppFocusState.overrideIsFocused = true
+
+        store.addNotification(
+            tabId: workspaceB.id,
+            surfaceId: focusedPanelId,
+            title: "Done",
+            subtitle: "",
+            body: ""
+        )
+
+        XCTAssertEqual(
+            suppressedCount,
+            1,
+            "A notification for the focused tab of its own window must be suppressed; focus state must be judged by the owning window's tab manager, not the primary window's"
+        )
+        XCTAssertEqual(deliveredCount, 0)
+    }
+}
