@@ -9578,12 +9578,6 @@ class TerminalController {
         return terminalPanel.surface.surface
     }
 
-    private func resolveSurface(from arg: String, tabManager: TabManager) -> ghostty_surface_t? {
-        // Backwards compatibility: resolve a terminal surface by panel UUID or a stable index.
-        // Use a slightly longer wait to reduce flakiness during bonsplit/layout restructures.
-        return resolveTerminalSurface(from: arg, tabManager: tabManager, waitUpTo: 2.0)
-    }
-
     private func resolveSurfaceId(from arg: String, tab: Workspace) -> UUID? {
         if let uuid = UUID(uuidString: arg), tab.panels[uuid] != nil {
             return uuid
@@ -9777,14 +9771,11 @@ class TerminalController {
                 .replacingOccurrences(of: "\\r", with: "\r")
                 .replacingOccurrences(of: "\\t", with: "\t")
 
-            for char in unescaped {
-                if char.unicodeScalars.count == 1,
-                   let scalar = char.unicodeScalars.first,
-                   handleControlScalar(scalar, surface: surface) {
-                    continue
-                }
-                sendTextEvent(surface: surface, text: String(char))
-            }
+            sendSocketText(unescaped, surface: surface)
+            // Ensure we present a new frame after injecting input so snapshot-based tests (and
+            // socket-driven agents) can observe the updated terminal without requiring a focus
+            // change to trigger a draw.
+            terminalPanel.surface.forceRefresh(reason: "terminalController.sendInput")
             success = true
         }
         if let error { return error }
@@ -9915,21 +9906,22 @@ class TerminalController {
 
         var success = false
         DispatchQueue.main.sync {
-            guard let surface = resolveSurface(from: target, tabManager: tabManager) else { return }
+            // Backwards compatibility: resolve a terminal surface by panel UUID or a stable
+            // index. Use a slightly longer wait to reduce flakiness during bonsplit/layout
+            // restructures.
+            guard let terminalPanel = resolveTerminalPanel(from: target, tabManager: tabManager),
+                  let surface = waitForTerminalSurface(terminalPanel, waitUpTo: 2.0) else { return }
 
             let unescaped = text
                 .replacingOccurrences(of: "\\n", with: "\r")
                 .replacingOccurrences(of: "\\r", with: "\r")
                 .replacingOccurrences(of: "\\t", with: "\t")
 
-            for char in unescaped {
-                if char.unicodeScalars.count == 1,
-                   let scalar = char.unicodeScalars.first,
-                   handleControlScalar(scalar, surface: surface) {
-                    continue
-                }
-                sendTextEvent(surface: surface, text: String(char))
-            }
+            sendSocketText(unescaped, surface: surface)
+            // Ensure we present a new frame after injecting input so snapshot-based tests (and
+            // socket-driven agents) can observe the updated terminal without requiring a focus
+            // change to trigger a draw.
+            terminalPanel.surface.forceRefresh(reason: "terminalController.sendInputToSurface")
             success = true
         }
 
@@ -11325,6 +11317,58 @@ class TerminalController {
         }
     }
 
+    /// Shared skeleton for the legacy (non-fast-path) branch of the v1 report_*/ports_kick
+    /// handlers: resolve the target tab, prune stale surface metadata, resolve the panel
+    /// argument (falling back to the focused panel), and validate it against the tab's live
+    /// panels — all on the main actor. Returns "OK" on success, or the exact error string for
+    /// whichever step failed. `usage` supplies the per-handler usage text for the "missing
+    /// panel id" error.
+    private func withReportTargetSurface(
+        _ args: String,
+        usage: String,
+        _ body: (Workspace, UUID) -> Void
+    ) -> String {
+        let parsed = parseOptions(args)
+        var result = "OK"
+        DispatchQueue.main.sync {
+            guard let tab = resolveTabForReport(args) else {
+                result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
+                return
+            }
+
+            let validSurfaceIds = Set(tab.panels.keys)
+            tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
+
+            let panelArg = parsed.options["panel"] ?? parsed.options["surface"]
+            let surfaceId: UUID
+            if let panelArg {
+                if panelArg.isEmpty {
+                    result = "ERROR: Missing panel id — usage: \(usage)"
+                    return
+                }
+                guard let parsedId = UUID(uuidString: panelArg) else {
+                    result = "ERROR: Invalid panel id '\(panelArg)'"
+                    return
+                }
+                surfaceId = parsedId
+            } else {
+                guard let focused = tab.focusedPanelId else {
+                    result = "ERROR: Missing panel id (no focused surface)"
+                    return
+                }
+                surfaceId = focused
+            }
+
+            guard validSurfaceIds.contains(surfaceId) else {
+                result = "ERROR: Panel not found '\(surfaceId.uuidString)'"
+                return
+            }
+
+            body(tab, surfaceId)
+        }
+        return result
+    }
+
     private func reportPorts(_ args: String) -> String {
         let parsed = parseOptions(args)
         guard !parsed.positional.isEmpty else {
@@ -11353,45 +11397,13 @@ class TerminalController {
             return "OK"
         }
 
-        var result = "OK"
-        DispatchQueue.main.sync {
-            guard let tab = resolveTabForReport(args) else {
-                result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
-                return
-            }
-
-            let validSurfaceIds = Set(tab.panels.keys)
-            tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
-
-            let panelArg = parsed.options["panel"] ?? parsed.options["surface"]
-            let surfaceId: UUID
-            if let panelArg {
-                if panelArg.isEmpty {
-                    result = "ERROR: Missing panel id — usage: report_ports <port1> [port2...] [--tab=X] [--panel=Y]"
-                    return
-                }
-                guard let parsedId = UUID(uuidString: panelArg) else {
-                    result = "ERROR: Invalid panel id '\(panelArg)'"
-                    return
-                }
-                surfaceId = parsedId
-            } else {
-                guard let focused = tab.focusedPanelId else {
-                    result = "ERROR: Missing panel id (no focused surface)"
-                    return
-                }
-                surfaceId = focused
-            }
-
-            guard validSurfaceIds.contains(surfaceId) else {
-                result = "ERROR: Panel not found '\(surfaceId.uuidString)'"
-                return
-            }
-
+        return withReportTargetSurface(
+            args,
+            usage: "report_ports <port1> [port2...] [--tab=X] [--panel=Y]"
+        ) { tab, surfaceId in
             tab.surfaceListeningPorts[surfaceId] = ports
             tab.recomputeListeningPorts()
         }
-        return result
     }
 
     private func reportPwd(_ args: String) -> String {
@@ -11415,44 +11427,10 @@ class TerminalController {
             }
             return "OK"
         }
-        var result = "OK"
-        DispatchQueue.main.sync {
-            guard let tab = resolveTabForReport(args) else {
-                result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
-                return
-            }
 
-            let validSurfaceIds = Set(tab.panels.keys)
-            tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
-
-            let panelArg = parsed.options["panel"] ?? parsed.options["surface"]
-            let surfaceId: UUID
-            if let panelArg {
-                if panelArg.isEmpty {
-                    result = "ERROR: Missing panel id — usage: report_pwd <path> [--tab=X] [--panel=Y]"
-                    return
-                }
-                guard let parsedId = UUID(uuidString: panelArg) else {
-                    result = "ERROR: Invalid panel id '\(panelArg)'"
-                    return
-                }
-                surfaceId = parsedId
-            } else {
-                guard let focused = tab.focusedPanelId else {
-                    result = "ERROR: Missing panel id (no focused surface)"
-                    return
-                }
-                surfaceId = focused
-            }
-
-            guard validSurfaceIds.contains(surfaceId) else {
-                result = "ERROR: Panel not found '\(surfaceId.uuidString)'"
-                return
-            }
-
+        return withReportTargetSurface(args, usage: "report_pwd <path> [--tab=X] [--panel=Y]") { tab, surfaceId in
             tabManager.updateSurfaceDirectory(tabId: tab.id, surfaceId: surfaceId, directory: directory)
         }
-        return result
     }
 
     private func reportShellState(_ args: String) -> String {
@@ -11500,44 +11478,12 @@ class TerminalController {
 
         guard let tabManager else { return "ERROR: TabManager not available" }
 
-        var result = "OK"
-        DispatchQueue.main.sync {
-            guard let tab = resolveTabForReport(args) else {
-                result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
-                return
-            }
-
-            let validSurfaceIds = Set(tab.panels.keys)
-            tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
-
-            let panelArg = parsed.options["panel"] ?? parsed.options["surface"]
-            let surfaceId: UUID
-            if let panelArg {
-                if panelArg.isEmpty {
-                    result = "ERROR: Missing panel id — usage: report_shell_state <prompt|running> [--tab=X] [--panel=Y]"
-                    return
-                }
-                guard let parsedId = UUID(uuidString: panelArg) else {
-                    result = "ERROR: Invalid panel id '\(panelArg)'"
-                    return
-                }
-                surfaceId = parsedId
-            } else {
-                guard let focused = tab.focusedPanelId else {
-                    result = "ERROR: Missing panel id (no focused surface)"
-                    return
-                }
-                surfaceId = focused
-            }
-
-            guard validSurfaceIds.contains(surfaceId) else {
-                result = "ERROR: Panel not found '\(surfaceId.uuidString)'"
-                return
-            }
-
+        return withReportTargetSurface(
+            args,
+            usage: "report_shell_state <prompt|running> [--tab=X] [--panel=Y]"
+        ) { tab, surfaceId in
             tabManager.updateSurfaceShellActivity(tabId: tab.id, surfaceId: surfaceId, state: state)
         }
-        return result
     }
 
     private func clearPorts(_ args: String) -> String {
@@ -11556,37 +11502,32 @@ class TerminalController {
             }
             return "OK"
         }
-        var result = "OK"
-        DispatchQueue.main.sync {
-            guard let tab = resolveTabForReport(args) else {
-                result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
-                return
-            }
 
-            let validSurfaceIds = Set(tab.panels.keys)
-            tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
+        let panelArg = parsed.options["panel"] ?? parsed.options["surface"]
+        guard panelArg != nil else {
+            // No panel arg means "clear ALL ports for the tab" — a special case that doesn't
+            // fit the shared single-surface skeleton (which falls back to the focused panel
+            // instead), so it stays inline.
+            var result = "OK"
+            DispatchQueue.main.sync {
+                guard let tab = resolveTabForReport(args) else {
+                    result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
+                    return
+                }
 
-            let panelArg = parsed.options["panel"] ?? parsed.options["surface"]
-            if let panelArg {
-                if panelArg.isEmpty {
-                    result = "ERROR: Missing panel id — usage: clear_ports [--tab=X] [--panel=Y]"
-                    return
-                }
-                guard let surfaceId = UUID(uuidString: panelArg) else {
-                    result = "ERROR: Invalid panel id '\(panelArg)'"
-                    return
-                }
-                guard validSurfaceIds.contains(surfaceId) else {
-                    result = "ERROR: Panel not found '\(surfaceId.uuidString)'"
-                    return
-                }
-                tab.surfaceListeningPorts.removeValue(forKey: surfaceId)
-            } else {
+                let validSurfaceIds = Set(tab.panels.keys)
+                tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
+
                 tab.surfaceListeningPorts.removeAll()
+                tab.recomputeListeningPorts()
             }
+            return result
+        }
+
+        return withReportTargetSurface(args, usage: "clear_ports [--tab=X] [--panel=Y]") { tab, surfaceId in
+            tab.surfaceListeningPorts.removeValue(forKey: surfaceId)
             tab.recomputeListeningPorts()
         }
-        return result
     }
 
     private func reportTTY(_ args: String) -> String {
@@ -11615,39 +11556,7 @@ class TerminalController {
             return "OK"
         }
 
-        var result = "OK"
-        DispatchQueue.main.sync {
-            guard let tab = resolveTabForReport(args) else {
-                result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
-                return
-            }
-
-            let panelArg = parsed.options["panel"] ?? parsed.options["surface"]
-            let surfaceId: UUID
-            if let panelArg {
-                if panelArg.isEmpty {
-                    result = "ERROR: Missing panel id — usage: report_tty <tty_name> [--tab=X] [--panel=Y]"
-                    return
-                }
-                guard let parsedId = UUID(uuidString: panelArg) else {
-                    result = "ERROR: Invalid panel id '\(panelArg)'"
-                    return
-                }
-                surfaceId = parsedId
-            } else {
-                guard let focused = tab.focusedPanelId else {
-                    result = "ERROR: Missing panel id (no focused surface)"
-                    return
-                }
-                surfaceId = focused
-            }
-
-            let validSurfaceIds = Set(tab.panels.keys)
-            guard validSurfaceIds.contains(surfaceId) else {
-                result = "ERROR: Panel not found '\(surfaceId.uuidString)'"
-                return
-            }
-
+        return withReportTargetSurface(args, usage: "report_tty <tty_name> [--tab=X] [--panel=Y]") { tab, surfaceId in
             tab.surfaceTTYNames[surfaceId] = ttyName
             if tab.isRemoteWorkspace {
                 tab.syncRemotePortScanTTYs()
@@ -11656,7 +11565,6 @@ class TerminalController {
                 PortScanner.shared.registerTTY(workspaceId: tab.id, panelId: surfaceId, ttyName: ttyName)
             }
         }
-        return result
     }
 
     private func portsKick(_ args: String) -> String {
@@ -11689,40 +11597,13 @@ class TerminalController {
             return "OK"
         }
 
-        var result = "OK"
-        DispatchQueue.main.sync {
-            guard let tab = resolveTabForReport(args) else {
-                result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
-                return
-            }
-
-            let panelArg = parsed.options["panel"] ?? parsed.options["surface"]
-            let surfaceId: UUID
-            if let panelArg {
-                if panelArg.isEmpty {
-                    result = "ERROR: Missing panel id — usage: ports_kick [--tab=X] [--panel=Y]"
-                    return
-                }
-                guard let parsedId = UUID(uuidString: panelArg) else {
-                    result = "ERROR: Invalid panel id '\(panelArg)'"
-                    return
-                }
-                surfaceId = parsedId
-            } else {
-                guard let focused = tab.focusedPanelId else {
-                    result = "ERROR: Missing panel id (no focused surface)"
-                    return
-                }
-                surfaceId = focused
-            }
-
+        return withReportTargetSurface(args, usage: "ports_kick [--tab=X] [--panel=Y]") { tab, surfaceId in
             if tab.isRemoteWorkspace {
                 tab.kickRemotePortScan(panelId: surfaceId, reason: reason)
             } else {
                 PortScanner.shared.kick(workspaceId: tab.id, panelId: surfaceId)
             }
         }
-        return result
     }
 
     private func sidebarState(_ args: String) -> String {
