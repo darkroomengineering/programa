@@ -13427,6 +13427,97 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 #endif
 
+    /// Configures a Programa main window's AppKit-level presentation (identifier,
+    /// titlebar, movability, transparency, glass effect, decorations) and registers
+    /// it for window-context tracking, then installs the file-drop overlay.
+    ///
+    /// Extracted verbatim from `ContentView`'s `WindowAccessor` trailing closure
+    /// (nuclear-review CV2b) so this AppKit window mutation lives with the
+    /// window-context layer instead of the SwiftUI view layer. `ContentView` still
+    /// owns tracking its own `@State` (`observedWindow`, `isFullScreen`,
+    /// `titlebarPadding`) — this method returns the computed titlebar padding so
+    /// the caller can decide whether to update that `@State`.
+    @discardableResult
+    func configureMainWindow(
+        _ window: NSWindow,
+        windowId: UUID,
+        windowIdentifier: String,
+        tabManager: TabManager,
+        sidebarState: SidebarState,
+        sidebarSelectionState: SidebarSelectionState,
+        sidebarBlendMode: String,
+        bgGlassEnabled: Bool,
+        bgGlassTintHex: String,
+        bgGlassTintOpacity: Double
+    ) -> CGFloat {
+        window.identifier = NSUserInterfaceItemIdentifier(windowIdentifier)
+        window.titlebarAppearsTransparent = true
+        // Keep window immovable; the sidebar's WindowDragHandleView handles
+        // drag-to-move via performDrag with temporary movable override.
+        // isMovableByWindowBackground=true breaks tab reordering, and
+        // isMovable=true blocks clicks on sidebar buttons in minimal mode.
+        window.isMovableByWindowBackground = false
+        window.isMovable = false
+        window.styleMask.insert(.fullSizeContentView)
+
+        // Keep content below the titlebar so drags on Bonsplit's tab bar don't
+        // get interpreted as window drags.
+        let computedTitlebarHeight = window.frame.height - window.contentLayoutRect.height
+        let nextTitlebarPadding = max(28, min(72, computedTitlebarHeight))
+#if DEBUG
+        if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_MODE"] == "1" {
+            UpdateLogStore.shared.append("ui test window accessor: id=\(windowIdentifier) visible=\(window.isVisible)")
+        }
+#endif
+        // User settings decide whether window glass is active. The native Tahoe
+        // NSGlassEffectView path vs the older NSVisualEffectView fallback is chosen
+        // inside WindowGlassEffect.apply.
+        let currentThemeBackground = GhosttyBackgroundTheme.currentColor()
+        let shouldApplyWindowGlass = cmuxShouldApplyWindowGlass(
+            sidebarBlendMode: sidebarBlendMode,
+            bgGlassEnabled: bgGlassEnabled,
+            glassEffectAvailable: WindowGlassEffect.isAvailable
+        )
+        let shouldForceTransparentHosting =
+            shouldApplyWindowGlass || currentThemeBackground.alphaComponent < 0.999
+
+        if shouldForceTransparentHosting {
+            window.isOpaque = false
+            // Keep the window clear whenever translucency is active. Relying only on
+            // terminal focus-driven updates can leave stale opaque window fills.
+            window.backgroundColor = NSColor.white.withAlphaComponent(0.001)
+            // Configure contentView hierarchy for transparency.
+            if let contentView = window.contentView {
+                ContentView.makeViewHierarchyTransparent(contentView)
+            }
+        } else {
+            // Browser-focused workspaces may not have an active terminal panel to refresh
+            // the NSWindow background. Keep opaque theme changes applied here as well.
+            window.backgroundColor = currentThemeBackground
+            window.isOpaque = currentThemeBackground.alphaComponent >= 0.999
+        }
+
+        if shouldApplyWindowGlass {
+            // Apply liquid glass effect to the window with tint from settings
+            let tintColor = (NSColor(hex: bgGlassTintHex) ?? .black).withAlphaComponent(bgGlassTintOpacity)
+            WindowGlassEffect.apply(to: window, tintColor: tintColor)
+        } else {
+            WindowGlassEffect.remove(from: window)
+        }
+        AppDelegate.shared?.attachUpdateAccessory(to: window)
+        AppDelegate.shared?.applyWindowDecorations(to: window)
+        AppDelegate.shared?.registerMainWindow(
+            window,
+            windowId: windowId,
+            tabManager: tabManager,
+            sidebarState: sidebarState,
+            sidebarSelectionState: sidebarSelectionState
+        )
+        installFileDropOverlay(on: window, tabManager: tabManager)
+
+        return nextTitlebarPadding
+    }
+
 }
 
 @MainActor
