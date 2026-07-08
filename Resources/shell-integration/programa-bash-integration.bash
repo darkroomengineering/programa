@@ -745,7 +745,7 @@ _cmux_start_pr_poll_loop() {
     fi
     _PROGRAMA_PR_POLL_PWD="$watch_pwd"
 
-    {
+    (
         local signal_path=""
         signal_path="$(_cmux_pr_force_signal_path 2>/dev/null || true)"
         while :; do
