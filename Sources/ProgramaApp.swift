@@ -90,9 +90,10 @@ enum WorkspaceButtonFadeSettings {
 enum PaneFirstClickFocusSettings {
     static let enabledKey = "paneFirstClickFocus.enabled"
     static let defaultEnabled = false
+    private static let flag = UserDefaultsFlag(key: enabledKey, defaultValue: defaultEnabled)
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: enabledKey) as? Bool ?? defaultEnabled
+        flag.isEnabled(defaults: defaults)
     }
 }
 
@@ -3775,49 +3776,44 @@ final class AppIconAppearanceObserver: NSObject {
 enum QuitWarningSettings {
     static let warnBeforeQuitKey = "warnBeforeQuitShortcut"
     static let defaultWarnBeforeQuit = true
+    private static let flag = UserDefaultsFlag(key: warnBeforeQuitKey, defaultValue: defaultWarnBeforeQuit)
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: warnBeforeQuitKey) == nil {
-            return defaultWarnBeforeQuit
-        }
-        return defaults.bool(forKey: warnBeforeQuitKey)
+        flag.isEnabled(defaults: defaults)
     }
 
     static func setEnabled(_ isEnabled: Bool, defaults: UserDefaults = .standard) {
-        defaults.set(isEnabled, forKey: warnBeforeQuitKey)
+        flag.setEnabled(isEnabled, defaults: defaults)
     }
 }
 
 enum ScrollbackPersistenceSettings {
     static let persistScrollbackKey = "sessionPersistScrollback"
     static let defaultPersistScrollback = true
+    private static let flag = UserDefaultsFlag(key: persistScrollbackKey, defaultValue: defaultPersistScrollback)
+
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: persistScrollbackKey) == nil { return defaultPersistScrollback }
-        return defaults.bool(forKey: persistScrollbackKey)
+        flag.isEnabled(defaults: defaults)
     }
 }
 
 enum CommandPaletteRenameSelectionSettings {
     static let selectAllOnFocusKey = "commandPalette.renameSelectAllOnFocus"
     static let defaultSelectAllOnFocus = true
+    private static let flag = UserDefaultsFlag(key: selectAllOnFocusKey, defaultValue: defaultSelectAllOnFocus)
 
     static func selectAllOnFocusEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: selectAllOnFocusKey) == nil {
-            return defaultSelectAllOnFocus
-        }
-        return defaults.bool(forKey: selectAllOnFocusKey)
+        flag.isEnabled(defaults: defaults)
     }
 }
 
 enum CommandPaletteSwitcherSearchSettings {
     static let searchAllSurfacesKey = "commandPalette.switcherSearchAllSurfaces"
     static let defaultSearchAllSurfaces = false
+    private static let flag = UserDefaultsFlag(key: searchAllSurfacesKey, defaultValue: defaultSearchAllSurfaces)
 
     static func searchAllSurfacesEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: searchAllSurfacesKey) == nil {
-            return defaultSearchAllSurfaces
-        }
-        return defaults.bool(forKey: searchAllSurfacesKey)
+        flag.isEnabled(defaults: defaults)
     }
 }
 
@@ -3825,12 +3821,10 @@ enum ClaudeCodeIntegrationSettings {
     static let hooksEnabledKey = "claudeCodeHooksEnabled"
     static let defaultHooksEnabled = true
     static let customClaudePathKey = "claudeCodeCustomClaudePath"
+    private static let hooksFlag = UserDefaultsFlag(key: hooksEnabledKey, defaultValue: defaultHooksEnabled)
 
     static func hooksEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: hooksEnabledKey) == nil {
-            return defaultHooksEnabled
-        }
-        return defaults.bool(forKey: hooksEnabledKey)
+        hooksFlag.isEnabled(defaults: defaults)
     }
 
     static func customClaudePath(defaults: UserDefaults = .standard) -> String? {
