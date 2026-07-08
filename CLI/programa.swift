@@ -1267,6 +1267,70 @@ enum CLIProcessRunner {
     }
 }
 
+/// Execution context passed to a `CommandDescriptor`'s `execute` closure.
+///
+/// Bundles everything a command body previously read from `run()`'s locals
+/// (commandArgs, client, jsonOutput, idFormat, windowId, and the literal
+/// command name, needed by handlers shared across several names such as
+/// the tmux-compat group).
+struct CommandContext {
+    let command: String
+    let commandArgs: [String]
+    let client: SocketClient
+    let jsonOutput: Bool
+    let idFormat: CLIIDFormat
+    /// True when the user passed `--id-format` explicitly (distinct from
+    /// `idFormat`, which always has a concrete value). Only `rpc` cares
+    /// about this distinction today.
+    let idFormatArgProvided: Bool
+    let windowId: String?
+}
+
+/// Single source of truth for a CLI command's name(s), its one-line entry in
+/// the grouped `Commands:` help block, and how it executes.
+///
+/// This collapses what used to be independently maintained in three places:
+/// the kebab-case dispatch switch, the free-text `usage()` help string, and
+/// (implicitly) the "is this a known command" check used for unknown-command
+/// handling. A command added to the table automatically gets dispatch,
+/// help-list membership, and unknown-command exclusion in one place —
+/// nothing else to keep in sync.
+///
+/// Not every command routes through this table's `execute` closure: a
+/// handful (`welcome`, `shortcuts`, `feedback`, `themes`, `claude-teams`,
+/// `omo`, `omx`, `omc`, `codex`, `version`, `remote-daemon-status`) are
+/// intercepted earlier in `run()`, before the socket connects, because they
+/// have pre-connection semantics (e.g. `version`/`welcome` must work even
+/// when Programa isn't running). Those still get a descriptor — with
+/// `execute == nil` — purely so `usage()` has one place to read their help
+/// line from. If dispatch ever reached the table for one of them (it
+/// shouldn't, given the pre-connection interception always returns first),
+/// it falls through to "Unknown command", matching prior behavior (they
+/// were never switch cases either).
+///
+/// A descriptor with `names: []` is a pure help-text spacer/section-comment
+/// (e.g. the blank line + "# tmux compatibility commands" header) — it
+/// contributes lines to the help block but never participates in dispatch.
+///
+/// Explicit non-goal: this table only unifies CLI-side name → behavior
+/// knowledge. It does not attempt to unify with the app-side v2 method
+/// switch (`Sources/TerminalController.swift`'s `processV2Command`) — that's
+/// server code with different concerns (method routing, not CLI UX).
+struct CommandDescriptor {
+    /// Kebab-case name(s) that route to this descriptor. More than one name
+    /// means the names are aliases sharing one handler (e.g. tmux-compat
+    /// commands, or `rename-workspace`/`rename-window`).
+    let names: [String]
+    /// Lines contributed verbatim, in order, to the `Commands:` section of
+    /// `usage()`. Empty means the command exists but is intentionally
+    /// undocumented (matches several legacy/internal commands that were
+    /// already missing from the old free-text help).
+    let helpLines: [String]
+    /// Executes the command. `nil` for the pre-connection-special commands
+    /// described above.
+    let execute: ((CommandContext) throws -> Void)?
+}
+
 struct CMUXCLI {
     let args: [String]
 
@@ -1543,977 +1607,1435 @@ struct CMUXCLI {
             _ = try client.sendV2(method: "window.focus", params: ["window_id": normalizedWindow])
         }
 
-        switch command {
-        case "ping":
-            _ = try client.sendV2(method: "system.ping")
-            print("PONG")
-
-        case "capabilities":
-            let response = try client.sendV2(method: "system.capabilities")
-            print(jsonString(formatIDs(response, mode: idFormat)))
-
-        case "rpc":
-            guard let method = commandArgs.first?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !method.isEmpty else {
-                throw CLIError(message: "Usage: programa rpc <method> [json-params]")
-            }
-            let params = try parseRPCParams(Array(commandArgs.dropFirst()))
-            let response = try client.sendV2(method: method, params: params)
-            let output: Any = idFormatArg == nil ? response : formatIDs(response, mode: idFormat)
-            print(jsonString(output))
-
-        case "identify":
-            var params: [String: Any] = [:]
-            let includeCaller = !hasFlag(commandArgs, name: "--no-caller")
-            if includeCaller {
-                let idWsFlag = optionValue(commandArgs, name: "--workspace")
-                let workspaceArg = idWsFlag ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                let surfaceArg = optionValue(commandArgs, name: "--surface") ?? (idWsFlag == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
-                if workspaceArg != nil || surfaceArg != nil {
-                    let workspaceId = try normalizeWorkspaceHandle(
-                        workspaceArg,
-                        client: client,
-                        allowCurrent: surfaceArg != nil
-                    )
-                    var caller: [String: Any] = [:]
-                    if let workspaceId {
-                        caller["workspace_id"] = workspaceId
-                    }
-                    if surfaceArg != nil {
-                        guard let surfaceId = try normalizeSurfaceHandle(
-                            surfaceArg,
-                            client: client,
-                            workspaceHandle: workspaceId
-                        ) else {
-                            throw CLIError(message: "Invalid surface handle")
-                        }
-                        caller["surface_id"] = surfaceId
-                    }
-                    if !caller.isEmpty {
-                        params["caller"] = caller
-                    }
-                }
-            }
-            let response = try client.sendV2(method: "system.identify", params: params)
-            print(jsonString(formatIDs(response, mode: idFormat)))
-
-        case "list-windows":
-            let listed = try client.sendV2(method: "window.list")
-            let windows = listed["windows"] as? [[String: Any]] ?? []
-            if jsonOutput {
-                let payload = windows.map { item -> [String: Any] in
-                    var dict: [String: Any] = [
-                        "index": intFromAny(item["index"]) ?? 0,
-                        "id": (item["id"] as? String) ?? "",
-                        "key": (item["key"] as? Bool) ?? false,
-                        "workspace_count": intFromAny(item["workspace_count"]) ?? 0,
-                    ]
-                    dict["selected_workspace_id"] = item["selected_workspace_id"] as? String ?? NSNull()
-                    return dict
-                }
-                print(jsonString(payload))
-            } else if windows.isEmpty {
-                print("No windows")
-            } else {
-                let lines = windows.map { item -> String in
-                    let selected = ((item["key"] as? Bool) ?? false) ? "*" : " "
-                    let idx = intFromAny(item["index"]) ?? 0
-                    let id = (item["id"] as? String) ?? ""
-                    let selectedWs = (item["selected_workspace_id"] as? String) ?? "none"
-                    let workspaceCount = intFromAny(item["workspace_count"]) ?? 0
-                    return "\(selected) \(idx): \(id) selected_workspace=\(selectedWs) workspaces=\(workspaceCount)"
-                }
-                print(lines.joined(separator: "\n"))
-            }
-
-        case "current-window":
-            let response = try client.sendV2(method: "window.current")
-            let windowId = (response["window_id"] as? String) ?? ""
-            if jsonOutput {
-                print(jsonString(["window_id": windowId]))
-            } else {
-                print(windowId)
-            }
-
-        case "new-window":
-            let response = try client.sendV2(method: "window.create")
-            print("OK \((response["window_id"] as? String) ?? "")")
-
-        case "focus-window":
-            guard let target = optionValue(commandArgs, name: "--window") else {
-                throw CLIError(message: "focus-window requires --window")
-            }
-            // v1 only ever accepted a literal window UUID (no index/ref resolution) — preserve
-            // that exactly rather than widening acceptance via normalizeWindowHandle.
-            guard isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-                throw CLIError(message: "ERROR: Invalid window id")
-            }
-            do {
-                _ = try client.sendV2(method: "window.focus", params: ["window_id": target])
-                print("OK")
-            } catch {
-                throw CLIError(message: "ERROR: Window not found")
-            }
-
-        case "close-window":
-            guard let target = optionValue(commandArgs, name: "--window") else {
-                throw CLIError(message: "close-window requires --window")
-            }
-            guard isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-                throw CLIError(message: "ERROR: Invalid window id")
-            }
-            do {
-                _ = try client.sendV2(method: "window.close", params: ["window_id": target])
-                print("OK")
-            } catch {
-                throw CLIError(message: "ERROR: Window not found")
-            }
-
-        case "move-workspace-to-window":
-            guard let workspaceRaw = optionValue(commandArgs, name: "--workspace") else {
-                throw CLIError(message: "move-workspace-to-window requires --workspace")
-            }
-            guard let windowRaw = optionValue(commandArgs, name: "--window") else {
-                throw CLIError(message: "move-workspace-to-window requires --window")
-            }
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceRaw, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let winId = try normalizeWindowHandle(windowRaw, client: client)
-            if let winId { params["window_id"] = winId }
-            let payload = try client.sendV2(method: "workspace.move_to_window", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["workspace", "window"]))
-
-        case "move-surface":
-            try runMoveSurface(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "reorder-surface":
-            try runReorderSurface(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "reorder-workspace":
-            try runReorderWorkspace(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "workspace-action":
-            try runWorkspaceAction(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat, windowOverride: windowId)
-
-        case "tab-action":
-            try runTabAction(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat, windowOverride: windowId)
-
-        case "rename-tab":
-            try runRenameTab(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat, windowOverride: windowId)
-
-        case "list-workspaces":
-            let payload = try client.sendV2(method: "workspace.list")
-            if jsonOutput {
-                print(jsonString(formatIDs(payload, mode: idFormat)))
-            } else {
-                let workspaces = payload["workspaces"] as? [[String: Any]] ?? []
-                if workspaces.isEmpty {
-                    print("No workspaces")
-                } else {
-                    for ws in workspaces {
-                        let selected = (ws["selected"] as? Bool) == true
-                        let handle = textHandle(ws, idFormat: idFormat)
-                        let title = (ws["title"] as? String) ?? ""
-                        let remoteTag: String = {
-                            guard let remote = ws["remote"] as? [String: Any],
-                                  (remote["enabled"] as? Bool) == true else {
-                                return ""
-                            }
-                            let state = (remote["state"] as? String) ?? "unknown"
-                            return "  [ssh:\(state)]"
-                        }()
-                        let prefix = selected ? "* " : "  "
-                        let selTag = selected ? "  [selected]" : ""
-                        let titlePart = title.isEmpty ? "" : "  \(title)"
-                        print("\(prefix)\(handle)\(titlePart)\(remoteTag)\(selTag)")
-                    }
-                }
-            }
-
-        case "ssh":
-            try runSSH(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-        case "ssh-session-end":
-            try runSSHSessionEnd(commandArgs: commandArgs, client: client)
-
-        case "new-workspace":
-            let (commandOpt, rem0) = parseOption(commandArgs, name: "--command")
-            let (cwdOpt, rem1) = parseOption(rem0, name: "--cwd")
-            let (nameOpt, rem2) = parseOption(rem1, name: "--name")
-            let (descriptionOpt, remaining) = parseOption(rem2, name: "--description")
-            if let unknown = remaining.first(where: { $0.hasPrefix("--") }) {
-                throw CLIError(message: "new-workspace: unknown flag '\(unknown)'. Known flags: --name <title>, --description <text>, --command <text>, --cwd <path>")
-            }
-            var params: [String: Any] = [:]
-            if let cwdOpt {
-                let resolved = resolvePath(cwdOpt)
-                params["cwd"] = resolved
-            }
-            if let nameOpt {
-                params["title"] = nameOpt
-            }
-            if let descriptionOpt {
-                params["description"] = descriptionOpt
-            }
-            let response = try client.sendV2(method: "workspace.create", params: params)
-            let wsId = (response["workspace_ref"] as? String) ?? (response["workspace_id"] as? String) ?? ""
-            print("OK \(wsId)")
-            if let commandText = commandOpt, !wsId.isEmpty {
-                let text = unescapeSendText(commandText + "\\n")
-                let sendParams: [String: Any] = ["text": text, "workspace_id": wsId]
-                _ = try client.sendV2(method: "surface.send_text", params: sendParams)
-            }
-
-        case "new-split":
-            let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
-            let (panelArg, rem1) = parseOption(rem0, name: "--panel")
-            let (sfArg, rem2) = parseOption(rem1, name: "--surface")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            let surfaceRaw = sfArg ?? panelArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
-            guard let direction = rem2.first else {
-                throw CLIError(message: "new-split requires a direction")
-            }
-            var params: [String: Any] = ["direction": direction]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let sfId = try normalizeSurfaceHandle(surfaceRaw, client: client, workspaceHandle: wsId)
-            if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.split", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat))
-
-        case "list-panes":
-            let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let payload = try client.sendV2(method: "pane.list", params: params)
-            if jsonOutput {
-                print(jsonString(formatIDs(payload, mode: idFormat)))
-            } else {
-                let panes = payload["panes"] as? [[String: Any]] ?? []
-                if panes.isEmpty {
-                    print("No panes")
-                } else {
-                    for pane in panes {
-                        let focused = (pane["focused"] as? Bool) == true
-                        let handle = textHandle(pane, idFormat: idFormat)
-                        let count = pane["surface_count"] as? Int ?? 0
-                        let prefix = focused ? "* " : "  "
-                        let focusTag = focused ? "  [focused]" : ""
-                        print("\(prefix)\(handle)  [\(count) surface\(count == 1 ? "" : "s")]\(focusTag)")
-                    }
-                }
-            }
-
-        case "list-pane-surfaces":
-            let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
-            let paneRaw = optionValue(commandArgs, name: "--pane")
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let paneId = try normalizePaneHandle(paneRaw, client: client, workspaceHandle: wsId)
-            if let paneId { params["pane_id"] = paneId }
-            let payload = try client.sendV2(method: "pane.surfaces", params: params)
-            if jsonOutput {
-                print(jsonString(formatIDs(payload, mode: idFormat)))
-            } else {
-                let surfaces = payload["surfaces"] as? [[String: Any]] ?? []
-                if surfaces.isEmpty {
-                    print("No surfaces in pane")
-                } else {
-                    for surface in surfaces {
-                        let selected = (surface["selected"] as? Bool) == true
-                        let handle = textHandle(surface, idFormat: idFormat)
-                        let title = (surface["title"] as? String) ?? ""
-                        let prefix = selected ? "* " : "  "
-                        let selTag = selected ? "  [selected]" : ""
-                        print("\(prefix)\(handle)  \(title)\(selTag)")
-                    }
-                }
-            }
-
-        case "tree":
-            try runTreeCommand(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "focus-pane":
-            let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
-            guard let paneRaw = optionValue(commandArgs, name: "--pane") ?? commandArgs.first else {
-                throw CLIError(message: "focus-pane requires --pane <id|ref>")
-            }
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let paneId = try normalizePaneHandle(paneRaw, client: client, workspaceHandle: wsId)
-            if let paneId { params["pane_id"] = paneId }
-            let payload = try client.sendV2(method: "pane.focus", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["pane", "workspace"]))
-
-        case "new-pane":
-            let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
-            let type = optionValue(commandArgs, name: "--type")
-            let direction = optionValue(commandArgs, name: "--direction") ?? "right"
-            let url = optionValue(commandArgs, name: "--url")
-            var params: [String: Any] = ["direction": direction]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            if let type { params["type"] = type }
-            if let url { params["url"] = url }
-            let payload = try client.sendV2(method: "pane.create", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["surface", "pane", "workspace"]))
-
-        case "new-surface":
-            let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
-            let type = optionValue(commandArgs, name: "--type")
-            let paneRaw = optionValue(commandArgs, name: "--pane")
-            let url = optionValue(commandArgs, name: "--url")
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let paneId = try normalizePaneHandle(paneRaw, client: client, workspaceHandle: wsId)
-            if let paneId { params["pane_id"] = paneId }
-            if let type { params["type"] = type }
-            if let url { params["url"] = url }
-            let payload = try client.sendV2(method: "surface.create", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["surface", "pane", "workspace"]))
-
-        case "close-surface":
-            let csWsFlag = optionValue(commandArgs, name: "--workspace")
-            let workspaceArg = csWsFlag ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            let surfaceRaw = optionValue(commandArgs, name: "--surface") ?? optionValue(commandArgs, name: "--panel") ?? (csWsFlag == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let sfId = try normalizeSurfaceHandle(surfaceRaw, client: client, workspaceHandle: wsId)
-            if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.close", params: params)
-            if let closedWorkspaceId = (payload["workspace_id"] as? String) ?? wsId,
-               let closedSurfaceId = (payload["surface_id"] as? String) ?? sfId {
-                try? tmuxPruneCompatSurfaceState(
-                    workspaceId: closedWorkspaceId,
-                    surfaceId: closedSurfaceId,
-                    client: client
-                )
-            }
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat))
-
-        case "drag-surface-to-split":
-            let (surfaceArg, rem0) = parseOption(commandArgs, name: "--surface")
-            let (panelArg, rem1) = parseOption(rem0, name: "--panel")
-            let surface = surfaceArg ?? panelArg
-            guard let surface else {
-                throw CLIError(message: "drag-surface-to-split requires --surface <id|index>")
-            }
-            guard let direction = rem1.first else {
-                throw CLIError(message: "drag-surface-to-split requires a direction")
-            }
-            // v1 always targeted the currently-selected workspace (no --workspace support);
-            // leave workspace_id unset so v2 falls back to the current selection identically.
-            let surfaceIdForDrag = try normalizeSurfaceHandle(surface, client: client, workspaceHandle: nil)
-            var dragParams: [String: Any] = ["direction": direction]
-            if let surfaceIdForDrag { dragParams["surface_id"] = surfaceIdForDrag }
-            let dragPayload = try client.sendV2(method: "surface.drag_to_split", params: dragParams)
-            print("OK \((dragPayload["pane_id"] as? String) ?? "")")
-
-        case "refresh-surfaces":
-            // v1 always targeted the currently-selected workspace; no workspace_id here either.
-            let refreshPayload = try client.sendV2(method: "surface.refresh", params: [:])
-            print("OK Refreshed \(intFromAny(refreshPayload["refreshed"]) ?? 0) surfaces")
-        case "reload-config":
-            if let unexpected = commandArgs.first {
-                throw CLIError(message: "reload-config does not accept arguments. Unexpected argument '\(unexpected)'")
-            }
-            _ = try client.sendV2(method: "app.reload_config")
-            print("OK Reloaded config")
-
-        case "surface-health":
-            let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let payload = try client.sendV2(method: "surface.health", params: params)
-            if jsonOutput {
-                print(jsonString(formatIDs(payload, mode: idFormat)))
-            } else {
-                let surfaces = payload["surfaces"] as? [[String: Any]] ?? []
-                if surfaces.isEmpty {
-                    print("No surfaces")
-                } else {
-                    for surface in surfaces {
-                        let handle = textHandle(surface, idFormat: idFormat)
-                        let sType = (surface["type"] as? String) ?? ""
-                        let inWindow = surface["in_window"]
-                        let inWindowStr: String
-                        if let b = inWindow as? Bool {
-                            inWindowStr = " in_window=\(b)"
-                        } else {
-                            inWindowStr = ""
-                        }
-                        print("\(handle)  type=\(sType)\(inWindowStr)")
-                    }
-                }
-            }
-
-        case "debug-terminals":
-            let unexpected = commandArgs.filter { $0 != "--" }
-            if let extra = unexpected.first {
-                throw CLIError(message: "debug-terminals: unexpected argument '\(extra)'")
-            }
-            let payload = try client.sendV2(method: "debug.terminals")
-            if jsonOutput {
-                print(jsonString(formatIDs(payload, mode: idFormat)))
-            } else {
-                print(formatDebugTerminalsPayload(payload, idFormat: idFormat))
-            }
-
-        case "trigger-flash":
-            let tfWsFlag = optionValue(commandArgs, name: "--workspace")
-            let explicitWorkspaceArg = tfWsFlag
-            let preferTTYFallback = windowId == nil && ProcessInfo.processInfo.environment["TMUX"] != nil
-            let callerWorkspaceArg = preferTTYFallback
-                ? nil
-                : (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            let workspaceArg = explicitWorkspaceArg ?? callerWorkspaceArg
-            let explicitSurfaceArg = optionValue(commandArgs, name: "--surface") ?? optionValue(commandArgs, name: "--panel")
-            let callerSurfaceArg = explicitSurfaceArg == nil && preferTTYFallback == false && windowId == nil
-                ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"]
-                : nil
-            let surfaceArg = explicitSurfaceArg ?? callerSurfaceArg
-            var params: [String: Any] = [:]
-            let wsId = try {
-                if explicitWorkspaceArg != nil {
-                    return try normalizeWorkspaceHandle(workspaceArg, client: client)
-                }
-                return try resolveWorkspaceIdAllowingFallback(workspaceArg, client: client)
-            }()
-            if let wsId { params["workspace_id"] = wsId }
-            let sfId = try {
-                if explicitSurfaceArg != nil {
-                    return try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId)
-                }
-                guard let wsId else { return nil }
-                return try resolveSurfaceIdAllowingFallback(
-                    surfaceArg,
-                    workspaceId: wsId,
-                    client: client
-                )
-            }()
-            if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.trigger_flash", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat))
-
-        case "list-panels":
-            let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let payload = try client.sendV2(method: "surface.list", params: params)
-            if jsonOutput {
-                print(jsonString(formatIDs(payload, mode: idFormat)))
-            } else {
-                let surfaces = payload["surfaces"] as? [[String: Any]] ?? []
-                if surfaces.isEmpty {
-                    print("No surfaces")
-                } else {
-                    for surface in surfaces {
-                        let focused = (surface["focused"] as? Bool) == true
-                        let handle = textHandle(surface, idFormat: idFormat)
-                        let sType = (surface["type"] as? String) ?? ""
-                        let title = (surface["title"] as? String) ?? ""
-                        let prefix = focused ? "* " : "  "
-                        let focusTag = focused ? "  [focused]" : ""
-                        let titlePart = title.isEmpty ? "" : "  \"\(title)\""
-                        print("\(prefix)\(handle)  \(sType)\(focusTag)\(titlePart)")
-                    }
-                }
-            }
-
-        case "focus-panel":
-            let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
-            guard let panelRaw = optionValue(commandArgs, name: "--panel") else {
-                throw CLIError(message: "focus-panel requires --panel")
-            }
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let sfId = try normalizeSurfaceHandle(panelRaw, client: client, workspaceHandle: wsId)
-            if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.focus", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat))
-
-        case "close-workspace":
-            guard let workspaceRaw = optionValue(commandArgs, name: "--workspace") else {
-                throw CLIError(message: "close-workspace requires --workspace")
-            }
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceRaw, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let payload = try client.sendV2(method: "workspace.close", params: params)
-            if let closedWorkspaceId = (payload["workspace_id"] as? String) ?? wsId {
-                try? tmuxPruneCompatWorkspaceState(workspaceId: closedWorkspaceId)
-            }
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["workspace"]))
-
-        case "select-workspace":
-            guard let workspaceRaw = optionValue(commandArgs, name: "--workspace") else {
-                throw CLIError(message: "select-workspace requires --workspace")
-            }
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceRaw, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let payload = try client.sendV2(method: "workspace.select", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["workspace"]))
-
-        case "rename-workspace", "rename-window":
-            let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            let titleArgs = rem0.dropFirst(rem0.first == "--" ? 1 : 0)
-            let title = titleArgs.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !title.isEmpty else {
-                throw CLIError(message: "\(command) requires a title")
-            }
-            let wsId = try resolveWorkspaceId(workspaceArg, client: client)
-            let params: [String: Any] = ["title": title, "workspace_id": wsId]
-            let payload = try client.sendV2(method: "workspace.rename", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["workspace"]))
-
-        case "current-workspace":
-            let response = try client.sendV2(method: "workspace.current")
-            if jsonOutput {
-                print(jsonString(formatIDs(response, mode: idFormat)))
-            } else {
-                let handle = formatHandle(response, kind: "workspace", idFormat: idFormat)
-                    ?? (response["workspace_id"] as? String)
-                    ?? ""
-                print(handle)
-            }
-
-        case "read-screen":
-            let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
-            let (sfArg, rem1) = parseOption(rem0, name: "--surface")
-            let (linesArg, rem2) = parseOption(rem1, name: "--lines")
-            let trailing = rem2.filter { $0 != "--scrollback" }
-            if !trailing.isEmpty {
-                throw CLIError(message: "read-screen: unexpected arguments: \(trailing.joined(separator: " "))")
-            }
-
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            let surfaceArg = sfArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
-
-            var params: [String: Any] = [:]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId)
-            if let sfId { params["surface_id"] = sfId }
-
-            let includeScrollback = rem2.contains("--scrollback")
-            if includeScrollback {
-                params["scrollback"] = true
-            }
-            if let linesArg {
-                guard let lineCount = Int(linesArg), lineCount > 0 else {
-                    throw CLIError(message: "--lines must be greater than 0")
-                }
-                params["lines"] = lineCount
-                params["scrollback"] = true
-            }
-
-            let payload = try client.sendV2(method: "surface.read_text", params: params)
-            if jsonOutput {
-                print(jsonString(payload))
-            } else {
-                print((payload["text"] as? String) ?? "")
-            }
-
-        case "send":
-            let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
-            let (sfArg, rem1) = parseOption(rem0, name: "--surface")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            let surfaceArg = sfArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
-            let rawText = rem1.dropFirst(rem1.first == "--" ? 1 : 0).joined(separator: " ")
-            guard !rawText.isEmpty else { throw CLIError(message: "send requires text") }
-            let text = unescapeSendText(rawText)
-            var params: [String: Any] = ["text": text]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId)
-            if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.send_text", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat))
-
-        case "send-key":
-            let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
-            let (sfArg, rem1) = parseOption(rem0, name: "--surface")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            let surfaceArg = sfArg ?? (wsArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
-            let keyArgs = rem1.first == "--" ? Array(rem1.dropFirst()) : rem1
-            guard let key = keyArgs.first else { throw CLIError(message: "send-key requires a key") }
-            var params: [String: Any] = ["key": key]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId)
-            if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.send_key", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat))
-
-        case "send-panel":
-            let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
-            let (panelArg, rem1) = parseOption(rem0, name: "--panel")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            guard let panelArg else {
-                throw CLIError(message: "send-panel requires --panel")
-            }
-            let rawText = rem1.dropFirst(rem1.first == "--" ? 1 : 0).joined(separator: " ")
-            guard !rawText.isEmpty else { throw CLIError(message: "send-panel requires text") }
-            let text = unescapeSendText(rawText)
-            var params: [String: Any] = ["text": text]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let sfId = try normalizeSurfaceHandle(panelArg, client: client, workspaceHandle: wsId)
-            if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.send_text", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat))
-
-        case "send-key-panel":
-            let (wsArg, rem0) = parseOption(commandArgs, name: "--workspace")
-            let (panelArg, rem1) = parseOption(rem0, name: "--panel")
-            let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            guard let panelArg else {
-                throw CLIError(message: "send-key-panel requires --panel")
-            }
-            let skpArgs = rem1.first == "--" ? Array(rem1.dropFirst()) : rem1
-            let key = skpArgs.first ?? ""
-            guard !key.isEmpty else { throw CLIError(message: "send-key-panel requires a key") }
-            var params: [String: Any] = ["key": key]
-            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let sfId = try normalizeSurfaceHandle(panelArg, client: client, workspaceHandle: wsId)
-            if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.send_key", params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat))
-
-        case "notify":
-            let title = optionValue(commandArgs, name: "--title") ?? "Notification"
-            let subtitle = optionValue(commandArgs, name: "--subtitle") ?? ""
-            let body = optionValue(commandArgs, name: "--body") ?? ""
-
-            let explicitWorkspaceArg = optionValue(commandArgs, name: "--workspace")
-            let preferTTYFallback = windowId == nil && ProcessInfo.processInfo.environment["TMUX"] != nil
-            let callerWorkspaceArg = preferTTYFallback
-                ? nil
-                : (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-            let workspaceArg = explicitWorkspaceArg ?? callerWorkspaceArg
-            let explicitSurfaceArg = optionValue(commandArgs, name: "--surface")
-            let callerSurfaceArg = explicitSurfaceArg == nil && preferTTYFallback == false && windowId == nil
-                ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"]
-                : nil
-            let surfaceArg = explicitSurfaceArg ?? callerSurfaceArg
-
-            let targetWorkspace = try {
-                if explicitWorkspaceArg != nil {
-                    return try resolveWorkspaceId(workspaceArg, client: client)
-                }
-                return try resolveWorkspaceIdAllowingFallback(workspaceArg, client: client)
-            }()
-            let targetSurface = try {
-                if explicitSurfaceArg != nil {
-                    return try resolveSurfaceId(surfaceArg, workspaceId: targetWorkspace, client: client)
-                }
-                return try resolveSurfaceIdAllowingFallback(
-                    surfaceArg,
-                    workspaceId: targetWorkspace,
-                    client: client
-                )
-            }()
-
-            _ = try client.sendV2(method: "notification.create_for_target", params: [
-                "workspace_id": targetWorkspace,
-                "surface_id": targetSurface,
-                "title": title,
-                "subtitle": subtitle,
-                "body": body,
-            ])
-            print("OK")
-
-        case "list-notifications":
-            let listed = try client.sendV2(method: "notification.list")
-            let notifications = listed["notifications"] as? [[String: Any]] ?? []
-            if jsonOutput {
-                let payload = notifications.enumerated().map { _, item -> [String: Any] in
-                    var dict: [String: Any] = [
-                        "id": (item["id"] as? String) ?? "",
-                        "workspace_id": (item["workspace_id"] as? String) ?? "",
-                        "is_read": (item["is_read"] as? Bool) ?? false,
-                        "title": (item["title"] as? String) ?? "",
-                        "subtitle": (item["subtitle"] as? String) ?? "",
-                        "body": (item["body"] as? String) ?? "",
-                    ]
-                    dict["surface_id"] = item["surface_id"] as? String ?? NSNull()
-                    return dict
-                }
-                print(jsonString(payload))
-            } else if notifications.isEmpty {
-                print("No notifications")
-            } else {
-                let lines = notifications.enumerated().map { index, item -> String in
-                    let surfaceText = (item["surface_id"] as? String) ?? "none"
-                    let readText = ((item["is_read"] as? Bool) ?? false) ? "read" : "unread"
-                    let id = (item["id"] as? String) ?? ""
-                    let workspaceId = (item["workspace_id"] as? String) ?? ""
-                    let title = (item["title"] as? String) ?? ""
-                    let subtitle = (item["subtitle"] as? String) ?? ""
-                    let body = (item["body"] as? String) ?? ""
-                    return "\(index):\(id)|\(workspaceId)|\(surfaceText)|\(readText)|\(title)|\(subtitle)|\(body)"
-                }
-                print(lines.joined(separator: "\n"))
-            }
-
-        case "clear-notifications":
-            if let wsFlag = optionValue(commandArgs, name: "--workspace") {
-                let wsId = try resolveWorkspaceId(wsFlag, client: client)
-                _ = try client.sendV2(method: "notification.clear", params: ["workspace_id": wsId])
-            } else if windowId == nil,
-                      let envWs = ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"],
-                      let wsId = try? resolveWorkspaceId(envWs, client: client) {
-                _ = try client.sendV2(method: "notification.clear", params: ["workspace_id": wsId])
-            } else {
-                _ = try client.sendV2(method: "notification.clear")
-            }
-            print("OK")
-
-        case "set-status":
-            let parsed = parseFlagArgs(commandArgs, stopAtDashDash: false)
-            guard parsed.positional.count >= 2 else {
-                throw CLIError(message: "ERROR: Missing status key or value — usage: set_status <key> <value> [--icon=X] [--color=#hex] [--url=X] [--priority=N] [--format=plain|markdown] [--tab=X]")
-            }
-            var params: [String: Any] = [
-                "key": parsed.positional[0],
-                "value": parsed.positional[1...].joined(separator: " "),
-            ]
-            if let icon = normalizedFlagValue(parsed.options["icon"]) { params["icon"] = icon }
-            if let color = normalizedFlagValue(parsed.options["color"]) { params["color"] = color }
-            if let url = normalizedFlagValue(parsed.options["url"] ?? parsed.options["link"]) { params["url"] = url }
-            if let priorityRaw = normalizedFlagValue(parsed.options["priority"]) {
-                guard let priority = Int(priorityRaw) else {
-                    throw CLIError(message: "ERROR: Invalid metadata priority '\(priorityRaw)' — must be an integer")
-                }
-                params["priority"] = max(-9999, min(9999, priority))
-            }
-            if let formatRaw = normalizedFlagValue(parsed.options["format"]) {
-                guard ["plain", "markdown", "md"].contains(formatRaw.lowercased()) else {
-                    throw CLIError(message: "ERROR: Invalid metadata format '\(formatRaw)' — use: plain, markdown")
-                }
-                params["format"] = formatRaw.lowercased() == "md" ? "markdown" : formatRaw.lowercased()
-            }
-            if let pidRaw = normalizedFlagValue(parsed.options["pid"]), let pid = Int(pidRaw), pid > 0 {
-                params["pid"] = pid
-            }
-            params["workspace_id"] = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
-            _ = try client.sendV2(method: "workspace.set_status", params: params)
-            print("OK")
-
-        case "clear-status":
-            let parsed = parseFlagArgs(commandArgs)
-            guard let key = parsed.positional.first, parsed.positional.count == 1 else {
-                throw CLIError(message: "ERROR: Missing metadata key — usage: clear_status <key> [--tab=X]")
-            }
-            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
-            _ = try client.sendV2(method: "workspace.clear_status", params: ["workspace_id": workspaceId, "key": key])
-            print("OK")
-
-        case "list-status":
-            let parsed = parseFlagArgs(commandArgs)
-            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
-            let payload = try client.sendV2(method: "workspace.list_status", params: ["workspace_id": workspaceId])
-            let entries = payload["entries"] as? [[String: Any]] ?? []
-            if entries.isEmpty {
-                print("No status entries")
-            } else {
-                print(entries.map(sidebarMetadataLineText).joined(separator: "\n"))
-            }
-
-        case "set-progress":
-            let parsed = parseFlagArgs(commandArgs)
-            guard let first = parsed.positional.first else {
-                throw CLIError(message: "ERROR: Missing progress value — usage: set_progress <0.0-1.0> [--label=X] [--tab=X]")
-            }
-            guard let value = Double(first), value.isFinite else {
-                throw CLIError(message: "ERROR: Invalid progress value '\(first)' — must be 0.0 to 1.0")
-            }
-            var params: [String: Any] = ["value": min(1.0, max(0.0, value))]
-            if let label = normalizedFlagValue(parsed.options["label"]) { params["label"] = label }
-            params["workspace_id"] = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
-            _ = try client.sendV2(method: "workspace.set_progress", params: params)
-            print("OK")
-
-        case "clear-progress":
-            let parsed = parseFlagArgs(commandArgs)
-            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
-            _ = try client.sendV2(method: "workspace.clear_progress", params: ["workspace_id": workspaceId])
-            print("OK")
-
-        case "log":
-            let parsed = parseFlagArgs(commandArgs)
-            guard !parsed.positional.isEmpty else {
-                throw CLIError(message: "ERROR: Missing message — usage: log [--level=X] [--source=X] [--tab=X] -- <message>")
-            }
-            let levelStr = parsed.options["level"] ?? "info"
-            guard ["info", "progress", "success", "warning", "error"].contains(levelStr) else {
-                throw CLIError(message: "ERROR: Unknown log level '\(levelStr)' — use: info, progress, success, warning, error")
-            }
-            var params: [String: Any] = [
-                "message": parsed.positional.joined(separator: " "),
-                "level": levelStr,
-            ]
-            if let source = normalizedFlagValue(parsed.options["source"]) { params["source"] = source }
-            params["workspace_id"] = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
-            _ = try client.sendV2(method: "workspace.log", params: params)
-            print("OK")
-
-        case "clear-log":
-            let parsed = parseFlagArgs(commandArgs)
-            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
-            _ = try client.sendV2(method: "workspace.clear_log", params: ["workspace_id": workspaceId])
-            print("OK")
-
-        case "list-log":
-            let parsed = parseFlagArgs(commandArgs)
-            var params: [String: Any] = [:]
-            if let limitStr = parsed.options["limit"] {
-                guard !limitStr.isEmpty else {
-                    throw CLIError(message: "ERROR: Missing limit value — usage: list_log [--limit=N] [--tab=X]")
-                }
-                guard let limit = Int(limitStr), limit >= 0 else {
-                    throw CLIError(message: "ERROR: Invalid limit '\(limitStr)' — must be >= 0")
-                }
-                params["limit"] = limit
-            }
-            params["workspace_id"] = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
-            let payload = try client.sendV2(method: "workspace.list_log", params: params)
-            let entries = payload["entries"] as? [[String: Any]] ?? []
-            if entries.isEmpty {
-                print("No log entries")
-            } else {
-                print(entries.map(sidebarLogLineText).joined(separator: "\n"))
-            }
-
-        case "sidebar-state":
-            let parsed = parseFlagArgs(commandArgs)
-            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
-            let payload = try client.sendV2(method: "workspace.sidebar_state", params: ["workspace_id": workspaceId])
-            print(sidebarStateText(payload))
-
-        case "claude-hook":
-            try runClaudeHook(commandArgs: commandArgs, client: client)
-
-        case "codex-hook":
-            try runCodexHook(commandArgs: commandArgs, client: client)
-
-        case "set-app-focus":
-            guard let value = commandArgs.first else { throw CLIError(message: "set-app-focus requires a value") }
-            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let state: String
-            switch normalized {
-            case "active", "1", "true": state = "active"
-            case "inactive", "0", "false": state = "inactive"
-            case "clear", "none", "": state = "clear"
-            default:
-                throw CLIError(message: "ERROR: Expected active, inactive, or clear")
-            }
-            _ = try client.sendV2(method: "app.focus_override.set", params: ["state": state])
-            print("OK")
-
-        case "simulate-app-active":
-            _ = try client.sendV2(method: "app.simulate_active")
-            print("OK")
-
-        case "__tmux-compat":
-            try runClaudeTeamsTmuxCompat(
-                commandArgs: commandArgs,
-                client: client,
-                jsonOutput: jsonOutput,
-                idFormat: idFormat,
-                windowOverride: windowId
-            )
-
-        case "capture-pane",
-             "resize-pane",
-             "pipe-pane",
-             "wait-for",
-             "swap-pane",
-             "break-pane",
-             "join-pane",
-             "last-window",
-             "last-pane",
-             "next-window",
-             "previous-window",
-             "find-window",
-             "clear-history",
-             "set-hook",
-             "popup",
-             "bind-key",
-             "unbind-key",
-             "copy-mode",
-             "set-buffer",
-             "paste-buffer",
-             "list-buffers",
-             "respawn-pane",
-             "display-message":
-            try runTmuxCompatCommand(
-                command: command,
-                commandArgs: commandArgs,
-                client: client,
-                jsonOutput: jsonOutput,
-                idFormat: idFormat,
-                windowOverride: windowId
-            )
-
-        case "help":
-            print(usage())
-
-        // Browser commands
-        case "browser":
-            try runBrowserCommand(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        // Legacy aliases shimmed onto the v2 browser command surface.
-        case "open-browser":
-            try runBrowserCommand(commandArgs: ["open"] + commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "navigate":
-            let bridged = replaceToken(commandArgs, from: "--panel", to: "--surface")
-            try runBrowserCommand(commandArgs: ["navigate"] + bridged, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "browser-back":
-            let bridged = replaceToken(commandArgs, from: "--panel", to: "--surface")
-            try runBrowserCommand(commandArgs: ["back"] + bridged, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "browser-forward":
-            let bridged = replaceToken(commandArgs, from: "--panel", to: "--surface")
-            try runBrowserCommand(commandArgs: ["forward"] + bridged, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "browser-reload":
-            let bridged = replaceToken(commandArgs, from: "--panel", to: "--surface")
-            try runBrowserCommand(commandArgs: ["reload"] + bridged, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "get-url":
-            let bridged = replaceToken(commandArgs, from: "--panel", to: "--surface")
-            try runBrowserCommand(commandArgs: ["get-url"] + bridged, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "focus-webview":
-            let bridged = replaceToken(commandArgs, from: "--panel", to: "--surface")
-            try runBrowserCommand(commandArgs: ["focus-webview"] + bridged, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        case "is-webview-focused":
-            let bridged = replaceToken(commandArgs, from: "--panel", to: "--surface")
-            try runBrowserCommand(commandArgs: ["is-webview-focused"] + bridged, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        // Markdown commands
-        case "markdown":
-            try runMarkdownCommand(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-
-        default:
+        let ctx = CommandContext(
+            command: command,
+            commandArgs: commandArgs,
+            client: client,
+            jsonOutput: jsonOutput,
+            idFormat: idFormat,
+            idFormatArgProvided: idFormatArg != nil,
+            windowId: windowId
+        )
+        if let descriptor = commandDescriptor(named: command), let execute = descriptor.execute {
+            try execute(ctx)
+        } else {
             print(usage())
             throw CLIError(message: "Unknown command: \(command)")
         }
+    }
+
+    /// Single source of truth for command existence, help text, and dispatch.
+    /// See `CommandDescriptor` for the collapsed-knowledge rationale (CT1).
+    ///
+    /// Order matches the historical `Commands:` help block, since that order
+    /// is externally visible; dispatch itself is by name lookup and does not
+    /// depend on array order.
+    private func commandDescriptors() -> [CommandDescriptor] {
+        [
+            // MARK: - Pre-connection specials (dispatched earlier in run();
+            // documented here only so usage() has one source for help text).
+            CommandDescriptor(names: ["welcome"], helpLines: ["welcome"], execute: nil),
+            CommandDescriptor(names: ["shortcuts"], helpLines: ["shortcuts"], execute: nil),
+            CommandDescriptor(
+                names: ["feedback"],
+                helpLines: ["feedback [--email <email> --body <text> [--image <path> ...]]  (opens GitHub issues; direct submission disabled)"],
+                execute: nil
+            ),
+            CommandDescriptor(names: ["themes"], helpLines: ["themes [list|set|clear]"], execute: nil),
+            CommandDescriptor(names: ["claude-teams"], helpLines: ["claude-teams [claude-args...]"], execute: nil),
+            CommandDescriptor(names: ["omo"], helpLines: ["omo [opencode-args...]"], execute: nil),
+            CommandDescriptor(names: ["omx"], helpLines: ["omx [omx-args...]"], execute: nil),
+            CommandDescriptor(names: ["omc"], helpLines: ["omc [omc-args...]"], execute: nil),
+            CommandDescriptor(names: ["codex"], helpLines: ["codex <install-hooks|uninstall-hooks>"], execute: nil),
+
+            CommandDescriptor(
+                names: ["ping"],
+                helpLines: ["ping"],
+                execute: { ctx in
+                    _ = try ctx.client.sendV2(method: "system.ping")
+                    print("PONG")
+                }
+            ),
+
+            CommandDescriptor(names: ["version"], helpLines: ["version"], execute: nil),
+
+            CommandDescriptor(
+                names: ["capabilities"],
+                helpLines: ["capabilities"],
+                execute: { ctx in
+                    let response = try ctx.client.sendV2(method: "system.capabilities")
+                    print(self.jsonString(self.formatIDs(response, mode: ctx.idFormat)))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["rpc"],
+                helpLines: ["rpc <method> [json-params]"],
+                execute: { ctx in
+                    guard let method = ctx.commandArgs.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !method.isEmpty else {
+                        throw CLIError(message: "Usage: programa rpc <method> [json-params]")
+                    }
+                    let params = try self.parseRPCParams(Array(ctx.commandArgs.dropFirst()))
+                    let response = try ctx.client.sendV2(method: method, params: params)
+                    let output: Any = ctx.idFormatArgProvided ? self.formatIDs(response, mode: ctx.idFormat) : response
+                    print(self.jsonString(output))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["identify"],
+                helpLines: ["identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]"],
+                execute: { ctx in
+                    var params: [String: Any] = [:]
+                    let includeCaller = !self.hasFlag(ctx.commandArgs, name: "--no-caller")
+                    if includeCaller {
+                        let idWsFlag = self.optionValue(ctx.commandArgs, name: "--workspace")
+                        let workspaceArg = idWsFlag ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                        let surfaceArg = self.optionValue(ctx.commandArgs, name: "--surface") ?? (idWsFlag == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                        if workspaceArg != nil || surfaceArg != nil {
+                            let workspaceId = try self.normalizeWorkspaceHandle(
+                                workspaceArg,
+                                client: ctx.client,
+                                allowCurrent: surfaceArg != nil
+                            )
+                            var caller: [String: Any] = [:]
+                            if let workspaceId {
+                                caller["workspace_id"] = workspaceId
+                            }
+                            if surfaceArg != nil {
+                                guard let surfaceId = try self.normalizeSurfaceHandle(
+                                    surfaceArg,
+                                    client: ctx.client,
+                                    workspaceHandle: workspaceId
+                                ) else {
+                                    throw CLIError(message: "Invalid surface handle")
+                                }
+                                caller["surface_id"] = surfaceId
+                            }
+                            if !caller.isEmpty {
+                                params["caller"] = caller
+                            }
+                        }
+                    }
+                    let response = try ctx.client.sendV2(method: "system.identify", params: params)
+                    print(self.jsonString(self.formatIDs(response, mode: ctx.idFormat)))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["list-windows"],
+                helpLines: ["list-windows"],
+                execute: { ctx in
+                    let listed = try ctx.client.sendV2(method: "window.list")
+                    let windows = listed["windows"] as? [[String: Any]] ?? []
+                    if ctx.jsonOutput {
+                        let payload = windows.map { item -> [String: Any] in
+                            var dict: [String: Any] = [
+                                "index": self.intFromAny(item["index"]) ?? 0,
+                                "id": (item["id"] as? String) ?? "",
+                                "key": (item["key"] as? Bool) ?? false,
+                                "workspace_count": self.intFromAny(item["workspace_count"]) ?? 0,
+                            ]
+                            dict["selected_workspace_id"] = item["selected_workspace_id"] as? String ?? NSNull()
+                            return dict
+                        }
+                        print(self.jsonString(payload))
+                    } else if windows.isEmpty {
+                        print("No windows")
+                    } else {
+                        let lines = windows.map { item -> String in
+                            let selected = ((item["key"] as? Bool) ?? false) ? "*" : " "
+                            let idx = self.intFromAny(item["index"]) ?? 0
+                            let id = (item["id"] as? String) ?? ""
+                            let selectedWs = (item["selected_workspace_id"] as? String) ?? "none"
+                            let workspaceCount = self.intFromAny(item["workspace_count"]) ?? 0
+                            return "\(selected) \(idx): \(id) selected_workspace=\(selectedWs) workspaces=\(workspaceCount)"
+                        }
+                        print(lines.joined(separator: "\n"))
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["current-window"],
+                helpLines: ["current-window"],
+                execute: { ctx in
+                    let response = try ctx.client.sendV2(method: "window.current")
+                    let windowId = (response["window_id"] as? String) ?? ""
+                    if ctx.jsonOutput {
+                        print(self.jsonString(["window_id": windowId]))
+                    } else {
+                        print(windowId)
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["new-window"],
+                helpLines: ["new-window"],
+                execute: { ctx in
+                    let response = try ctx.client.sendV2(method: "window.create")
+                    print("OK \((response["window_id"] as? String) ?? "")")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["focus-window"],
+                helpLines: ["focus-window --window <id>"],
+                execute: { ctx in
+                    guard let target = self.optionValue(ctx.commandArgs, name: "--window") else {
+                        throw CLIError(message: "focus-window requires --window")
+                    }
+                    // v1 only ever accepted a literal window UUID (no index/ref resolution) — preserve
+                    // that exactly rather than widening acceptance via normalizeWindowHandle.
+                    guard self.isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                        throw CLIError(message: "ERROR: Invalid window id")
+                    }
+                    do {
+                        _ = try ctx.client.sendV2(method: "window.focus", params: ["window_id": target])
+                        print("OK")
+                    } catch {
+                        throw CLIError(message: "ERROR: Window not found")
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["close-window"],
+                helpLines: ["close-window --window <id>"],
+                execute: { ctx in
+                    guard let target = self.optionValue(ctx.commandArgs, name: "--window") else {
+                        throw CLIError(message: "close-window requires --window")
+                    }
+                    guard self.isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                        throw CLIError(message: "ERROR: Invalid window id")
+                    }
+                    do {
+                        _ = try ctx.client.sendV2(method: "window.close", params: ["window_id": target])
+                        print("OK")
+                    } catch {
+                        throw CLIError(message: "ERROR: Window not found")
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["move-workspace-to-window"],
+                helpLines: ["move-workspace-to-window --workspace <id|ref> --window <id|ref>"],
+                execute: { ctx in
+                    guard let workspaceRaw = self.optionValue(ctx.commandArgs, name: "--workspace") else {
+                        throw CLIError(message: "move-workspace-to-window requires --workspace")
+                    }
+                    guard let windowRaw = self.optionValue(ctx.commandArgs, name: "--window") else {
+                        throw CLIError(message: "move-workspace-to-window requires --window")
+                    }
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceRaw, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let winId = try self.normalizeWindowHandle(windowRaw, client: ctx.client)
+                    if let winId { params["window_id"] = winId }
+                    let payload = try ctx.client.sendV2(method: "workspace.move_to_window", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["workspace", "window"]))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["reorder-workspace"],
+                helpLines: ["reorder-workspace --workspace <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>) [--window <id|ref|index>]"],
+                execute: { ctx in
+                    try self.runReorderWorkspace(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["workspace-action"],
+                helpLines: ["workspace-action --action <name> [--workspace <id|ref|index>] [--title <text>] [--color <name|#hex>] [--description <text>]"],
+                execute: { ctx in
+                    try self.runWorkspaceAction(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, windowOverride: ctx.windowId)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["list-workspaces"],
+                helpLines: ["list-workspaces"],
+                execute: { ctx in
+                    let payload = try ctx.client.sendV2(method: "workspace.list")
+                    if ctx.jsonOutput {
+                        print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
+                    } else {
+                        let workspaces = payload["workspaces"] as? [[String: Any]] ?? []
+                        if workspaces.isEmpty {
+                            print("No workspaces")
+                        } else {
+                            for ws in workspaces {
+                                let selected = (ws["selected"] as? Bool) == true
+                                let handle = self.textHandle(ws, idFormat: ctx.idFormat)
+                                let title = (ws["title"] as? String) ?? ""
+                                let remoteTag: String = {
+                                    guard let remote = ws["remote"] as? [String: Any],
+                                          (remote["enabled"] as? Bool) == true else {
+                                        return ""
+                                    }
+                                    let state = (remote["state"] as? String) ?? "unknown"
+                                    return "  [ssh:\(state)]"
+                                }()
+                                let prefix = selected ? "* " : "  "
+                                let selTag = selected ? "  [selected]" : ""
+                                let titlePart = title.isEmpty ? "" : "  \(title)"
+                                print("\(prefix)\(handle)\(titlePart)\(remoteTag)\(selTag)")
+                            }
+                        }
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["new-workspace"],
+                helpLines: ["new-workspace [--name <title>] [--description <text>] [--cwd <path>] [--command <text>]"],
+                execute: { ctx in
+                    let (commandOpt, rem0) = self.parseOption(ctx.commandArgs, name: "--command")
+                    let (cwdOpt, rem1) = self.parseOption(rem0, name: "--cwd")
+                    let (nameOpt, rem2) = self.parseOption(rem1, name: "--name")
+                    let (descriptionOpt, remaining) = self.parseOption(rem2, name: "--description")
+                    if let unknown = remaining.first(where: { $0.hasPrefix("--") }) {
+                        throw CLIError(message: "new-workspace: unknown flag '\(unknown)'. Known flags: --name <title>, --description <text>, --command <text>, --cwd <path>")
+                    }
+                    var params: [String: Any] = [:]
+                    if let cwdOpt {
+                        let resolved = self.resolvePath(cwdOpt)
+                        params["cwd"] = resolved
+                    }
+                    if let nameOpt {
+                        params["title"] = nameOpt
+                    }
+                    if let descriptionOpt {
+                        params["description"] = descriptionOpt
+                    }
+                    let response = try ctx.client.sendV2(method: "workspace.create", params: params)
+                    let wsId = (response["workspace_ref"] as? String) ?? (response["workspace_id"] as? String) ?? ""
+                    print("OK \(wsId)")
+                    if let commandText = commandOpt, !wsId.isEmpty {
+                        let text = self.unescapeSendText(commandText + "\\n")
+                        let sendParams: [String: Any] = ["text": text, "workspace_id": wsId]
+                        _ = try ctx.client.sendV2(method: "surface.send_text", params: sendParams)
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["ssh"],
+                helpLines: ["ssh <destination> [--name <title>] [--port <n>] [--identity <path>] [--ssh-option <opt>] [--no-focus] [-- <remote-command-args>]"],
+                execute: { ctx in
+                    try self.runSSH(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+            CommandDescriptor(
+                names: ["ssh-session-end"],
+                helpLines: [],
+                execute: { ctx in
+                    try self.runSSHSessionEnd(commandArgs: ctx.commandArgs, client: ctx.client)
+                }
+            ),
+
+            CommandDescriptor(names: ["remote-daemon-status"], helpLines: ["remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]"], execute: nil),
+
+            CommandDescriptor(
+                names: ["new-split"],
+                helpLines: ["new-split <left|right|up|down> [--workspace <id|ref>] [--surface <id|ref>] [--panel <id|ref>]"],
+                execute: { ctx in
+                    let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
+                    let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
+                    let (sfArg, rem2) = self.parseOption(rem1, name: "--surface")
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let surfaceRaw = sfArg ?? panelArg ?? (wsArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    guard let direction = rem2.first else {
+                        throw CLIError(message: "new-split requires a direction")
+                    }
+                    var params: [String: Any] = ["direction": direction]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(surfaceRaw, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+                    let payload = try ctx.client.sendV2(method: "surface.split", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["list-panes"],
+                helpLines: ["list-panes [--workspace <id|ref>]"],
+                execute: { ctx in
+                    let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let payload = try ctx.client.sendV2(method: "pane.list", params: params)
+                    if ctx.jsonOutput {
+                        print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
+                    } else {
+                        let panes = payload["panes"] as? [[String: Any]] ?? []
+                        if panes.isEmpty {
+                            print("No panes")
+                        } else {
+                            for pane in panes {
+                                let focused = (pane["focused"] as? Bool) == true
+                                let handle = self.textHandle(pane, idFormat: ctx.idFormat)
+                                let count = pane["surface_count"] as? Int ?? 0
+                                let prefix = focused ? "* " : "  "
+                                let focusTag = focused ? "  [focused]" : ""
+                                print("\(prefix)\(handle)  [\(count) surface\(count == 1 ? "" : "s")]\(focusTag)")
+                            }
+                        }
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["list-pane-surfaces"],
+                helpLines: ["list-pane-surfaces [--workspace <id|ref>] [--pane <id|ref>]"],
+                execute: { ctx in
+                    let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
+                    let paneRaw = self.optionValue(ctx.commandArgs, name: "--pane")
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let paneId = try self.normalizePaneHandle(paneRaw, client: ctx.client, workspaceHandle: wsId)
+                    if let paneId { params["pane_id"] = paneId }
+                    let payload = try ctx.client.sendV2(method: "pane.surfaces", params: params)
+                    if ctx.jsonOutput {
+                        print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
+                    } else {
+                        let surfaces = payload["surfaces"] as? [[String: Any]] ?? []
+                        if surfaces.isEmpty {
+                            print("No surfaces in pane")
+                        } else {
+                            for surface in surfaces {
+                                let selected = (surface["selected"] as? Bool) == true
+                                let handle = self.textHandle(surface, idFormat: ctx.idFormat)
+                                let title = (surface["title"] as? String) ?? ""
+                                let prefix = selected ? "* " : "  "
+                                let selTag = selected ? "  [selected]" : ""
+                                print("\(prefix)\(handle)  \(title)\(selTag)")
+                            }
+                        }
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["tree"],
+                helpLines: ["tree [--all] [--workspace <id|ref|index>]"],
+                execute: { ctx in
+                    try self.runTreeCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["focus-pane"],
+                helpLines: ["focus-pane --pane <id|ref> [--workspace <id|ref>]"],
+                execute: { ctx in
+                    let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
+                    guard let paneRaw = self.optionValue(ctx.commandArgs, name: "--pane") ?? ctx.commandArgs.first else {
+                        throw CLIError(message: "focus-pane requires --pane <id|ref>")
+                    }
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let paneId = try self.normalizePaneHandle(paneRaw, client: ctx.client, workspaceHandle: wsId)
+                    if let paneId { params["pane_id"] = paneId }
+                    let payload = try ctx.client.sendV2(method: "pane.focus", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["pane", "workspace"]))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["new-pane"],
+                helpLines: ["new-pane [--type <terminal|browser>] [--direction <left|right|up|down>] [--workspace <id|ref>] [--url <url>]"],
+                execute: { ctx in
+                    let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
+                    let type = self.optionValue(ctx.commandArgs, name: "--type")
+                    let direction = self.optionValue(ctx.commandArgs, name: "--direction") ?? "right"
+                    let url = self.optionValue(ctx.commandArgs, name: "--url")
+                    var params: [String: Any] = ["direction": direction]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    if let type { params["type"] = type }
+                    if let url { params["url"] = url }
+                    let payload = try ctx.client.sendV2(method: "pane.create", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["surface", "pane", "workspace"]))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["new-surface"],
+                helpLines: ["new-surface [--type <terminal|browser>] [--pane <id|ref>] [--workspace <id|ref>] [--url <url>]"],
+                execute: { ctx in
+                    let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
+                    let type = self.optionValue(ctx.commandArgs, name: "--type")
+                    let paneRaw = self.optionValue(ctx.commandArgs, name: "--pane")
+                    let url = self.optionValue(ctx.commandArgs, name: "--url")
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let paneId = try self.normalizePaneHandle(paneRaw, client: ctx.client, workspaceHandle: wsId)
+                    if let paneId { params["pane_id"] = paneId }
+                    if let type { params["type"] = type }
+                    if let url { params["url"] = url }
+                    let payload = try ctx.client.sendV2(method: "surface.create", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["surface", "pane", "workspace"]))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["close-surface"],
+                helpLines: ["close-surface [--surface <id|ref>] [--workspace <id|ref>]"],
+                execute: { ctx in
+                    let csWsFlag = self.optionValue(ctx.commandArgs, name: "--workspace")
+                    let workspaceArg = csWsFlag ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let surfaceRaw = self.optionValue(ctx.commandArgs, name: "--surface") ?? self.optionValue(ctx.commandArgs, name: "--panel") ?? (csWsFlag == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(surfaceRaw, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+                    let payload = try ctx.client.sendV2(method: "surface.close", params: params)
+                    if let closedWorkspaceId = (payload["workspace_id"] as? String) ?? wsId,
+                       let closedSurfaceId = (payload["surface_id"] as? String) ?? sfId {
+                        try? self.tmuxPruneCompatSurfaceState(
+                            workspaceId: closedWorkspaceId,
+                            surfaceId: closedSurfaceId,
+                            client: ctx.client
+                        )
+                    }
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["move-surface"],
+                helpLines: ["move-surface --surface <id|ref|index> [--pane <id|ref|index>] [--workspace <id|ref|index>] [--window <id|ref|index>] [--before <id|ref|index>] [--after <id|ref|index>] [--index <n>] [--focus <true|false>]"],
+                execute: { ctx in
+                    try self.runMoveSurface(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["reorder-surface"],
+                helpLines: ["reorder-surface --surface <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>)"],
+                execute: { ctx in
+                    try self.runReorderSurface(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["tab-action"],
+                helpLines: ["tab-action --action <name> [--tab <id|ref|index>] [--surface <id|ref|index>] [--workspace <id|ref|index>] [--title <text>] [--url <url>]"],
+                execute: { ctx in
+                    try self.runTabAction(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, windowOverride: ctx.windowId)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["rename-tab"],
+                helpLines: ["rename-tab [--workspace <id|ref>] [--tab <id|ref>] [--surface <id|ref>] <title>"],
+                execute: { ctx in
+                    try self.runRenameTab(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, windowOverride: ctx.windowId)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["drag-surface-to-split"],
+                helpLines: ["drag-surface-to-split --surface <id|ref> <left|right|up|down>"],
+                execute: { ctx in
+                    let (surfaceArg, rem0) = self.parseOption(ctx.commandArgs, name: "--surface")
+                    let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
+                    let surface = surfaceArg ?? panelArg
+                    guard let surface else {
+                        throw CLIError(message: "drag-surface-to-split requires --surface <id|index>")
+                    }
+                    guard let direction = rem1.first else {
+                        throw CLIError(message: "drag-surface-to-split requires a direction")
+                    }
+                    // v1 always targeted the currently-selected workspace (no --workspace support);
+                    // leave workspace_id unset so v2 falls back to the current selection identically.
+                    let surfaceIdForDrag = try self.normalizeSurfaceHandle(surface, client: ctx.client, workspaceHandle: nil)
+                    var dragParams: [String: Any] = ["direction": direction]
+                    if let surfaceIdForDrag { dragParams["surface_id"] = surfaceIdForDrag }
+                    let dragPayload = try ctx.client.sendV2(method: "surface.drag_to_split", params: dragParams)
+                    print("OK \((dragPayload["pane_id"] as? String) ?? "")")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["refresh-surfaces"],
+                helpLines: ["refresh-surfaces"],
+                execute: { ctx in
+                    // v1 always targeted the currently-selected workspace; no workspace_id here either.
+                    let refreshPayload = try ctx.client.sendV2(method: "surface.refresh", params: [:])
+                    print("OK Refreshed \(self.intFromAny(refreshPayload["refreshed"]) ?? 0) surfaces")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["reload-config"],
+                helpLines: ["reload-config"],
+                execute: { ctx in
+                    if let unexpected = ctx.commandArgs.first {
+                        throw CLIError(message: "reload-config does not accept arguments. Unexpected argument '\(unexpected)'")
+                    }
+                    _ = try ctx.client.sendV2(method: "app.reload_config")
+                    print("OK Reloaded config")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["surface-health"],
+                helpLines: ["surface-health [--workspace <id|ref>]"],
+                execute: { ctx in
+                    let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let payload = try ctx.client.sendV2(method: "surface.health", params: params)
+                    if ctx.jsonOutput {
+                        print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
+                    } else {
+                        let surfaces = payload["surfaces"] as? [[String: Any]] ?? []
+                        if surfaces.isEmpty {
+                            print("No surfaces")
+                        } else {
+                            for surface in surfaces {
+                                let handle = self.textHandle(surface, idFormat: ctx.idFormat)
+                                let sType = (surface["type"] as? String) ?? ""
+                                let inWindow = surface["in_window"]
+                                let inWindowStr: String
+                                if let b = inWindow as? Bool {
+                                    inWindowStr = " in_window=\(b)"
+                                } else {
+                                    inWindowStr = ""
+                                }
+                                print("\(handle)  type=\(sType)\(inWindowStr)")
+                            }
+                        }
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["debug-terminals"],
+                helpLines: [],
+                execute: { ctx in
+                    let unexpected = ctx.commandArgs.filter { $0 != "--" }
+                    if let extra = unexpected.first {
+                        throw CLIError(message: "debug-terminals: unexpected argument '\(extra)'")
+                    }
+                    let payload = try ctx.client.sendV2(method: "debug.terminals")
+                    if ctx.jsonOutput {
+                        print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
+                    } else {
+                        print(self.formatDebugTerminalsPayload(payload, idFormat: ctx.idFormat))
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["trigger-flash"],
+                helpLines: ["trigger-flash [--workspace <id|ref>] [--surface <id|ref>]"],
+                execute: { ctx in
+                    let tfWsFlag = self.optionValue(ctx.commandArgs, name: "--workspace")
+                    let explicitWorkspaceArg = tfWsFlag
+                    let preferTTYFallback = ctx.windowId == nil && ProcessInfo.processInfo.environment["TMUX"] != nil
+                    let callerWorkspaceArg = preferTTYFallback
+                        ? nil
+                        : (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let workspaceArg = explicitWorkspaceArg ?? callerWorkspaceArg
+                    let explicitSurfaceArg = self.optionValue(ctx.commandArgs, name: "--surface") ?? self.optionValue(ctx.commandArgs, name: "--panel")
+                    let callerSurfaceArg = explicitSurfaceArg == nil && preferTTYFallback == false && ctx.windowId == nil
+                        ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"]
+                        : nil
+                    let surfaceArg = explicitSurfaceArg ?? callerSurfaceArg
+                    var params: [String: Any] = [:]
+                    let wsId = try {
+                        if explicitWorkspaceArg != nil {
+                            return try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                        }
+                        return try self.resolveWorkspaceIdAllowingFallback(workspaceArg, client: ctx.client)
+                    }()
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try {
+                        if explicitSurfaceArg != nil {
+                            return try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                        }
+                        guard let wsId else { return nil }
+                        return try self.resolveSurfaceIdAllowingFallback(
+                            surfaceArg,
+                            workspaceId: wsId,
+                            client: ctx.client
+                        )
+                    }()
+                    if let sfId { params["surface_id"] = sfId }
+                    let payload = try ctx.client.sendV2(method: "surface.trigger_flash", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["list-panels"],
+                helpLines: ["list-panels [--workspace <id|ref>]"],
+                execute: { ctx in
+                    let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let payload = try ctx.client.sendV2(method: "surface.list", params: params)
+                    if ctx.jsonOutput {
+                        print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
+                    } else {
+                        let surfaces = payload["surfaces"] as? [[String: Any]] ?? []
+                        if surfaces.isEmpty {
+                            print("No surfaces")
+                        } else {
+                            for surface in surfaces {
+                                let focused = (surface["focused"] as? Bool) == true
+                                let handle = self.textHandle(surface, idFormat: ctx.idFormat)
+                                let sType = (surface["type"] as? String) ?? ""
+                                let title = (surface["title"] as? String) ?? ""
+                                let prefix = focused ? "* " : "  "
+                                let focusTag = focused ? "  [focused]" : ""
+                                let titlePart = title.isEmpty ? "" : "  \"\(title)\""
+                                print("\(prefix)\(handle)  \(sType)\(focusTag)\(titlePart)")
+                            }
+                        }
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["focus-panel"],
+                helpLines: ["focus-panel --panel <id|ref> [--workspace <id|ref>]"],
+                execute: { ctx in
+                    let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
+                    guard let panelRaw = self.optionValue(ctx.commandArgs, name: "--panel") else {
+                        throw CLIError(message: "focus-panel requires --panel")
+                    }
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(panelRaw, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+                    let payload = try ctx.client.sendV2(method: "surface.focus", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["close-workspace"],
+                helpLines: ["close-workspace --workspace <id|ref>"],
+                execute: { ctx in
+                    guard let workspaceRaw = self.optionValue(ctx.commandArgs, name: "--workspace") else {
+                        throw CLIError(message: "close-workspace requires --workspace")
+                    }
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceRaw, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let payload = try ctx.client.sendV2(method: "workspace.close", params: params)
+                    if let closedWorkspaceId = (payload["workspace_id"] as? String) ?? wsId {
+                        try? self.tmuxPruneCompatWorkspaceState(workspaceId: closedWorkspaceId)
+                    }
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["workspace"]))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["select-workspace"],
+                helpLines: ["select-workspace --workspace <id|ref>"],
+                execute: { ctx in
+                    guard let workspaceRaw = self.optionValue(ctx.commandArgs, name: "--workspace") else {
+                        throw CLIError(message: "select-workspace requires --workspace")
+                    }
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceRaw, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let payload = try ctx.client.sendV2(method: "workspace.select", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["workspace"]))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["rename-workspace", "rename-window"],
+                helpLines: [
+                    "rename-workspace [--workspace <id|ref>] <title>",
+                    "rename-window [--workspace <id|ref>] <title>",
+                ],
+                execute: { ctx in
+                    let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let titleArgs = rem0.dropFirst(rem0.first == "--" ? 1 : 0)
+                    let title = titleArgs.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !title.isEmpty else {
+                        throw CLIError(message: "\(ctx.command) requires a title")
+                    }
+                    let wsId = try self.resolveWorkspaceId(workspaceArg, client: ctx.client)
+                    let params: [String: Any] = ["title": title, "workspace_id": wsId]
+                    let payload = try ctx.client.sendV2(method: "workspace.rename", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["workspace"]))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["current-workspace"],
+                helpLines: ["current-workspace"],
+                execute: { ctx in
+                    let response = try ctx.client.sendV2(method: "workspace.current")
+                    if ctx.jsonOutput {
+                        print(self.jsonString(self.formatIDs(response, mode: ctx.idFormat)))
+                    } else {
+                        let handle = self.formatHandle(response, kind: "workspace", idFormat: ctx.idFormat)
+                            ?? (response["workspace_id"] as? String)
+                            ?? ""
+                        print(handle)
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["read-screen"],
+                helpLines: ["read-screen [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]"],
+                execute: { ctx in
+                    let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
+                    let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
+                    let (linesArg, rem2) = self.parseOption(rem1, name: "--lines")
+                    let trailing = rem2.filter { $0 != "--scrollback" }
+                    if !trailing.isEmpty {
+                        throw CLIError(message: "read-screen: unexpected arguments: \(trailing.joined(separator: " "))")
+                    }
+
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let surfaceArg = sfArg ?? (wsArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+
+                    let includeScrollback = rem2.contains("--scrollback")
+                    if includeScrollback {
+                        params["scrollback"] = true
+                    }
+                    if let linesArg {
+                        guard let lineCount = Int(linesArg), lineCount > 0 else {
+                            throw CLIError(message: "--lines must be greater than 0")
+                        }
+                        params["lines"] = lineCount
+                        params["scrollback"] = true
+                    }
+
+                    let payload = try ctx.client.sendV2(method: "surface.read_text", params: params)
+                    if ctx.jsonOutput {
+                        print(self.jsonString(payload))
+                    } else {
+                        print((payload["text"] as? String) ?? "")
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["send"],
+                helpLines: ["send [--workspace <id|ref>] [--surface <id|ref>] <text>"],
+                execute: { ctx in
+                    let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
+                    let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let surfaceArg = sfArg ?? (wsArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    let rawText = rem1.dropFirst(rem1.first == "--" ? 1 : 0).joined(separator: " ")
+                    guard !rawText.isEmpty else { throw CLIError(message: "send requires text") }
+                    let text = self.unescapeSendText(rawText)
+                    var params: [String: Any] = ["text": text]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+                    let payload = try ctx.client.sendV2(method: "surface.send_text", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["send-key"],
+                helpLines: ["send-key [--workspace <id|ref>] [--surface <id|ref>] <key>"],
+                execute: { ctx in
+                    let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
+                    let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let surfaceArg = sfArg ?? (wsArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    let keyArgs = rem1.first == "--" ? Array(rem1.dropFirst()) : rem1
+                    guard let key = keyArgs.first else { throw CLIError(message: "send-key requires a key") }
+                    var params: [String: Any] = ["key": key]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+                    let payload = try ctx.client.sendV2(method: "surface.send_key", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["send-panel"],
+                helpLines: ["send-panel --panel <id|ref> [--workspace <id|ref>] <text>"],
+                execute: { ctx in
+                    let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
+                    let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    guard let panelArg else {
+                        throw CLIError(message: "send-panel requires --panel")
+                    }
+                    let rawText = rem1.dropFirst(rem1.first == "--" ? 1 : 0).joined(separator: " ")
+                    guard !rawText.isEmpty else { throw CLIError(message: "send-panel requires text") }
+                    let text = self.unescapeSendText(rawText)
+                    var params: [String: Any] = ["text": text]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(panelArg, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+                    let payload = try ctx.client.sendV2(method: "surface.send_text", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["send-key-panel"],
+                helpLines: ["send-key-panel --panel <id|ref> [--workspace <id|ref>] <key>"],
+                execute: { ctx in
+                    let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
+                    let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    guard let panelArg else {
+                        throw CLIError(message: "send-key-panel requires --panel")
+                    }
+                    let skpArgs = rem1.first == "--" ? Array(rem1.dropFirst()) : rem1
+                    let key = skpArgs.first ?? ""
+                    guard !key.isEmpty else { throw CLIError(message: "send-key-panel requires a key") }
+                    var params: [String: Any] = ["key": key]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(panelArg, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+                    let payload = try ctx.client.sendV2(method: "surface.send_key", params: params)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["notify"],
+                helpLines: ["notify --title <text> [--subtitle <text>] [--body <text>] [--workspace <id|ref>] [--surface <id|ref>]"],
+                execute: { ctx in
+                    let title = self.optionValue(ctx.commandArgs, name: "--title") ?? "Notification"
+                    let subtitle = self.optionValue(ctx.commandArgs, name: "--subtitle") ?? ""
+                    let body = self.optionValue(ctx.commandArgs, name: "--body") ?? ""
+
+                    let explicitWorkspaceArg = self.optionValue(ctx.commandArgs, name: "--workspace")
+                    let preferTTYFallback = ctx.windowId == nil && ProcessInfo.processInfo.environment["TMUX"] != nil
+                    let callerWorkspaceArg = preferTTYFallback
+                        ? nil
+                        : (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let workspaceArg = explicitWorkspaceArg ?? callerWorkspaceArg
+                    let explicitSurfaceArg = self.optionValue(ctx.commandArgs, name: "--surface")
+                    let callerSurfaceArg = explicitSurfaceArg == nil && preferTTYFallback == false && ctx.windowId == nil
+                        ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"]
+                        : nil
+                    let surfaceArg = explicitSurfaceArg ?? callerSurfaceArg
+
+                    let targetWorkspace = try {
+                        if explicitWorkspaceArg != nil {
+                            return try self.resolveWorkspaceId(workspaceArg, client: ctx.client)
+                        }
+                        return try self.resolveWorkspaceIdAllowingFallback(workspaceArg, client: ctx.client)
+                    }()
+                    let targetSurface = try {
+                        if explicitSurfaceArg != nil {
+                            return try self.resolveSurfaceId(surfaceArg, workspaceId: targetWorkspace, client: ctx.client)
+                        }
+                        return try self.resolveSurfaceIdAllowingFallback(
+                            surfaceArg,
+                            workspaceId: targetWorkspace,
+                            client: ctx.client
+                        )
+                    }()
+
+                    _ = try ctx.client.sendV2(method: "notification.create_for_target", params: [
+                        "workspace_id": targetWorkspace,
+                        "surface_id": targetSurface,
+                        "title": title,
+                        "subtitle": subtitle,
+                        "body": body,
+                    ])
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["list-notifications"],
+                helpLines: ["list-notifications"],
+                execute: { ctx in
+                    let listed = try ctx.client.sendV2(method: "notification.list")
+                    let notifications = listed["notifications"] as? [[String: Any]] ?? []
+                    if ctx.jsonOutput {
+                        let payload = notifications.enumerated().map { _, item -> [String: Any] in
+                            var dict: [String: Any] = [
+                                "id": (item["id"] as? String) ?? "",
+                                "workspace_id": (item["workspace_id"] as? String) ?? "",
+                                "is_read": (item["is_read"] as? Bool) ?? false,
+                                "title": (item["title"] as? String) ?? "",
+                                "subtitle": (item["subtitle"] as? String) ?? "",
+                                "body": (item["body"] as? String) ?? "",
+                            ]
+                            dict["surface_id"] = item["surface_id"] as? String ?? NSNull()
+                            return dict
+                        }
+                        print(self.jsonString(payload))
+                    } else if notifications.isEmpty {
+                        print("No notifications")
+                    } else {
+                        let lines = notifications.enumerated().map { index, item -> String in
+                            let surfaceText = (item["surface_id"] as? String) ?? "none"
+                            let readText = ((item["is_read"] as? Bool) ?? false) ? "read" : "unread"
+                            let id = (item["id"] as? String) ?? ""
+                            let workspaceId = (item["workspace_id"] as? String) ?? ""
+                            let title = (item["title"] as? String) ?? ""
+                            let subtitle = (item["subtitle"] as? String) ?? ""
+                            let body = (item["body"] as? String) ?? ""
+                            return "\(index):\(id)|\(workspaceId)|\(surfaceText)|\(readText)|\(title)|\(subtitle)|\(body)"
+                        }
+                        print(lines.joined(separator: "\n"))
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["clear-notifications"],
+                helpLines: ["clear-notifications"],
+                execute: { ctx in
+                    if let wsFlag = self.optionValue(ctx.commandArgs, name: "--workspace") {
+                        let wsId = try self.resolveWorkspaceId(wsFlag, client: ctx.client)
+                        _ = try ctx.client.sendV2(method: "notification.clear", params: ["workspace_id": wsId])
+                    } else if ctx.windowId == nil,
+                              let envWs = ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"],
+                              let wsId = try? self.resolveWorkspaceId(envWs, client: ctx.client) {
+                        _ = try ctx.client.sendV2(method: "notification.clear", params: ["workspace_id": wsId])
+                    } else {
+                        _ = try ctx.client.sendV2(method: "notification.clear")
+                    }
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["set-status"],
+                helpLines: [],
+                execute: { ctx in
+                    let parsed = self.parseFlagArgs(ctx.commandArgs, stopAtDashDash: false)
+                    guard parsed.positional.count >= 2 else {
+                        throw CLIError(message: "ERROR: Missing status key or value — usage: set_status <key> <value> [--icon=X] [--color=#hex] [--url=X] [--priority=N] [--format=plain|markdown] [--tab=X]")
+                    }
+                    var params: [String: Any] = [
+                        "key": parsed.positional[0],
+                        "value": parsed.positional[1...].joined(separator: " "),
+                    ]
+                    if let icon = self.normalizedFlagValue(parsed.options["icon"]) { params["icon"] = icon }
+                    if let color = self.normalizedFlagValue(parsed.options["color"]) { params["color"] = color }
+                    if let url = self.normalizedFlagValue(parsed.options["url"] ?? parsed.options["link"]) { params["url"] = url }
+                    if let priorityRaw = self.normalizedFlagValue(parsed.options["priority"]) {
+                        guard let priority = Int(priorityRaw) else {
+                            throw CLIError(message: "ERROR: Invalid metadata priority '\(priorityRaw)' — must be an integer")
+                        }
+                        params["priority"] = max(-9999, min(9999, priority))
+                    }
+                    if let formatRaw = self.normalizedFlagValue(parsed.options["format"]) {
+                        guard ["plain", "markdown", "md"].contains(formatRaw.lowercased()) else {
+                            throw CLIError(message: "ERROR: Invalid metadata format '\(formatRaw)' — use: plain, markdown")
+                        }
+                        params["format"] = formatRaw.lowercased() == "md" ? "markdown" : formatRaw.lowercased()
+                    }
+                    if let pidRaw = self.normalizedFlagValue(parsed.options["pid"]), let pid = Int(pidRaw), pid > 0 {
+                        params["pid"] = pid
+                    }
+                    params["workspace_id"] = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
+                    _ = try ctx.client.sendV2(method: "workspace.set_status", params: params)
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["clear-status"],
+                helpLines: [],
+                execute: { ctx in
+                    let parsed = self.parseFlagArgs(ctx.commandArgs)
+                    guard let key = parsed.positional.first, parsed.positional.count == 1 else {
+                        throw CLIError(message: "ERROR: Missing metadata key — usage: clear_status <key> [--tab=X]")
+                    }
+                    let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
+                    _ = try ctx.client.sendV2(method: "workspace.clear_status", params: ["workspace_id": workspaceId, "key": key])
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["list-status"],
+                helpLines: [],
+                execute: { ctx in
+                    let parsed = self.parseFlagArgs(ctx.commandArgs)
+                    let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
+                    let payload = try ctx.client.sendV2(method: "workspace.list_status", params: ["workspace_id": workspaceId])
+                    let entries = payload["entries"] as? [[String: Any]] ?? []
+                    if entries.isEmpty {
+                        print("No status entries")
+                    } else {
+                        print(entries.map(self.sidebarMetadataLineText).joined(separator: "\n"))
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["set-progress"],
+                helpLines: [],
+                execute: { ctx in
+                    let parsed = self.parseFlagArgs(ctx.commandArgs)
+                    guard let first = parsed.positional.first else {
+                        throw CLIError(message: "ERROR: Missing progress value — usage: set_progress <0.0-1.0> [--label=X] [--tab=X]")
+                    }
+                    guard let value = Double(first), value.isFinite else {
+                        throw CLIError(message: "ERROR: Invalid progress value '\(first)' — must be 0.0 to 1.0")
+                    }
+                    var params: [String: Any] = ["value": min(1.0, max(0.0, value))]
+                    if let label = self.normalizedFlagValue(parsed.options["label"]) { params["label"] = label }
+                    params["workspace_id"] = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
+                    _ = try ctx.client.sendV2(method: "workspace.set_progress", params: params)
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["clear-progress"],
+                helpLines: [],
+                execute: { ctx in
+                    let parsed = self.parseFlagArgs(ctx.commandArgs)
+                    let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
+                    _ = try ctx.client.sendV2(method: "workspace.clear_progress", params: ["workspace_id": workspaceId])
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["log"],
+                helpLines: [],
+                execute: { ctx in
+                    let parsed = self.parseFlagArgs(ctx.commandArgs)
+                    guard !parsed.positional.isEmpty else {
+                        throw CLIError(message: "ERROR: Missing message — usage: log [--level=X] [--source=X] [--tab=X] -- <message>")
+                    }
+                    let levelStr = parsed.options["level"] ?? "info"
+                    guard ["info", "progress", "success", "warning", "error"].contains(levelStr) else {
+                        throw CLIError(message: "ERROR: Unknown log level '\(levelStr)' — use: info, progress, success, warning, error")
+                    }
+                    var params: [String: Any] = [
+                        "message": parsed.positional.joined(separator: " "),
+                        "level": levelStr,
+                    ]
+                    if let source = self.normalizedFlagValue(parsed.options["source"]) { params["source"] = source }
+                    params["workspace_id"] = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
+                    _ = try ctx.client.sendV2(method: "workspace.log", params: params)
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["clear-log"],
+                helpLines: [],
+                execute: { ctx in
+                    let parsed = self.parseFlagArgs(ctx.commandArgs)
+                    let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
+                    _ = try ctx.client.sendV2(method: "workspace.clear_log", params: ["workspace_id": workspaceId])
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["list-log"],
+                helpLines: [],
+                execute: { ctx in
+                    let parsed = self.parseFlagArgs(ctx.commandArgs)
+                    var params: [String: Any] = [:]
+                    if let limitStr = parsed.options["limit"] {
+                        guard !limitStr.isEmpty else {
+                            throw CLIError(message: "ERROR: Missing limit value — usage: list_log [--limit=N] [--tab=X]")
+                        }
+                        guard let limit = Int(limitStr), limit >= 0 else {
+                            throw CLIError(message: "ERROR: Invalid limit '\(limitStr)' — must be >= 0")
+                        }
+                        params["limit"] = limit
+                    }
+                    params["workspace_id"] = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
+                    let payload = try ctx.client.sendV2(method: "workspace.list_log", params: params)
+                    let entries = payload["entries"] as? [[String: Any]] ?? []
+                    if entries.isEmpty {
+                        print("No log entries")
+                    } else {
+                        print(entries.map(self.sidebarLogLineText).joined(separator: "\n"))
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["sidebar-state"],
+                helpLines: [],
+                execute: { ctx in
+                    let parsed = self.parseFlagArgs(ctx.commandArgs)
+                    let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
+                    let payload = try ctx.client.sendV2(method: "workspace.sidebar_state", params: ["workspace_id": workspaceId])
+                    print(self.sidebarStateText(payload))
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["claude-hook"],
+                helpLines: ["claude-hook <session-start|stop|notification> [--workspace <id|ref>] [--surface <id|ref>]"],
+                execute: { ctx in
+                    try self.runClaudeHook(commandArgs: ctx.commandArgs, client: ctx.client)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["codex-hook"],
+                helpLines: [],
+                execute: { ctx in
+                    try self.runCodexHook(commandArgs: ctx.commandArgs, client: ctx.client)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["set-app-focus"],
+                helpLines: ["set-app-focus <active|inactive|clear>"],
+                execute: { ctx in
+                    guard let value = ctx.commandArgs.first else { throw CLIError(message: "set-app-focus requires a value") }
+                    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    let state: String
+                    switch normalized {
+                    case "active", "1", "true": state = "active"
+                    case "inactive", "0", "false": state = "inactive"
+                    case "clear", "none", "": state = "clear"
+                    default:
+                        throw CLIError(message: "ERROR: Expected active, inactive, or clear")
+                    }
+                    _ = try ctx.client.sendV2(method: "app.focus_override.set", params: ["state": state])
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["simulate-app-active"],
+                helpLines: ["simulate-app-active"],
+                execute: { ctx in
+                    _ = try ctx.client.sendV2(method: "app.simulate_active")
+                    print("OK")
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["__tmux-compat"],
+                helpLines: [],
+                execute: { ctx in
+                    try self.runClaudeTeamsTmuxCompat(
+                        commandArgs: ctx.commandArgs,
+                        client: ctx.client,
+                        jsonOutput: ctx.jsonOutput,
+                        idFormat: ctx.idFormat,
+                        windowOverride: ctx.windowId
+                    )
+                }
+            ),
+
+            // MARK: - tmux compatibility commands (all share one bespoke
+            // handler; help text preserves the original grouped layout,
+            // including the two pipe-separated combo lines).
+            CommandDescriptor(names: [], helpLines: ["", "# tmux compatibility commands"], execute: nil),
+        ] + Self.tmuxCompatDescriptors(runTmuxCompatCommand: { ctx in
+            try self.runTmuxCompatCommand(
+                command: ctx.command,
+                commandArgs: ctx.commandArgs,
+                client: ctx.client,
+                jsonOutput: ctx.jsonOutput,
+                idFormat: ctx.idFormat,
+                windowOverride: ctx.windowId
+            )
+        }) + [
+            CommandDescriptor(names: [], helpLines: [""], execute: nil),
+
+            CommandDescriptor(
+                names: ["markdown"],
+                helpLines: ["markdown [open] <path>             (open markdown file in formatted viewer panel with live reload)"],
+                execute: { ctx in
+                    try self.runMarkdownCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
+            CommandDescriptor(names: [], helpLines: [""], execute: nil),
+
+            CommandDescriptor(
+                names: ["browser"],
+                helpLines: [
+                    "browser [--surface <id|ref|index> | <surface>] <subcommand> ...",
+                    "browser open [url]                   (create browser split in caller's workspace; if surface supplied, behaves like navigate)",
+                    "browser open-split [url]",
+                    "browser goto|navigate <url> [--snapshot-after]",
+                    "browser back|forward|reload [--snapshot-after]",
+                    "browser url|get-url",
+                    "browser snapshot [--interactive|-i] [--cursor] [--compact] [--max-depth <n>] [--selector <css>]",
+                    "browser eval <script>",
+                    "browser wait [--selector <css>] [--text <text>] [--url-contains <text>] [--load-state <interactive|complete>] [--function <js>] [--timeout-ms <ms>]",
+                    "browser click|dblclick|hover|focus|check|uncheck|scroll-into-view <selector> [--snapshot-after]",
+                    "browser type <selector> <text> [--snapshot-after]",
+                    "browser fill <selector> [text] [--snapshot-after]   (empty text clears input)",
+                    "browser press|keydown|keyup <key> [--snapshot-after]",
+                    "browser select <selector> <value> [--snapshot-after]",
+                    "browser scroll [--selector <css>] [--dx <n>] [--dy <n>] [--snapshot-after]",
+                    "browser screenshot [--out <path>] [--json]",
+                    "browser get <url|title|text|html|value|attr|count|box|styles> [...]",
+                    "browser is <visible|enabled|checked> <selector>",
+                    "browser find <role|text|label|placeholder|alt|title|testid|first|last|nth> ...",
+                    "browser frame <selector|main>",
+                    "browser dialog <accept|dismiss> [text]",
+                    "browser download [wait] [--path <path>] [--timeout-ms <ms>]",
+                    "browser cookies <get|set|clear> [...]",
+                    "browser storage <local|session> <get|set|clear> [...]",
+                    "browser tab <new|list|switch|close|<index>> [...]",
+                    "browser console <list|clear>",
+                    "browser errors <list|clear>",
+                    "browser highlight <selector>",
+                    "browser state <save|load> <path>",
+                    "browser addinitscript <script>",
+                    "browser addscript <script>",
+                    "browser addstyle <css>",
+                    "browser identify [--surface <id|ref|index>]",
+                ],
+                execute: { ctx in
+                    try self.runBrowserCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
+            // Legacy aliases shimmed onto the v2 browser command surface.
+            // Undocumented in the old help text; kept that way here too.
+            CommandDescriptor(
+                names: ["open-browser"],
+                helpLines: [],
+                execute: { ctx in
+                    try self.runBrowserCommand(commandArgs: ["open"] + ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+            CommandDescriptor(
+                names: ["navigate"],
+                helpLines: [],
+                execute: { ctx in
+                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
+                    try self.runBrowserCommand(commandArgs: ["navigate"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+            CommandDescriptor(
+                names: ["browser-back"],
+                helpLines: [],
+                execute: { ctx in
+                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
+                    try self.runBrowserCommand(commandArgs: ["back"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+            CommandDescriptor(
+                names: ["browser-forward"],
+                helpLines: [],
+                execute: { ctx in
+                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
+                    try self.runBrowserCommand(commandArgs: ["forward"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+            CommandDescriptor(
+                names: ["browser-reload"],
+                helpLines: [],
+                execute: { ctx in
+                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
+                    try self.runBrowserCommand(commandArgs: ["reload"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+            CommandDescriptor(
+                names: ["get-url"],
+                helpLines: [],
+                execute: { ctx in
+                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
+                    try self.runBrowserCommand(commandArgs: ["get-url"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+            CommandDescriptor(
+                names: ["focus-webview"],
+                helpLines: [],
+                execute: { ctx in
+                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
+                    try self.runBrowserCommand(commandArgs: ["focus-webview"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+            CommandDescriptor(
+                names: ["is-webview-focused"],
+                helpLines: [],
+                execute: { ctx in
+                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
+                    try self.runBrowserCommand(commandArgs: ["is-webview-focused"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["help"],
+                helpLines: ["help"],
+                execute: { ctx in
+                    print(self.usage())
+                }
+            ),
+        ]
+    }
+
+    /// The 23 tmux-emulation command names, all dispatched through the same
+    /// `runTmuxCompatCommand`. Help text preserves the original grouped
+    /// layout, including the two pipe-separated combo lines
+    /// ("next-window | previous-window | last-window" and
+    /// "bind-key | unbind-key | copy-mode") that documented three names on
+    /// one line while still being three independently-dispatchable commands.
+    private static func tmuxCompatDescriptors(
+        runTmuxCompatCommand: @escaping (CommandContext) throws -> Void
+    ) -> [CommandDescriptor] {
+        [
+            CommandDescriptor(names: ["capture-pane"], helpLines: ["capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["resize-pane"], helpLines: ["resize-pane --pane <id|ref> [--workspace <id|ref>] (-L|-R|-U|-D) [--amount <n>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["pipe-pane"], helpLines: ["pipe-pane --command <shell-command> [--workspace <id|ref>] [--surface <id|ref>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["wait-for"], helpLines: ["wait-for [-S|--signal] <name> [--timeout <seconds>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["swap-pane"], helpLines: ["swap-pane --pane <id|ref> --target-pane <id|ref> [--workspace <id|ref>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["break-pane"], helpLines: ["break-pane [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["join-pane"], helpLines: ["join-pane --target-pane <id|ref> [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["next-window", "previous-window", "last-window"], helpLines: ["next-window | previous-window | last-window"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["last-pane"], helpLines: ["last-pane [--workspace <id|ref>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["find-window"], helpLines: ["find-window [--content] [--select] <query>"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["clear-history"], helpLines: ["clear-history [--workspace <id|ref>] [--surface <id|ref>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["set-hook"], helpLines: ["set-hook [--list] [--unset <event>] | <event> <command>"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["popup"], helpLines: ["popup"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["bind-key", "unbind-key", "copy-mode"], helpLines: ["bind-key | unbind-key | copy-mode"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["set-buffer"], helpLines: ["set-buffer [--name <name>] <text>"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["list-buffers"], helpLines: ["list-buffers"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["paste-buffer"], helpLines: ["paste-buffer [--name <name>] [--workspace <id|ref>] [--surface <id|ref>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["respawn-pane"], helpLines: ["respawn-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <cmd>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["display-message"], helpLines: ["display-message [-p|--print] <text>"], execute: runTmuxCompatCommand),
+        ]
+    }
+
+    /// Looks up the descriptor whose `names` contains `command`, if any.
+    private func commandDescriptor(named command: String) -> CommandDescriptor? {
+        commandDescriptors().first { $0.names.contains(command) }
     }
 
     private func resolvePath(_ path: String) -> String {
@@ -14073,6 +14595,16 @@ struct CMUXCLI {
         return URL(fileURLWithPath: expanded).standardizedFileURL
     }
 
+    /// The `Commands:` section body, generated from `commandDescriptors()` so
+    /// it can never drift from what the dispatcher actually knows about.
+    /// See `CommandDescriptor` for why this is the single source of truth.
+    private func commandsHelpBlock() -> String {
+        commandDescriptors()
+            .flatMap { $0.helpLines }
+            .map { $0.isEmpty ? "" : "  " + $0 }
+            .joined(separator: "\n")
+    }
+
     private func usage() -> String {
         return """
         programa - control programa via Unix socket
@@ -14090,125 +14622,7 @@ struct CMUXCLI {
           --password takes precedence, then PROGRAMA_SOCKET_PASSWORD env var, then password saved in Settings.
 
         Commands:
-          welcome
-          shortcuts
-          feedback [--email <email> --body <text> [--image <path> ...]]  (opens GitHub issues; direct submission disabled)
-          themes [list|set|clear]
-          claude-teams [claude-args...]
-          omo [opencode-args...]
-          omx [omx-args...]
-          omc [omc-args...]
-          codex <install-hooks|uninstall-hooks>
-          ping
-          version
-          capabilities
-          rpc <method> [json-params]
-          identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]
-          list-windows
-          current-window
-          new-window
-          focus-window --window <id>
-          close-window --window <id>
-          move-workspace-to-window --workspace <id|ref> --window <id|ref>
-          reorder-workspace --workspace <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>) [--window <id|ref|index>]
-          workspace-action --action <name> [--workspace <id|ref|index>] [--title <text>] [--color <name|#hex>] [--description <text>]
-          list-workspaces
-          new-workspace [--name <title>] [--description <text>] [--cwd <path>] [--command <text>]
-          ssh <destination> [--name <title>] [--port <n>] [--identity <path>] [--ssh-option <opt>] [--no-focus] [-- <remote-command-args>]
-          remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]
-          new-split <left|right|up|down> [--workspace <id|ref>] [--surface <id|ref>] [--panel <id|ref>]
-          list-panes [--workspace <id|ref>]
-          list-pane-surfaces [--workspace <id|ref>] [--pane <id|ref>]
-          tree [--all] [--workspace <id|ref|index>]
-          focus-pane --pane <id|ref> [--workspace <id|ref>]
-          new-pane [--type <terminal|browser>] [--direction <left|right|up|down>] [--workspace <id|ref>] [--url <url>]
-          new-surface [--type <terminal|browser>] [--pane <id|ref>] [--workspace <id|ref>] [--url <url>]
-          close-surface [--surface <id|ref>] [--workspace <id|ref>]
-          move-surface --surface <id|ref|index> [--pane <id|ref|index>] [--workspace <id|ref|index>] [--window <id|ref|index>] [--before <id|ref|index>] [--after <id|ref|index>] [--index <n>] [--focus <true|false>]
-          reorder-surface --surface <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>)
-          tab-action --action <name> [--tab <id|ref|index>] [--surface <id|ref|index>] [--workspace <id|ref|index>] [--title <text>] [--url <url>]
-          rename-tab [--workspace <id|ref>] [--tab <id|ref>] [--surface <id|ref>] <title>
-          drag-surface-to-split --surface <id|ref> <left|right|up|down>
-          refresh-surfaces
-          reload-config
-          surface-health [--workspace <id|ref>]
-          trigger-flash [--workspace <id|ref>] [--surface <id|ref>]
-          list-panels [--workspace <id|ref>]
-          focus-panel --panel <id|ref> [--workspace <id|ref>]
-          close-workspace --workspace <id|ref>
-          select-workspace --workspace <id|ref>
-          rename-workspace [--workspace <id|ref>] <title>
-          rename-window [--workspace <id|ref>] <title>
-          current-workspace
-          read-screen [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]
-          send [--workspace <id|ref>] [--surface <id|ref>] <text>
-          send-key [--workspace <id|ref>] [--surface <id|ref>] <key>
-          send-panel --panel <id|ref> [--workspace <id|ref>] <text>
-          send-key-panel --panel <id|ref> [--workspace <id|ref>] <key>
-          notify --title <text> [--subtitle <text>] [--body <text>] [--workspace <id|ref>] [--surface <id|ref>]
-          list-notifications
-          clear-notifications
-          claude-hook <session-start|stop|notification> [--workspace <id|ref>] [--surface <id|ref>]
-          set-app-focus <active|inactive|clear>
-          simulate-app-active
-
-          # tmux compatibility commands
-          capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]
-          resize-pane --pane <id|ref> [--workspace <id|ref>] (-L|-R|-U|-D) [--amount <n>]
-          pipe-pane --command <shell-command> [--workspace <id|ref>] [--surface <id|ref>]
-          wait-for [-S|--signal] <name> [--timeout <seconds>]
-          swap-pane --pane <id|ref> --target-pane <id|ref> [--workspace <id|ref>]
-          break-pane [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
-          join-pane --target-pane <id|ref> [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
-          next-window | previous-window | last-window
-          last-pane [--workspace <id|ref>]
-          find-window [--content] [--select] <query>
-          clear-history [--workspace <id|ref>] [--surface <id|ref>]
-          set-hook [--list] [--unset <event>] | <event> <command>
-          popup
-          bind-key | unbind-key | copy-mode
-          set-buffer [--name <name>] <text>
-          list-buffers
-          paste-buffer [--name <name>] [--workspace <id|ref>] [--surface <id|ref>]
-          respawn-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <cmd>]
-          display-message [-p|--print] <text>
-
-          markdown [open] <path>             (open markdown file in formatted viewer panel with live reload)
-
-          browser [--surface <id|ref|index> | <surface>] <subcommand> ...
-          browser open [url]                   (create browser split in caller's workspace; if surface supplied, behaves like navigate)
-          browser open-split [url]
-          browser goto|navigate <url> [--snapshot-after]
-          browser back|forward|reload [--snapshot-after]
-          browser url|get-url
-          browser snapshot [--interactive|-i] [--cursor] [--compact] [--max-depth <n>] [--selector <css>]
-          browser eval <script>
-          browser wait [--selector <css>] [--text <text>] [--url-contains <text>] [--load-state <interactive|complete>] [--function <js>] [--timeout-ms <ms>]
-          browser click|dblclick|hover|focus|check|uncheck|scroll-into-view <selector> [--snapshot-after]
-          browser type <selector> <text> [--snapshot-after]
-          browser fill <selector> [text] [--snapshot-after]   (empty text clears input)
-          browser press|keydown|keyup <key> [--snapshot-after]
-          browser select <selector> <value> [--snapshot-after]
-          browser scroll [--selector <css>] [--dx <n>] [--dy <n>] [--snapshot-after]
-          browser screenshot [--out <path>] [--json]
-          browser get <url|title|text|html|value|attr|count|box|styles> [...]
-          browser is <visible|enabled|checked> <selector>
-          browser find <role|text|label|placeholder|alt|title|testid|first|last|nth> ...
-          browser frame <selector|main>
-          browser dialog <accept|dismiss> [text]
-          browser download [wait] [--path <path>] [--timeout-ms <ms>]
-          browser cookies <get|set|clear> [...]
-          browser storage <local|session> <get|set|clear> [...]
-          browser tab <new|list|switch|close|<index>> [...]
-          browser console <list|clear>
-          browser errors <list|clear>
-          browser highlight <selector>
-          browser state <save|load> <path>
-          browser addinitscript <script>
-          browser addscript <script>
-          browser addstyle <css>
-          browser identify [--surface <id|ref|index>]
-          help
+        \(commandsHelpBlock())
 
         Environment:
           PROGRAMA_WORKSPACE_ID   Auto-set in programa terminals. Used as default --workspace for
