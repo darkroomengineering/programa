@@ -14,24 +14,6 @@ struct CLIError: Error, CustomStringConvertible {
     var description: String { message }
 }
 
-struct WindowInfo {
-    let index: Int
-    let id: String
-    let key: Bool
-    let selectedWorkspaceId: String?
-    let workspaceCount: Int
-}
-
-struct NotificationInfo {
-    let id: String
-    let workspaceId: String
-    let surfaceId: String?
-    let isRead: Bool
-    let title: String
-    let subtitle: String
-    let body: String
-}
-
 private struct ClaudeHookParsedInput {
     let object: [String: Any]?
     let rawFallback: String?
@@ -1563,8 +1545,8 @@ struct CMUXCLI {
 
         switch command {
         case "ping":
-            let response = try sendV1Command("ping", client: client)
-            print(response)
+            _ = try client.sendV2(method: "system.ping")
+            print("PONG")
 
         case "capabilities":
             let response = try client.sendV2(method: "system.capabilities")
@@ -1616,49 +1598,76 @@ struct CMUXCLI {
             print(jsonString(formatIDs(response, mode: idFormat)))
 
         case "list-windows":
-            let response = try sendV1Command("list_windows", client: client)
+            let listed = try client.sendV2(method: "window.list")
+            let windows = listed["windows"] as? [[String: Any]] ?? []
             if jsonOutput {
-                let windows = parseWindows(response)
                 let payload = windows.map { item -> [String: Any] in
                     var dict: [String: Any] = [
-                        "index": item.index,
-                        "id": item.id,
-                        "key": item.key,
-                        "workspace_count": item.workspaceCount,
+                        "index": intFromAny(item["index"]) ?? 0,
+                        "id": (item["id"] as? String) ?? "",
+                        "key": (item["key"] as? Bool) ?? false,
+                        "workspace_count": intFromAny(item["workspace_count"]) ?? 0,
                     ]
-                    dict["selected_workspace_id"] = item.selectedWorkspaceId ?? NSNull()
+                    dict["selected_workspace_id"] = item["selected_workspace_id"] as? String ?? NSNull()
                     return dict
                 }
                 print(jsonString(payload))
+            } else if windows.isEmpty {
+                print("No windows")
             } else {
-                print(response)
+                let lines = windows.map { item -> String in
+                    let selected = ((item["key"] as? Bool) ?? false) ? "*" : " "
+                    let idx = intFromAny(item["index"]) ?? 0
+                    let id = (item["id"] as? String) ?? ""
+                    let selectedWs = (item["selected_workspace_id"] as? String) ?? "none"
+                    let workspaceCount = intFromAny(item["workspace_count"]) ?? 0
+                    return "\(selected) \(idx): \(id) selected_workspace=\(selectedWs) workspaces=\(workspaceCount)"
+                }
+                print(lines.joined(separator: "\n"))
             }
 
         case "current-window":
-            let response = try sendV1Command("current_window", client: client)
+            let response = try client.sendV2(method: "window.current")
+            let windowId = (response["window_id"] as? String) ?? ""
             if jsonOutput {
-                print(jsonString(["window_id": response]))
+                print(jsonString(["window_id": windowId]))
             } else {
-                print(response)
+                print(windowId)
             }
 
         case "new-window":
-            let response = try sendV1Command("new_window", client: client)
-            print(response)
+            let response = try client.sendV2(method: "window.create")
+            print("OK \((response["window_id"] as? String) ?? "")")
 
         case "focus-window":
             guard let target = optionValue(commandArgs, name: "--window") else {
                 throw CLIError(message: "focus-window requires --window")
             }
-            let response = try sendV1Command("focus_window \(target)", client: client)
-            print(response)
+            // v1 only ever accepted a literal window UUID (no index/ref resolution) — preserve
+            // that exactly rather than widening acceptance via normalizeWindowHandle.
+            guard isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                throw CLIError(message: "ERROR: Invalid window id")
+            }
+            do {
+                _ = try client.sendV2(method: "window.focus", params: ["window_id": target])
+                print("OK")
+            } catch {
+                throw CLIError(message: "ERROR: Window not found")
+            }
 
         case "close-window":
             guard let target = optionValue(commandArgs, name: "--window") else {
                 throw CLIError(message: "close-window requires --window")
             }
-            let response = try sendV1Command("close_window \(target)", client: client)
-            print(response)
+            guard isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                throw CLIError(message: "ERROR: Invalid window id")
+            }
+            do {
+                _ = try client.sendV2(method: "window.close", params: ["window_id": target])
+                print("OK")
+            } catch {
+                throw CLIError(message: "ERROR: Window not found")
+            }
 
         case "move-workspace-to-window":
             guard let workspaceRaw = optionValue(commandArgs, name: "--workspace") else {
@@ -1897,18 +1906,24 @@ struct CMUXCLI {
             guard let direction = rem1.first else {
                 throw CLIError(message: "drag-surface-to-split requires a direction")
             }
-            let response = try sendV1Command("drag_surface_to_split \(surface) \(direction)", client: client)
-            print(response)
+            // v1 always targeted the currently-selected workspace (no --workspace support);
+            // leave workspace_id unset so v2 falls back to the current selection identically.
+            let surfaceIdForDrag = try normalizeSurfaceHandle(surface, client: client, workspaceHandle: nil)
+            var dragParams: [String: Any] = ["direction": direction]
+            if let surfaceIdForDrag { dragParams["surface_id"] = surfaceIdForDrag }
+            let dragPayload = try client.sendV2(method: "surface.drag_to_split", params: dragParams)
+            print("OK \((dragPayload["pane_id"] as? String) ?? "")")
 
         case "refresh-surfaces":
-            let response = try sendV1Command("refresh_surfaces", client: client)
-            print(response)
+            // v1 always targeted the currently-selected workspace; no workspace_id here either.
+            let refreshPayload = try client.sendV2(method: "surface.refresh", params: [:])
+            print("OK Refreshed \(intFromAny(refreshPayload["refreshed"]) ?? 0) surfaces")
         case "reload-config":
             if let unexpected = commandArgs.first {
                 throw CLIError(message: "reload-config does not accept arguments. Unexpected argument '\(unexpected)'")
             }
-            let response = try sendV1Command("reload_config", client: client)
-            print(response)
+            _ = try client.sendV2(method: "app.reload_config")
+            print("OK Reloaded config")
 
         case "surface-health":
             let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
@@ -2210,124 +2225,182 @@ struct CMUXCLI {
                 )
             }()
 
-            let payload = "\(title)|\(subtitle)|\(body)"
-            let response = try sendV1Command("notify_target \(targetWorkspace) \(targetSurface) \(payload)", client: client)
-            print(response)
+            _ = try client.sendV2(method: "notification.create_for_target", params: [
+                "workspace_id": targetWorkspace,
+                "surface_id": targetSurface,
+                "title": title,
+                "subtitle": subtitle,
+                "body": body,
+            ])
+            print("OK")
 
         case "list-notifications":
-            let response = try sendV1Command("list_notifications", client: client)
+            let listed = try client.sendV2(method: "notification.list")
+            let notifications = listed["notifications"] as? [[String: Any]] ?? []
             if jsonOutput {
-                let notifications = parseNotifications(response)
-                let payload = notifications.map { item in
+                let payload = notifications.enumerated().map { _, item -> [String: Any] in
                     var dict: [String: Any] = [
-                        "id": item.id,
-                        "workspace_id": item.workspaceId,
-                        "is_read": item.isRead,
-                        "title": item.title,
-                        "subtitle": item.subtitle,
-                        "body": item.body
+                        "id": (item["id"] as? String) ?? "",
+                        "workspace_id": (item["workspace_id"] as? String) ?? "",
+                        "is_read": (item["is_read"] as? Bool) ?? false,
+                        "title": (item["title"] as? String) ?? "",
+                        "subtitle": (item["subtitle"] as? String) ?? "",
+                        "body": (item["body"] as? String) ?? "",
                     ]
-                    dict["surface_id"] = item.surfaceId ?? NSNull()
+                    dict["surface_id"] = item["surface_id"] as? String ?? NSNull()
                     return dict
                 }
                 print(jsonString(payload))
+            } else if notifications.isEmpty {
+                print("No notifications")
             } else {
-                print(response)
+                let lines = notifications.enumerated().map { index, item -> String in
+                    let surfaceText = (item["surface_id"] as? String) ?? "none"
+                    let readText = ((item["is_read"] as? Bool) ?? false) ? "read" : "unread"
+                    let id = (item["id"] as? String) ?? ""
+                    let workspaceId = (item["workspace_id"] as? String) ?? ""
+                    let title = (item["title"] as? String) ?? ""
+                    let subtitle = (item["subtitle"] as? String) ?? ""
+                    let body = (item["body"] as? String) ?? ""
+                    return "\(index):\(id)|\(workspaceId)|\(surfaceText)|\(readText)|\(title)|\(subtitle)|\(body)"
+                }
+                print(lines.joined(separator: "\n"))
             }
 
         case "clear-notifications":
-            var socketCmd = "clear_notifications"
             if let wsFlag = optionValue(commandArgs, name: "--workspace") {
                 let wsId = try resolveWorkspaceId(wsFlag, client: client)
-                socketCmd += " --tab=\(wsId)"
+                _ = try client.sendV2(method: "notification.clear", params: ["workspace_id": wsId])
             } else if windowId == nil,
                       let envWs = ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"],
                       let wsId = try? resolveWorkspaceId(envWs, client: client) {
-                socketCmd += " --tab=\(wsId)"
+                _ = try client.sendV2(method: "notification.clear", params: ["workspace_id": wsId])
+            } else {
+                _ = try client.sendV2(method: "notification.clear")
             }
-            let response = try sendV1Command(socketCmd, client: client)
-            print(response)
+            print("OK")
 
         case "set-status":
-            let response = try forwardSidebarMetadataCommand(
-                "set_status",
-                commandArgs: commandArgs,
-                client: client,
-                windowOverride: windowId
-            )
-            print(response)
+            let parsed = parseFlagArgs(commandArgs, stopAtDashDash: false)
+            guard parsed.positional.count >= 2 else {
+                throw CLIError(message: "ERROR: Missing status key or value — usage: set_status <key> <value> [--icon=X] [--color=#hex] [--url=X] [--priority=N] [--format=plain|markdown] [--tab=X]")
+            }
+            var params: [String: Any] = [
+                "key": parsed.positional[0],
+                "value": parsed.positional[1...].joined(separator: " "),
+            ]
+            if let icon = normalizedFlagValue(parsed.options["icon"]) { params["icon"] = icon }
+            if let color = normalizedFlagValue(parsed.options["color"]) { params["color"] = color }
+            if let url = normalizedFlagValue(parsed.options["url"] ?? parsed.options["link"]) { params["url"] = url }
+            if let priorityRaw = normalizedFlagValue(parsed.options["priority"]) {
+                guard let priority = Int(priorityRaw) else {
+                    throw CLIError(message: "ERROR: Invalid metadata priority '\(priorityRaw)' — must be an integer")
+                }
+                params["priority"] = max(-9999, min(9999, priority))
+            }
+            if let formatRaw = normalizedFlagValue(parsed.options["format"]) {
+                guard ["plain", "markdown", "md"].contains(formatRaw.lowercased()) else {
+                    throw CLIError(message: "ERROR: Invalid metadata format '\(formatRaw)' — use: plain, markdown")
+                }
+                params["format"] = formatRaw.lowercased() == "md" ? "markdown" : formatRaw.lowercased()
+            }
+            if let pidRaw = normalizedFlagValue(parsed.options["pid"]), let pid = Int(pidRaw), pid > 0 {
+                params["pid"] = pid
+            }
+            params["workspace_id"] = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
+            _ = try client.sendV2(method: "workspace.set_status", params: params)
+            print("OK")
 
         case "clear-status":
-            let response = try forwardSidebarMetadataCommand(
-                "clear_status",
-                commandArgs: commandArgs,
-                client: client,
-                windowOverride: windowId
-            )
-            print(response)
+            let parsed = parseFlagArgs(commandArgs)
+            guard let key = parsed.positional.first, parsed.positional.count == 1 else {
+                throw CLIError(message: "ERROR: Missing metadata key — usage: clear_status <key> [--tab=X]")
+            }
+            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
+            _ = try client.sendV2(method: "workspace.clear_status", params: ["workspace_id": workspaceId, "key": key])
+            print("OK")
 
         case "list-status":
-            let response = try forwardSidebarMetadataCommand(
-                "list_status",
-                commandArgs: commandArgs,
-                client: client,
-                windowOverride: windowId
-            )
-            print(response)
+            let parsed = parseFlagArgs(commandArgs)
+            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
+            let payload = try client.sendV2(method: "workspace.list_status", params: ["workspace_id": workspaceId])
+            let entries = payload["entries"] as? [[String: Any]] ?? []
+            if entries.isEmpty {
+                print("No status entries")
+            } else {
+                print(entries.map(sidebarMetadataLineText).joined(separator: "\n"))
+            }
 
         case "set-progress":
-            let response = try forwardSidebarMetadataCommand(
-                "set_progress",
-                commandArgs: commandArgs,
-                client: client,
-                windowOverride: windowId
-            )
-            print(response)
+            let parsed = parseFlagArgs(commandArgs)
+            guard let first = parsed.positional.first else {
+                throw CLIError(message: "ERROR: Missing progress value — usage: set_progress <0.0-1.0> [--label=X] [--tab=X]")
+            }
+            guard let value = Double(first), value.isFinite else {
+                throw CLIError(message: "ERROR: Invalid progress value '\(first)' — must be 0.0 to 1.0")
+            }
+            var params: [String: Any] = ["value": min(1.0, max(0.0, value))]
+            if let label = normalizedFlagValue(parsed.options["label"]) { params["label"] = label }
+            params["workspace_id"] = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
+            _ = try client.sendV2(method: "workspace.set_progress", params: params)
+            print("OK")
 
         case "clear-progress":
-            let response = try forwardSidebarMetadataCommand(
-                "clear_progress",
-                commandArgs: commandArgs,
-                client: client,
-                windowOverride: windowId
-            )
-            print(response)
+            let parsed = parseFlagArgs(commandArgs)
+            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
+            _ = try client.sendV2(method: "workspace.clear_progress", params: ["workspace_id": workspaceId])
+            print("OK")
 
         case "log":
-            let response = try forwardSidebarMetadataCommand(
-                "log",
-                commandArgs: commandArgs,
-                client: client,
-                windowOverride: windowId
-            )
-            print(response)
+            let parsed = parseFlagArgs(commandArgs)
+            guard !parsed.positional.isEmpty else {
+                throw CLIError(message: "ERROR: Missing message — usage: log [--level=X] [--source=X] [--tab=X] -- <message>")
+            }
+            let levelStr = parsed.options["level"] ?? "info"
+            guard ["info", "progress", "success", "warning", "error"].contains(levelStr) else {
+                throw CLIError(message: "ERROR: Unknown log level '\(levelStr)' — use: info, progress, success, warning, error")
+            }
+            var params: [String: Any] = [
+                "message": parsed.positional.joined(separator: " "),
+                "level": levelStr,
+            ]
+            if let source = normalizedFlagValue(parsed.options["source"]) { params["source"] = source }
+            params["workspace_id"] = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
+            _ = try client.sendV2(method: "workspace.log", params: params)
+            print("OK")
 
         case "clear-log":
-            let response = try forwardSidebarMetadataCommand(
-                "clear_log",
-                commandArgs: commandArgs,
-                client: client,
-                windowOverride: windowId
-            )
-            print(response)
+            let parsed = parseFlagArgs(commandArgs)
+            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
+            _ = try client.sendV2(method: "workspace.clear_log", params: ["workspace_id": workspaceId])
+            print("OK")
 
         case "list-log":
-            let response = try forwardSidebarMetadataCommand(
-                "list_log",
-                commandArgs: commandArgs,
-                client: client,
-                windowOverride: windowId
-            )
-            print(response)
+            let parsed = parseFlagArgs(commandArgs)
+            var params: [String: Any] = [:]
+            if let limitStr = parsed.options["limit"] {
+                guard !limitStr.isEmpty else {
+                    throw CLIError(message: "ERROR: Missing limit value — usage: list_log [--limit=N] [--tab=X]")
+                }
+                guard let limit = Int(limitStr), limit >= 0 else {
+                    throw CLIError(message: "ERROR: Invalid limit '\(limitStr)' — must be >= 0")
+                }
+                params["limit"] = limit
+            }
+            params["workspace_id"] = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
+            let payload = try client.sendV2(method: "workspace.list_log", params: params)
+            let entries = payload["entries"] as? [[String: Any]] ?? []
+            if entries.isEmpty {
+                print("No log entries")
+            } else {
+                print(entries.map(sidebarLogLineText).joined(separator: "\n"))
+            }
 
         case "sidebar-state":
-            let response = try forwardSidebarMetadataCommand(
-                "sidebar_state",
-                commandArgs: commandArgs,
-                client: client,
-                windowOverride: windowId
-            )
-            print(response)
+            let parsed = parseFlagArgs(commandArgs)
+            let workspaceId = try resolveSidebarWorkspaceId(options: parsed.options, windowOverride: windowId, client: client)
+            let payload = try client.sendV2(method: "workspace.sidebar_state", params: ["workspace_id": workspaceId])
+            print(sidebarStateText(payload))
 
         case "claude-hook":
             try runClaudeHook(commandArgs: commandArgs, client: client)
@@ -2337,12 +2410,21 @@ struct CMUXCLI {
 
         case "set-app-focus":
             guard let value = commandArgs.first else { throw CLIError(message: "set-app-focus requires a value") }
-            let response = try sendV1Command("set_app_focus \(value)", client: client)
-            print(response)
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let state: String
+            switch normalized {
+            case "active", "1", "true": state = "active"
+            case "inactive", "0", "false": state = "inactive"
+            case "clear", "none", "": state = "clear"
+            default:
+                throw CLIError(message: "ERROR: Expected active, inactive, or clear")
+            }
+            _ = try client.sendV2(method: "app.focus_override.set", params: ["state": state])
+            print("OK")
 
         case "simulate-app-active":
-            let response = try sendV1Command("simulate_app_active", client: client)
-            print(response)
+            _ = try client.sendV2(method: "app.simulate_active")
+            print("OK")
 
         case "__tmux-compat":
             try runClaudeTeamsTmuxCompat(
@@ -2783,14 +2865,6 @@ struct CMUXCLI {
             return parsed
         }
         return .refs
-    }
-
-    private func sendV1Command(_ command: String, client: SocketClient) throws -> String {
-        let response = try client.send(command: command)
-        if response.hasPrefix("ERROR:") {
-            throw CLIError(message: response)
-        }
-        return response
     }
 
     private func formatIDs(_ object: Any, mode: CLIIDFormat) -> Any {
@@ -6278,72 +6352,6 @@ struct CMUXCLI {
         throw CLIError(message: "Unsupported browser subcommand: \(subcommand)")
     }
 
-    private func parseWindows(_ response: String) -> [WindowInfo] {
-        guard response != "No windows" else { return [] }
-        return response
-            .split(separator: "\n")
-            .compactMap { line in
-                let raw = String(line)
-                let key = raw.hasPrefix("*")
-                let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "* "))
-                let parts = cleaned.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
-                guard parts.count >= 2 else { return nil }
-                let indexText = parts[0].replacingOccurrences(of: ":", with: "")
-                guard let index = Int(indexText) else { return nil }
-                let id = parts[1]
-
-                var selectedWorkspaceId: String?
-                var workspaceCount: Int = 0
-                for token in parts.dropFirst(2) {
-                    if token.hasPrefix("selected_workspace=") {
-                        let v = token.replacingOccurrences(of: "selected_workspace=", with: "")
-                        selectedWorkspaceId = (v == "none") ? nil : v
-                    } else if token.hasPrefix("workspaces=") {
-                        let v = token.replacingOccurrences(of: "workspaces=", with: "")
-                        workspaceCount = Int(v) ?? 0
-                    }
-                }
-
-                return WindowInfo(
-                    index: index,
-                    id: id,
-                    key: key,
-                    selectedWorkspaceId: selectedWorkspaceId,
-                    workspaceCount: workspaceCount
-                )
-            }
-    }
-
-    private func parseNotifications(_ response: String) -> [NotificationInfo] {
-        guard response != "No notifications" else { return [] }
-        return response
-            .split(separator: "\n")
-            .compactMap { line in
-                let raw = String(line)
-                let parts = raw.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-                guard parts.count == 2 else { return nil }
-                let payload = parts[1].split(separator: "|", maxSplits: 6, omittingEmptySubsequences: false)
-                guard payload.count >= 7 else { return nil }
-                let notifId = String(payload[0])
-                let workspaceId = String(payload[1])
-                let surfaceRaw = String(payload[2])
-                let surfaceId = surfaceRaw == "none" ? nil : surfaceRaw
-                let readText = String(payload[3])
-                let title = String(payload[4])
-                let subtitle = String(payload[5])
-                let body = String(payload[6])
-                return NotificationInfo(
-                    id: notifId,
-                    workspaceId: workspaceId,
-                    surfaceId: surfaceId,
-                    isRead: readText == "read",
-                    title: title,
-                    subtitle: subtitle,
-                    body: body
-                )
-            }
-    }
-
     private func resolveWorkspaceId(_ raw: String?, client: SocketClient) throws -> String {
         if let raw, isUUID(raw) {
             return raw
@@ -8531,55 +8539,174 @@ struct CMUXCLI {
         return ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
     }
 
-    private func forwardSidebarMetadataCommand(
-        _ socketCommand: String,
-        commandArgs: [String],
-        client: SocketClient,
-        windowOverride: String?
-    ) throws -> String {
-        func insertArgumentBeforeSeparator(_ value: String, into args: inout [String]) {
-            if let separatorIndex = args.firstIndex(of: "--") {
-                args.insert(value, at: separatorIndex)
+    /// Parses CLI-style flags (`--name value` or `--name=value`) into positional args + an
+    /// options dict, mirroring the v1 server-side `parseOptions`/`parseOptionsNoStop` grammar
+    /// so v2-backed sidebar commands can rebuild the same structured params client-side.
+    /// `stopAtDashDash: true` matches `parseOptions` (a bare `--` ends flag parsing, remaining
+    /// tokens are positional); `false` matches `parseOptionsNoStop` (a bare `--` is skipped,
+    /// used by `report_meta_block`-style commands where `--` separates key/options from markdown
+    /// body but the caller already split that out).
+    private func parseFlagArgs(_ args: [String], stopAtDashDash: Bool = true) -> (positional: [String], options: [String: String]) {
+        var positional: [String] = []
+        var options: [String: String] = [:]
+        var stopParsingOptions = false
+        var i = 0
+        while i < args.count {
+            let token = args[i]
+            if stopParsingOptions {
+                positional.append(token)
+            } else if token == "--" {
+                if stopAtDashDash {
+                    stopParsingOptions = true
+                }
+            } else if token.hasPrefix("--") {
+                if let eqIndex = token.firstIndex(of: "=") {
+                    let key = String(token[token.index(token.startIndex, offsetBy: 2)..<eqIndex])
+                    let value = String(token[token.index(after: eqIndex)...])
+                    options[key] = value
+                } else {
+                    let key = String(token.dropFirst(2))
+                    if i + 1 < args.count, !args[i + 1].hasPrefix("--") {
+                        options[key] = args[i + 1]
+                        i += 1
+                    } else {
+                        options[key] = ""
+                    }
+                }
             } else {
-                args.append(value)
+                positional.append(token)
             }
+            i += 1
+        }
+        return (positional, options)
+    }
+
+    private func normalizedFlagValue(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Resolves the target workspace for a sidebar-metadata command: explicit `--workspace`
+    /// flag, else `$PROGRAMA_WORKSPACE_ID` (unless a `--window` override is active), else the
+    /// server's currently-selected workspace (mirrors v1's `resolveTabForReport`/
+    /// `parseSidebarMutationTabTarget` fallback to `tabManager.selectedTabId`).
+    private func resolveSidebarWorkspaceId(
+        options: [String: String],
+        windowOverride: String?,
+        client: SocketClient
+    ) throws -> String {
+        let raw = options["workspace"] ?? (windowOverride == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+        return try resolveWorkspaceId(raw, client: client)
+    }
+
+    /// Rebuilds v1's `key=value icon=X color=Y url=Z priority=N format=X` status-entry line
+    /// from a `workspace.set_status`/`list_status`/`sidebar_state` v2 entry dict.
+    private func sidebarMetadataLineText(_ entry: [String: Any]) -> String {
+        let key = (entry["key"] as? String) ?? ""
+        let value = (entry["value"] as? String) ?? ""
+        var line = "\(key)=\(value)"
+        if let icon = entry["icon"] as? String { line += " icon=\(icon)" }
+        if let color = entry["color"] as? String { line += " color=\(color)" }
+        if let url = entry["url"] as? String { line += " url=\(url)" }
+        if let priority = intFromAny(entry["priority"]), priority != 0 { line += " priority=\(priority)" }
+        if let format = entry["format"] as? String, format != "plain" { line += " format=\(format)" }
+        return line
+    }
+
+    /// Rebuilds v1's `key=markdown priority=N` metadata-block line from a `sidebar_state`
+    /// v2 `metadata_blocks` entry dict.
+    private func sidebarMetadataBlockLineText(_ block: [String: Any]) -> String {
+        let key = (block["key"] as? String) ?? ""
+        let markdown = ((block["markdown"] as? String) ?? "").replacingOccurrences(of: "\n", with: "\\n")
+        var line = "\(key)=\(markdown)"
+        if let priority = intFromAny(block["priority"]), priority != 0 { line += " priority=\(priority)" }
+        return line
+    }
+
+    /// Rebuilds v1's `[level] message` (optionally `[source] [level] message`) log line from
+    /// a `workspace.list_log` v2 entry dict.
+    private func sidebarLogLineText(_ entry: [String: Any]) -> String {
+        let level = (entry["level"] as? String) ?? "info"
+        let message = (entry["message"] as? String) ?? ""
+        var line = "[\(level)] \(message)"
+        if let source = entry["source"] as? String, !source.isEmpty {
+            line = "[\(source)] \(line)"
+        }
+        return line
+    }
+
+    /// Rebuilds v1's `sidebar_state` multi-line text dump from a `workspace.sidebar_state`
+    /// v2 payload. Field-for-field mirror of `TerminalController.sidebarState(_:)`.
+    private func sidebarStateText(_ payload: [String: Any]) -> String {
+        var lines: [String] = []
+        lines.append("tab=\((payload["workspace_id"] as? String) ?? "")")
+        lines.append("color=\((payload["color"] as? String) ?? "none")")
+        lines.append("cwd=\((payload["cwd"] as? String) ?? "")")
+
+        if let focusedCwd = payload["focused_cwd"] as? String {
+            lines.append("focused_cwd=\(focusedCwd)")
+            lines.append("focused_panel=\((payload["focused_surface_id"] as? String) ?? "unknown")")
+        } else {
+            lines.append("focused_cwd=unknown")
+            lines.append("focused_panel=unknown")
         }
 
-        var forwardedArgs: [String] = []
-        var resolvedExplicitWorkspace = false
-        var index = 0
-
-        while index < commandArgs.count {
-            let arg = commandArgs[index]
-            if arg == "--workspace", index + 1 < commandArgs.count {
-                let workspaceId = try resolveWorkspaceId(commandArgs[index + 1], client: client)
-                forwardedArgs.append("--tab=\(workspaceId)")
-                resolvedExplicitWorkspace = true
-                index += 2
-                continue
-            }
-            if arg.hasPrefix("--workspace=") {
-                let rawWorkspace = String(arg.dropFirst("--workspace=".count))
-                let workspaceId = try resolveWorkspaceId(rawWorkspace, client: client)
-                forwardedArgs.append("--tab=\(workspaceId)")
-                resolvedExplicitWorkspace = true
-                index += 1
-                continue
-            }
-            forwardedArgs.append(arg)
-            index += 1
+        if let git = payload["git_branch"] as? [String: Any], let branch = git["branch"] as? String {
+            let dirty = (git["dirty"] as? Bool) ?? false
+            lines.append("git_branch=\(branch)\(dirty ? " dirty" : " clean")")
+        } else {
+            lines.append("git_branch=none")
         }
 
-        if !resolvedExplicitWorkspace,
-           let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowOverride) {
-            let workspaceId = try resolveWorkspaceId(workspaceArg, client: client)
-            insertArgumentBeforeSeparator("--tab=\(workspaceId)", into: &forwardedArgs)
+        if let pr = payload["pull_request"] as? [String: Any],
+           let number = intFromAny(pr["number"]),
+           let status = pr["state"] as? String,
+           let url = pr["url"] as? String {
+            lines.append("pr=#\(number) \(status) \(url)")
+            lines.append("pr_label=\((pr["label"] as? String) ?? "")")
+            lines.append("pr_checks=\((pr["checks"] as? String) ?? "none")")
+        } else {
+            lines.append("pr=none")
+            lines.append("pr_label=none")
+            lines.append("pr_checks=none")
         }
 
-        let command = ([socketCommand] + forwardedArgs)
-            .map(shellQuote)
-            .joined(separator: " ")
-        return try sendV1Command(command, client: client)
+        let ports = (payload["ports"] as? [Any])?.compactMap { intFromAny($0) } ?? []
+        if ports.isEmpty {
+            lines.append("ports=none")
+        } else {
+            lines.append("ports=\(ports.map(String.init).joined(separator: ","))")
+        }
+
+        if let progress = payload["progress"] as? [String: Any], let value = doubleFromAny(progress["value"]) {
+            let label = (progress["label"] as? String) ?? ""
+            lines.append("progress=\(String(format: "%.2f", value)) \(label)".trimmingCharacters(in: .whitespaces))
+        } else {
+            lines.append("progress=none")
+        }
+
+        let statusEntries = payload["status_entries"] as? [[String: Any]] ?? []
+        lines.append("status_count=\(statusEntries.count)")
+        for entry in statusEntries {
+            lines.append("  \(sidebarMetadataLineText(entry))")
+        }
+
+        let metadataBlocks = payload["metadata_blocks"] as? [[String: Any]] ?? []
+        lines.append("meta_block_count=\(metadataBlocks.count)")
+        for block in metadataBlocks {
+            lines.append("  \(sidebarMetadataBlockLineText(block))")
+        }
+
+        lines.append("log_count=\(intFromAny(payload["log_count"]) ?? 0)")
+        let recentLogEntries = payload["recent_log_entries"] as? [[String: Any]] ?? []
+        for entry in recentLogEntries {
+            let level = (entry["level"] as? String) ?? "info"
+            let message = (entry["message"] as? String) ?? ""
+            lines.append("  [\(level)] \(message)")
+        }
+
+        return lines.joined(separator: "\n")
     }
 
     /// Pick the display handle for an item dict based on --id-format.
@@ -11985,10 +12112,11 @@ struct CMUXCLI {
             // user submits a prompt (UserPromptSubmit) or Claude starts working
             // (PreToolUse).
             if let claudePid {
-                _ = try? sendV1Command(
-                    "set_agent_pid claude_code \(claudePid) --tab=\(workspaceId)",
-                    client: client
-                )
+                _ = try? client.sendV2(method: "workspace.set_agent_pid", params: [
+                    "workspace_id": workspaceId,
+                    "key": "claude_code",
+                    "pid": claudePid,
+                ])
             }
             print("OK")
 
@@ -12026,11 +12154,13 @@ struct CMUXCLI {
                 }
 
                 if let completion {
-                    let title = "Claude Code"
-                    let subtitle = sanitizeNotificationField(completion.subtitle)
-                    let body = sanitizeNotificationField(completion.body)
-                    let payload = "\(title)|\(subtitle)|\(body)"
-                    _ = try? sendV1Command("notify_target \(workspaceId) \(surfaceId) \(payload)", client: client)
+                    _ = try? client.sendV2(method: "notification.create_for_target", params: [
+                        "workspace_id": workspaceId,
+                        "surface_id": surfaceId,
+                        "title": "Claude Code",
+                        "subtitle": sanitizeNotificationField(completion.subtitle),
+                        "body": sanitizeNotificationField(completion.body),
+                    ])
                 }
 
                 try? setClaudeStatus(
@@ -12056,7 +12186,7 @@ struct CMUXCLI {
                 fallback: workspaceArg,
                 client: client
             )
-            _ = try sendV1Command("clear_notifications --tab=\(workspaceId)", client: client)
+            _ = try client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
             try setClaudeStatus(
                 client: client,
                 workspaceId: workspaceId,
@@ -12091,7 +12221,6 @@ struct CMUXCLI {
             let title = "Claude Code"
             let subtitle = sanitizeNotificationField(summary.subtitle)
             let body = sanitizeNotificationField(summary.body)
-            let payload = "\(title)|\(subtitle)|\(body)"
 
             if let sessionId = parsedInput.sessionId {
                 try? sessionStore.upsert(
@@ -12104,7 +12233,13 @@ struct CMUXCLI {
                 )
             }
 
-            let response = (try? sendV1Command("notify_target \(workspaceId) \(surfaceId) \(payload)", client: client)) ?? "OK"
+            _ = try? client.sendV2(method: "notification.create_for_target", params: [
+                "workspace_id": workspaceId,
+                "surface_id": surfaceId,
+                "title": title,
+                "subtitle": subtitle,
+                "body": body,
+            ])
             _ = try? setClaudeStatus(
                 client: client,
                 workspaceId: workspaceId,
@@ -12112,7 +12247,7 @@ struct CMUXCLI {
                 icon: "bell.fill",
                 color: "#4C8DFF"
             )
-            print(response)
+            print("OK")
 
         case "session-end":
             // Final cleanup when Claude process exits.
@@ -12142,8 +12277,8 @@ struct CMUXCLI {
             if let consumedSession {
                 let workspaceId = consumedSession.workspaceId
                 _ = try? clearClaudeStatus(client: client, workspaceId: workspaceId)
-                _ = try? sendV1Command("clear_agent_pid claude_code --tab=\(workspaceId)", client: client)
-                _ = try? sendV1Command("clear_notifications --tab=\(workspaceId)", client: client)
+                _ = try? client.sendV2(method: "workspace.clear_agent_pid", params: ["workspace_id": workspaceId, "key": "claude_code"])
+                _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
             }
             print("OK")
 
@@ -12182,7 +12317,7 @@ struct CMUXCLI {
                 return
             }
 
-            _ = try? sendV1Command("clear_notifications --tab=\(workspaceId)", client: client)
+            _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
 
             let statusValue: String
             if UserDefaults.standard.bool(forKey: "claudeCodeVerboseStatus"),
@@ -12222,15 +12357,21 @@ struct CMUXCLI {
         color: String,
         pid: Int? = nil
     ) throws {
-        var cmd = "set_status claude_code \(value) --icon=\(icon) --color=\(color) --tab=\(workspaceId)"
+        var params: [String: Any] = [
+            "workspace_id": workspaceId,
+            "key": "claude_code",
+            "value": value,
+            "icon": icon,
+            "color": color,
+        ]
         if let pid {
-            cmd += " --pid=\(pid)"
+            params["pid"] = pid
         }
-        _ = try client.send(command: cmd)
+        _ = try client.sendV2(method: "workspace.set_status", params: params)
     }
 
     private func clearClaudeStatus(client: SocketClient, workspaceId: String) throws {
-        _ = try client.send(command: "clear_status claude_code --tab=\(workspaceId)")
+        _ = try client.sendV2(method: "workspace.clear_status", params: ["workspace_id": workspaceId, "key": "claude_code"])
     }
 
     private func resolvePreferredWorkspaceIdForClaudeHook(
@@ -13365,10 +13506,11 @@ struct CMUXCLI {
                 )
             }
             if let codexPid {
-                _ = try? sendV1Command(
-                    "set_agent_pid \(agentPIDKey) \(codexPid) --tab=\(workspaceId)",
-                    client: client
-                )
+                _ = try? client.sendV2(method: "workspace.set_agent_pid", params: [
+                    "workspace_id": workspaceId,
+                    "key": agentPIDKey,
+                    "pid": codexPid,
+                ])
             }
             print("{}")
 
@@ -13391,12 +13533,13 @@ struct CMUXCLI {
                 )
             }
             if let codexPid {
-                _ = try? sendV1Command(
-                    "set_agent_pid \(agentPIDKey) \(codexPid) --tab=\(workspaceId)",
-                    client: client
-                )
+                _ = try? client.sendV2(method: "workspace.set_agent_pid", params: [
+                    "workspace_id": workspaceId,
+                    "key": agentPIDKey,
+                    "pid": codexPid,
+                ])
             }
-            _ = try? sendV1Command("clear_notifications --tab=\(workspaceId)", client: client)
+            _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
             try setCodexStatus(
                 client: client,
                 workspaceId: workspaceId,
@@ -13444,10 +13587,11 @@ struct CMUXCLI {
                     )
                 }
                 if let codexPid {
-                    _ = try? sendV1Command(
-                        "set_agent_pid \(agentPIDKey) \(codexPid) --tab=\(workspaceId)",
-                        client: client
-                    )
+                    _ = try? client.sendV2(method: "workspace.set_agent_pid", params: [
+                        "workspace_id": workspaceId,
+                        "key": agentPIDKey,
+                        "pid": codexPid,
+                    ])
                 }
 
                 // Send completion notification
@@ -13459,8 +13603,13 @@ struct CMUXCLI {
                     lastMessage.map { truncate(normalizedSingleLine($0), maxLength: 200) }
                         ?? "Codex session completed"
                 )
-                let payload = "Codex|\(sanitizeNotificationField(subtitle))|\(body)"
-                _ = try? sendV1Command("notify_target \(workspaceId) \(surfaceId) \(payload)", client: client)
+                _ = try? client.sendV2(method: "notification.create_for_target", params: [
+                    "workspace_id": workspaceId,
+                    "surface_id": surfaceId,
+                    "title": "Codex",
+                    "subtitle": sanitizeNotificationField(subtitle),
+                    "body": body,
+                ])
 
                 try? setCodexStatus(
                     client: client,
@@ -13493,8 +13642,13 @@ struct CMUXCLI {
         icon: String,
         color: String
     ) throws {
-        let cmd = "set_status codex \(value) --icon=\(icon) --color=\(color) --tab=\(workspaceId)"
-        _ = try client.send(command: cmd)
+        _ = try client.sendV2(method: "workspace.set_status", params: [
+            "workspace_id": workspaceId,
+            "key": "codex",
+            "value": value,
+            "icon": icon,
+            "color": color,
+        ])
     }
 
     private func codexAgentPIDKey(sessionId: String?) -> String {
