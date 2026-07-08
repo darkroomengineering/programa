@@ -92,6 +92,14 @@
 		A5001100 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A5001101 /* Assets.xcassets */; };
 		A5001230 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A5001231 /* Sparkle */; };
 		B9000002A1B2C3D4E5F60719 /* programa.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000001A1B2C3D4E5F60719 /* programa.swift */; };
+		B9000031A1B2C3D4E5F60719 /* CLI+Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000030A1B2C3D4E5F60719 /* CLI+Markdown.swift */; };
+		B9000033A1B2C3D4E5F60719 /* CLI+SSH.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000032A1B2C3D4E5F60719 /* CLI+SSH.swift */; };
+		B9000035A1B2C3D4E5F60719 /* CLI+Browser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000034A1B2C3D4E5F60719 /* CLI+Browser.swift */; };
+		B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */; };
+		B9000039A1B2C3D4E5F60719 /* CLI+Tree.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */; };
+		B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */; };
+		B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */; };
+		B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */; };
 		B9000027A1B2C3D4E5F60719 /* RemoteRelayZshBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001641 /* RemoteRelayZshBootstrap.swift */; };
 		B900000BA1B2C3D4E5F60719 /* programa in Copy CLI */ = {isa = PBXBuildFile; fileRef = B9000004A1B2C3D4E5F60719 /* programa */; };
 		C1ADE00002A1B2C3D4E5F719 /* claude in Copy CLI */ = {isa = PBXBuildFile; fileRef = C1ADE00001A1B2C3D4E5F719 /* claude */; };
@@ -318,6 +326,14 @@
 		D1BEF00001A1B2C3D4E5F719 /* open */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "Resources/bin/open"; sourceTree = SOURCE_ROOT; };
 		A5002001 /* THIRD_PARTY_LICENSES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_LICENSES.md; sourceTree = SOURCE_ROOT; };
 		B9000001A1B2C3D4E5F60719 /* programa.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = programa.swift; sourceTree = "<group>"; };
+		B9000030A1B2C3D4E5F60719 /* CLI+Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Markdown.swift"; sourceTree = "<group>"; };
+		B9000032A1B2C3D4E5F60719 /* CLI+SSH.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+SSH.swift"; sourceTree = "<group>"; };
+		B9000034A1B2C3D4E5F60719 /* CLI+Browser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Browser.swift"; sourceTree = "<group>"; };
+		B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Themes.swift"; sourceTree = "<group>"; };
+		B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Tree.swift"; sourceTree = "<group>"; };
+		B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+TmuxCompat.swift"; sourceTree = "<group>"; };
+		B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentWrappers.swift"; sourceTree = "<group>"; };
+		B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Hooks.swift"; sourceTree = "<group>"; };
 		B9000004A1B2C3D4E5F60719 /* programa */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = programa; sourceTree = BUILT_PRODUCTS_DIR; };
 		D1320AA0D1320AA0D1320AA5 /* ProgramaDockTilePlugin.plugin */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProgramaDockTilePlugin.plugin; sourceTree = BUILT_PRODUCTS_DIR; };
 				B9000011A1B2C3D4E5F60719 /* AutomationSocketUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomationSocketUITests.swift; sourceTree = "<group>"; };
@@ -575,6 +591,14 @@
 			isa = PBXGroup;
 			children = (
 				B9000001A1B2C3D4E5F60719 /* programa.swift */,
+				B9000030A1B2C3D4E5F60719 /* CLI+Markdown.swift */,
+				B9000032A1B2C3D4E5F60719 /* CLI+SSH.swift */,
+				B9000034A1B2C3D4E5F60719 /* CLI+Browser.swift */,
+				B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */,
+				B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */,
+				B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */,
+				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
+				B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */,
 			);
 			path = CLI;
 			sourceTree = "<group>";
@@ -969,6 +993,14 @@
 			files = (
 				B9000002A1B2C3D4E5F60719 /* programa.swift in Sources */,
 				B9000027A1B2C3D4E5F60719 /* RemoteRelayZshBootstrap.swift in Sources */,
+				B9000031A1B2C3D4E5F60719 /* CLI+Markdown.swift in Sources */,
+				B9000033A1B2C3D4E5F60719 /* CLI+SSH.swift in Sources */,
+				B9000035A1B2C3D4E5F60719 /* CLI+Browser.swift in Sources */,
+				B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */,
+				B9000039A1B2C3D4E5F60719 /* CLI+Tree.swift in Sources */,
+				B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */,
+				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,
+				B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
