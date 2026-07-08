@@ -31,6 +31,17 @@ This doc tracks the migration from the existing v1 line protocol (space-delimite
       family + `app.reload_config` + `workspace.clear_agent_pid`) — v1 handlers are
       untouched; this only adds v2 adapters. **v1 removal is planned in a follow-up PR**
       once consumers (shell integration, `tests/`) migrate to v2.
+- [x] Add the last few v2 methods for full parity (`workspace.set_agent_pid`,
+      `workspace.report_meta_block`/`clear_meta_block`/`list_meta_blocks`,
+      `workspace.reset_sidebar`) — `report_meta`/`clear_meta`/`list_meta` needed no new
+      method since they're v1 aliases of `set_status`/`clear_status`/`list_status`, and
+      `read_screen` needed no new method since `surface.read_text` already covers it.
+- [x] Migrate the CLI (`CLI/programa.swift`) off the v1 line protocol entirely — every
+      dispatch case and the sidebar-metadata/Claude-Codex-hook helpers now speak v2 JSON-RPC.
+      `sendV1Command`/`forwardSidebarMetadataCommand` are deleted. CLI output text is
+      reconstructed client-side from v2 JSON payloads to stay byte-identical for users.
+      v1 handlers in `TerminalController.swift` are untouched (still used by `tests/` and
+      shell integration, which migrate in a follow-up PR).
 
 Notes:
 - A close-top nested split sequence (T-shape) could leave terminal views detached from the window until the user switched workspaces.
@@ -61,6 +72,9 @@ Notes:
 - v2 methods should accept **IDs**; v2 responses may include ephemeral `index` fields for ordering/debugging, but IDs are the stable handles.
 
 ## Method Parity Checklist (v1 -> v2)
+
+System:
+- [x] ping -> `system.ping` (liveness; the CLI's `ping` subcommand calls this and prints "PONG" on success)
 
 Windows:
 - [x] list_windows -> `window.list`
@@ -124,13 +138,20 @@ reads use `v2MainSync` like sibling read methods):
 - [x] clear_progress -> `workspace.clear_progress`
 - [x] sidebar_state -> `workspace.sidebar_state`
 - [x] clear_agent_pid -> `workspace.clear_agent_pid`
+- [x] set_agent_pid -> `workspace.set_agent_pid`
+- [x] report_meta / clear_meta / list_meta -> alias of `workspace.set_status` / `clear_status` / `list_status` (v1 handlers are themselves aliases)
+- [x] report_meta_block -> `workspace.report_meta_block`
+- [x] clear_meta_block -> `workspace.clear_meta_block`
+- [x] list_meta_blocks -> `workspace.list_meta_blocks`
+- [x] reset_sidebar -> `workspace.reset_sidebar`
+- [x] read_screen -> `surface.read_text` (already covers read_screen's scrollback/lines semantics)
 
 Notifications:
 - [x] notify -> `notification.create`
 - [x] notify_surface -> `notification.create_for_surface`
 - [x] notify_target -> `notification.create_for_target`
 - [x] list_notifications -> `notification.list`
-- [x] clear_notifications -> `notification.clear`
+- [x] clear_notifications -> `notification.clear` (now accepts an optional `workspace_id` to scope the clear to one workspace, matching v1's `--tab=X`; omitting it clears all notifications, matching v1's bare `clear_notifications`)
 - [x] set_app_focus -> `app.focus_override.set`
 - [x] simulate_app_active -> `app.simulate_active`
 - [x] reload_config -> `app.reload_config`

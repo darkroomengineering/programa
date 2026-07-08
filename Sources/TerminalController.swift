@@ -1936,6 +1936,16 @@ class TerminalController {
             return v2Result(id: id, self.v2WorkspaceSidebarState(params: params))
         case "workspace.clear_agent_pid":
             return v2Result(id: id, self.v2WorkspaceClearAgentPID(params: params))
+        case "workspace.set_agent_pid":
+            return v2Result(id: id, self.v2WorkspaceSetAgentPID(params: params))
+        case "workspace.report_meta_block":
+            return v2Result(id: id, self.v2WorkspaceReportMetaBlock(params: params))
+        case "workspace.clear_meta_block":
+            return v2Result(id: id, self.v2WorkspaceClearMetaBlock(params: params))
+        case "workspace.list_meta_blocks":
+            return v2Result(id: id, self.v2WorkspaceListMetaBlocks(params: params))
+        case "workspace.reset_sidebar":
+            return v2Result(id: id, self.v2WorkspaceResetSidebar(params: params))
 
         // Settings
         case "settings.open":
@@ -2036,7 +2046,7 @@ class TerminalController {
         case "notification.list":
             return v2Ok(id: id, result: self.v2NotificationList())
         case "notification.clear":
-            return v2Result(id: id, self.v2NotificationClear())
+            return v2Result(id: id, self.v2NotificationClear(params: params))
 
         // App focus
         case "app.focus_override.set":
@@ -2337,6 +2347,11 @@ class TerminalController {
             "workspace.clear_progress",
             "workspace.sidebar_state",
             "workspace.clear_agent_pid",
+            "workspace.set_agent_pid",
+            "workspace.report_meta_block",
+            "workspace.clear_meta_block",
+            "workspace.list_meta_blocks",
+            "workspace.reset_sidebar",
             "settings.open",
             "feedback.open",
             "feedback.submit",
@@ -4877,6 +4892,157 @@ class TerminalController {
             "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
             "key": key,
         ])
+    }
+
+    /// Mirrors v1's `set_agent_pid <key> <pid> [--tab=X]`: registers a PID for stale-session
+    /// detection/OSC suppression without setting a visible status entry (unlike
+    /// `workspace.set_status`, which also accepts an optional `pid`).
+    private func v2WorkspaceSetAgentPID(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let key = v2String(params, "key") else {
+            return .err(code: "invalid_params", message: "Missing key", data: nil)
+        }
+        guard let rawPid = v2Int(params, "pid"), rawPid > 0 else {
+            return .err(code: "invalid_params", message: "Missing or invalid pid — must be a positive integer", data: nil)
+        }
+        let pid = pid_t(rawPid)
+
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { [weak self] _, tab in
+            guard let self else { return }
+            tab.agentPIDs[key] = pid
+            self.refreshTrackedAgentPorts(for: tab)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "key": key,
+            "pid": Int(pid),
+        ])
+    }
+
+    /// Mirrors v1's `report_meta_block <key> [--priority=N] [--tab=X] -- <markdown>`: sets a
+    /// freeform sidebar markdown block, distinct from `workspace.set_status`'s single-line
+    /// key/value entries.
+    private func v2WorkspaceReportMetaBlock(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+        }
+        guard let key = v2String(params, "key") else {
+            return .err(code: "invalid_params", message: "Missing key", data: nil)
+        }
+        guard let rawMarkdown = v2RawString(params, "markdown") else {
+            return .err(code: "invalid_params", message: "Missing markdown", data: nil)
+        }
+        let normalizedMarkdown = rawMarkdown
+            .replacingOccurrences(of: "\\r\\n", with: "\n")
+            .replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\\t", with: "\t")
+        let trimmedMarkdown = normalizedMarkdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedMarkdown.isEmpty else {
+            return .err(code: "invalid_params", message: "Missing markdown", data: nil)
+        }
+
+        var priority = 0
+        if v2HasNonNullParam(params, "priority") {
+            guard let rawPriority = v2Int(params, "priority") else {
+                return .err(code: "invalid_params", message: "Invalid priority — must be an integer", data: nil)
+            }
+            priority = max(-9999, min(9999, rawPriority))
+        }
+
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { _, tab in
+            guard Self.shouldReplaceMetadataBlock(
+                current: tab.metadataBlocks[key],
+                key: key,
+                markdown: normalizedMarkdown,
+                priority: priority
+            ) else {
+                return
+            }
+            tab.metadataBlocks[key] = SidebarMetadataBlock(
+                key: key,
+                markdown: normalizedMarkdown,
+                priority: priority,
+                timestamp: Date()
+            )
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "key": key,
+            "markdown": normalizedMarkdown,
+            "priority": priority,
+        ])
+    }
+
+    /// Mirrors v1's `clear_meta_block <key> [--tab=X]`. Unlike the telemetry-mutation family
+    /// above, this needs to report whether the key existed, so — like v1's synchronous
+    /// `DispatchQueue.main.sync` implementation — it resolves and mutates on the main actor via
+    /// `v2MainSync` rather than firing an async `v2ScheduleTelemetryMutation`. This is a rare,
+    /// agent/test-triggered command, not a high-frequency telemetry path.
+    private func v2WorkspaceClearMetaBlock(params: [String: Any]) -> V2CallResult {
+        guard let tabManager = v2ResolveTabManager(params: params) else {
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        }
+        guard let key = v2String(params, "key") else {
+            return .err(code: "invalid_params", message: "Missing key", data: nil)
+        }
+
+        var result: V2CallResult = .err(code: "not_found", message: "Workspace not found", data: nil)
+        v2MainSync {
+            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else { return }
+            let found = ws.metadataBlocks.removeValue(forKey: key) != nil
+            result = .ok([
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+                "key": key,
+                "found": found,
+            ])
+        }
+        return result
+    }
+
+    /// Mirrors v1's `list_meta_blocks [--tab=X]`.
+    private func v2WorkspaceListMetaBlocks(params: [String: Any]) -> V2CallResult {
+        guard let tabManager = v2ResolveTabManager(params: params) else {
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        }
+
+        var result: V2CallResult = .err(code: "not_found", message: "Workspace not found", data: nil)
+        v2MainSync {
+            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else { return }
+            let blocks: [[String: Any]] = ws.sidebarMetadataBlocksInDisplayOrder().map { block in
+                ["key": block.key, "markdown": block.markdown, "priority": block.priority]
+            }
+            result = .ok([
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+                "blocks": blocks,
+            ])
+        }
+        return result
+    }
+
+    /// Mirrors v1's `reset_sidebar [--tab=X]`.
+    private func v2WorkspaceResetSidebar(params: [String: Any]) -> V2CallResult {
+        guard let tabManager = v2ResolveTabManager(params: params) else {
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        }
+
+        var result: V2CallResult = .err(code: "not_found", message: "Workspace not found", data: nil)
+        v2MainSync {
+            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else { return }
+            ws.resetSidebarContext(reason: "v2.workspace.reset_sidebar")
+            result = .ok([
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+            ])
+        }
+        return result
     }
 
     private func v2WorkspaceAction(params: [String: Any]) -> V2CallResult {
@@ -7476,7 +7642,15 @@ class TerminalController {
         return ["notifications": items]
     }
 
-    private func v2NotificationClear() -> V2CallResult {
+    /// Mirrors v1's `clear_notifications [--tab=X]`: with a `workspace_id`, scopes the clear
+    /// to that workspace's notifications only; without one, clears all notifications globally.
+    private func v2NotificationClear(params: [String: Any]) -> V2CallResult {
+        if let workspaceId = v2UUID(params, "workspace_id") {
+            DispatchQueue.main.async {
+                TerminalNotificationStore.shared.clearNotifications(forTabId: workspaceId)
+            }
+            return .ok(["workspace_id": workspaceId.uuidString, "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId)])
+        }
         DispatchQueue.main.async {
             TerminalNotificationStore.shared.clearAll()
         }
