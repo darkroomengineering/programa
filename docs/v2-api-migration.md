@@ -27,6 +27,10 @@ This doc tracks the migration from the existing v1 line protocol (space-delimite
 - [x] Add runners for v1 + v2 suites on the VM (`./scripts/run-tests-v1.sh`, `./scripts/run-tests-v2.sh`)
 - [x] Verify v1 suite passes (VM)
 - [x] Verify v2 suite passes (VM)
+- [x] Add remaining v2 methods for full v1 parity (surface telemetry + sidebar metadata
+      family + `app.reload_config` + `workspace.clear_agent_pid`) — v1 handlers are
+      untouched; this only adds v2 adapters. **v1 removal is planned in a follow-up PR**
+      once consumers (shell integration, `tests/`) migrate to v2.
 
 Notes:
 - A close-top nested split sequence (T-shape) could leave terminal views detached from the window until the user switched workspaces.
@@ -84,6 +88,19 @@ Surfaces / Splits:
 - [x] surface_health -> `surface.health`
 - [x] trigger_flash -> `surface.trigger_flash` (new in v2)
 
+Surface Telemetry (report_*/ports/git/pr — off-main parse, main.async mutate; see "Socket
+command threading policy" in the root `CLAUDE.md`):
+- [x] report_tty -> `surface.report_tty`
+- [x] ports_kick -> `surface.ports_kick`
+- [x] report_pwd -> `surface.report_pwd`
+- [x] report_shell_state -> `surface.report_shell_state` (reuses the v1 `SocketFastPathState` dedup)
+- [x] report_git_branch -> `surface.report_git_branch`
+- [x] clear_git_branch -> `surface.clear_git_branch`
+- [x] report_pr / report_review -> `surface.report_pr`
+- [x] clear_pr -> `surface.clear_pr`
+- [x] report_ports -> `surface.report_ports`
+- [x] clear_ports -> `surface.clear_ports` (omit `surface_id` to clear all ports for the workspace)
+
 Panes:
 - [x] list_panes -> `pane.list`
 - [x] focus_pane -> `pane.focus`
@@ -94,6 +111,20 @@ Input:
 - [x] send / send_surface -> `surface.send_text`
 - [x] send_key / send_key_surface -> `surface.send_key`
 
+Sidebar Metadata (workspace-scoped — v1's set_status/log/set_progress/sidebar_state family
+mutate a `Tab`/`Workspace`, not a specific surface; mutations are off-main + main.async,
+reads use `v2MainSync` like sibling read methods):
+- [x] set_status -> `workspace.set_status`
+- [x] clear_status -> `workspace.clear_status`
+- [x] list_status -> `workspace.list_status`
+- [x] log -> `workspace.log`
+- [x] clear_log -> `workspace.clear_log`
+- [x] list_log -> `workspace.list_log`
+- [x] set_progress -> `workspace.set_progress`
+- [x] clear_progress -> `workspace.clear_progress`
+- [x] sidebar_state -> `workspace.sidebar_state`
+- [x] clear_agent_pid -> `workspace.clear_agent_pid`
+
 Notifications:
 - [x] notify -> `notification.create`
 - [x] notify_surface -> `notification.create_for_surface`
@@ -102,6 +133,7 @@ Notifications:
 - [x] clear_notifications -> `notification.clear`
 - [x] set_app_focus -> `app.focus_override.set`
 - [x] simulate_app_active -> `app.simulate_active`
+- [x] reload_config -> `app.reload_config`
 
 Browser:
 - [x] open_browser -> `browser.open_split`
