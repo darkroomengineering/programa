@@ -221,25 +221,39 @@ class CPUMonitor:
 
 
 def keep_only_first_workspace(client: cmux) -> str:
-    workspaces = sorted(client.list_workspaces(), key=lambda row: row[0])
-    if not workspaces:
-        first_id = client.new_workspace()
-        client.select_workspace(first_id)
-        return first_id
+    # The app may still be settling when this runs right after socket connect
+    # (workspaces closing/restoring from the previous session), so a workspace
+    # listed one moment can be gone by the time we select/close it, surfacing
+    # as "ERROR: Tab not found". Re-snapshot and retry instead of failing the
+    # whole run on that startup race.
+    deadline = time.time() + 10.0
+    last_error: Optional[cmuxError] = None
+    while True:
+        try:
+            workspaces = sorted(client.list_workspaces(), key=lambda row: row[0])
+            if not workspaces:
+                first_id = client.new_workspace()
+                client.select_workspace(first_id)
+                return first_id
 
-    first_id = workspaces[0][1]
-    client.select_workspace(first_id)
-    for _index, wid, _title, _selected in reversed(workspaces[1:]):
-        if wid == first_id:
-            continue
-        client.close_workspace(wid)
+            first_id = workspaces[0][1]
+            client.select_workspace(first_id)
+            for _index, wid, _title, _selected in reversed(workspaces[1:]):
+                if wid == first_id:
+                    continue
+                client.close_workspace(wid)
 
-    def only_first() -> bool:
-        current = sorted(client.list_workspaces(), key=lambda row: row[0])
-        return len(current) == 1 and current[0][1] == first_id
+            def only_first() -> bool:
+                current = sorted(client.list_workspaces(), key=lambda row: row[0])
+                return len(current) == 1 and current[0][1] == first_id
 
-    wait_for(only_first, timeout_s=6.0)
-    return first_id
+            wait_for(only_first, timeout_s=6.0)
+            return first_id
+        except cmuxError as e:
+            if "not found" not in str(e).lower() or time.time() >= deadline:
+                raise
+            last_error = e
+            time.sleep(0.25)
 
 
 def create_workspaces(client: cmux, count: int) -> list[str]:
