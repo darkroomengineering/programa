@@ -66,6 +66,16 @@ _cmux_json_escape() {
     printf '%s\n' "$value"
 }
 
+# Build a single-line v2 JSON-RPC request frame for the direct-socket
+# (fire-and-forget) path. `params_json` must already be a well-formed JSON
+# object string (see call sites, which use _cmux_json_escape on any
+# user-controlled values before interpolating them).
+_cmux_json_rpc_frame() {
+    local method="$1"
+    local params_json="$2"
+    printf '%s\n' "{\"id\":1,\"method\":\"$method\",\"params\":$params_json}"
+}
+
 _cmux_relay_rpc_bg() {
     local method="$1"
     local params="$2"
@@ -358,13 +368,17 @@ _cmux_report_tty_payload() {
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     [[ -n "$_PROGRAMA_TTY_NAME" ]] || return 0
 
-    local payload="report_tty $_PROGRAMA_TTY_NAME --tab=$PROGRAMA_TAB_ID"
+    local workspace_id="" tty_name_json params
+    workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+    tty_name_json="$(_cmux_json_escape "$_PROGRAMA_TTY_NAME")"
+    params="{\"workspace_id\":\"$workspace_id\",\"tty_name\":\"$tty_name_json\""
     if [[ -z "$TMUX" ]]; then
         [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
-        payload+=" --panel=$PROGRAMA_PANEL_ID"
+        params+=",\"surface_id\":\"$PROGRAMA_PANEL_ID\""
     fi
+    params+="}"
 
-    printf '%s\n' "$payload"
+    _cmux_json_rpc_frame "surface.report_tty" "$params"
 }
 
 _cmux_report_tty_once() {
@@ -398,8 +412,12 @@ _cmux_report_shell_activity_state() {
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
     [[ "$_PROGRAMA_SHELL_ACTIVITY_LAST" == "$state" ]] && return 0
     _PROGRAMA_SHELL_ACTIVITY_LAST="$state"
+    local workspace_id="" state_json params
+    workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+    state_json="$(_cmux_json_escape "$state")"
+    params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"state\":\"$state_json\"}"
     (
-        _cmux_send "report_shell_state $state --tab=$PROGRAMA_TAB_ID --panel=$PROGRAMA_PANEL_ID"
+        _cmux_send "$(_cmux_json_rpc_frame "surface.report_shell_state" "$params")"
     ) >/dev/null 2>&1 &
     disown 2>/dev/null
 }
@@ -415,8 +433,12 @@ _cmux_ports_kick() {
     fi
     _PROGRAMA_PORTS_LAST_RUN="$(_cmux_now)"
     if _cmux_socket_is_unix; then
+        local workspace_id="" reason_json params
+        workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+        reason_json="$(_cmux_json_escape "$reason")"
+        params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"reason\":\"$reason_json\"}"
         {
-            _cmux_send "ports_kick --tab=$PROGRAMA_TAB_ID --panel=$PROGRAMA_PANEL_ID --reason=$reason"
+            _cmux_send "$(_cmux_json_rpc_frame "surface.ports_kick" "$params")"
         } >/dev/null 2>&1 & disown
     else
         _cmux_ports_kick_via_relay "$reason"
@@ -427,8 +449,11 @@ _cmux_clear_pr_for_panel() {
     [[ -S "$PROGRAMA_SOCKET_PATH" ]] || return 0
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
+    local workspace_id="" params
+    workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+    params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\"}"
     # Synchronous: must arrive before the next report_pr from the poll loop.
-    _cmux_send "clear_pr --tab=$PROGRAMA_TAB_ID --panel=$PROGRAMA_PANEL_ID"
+    _cmux_send "$(_cmux_json_rpc_frame "surface.clear_pr" "$params")"
 }
 
 _cmux_pr_output_indicates_no_pull_request() {
@@ -629,9 +654,9 @@ _cmux_report_pr_for_path() {
     fi
 
     case "$state" in
-        MERGED) status_opt="--state=merged" ;;
-        OPEN) status_opt="--state=open" ;;
-        CLOSED) status_opt="--state=closed" ;;
+        MERGED) status_opt="merged" ;;
+        OPEN) status_opt="open" ;;
+        CLOSED) status_opt="closed" ;;
         *) return 1 ;;
     esac
 
@@ -645,8 +670,12 @@ _cmux_report_pr_for_path() {
     _PROGRAMA_PR_LAST_BRANCH="$branch"
     _PROGRAMA_PR_NO_PR_BRANCH=""
 
-    local quoted_branch="${branch//\"/\\\"}"
-    _cmux_send "report_pr $number $url $status_opt --branch=\"$quoted_branch\" --tab=$PROGRAMA_TAB_ID --panel=$PROGRAMA_PANEL_ID"
+    local workspace_id="" branch_json url_json params
+    workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+    branch_json="$(_cmux_json_escape "$branch")"
+    url_json="$(_cmux_json_escape "$url")"
+    params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"number\":$number,\"url\":\"$url_json\",\"state\":\"$status_opt\",\"branch\":\"$branch_json\"}"
+    _cmux_send "$(_cmux_json_rpc_frame "surface.report_pr" "$params")"
 }
 
 _cmux_child_pids() {
@@ -745,7 +774,7 @@ _cmux_start_pr_poll_loop() {
     fi
     _PROGRAMA_PR_POLL_PWD="$watch_pwd"
 
-    {
+    (
         local signal_path=""
         signal_path="$(_cmux_pr_force_signal_path 2>/dev/null || true)"
         while :; do
@@ -913,8 +942,11 @@ _cmux_prompt_command() {
     if [[ "$pwd" != "$_PROGRAMA_PWD_LAST_PWD" ]]; then
         _PROGRAMA_PWD_LAST_PWD="$pwd"
         (
-            local qpwd="${pwd//\"/\\\"}"
-            _cmux_send "report_pwd \"${qpwd}\" --tab=$PROGRAMA_TAB_ID --panel=$PROGRAMA_PANEL_ID"
+            local workspace_id="" pwd_json params
+            workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+            pwd_json="$(_cmux_json_escape "$pwd")"
+            params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"path\":\"$pwd_json\"}"
+            _cmux_send "$(_cmux_json_rpc_frame "surface.report_pwd" "$params")"
         ) >/dev/null 2>&1 &
         disown 2>/dev/null
     fi
@@ -963,15 +995,20 @@ _cmux_prompt_command() {
         (
             # Skip git operations if not in a git repository to avoid TCC prompts
             git rev-parse --git-dir >/dev/null 2>&1 || exit 0
-            local branch dirty_opt=""
+            local branch dirty=false workspace_id="" params
             branch=$(git branch --show-current 2>/dev/null)
+            workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
             if [[ -n "$branch" ]]; then
                 local first
                 first=$(git status --porcelain -uno 2>/dev/null | head -1)
-                [[ -n "$first" ]] && dirty_opt="--status=dirty"
-                _cmux_send "report_git_branch $branch $dirty_opt --tab=$PROGRAMA_TAB_ID --panel=$PROGRAMA_PANEL_ID"
+                [[ -n "$first" ]] && dirty=true
+                local branch_json
+                branch_json="$(_cmux_json_escape "$branch")"
+                params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"branch\":\"$branch_json\",\"dirty\":$dirty}"
+                _cmux_send "$(_cmux_json_rpc_frame "surface.report_git_branch" "$params")"
             else
-                _cmux_send "clear_git_branch --tab=$PROGRAMA_TAB_ID --panel=$PROGRAMA_PANEL_ID"
+                params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\"}"
+                _cmux_send "$(_cmux_json_rpc_frame "surface.clear_git_branch" "$params")"
             fi
         ) >/dev/null 2>&1 &
         _PROGRAMA_GIT_JOB_PID=$!
