@@ -439,6 +439,35 @@ jobs:
             remote-daemon-assets/programad-remote-*
           if-no-files-found: error
 
+      - name: Generate rolling release notes (since previous ship)
+        id: rolling_notes
+        if: github.event_name == 'workflow_run' && steps.guard_release_assets.outputs.skip_all != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The rolling release is reused each ship; generate_release_notes on an
+          # existing release accumulates every past ship's "What's Changed" into
+          # one ever-growing body. Instead, generate notes for just the span since
+          # the previous ship (old rolling tag -> new commit) and REPLACE the body.
+          # Must run BEFORE the rolling tag is force-moved below.
+          NEW_SHA="${{ github.event.workflow_run.head_sha }}"
+          ARGS=(-f tag_name="rolling-next" -f target_commitish="$NEW_SHA")
+          PREV_SHA=""
+          if PREV_SHA=$(gh api "repos/${{ github.repository }}/git/ref/tags/rolling" --jq .object.sha 2>/dev/null); then
+            ARGS+=(-f previous_tag_name="rolling")
+          fi
+          BODY=$(gh api "repos/${{ github.repository }}/releases/generate-notes" "${ARGS[@]}" --jq .body)
+          # The synthetic rolling-next tag never exists; fix the compare link to real SHAs.
+          if [ -n "$PREV_SHA" ]; then
+            BODY=$(printf '%s' "$BODY" | sed "s|/compare/rolling...rolling-next|/compare/${PREV_SHA}...${NEW_SHA}|")
+          fi
+          {
+            echo "body<<PROGRAMA_ROLLING_NOTES_EOF"
+            printf '%s\n' "$BODY"
+            echo "PROGRAMA_ROLLING_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Move rolling tag to shipped commit
         if: github.event_name == 'workflow_run' && steps.guard_release_assets.outputs.skip_all != 'true'
         run: |
@@ -464,7 +493,11 @@ jobs:
             remote-daemon-assets/programad-remote-linux-amd64
             remote-daemon-assets/programad-remote-checksums.txt
             remote-daemon-assets/programad-remote-manifest.json
-          generate_release_notes: true
+          # Auto-ship: replace the body with freshly-scoped notes (previous ship -> now)
+          # so the reused rolling release doesn't accumulate every past "What's Changed".
+          # Milestone v* tags: a fresh release, so GitHub-generated notes are fine.
+          body: ${{ steps.rolling_notes.outputs.body }}
+          generate_release_notes: ${{ env.IS_AUTO_SHIP != 'true' }}
           overwrite_files: true
 
       - name: Cleanup keychain
