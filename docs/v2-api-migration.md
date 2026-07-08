@@ -163,14 +163,15 @@ Debug / Test-only:
 
 ## Test Migration
 
-v1 suite stays in `tests/`.
+The v1 python suite (`tests/`, driven by `tests/cmux.py`) has been deleted now that `tests_v2/`
+has full protocol parity. Only CI-infrastructure guard scripts and the two CI-wired tests ported
+onto the v2 client remain in `tests/`.
 
 v2 suite lives in `tests_v2/` and should:
 - use a v2 JSON client (`tests_v2/programa.py`)
 - avoid depending on v1 text output formats
 
-VM runners:
-- v1: `ssh programa-vm 'cd /Users/programa/GhosttyTabs && ./scripts/run-tests-v1.sh'`
+VM runner:
 - v2: `ssh programa-vm 'cd /Users/programa/GhosttyTabs && ./scripts/run-tests-v2.sh'`
 
 ## Open Questions
