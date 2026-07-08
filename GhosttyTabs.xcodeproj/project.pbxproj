@@ -14,6 +14,10 @@
 			A5001003 /* TabManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001013 /* TabManager.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
 			A5001005 /* GhosttyTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001015 /* GhosttyTerminalView.swift */; };
+			A5FF0051 /* GhosttyTerminalView+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0041 /* GhosttyTerminalView+Keyboard.swift */; };
+			A5FF0052 /* GhosttyTerminalView+Mouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0042 /* GhosttyTerminalView+Mouse.swift */; };
+			A5FF0053 /* GhosttyTerminalView+DragDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0043 /* GhosttyTerminalView+DragDrop.swift */; };
+			A5FF0054 /* GhosttyTerminalView+Accessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0044 /* GhosttyTerminalView+Accessibility.swift */; };
 			A5001532 /* TerminalWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001531 /* TerminalWindowPortal.swift */; };
 			A5001534 /* BrowserWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001533 /* BrowserWindowPortal.swift */; };
 		A5001540 /* PortScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001541 /* PortScanner.swift */; };
@@ -213,6 +217,10 @@
 			A5001013 /* TabManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManager.swift; sourceTree = "<group>"; };
 			A5001014 /* GhosttyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfig.swift; sourceTree = "<group>"; };
 			A5001015 /* GhosttyTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTerminalView.swift; sourceTree = "<group>"; };
+			A5FF0041 /* GhosttyTerminalView+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+Keyboard.swift"; sourceTree = "<group>"; };
+			A5FF0042 /* GhosttyTerminalView+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+Mouse.swift"; sourceTree = "<group>"; };
+			A5FF0043 /* GhosttyTerminalView+DragDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+DragDrop.swift"; sourceTree = "<group>"; };
+			A5FF0044 /* GhosttyTerminalView+Accessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+Accessibility.swift"; sourceTree = "<group>"; };
 			A5001531 /* TerminalWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalWindowPortal.swift; sourceTree = "<group>"; };
 			A5001533 /* BrowserWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserWindowPortal.swift; sourceTree = "<group>"; };
 		A5001541 /* PortScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortScanner.swift; sourceTree = "<group>"; };
@@ -466,6 +474,10 @@
 				A5001417 /* WorkspaceContentView.swift */,
 				A5001014 /* GhosttyConfig.swift */,
 				A5001015 /* GhosttyTerminalView.swift */,
+				A5FF0041 /* GhosttyTerminalView+Keyboard.swift */,
+				A5FF0042 /* GhosttyTerminalView+Mouse.swift */,
+				A5FF0043 /* GhosttyTerminalView+DragDrop.swift */,
+				A5FF0044 /* GhosttyTerminalView+Accessibility.swift */,
 				A5001531 /* TerminalWindowPortal.swift */,
 				A5001533 /* BrowserWindowPortal.swift */,
 				A5001019 /* TerminalController.swift */,
@@ -771,6 +783,10 @@
 				A5001407 /* WorkspaceContentView.swift in Sources */,
 				A5001004 /* GhosttyConfig.swift in Sources */,
 				A5001005 /* GhosttyTerminalView.swift in Sources */,
+				A5FF0051 /* GhosttyTerminalView+Keyboard.swift in Sources */,
+				A5FF0052 /* GhosttyTerminalView+Mouse.swift in Sources */,
+				A5FF0053 /* GhosttyTerminalView+DragDrop.swift in Sources */,
+				A5FF0054 /* GhosttyTerminalView+Accessibility.swift in Sources */,
 				A5001532 /* TerminalWindowPortal.swift in Sources */,
 				A5001534 /* BrowserWindowPortal.swift in Sources */,
 				A5001007 /* TerminalController.swift in Sources */,
