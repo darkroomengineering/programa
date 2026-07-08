@@ -57,6 +57,13 @@ MAX_P95_DELTA_MS = float(os.environ.get("PROGRAMA_LAG_MAX_P95_DELTA_MS", "20.0")
 MAX_AVG_DELTA_MS = float(os.environ.get("PROGRAMA_LAG_MAX_AVG_DELTA_MS", "12.0"))
 MIN_BASELINE_P95_MS_FOR_RATIO = float(os.environ.get("PROGRAMA_LAG_MIN_BASELINE_P95_MS_FOR_RATIO", "6.0"))
 MIN_BASELINE_AVG_MS_FOR_RATIO = float(os.environ.get("PROGRAMA_LAG_MIN_BASELINE_AVG_MS_FOR_RATIO", "4.0"))
+# Ratios are only meaningful when the churn result is actually slow: on fast
+# baselines (~6-8ms p95) a few ms of runner jitter doubles the ratio while
+# absolute latency stays excellent. Below these churn floors, the delta and
+# absolute caps still guard real regressions (a genuine 3x regression from a
+# 7ms baseline blows the 20ms p95 delta cap anyway).
+MIN_CHURN_P95_MS_FOR_RATIO = float(os.environ.get("PROGRAMA_LAG_MIN_CHURN_P95_MS_FOR_RATIO", "20.0"))
+MIN_CHURN_AVG_MS_FOR_RATIO = float(os.environ.get("PROGRAMA_LAG_MIN_CHURN_AVG_MS_FOR_RATIO", "14.0"))
 MAX_CPU_PERCENT = float(os.environ.get("PROGRAMA_LAG_MAX_CPU_PERCENT", "180.0"))
 ENFORCE_CPU = os.environ.get("PROGRAMA_LAG_ENFORCE_CPU", "0") == "1"
 ALLOW_MAIN_SOCKET = os.environ.get("PROGRAMA_LAG_ALLOW_MAIN_SOCKET", "0") == "1"
@@ -459,17 +466,25 @@ def main() -> int:
         avg_ratio = churn.avg_ms / max(baseline.avg_ms, 0.001)
         p95_delta_ms = churn.p95_ms - baseline.p95_ms
         avg_delta_ms = churn.avg_ms - baseline.avg_ms
-        enforce_p95_ratio = baseline.p95_ms >= MIN_BASELINE_P95_MS_FOR_RATIO
-        enforce_avg_ratio = baseline.avg_ms >= MIN_BASELINE_AVG_MS_FOR_RATIO
+        enforce_p95_ratio = (
+            baseline.p95_ms >= MIN_BASELINE_P95_MS_FOR_RATIO
+            and churn.p95_ms >= MIN_CHURN_P95_MS_FOR_RATIO
+        )
+        enforce_avg_ratio = (
+            baseline.avg_ms >= MIN_BASELINE_AVG_MS_FOR_RATIO
+            and churn.avg_ms >= MIN_CHURN_AVG_MS_FOR_RATIO
+        )
 
         print("\nComparison")
         print(
             f"  p95_ratio: {p95_ratio:.2f}x (max {MAX_P95_RATIO:.2f}x, "
-            f"enabled when baseline p95 >= {MIN_BASELINE_P95_MS_FOR_RATIO:.2f}ms)"
+            f"enabled when baseline p95 >= {MIN_BASELINE_P95_MS_FOR_RATIO:.2f}ms "
+            f"and churn p95 >= {MIN_CHURN_P95_MS_FOR_RATIO:.2f}ms)"
         )
         print(
             f"  avg_ratio: {avg_ratio:.2f}x (max {MAX_AVG_RATIO:.2f}x, "
-            f"enabled when baseline avg >= {MIN_BASELINE_AVG_MS_FOR_RATIO:.2f}ms)"
+            f"enabled when baseline avg >= {MIN_BASELINE_AVG_MS_FOR_RATIO:.2f}ms "
+            f"and churn avg >= {MIN_CHURN_AVG_MS_FOR_RATIO:.2f}ms)"
         )
         print(f"  churn_p95_ms: {churn.p95_ms:.2f} (max {MAX_CHURN_P95_MS:.2f})")
         print(f"  p95_delta_ms: {p95_delta_ms:.2f} (max {MAX_P95_DELTA_MS:.2f})")
