@@ -75,17 +75,18 @@ if [ "$SOCKET_READY" != "true" ]; then
   exit 1
 fi
 
-# --- Ping the socket ---
+# --- Ping the socket (v2 JSON-RPC) ---
 echo "Pinging socket..."
 PING_RESPONSE=$(python3 -c "
-import socket
+import json, socket
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect('$SOCKET_PATH')
 s.settimeout(5.0)
-s.sendall(b'ping\n')
-data = s.recv(1024).decode().strip()
+s.sendall(json.dumps({'id': 1, 'method': 'system.ping'}).encode() + b'\n')
+data = s.recv(4096).decode().strip()
 s.close()
-print(data)
+res = json.loads(data)
+print('PONG' if res.get('ok') and res.get('result', {}).get('pong') else data)
 ")
 echo "Ping response: $PING_RESPONSE"
 if [ "$PING_RESPONSE" != "PONG" ]; then
@@ -93,15 +94,15 @@ if [ "$PING_RESPONSE" != "PONG" ]; then
   exit 1
 fi
 
-# --- Send a command to the terminal ---
+# --- Send a command to the terminal (v2 JSON-RPC) ---
 echo "Sending 'time' command to terminal..."
 SEND_RESPONSE=$(python3 -c "
-import socket
+import json, socket
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect('$SOCKET_PATH')
 s.settimeout(5.0)
-s.sendall(b'send time\\\n\n')
-data = s.recv(1024).decode().strip()
+s.sendall(json.dumps({'id': 2, 'method': 'surface.send_text', 'params': {'text': 'time\n'}}).encode() + b'\n')
+data = s.recv(4096).decode().strip()
 s.close()
 print(data)
 ")
@@ -120,16 +121,17 @@ if ! kill -0 "$APP_PID" 2>/dev/null; then
   exit 1
 fi
 
-# --- Final ping ---
+# --- Final ping (v2 JSON-RPC) ---
 FINAL_PING=$(python3 -c "
-import socket
+import json, socket
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect('$SOCKET_PATH')
 s.settimeout(5.0)
-s.sendall(b'ping\n')
-data = s.recv(1024).decode().strip()
+s.sendall(json.dumps({'id': 3, 'method': 'system.ping'}).encode() + b'\n')
+data = s.recv(4096).decode().strip()
 s.close()
-print(data)
+res = json.loads(data)
+print('PONG' if res.get('ok') and res.get('result', {}).get('pong') else data)
 ")
 echo "Final ping: $FINAL_PING"
 if [ "$FINAL_PING" != "PONG" ]; then
