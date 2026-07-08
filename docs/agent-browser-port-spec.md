@@ -5,6 +5,12 @@ Source inventory snapshot: `vercel-labs/agent-browser` @ `03a8cb9`
 
 This document tracks implemented behavior and remaining parity gaps for the Programa browser port.
 
+**Historical note (2026-07-08):** the v1 line protocol referenced throughout this doc (v1
+commands, the v1->v2 shim, `--panel` as a migration-era alias, `run-tests-v1.sh`) was removed
+once v2 reached full parity. Everything below describing "keep v1 working" / "shim" /
+"before deprecating v1" reflects the plan as written during that migration and is kept for
+history; see `docs/v2-api-migration.md` for the current (v2-only) state.
+
 ## Goals
 
 1. Provide an LLM-friendly browser automation API in Programa with stable handles.
