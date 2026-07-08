@@ -41,6 +41,9 @@
 		A5001406 /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001416 /* Workspace.swift */; };
 		A5001407 /* WorkspaceContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001417 /* WorkspaceContentView.swift */; };
 			A5001093 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001090 /* AppDelegate.swift */; };
+			A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0021 /* AppDelegate+UITestCmdClick.swift */; };
+			A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */; };
+			A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0023 /* AppDelegate+UITestHarnesses.swift */; };
 			A5001094 /* NotificationsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001091 /* NotificationsPage.swift */; };
 			A5001095 /* TerminalNotificationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001092 /* TerminalNotificationStore.swift */; };
 			A5001303 /* SurfaceSearchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001301 /* SurfaceSearchOverlay.swift */; };
@@ -240,6 +243,9 @@
 		A5001416 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
 		A5001417 /* WorkspaceContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceContentView.swift; sourceTree = "<group>"; };
 		A5001090 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A5FF0021 /* AppDelegate+UITestCmdClick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestCmdClick.swift"; sourceTree = "<group>"; };
+		A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestStressWorkspaces.swift"; sourceTree = "<group>"; };
+		A5FF0023 /* AppDelegate+UITestHarnesses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestHarnesses.swift"; sourceTree = "<group>"; };
 		A5001091 /* NotificationsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsPage.swift; sourceTree = "<group>"; };
 		A5001092 /* TerminalNotificationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalNotificationStore.swift; sourceTree = "<group>"; };
 		A5001301 /* SurfaceSearchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Find/SurfaceSearchOverlay.swift; sourceTree = "<group>"; };
@@ -476,6 +482,9 @@
 				A5001620 /* AppleScriptSupport.swift */,
 				D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */,
 				A5001090 /* AppDelegate.swift */,
+				A5FF0021 /* AppDelegate+UITestCmdClick.swift */,
+				A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */,
+				A5FF0023 /* AppDelegate+UITestHarnesses.swift */,
 				A5001091 /* NotificationsPage.swift */,
 				A5001092 /* TerminalNotificationStore.swift */,
 				A5001301 /* SurfaceSearchOverlay.swift */,
@@ -780,6 +789,9 @@
 				A5001226 /* SocketControlSettings.swift in Sources */,
 				A5001621 /* AppleScriptSupport.swift in Sources */,
 				A5001093 /* AppDelegate.swift in Sources */,
+				A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */,
+				A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */,
+				A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */,
 				A5001094 /* NotificationsPage.swift in Sources */,
 				A5001095 /* TerminalNotificationStore.swift in Sources */,
 				A5001303 /* SurfaceSearchOverlay.swift in Sources */,
