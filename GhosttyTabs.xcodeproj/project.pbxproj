@@ -41,6 +41,8 @@
 		A5001290 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A5001291 /* MarkdownUI */; };
 		A5001405 /* PanelContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001415 /* PanelContentView.swift */; };
 		A5001406 /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001416 /* Workspace.swift */; };
+		A5FF0012 /* WorkspaceRemoteSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0002 /* WorkspaceRemoteSession.swift */; };
+		A5FF0011 /* WorkspaceRemoteDaemon.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0001 /* WorkspaceRemoteDaemon.swift */; };
 		A5001407 /* WorkspaceContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001417 /* WorkspaceContentView.swift */; };
 			A5001093 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001090 /* AppDelegate.swift */; };
 			A5001094 /* NotificationsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001091 /* NotificationsPage.swift */; };
@@ -242,6 +244,8 @@
 		A5001418 /* MarkdownPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanel.swift; sourceTree = "<group>"; };
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
 		A5001416 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
+		A5FF0002 /* WorkspaceRemoteSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteSession.swift; sourceTree = "<group>"; };
+		A5FF0001 /* WorkspaceRemoteDaemon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteDaemon.swift; sourceTree = "<group>"; };
 		A5001417 /* WorkspaceContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceContentView.swift; sourceTree = "<group>"; };
 		A5001090 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A5001091 /* NotificationsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsPage.swift; sourceTree = "<group>"; };
@@ -467,6 +471,8 @@
 					A5001013 /* TabManager.swift */,
 					A5001511 /* UITestRecorder.swift */,
 					A5001416 /* Workspace.swift */,
+					A5FF0002 /* WorkspaceRemoteSession.swift */,
+					A5FF0001 /* WorkspaceRemoteDaemon.swift */,
 				A5001417 /* WorkspaceContentView.swift */,
 				A5001014 /* GhosttyConfig.swift */,
 				A5001015 /* GhosttyTerminalView.swift */,
@@ -774,6 +780,8 @@
 						A5001003 /* TabManager.swift in Sources */,
 						A5001501 /* UITestRecorder.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
+						A5FF0012 /* WorkspaceRemoteSession.swift in Sources */,
+						A5FF0011 /* WorkspaceRemoteDaemon.swift in Sources */,
 				A5001407 /* WorkspaceContentView.swift in Sources */,
 				A5001004 /* GhosttyConfig.swift in Sources */,
 				A5001005 /* GhosttyTerminalView.swift in Sources */,
