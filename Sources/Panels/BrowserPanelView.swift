@@ -379,6 +379,394 @@ private struct BrowserChromeStyle {
     }
 }
 
+/// Back/forward/reload navigation buttons plus the in-progress download
+/// indicator shown at the leading edge of the address bar.
+private struct BrowserNavigationButtonsView: View {
+    let panel: BrowserPanel
+
+    private let addressBarButtonHitSize: CGFloat = 26
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: {
+                #if DEBUG
+                dlog("browser.back panel=\(panel.id.uuidString.prefix(5))")
+                #endif
+                panel.goBack()
+            }) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: addressBarButtonHitSize, height: addressBarButtonHitSize, alignment: .center)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(OmnibarAddressButtonStyle())
+            .disabled(!panel.canGoBack)
+            .opacity(panel.canGoBack ? 1.0 : 0.4)
+            .safeHelp(String(localized: "browser.goBack", defaultValue: "Go Back"))
+
+            Button(action: {
+                #if DEBUG
+                dlog("browser.forward panel=\(panel.id.uuidString.prefix(5))")
+                #endif
+                panel.goForward()
+            }) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: addressBarButtonHitSize, height: addressBarButtonHitSize, alignment: .center)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(OmnibarAddressButtonStyle())
+            .disabled(!panel.canGoForward)
+            .opacity(panel.canGoForward ? 1.0 : 0.4)
+            .safeHelp(String(localized: "browser.goForward", defaultValue: "Go Forward"))
+
+            Button(action: {
+                if panel.isLoading {
+                    #if DEBUG
+                    dlog("browser.stop panel=\(panel.id.uuidString.prefix(5))")
+                    #endif
+                    panel.stopLoading()
+                } else {
+                    #if DEBUG
+                    dlog("browser.reload panel=\(panel.id.uuidString.prefix(5))")
+                    #endif
+                    panel.reload()
+                }
+            }) {
+                Image(systemName: panel.isLoading ? "xmark" : "arrow.clockwise")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: addressBarButtonHitSize, height: addressBarButtonHitSize, alignment: .center)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(OmnibarAddressButtonStyle())
+            .safeHelp(panel.isLoading ? String(localized: "browser.stop", defaultValue: "Stop") : String(localized: "browser.reload", defaultValue: "Reload"))
+
+            if panel.isDownloading {
+                HStack(spacing: 4) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(String(localized: "browser.downloading", defaultValue: "Downloading..."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 6)
+                .safeHelp(String(localized: "browser.downloadInProgress", defaultValue: "Download in progress"))
+            }
+        }
+    }
+}
+
+/// Toolbar button + popover for switching/creating/renaming browser profiles.
+private struct BrowserProfileMenuView: View {
+    enum Action {
+        case newProfile
+        case importBrowserData
+        case renameProfile
+    }
+
+    let panel: BrowserPanel
+    @ObservedObject private var browserProfileStore = BrowserProfileStore.shared
+    let iconColor: Color
+    @Binding var isPresented: Bool
+    let popoverPadding: (horizontal: CGFloat, vertical: CGFloat)
+    let onSelectProfile: (UUID) -> Void
+    let onAction: (Action) -> Void
+
+    private let addressBarButtonSize: CGFloat = 22
+    private let devToolsButtonIconSize: CGFloat = 11
+
+    var body: some View {
+        Button(action: {
+            isPresented.toggle()
+        }) {
+            Image(systemName: "person.crop.circle")
+                .symbolRenderingMode(.monochrome)
+                .programaFlatSymbolColorRendering()
+                .font(.system(size: devToolsButtonIconSize, weight: .medium))
+                .foregroundStyle(iconColor)
+                .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
+        }
+        .buttonStyle(OmnibarAddressButtonStyle())
+        .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            popoverContent
+        }
+        .safeHelp(
+            String(
+                format: String(
+                    localized: "browser.profile.buttonHelp",
+                    defaultValue: "Browser Profile: %@"
+                ),
+                panel.profileDisplayName
+            )
+        )
+        .accessibilityIdentifier("BrowserProfileButton")
+    }
+
+    private var popoverContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "browser.profile.menu.title", defaultValue: "Profiles"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(browserProfileStore.profiles) { profile in
+                    Button {
+                        onSelectProfile(profile.id)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: profile.id == panel.profileID ? "checkmark" : "circle")
+                                .font(.system(size: 10, weight: .semibold))
+                                .opacity(profile.id == panel.profileID ? 1.0 : 0.0)
+                                .frame(width: 12, alignment: .center)
+                            Text(profile.displayName)
+                                .font(.system(size: 12))
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 8)
+                        .frame(height: 24)
+                        .contentShape(Rectangle())
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(profile.id == panel.profileID ? Color.primary.opacity(0.12) : Color.clear)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Divider()
+
+            Button {
+                isPresented = false
+                onAction(.newProfile)
+            } label: {
+                Text(String(localized: "browser.profile.new", defaultValue: "New Profile..."))
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                onAction(.importBrowserData)
+            } label: {
+                Text(String(localized: "menu.view.importFromBrowser", defaultValue: "Import Browser Data…"))
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+
+            if browserProfileStore.canRenameProfile(id: panel.profileID) {
+                Button {
+                    isPresented = false
+                    onAction(.renameProfile)
+                } label: {
+                    Text(String(localized: "browser.profile.rename", defaultValue: "Rename Current Profile..."))
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, popoverPadding.horizontal)
+        .padding(.vertical, popoverPadding.vertical)
+        .frame(minWidth: 208)
+    }
+}
+
+/// Toolbar button + popover for switching the browser theme mode.
+private struct BrowserThemeModeMenuView: View {
+    let currentMode: BrowserThemeMode
+    let iconColor: Color
+    @Binding var isPresented: Bool
+    let onSelectMode: (BrowserThemeMode) -> Void
+
+    private let addressBarButtonSize: CGFloat = 22
+    private let devToolsButtonIconSize: CGFloat = 11
+
+    var body: some View {
+        Button(action: {
+            isPresented.toggle()
+        }) {
+            Image(systemName: currentMode.iconName)
+                .symbolRenderingMode(.monochrome)
+                .programaFlatSymbolColorRendering()
+                .font(.system(size: devToolsButtonIconSize, weight: .medium))
+                .foregroundStyle(iconColor)
+                .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
+        }
+        .buttonStyle(OmnibarAddressButtonStyle())
+        .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            popoverContent
+        }
+        .safeHelp(
+            String(
+                format: String(
+                    localized: "browser.theme.buttonHelp",
+                    defaultValue: "Browser Theme: %@"
+                ),
+                currentMode.displayName
+            )
+        )
+        .accessibilityIdentifier("BrowserThemeModeButton")
+    }
+
+    private var popoverContent: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(BrowserThemeMode.allCases) { mode in
+                Button {
+                    onSelectMode(mode)
+                    isPresented = false
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: mode == currentMode ? "checkmark" : "circle")
+                            .font(.system(size: 10, weight: .semibold))
+                            .opacity(mode == currentMode ? 1.0 : 0.0)
+                            .frame(width: 12, alignment: .center)
+                        Text(mode.displayName)
+                            .font(.system(size: 12))
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .contentShape(Rectangle())
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(mode == currentMode ? Color.primary.opacity(0.12) : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("BrowserThemeModeOption\(mode.rawValue.capitalized)")
+            }
+        }
+        .padding(8)
+        .frame(minWidth: 128)
+    }
+}
+
+/// Groups the browser-data import hint content shared by the blank-tab
+/// overlays (floating card / inline strip) and the toolbar-chip popover.
+/// All three presentations render the same hint body and action buttons.
+private struct BrowserImportHintContentView {
+    let summary: String
+    let onImport: () -> Void
+    let onOpenSettings: () -> Void
+    let onDismiss: () -> Void
+
+    var cardOverlay: some View {
+        VStack {
+            Spacer(minLength: 22)
+
+            hintBody
+            .padding(12)
+            .frame(maxWidth: 360, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.9))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(
+                    Color(nsColor: .separatorColor).opacity(0.45),
+                    lineWidth: 1
+                )
+            )
+            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+
+            Spacer()
+        }
+        .padding(.horizontal, 18)
+    }
+
+    var inlineStrip: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            hintBody
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 520, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(nsColor: .windowBackgroundColor).opacity(0.84))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(
+                        Color(nsColor: .separatorColor).opacity(0.35),
+                        lineWidth: 1
+                    )
+                )
+                .shadow(color: Color.black.opacity(0.05), radius: 6, y: 2)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 14)
+    }
+
+    var popover: some View {
+        hintBody
+            .padding(12)
+            .frame(width: 300, alignment: .leading)
+    }
+
+    private var hintBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "browser.import.hint.title", defaultValue: "Import browser data"))
+                .font(.system(size: 12.5, weight: .semibold))
+
+            Text(summary)
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(String(localized: "browser.import.hint.settingsFootnote", defaultValue: "You can always find this in Settings > Browser."))
+                .font(.system(size: 10.5))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    primaryButton
+                    settingsButton
+                    dismissButton
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    primaryButton
+                    HStack(spacing: 10) {
+                        settingsButton
+                        dismissButton
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var primaryButton: some View {
+        Button(String(localized: "browser.import.hint.import", defaultValue: "Import…")) {
+            onImport()
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .accessibilityIdentifier("BrowserImportHintImportButton")
+    }
+
+    private var settingsButton: some View {
+        Button(String(localized: "browser.import.hint.settings", defaultValue: "Browser Settings")) {
+            onOpenSettings()
+        }
+        .buttonStyle(.plain)
+        .controlSize(.small)
+        .accessibilityIdentifier("BrowserImportHintSettingsButton")
+    }
+
+    private var dismissButton: some View {
+        Button(String(localized: "browser.import.hint.dismiss", defaultValue: "Hide Hint")) {
+            onDismiss()
+        }
+        .buttonStyle(.plain)
+        .controlSize(.small)
+        .accessibilityIdentifier("BrowserImportHintDismissButton")
+    }
+}
+
 /// View for rendering a browser panel with address bar
 struct BrowserPanelView: View {
     @ObservedObject var panel: BrowserPanel
@@ -435,7 +823,6 @@ struct BrowserPanelView: View {
     // not a capsule.
     private let omnibarPillCornerRadius: CGFloat = 10
     private let addressBarButtonSize: CGFloat = 22
-    private let addressBarButtonHitSize: CGFloat = 26
     private let addressBarVerticalPadding: CGFloat = 4
     private let devToolsButtonIconSize: CGFloat = 11
 
@@ -837,7 +1224,7 @@ struct BrowserPanelView: View {
 
     private var addressBar: some View {
         HStack(spacing: 8) {
-            addressBarButtonBar
+            BrowserNavigationButtonsView(panel: panel)
 
             omnibarField
                 .accessibilityIdentifier("BrowserOmnibarPill")
@@ -848,8 +1235,29 @@ struct BrowserPanelView: View {
                     browserImportHintToolbarChip
                 }
                 reactGrabButton
-                browserProfileButton
-                browserThemeModeButton
+                BrowserProfileMenuView(
+                    panel: panel,
+                    iconColor: devToolsColorOption.color,
+                    isPresented: $isBrowserProfileMenuPresented,
+                    popoverPadding: (browserProfilePopoverHorizontalPadding, browserProfilePopoverVerticalPadding),
+                    onSelectProfile: applyBrowserProfileSelection,
+                    onAction: { action in
+                        switch action {
+                        case .newProfile:
+                            presentCreateBrowserProfilePrompt()
+                        case .importBrowserData:
+                            presentImportDialogFromProfileMenu()
+                        case .renameProfile:
+                            presentRenameBrowserProfilePrompt()
+                        }
+                    }
+                )
+                BrowserThemeModeMenuView(
+                    currentMode: browserThemeMode,
+                    iconColor: browserThemeModeIconColor,
+                    isPresented: $isBrowserThemeMenuPresented,
+                    onSelectMode: applyBrowserThemeModeSelection
+                )
                 developerToolsButton
             }
         }
@@ -868,75 +1276,6 @@ struct BrowserPanelView: View {
         // Keep the omnibar stack above WKWebView so the suggestions popup is visible.
         .zIndex(1)
         .environment(\.colorScheme, browserChromeColorScheme)
-    }
-
-    private var addressBarButtonBar: some View {
-        return HStack(spacing: 0) {
-            Button(action: {
-                #if DEBUG
-                dlog("browser.back panel=\(panel.id.uuidString.prefix(5))")
-                #endif
-                panel.goBack()
-            }) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: addressBarButtonHitSize, height: addressBarButtonHitSize, alignment: .center)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(OmnibarAddressButtonStyle())
-            .disabled(!panel.canGoBack)
-            .opacity(panel.canGoBack ? 1.0 : 0.4)
-            .safeHelp(String(localized: "browser.goBack", defaultValue: "Go Back"))
-
-            Button(action: {
-                #if DEBUG
-                dlog("browser.forward panel=\(panel.id.uuidString.prefix(5))")
-                #endif
-                panel.goForward()
-            }) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: addressBarButtonHitSize, height: addressBarButtonHitSize, alignment: .center)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(OmnibarAddressButtonStyle())
-            .disabled(!panel.canGoForward)
-            .opacity(panel.canGoForward ? 1.0 : 0.4)
-            .safeHelp(String(localized: "browser.goForward", defaultValue: "Go Forward"))
-
-            Button(action: {
-                if panel.isLoading {
-                    #if DEBUG
-                    dlog("browser.stop panel=\(panel.id.uuidString.prefix(5))")
-                    #endif
-                    panel.stopLoading()
-                } else {
-                    #if DEBUG
-                    dlog("browser.reload panel=\(panel.id.uuidString.prefix(5))")
-                    #endif
-                    panel.reload()
-                }
-            }) {
-                Image(systemName: panel.isLoading ? "xmark" : "arrow.clockwise")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: addressBarButtonHitSize, height: addressBarButtonHitSize, alignment: .center)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(OmnibarAddressButtonStyle())
-            .safeHelp(panel.isLoading ? String(localized: "browser.stop", defaultValue: "Stop") : String(localized: "browser.reload", defaultValue: "Reload"))
-
-            if panel.isDownloading {
-                HStack(spacing: 4) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(String(localized: "browser.downloading", defaultValue: "Downloading..."))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.leading, 6)
-                .safeHelp(String(localized: "browser.downloadInProgress", defaultValue: "Download in progress"))
-            }
-        }
     }
 
     private var reactGrabButton: some View {
@@ -974,62 +1313,6 @@ struct BrowserPanelView: View {
         .accessibilityIdentifier("BrowserToggleDevToolsButton")
     }
 
-    private var browserProfileButton: some View {
-        Button(action: {
-            isBrowserProfileMenuPresented.toggle()
-        }) {
-            Image(systemName: "person.crop.circle")
-                .symbolRenderingMode(.monochrome)
-                .programaFlatSymbolColorRendering()
-                .font(.system(size: devToolsButtonIconSize, weight: .medium))
-                .foregroundStyle(devToolsColorOption.color)
-                .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
-        }
-        .buttonStyle(OmnibarAddressButtonStyle())
-        .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
-        .popover(isPresented: $isBrowserProfileMenuPresented, arrowEdge: .bottom) {
-            browserProfilePopover
-        }
-        .safeHelp(
-            String(
-                format: String(
-                    localized: "browser.profile.buttonHelp",
-                    defaultValue: "Browser Profile: %@"
-                ),
-                panel.profileDisplayName
-            )
-        )
-        .accessibilityIdentifier("BrowserProfileButton")
-    }
-
-    private var browserThemeModeButton: some View {
-        Button(action: {
-            isBrowserThemeMenuPresented.toggle()
-        }) {
-            Image(systemName: browserThemeMode.iconName)
-                .symbolRenderingMode(.monochrome)
-                .programaFlatSymbolColorRendering()
-                .font(.system(size: devToolsButtonIconSize, weight: .medium))
-                .foregroundStyle(browserThemeModeIconColor)
-                .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
-        }
-        .buttonStyle(OmnibarAddressButtonStyle())
-        .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
-        .popover(isPresented: $isBrowserThemeMenuPresented, arrowEdge: .bottom) {
-            browserThemeModePopover
-        }
-        .safeHelp(
-            String(
-                format: String(
-                    localized: "browser.theme.buttonHelp",
-                    defaultValue: "Browser Theme: %@"
-                ),
-                browserThemeMode.displayName
-            )
-        )
-        .accessibilityIdentifier("BrowserThemeModeButton")
-    }
-
     private var browserImportHintToolbarChip: some View {
         Button(action: {
             isBrowserImportHintPopoverPresented.toggle()
@@ -1047,113 +1330,23 @@ struct BrowserPanelView: View {
         }
         .buttonStyle(OmnibarAddressButtonStyle())
         .popover(isPresented: $isBrowserImportHintPopoverPresented, arrowEdge: .bottom) {
-            browserImportHintPopover
+            browserImportHintContent.popover
         }
         .safeHelp(String(localized: "browser.import.hint.toolbar.help", defaultValue: "Import browser data"))
         .accessibilityIdentifier("BrowserImportHintToolbarChip")
     }
 
-    private var browserProfilePopover: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "browser.profile.menu.title", defaultValue: "Profiles"))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(browserProfileStore.profiles) { profile in
-                    Button {
-                        applyBrowserProfileSelection(profile.id)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: profile.id == panel.profileID ? "checkmark" : "circle")
-                                .font(.system(size: 10, weight: .semibold))
-                                .opacity(profile.id == panel.profileID ? 1.0 : 0.0)
-                                .frame(width: 12, alignment: .center)
-                            Text(profile.displayName)
-                                .font(.system(size: 12))
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 8)
-                        .frame(height: 24)
-                        .contentShape(Rectangle())
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(profile.id == panel.profileID ? Color.primary.opacity(0.12) : Color.clear)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Divider()
-
-            Button {
-                isBrowserProfileMenuPresented = false
-                presentCreateBrowserProfilePrompt()
-            } label: {
-                Text(String(localized: "browser.profile.new", defaultValue: "New Profile..."))
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                presentImportDialogFromProfileMenu()
-            } label: {
-                Text(String(localized: "menu.view.importFromBrowser", defaultValue: "Import Browser Data…"))
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.plain)
-
-            if browserProfileStore.canRenameProfile(id: panel.profileID) {
-                Button {
-                    isBrowserProfileMenuPresented = false
-                    presentRenameBrowserProfilePrompt()
-                } label: {
-                    Text(String(localized: "browser.profile.rename", defaultValue: "Rename Current Profile..."))
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, browserProfilePopoverHorizontalPadding)
-        .padding(.vertical, browserProfilePopoverVerticalPadding)
-        .frame(minWidth: 208)
-    }
-
-    private var browserThemeModePopover: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(BrowserThemeMode.allCases) { mode in
-                Button {
-                    applyBrowserThemeModeSelection(mode)
-                    isBrowserThemeMenuPresented = false
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: mode == browserThemeMode ? "checkmark" : "circle")
-                            .font(.system(size: 10, weight: .semibold))
-                            .opacity(mode == browserThemeMode ? 1.0 : 0.0)
-                            .frame(width: 12, alignment: .center)
-                        Text(mode.displayName)
-                            .font(.system(size: 12))
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 8)
-                    .frame(height: 24)
-                    .contentShape(Rectangle())
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(mode == browserThemeMode ? Color.primary.opacity(0.12) : Color.clear)
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("BrowserThemeModeOption\(mode.rawValue.capitalized)")
-            }
-        }
-        .padding(8)
-        .frame(minWidth: 128)
-    }
-
     private var browserThemeModeIconColor: Color {
         devToolsColorOption.color
+    }
+
+    private var browserImportHintContent: BrowserImportHintContentView {
+        BrowserImportHintContentView(
+            summary: browserImportHintSummary,
+            onImport: presentImportDialogFromHint,
+            onOpenSettings: openBrowserImportSettings,
+            onDismiss: dismissBrowserImportHint
+        )
     }
 
     private var omnibarField: some View {
@@ -1306,13 +1499,13 @@ struct BrowserPanelView: View {
                     .overlay(alignment: .topLeading) {
                         if shouldShowEmptyStateImportOverlay,
                            browserImportHintPresentation.blankTabPlacement == .inlineStrip {
-                            emptyBrowserStateInlineStrip
+                            browserImportHintContent.inlineStrip
                         }
                     }
                     .overlay {
                         if shouldShowEmptyStateImportOverlay,
                            browserImportHintPresentation.blankTabPlacement == .floatingCard {
-                            emptyBrowserStateCardOverlay
+                            browserImportHintContent.cardOverlay
                         }
                     }
             }
@@ -1572,121 +1765,6 @@ struct BrowserPanelView: View {
             detail: "request=\(requestId.uuidString.prefix(8))"
         )
 #endif
-    }
-
-    private var emptyBrowserStateCardOverlay: some View {
-        VStack {
-            Spacer(minLength: 22)
-
-            browserImportHintBody
-            .padding(12)
-            .frame(maxWidth: 360, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.9))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(
-                    Color(nsColor: .separatorColor).opacity(0.45),
-                    lineWidth: 1
-                )
-            )
-            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
-
-            Spacer()
-        }
-        .padding(.horizontal, 18)
-    }
-
-    private var emptyBrowserStateInlineStrip: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            browserImportHintBody
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(maxWidth: 520, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(nsColor: .windowBackgroundColor).opacity(0.84))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(
-                        Color(nsColor: .separatorColor).opacity(0.35),
-                        lineWidth: 1
-                    )
-                )
-                .shadow(color: Color.black.opacity(0.05), radius: 6, y: 2)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 14)
-    }
-
-    private var browserImportHintPopover: some View {
-        browserImportHintBody
-            .padding(12)
-            .frame(width: 300, alignment: .leading)
-    }
-
-    private var browserImportHintBody: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "browser.import.hint.title", defaultValue: "Import browser data"))
-                .font(.system(size: 12.5, weight: .semibold))
-
-            Text(browserImportHintSummary)
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(String(localized: "browser.import.hint.settingsFootnote", defaultValue: "You can always find this in Settings > Browser."))
-                .font(.system(size: 10.5))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    browserImportHintPrimaryButton
-                    browserImportHintSettingsButton
-                    browserImportHintDismissButton
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    browserImportHintPrimaryButton
-                    HStack(spacing: 10) {
-                        browserImportHintSettingsButton
-                        browserImportHintDismissButton
-                    }
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    private var browserImportHintPrimaryButton: some View {
-        Button(String(localized: "browser.import.hint.import", defaultValue: "Import…")) {
-            presentImportDialogFromHint()
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .accessibilityIdentifier("BrowserImportHintImportButton")
-    }
-
-    private var browserImportHintSettingsButton: some View {
-        Button(String(localized: "browser.import.hint.settings", defaultValue: "Browser Settings")) {
-            openBrowserImportSettings()
-        }
-        .buttonStyle(.plain)
-        .controlSize(.small)
-        .accessibilityIdentifier("BrowserImportHintSettingsButton")
-    }
-
-    private var browserImportHintDismissButton: some View {
-        Button(String(localized: "browser.import.hint.dismiss", defaultValue: "Hide Hint")) {
-            dismissBrowserImportHint()
-        }
-        .buttonStyle(.plain)
-        .controlSize(.small)
-        .accessibilityIdentifier("BrowserImportHintDismissButton")
     }
 
     private var shouldShowEmptyStateImportOverlay: Bool {
