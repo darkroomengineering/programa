@@ -10023,13 +10023,23 @@ struct CMUXCLI {
     delete process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT;
     """
 
-    private func configureClaudeTeamsEnvironment(
+    /// Configures the shared tmux-compat environment for an agent wrapper
+    /// command (claude-teams, omo, omx, omc), then optionally layers on the
+    /// NODE_OPTIONS restore module. claude-teams and omc both wrap Claude
+    /// Code and need that module configured identically (silently skipped
+    /// if the module file can't be created).
+    private func configureAgentWrapperEnvironment(
         processEnvironment: [String: String],
         shimDirectory: URL,
         executablePath: String,
         socketPath: String,
         explicitPassword: String?,
-        focusedContext: TmuxCompatFocusedContext?
+        focusedContext: TmuxCompatFocusedContext?,
+        tmuxPathPrefix: String,
+        programaBinEnvVar: String,
+        termOverrideEnvVar: String,
+        extraEnvVars: [(key: String, value: String)],
+        needsClaudeNodeOptionsRestore: Bool
     ) {
         configureTmuxCompatEnvironment(
             processEnvironment: processEnvironment,
@@ -10038,13 +10048,12 @@ struct CMUXCLI {
             socketPath: socketPath,
             explicitPassword: explicitPassword,
             focusedContext: focusedContext,
-            tmuxPathPrefix: "cmux-claude-teams",
-            programaBinEnvVar: "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
-            termOverrideEnvVar: "PROGRAMA_CLAUDE_TEAMS_TERM",
-            extraEnvVars: [
-                (key: "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", value: "1"),
-            ]
+            tmuxPathPrefix: tmuxPathPrefix,
+            programaBinEnvVar: programaBinEnvVar,
+            termOverrideEnvVar: termOverrideEnvVar,
+            extraEnvVars: extraEnvVars
         )
+        guard needsClaudeNodeOptionsRestore else { return }
         guard let restoreModuleURL = try? createClaudeNodeOptionsRestoreModule() else {
             unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT")
             unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS")
@@ -10102,64 +10111,119 @@ struct CMUXCLI {
         return restoreModuleURL
     }
 
-    private func runClaudeTeams(
+    /// Everything that differs between the four agent wrapper commands
+    /// (claude-teams, omo, omx, omc). runAgentWrapper implements their
+    /// shared shape once; each run* function below just builds a config.
+    private struct AgentWrapperConfig {
+        /// Name used in "programa <cmdLabel>" messages.
+        let cmdLabel: String
+        /// Bare command name: used for the execvp fallback, the not-found
+        /// `which` check, and error messages (e.g. "claude").
+        let execName: String
+        /// Resolves the real executable path given the launcher environment
+        /// (already carrying PROGRAMA_SOCKET/PROGRAMA_SOCKET_PATH/
+        /// PROGRAMA_SOCKET_PASSWORD).
+        let resolveExecutable: (_ launcherEnvironment: [String: String]) -> String?
+        /// When non-nil, a nil resolveExecutable result triggers a `which`
+        /// check; if that also fails, throws CLIError with this hint. nil
+        /// (claude-teams) means no early not-found check is performed --
+        /// claude-teams instead falls through to the generic exec-failure
+        /// error below.
+        let notFoundInstallHint: String?
+        /// Runs after the not-found check (if any), before shim directory
+        /// creation. Only omo uses this (oh-my-opencode plugin setup).
+        let preLaunch: (() throws -> Void)?
+        /// Creates the tool's shim directory.
+        let createShimDir: () throws -> URL
+        /// Runs after focused-context lookup, before configureEnvironment.
+        /// Returns env vars to merge into the launcher environment (e.g.
+        /// omo's resolved OPENCODE_PORT). Only omo uses this.
+        let beforeConfigure: ((_ launcherEnvironment: [String: String]) -> [String: String])?
+        let tmuxPathPrefix: String
+        let programaBinEnvVar: String
+        let termOverrideEnvVar: String
+        /// Extra env vars to set, computed from the (possibly beforeConfigure-
+        /// augmented) launcher environment.
+        let extraEnvVars: (_ launcherEnvironment: [String: String]) -> [(key: String, value: String)]
+        /// claude-teams and omc both wrap Claude Code and need the
+        /// NODE_OPTIONS restore module configured.
+        let needsClaudeNodeOptionsRestore: Bool
+        /// Transforms the raw CLI args before exec. claude-teams injects
+        /// --teammate-mode; omo injects a default --port. omx/omc pass
+        /// commandArgs through unchanged.
+        let buildLaunchArguments: (_ commandArgs: [String], _ launcherEnvironment: [String: String]) -> [String]
+        /// Extra text appended (after a blank line) to the exec-failure
+        /// message. nil for claude-teams.
+        let execFailureHint: String?
+    }
+
+    /// Implements the shared shape of `programa claude-teams`, `programa
+    /// omo`, `programa omx`, and `programa omc`: build the launcher
+    /// environment, resolve the real executable, optionally check it's
+    /// installed and run tool-specific setup, create shim scripts, gather
+    /// focused-terminal context, configure environment variables, and exec.
+    private func runAgentWrapper(
         commandArgs: [String],
         socketPath: String,
-        explicitPassword: String?
+        explicitPassword: String?,
+        config: AgentWrapperConfig
     ) throws {
-        let processEnvironment = ProcessInfo.processInfo.environment
-        var launcherEnvironment = processEnvironment
+        var launcherEnvironment = ProcessInfo.processInfo.environment
         launcherEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
         launcherEnvironment["PROGRAMA_SOCKET"] = socketPath
         if let explicitPassword,
            !explicitPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             launcherEnvironment["PROGRAMA_SOCKET_PASSWORD"] = explicitPassword
         }
-        let shimDirectory = try createClaudeTeamsShimDirectory()
+
+        let resolvedExecutablePath = config.resolveExecutable(launcherEnvironment)
+
+        if resolvedExecutablePath == nil, let hint = config.notFoundInstallHint {
+            let checkProcess = Process()
+            checkProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            checkProcess.arguments = [config.execName]
+            checkProcess.standardOutput = Pipe()
+            checkProcess.standardError = Pipe()
+            try? checkProcess.run()
+            checkProcess.waitUntilExit()
+            if checkProcess.terminationStatus != 0 {
+                throw CLIError(message: "\(config.execName) is not installed. Install it first:\n  \(hint)\n\nThen run: programa \(config.cmdLabel)")
+            }
+        }
+
+        if let preLaunch = config.preLaunch {
+            try preLaunch()
+        }
+
+        let shimDirectory = try config.createShimDir()
         let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "programa")
         let focusedContext = tmuxCompatFocusedContext(
             processEnvironment: launcherEnvironment,
             explicitPassword: explicitPassword
         )
-        let bundledClaudePath = resolvedExecutableURL()?
-            .deletingLastPathComponent()
-            .appendingPathComponent("claude", isDirectory: false)
-            .path
-        let claudeExecutablePath: String? = {
-            // Check custom path from Settings > Automation > Claude Code.
-            // Try env var first (set by the app per-session), then UserDefaults.
-            let candidates = [
-                launcherEnvironment["PROGRAMA_CUSTOM_CLAUDE_PATH"],
-                UserDefaults.standard.string(forKey: "claudeCodeCustomClaudePath"),
-            ]
-            for raw in candidates {
-                guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !trimmed.isEmpty else { continue }
-                var isDir: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDir),
-                      !isDir.boolValue,
-                      FileManager.default.isExecutableFile(atPath: trimmed),
-                      !isProgramaClaudeWrapper(at: trimmed) else { continue }
-                return trimmed
+
+        if let beforeConfigure = config.beforeConfigure {
+            for (key, value) in beforeConfigure(launcherEnvironment) {
+                launcherEnvironment[key] = value
             }
-            return resolveClaudeExecutable(searchPath: launcherEnvironment["PATH"])
-                ?? {
-                    guard let bundledClaudePath,
-                          FileManager.default.isExecutableFile(atPath: bundledClaudePath) else { return nil }
-                    return bundledClaudePath
-                }()
-        }()
-        configureClaudeTeamsEnvironment(
+        }
+
+        configureAgentWrapperEnvironment(
             processEnvironment: launcherEnvironment,
             shimDirectory: shimDirectory,
             executablePath: executablePath,
             socketPath: socketPath,
             explicitPassword: explicitPassword,
-            focusedContext: focusedContext
+            focusedContext: focusedContext,
+            tmuxPathPrefix: config.tmuxPathPrefix,
+            programaBinEnvVar: config.programaBinEnvVar,
+            termOverrideEnvVar: config.termOverrideEnvVar,
+            extraEnvVars: config.extraEnvVars(launcherEnvironment),
+            needsClaudeNodeOptionsRestore: config.needsClaudeNodeOptionsRestore
         )
 
-        let launchPath = claudeExecutablePath ?? "claude"
-        let launchArguments = claudeTeamsLaunchArguments(commandArgs: commandArgs)
+        let launchPath = resolvedExecutablePath ?? config.execName
+        let launchArguments = config.buildLaunchArguments(commandArgs, launcherEnvironment)
         var argv = ([launchPath] + launchArguments).map { strdup($0) }
         defer {
             for item in argv {
@@ -10168,37 +10232,108 @@ struct CMUXCLI {
         }
         argv.append(nil)
 
-        if claudeExecutablePath != nil {
+        if resolvedExecutablePath != nil {
             execv(launchPath, &argv)
         } else {
-            execvp("claude", &argv)
+            execvp(config.execName, &argv)
         }
         let code = errno
-        throw CLIError(message: "Failed to launch claude: \(String(cString: strerror(code)))")
+        let hintSuffix = config.execFailureHint.map { "\n\n\($0)" } ?? ""
+        throw CLIError(message: "Failed to launch \(config.execName): \(String(cString: strerror(code)))\(hintSuffix)")
+    }
+
+    private func runClaudeTeams(
+        commandArgs: [String],
+        socketPath: String,
+        explicitPassword: String?
+    ) throws {
+        try runAgentWrapper(
+            commandArgs: commandArgs,
+            socketPath: socketPath,
+            explicitPassword: explicitPassword,
+            config: AgentWrapperConfig(
+                cmdLabel: "claude-teams",
+                execName: "claude",
+                resolveExecutable: { launcherEnvironment in
+                    let bundledClaudePath = resolvedExecutableURL()?
+                        .deletingLastPathComponent()
+                        .appendingPathComponent("claude", isDirectory: false)
+                        .path
+                    // Check custom path from Settings > Automation > Claude Code.
+                    // Try env var first (set by the app per-session), then UserDefaults.
+                    let candidates = [
+                        launcherEnvironment["PROGRAMA_CUSTOM_CLAUDE_PATH"],
+                        UserDefaults.standard.string(forKey: "claudeCodeCustomClaudePath"),
+                    ]
+                    for raw in candidates {
+                        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+                              !trimmed.isEmpty else { continue }
+                        var isDir: ObjCBool = false
+                        guard FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDir),
+                              !isDir.boolValue,
+                              FileManager.default.isExecutableFile(atPath: trimmed),
+                              !isProgramaClaudeWrapper(at: trimmed) else { continue }
+                        return trimmed
+                    }
+                    return resolveClaudeExecutable(searchPath: launcherEnvironment["PATH"])
+                        ?? {
+                            guard let bundledClaudePath,
+                                  FileManager.default.isExecutableFile(atPath: bundledClaudePath) else { return nil }
+                            return bundledClaudePath
+                        }()
+                },
+                notFoundInstallHint: nil,
+                preLaunch: nil,
+                createShimDir: { try self.createClaudeTeamsShimDirectory() },
+                beforeConfigure: nil,
+                tmuxPathPrefix: "cmux-claude-teams",
+                programaBinEnvVar: "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
+                termOverrideEnvVar: "PROGRAMA_CLAUDE_TEAMS_TERM",
+                extraEnvVars: { _ in
+                    [(key: "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", value: "1")]
+                },
+                needsClaudeNodeOptionsRestore: true,
+                buildLaunchArguments: { commandArgs, _ in
+                    claudeTeamsLaunchArguments(commandArgs: commandArgs)
+                },
+                execFailureHint: nil
+            )
+        )
     }
 
     // MARK: - programa omo (OpenCode + oh-my-openagent)
 
-    private func resolveOpenCodeExecutable(searchPath: String?) -> String? {
-        resolveExecutableInSearchPath("opencode", searchPath: searchPath)
+    /// Creates a shim directory containing a `tmux` shim that answers
+    /// `-V`/`-v` locally (no live socket connection needed just to probe
+    /// the tmux version) and forwards everything else to `programa
+    /// __tmux-compat`. Shared by omo, omx, and omc; claude-teams uses its
+    /// own simpler shim with no -V/-v handling (createClaudeTeamsShimDirectory).
+    private func createVFlagTmuxShimDirectory(
+        directoryName: String,
+        programaBinEnvVar: String,
+        versionCheckComment: String = ""
+    ) throws -> URL {
+        let tmuxScript = """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        \(versionCheckComment)case "${1:-}" in
+          -V|-v) echo "tmux 3.4"; exit 0 ;;
+        esac
+        exec "${\(programaBinEnvVar):-programa}" __tmux-compat "$@"
+        """
+        return try createTmuxCompatShimDirectory(
+            directoryName: directoryName,
+            tmuxShimScript: tmuxScript
+        )
     }
 
     private func createOMOShimDirectory() throws -> URL {
         // tmux shim: redirects tmux commands to programa __tmux-compat
         // Handle -V locally (no socket needed) since __tmux-compat requires a connection.
-        let tmuxScript = """
-        #!/usr/bin/env bash
-        set -euo pipefail
-        # Only match -V/-v as the first arg (top-level tmux flag).
-        # -v inside subcommands (e.g. split-window -v) is a vertical split flag.
-        case "${1:-}" in
-          -V|-v) echo "tmux 3.4"; exit 0 ;;
-        esac
-        exec "${PROGRAMA_OMO_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
-        """
-        let root = try createTmuxCompatShimDirectory(
+        let root = try createVFlagTmuxShimDirectory(
             directoryName: "omo-bin",
-            tmuxShimScript: tmuxScript
+            programaBinEnvVar: "PROGRAMA_OMO_PROGRAMA_BIN",
+            versionCheckComment: "# Only match -V/-v as the first arg (top-level tmux flag).\n# -v inside subcommands (e.g. split-window -v) is a vertical split flag.\n"
         )
 
         // terminal-notifier shim: intercepts macOS notifications and routes to programa notify
@@ -10600,147 +10735,61 @@ struct CMUXCLI {
         setenv("OPENCODE_CONFIG_DIR", shadowDir.path, 1)
     }
 
-    private func configureOMOEnvironment(
-        processEnvironment: [String: String],
-        shimDirectory: URL,
-        executablePath: String,
-        socketPath: String,
-        explicitPassword: String?,
-        focusedContext: TmuxCompatFocusedContext?,
-        openCodePort: String
-    ) {
-        configureTmuxCompatEnvironment(
-            processEnvironment: processEnvironment,
-            shimDirectory: shimDirectory,
-            executablePath: executablePath,
-            socketPath: socketPath,
-            explicitPassword: explicitPassword,
-            focusedContext: focusedContext,
-            tmuxPathPrefix: "cmux-omo",
-            programaBinEnvVar: "PROGRAMA_OMO_PROGRAMA_BIN",
-            termOverrideEnvVar: "PROGRAMA_OMO_TERM",
-            extraEnvVars: [(key: "OPENCODE_PORT", value: openCodePort)]
-        )
-    }
-
     private func runOMO(
         commandArgs: [String],
         socketPath: String,
         explicitPassword: String?
     ) throws {
-        let processEnvironment = ProcessInfo.processInfo.environment
-        var launcherEnvironment = processEnvironment
-        launcherEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
-        launcherEnvironment["PROGRAMA_SOCKET"] = socketPath
-        if let explicitPassword,
-           !explicitPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            launcherEnvironment["PROGRAMA_SOCKET_PASSWORD"] = explicitPassword
-        }
-
-        // Check for opencode before doing expensive plugin setup
-        let openCodeExecutablePath = resolveOpenCodeExecutable(searchPath: launcherEnvironment["PATH"])
-        if openCodeExecutablePath == nil {
-            let checkProcess = Process()
-            checkProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-            checkProcess.arguments = ["opencode"]
-            checkProcess.standardOutput = Pipe()
-            checkProcess.standardError = Pipe()
-            try? checkProcess.run()
-            checkProcess.waitUntilExit()
-            if checkProcess.terminationStatus != 0 {
-                throw CLIError(message: "opencode is not installed. Install it first:\n  npm install -g opencode-ai\n  # or\n  bun install -g opencode-ai\n\nThen run: programa omo")
-            }
-        }
-
-        // Ensure oh-my-opencode plugin is registered and installed
-        try omoEnsurePlugin()
-
-        let shimDirectory = try createOMOShimDirectory()
-        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "programa")
-        let focusedContext = tmuxCompatFocusedContext(
-            processEnvironment: launcherEnvironment,
-            explicitPassword: explicitPassword
-        )
-        let openCodePort = omoResolvedPort(
+        try runAgentWrapper(
             commandArgs: commandArgs,
-            processEnvironment: launcherEnvironment
-        )
-        launcherEnvironment["OPENCODE_PORT"] = openCodePort
-        configureOMOEnvironment(
-            processEnvironment: launcherEnvironment,
-            shimDirectory: shimDirectory,
-            executablePath: executablePath,
             socketPath: socketPath,
             explicitPassword: explicitPassword,
-            focusedContext: focusedContext,
-            openCodePort: openCodePort
+            config: AgentWrapperConfig(
+                cmdLabel: "omo",
+                execName: "opencode",
+                resolveExecutable: { launcherEnvironment in
+                    resolveExecutableInSearchPath("opencode", searchPath: launcherEnvironment["PATH"])
+                },
+                notFoundInstallHint: "npm install -g opencode-ai\n  # or\n  bun install -g opencode-ai",
+                // Ensure oh-my-opencode plugin is registered and installed.
+                preLaunch: { try self.omoEnsurePlugin() },
+                createShimDir: { try self.createOMOShimDirectory() },
+                beforeConfigure: { launcherEnvironment in
+                    // oh-my-openagent needs the OpenCode API server running to attach
+                    // subagent sessions to tmux panes. Prefer the historic default port
+                    // when it is available, otherwise fall back to a free loopback port.
+                    let openCodePort = omoResolvedPort(
+                        commandArgs: commandArgs,
+                        processEnvironment: launcherEnvironment
+                    )
+                    return ["OPENCODE_PORT": openCodePort]
+                },
+                tmuxPathPrefix: "cmux-omo",
+                programaBinEnvVar: "PROGRAMA_OMO_PROGRAMA_BIN",
+                termOverrideEnvVar: "PROGRAMA_OMO_TERM",
+                extraEnvVars: { launcherEnvironment in
+                    [(key: "OPENCODE_PORT", value: launcherEnvironment["OPENCODE_PORT"] ?? "")]
+                },
+                needsClaudeNodeOptionsRestore: false,
+                buildLaunchArguments: { commandArgs, launcherEnvironment in
+                    var effectiveArgs = commandArgs
+                    if omoRequestedPort(from: commandArgs) == nil {
+                        effectiveArgs.append("--port")
+                        effectiveArgs.append(launcherEnvironment["OPENCODE_PORT"] ?? "")
+                    }
+                    return effectiveArgs
+                },
+                execFailureHint: "Is opencode installed? Install with:\n  npm install -g opencode-ai"
+            )
         )
-
-        let launchPath = openCodeExecutablePath ?? "opencode"
-        // oh-my-openagent needs the OpenCode API server running to attach
-        // subagent sessions to tmux panes. Prefer the historic default port
-        // when it is available, otherwise fall back to a free loopback port.
-        var effectiveArgs = commandArgs
-        if omoRequestedPort(from: commandArgs) == nil {
-            effectiveArgs.append("--port")
-            effectiveArgs.append(openCodePort)
-        }
-        var argv = ([launchPath] + effectiveArgs).map { strdup($0) }
-        defer {
-            for item in argv {
-                free(item)
-            }
-        }
-        argv.append(nil)
-
-        if openCodeExecutablePath != nil {
-            execv(launchPath, &argv)
-        } else {
-            execvp("opencode", &argv)
-        }
-        let code = errno
-        throw CLIError(message: "Failed to launch opencode: \(String(cString: strerror(code)))\n\nIs opencode installed? Install with:\n  npm install -g opencode-ai")
     }
 
     // MARK: - programa omx (Oh My Codex)
 
-    private func resolveOMXExecutable(searchPath: String?) -> String? {
-        resolveExecutableInSearchPath("omx", searchPath: searchPath)
-    }
-
     private func createOMXShimDirectory() throws -> URL {
-        let tmuxScript = """
-        #!/usr/bin/env bash
-        set -euo pipefail
-        case "${1:-}" in
-          -V|-v) echo "tmux 3.4"; exit 0 ;;
-        esac
-        exec "${PROGRAMA_OMX_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
-        """
-        return try createTmuxCompatShimDirectory(
+        try createVFlagTmuxShimDirectory(
             directoryName: "omx-bin",
-            tmuxShimScript: tmuxScript
-        )
-    }
-
-    private func configureOMXEnvironment(
-        processEnvironment: [String: String],
-        shimDirectory: URL,
-        executablePath: String,
-        socketPath: String,
-        explicitPassword: String?,
-        focusedContext: TmuxCompatFocusedContext?
-    ) {
-        configureTmuxCompatEnvironment(
-            processEnvironment: processEnvironment,
-            shimDirectory: shimDirectory,
-            executablePath: executablePath,
-            socketPath: socketPath,
-            explicitPassword: explicitPassword,
-            focusedContext: focusedContext,
-            tmuxPathPrefix: "cmux-omx",
-            programaBinEnvVar: "PROGRAMA_OMX_PROGRAMA_BIN",
-            termOverrideEnvVar: "PROGRAMA_OMX_TERM"
+            programaBinEnvVar: "PROGRAMA_OMX_PROGRAMA_BIN"
         )
     }
 
@@ -10749,122 +10798,37 @@ struct CMUXCLI {
         socketPath: String,
         explicitPassword: String?
     ) throws {
-        let processEnvironment = ProcessInfo.processInfo.environment
-        var launcherEnvironment = processEnvironment
-        launcherEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
-        launcherEnvironment["PROGRAMA_SOCKET"] = socketPath
-        if let explicitPassword,
-           !explicitPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            launcherEnvironment["PROGRAMA_SOCKET_PASSWORD"] = explicitPassword
-        }
-
-        let omxExecutablePath = resolveOMXExecutable(searchPath: launcherEnvironment["PATH"])
-        if omxExecutablePath == nil {
-            let checkProcess = Process()
-            checkProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-            checkProcess.arguments = ["omx"]
-            checkProcess.standardOutput = Pipe()
-            checkProcess.standardError = Pipe()
-            try? checkProcess.run()
-            checkProcess.waitUntilExit()
-            if checkProcess.terminationStatus != 0 {
-                throw CLIError(message: "omx is not installed. Install it first:\n  npm install -g oh-my-codex\n\nThen run: programa omx")
-            }
-        }
-
-        let shimDirectory = try createOMXShimDirectory()
-        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "programa")
-        let focusedContext = tmuxCompatFocusedContext(
-            processEnvironment: launcherEnvironment,
-            explicitPassword: explicitPassword
-        )
-        configureOMXEnvironment(
-            processEnvironment: launcherEnvironment,
-            shimDirectory: shimDirectory,
-            executablePath: executablePath,
+        try runAgentWrapper(
+            commandArgs: commandArgs,
             socketPath: socketPath,
             explicitPassword: explicitPassword,
-            focusedContext: focusedContext
+            config: AgentWrapperConfig(
+                cmdLabel: "omx",
+                execName: "omx",
+                resolveExecutable: { launcherEnvironment in
+                    resolveExecutableInSearchPath("omx", searchPath: launcherEnvironment["PATH"])
+                },
+                notFoundInstallHint: "npm install -g oh-my-codex",
+                preLaunch: nil,
+                createShimDir: { try self.createOMXShimDirectory() },
+                beforeConfigure: nil,
+                tmuxPathPrefix: "cmux-omx",
+                programaBinEnvVar: "PROGRAMA_OMX_PROGRAMA_BIN",
+                termOverrideEnvVar: "PROGRAMA_OMX_TERM",
+                extraEnvVars: { _ in [] },
+                needsClaudeNodeOptionsRestore: false,
+                buildLaunchArguments: { commandArgs, _ in commandArgs },
+                execFailureHint: "Is oh-my-codex installed? Install with:\n  npm install -g oh-my-codex"
+            )
         )
-
-        let launchPath = omxExecutablePath ?? "omx"
-        var argv = ([launchPath] + commandArgs).map { strdup($0) }
-        defer {
-            for item in argv {
-                free(item)
-            }
-        }
-        argv.append(nil)
-
-        if omxExecutablePath != nil {
-            execv(launchPath, &argv)
-        } else {
-            execvp("omx", &argv)
-        }
-        let code = errno
-        throw CLIError(message: "Failed to launch omx: \(String(cString: strerror(code)))\n\nIs oh-my-codex installed? Install with:\n  npm install -g oh-my-codex")
     }
 
     // MARK: - programa omc (Oh My Claude Code)
 
-    private func resolveOMCExecutable(searchPath: String?) -> String? {
-        resolveExecutableInSearchPath("omc", searchPath: searchPath)
-    }
-
     private func createOMCShimDirectory() throws -> URL {
-        let tmuxScript = """
-        #!/usr/bin/env bash
-        set -euo pipefail
-        case "${1:-}" in
-          -V|-v) echo "tmux 3.4"; exit 0 ;;
-        esac
-        exec "${PROGRAMA_OMC_PROGRAMA_BIN:-programa}" __tmux-compat "$@"
-        """
-        return try createTmuxCompatShimDirectory(
+        try createVFlagTmuxShimDirectory(
             directoryName: "omc-bin",
-            tmuxShimScript: tmuxScript
-        )
-    }
-
-    private func configureOMCEnvironment(
-        processEnvironment: [String: String],
-        shimDirectory: URL,
-        executablePath: String,
-        socketPath: String,
-        explicitPassword: String?,
-        focusedContext: TmuxCompatFocusedContext?
-    ) {
-        configureTmuxCompatEnvironment(
-            processEnvironment: processEnvironment,
-            shimDirectory: shimDirectory,
-            executablePath: executablePath,
-            socketPath: socketPath,
-            explicitPassword: explicitPassword,
-            focusedContext: focusedContext,
-            tmuxPathPrefix: "cmux-omc",
-            programaBinEnvVar: "PROGRAMA_OMC_PROGRAMA_BIN",
-            termOverrideEnvVar: "PROGRAMA_OMC_TERM"
-        )
-        // omc wraps Claude Code, so it needs the same NODE_OPTIONS restore module
-        guard let restoreModuleURL = try? createClaudeNodeOptionsRestoreModule() else {
-            unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT")
-            unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS")
-            return
-        }
-        if let existing = processEnvironment["NODE_OPTIONS"] {
-            setenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT", "1", 1)
-            setenv("PROGRAMA_ORIGINAL_NODE_OPTIONS", existing, 1)
-        } else {
-            setenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT", "0", 1)
-            unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS")
-        }
-        setenv(
-            "NODE_OPTIONS",
-            mergedNodeOptions(
-                existing: processEnvironment["NODE_OPTIONS"],
-                restoreModulePath: restoreModuleURL.path
-            ),
-            1
+            programaBinEnvVar: "PROGRAMA_OMC_PROGRAMA_BIN"
         )
     }
 
@@ -10873,60 +10837,30 @@ struct CMUXCLI {
         socketPath: String,
         explicitPassword: String?
     ) throws {
-        let processEnvironment = ProcessInfo.processInfo.environment
-        var launcherEnvironment = processEnvironment
-        launcherEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
-        launcherEnvironment["PROGRAMA_SOCKET"] = socketPath
-        if let explicitPassword,
-           !explicitPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            launcherEnvironment["PROGRAMA_SOCKET_PASSWORD"] = explicitPassword
-        }
-
-        let omcExecutablePath = resolveOMCExecutable(searchPath: launcherEnvironment["PATH"])
-        if omcExecutablePath == nil {
-            let checkProcess = Process()
-            checkProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-            checkProcess.arguments = ["omc"]
-            checkProcess.standardOutput = Pipe()
-            checkProcess.standardError = Pipe()
-            try? checkProcess.run()
-            checkProcess.waitUntilExit()
-            if checkProcess.terminationStatus != 0 {
-                throw CLIError(message: "omc is not installed. Install it first:\n  npm install -g oh-my-claude-sisyphus\n\nThen run: programa omc")
-            }
-        }
-
-        let shimDirectory = try createOMCShimDirectory()
-        let executablePath = resolvedExecutableURL()?.path ?? (args.first ?? "programa")
-        let focusedContext = tmuxCompatFocusedContext(
-            processEnvironment: launcherEnvironment,
-            explicitPassword: explicitPassword
-        )
-        configureOMCEnvironment(
-            processEnvironment: launcherEnvironment,
-            shimDirectory: shimDirectory,
-            executablePath: executablePath,
+        try runAgentWrapper(
+            commandArgs: commandArgs,
             socketPath: socketPath,
             explicitPassword: explicitPassword,
-            focusedContext: focusedContext
+            config: AgentWrapperConfig(
+                cmdLabel: "omc",
+                execName: "omc",
+                resolveExecutable: { launcherEnvironment in
+                    resolveExecutableInSearchPath("omc", searchPath: launcherEnvironment["PATH"])
+                },
+                notFoundInstallHint: "npm install -g oh-my-claude-sisyphus",
+                preLaunch: nil,
+                createShimDir: { try self.createOMCShimDirectory() },
+                beforeConfigure: nil,
+                tmuxPathPrefix: "cmux-omc",
+                programaBinEnvVar: "PROGRAMA_OMC_PROGRAMA_BIN",
+                termOverrideEnvVar: "PROGRAMA_OMC_TERM",
+                extraEnvVars: { _ in [] },
+                // omc wraps Claude Code, so it needs the same NODE_OPTIONS restore module.
+                needsClaudeNodeOptionsRestore: true,
+                buildLaunchArguments: { commandArgs, _ in commandArgs },
+                execFailureHint: "Is oh-my-claude-sisyphus installed? Install with:\n  npm install -g oh-my-claude-sisyphus"
+            )
         )
-
-        let launchPath = omcExecutablePath ?? "omc"
-        var argv = ([launchPath] + commandArgs).map { strdup($0) }
-        defer {
-            for item in argv {
-                free(item)
-            }
-        }
-        argv.append(nil)
-
-        if omcExecutablePath != nil {
-            execv(launchPath, &argv)
-        } else {
-            execvp("omc", &argv)
-        }
-        let code = errno
-        throw CLIError(message: "Failed to launch omc: \(String(cString: strerror(code)))\n\nIs oh-my-claude-sisyphus installed? Install with:\n  npm install -g oh-my-claude-sisyphus")
     }
 
     private func runClaudeTeamsTmuxCompat(

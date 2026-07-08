@@ -21,22 +21,91 @@ delete process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS;
 delete process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT;
 `
 
-// runClaudeTeamsRelay implements `programa claude-teams` on the remote side.
-// It creates tmux shim scripts, sets up environment variables, gets the
-// focused context via system.identify, and exec's into `claude`.
-func runClaudeTeamsRelay(socketPath string, args []string, refreshAddr func() string) int {
+// agentRelayConfig captures everything that differs between the four agent
+// wrapper commands (claude-teams, omo, omx, omc). All four follow the same
+// shape: create a shim dir, resolve the real executable, gather focused
+// terminal context, configure the shared environment, then exec into the
+// tool. runAgentRelay implements that shape once; each run*Relay function
+// below is a thin config constructor.
+type agentRelayConfig struct {
+	// cmdLabel names the tool in "programa <cmdLabel>: ..." messages.
+	cmdLabel string
+	// execName is the executable to search for in PATH (e.g. "claude").
+	execName string
+	// notFoundHint is appended after "<execName> not found in PATH\n".
+	// Empty for claude-teams, which offers no install hint.
+	notFoundHint string
+	// checkNotFoundEarly aborts immediately once execName can't be
+	// resolved, before preLaunch/focused-context/env setup. omo, omx, and
+	// omc all check early. claude-teams instead defers the check until
+	// just before exec (after focused-context lookup, env configuration,
+	// and NODE_OPTIONS setup have already run) -- this ordering
+	// difference has no observable effect since the process exits either
+	// way, but it is preserved here rather than normalized because it
+	// reflects the original code path rather than a spec requirement.
+	checkNotFoundEarly bool
+
+	// createShimDir creates (or reuses) the shim directory for this tool.
+	createShimDir func() (string, error)
+
+	// preLaunch runs after the executable is resolved (and, for
+	// checkNotFoundEarly tools, after that check) but before focused-context
+	// lookup. Only omo uses this, for oh-my-opencode plugin setup.
+	preLaunch func(originalPath string) error
+
+	tmuxPathPrefix string
+	cmuxBinEnvVar  string
+	termEnvVar     string
+	extraEnv       map[string]string
+
+	// postEnvSetup runs after configureAgentEnvironment. claude-teams and
+	// omc both use it to configure the NODE_OPTIONS restore module (both
+	// wrap Claude Code) -- but claude-teams silently ignores setup
+	// failure while omc prints a warning. That asymmetry exists in the
+	// original code and is preserved rather than normalized.
+	postEnvSetup func()
+
+	// buildLaunchArgs adapts the raw CLI args before exec. nil means the
+	// args are passed through unchanged (omx, omc). claude-teams injects
+	// --teammate-mode; omo injects a default --port and sets OPENCODE_PORT.
+	buildLaunchArgs func(args []string) []string
+
+	// directExec execs execPath directly via syscall.Exec (claude-teams:
+	// claude is a native binary). When false, launch goes through
+	// resolveNodeScriptExec (omo/omx/omc wrap node/bun scripts).
+	directExec bool
+}
+
+// runAgentRelay implements the shared shape of `programa claude-teams`,
+// `programa omo`, `programa omx`, and `programa omc` on the remote side:
+// create shim scripts, resolve the real executable, get the focused
+// context via system.identify, configure environment variables, and
+// exec into the tool.
+func runAgentRelay(socketPath string, args []string, refreshAddr func() string, cfg agentRelayConfig) int {
 	rc := &rpcContext{socketPath: socketPath, refreshAddr: refreshAddr}
 
-	shimDir, err := createTmuxShimDir("claude-teams-bin", claudeTeamsShimScript)
+	shimDir, err := cfg.createShimDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "programa claude-teams: failed to create shim directory: %v\n", err)
+		fmt.Fprintf(os.Stderr, "programa %s: failed to create shim directory: %v\n", cfg.cmdLabel, err)
 		return 1
 	}
 
 	// Resolve the agent executable BEFORE modifying PATH (so the shim
 	// directory doesn't shadow anything). Matches the Swift CLI behavior.
 	originalPath := os.Getenv("PATH")
-	claudePath := findExecutableInPath("claude", originalPath, shimDir)
+	execPath := findExecutableInPath(cfg.execName, originalPath, shimDir)
+
+	if cfg.checkNotFoundEarly && execPath == "" {
+		fmt.Fprintf(os.Stderr, "programa %s: %s not found in PATH\n%s", cfg.cmdLabel, cfg.execName, cfg.notFoundHint)
+		return 1
+	}
+
+	if cfg.preLaunch != nil {
+		if err := cfg.preLaunch(originalPath); err != nil {
+			fmt.Fprintf(os.Stderr, "programa %s: %v\n", cfg.cmdLabel, err)
+			return 1
+		}
+	}
 
 	focused := getFocusedContext(rc)
 
@@ -44,75 +113,49 @@ func runClaudeTeamsRelay(socketPath string, args []string, refreshAddr func() st
 		shimDir:        shimDir,
 		socketPath:     socketPath,
 		focused:        focused,
-		tmuxPathPrefix: "programa-claude-teams",
-		cmuxBinEnvVar:  "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
-		termEnvVar:     "PROGRAMA_CLAUDE_TEAMS_TERM",
-		extraEnv: map[string]string{
-			"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-		},
+		tmuxPathPrefix: cfg.tmuxPathPrefix,
+		cmuxBinEnvVar:  cfg.cmuxBinEnvVar,
+		termEnvVar:     cfg.termEnvVar,
+		extraEnv:       cfg.extraEnv,
 	})
-	if restoreModulePath, err := ensureClaudeNodeOptionsRestoreModule(); err == nil {
-		configureClaudeNodeOptions(restoreModulePath)
+
+	if cfg.postEnvSetup != nil {
+		cfg.postEnvSetup()
 	}
 
-	launchArgs := claudeTeamsLaunchArgs(args)
+	launchArgs := args
+	if cfg.buildLaunchArgs != nil {
+		launchArgs = cfg.buildLaunchArgs(args)
+	}
 
-	if claudePath == "" {
-		fmt.Fprintf(os.Stderr, "programa claude-teams: claude not found in PATH\n")
+	if !cfg.checkNotFoundEarly && execPath == "" {
+		fmt.Fprintf(os.Stderr, "programa %s: %s not found in PATH\n%s", cfg.cmdLabel, cfg.execName, cfg.notFoundHint)
 		return 1
 	}
-	argv := append([]string{claudePath}, launchArgs...)
-	execErr := syscall.Exec(claudePath, argv, os.Environ())
-	fmt.Fprintf(os.Stderr, "programa claude-teams: exec failed: %v\n", execErr)
+
+	var launchPath string
+	var launchArgv []string
+	if cfg.directExec {
+		launchPath = execPath
+		launchArgv = append([]string{execPath}, launchArgs...)
+	} else {
+		launchPath, launchArgv = resolveNodeScriptExec(execPath, launchArgs, originalPath, shimDir)
+	}
+
+	execErr := syscall.Exec(launchPath, launchArgv, os.Environ())
+	fmt.Fprintf(os.Stderr, "programa %s: exec failed: %v\n", cfg.cmdLabel, execErr)
 	return 1
 }
 
-// runOMORelay implements `programa omo` on the remote side.
-func runOMORelay(socketPath string, args []string, refreshAddr func() string) int {
-	rc := &rpcContext{socketPath: socketPath, refreshAddr: refreshAddr}
-
-	shimDir, err := createOMOShimDir()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "programa omo: failed to create shim directory: %v\n", err)
-		return 1
-	}
-
-	// Resolve the agent executable BEFORE modifying PATH.
-	originalPath := os.Getenv("PATH")
-	opencodePath := findExecutableInPath("opencode", originalPath, shimDir)
-	if opencodePath == "" {
-		fmt.Fprintf(os.Stderr, "programa omo: opencode not found in PATH\n"+
-			"Install it first:\n  npm install -g opencode-ai\n  # or\n  bun install -g opencode-ai\n")
-		return 1
-	}
-
-	// Ensure oh-my-opencode plugin is set up
-	if err := omoEnsurePlugin(originalPath); err != nil {
-		fmt.Fprintf(os.Stderr, "programa omo: plugin setup: %v\n", err)
-		return 1
-	}
-
-	focused := getFocusedContext(rc)
-
-	configureAgentEnvironment(agentConfig{
-		shimDir:        shimDir,
-		socketPath:     socketPath,
-		focused:        focused,
-		tmuxPathPrefix: "programa-omo",
-		cmuxBinEnvVar:  "PROGRAMA_OMO_PROGRAMA_BIN",
-		termEnvVar:     "PROGRAMA_OMO_TERM",
-		extraEnv:       map[string]string{},
-	})
-
-	// Set OPENCODE_PORT if not already set
+// omoLaunchArgs implements omo's --port default: it sets OPENCODE_PORT if
+// unset, then injects "--port <value>" into the CLI args unless the caller
+// already passed --port/--port=.
+func omoLaunchArgs(args []string) []string {
 	if os.Getenv("OPENCODE_PORT") == "" {
 		os.Setenv("OPENCODE_PORT", "4096")
 	}
-
-	// Build launch arguments
-	launchArgs := args
 	hasPort := false
-	for _, arg := range launchArgs {
+	for _, arg := range args {
 		if arg == "--port" || strings.HasPrefix(arg, "--port=") {
 			hasPort = true
 			break
@@ -123,92 +166,97 @@ func runOMORelay(socketPath string, args []string, refreshAddr func() string) in
 		if port == "" {
 			port = "4096"
 		}
-		launchArgs = append([]string{"--port", port}, launchArgs...)
+		return append([]string{"--port", port}, args...)
 	}
+	return args
+}
 
-	launchPath, launchArgv := resolveNodeScriptExec(opencodePath, launchArgs, originalPath, shimDir)
-	execErr := syscall.Exec(launchPath, launchArgv, os.Environ())
-	fmt.Fprintf(os.Stderr, "programa omo: exec failed: %v\n", execErr)
-	return 1
+// runClaudeTeamsRelay implements `programa claude-teams` on the remote side.
+func runClaudeTeamsRelay(socketPath string, args []string, refreshAddr func() string) int {
+	return runAgentRelay(socketPath, args, refreshAddr, agentRelayConfig{
+		cmdLabel: "claude-teams",
+		execName: "claude",
+		createShimDir: func() (string, error) {
+			return createTmuxShimDir("claude-teams-bin", claudeTeamsShimScript)
+		},
+		tmuxPathPrefix: "programa-claude-teams",
+		cmuxBinEnvVar:  "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
+		termEnvVar:     "PROGRAMA_CLAUDE_TEAMS_TERM",
+		extraEnv: map[string]string{
+			"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+		},
+		postEnvSetup: func() {
+			if restoreModulePath, err := ensureClaudeNodeOptionsRestoreModule(); err == nil {
+				configureClaudeNodeOptions(restoreModulePath)
+			}
+		},
+		buildLaunchArgs: claudeTeamsLaunchArgs,
+		directExec:      true,
+	})
+}
+
+// runOMORelay implements `programa omo` on the remote side.
+func runOMORelay(socketPath string, args []string, refreshAddr func() string) int {
+	return runAgentRelay(socketPath, args, refreshAddr, agentRelayConfig{
+		cmdLabel:           "omo",
+		execName:           "opencode",
+		notFoundHint:       "Install it first:\n  npm install -g opencode-ai\n  # or\n  bun install -g opencode-ai\n",
+		checkNotFoundEarly: true,
+		createShimDir:      createOMOShimDir,
+		preLaunch: func(originalPath string) error {
+			if err := omoEnsurePlugin(originalPath); err != nil {
+				return fmt.Errorf("plugin setup: %w", err)
+			}
+			return nil
+		},
+		tmuxPathPrefix:  "programa-omo",
+		cmuxBinEnvVar:   "PROGRAMA_OMO_PROGRAMA_BIN",
+		termEnvVar:      "PROGRAMA_OMO_TERM",
+		extraEnv:        map[string]string{},
+		buildLaunchArgs: omoLaunchArgs,
+	})
 }
 
 // runOMXRelay implements `programa omx` on the remote side.
 func runOMXRelay(socketPath string, args []string, refreshAddr func() string) int {
-	rc := &rpcContext{socketPath: socketPath, refreshAddr: refreshAddr}
-
-	shimDir, err := createTmuxShimDir("omx-bin", omxShimScript)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "programa omx: failed to create shim directory: %v\n", err)
-		return 1
-	}
-
-	originalPath := os.Getenv("PATH")
-	omxPath := findExecutableInPath("omx", originalPath, shimDir)
-	if omxPath == "" {
-		fmt.Fprintf(os.Stderr, "programa omx: omx not found in PATH\n"+
-			"Install it first:\n  npm install -g oh-my-codex\n")
-		return 1
-	}
-
-	focused := getFocusedContext(rc)
-
-	configureAgentEnvironment(agentConfig{
-		shimDir:        shimDir,
-		socketPath:     socketPath,
-		focused:        focused,
+	return runAgentRelay(socketPath, args, refreshAddr, agentRelayConfig{
+		cmdLabel:           "omx",
+		execName:           "omx",
+		notFoundHint:       "Install it first:\n  npm install -g oh-my-codex\n",
+		checkNotFoundEarly: true,
+		createShimDir: func() (string, error) {
+			return createTmuxShimDir("omx-bin", omxShimScript)
+		},
 		tmuxPathPrefix: "programa-omx",
 		cmuxBinEnvVar:  "PROGRAMA_OMX_PROGRAMA_BIN",
 		termEnvVar:     "PROGRAMA_OMX_TERM",
 		extraEnv:       map[string]string{},
 	})
-
-	launchPath, launchArgv := resolveNodeScriptExec(omxPath, args, originalPath, shimDir)
-	execErr := syscall.Exec(launchPath, launchArgv, os.Environ())
-	fmt.Fprintf(os.Stderr, "programa omx: exec failed: %v\n", execErr)
-	return 1
 }
 
 // runOMCRelay implements `programa omc` on the remote side.
 func runOMCRelay(socketPath string, args []string, refreshAddr func() string) int {
-	rc := &rpcContext{socketPath: socketPath, refreshAddr: refreshAddr}
-
-	shimDir, err := createTmuxShimDir("omc-bin", omcShimScript)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "programa omc: failed to create shim directory: %v\n", err)
-		return 1
-	}
-
-	originalPath := os.Getenv("PATH")
-	omcPath := findExecutableInPath("omc", originalPath, shimDir)
-	if omcPath == "" {
-		fmt.Fprintf(os.Stderr, "programa omc: omc not found in PATH\n"+
-			"Install it first:\n  npm install -g oh-my-claude-sisyphus\n")
-		return 1
-	}
-
-	focused := getFocusedContext(rc)
-
-	configureAgentEnvironment(agentConfig{
-		shimDir:        shimDir,
-		socketPath:     socketPath,
-		focused:        focused,
+	return runAgentRelay(socketPath, args, refreshAddr, agentRelayConfig{
+		cmdLabel:           "omc",
+		execName:           "omc",
+		notFoundHint:       "Install it first:\n  npm install -g oh-my-claude-sisyphus\n",
+		checkNotFoundEarly: true,
+		createShimDir: func() (string, error) {
+			return createTmuxShimDir("omc-bin", omcShimScript)
+		},
 		tmuxPathPrefix: "programa-omc",
 		cmuxBinEnvVar:  "PROGRAMA_OMC_PROGRAMA_BIN",
 		termEnvVar:     "PROGRAMA_OMC_TERM",
 		extraEnv:       map[string]string{},
+		// omc wraps Claude Code, so configure NODE_OPTIONS restore module.
+		postEnvSetup: func() {
+			if restoreModulePath, err := ensureClaudeNodeOptionsRestoreModule(); err == nil {
+				configureClaudeNodeOptions(restoreModulePath)
+			} else {
+				fmt.Fprintf(os.Stderr, "programa omc: warning: failed to create NODE_OPTIONS restore module: %v\n", err)
+			}
+		},
 	})
-
-	// omc wraps Claude Code, so configure NODE_OPTIONS restore module
-	if restoreModulePath, err := ensureClaudeNodeOptionsRestoreModule(); err == nil {
-		configureClaudeNodeOptions(restoreModulePath)
-	} else {
-		fmt.Fprintf(os.Stderr, "programa omc: warning: failed to create NODE_OPTIONS restore module: %v\n", err)
-	}
-
-	launchPath, launchArgv := resolveNodeScriptExec(omcPath, args, originalPath, shimDir)
-	execErr := syscall.Exec(launchPath, launchArgv, os.Environ())
-	fmt.Fprintf(os.Stderr, "programa omc: exec failed: %v\n", execErr)
-	return 1
 }
 
 // --- Shim creation ---
