@@ -19,6 +19,7 @@ The test fails when churn latency regresses too far relative to baseline.
 
 from __future__ import annotations
 
+import json
 import os
 import select
 import socket
@@ -31,7 +32,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# This is the only python test wired into CI (.github/workflows/ci.yml,
+# tests-build-and-lag job) that speaks the socket protocol. It has been
+# ported off the retired v1 line-protocol client (tests/cmux.py) onto the
+# v2 JSON-RPC client (tests_v2/cmux.py) so nothing CI-gated depends on v1.
+_TESTS_V2_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests_v2")
+)
+sys.path.insert(0, _TESTS_V2_DIR)
 from cmux import cmux, cmuxError
 
 NEW_WORKSPACES = int(os.environ.get("PROGRAMA_LAG_NEW_WORKSPACES", "20"))
@@ -65,10 +73,21 @@ class LatencyStats:
 
 
 class RawSocketClient:
+    """Minimal v2 JSON-RPC client used only for the latency-critical simulate_shortcut loop.
+
+    Speaks the same one-JSON-object-per-line framing as tests_v2/cmux.py
+    (``{"id": N, "method": ..., "params": {...}}`` in, ``{"id": N, "ok": ...}``
+    out), but skips the full client's id-resolution helpers so the measured
+    round trip is just: write one line, read one line. Kept separate from the
+    full v2 cmux client (rather than reusing it) so the timing-loop shape and
+    per-call overhead stay identical to the pre-port v1 measurement.
+    """
+
     def __init__(self, socket_path: str):
         self.socket_path = socket_path
         self.sock: Optional[socket.socket] = None
         self.recv_buffer = ""
+        self._next_id = 1
 
     def connect(self) -> None:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -90,30 +109,49 @@ class RawSocketClient:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 
-    def command(self, command: str, timeout_s: float = 2.0) -> str:
+    def call(self, method: str, params: Optional[dict] = None, timeout_s: float = 2.0) -> dict:
         if self.sock is None:
             raise cmuxError("Raw socket client not connected")
 
-        self.sock.sendall((command + "\n").encode("utf-8"))
+        req_id = self._next_id
+        self._next_id += 1
+        payload = {"id": req_id, "method": method, "params": params or {}}
+        self.sock.sendall((json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8"))
         deadline = time.time() + timeout_s
 
         while True:
             if "\n" in self.recv_buffer:
                 line, self.recv_buffer = self.recv_buffer.split("\n", 1)
-                return line
+                break
 
             remaining = deadline - time.time()
             if remaining <= 0:
-                raise cmuxError(f"Timed out waiting for response to: {command}")
+                raise cmuxError(f"Timed out waiting for response to: {method}")
 
             ready, _, _ = select.select([self.sock], [], [], remaining)
             if not ready:
-                raise cmuxError(f"Timed out waiting for response to: {command}")
+                raise cmuxError(f"Timed out waiting for response to: {method}")
 
             chunk = self.sock.recv(8192)
             if not chunk:
                 raise cmuxError("Socket closed while waiting for response")
             self.recv_buffer += chunk.decode("utf-8", errors="replace")
+
+        try:
+            resp = json.loads(line)
+        except json.JSONDecodeError as e:
+            raise cmuxError(f"Invalid JSON response: {e}: {line[:200]}")
+
+        if not isinstance(resp, dict) or resp.get("id") != req_id:
+            raise cmuxError(f"Mismatched or invalid response to {method}: {line[:200]}")
+
+        if resp.get("ok") is True:
+            return resp.get("result") or {}
+
+        err = resp.get("error") or {}
+        code = err.get("code") or "error"
+        msg = err.get("message") or "Unknown error"
+        raise cmuxError(f"{code}: {msg}")
 
 
 def wait_for(predicate: Callable[[], bool], timeout_s: float, step_s: float = 0.05) -> None:
@@ -224,8 +262,11 @@ def keep_only_first_workspace(client: cmux) -> str:
     # The app may still be settling when this runs right after socket connect
     # (workspaces closing/restoring from the previous session), so a workspace
     # listed one moment can be gone by the time we select/close it, surfacing
-    # as "ERROR: Tab not found". Re-snapshot and retry instead of failing the
-    # whole run on that startup race.
+    # as a v2 "not_found: Workspace not found" error (the v1 client's
+    # equivalent was the literal string "ERROR: Tab not found"). Both contain
+    # "not found" case-insensitively, so the retry match below covers either
+    # client. Re-snapshot and retry instead of failing the whole run on that
+    # startup race.
     deadline = time.time() + 10.0
     last_error: Optional[cmuxError] = None
     while True:
@@ -286,9 +327,17 @@ def focused_terminal_panel(client: cmux) -> str:
     return focused[1]
 
 
+def send_line(client: cmux, text: str) -> None:
+    # tests_v2/cmux.py mirrors most of the v1 client's convenience API but
+    # doesn't ship a send_line helper, so this is a small local shim rather
+    # than a change to the shared v2 client. client.send() already unescapes
+    # backslash-n into a real newline, matching v1's send_line semantics.
+    client.send(text + "\\n")
+
+
 def seed_history(client: cmux, lines: int) -> None:
     for i in range(lines):
-        client.send_line(f"echo cmux-lag-seed-{i}")
+        send_line(client, f"echo cmux-lag-seed-{i}")
 
 
 def run_shortcut_latency_burst(
@@ -301,16 +350,12 @@ def run_shortcut_latency_burst(
     with RawSocketClient(socket_path) as raw:
         # Warm up the command path and responder chain.
         for _ in range(5):
-            response = raw.command(f"simulate_shortcut {combo}")
-            if not response.startswith("OK"):
-                raise cmuxError(response)
+            raw.call("debug.shortcut.simulate", {"combo": combo})
 
         for _ in range(count):
             start = time.perf_counter()
-            response = raw.command(f"simulate_shortcut {combo}")
+            raw.call("debug.shortcut.simulate", {"combo": combo})
             elapsed_ms = (time.perf_counter() - start) * 1000.0
-            if not response.startswith("OK"):
-                raise cmuxError(response)
             latencies_ms.append(elapsed_ms)
             if delay_s > 0:
                 time.sleep(delay_s)
