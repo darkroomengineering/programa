@@ -2098,7 +2098,7 @@ final class WindowBrowserSlotView: NSView {
 }
 
 @MainActor
-final class WindowBrowserPortal: NSObject {
+final class WindowBrowserPortal: HostedViewPortalRegistry {
     private static let transientRecoveryRetryBudget: Int = 12
 
     private static func dividerHitRectContains(_ point: NSPoint, rect: NSRect) -> Bool {
@@ -2108,16 +2108,14 @@ final class WindowBrowserPortal: NSObject {
             point.y <= rect.maxY
     }
 
-    private weak var window: NSWindow?
     private let hostView = WindowBrowserHostView(frame: .zero)
-    private weak var installedContainerView: NSView?
-    private weak var installedReferenceView: NSView?
     private var hasDeferredFullSyncScheduled = false
     private var hasExternalGeometrySyncScheduled = false
-    private var geometryObservers: [NSObjectProtocol] = []
     // Keep generations monotonic even if a pending entry is cleared during hide/detach churn.
     private var nextHostedWebViewRefreshGeneration: UInt64 = 0
     private var pendingHostedWebViewRefreshes: [ObjectIdentifier: PendingHostedWebViewRefresh] = [:]
+
+    override var hostViewForGeometry: NSView { hostView }
 
     private struct Entry {
         weak var webView: WKWebView?
@@ -2142,9 +2140,8 @@ final class WindowBrowserPortal: NSObject {
     private var entriesByWebViewId: [ObjectIdentifier: Entry] = [:]
     private var webViewByAnchorId: [ObjectIdentifier: ObjectIdentifier] = [:]
 
-    init(window: NSWindow) {
-        self.window = window
-        super.init()
+    override init(window: NSWindow) {
+        super.init(window: window)
         hostView.wantsLayer = true
         hostView.layer?.masksToBounds = true
         hostView.translatesAutoresizingMaskIntoConstraints = true
@@ -2294,13 +2291,6 @@ final class WindowBrowserPortal: NSObject {
         })
     }
 
-    private func removeGeometryObservers() {
-        for observer in geometryObservers {
-            NotificationCenter.default.removeObserver(observer)
-        }
-        geometryObservers.removeAll()
-    }
-
     private func scheduleExternalGeometrySynchronize() {
         guard !hasExternalGeometrySyncScheduled else { return }
         hasExternalGeometrySyncScheduled = true
@@ -2363,34 +2353,14 @@ final class WindowBrowserPortal: NSObject {
         return true
     }
 
-    @discardableResult
-    private func synchronizeHostFrameToReference() -> Bool {
-        guard let container = installedContainerView,
-              let reference = installedReferenceView else {
-            return false
-        }
-        let frameInContainer = container.convert(reference.bounds, from: reference)
-        let hasFiniteFrame =
-            frameInContainer.origin.x.isFinite &&
-            frameInContainer.origin.y.isFinite &&
-            frameInContainer.size.width.isFinite &&
-            frameInContainer.size.height.isFinite
-        guard hasFiniteFrame else { return false }
-
-        if !Self.rectApproximatelyEqual(hostView.frame, frameInContainer) {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            hostView.frame = frameInContainer
-            CATransaction.commit()
 #if DEBUG
-            dlog(
-                "browser.portal.hostFrame.update host=\(browserPortalDebugToken(hostView)) " +
-                "frame=\(browserPortalDebugFrame(frameInContainer))"
-            )
-#endif
-        }
-        return frameInContainer.width > 1 && frameInContainer.height > 1
+    override func logHostFrameUpdate(_ frame: NSRect) {
+        dlog(
+            "browser.portal.hostFrame.update host=\(browserPortalDebugToken(hostView)) " +
+            "frame=\(browserPortalDebugFrame(frame))"
+        )
     }
+#endif
 
     private func installationTarget(for window: NSWindow) -> (container: NSView, reference: NSView)? {
         guard let contentView = window.contentView else { return nil }
@@ -2402,42 +2372,6 @@ final class WindowBrowserPortal: NSObject {
 
         guard let themeFrame = contentView.superview else { return nil }
         return (themeFrame, contentView)
-    }
-
-    private static func isHiddenOrAncestorHidden(_ view: NSView) -> Bool {
-        if view.isHidden { return true }
-        var current = view.superview
-        while let v = current {
-            if v.isHidden { return true }
-            current = v.superview
-        }
-        return false
-    }
-
-    private static func rectApproximatelyEqual(_ lhs: NSRect, _ rhs: NSRect, epsilon: CGFloat = 0.01) -> Bool {
-        abs(lhs.origin.x - rhs.origin.x) <= epsilon &&
-            abs(lhs.origin.y - rhs.origin.y) <= epsilon &&
-            abs(lhs.size.width - rhs.size.width) <= epsilon &&
-            abs(lhs.size.height - rhs.size.height) <= epsilon
-    }
-
-    private static func pixelSnappedRect(_ rect: NSRect, in view: NSView) -> NSRect {
-        guard rect.origin.x.isFinite,
-              rect.origin.y.isFinite,
-              rect.size.width.isFinite,
-              rect.size.height.isFinite else {
-            return rect
-        }
-        let scale = max(1.0, view.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1.0)
-        func snap(_ value: CGFloat) -> CGFloat {
-            (value * scale).rounded(.toNearestOrAwayFromZero) / scale
-        }
-        return NSRect(
-            x: snap(rect.origin.x),
-            y: snap(rect.origin.y),
-            width: max(0, snap(rect.size.width)),
-            height: max(0, snap(rect.size.height))
-        )
     }
 
     private static func searchOverlayConfigurationsEquivalent(
@@ -2454,30 +2388,6 @@ final class WindowBrowserPortal: NSObject {
         default:
             return false
         }
-    }
-
-    /// Convert an anchor view's bounds to window coordinates while honoring ancestor clipping.
-    /// SwiftUI/AppKit hosting layers can briefly report an anchor bounds rect larger than the
-    /// visible split pane during rearrangement; intersecting through ancestor bounds keeps the
-    /// portal locked to the pane the user can actually see.
-    private func effectiveAnchorFrameInWindow(for anchorView: NSView) -> NSRect {
-        var frameInWindow = anchorView.convert(anchorView.bounds, to: nil)
-        var current = anchorView.superview
-        while let ancestor = current {
-            let ancestorBoundsInWindow = ancestor.convert(ancestor.bounds, to: nil)
-            let finiteAncestorBounds =
-                ancestorBoundsInWindow.origin.x.isFinite &&
-                ancestorBoundsInWindow.origin.y.isFinite &&
-                ancestorBoundsInWindow.size.width.isFinite &&
-                ancestorBoundsInWindow.size.height.isFinite
-            if finiteAncestorBounds {
-                frameInWindow = frameInWindow.intersection(ancestorBoundsInWindow)
-                if frameInWindow.isNull { return .zero }
-            }
-            if ancestor === installedReferenceView { break }
-            current = ancestor.superview
-        }
-        return frameInWindow
     }
 
     private static func frameExtendsOutsideBounds(_ frame: NSRect, bounds: NSRect, epsilon: CGFloat = 0.5) -> Bool {
@@ -2567,14 +2477,6 @@ final class WindowBrowserPortal: NSObject {
         return count
     }
 #endif
-
-    private static func isView(_ view: NSView, above reference: NSView, in container: NSView) -> Bool {
-        guard let viewIndex = container.subviews.firstIndex(of: view),
-              let referenceIndex = container.subviews.firstIndex(of: reference) else {
-            return false
-        }
-        return viewIndex > referenceIndex
-    }
 
     private func preferredHostPlacementReference(in container: NSView, fallback reference: NSView) -> NSView {
         container.subviews.last(where: {
@@ -3916,10 +3818,6 @@ final class WindowBrowserPortal: NSObject {
 #if DEBUG
     func debugEntryCount() -> Int {
         entriesByWebViewId.count
-    }
-
-    func debugHostedSubviewCount() -> Int {
-        hostView.subviews.count
     }
 #endif
 
