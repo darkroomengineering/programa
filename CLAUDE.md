@@ -173,7 +173,7 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 
 ## Socket command threading policy
 
-- Do not use `DispatchQueue.main.sync` for high-frequency socket telemetry commands (`report_*`, `ports_kick`, status/progress/log metadata updates).
+- Do not use `DispatchQueue.main.sync` for high-frequency socket telemetry commands (`surface.report_*`, `surface.ports_kick`, status/progress/log metadata updates).
 - For telemetry hot paths:
   - Parse and validate arguments off-main.
   - Dedupe/coalesce off-main first.
@@ -184,7 +184,7 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 ## Socket focus policy
 
 - Socket/CLI commands must not steal macOS app focus (no app activation/window raising side effects).
-- Only explicit focus-intent commands may mutate in-app focus/selection (`window.focus`, `workspace.select/next/previous/last`, `surface.focus`, `pane.focus/last`, browser focus commands, and v1 focus equivalents).
+- Only explicit focus-intent commands may mutate in-app focus/selection (`window.focus`, `workspace.select/next/previous/last`, `surface.focus`, `pane.focus/last`, browser focus commands).
 - All non-focus commands should preserve current user focus context while still applying data/model changes.
 
 ## Testing policy

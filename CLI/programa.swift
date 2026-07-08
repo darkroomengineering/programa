@@ -2835,11 +2835,12 @@ struct CMUXCLI {
             explicit: explicitPassword,
             socketPath: socketPath
         ) {
-            let authResponse = try client.send(command: "auth \(socketPassword)")
-            if authResponse.hasPrefix("ERROR:"),
-               !authResponse.contains("Unknown command 'auth'") {
-                throw CLIError(message: authResponse)
-            }
+            // v2 JSON-RPC auth.login. The server treats this the same whether or not
+            // password auth is actually required: when required, the pre-protocol auth
+            // gate verifies the password before any command is processed; when not
+            // required, the server's own auth.login handler answers with
+            // authenticated: true, required: false rather than an error.
+            _ = try client.sendV2(method: "auth.login", params: ["password": socketPassword])
         }
     }
 

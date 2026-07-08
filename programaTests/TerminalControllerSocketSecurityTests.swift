@@ -111,6 +111,9 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
 
     func testSocketCommandPolicyDistinguishesFocusIntent() throws {
 #if DEBUG
+        // The v1 line protocol was removed: isV2: false is now unreachable from any real
+        // socket command (only v2 JSON-RPC is dispatched), and always denies focus
+        // mutation regardless of commandKey — verify that fallback explicitly.
         let nonFocus = TerminalController.debugSocketCommandPolicySnapshot(
             commandKey: "ping",
             isV2: false
@@ -120,13 +123,13 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         XCTAssertFalse(nonFocus.outsideSuppressed)
         XCTAssertFalse(nonFocus.outsideAllowsFocus)
 
-        let focusV1 = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "focus_window",
-            isV2: false
+        let windowFocus = TerminalController.debugSocketCommandPolicySnapshot(
+            commandKey: "window.focus",
+            isV2: true
         )
-        XCTAssertTrue(focusV1.insideSuppressed)
-        XCTAssertTrue(focusV1.insideAllowsFocus)
-        XCTAssertFalse(focusV1.outsideSuppressed)
+        XCTAssertTrue(windowFocus.insideSuppressed)
+        XCTAssertTrue(windowFocus.insideAllowsFocus)
+        XCTAssertFalse(windowFocus.outsideSuppressed)
 
         let focusV2 = TerminalController.debugSocketCommandPolicySnapshot(
             commandKey: "workspace.select",
@@ -151,8 +154,8 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         XCTAssertFalse(triggerFlash.insideAllowsFocus)
 
         let simulateShortcut = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "simulate_shortcut",
-            isV2: false
+            commandKey: "debug.shortcut.simulate",
+            isV2: true
         )
         XCTAssertTrue(simulateShortcut.insideSuppressed)
         XCTAssertFalse(simulateShortcut.insideAllowsFocus)

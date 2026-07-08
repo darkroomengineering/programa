@@ -23,7 +23,9 @@ Policy target:
 ## Explicit Focus-Intent Allowlist
 These may mutate in-app focus/selection state:
 
-v1:
+v1 (historical — the v1 line protocol was removed 2026-07-08; the equivalent v2 methods
+below are the only entrypoints left, and `focusIntentV1Commands`/the `isV2: false` policy
+branch were deleted along with it):
 - `focus_window`
 - `select_workspace`
 - `focus_surface`
@@ -51,6 +53,11 @@ v2:
 All other commands should preserve current user focus context.
 
 ## Command Coverage Matrix (All Command Families)
+
+The `v1 *` rows below are historical: the v1 line protocol was removed 2026-07-08 and
+these commands no longer exist. Kept for audit-trail context only; see
+`docs/v2-api-migration.md` for the v1 -> v2 name mapping.
+
 - [x] v1 `ping`, `help`
 - [x] v1 window commands (`list_windows`, `current_window`, `focus_window`, `new_window`, `close_window`)
 - [x] v1 workspace commands (`move_workspace_to_window`, `list_workspaces`, `new_workspace`, `close_workspace`, `select_workspace`, `current_workspace`)
