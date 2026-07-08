@@ -8,6 +8,7 @@
 
 		/* Begin PBXBuildFile section */
 			A5001001 /* ProgramaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001011 /* ProgramaApp.swift */; };
+			A5FF0007 /* SettingDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0017 /* SettingDefinition.swift */; };
 			A5001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001012 /* ContentView.swift */; };
 			E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */; };
 			B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */; };
@@ -222,6 +223,7 @@
 			F1000002A1B2C3D4E5F60718 /* programaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			A5001011 /* ProgramaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaApp.swift; sourceTree = "<group>"; };
+			A5FF0017 /* SettingDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingDefinition.swift; sourceTree = "<group>"; };
 			A5001012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 			9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSelectionState.swift; sourceTree = "<group>"; };
 			B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDragHandleView.swift; sourceTree = "<group>"; };
@@ -483,6 +485,7 @@
 				isa = PBXGroup;
 				children = (
 					A5001011 /* ProgramaApp.swift */,
+					A5FF0017 /* SettingDefinition.swift */,
 					A5001012 /* ContentView.swift */,
 					9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */,
 					B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */,
@@ -803,6 +806,7 @@
 				buildActionMask = 2147483647;
 				files = (
 					A5001001 /* ProgramaApp.swift in Sources */,
+					A5FF0007 /* SettingDefinition.swift in Sources */,
 					A5001002 /* ContentView.swift in Sources */,
 					E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */,
 					B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */,
