@@ -736,7 +736,7 @@ class TabManager: ObservableObject {
         let executionError: String?
     }
 
-    private struct WorkspaceGitProbeKey: Hashable {
+    struct WorkspaceGitProbeKey: Hashable {
         let workspaceId: UUID
         let panelId: UUID
     }
@@ -758,16 +758,16 @@ class TabManager: ObservableObject {
     weak var window: NSWindow?
 
     @Published var tabs: [Workspace] = []
-    @Published private(set) var isWorkspaceCycleHot: Bool = false
+    @Published internal(set) var isWorkspaceCycleHot: Bool = false
     @Published private(set) var pendingBackgroundWorkspaceLoadIds: Set<UUID> = []
     @Published private(set) var debugPinnedWorkspaceLoadIds: Set<UUID> = []
 
     /// Global monotonically increasing counter for PROGRAMA_PORT ordinal assignment.
     /// Static so port ranges don't overlap across multiple windows (each window has its own TabManager).
-    private static var nextPortOrdinal: Int = 0
-    private static let initialWorkspaceGitProbeDelays: [TimeInterval] = [0, 0.5, 1.5, 3.0, 6.0, 10.0]
-    private static let workspaceGitMetadataPollInterval: TimeInterval = 30
-    private static let selectedWorkspaceGitMetadataPollInterval: TimeInterval = 5
+    static var nextPortOrdinal: Int = 0
+    static let initialWorkspaceGitProbeDelays: [TimeInterval] = [0, 0.5, 1.5, 3.0, 6.0, 10.0]
+    static let workspaceGitMetadataPollInterval: TimeInterval = 30
+    static let selectedWorkspaceGitMetadataPollInterval: TimeInterval = 5
     private nonisolated static let workspacePullRequestProbeTimeout: TimeInterval = 5.0
     @Published var selectedTabId: UUID? {
         willSet {
@@ -840,32 +840,32 @@ class TabManager: ObservableObject {
     }
     private var observers: [NSObjectProtocol] = []
     private var suppressFocusFlash = false
-    private var lastFocusedPanelByTab: [UUID: UUID] = [:]
-    private struct PanelTitleUpdateKey: Hashable {
+    var lastFocusedPanelByTab: [UUID: UUID] = [:]
+    struct PanelTitleUpdateKey: Hashable {
         let tabId: UUID
         let panelId: UUID
     }
-    private var pendingPanelTitleUpdates: [PanelTitleUpdateKey: String] = [:]
+    var pendingPanelTitleUpdates: [PanelTitleUpdateKey: String] = [:]
     private let panelTitleUpdateCoalescer = NotificationBurstCoalescer(delay: 1.0 / 30.0)
-    private var recentlyClosedBrowsers = RecentlyClosedBrowserStack(capacity: 20)
+    var recentlyClosedBrowsers = RecentlyClosedBrowserStack(capacity: 20)
     private let initialWorkspaceGitProbeQueue = DispatchQueue(
         label: "com.cmux.initial-workspace-git-probe",
         qos: .utility
     )
-    private var workspaceGitProbeGenerationByKey: [WorkspaceGitProbeKey: UUID] = [:]
-    private var workspaceGitProbeTimersByKey: [WorkspaceGitProbeKey: [DispatchSourceTimer]] = [:]
-    private var workspaceGitTrackedDirectoryByKey: [WorkspaceGitProbeKey: String] = [:]
+    var workspaceGitProbeGenerationByKey: [WorkspaceGitProbeKey: UUID] = [:]
+    var workspaceGitProbeTimersByKey: [WorkspaceGitProbeKey: [DispatchSourceTimer]] = [:]
+    var workspaceGitTrackedDirectoryByKey: [WorkspaceGitProbeKey: String] = [:]
 
     // Recent tab history for back/forward navigation (like browser history)
-    private var tabHistory: [UUID] = []
-    private var historyIndex: Int = -1
-    private var isNavigatingHistory = false
+    var tabHistory: [UUID] = []
+    var historyIndex: Int = -1
+    var isNavigatingHistory = false
     private let maxHistorySize = 50
-    private var selectionSideEffectsGeneration: UInt64 = 0
+    var selectionSideEffectsGeneration: UInt64 = 0
     private var workspaceCycleGeneration: UInt64 = 0
-    private var workspaceCycleCooldownTask: Task<Void, Never>?
-    private var pendingWorkspaceUnfocusTarget: (tabId: UUID, panelId: UUID)?
-    private var sidebarSelectedWorkspaceIds: Set<UUID> = []
+    var workspaceCycleCooldownTask: Task<Void, Never>?
+    var pendingWorkspaceUnfocusTarget: (tabId: UUID, panelId: UUID)?
+    var sidebarSelectedWorkspaceIds: Set<UUID> = []
     var confirmCloseHandler: ((String, String, Bool) -> Bool)?
     private struct WorkspaceCreationTabSnapshot {
         let id: UUID
@@ -885,9 +885,9 @@ class TabManager: ObservableObject {
         let preferredWorkingDirectory: String?
         let inheritedTerminalFontPoints: Float?
     }
-    private var agentPIDSweepTimer: DispatchSourceTimer?
-    private var workspaceGitMetadataPollTimer: DispatchSourceTimer?
-    private var selectedWorkspaceGitMetadataPollTimer: DispatchSourceTimer?
+    var agentPIDSweepTimer: DispatchSourceTimer?
+    var workspaceGitMetadataPollTimer: DispatchSourceTimer?
+    var selectedWorkspaceGitMetadataPollTimer: DispatchSourceTimer?
 #if DEBUG
     private var debugWorkspaceSwitchCounter: UInt64 = 0
     private var debugWorkspaceSwitchId: UInt64 = 0
@@ -951,238 +951,13 @@ class TabManager: ObservableObject {
         selectedWorkspaceGitMetadataPollTimer?.cancel()
     }
 
-    // MARK: - Agent PID Sweep
-
-    /// Periodically checks agent PIDs associated with status entries.
-    /// If a process has exited (SIGKILL, crash, etc.), clears the stale status entry.
-    /// This is the safety net for cases where no hook fires (e.g. SIGKILL).
-    private func startAgentPIDSweepTimer() {
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        timer.schedule(deadline: .now() + 30, repeating: 30)
-        timer.setEventHandler { [weak self] in
-            guard let self else { return }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.sweepStaleAgentPIDs()
-            }
-        }
-        timer.resume()
-        agentPIDSweepTimer = timer
-    }
-
-    /// Periodically refreshes git/PR metadata for tracked workspace branches so
-    /// remote GitHub state changes (e.g. PR open -> merged) reach sidebar state
-    /// even when the local branch/directory does not change.
-    private func startWorkspaceGitMetadataPollTimer() {
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        let interval = Self.workspaceGitMetadataPollInterval
-        timer.schedule(deadline: .now() + interval, repeating: interval)
-        timer.setEventHandler { [weak self] in
-            guard let self else { return }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.refreshTrackedWorkspaceGitMetadata()
-            }
-        }
-        timer.resume()
-        workspaceGitMetadataPollTimer = timer
-    }
-
-    /// Refresh the selected workspace more aggressively so branch checkouts and
-    /// newly created PRs show up in the sidebar without waiting for the slower
-    /// background sweep across every tracked workspace.
-    private func startSelectedWorkspaceGitMetadataPollTimer() {
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        let interval = Self.selectedWorkspaceGitMetadataPollInterval
-        timer.schedule(deadline: .now() + interval, repeating: interval)
-        timer.setEventHandler { [weak self] in
-            guard let self else { return }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.refreshSelectedWorkspaceGitMetadata()
-            }
-        }
-        timer.resume()
-        selectedWorkspaceGitMetadataPollTimer = timer
-    }
-
-    private func refreshTrackedWorkspaceGitMetadata() {
-        let activeProbeKeys = Set(workspaceGitProbeGenerationByKey.keys)
-
-        for workspace in tabs {
-            for panelId in trackedWorkspaceGitMetadataPollCandidatePanelIds(
-                in: workspace,
-                activeProbeKeys: activeProbeKeys
-            ) {
-                scheduleWorkspaceGitMetadataRefreshIfPossible(
-                    workspaceId: workspace.id,
-                    panelId: panelId,
-                    reason: "periodicPoll"
-                )
-            }
-        }
-    }
-
-    private func refreshSelectedWorkspaceGitMetadata() {
-        guard let workspace = selectedWorkspace,
-              let focusedPanelId = workspace.focusedPanelId else {
-            return
-        }
-
-        let activeProbeKeys = Set(workspaceGitProbeGenerationByKey.keys)
-        let candidatePanelIds = trackedWorkspaceGitMetadataPollCandidatePanelIds(
-            in: workspace,
-            activeProbeKeys: activeProbeKeys
-        )
-        guard candidatePanelIds.contains(focusedPanelId) else { return }
-
-        scheduleWorkspaceGitMetadataRefreshIfPossible(
-            workspaceId: workspace.id,
-            panelId: focusedPanelId,
-            reason: "selectedPeriodicPoll"
-        )
-    }
-
-    func refreshTrackedWorkspaceGitMetadataForTesting() {
-        refreshTrackedWorkspaceGitMetadata()
-    }
-
-    func trackedWorkspaceGitMetadataPollCandidatePanelIdsForTesting(workspaceId: UUID) -> Set<UUID> {
-        let activeProbeKeys = Set(workspaceGitProbeGenerationByKey.keys)
-        guard let workspace = tabs.first(where: { $0.id == workspaceId }) else {
-            return []
-        }
-        return trackedWorkspaceGitMetadataPollCandidatePanelIds(
-            in: workspace,
-            activeProbeKeys: activeProbeKeys
-        )
-    }
-
-    func activeWorkspaceGitProbePanelIdsForTesting(workspaceId: UUID) -> Set<UUID> {
-        let probeKeys = Set(workspaceGitProbeGenerationByKey.keys.filter { $0.workspaceId == workspaceId })
-            .union(workspaceGitProbeTimersByKey.keys.filter { $0.workspaceId == workspaceId })
-        return Set(probeKeys.map(\.panelId))
-    }
-
-    private func trackedWorkspaceGitMetadataPollCandidatePanelIds(
-        in workspace: Workspace,
-        activeProbeKeys: Set<WorkspaceGitProbeKey>
-    ) -> Set<UUID> {
-        var candidatePanelIds = Set(workspace.panelGitBranches.keys)
-        candidatePanelIds.formUnion(workspace.panelPullRequests.keys)
-        // Only keep background polling panels whose current directory has already
-        // proven to yield sidebar git metadata. Initial multi-attempt probes handle
-        // startup races; this avoids polling non-repo directories forever.
-        candidatePanelIds.formUnion(
-            workspace.panels.keys.compactMap { panelId in
-                guard let currentDirectory = gitProbeDirectory(for: workspace, panelId: panelId) else {
-                    return nil
-                }
-                let probeKey = WorkspaceGitProbeKey(workspaceId: workspace.id, panelId: panelId)
-                guard workspaceGitTrackedDirectoryByKey[probeKey] == currentDirectory else {
-                    return nil
-                }
-                return panelId
-            }
-        )
-
-        if candidatePanelIds.isEmpty,
-           let focusedPanelId = workspace.focusedPanelId,
-           (workspace.gitBranch != nil || workspace.pullRequest != nil),
-           gitProbeDirectory(for: workspace, panelId: focusedPanelId) != nil {
-            candidatePanelIds.insert(focusedPanelId)
-        }
-
-        return Set(candidatePanelIds.filter { panelId in
-            let probeKey = WorkspaceGitProbeKey(workspaceId: workspace.id, panelId: panelId)
-            return !activeProbeKeys.contains(probeKey)
-        })
-    }
-
-    private func sweepStaleAgentPIDs() {
-        for tab in tabs {
-            var keysToRemove: [String] = []
-            for (key, pid) in tab.agentPIDs {
-                guard pid > 0 else {
-                    keysToRemove.append(key)
-                    continue
-                }
-                // kill(pid, 0) probes process liveness without sending a signal.
-                // ESRCH = process doesn't exist (stale). EPERM = process exists
-                // but we lack permission (not stale, keep tracking).
-                errno = 0
-                if kill(pid, 0) == -1, POSIXErrorCode(rawValue: errno) == .ESRCH {
-                    keysToRemove.append(key)
-                }
-            }
-            if !keysToRemove.isEmpty {
-                for key in keysToRemove {
-                    tab.statusEntries.removeValue(forKey: key)
-                    tab.agentPIDs.removeValue(forKey: key)
-                }
-                let remainingAgentPIDs = Set(tab.agentPIDs.values.compactMap { $0 > 0 ? Int($0) : nil })
-                PortScanner.shared.refreshAgentPorts(workspaceId: tab.id, agentPIDs: remainingAgentPIDs)
-                // Also clear stale notifications (e.g. "Doing well, thanks!")
-                // left behind when Claude was killed without SessionEnd firing.
-                AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id)
-            }
-        }
-    }
-
-    private func gitProbeDirectory(for workspace: Workspace, panelId: UUID) -> String? {
-        // Match the sidebar directory fallback chain so hidden/background panels can
-        // still probe git metadata before OSC 7 has reported a live cwd.
-        let rawDirectory = workspace.panelDirectories[panelId]
-            ?? workspace.terminalPanel(for: panelId)?.requestedWorkingDirectory
-            ?? (workspace.focusedPanelId == panelId ? workspace.currentDirectory : nil)
-        return rawDirectory.flatMap(normalizedWorkingDirectory)
-    }
-
-    func scheduleInitialWorkspaceGitMetadataRefreshIfPossible(
-        workspaceId: UUID,
-        panelId: UUID,
-        reason: String = "initial"
-    ) {
-        guard let workspace = tabs.first(where: { $0.id == workspaceId }),
-              !workspace.isRemoteWorkspace else {
-            return
-        }
-        scheduleWorkspaceGitMetadataRefreshIfPossible(
-            workspaceId: workspaceId,
-            panelId: panelId,
-            reason: reason,
-            delays: Self.initialWorkspaceGitProbeDelays
-        )
-    }
-
-    private func scheduleWorkspaceGitMetadataRefreshIfPossible(
-        workspaceId: UUID,
-        panelId: UUID,
-        reason: String,
-        delays: [TimeInterval] = [0]
-    ) {
-        guard let workspace = tabs.first(where: { $0.id == workspaceId }),
-              workspace.panels[panelId] != nil,
-              let directory = gitProbeDirectory(for: workspace, panelId: panelId) else {
-            return
-        }
-
-        scheduleWorkspaceGitMetadataRefresh(
-            workspaceId: workspaceId,
-            panelId: panelId,
-            directory: directory,
-            delays: delays,
-            reason: reason
-        )
-    }
-
-    private func wireClosedBrowserTracking(for workspace: Workspace) {
+    func wireClosedBrowserTracking(for workspace: Workspace) {
         workspace.onClosedBrowserPanel = { [weak self] snapshot in
             self?.recentlyClosedBrowsers.push(snapshot)
         }
     }
 
-    private func unwireClosedBrowserTracking(for workspace: Workspace) {
+    func unwireClosedBrowserTracking(for workspace: Workspace) {
         workspace.onClosedBrowserPanel = nil
     }
 
@@ -1546,7 +1321,7 @@ class TabManager: ObservableObject {
         )
     }
 
-    private func scheduleWorkspaceGitMetadataRefresh(
+    func scheduleWorkspaceGitMetadataRefresh(
         workspaceId: UUID,
         panelId: UUID,
         directory: String,
@@ -1599,7 +1374,7 @@ class TabManager: ObservableObject {
         }
     }
 
-    private func clearWorkspaceGitProbe(_ key: WorkspaceGitProbeKey) {
+    func clearWorkspaceGitProbe(_ key: WorkspaceGitProbeKey) {
         workspaceGitProbeGenerationByKey.removeValue(forKey: key)
         cancelWorkspaceGitProbeTimers(for: key)
     }
@@ -2523,7 +2298,7 @@ class TabManager: ObservableObject {
         return config
     }
 
-    private func normalizedWorkingDirectory(_ directory: String?) -> String? {
+    func normalizedWorkingDirectory(_ directory: String?) -> String? {
         guard let directory else { return nil }
         let normalized = normalizeDirectory(directory)
         let trimmed = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3903,49 +3678,6 @@ class TabManager: ObservableObject {
         selectedWorkspace?.newTerminalSurfaceInFocusedPane(focus: true)
     }
 
-    // MARK: - Split Creation
-
-    /// Create a new split in the current tab
-    @discardableResult
-    func createSplit(direction: SplitDirection) -> UUID? {
-        guard let selectedTabId,
-              let tab = tabs.first(where: { $0.id == selectedTabId }),
-              let focusedPanelId = tab.focusedPanelId else { return nil }
-        return createSplit(tabId: selectedTabId, surfaceId: focusedPanelId, direction: direction)
-    }
-
-    /// Create a new split from an explicit source panel.
-    @discardableResult
-    func createSplit(tabId: UUID, surfaceId: UUID, direction: SplitDirection, focus: Bool = true) -> UUID? {
-        guard let tab = tabs.first(where: { $0.id == tabId }),
-              tab.panels[surfaceId] != nil else { return nil }
-        tab.clearSplitZoom()
-        return newSplit(tabId: tabId, surfaceId: surfaceId, direction: direction, focus: focus)
-    }
-
-    /// Create a new browser split from the currently focused panel.
-    @discardableResult
-    func createBrowserSplit(direction: SplitDirection, url: URL? = nil) -> UUID? {
-        guard let selectedTabId,
-              let tab = tabs.first(where: { $0.id == selectedTabId }),
-              let focusedPanelId = tab.focusedPanelId else { return nil }
-        tab.clearSplitZoom()
-        return newBrowserSplit(
-            tabId: selectedTabId,
-            fromPanelId: focusedPanelId,
-            orientation: direction.orientation,
-            insertFirst: direction.insertFirst,
-            url: url
-        )
-    }
-
-    /// Refresh Bonsplit right-side action button tooltips for all workspaces.
-    func refreshSplitButtonTooltips() {
-        for workspace in tabs {
-            workspace.refreshSplitButtonTooltips()
-        }
-    }
-
     // MARK: - Pane Focus Navigation
 
     /// Move focus to an adjacent pane in the specified direction
@@ -4029,459 +3761,6 @@ class TabManager: ObservableObject {
         historyIndex < tabHistory.count - 1 && tabHistory.suffix(from: historyIndex + 1).contains { tabId in
             tabs.contains { $0.id == tabId }
         }
-    }
-
-    // MARK: - Split Operations (Backwards Compatibility)
-
-    /// Create a new split in the specified direction
-    /// Returns the new panel's ID (which is also the surface ID for terminals)
-    func newSplit(tabId: UUID, surfaceId: UUID, direction: SplitDirection, focus: Bool = true) -> UUID? {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
-        return tab.newTerminalSplit(
-            from: surfaceId,
-            orientation: direction.orientation,
-            insertFirst: direction.insertFirst,
-            focus: focus
-        )?.id
-    }
-
-    /// Move focus in the specified direction
-    func moveSplitFocus(tabId: UUID, surfaceId: UUID, direction: NavigationDirection) -> Bool {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return false }
-        tab.moveFocus(direction: direction)
-        return true
-    }
-
-    /// Resize split - not directly supported by bonsplit, but we can adjust divider positions
-    func resizeSplit(tabId: UUID, surfaceId: UUID, direction: ResizeDirection, amount: UInt16) -> Bool {
-        guard amount > 0,
-              let tab = tabs.first(where: { $0.id == tabId }),
-              let paneId = tab.paneId(forPanelId: surfaceId) else { return false }
-
-        let paneUUID = paneId.id
-        guard tab.bonsplitController.allPaneIds.contains(where: { $0.id == paneUUID }) else {
-            return false
-        }
-
-        var candidates: [ResizeSplitCandidate] = []
-        let trace = resizeSplitCollectCandidates(
-            node: tab.bonsplitController.treeSnapshot(),
-            targetPaneId: paneUUID.uuidString,
-            candidates: &candidates
-        )
-        guard trace.containsTarget else { return false }
-
-        let orientationMatches = candidates.filter { $0.orientation == direction.splitOrientation }
-        guard !orientationMatches.isEmpty else { return false }
-
-        guard let candidate = orientationMatches.first(where: {
-            $0.paneInFirstChild == direction.requiresPaneInFirstChild
-        }) else {
-            return false
-        }
-
-        let delta = CGFloat(amount) / candidate.axisPixels
-        let requested = candidate.dividerPosition + (direction.dividerDeltaSign * delta)
-        let clamped = min(max(requested, 0.1), 0.9)
-        return tab.bonsplitController.setDividerPosition(clamped, forSplit: candidate.splitId, fromExternal: true)
-    }
-
-    /// Equalize splits - not directly supported by bonsplit
-    func equalizeSplits(tabId: UUID) -> Bool {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return false }
-
-        var foundSplit = false
-        var allSucceeded = true
-        equalizeSplits(
-            in: tab.bonsplitController.treeSnapshot(),
-            controller: tab.bonsplitController,
-            foundSplit: &foundSplit,
-            allSucceeded: &allSucceeded
-        )
-        return foundSplit && allSucceeded
-    }
-
-    /// Toggle zoom on a panel.
-    func toggleSplitZoom(tabId: UUID, surfaceId: UUID) -> Bool {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return false }
-        return tab.toggleSplitZoom(panelId: surfaceId)
-    }
-
-    /// Toggle zoom for the currently focused panel in the selected workspace.
-    @discardableResult
-    func toggleFocusedSplitZoom() -> Bool {
-        guard let tab = selectedWorkspace,
-              let focusedPanelId = tab.focusedPanelId else { return false }
-        return tab.toggleSplitZoom(panelId: focusedPanelId)
-    }
-
-    private func equalizeSplits(
-        in node: ExternalTreeNode,
-        controller: BonsplitController,
-        foundSplit: inout Bool,
-        allSucceeded: inout Bool
-    ) {
-        switch node {
-        case .pane:
-            return
-        case .split(let splitNode):
-            foundSplit = true
-            guard let splitId = UUID(uuidString: splitNode.id) else {
-                allSucceeded = false
-                return
-            }
-
-            if !controller.setDividerPosition(0.5, forSplit: splitId) {
-                allSucceeded = false
-            }
-
-            equalizeSplits(
-                in: splitNode.first,
-                controller: controller,
-                foundSplit: &foundSplit,
-                allSucceeded: &allSucceeded
-            )
-            equalizeSplits(
-                in: splitNode.second,
-                controller: controller,
-                foundSplit: &foundSplit,
-                allSucceeded: &allSucceeded
-            )
-        }
-    }
-
-    private struct ResizeSplitCandidate {
-        let splitId: UUID
-        let orientation: String
-        let paneInFirstChild: Bool
-        let dividerPosition: CGFloat
-        let axisPixels: CGFloat
-    }
-
-    private struct ResizeSplitTrace {
-        let containsTarget: Bool
-        let bounds: CGRect
-    }
-
-    private func resizeSplitCollectCandidates(
-        node: ExternalTreeNode,
-        targetPaneId: String,
-        candidates: inout [ResizeSplitCandidate]
-    ) -> ResizeSplitTrace {
-        switch node {
-        case .pane(let pane):
-            let bounds = CGRect(
-                x: pane.frame.x,
-                y: pane.frame.y,
-                width: pane.frame.width,
-                height: pane.frame.height
-            )
-            return ResizeSplitTrace(containsTarget: pane.id == targetPaneId, bounds: bounds)
-
-        case .split(let split):
-            let first = resizeSplitCollectCandidates(
-                node: split.first,
-                targetPaneId: targetPaneId,
-                candidates: &candidates
-            )
-            let second = resizeSplitCollectCandidates(
-                node: split.second,
-                targetPaneId: targetPaneId,
-                candidates: &candidates
-            )
-
-            let combinedBounds = first.bounds.union(second.bounds)
-            let containsTarget = first.containsTarget || second.containsTarget
-
-            if containsTarget,
-               let splitUUID = UUID(uuidString: split.id) {
-                let orientation = split.orientation.lowercased()
-                let axisPixels: CGFloat = orientation == "horizontal"
-                    ? combinedBounds.width
-                    : combinedBounds.height
-                candidates.append(ResizeSplitCandidate(
-                    splitId: splitUUID,
-                    orientation: orientation,
-                    paneInFirstChild: first.containsTarget,
-                    dividerPosition: CGFloat(split.dividerPosition),
-                    axisPixels: max(axisPixels, 1)
-                ))
-            }
-
-            return ResizeSplitTrace(containsTarget: containsTarget, bounds: combinedBounds)
-        }
-    }
-
-    /// Close a surface/panel
-    func closeSurface(tabId: UUID, surfaceId: UUID) -> Bool {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return false }
-        // Guard against stale close callbacks (e.g. child-exit can trigger multiple actions).
-        // A stale callback must never affect unrelated panels/workspaces.
-        guard tab.panels[surfaceId] != nil,
-              tab.surfaceIdFromPanelId(surfaceId) != nil else { return false }
-        tab.closePanel(surfaceId)
-        AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tabId, surfaceId: surfaceId)
-        return true
-    }
-
-    // MARK: - Browser Panel Operations
-
-    /// Create a new browser panel in a split
-    func newBrowserSplit(
-        tabId: UUID,
-        fromPanelId: UUID,
-        orientation: SplitOrientation,
-        insertFirst: Bool = false,
-        url: URL? = nil,
-        preferredProfileID: UUID? = nil,
-        focus: Bool = true
-    ) -> UUID? {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
-        return tab.newBrowserSplit(
-            from: fromPanelId,
-            orientation: orientation,
-            insertFirst: insertFirst,
-            url: url,
-            preferredProfileID: preferredProfileID,
-            focus: focus
-        )?.id
-    }
-
-    /// Create a new browser surface in a pane
-    func newBrowserSurface(
-        tabId: UUID,
-        inPane paneId: PaneID,
-        url: URL? = nil,
-        preferredProfileID: UUID? = nil
-    ) -> UUID? {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
-        return tab.newBrowserSurface(
-            inPane: paneId,
-            url: url,
-            preferredProfileID: preferredProfileID
-        )?.id
-    }
-
-    /// Get a browser panel by ID
-    func browserPanel(tabId: UUID, panelId: UUID) -> BrowserPanel? {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
-        return tab.browserPanel(for: panelId)
-    }
-
-    /// Open a browser in a specific workspace, optionally preferring a split-right layout.
-    @discardableResult
-    func openBrowser(
-        inWorkspace tabId: UUID,
-        url: URL? = nil,
-        preferSplitRight: Bool = false,
-        preferredProfileID: UUID? = nil,
-        insertAtEnd: Bool = false
-    ) -> UUID? {
-        guard let workspace = tabs.first(where: { $0.id == tabId }) else { return nil }
-        if selectedTabId != tabId {
-            selectedTabId = tabId
-        }
-
-        if preferSplitRight {
-            if let targetPaneId = workspace.topRightBrowserReusePane(),
-               let browserPanel = workspace.newBrowserSurface(
-                   inPane: targetPaneId,
-                   url: url,
-                   focus: true,
-                   insertAtEnd: insertAtEnd,
-                   preferredProfileID: preferredProfileID
-               ) {
-                rememberFocusedSurface(tabId: tabId, surfaceId: browserPanel.id)
-                return browserPanel.id
-            }
-
-            let splitSourcePanelId: UUID? = {
-                if let focusedPanelId = workspace.focusedPanelId,
-                   workspace.panels[focusedPanelId] != nil {
-                    return focusedPanelId
-                }
-                if let rememberedPanelId = lastFocusedPanelByTab[tabId],
-                   workspace.panels[rememberedPanelId] != nil {
-                    return rememberedPanelId
-                }
-                if let orderedPanelId = workspace.sidebarOrderedPanelIds().first(where: { workspace.panels[$0] != nil }) {
-                    return orderedPanelId
-                }
-                return workspace.panels.keys.sorted { $0.uuidString < $1.uuidString }.first
-            }()
-
-            if let splitSourcePanelId,
-               let browserPanel = workspace.newBrowserSplit(
-                   from: splitSourcePanelId,
-                   orientation: .horizontal,
-                   url: url,
-                   preferredProfileID: preferredProfileID,
-                   focus: true
-               ) {
-                rememberFocusedSurface(tabId: tabId, surfaceId: browserPanel.id)
-                return browserPanel.id
-            }
-        }
-
-        guard let paneId = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first,
-              let browserPanel = workspace.newBrowserSurface(
-                  inPane: paneId,
-                  url: url,
-                  focus: true,
-                  insertAtEnd: insertAtEnd,
-                  preferredProfileID: preferredProfileID
-              ) else {
-            return nil
-        }
-        rememberFocusedSurface(tabId: tabId, surfaceId: browserPanel.id)
-        return browserPanel.id
-    }
-
-    /// Open a browser in the currently focused pane (as a new surface)
-    @discardableResult
-    func openBrowser(
-        url: URL? = nil,
-        preferredProfileID: UUID? = nil,
-        insertAtEnd: Bool = false
-    ) -> UUID? {
-        guard let tabId = selectedTabId else { return nil }
-        return openBrowser(
-            inWorkspace: tabId,
-            url: url,
-            preferSplitRight: false,
-            preferredProfileID: preferredProfileID,
-            insertAtEnd: insertAtEnd
-        )
-    }
-
-    /// Reopen the most recently closed browser panel (Cmd+Shift+T).
-    /// No-op when no browser panel restore snapshot is available.
-    @discardableResult
-    func reopenMostRecentlyClosedBrowserPanel() -> Bool {
-        while let snapshot = recentlyClosedBrowsers.pop() {
-            guard let targetWorkspace =
-                tabs.first(where: { $0.id == snapshot.workspaceId })
-                ?? selectedWorkspace
-                ?? tabs.first else {
-                return false
-            }
-            let preReopenFocusedPanelId = focusedPanelId(for: targetWorkspace.id)
-
-            if selectedTabId != targetWorkspace.id {
-                selectedTabId = targetWorkspace.id
-            }
-
-            if let reopenedPanelId = reopenClosedBrowserPanel(snapshot, in: targetWorkspace) {
-                enforceReopenedBrowserFocus(
-                    tabId: targetWorkspace.id,
-                    reopenedPanelId: reopenedPanelId,
-                    preReopenFocusedPanelId: preReopenFocusedPanelId
-                )
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private func enforceReopenedBrowserFocus(
-        tabId: UUID,
-        reopenedPanelId: UUID,
-        preReopenFocusedPanelId: UUID?
-    ) {
-        // Keep workspace-switch restoration pinned to the reopened browser panel.
-        rememberFocusedSurface(tabId: tabId, surfaceId: reopenedPanelId)
-        enforceReopenedBrowserFocusIfNeeded(
-            tabId: tabId,
-            reopenedPanelId: reopenedPanelId,
-            preReopenFocusedPanelId: preReopenFocusedPanelId
-        )
-
-        // Some stale focus callbacks can land one runloop turn later. Re-assert focus in two
-        // consecutive turns, but only when focus drifted back to the pre-reopen panel.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.enforceReopenedBrowserFocusIfNeeded(
-                tabId: tabId,
-                reopenedPanelId: reopenedPanelId,
-                preReopenFocusedPanelId: preReopenFocusedPanelId
-            )
-            DispatchQueue.main.async { [weak self] in
-                self?.enforceReopenedBrowserFocusIfNeeded(
-                    tabId: tabId,
-                    reopenedPanelId: reopenedPanelId,
-                    preReopenFocusedPanelId: preReopenFocusedPanelId
-                )
-            }
-        }
-    }
-
-    private func enforceReopenedBrowserFocusIfNeeded(
-        tabId: UUID,
-        reopenedPanelId: UUID,
-        preReopenFocusedPanelId: UUID?
-    ) {
-        guard selectedTabId == tabId,
-              let tab = tabs.first(where: { $0.id == tabId }),
-              tab.panels[reopenedPanelId] != nil else {
-            return
-        }
-
-        rememberFocusedSurface(tabId: tabId, surfaceId: reopenedPanelId)
-
-        guard tab.focusedPanelId != reopenedPanelId else { return }
-
-        if let focusedPanelId = tab.focusedPanelId,
-           let preReopenFocusedPanelId,
-           focusedPanelId != preReopenFocusedPanelId {
-            return
-        }
-
-        tab.focusPanel(reopenedPanelId)
-    }
-
-    private func reopenClosedBrowserPanel(
-        _ snapshot: ClosedBrowserPanelRestoreSnapshot,
-        in workspace: Workspace
-    ) -> UUID? {
-        if let originalPane = workspace.bonsplitController.allPaneIds.first(where: { $0.id == snapshot.originalPaneId }),
-           let browserPanel = workspace.newBrowserSurface(
-               inPane: originalPane,
-               url: snapshot.url,
-               focus: true,
-               preferredProfileID: snapshot.profileID
-           ) {
-            let tabCount = workspace.bonsplitController.tabs(inPane: originalPane).count
-            let maxIndex = max(0, tabCount - 1)
-            let targetIndex = min(max(snapshot.originalTabIndex, 0), maxIndex)
-            _ = workspace.reorderSurface(panelId: browserPanel.id, toIndex: targetIndex)
-            return browserPanel.id
-        }
-
-        if let orientation = snapshot.fallbackSplitOrientation,
-           let fallbackAnchorPaneId = snapshot.fallbackAnchorPaneId,
-           let anchorPane = workspace.bonsplitController.allPaneIds.first(where: { $0.id == fallbackAnchorPaneId }),
-           let anchorTab = workspace.bonsplitController.selectedTab(inPane: anchorPane) ?? workspace.bonsplitController.tabs(inPane: anchorPane).first,
-           let anchorPanelId = workspace.panelIdFromSurfaceId(anchorTab.id),
-           let browserPanelId = workspace.newBrowserSplit(
-               from: anchorPanelId,
-               orientation: orientation,
-               insertFirst: snapshot.fallbackSplitInsertFirst,
-               url: snapshot.url,
-               preferredProfileID: snapshot.profileID
-           )?.id {
-            return browserPanelId
-        }
-
-        guard let focusedPane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first else {
-            return nil
-        }
-        return workspace.newBrowserSurface(
-            inPane: focusedPane,
-            url: snapshot.url,
-            focus: true,
-            preferredProfileID: snapshot.profileID
-        )?.id
     }
 
     /// Flash the currently focused panel so the user can visually confirm focus.
@@ -5725,167 +5004,6 @@ class TabManager: ObservableObject {
         }
     }
 #endif
-}
-
-extension TabManager {
-    func sessionAutosaveFingerprint() -> Int {
-        var hasher = Hasher()
-        hasher.combine(selectedTabId)
-        hasher.combine(tabs.count)
-
-        for workspace in tabs.prefix(SessionPersistencePolicy.maxWorkspacesPerWindow) {
-            hasher.combine(workspace.id)
-            hasher.combine(workspace.focusedPanelId)
-            hasher.combine(workspace.currentDirectory)
-            hasher.combine(workspace.customTitle ?? "")
-            hasher.combine(workspace.customDescription ?? "")
-            hasher.combine(workspace.customColor ?? "")
-            hasher.combine(workspace.isPinned)
-            hasher.combine(workspace.panels.count)
-            hasher.combine(workspace.statusEntries.count)
-            hasher.combine(workspace.metadataBlocks.count)
-            hasher.combine(workspace.logEntries.count)
-            hasher.combine(workspace.panelDirectories.count)
-            hasher.combine(workspace.panelTitles.count)
-            hasher.combine(workspace.panelPullRequests.count)
-            hasher.combine(workspace.panelGitBranches.count)
-            hasher.combine(workspace.surfaceListeningPorts.count)
-
-            if let progress = workspace.progress {
-                hasher.combine(Int((progress.value * 1000).rounded()))
-                hasher.combine(progress.label)
-            } else {
-                hasher.combine(-1)
-            }
-
-            if let gitBranch = workspace.gitBranch {
-                hasher.combine(gitBranch.branch)
-                hasher.combine(gitBranch.isDirty)
-            } else {
-                hasher.combine("")
-                hasher.combine(false)
-            }
-        }
-
-        return hasher.finalize()
-    }
-
-    func sessionSnapshot(includeScrollback: Bool) -> SessionTabManagerSnapshot {
-        let restorableTabs = tabs
-            .filter { !$0.isRemoteWorkspace }
-            .prefix(SessionPersistencePolicy.maxWorkspacesPerWindow)
-        let workspaceSnapshots = restorableTabs
-            .map { $0.sessionSnapshot(includeScrollback: includeScrollback) }
-        let selectedWorkspaceIndex = selectedTabId.flatMap { selectedTabId in
-            restorableTabs.firstIndex(where: { $0.id == selectedTabId })
-        }
-        return SessionTabManagerSnapshot(
-            selectedWorkspaceIndex: selectedWorkspaceIndex,
-            workspaces: workspaceSnapshots
-        )
-    }
-
-    private func releaseRestoredAwayWorkspace(_ workspace: Workspace) {
-        // Session restore replaces the bootstrap workspace objects with freshly
-        // restored ones. Tear the old graph down after the atomic swap so late
-        // panel/socket callbacks cannot keep mutating hidden pre-restore state.
-        AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: workspace.id)
-        workspace.teardownAllPanels()
-        workspace.teardownRemoteConnection()
-        workspace.owningTabManager = nil
-    }
-
-    func restoreSessionSnapshot(_ snapshot: SessionTabManagerSnapshot) {
-        let previousTabs = tabs
-        for tab in previousTabs {
-            unwireClosedBrowserTracking(for: tab)
-        }
-        let existingProbeKeys = Set(workspaceGitProbeGenerationByKey.keys)
-            .union(workspaceGitProbeTimersByKey.keys)
-        for key in existingProbeKeys {
-            clearWorkspaceGitProbe(key)
-        }
-        workspaceGitTrackedDirectoryByKey.removeAll()
-
-        // Clear non-@Published state without touching tabs/selectedTabId yet.
-        lastFocusedPanelByTab.removeAll()
-        pendingPanelTitleUpdates.removeAll()
-        tabHistory.removeAll()
-        historyIndex = -1
-        isNavigatingHistory = false
-        pendingWorkspaceUnfocusTarget = nil
-        workspaceCycleCooldownTask?.cancel()
-        workspaceCycleCooldownTask = nil
-        isWorkspaceCycleHot = false
-        selectionSideEffectsGeneration &+= 1
-        recentlyClosedBrowsers = RecentlyClosedBrowserStack(capacity: 20)
-
-        // Build the new workspace list locally to avoid intermediate @Published
-        // emissions (empty tabs, nil selectedTabId) that can leave SwiftUI's
-        // mountedWorkspaceIds empty and cause a frozen blank launch state (#399).
-        var newTabs: [Workspace] = []
-        let workspaceSnapshots = snapshot.workspaces
-            .prefix(SessionPersistencePolicy.maxWorkspacesPerWindow)
-        for workspaceSnapshot in workspaceSnapshots {
-            let ordinal = Self.nextPortOrdinal
-            Self.nextPortOrdinal += 1
-            let workspace = Workspace(
-                title: workspaceSnapshot.processTitle,
-                workingDirectory: workspaceSnapshot.currentDirectory,
-                portOrdinal: ordinal
-            )
-            workspace.owningTabManager = self
-            workspace.restoreSessionSnapshot(workspaceSnapshot)
-            wireClosedBrowserTracking(for: workspace)
-            newTabs.append(workspace)
-        }
-
-        if newTabs.isEmpty {
-            let ordinal = Self.nextPortOrdinal
-            Self.nextPortOrdinal += 1
-            let fallback = Workspace(title: "Terminal 1", portOrdinal: ordinal)
-            fallback.owningTabManager = self
-            wireClosedBrowserTracking(for: fallback)
-            newTabs.append(fallback)
-        }
-
-        // Determine selection before mutating @Published properties.
-        let newSelectedId: UUID?
-        if let selectedWorkspaceIndex = snapshot.selectedWorkspaceIndex,
-           newTabs.indices.contains(selectedWorkspaceIndex) {
-            newSelectedId = newTabs[selectedWorkspaceIndex].id
-        } else {
-            newSelectedId = newTabs.first?.id
-        }
-
-        // Single atomic assignment of @Published properties so SwiftUI observers
-        // never see an intermediate state with empty tabs or nil selection.
-        tabs = newTabs
-        selectedTabId = newSelectedId
-        let existingIds = Set(newTabs.map(\.id))
-        pruneBackgroundWorkspaceLoads(existingIds: existingIds)
-        sidebarSelectedWorkspaceIds.formIntersection(existingIds)
-        for workspace in previousTabs {
-            releaseRestoredAwayWorkspace(workspace)
-        }
-        for workspace in newTabs {
-            let terminalPanels = workspace.panels.values.compactMap { $0 as? TerminalPanel }
-            for terminalPanel in terminalPanels {
-                scheduleInitialWorkspaceGitMetadataRefreshIfPossible(
-                    workspaceId: workspace.id,
-                    panelId: terminalPanel.id
-                )
-            }
-        }
-
-        if let selectedTabId {
-            NotificationCenter.default.post(
-                name: .ghosttyDidFocusTab,
-                object: nil,
-                userInfo: [GhosttyNotificationKey.tabId: selectedTabId]
-            )
-        }
-    }
 }
 
 // MARK: - Direction Types for Backwards Compatibility
