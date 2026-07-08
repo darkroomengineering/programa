@@ -3416,6 +3416,46 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         XCTAssertTrue(workspace.bonsplitController.closePane(leftPaneId))
         XCTAssertEqual(workspace.sidebarGitBranchesInDisplayOrder().map(\.branch), ["branch2"])
     }
+
+    func testClosingPaneClearsNotificationsForClosedPanels() {
+        let appDelegate = AppDelegate.shared ?? AppDelegate()
+        let store = TerminalNotificationStore.shared
+        let originalStore = appDelegate.notificationStore
+
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
+        appDelegate.notificationStore = store
+
+        defer {
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            appDelegate.notificationStore = originalStore
+        }
+
+        let workspace = Workspace()
+        guard let leftPanelId = workspace.focusedPanelId,
+              let leftPaneId = workspace.paneId(forPanelId: leftPanelId),
+              workspace.newTerminalSplit(from: leftPanelId, orientation: .horizontal) != nil else {
+            XCTFail("Expected left/right split panes")
+            return
+        }
+
+        store.addNotification(
+            tabId: workspace.id,
+            surfaceId: leftPanelId,
+            title: "left",
+            subtitle: "",
+            body: ""
+        )
+        XCTAssertTrue(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: leftPanelId))
+
+        XCTAssertTrue(workspace.bonsplitController.closePane(leftPaneId))
+
+        XCTAssertFalse(
+            store.hasUnreadNotification(forTabId: workspace.id, surfaceId: leftPanelId),
+            "Closing a pane must clear notifications for its panels, same as closing a single surface"
+        )
+    }
 }
 
 
