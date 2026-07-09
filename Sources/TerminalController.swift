@@ -8197,17 +8197,6 @@ class TerminalController {
         return out
     }
 
-    private static func responderChainContains(_ start: NSResponder?, target: NSResponder) -> Bool {
-        var r = start
-        var hops = 0
-        while let cur = r, hops < 64 {
-            if cur === target { return true }
-            r = cur.nextResponder
-            hops += 1
-        }
-        return false
-    }
-
     private func isTerminalFocused(_ args: String) -> String {
         guard let tabManager = tabManager else { return "ERROR: TabManager not available" }
 
@@ -8475,19 +8464,6 @@ class TerminalController {
         }
     }
 #endif
-
-    #if !DEBUG
-    private static func responderChainContains(_ start: NSResponder?, target: NSResponder) -> Bool {
-        var responder = start
-        var hops = 0
-        while let current = responder, hops < 64 {
-            if current === target { return true }
-            responder = current.nextResponder
-            hops += 1
-        }
-        return false
-    }
-    #endif
 
 #if DEBUG
     private func focusFromNotification(_ args: String) -> String {
