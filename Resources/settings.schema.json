@@ -84,25 +84,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "dockBadge": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show the unread count in the Dock tile."
-        },
         "showInMenuBar": {
           "type": "boolean",
           "default": true,
           "description": "Show the menu bar extra."
-        },
-        "unreadPaneRing": {
-          "type": "boolean",
-          "default": true,
-          "description": "Highlight panes with unread notifications."
-        },
-        "paneFlash": {
-          "type": "boolean",
-          "default": true,
-          "description": "Flash the focused pane when requested."
         },
         "sound": {
           "type": "string",

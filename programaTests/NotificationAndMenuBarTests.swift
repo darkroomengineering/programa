@@ -71,44 +71,6 @@ final class NotificationDockBadgeTests: XCTestCase {
         )
     }
 
-    func testNotificationBadgePreferenceDefaultsToEnabled() {
-        let suiteName = "NotificationDockBadgeTests.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        XCTAssertTrue(NotificationBadgeSettings.isDockBadgeEnabled(defaults: defaults))
-
-        defaults.set(false, forKey: NotificationBadgeSettings.dockBadgeEnabledKey)
-        XCTAssertFalse(NotificationBadgeSettings.isDockBadgeEnabled(defaults: defaults))
-
-        defaults.set(true, forKey: NotificationBadgeSettings.dockBadgeEnabledKey)
-        XCTAssertTrue(NotificationBadgeSettings.isDockBadgeEnabled(defaults: defaults))
-    }
-
-    func testNotificationPaneFlashPreferenceDefaultsToEnabled() {
-        let suiteName = "NotificationPaneFlashSettingsTests.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        XCTAssertTrue(NotificationPaneFlashSettings.isEnabled(defaults: defaults))
-
-        defaults.set(false, forKey: NotificationPaneFlashSettings.enabledKey)
-        XCTAssertFalse(NotificationPaneFlashSettings.isEnabled(defaults: defaults))
-
-        defaults.set(true, forKey: NotificationPaneFlashSettings.enabledKey)
-        XCTAssertTrue(NotificationPaneFlashSettings.isEnabled(defaults: defaults))
-    }
-
     func testMenuBarExtraPreferenceDefaultsToVisible() {
         let suiteName = "MenuBarExtraVisibilityTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {

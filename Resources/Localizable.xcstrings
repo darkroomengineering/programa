@@ -5600,28 +5600,6 @@
         }
       }
     },
-    "settings.app.dockBadge": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dock Badge"
-          }
-        }
-      }
-    },
-    "settings.app.dockBadge.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show unread count on app icon (Dock and Cmd+Tab)."
-          }
-        }
-      }
-    },
     "settings.app.hideAllSidebarDetails": {
       "extractionState": "manual",
       "localizations": {
@@ -7121,50 +7099,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Window Background"
-          }
-        }
-      }
-    },
-    "settings.notifications.paneFlash.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Briefly flash a blue outline when Programa highlights a pane."
-          }
-        }
-      }
-    },
-    "settings.notifications.paneFlash.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pane Flash"
-          }
-        }
-      }
-    },
-    "settings.notifications.paneRing.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show a blue ring around panes with unread notifications."
-          }
-        }
-      }
-    },
-    "settings.notifications.paneRing.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unread Pane Ring"
           }
         }
       }

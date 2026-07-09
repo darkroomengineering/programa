@@ -549,35 +549,6 @@ enum NotificationSoundSettings {
     }
 }
 
-enum NotificationBadgeSettings {
-    static let dockBadgeEnabledKey = "notificationDockBadgeEnabled"
-    static let defaultDockBadgeEnabled = true
-
-    static func isDockBadgeEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: dockBadgeEnabledKey) == nil {
-            return defaultDockBadgeEnabled
-        }
-        return defaults.bool(forKey: dockBadgeEnabledKey)
-    }
-}
-
-enum NotificationPaneRingSettings {
-    static let enabledKey = "notificationPaneRingEnabled"
-    static let defaultEnabled = true
-}
-
-enum NotificationPaneFlashSettings {
-    static let enabledKey = "notificationPaneFlashEnabled"
-    static let defaultEnabled = true
-
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: enabledKey) == nil {
-            return defaultEnabled
-        }
-        return defaults.bool(forKey: enabledKey)
-    }
-}
-
 enum TaggedRunBadgeSettings {
     static let environmentKey = "PROGRAMA_TAG"
     private static let maxTagLength = 10
@@ -688,7 +659,6 @@ final class TerminalNotificationStore: ObservableObject {
     private enum AuthorizationRequestOrigin: String {
         case notificationDelivery = "notification_delivery"
         case settingsButton = "settings_button"
-        case settingsTest = "settings_test"
     }
 
     @Published private(set) var notifications: [TerminalNotification] = [] {
@@ -825,39 +795,6 @@ final class TerminalNotificationStore: ObservableObject {
         }
         logAuthorization("open settings url=\(url.absoluteString)")
         notificationSettingsURLOpener(url)
-    }
-
-    func sendSettingsTestNotification() {
-        logAuthorization("settings test tapped state=\(authorizationState.statusLabel)")
-        ensureAuthorization(origin: .settingsTest) { [weak self] authorized in
-            guard let self, authorized else { return }
-
-            let content = UNMutableNotificationContent()
-            content.title = "cmux test notification"
-            content.body = "Desktop notifications are enabled."
-            content.sound = NotificationSoundSettings.sound()
-            content.categoryIdentifier = Self.categoryIdentifier
-
-            let request = UNNotificationRequest(
-                identifier: "programa.settings.test.\(UUID().uuidString)",
-                content: content,
-                trigger: nil
-            )
-
-            self.center.add(request) { error in
-                if let error {
-                    NSLog("Failed to schedule test notification: \(error)")
-                    self.logAuthorization("settings test schedule failed error=\(error.localizedDescription)")
-                } else {
-                    self.logAuthorization("settings test schedule succeeded")
-                    NotificationSoundSettings.runCustomCommand(
-                        title: content.title,
-                        subtitle: content.subtitle,
-                        body: content.body
-                    )
-                }
-            }
-        }
     }
 
     func handleApplicationDidBecomeActive() {
@@ -1418,7 +1355,7 @@ final class TerminalNotificationStore: ObservableObject {
     private func refreshDockBadge() {
         let label = Self.dockBadgeLabel(
             unreadCount: unreadCount,
-            isEnabled: NotificationBadgeSettings.isDockBadgeEnabled(),
+            isEnabled: true,
             runTag: TaggedRunBadgeSettings.normalizedTag()
         )
         NSApp?.dockTile.badgeLabel = label
