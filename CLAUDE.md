@@ -251,7 +251,7 @@ optionally be tagged as a `vX.Y.Z` marker, which the same `release.yml` also bui
 ```
 
 This updates both `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (build number). Then update
-`CHANGELOG.md` (the docs changelog page at `web/app/docs/changelog/page.tsx` reads from it), commit,
+`CHANGELOG.md`, which is the source of truth for the changelog, commit,
 and optionally tag:
 
 ```bash
@@ -269,6 +269,6 @@ Notes:
 - The release asset is `programa-macos.dmg` attached to each release.
 - README download button points to `releases/latest/download/programa-macos.dmg`.
 - Versioning: bump the minor version for milestone tags unless explicitly asked otherwise.
-- Changelog: update `CHANGELOG.md`; docs changelog is rendered from it.
+- Changelog: update `CHANGELOG.md`; it is the source of truth for the changelog.
 - `workflow_dispatch` on `release.yml` still runs a dry-run build that uploads an artifact instead
   of publishing.
