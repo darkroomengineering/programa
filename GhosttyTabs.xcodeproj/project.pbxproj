@@ -26,6 +26,7 @@
 			A5FF0054 /* GhosttyTerminalView+Accessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0044 /* GhosttyTerminalView+Accessibility.swift */; };
 			NRGV0001 /* GhosttyTerminalView+IME.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRGV0002 /* GhosttyTerminalView+IME.swift */; };
 			NRGV0003 /* GhosttyTerminalView+SwiftUIWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRGV0004 /* GhosttyTerminalView+SwiftUIWrapper.swift */; };
+			NRGV0005 /* GhosttyTerminalView+RenderStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRGV0006 /* GhosttyTerminalView+RenderStats.swift */; };
 			A5001532 /* TerminalWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001531 /* TerminalWindowPortal.swift */; };
 			A5001534 /* BrowserWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001533 /* BrowserWindowPortal.swift */; };
 			A5FF0008 /* HostedViewPortalRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0018 /* HostedViewPortalRegistry.swift */; };
@@ -251,6 +252,7 @@
 			A5FF0044 /* GhosttyTerminalView+Accessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+Accessibility.swift"; sourceTree = "<group>"; };
 			NRGV0002 /* GhosttyTerminalView+IME.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+IME.swift"; sourceTree = "<group>"; };
 			NRGV0004 /* GhosttyTerminalView+SwiftUIWrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+SwiftUIWrapper.swift"; sourceTree = "<group>"; };
+			NRGV0006 /* GhosttyTerminalView+RenderStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+RenderStats.swift"; sourceTree = "<group>"; };
 			A5001531 /* TerminalWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalWindowPortal.swift; sourceTree = "<group>"; };
 			A5001533 /* BrowserWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserWindowPortal.swift; sourceTree = "<group>"; };
 			A5FF0018 /* HostedViewPortalRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedViewPortalRegistry.swift; sourceTree = "<group>"; };
@@ -530,6 +532,7 @@
 				A5FF0044 /* GhosttyTerminalView+Accessibility.swift */,
 				NRGV0002 /* GhosttyTerminalView+IME.swift */,
 				NRGV0004 /* GhosttyTerminalView+SwiftUIWrapper.swift */,
+				NRGV0006 /* GhosttyTerminalView+RenderStats.swift */,
 				A5001531 /* TerminalWindowPortal.swift */,
 				A5001533 /* BrowserWindowPortal.swift */,
 				A5FF0018 /* HostedViewPortalRegistry.swift */,
@@ -861,6 +864,7 @@
 				A5FF0054 /* GhosttyTerminalView+Accessibility.swift in Sources */,
 				NRGV0001 /* GhosttyTerminalView+IME.swift in Sources */,
 				NRGV0003 /* GhosttyTerminalView+SwiftUIWrapper.swift in Sources */,
+				NRGV0005 /* GhosttyTerminalView+RenderStats.swift in Sources */,
 				A5001532 /* TerminalWindowPortal.swift in Sources */,
 				A5001534 /* BrowserWindowPortal.swift in Sources */,
 				A5FF0008 /* HostedViewPortalRegistry.swift in Sources */,
