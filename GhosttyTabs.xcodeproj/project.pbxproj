@@ -8,6 +8,10 @@
 
 		/* Begin PBXBuildFile section */
 			A5001001 /* ProgramaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001011 /* ProgramaApp.swift */; };
+		NRPA00003 /* DebugWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00004 /* DebugWindows.swift */; };
+		NRPA00005 /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00006 /* SettingsModels.swift */; };
+		NRPA00007 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00008 /* SettingsComponents.swift */; };
+		NRPA00009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00010 /* SettingsView.swift */; };
 			A5FF0007 /* SettingDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0017 /* SettingDefinition.swift */; };
 			A5001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001012 /* ContentView.swift */; };
 			A5FF0005 /* ContentView+CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0015 /* ContentView+CommandPalette.swift */; };
@@ -233,6 +237,10 @@
 			F1000002A1B2C3D4E5F60718 /* programaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			A5001011 /* ProgramaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaApp.swift; sourceTree = "<group>"; };
+		NRPA00004 /* DebugWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugWindows.swift; sourceTree = "<group>"; };
+		NRPA00006 /* SettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModels.swift; sourceTree = "<group>"; };
+		NRPA00008 /* SettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsComponents.swift; sourceTree = "<group>"; };
+		NRPA00010 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 			A5FF0017 /* SettingDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingDefinition.swift; sourceTree = "<group>"; };
 			A5001012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 			A5FF0015 /* ContentView+CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+CommandPalette.swift"; sourceTree = "<group>"; };
@@ -503,6 +511,10 @@
 				isa = PBXGroup;
 				children = (
 					A5001011 /* ProgramaApp.swift */,
+					NRPA00004 /* DebugWindows.swift */,
+					NRPA00006 /* SettingsModels.swift */,
+					NRPA00008 /* SettingsComponents.swift */,
+					NRPA00010 /* SettingsView.swift */,
 					A5FF0017 /* SettingDefinition.swift */,
 					A5001012 /* ContentView.swift */,
 					A5FF0015 /* ContentView+CommandPalette.swift */,
@@ -834,6 +846,10 @@
 				buildActionMask = 2147483647;
 				files = (
 					A5001001 /* ProgramaApp.swift in Sources */,
+					NRPA00003 /* DebugWindows.swift in Sources */,
+					NRPA00005 /* SettingsModels.swift in Sources */,
+					NRPA00007 /* SettingsComponents.swift in Sources */,
+					NRPA00009 /* SettingsView.swift in Sources */,
 					A5FF0007 /* SettingDefinition.swift in Sources */,
 					A5001002 /* ContentView.swift in Sources */,
 					A5FF0005 /* ContentView+CommandPalette.swift in Sources */,
