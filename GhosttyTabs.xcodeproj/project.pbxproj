@@ -11,6 +11,12 @@
 			A5FF0007 /* SettingDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0017 /* SettingDefinition.swift */; };
 			A5001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001012 /* ContentView.swift */; };
 			A5FF0005 /* ContentView+CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0015 /* ContentView+CommandPalette.swift */; };
+			NRCV00000000000000000005 /* TabItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000006 /* TabItemView.swift */; };
+			NRCV00000000000000000003 /* FileDropOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000004 /* FileDropOverlayView.swift */; };
+			NRCV00000000000000000001 /* CommandPaletteSearchEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */; };
+			NRCV00000000000000000007 /* SidebarDragDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000008 /* SidebarDragDrop.swift */; };
+			NRCV00000000000000000009 /* SidebarVisuals.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000010 /* SidebarVisuals.swift */; };
+			NRCV00000000000000000011 /* CommandPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000012 /* CommandPaletteController.swift */; };
 			E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */; };
 			B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */; };
 			A5001003 /* TabManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001013 /* TabManager.swift */; };
@@ -33,6 +39,14 @@
 			A5001006 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5001016 /* GhosttyKit.xcframework */; };
 		A5001007 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001019 /* TerminalController.swift */; };
 		A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0004 /* TerminalController+BrowserAutomation.swift */; };
+		NRTC0011 /* TerminalController+System.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0001 /* TerminalController+System.swift */; };
+		NRTC0012 /* TerminalController+Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0002 /* TerminalController+Telemetry.swift */; };
+		NRTC0013 /* TerminalController+Window.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0003 /* TerminalController+Window.swift */; };
+		NRTC0014 /* TerminalController+Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0004 /* TerminalController+Workspace.swift */; };
+		NRTC0015 /* TerminalController+Surface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0005 /* TerminalController+Surface.swift */; };
+		NRTC0016 /* TerminalController+Pane.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0006 /* TerminalController+Pane.swift */; };
+		NRTC0017 /* TerminalController+Notification.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0007 /* TerminalController+Notification.swift */; };
+		NRTC0018 /* TerminalController+Debug.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0008 /* TerminalController+Debug.swift */; };
 		A5001500 /* ProgramaWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001510 /* ProgramaWebView.swift */; };
 		A5001501 /* UITestRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001511 /* UITestRecorder.swift */; };
 		A5001226 /* SocketControlSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001225 /* SocketControlSettings.swift */; };
@@ -243,6 +257,12 @@
 			A5FF0017 /* SettingDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingDefinition.swift; sourceTree = "<group>"; };
 			A5001012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 			A5FF0015 /* ContentView+CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+CommandPalette.swift"; sourceTree = "<group>"; };
+		NRCV00000000000000000006 /* TabItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabItemView.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000004 /* FileDropOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropOverlayView.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteSearchEngine.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000008 /* SidebarDragDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarDragDrop.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000010 /* SidebarVisuals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarVisuals.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000012 /* CommandPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteController.swift; sourceTree = "<group>"; };
 			9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSelectionState.swift; sourceTree = "<group>"; };
 			B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDragHandleView.swift; sourceTree = "<group>"; };
 			A5001013 /* TabManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManager.swift; sourceTree = "<group>"; };
@@ -267,6 +287,14 @@
 		A5001018 /* programa-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "programa-Bridging-Header.h"; sourceTree = "<group>"; };
 		A5001019 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
 		A5FF0004 /* TerminalController+BrowserAutomation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+BrowserAutomation.swift"; sourceTree = "<group>"; };
+		NRTC0001 /* TerminalController+System.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+System.swift"; sourceTree = "<group>"; };
+		NRTC0002 /* TerminalController+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Telemetry.swift"; sourceTree = "<group>"; };
+		NRTC0003 /* TerminalController+Window.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Window.swift"; sourceTree = "<group>"; };
+		NRTC0004 /* TerminalController+Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Workspace.swift"; sourceTree = "<group>"; };
+		NRTC0005 /* TerminalController+Surface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Surface.swift"; sourceTree = "<group>"; };
+		NRTC0006 /* TerminalController+Pane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Pane.swift"; sourceTree = "<group>"; };
+		NRTC0007 /* TerminalController+Notification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Notification.swift"; sourceTree = "<group>"; };
+		NRTC0008 /* TerminalController+Debug.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Debug.swift"; sourceTree = "<group>"; };
 		A5001620 /* AppleScriptSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleScriptSupport.swift; sourceTree = "<group>"; };
 		D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconDockTilePlugin.swift; sourceTree = "<group>"; };
 		A5001510 /* ProgramaWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ProgramaWebView.swift; sourceTree = "<group>"; };
@@ -520,6 +548,12 @@
 					A5FF0017 /* SettingDefinition.swift */,
 					A5001012 /* ContentView.swift */,
 					A5FF0015 /* ContentView+CommandPalette.swift */,
+					NRCV00000000000000000006 /* TabItemView.swift */,
+					NRCV00000000000000000004 /* FileDropOverlayView.swift */,
+					NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */,
+					NRCV00000000000000000008 /* SidebarDragDrop.swift */,
+					NRCV00000000000000000010 /* SidebarVisuals.swift */,
+					NRCV00000000000000000012 /* CommandPaletteController.swift */,
 					9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */,
 					B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */,
 					A50012F0 /* Backport.swift */,
@@ -547,6 +581,14 @@
 				A5FF0018 /* HostedViewPortalRegistry.swift */,
 				A5001019 /* TerminalController.swift */,
 				A5FF0004 /* TerminalController+BrowserAutomation.swift */,
+				NRTC0001 /* TerminalController+System.swift */,
+				NRTC0002 /* TerminalController+Telemetry.swift */,
+				NRTC0003 /* TerminalController+Window.swift */,
+				NRTC0004 /* TerminalController+Workspace.swift */,
+				NRTC0005 /* TerminalController+Surface.swift */,
+				NRTC0006 /* TerminalController+Pane.swift */,
+				NRTC0007 /* TerminalController+Notification.swift */,
+				NRTC0008 /* TerminalController+Debug.swift */,
 				A5001541 /* PortScanner.swift */,
 				A5001544 /* TerminalImageTransfer.swift */,
 				A5001545 /* TerminalSSHSessionDetector.swift */,
@@ -858,6 +900,12 @@
 					A5FF0007 /* SettingDefinition.swift in Sources */,
 					A5001002 /* ContentView.swift in Sources */,
 					A5FF0005 /* ContentView+CommandPalette.swift in Sources */,
+					NRCV00000000000000000005 /* TabItemView.swift in Sources */,
+					NRCV00000000000000000003 /* FileDropOverlayView.swift in Sources */,
+					NRCV00000000000000000001 /* CommandPaletteSearchEngine.swift in Sources */,
+					NRCV00000000000000000007 /* SidebarDragDrop.swift in Sources */,
+					NRCV00000000000000000009 /* SidebarVisuals.swift in Sources */,
+					NRCV00000000000000000011 /* CommandPaletteController.swift in Sources */,
 					E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */,
 					B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */,
 					A50012F1 /* Backport.swift in Sources */,
@@ -885,6 +933,14 @@
 				A5FF0008 /* HostedViewPortalRegistry.swift in Sources */,
 				A5001007 /* TerminalController.swift in Sources */,
 				A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */,
+				NRTC0011 /* TerminalController+System.swift in Sources */,
+				NRTC0012 /* TerminalController+Telemetry.swift in Sources */,
+				NRTC0013 /* TerminalController+Window.swift in Sources */,
+				NRTC0014 /* TerminalController+Workspace.swift in Sources */,
+				NRTC0015 /* TerminalController+Surface.swift in Sources */,
+				NRTC0016 /* TerminalController+Pane.swift in Sources */,
+				NRTC0017 /* TerminalController+Notification.swift in Sources */,
+				NRTC0018 /* TerminalController+Debug.swift in Sources */,
 				A5001540 /* PortScanner.swift in Sources */,
 				A5001542 /* TerminalImageTransfer.swift in Sources */,
 				A5001543 /* TerminalSSHSessionDetector.swift in Sources */,
