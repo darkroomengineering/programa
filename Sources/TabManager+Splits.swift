@@ -12,7 +12,7 @@ extension TabManager {
     @discardableResult
     func createSplit(direction: SplitDirection) -> UUID? {
         guard let selectedTabId,
-              let tab = tabs.first(where: { $0.id == selectedTabId }),
+              let tab = workspace(withId: selectedTabId),
               let focusedPanelId = tab.focusedPanelId else { return nil }
         return createSplit(tabId: selectedTabId, surfaceId: focusedPanelId, direction: direction)
     }
@@ -20,7 +20,7 @@ extension TabManager {
     /// Create a new split from an explicit source panel.
     @discardableResult
     func createSplit(tabId: UUID, surfaceId: UUID, direction: SplitDirection, focus: Bool = true) -> UUID? {
-        guard let tab = tabs.first(where: { $0.id == tabId }),
+        guard let tab = workspace(withId: tabId),
               tab.panels[surfaceId] != nil else { return nil }
         tab.clearSplitZoom()
         return newSplit(tabId: tabId, surfaceId: surfaceId, direction: direction, focus: focus)
@@ -30,7 +30,7 @@ extension TabManager {
     @discardableResult
     func createBrowserSplit(direction: SplitDirection, url: URL? = nil) -> UUID? {
         guard let selectedTabId,
-              let tab = tabs.first(where: { $0.id == selectedTabId }),
+              let tab = workspace(withId: selectedTabId),
               let focusedPanelId = tab.focusedPanelId else { return nil }
         tab.clearSplitZoom()
         return newBrowserSplit(
@@ -56,7 +56,7 @@ extension TabManager {
     /// Create a new split in the specified direction
     /// Returns the new panel's ID (which is also the surface ID for terminals)
     func newSplit(tabId: UUID, surfaceId: UUID, direction: SplitDirection, focus: Bool = true) -> UUID? {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
+        guard let tab = workspace(withId: tabId) else { return nil }
         return tab.newTerminalSplit(
             from: surfaceId,
             orientation: direction.orientation,
@@ -67,7 +67,7 @@ extension TabManager {
 
     /// Move focus in the specified direction
     func moveSplitFocus(tabId: UUID, surfaceId: UUID, direction: NavigationDirection) -> Bool {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return false }
+        guard let tab = workspace(withId: tabId) else { return false }
         tab.moveFocus(direction: direction)
         return true
     }
@@ -75,7 +75,7 @@ extension TabManager {
     /// Resize split - not directly supported by bonsplit, but we can adjust divider positions
     func resizeSplit(tabId: UUID, surfaceId: UUID, direction: ResizeDirection, amount: UInt16) -> Bool {
         guard amount > 0,
-              let tab = tabs.first(where: { $0.id == tabId }),
+              let tab = workspace(withId: tabId),
               let paneId = tab.paneId(forPanelId: surfaceId) else { return false }
 
         let paneUUID = paneId.id
@@ -108,7 +108,7 @@ extension TabManager {
 
     /// Equalize splits - not directly supported by bonsplit
     func equalizeSplits(tabId: UUID) -> Bool {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return false }
+        guard let tab = workspace(withId: tabId) else { return false }
 
         var foundSplit = false
         var allSucceeded = true
@@ -123,7 +123,7 @@ extension TabManager {
 
     /// Toggle zoom on a panel.
     func toggleSplitZoom(tabId: UUID, surfaceId: UUID) -> Bool {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return false }
+        guard let tab = workspace(withId: tabId) else { return false }
         return tab.toggleSplitZoom(panelId: surfaceId)
     }
 
@@ -234,7 +234,7 @@ extension TabManager {
 
     /// Close a surface/panel
     func closeSurface(tabId: UUID, surfaceId: UUID) -> Bool {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return false }
+        guard let tab = workspace(withId: tabId) else { return false }
         // Guard against stale close callbacks (e.g. child-exit can trigger multiple actions).
         // A stale callback must never affect unrelated panels/workspaces.
         guard tab.panels[surfaceId] != nil,
