@@ -1924,4 +1924,201 @@ extension CMUXCLI {
             throw CLIError(message: "Unsupported tmux compatibility command: \(command)")
         }
     }
+
+    /// Subcommand help text for TmuxCompat commands, split out of the
+    /// central `subcommandUsage` switch (programa.swift) so each domain's
+    /// help text lives next to its command descriptors. Refs #101.
+    func tmuxCompatSubcommandUsage(_ command: String) -> String? {
+        switch command {
+        case "capture-pane":
+            return """
+            Usage: programa capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]
+
+            tmux-compatible alias for reading terminal text from a pane.
+
+            Flags:
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Surface context (default: $PROGRAMA_SURFACE_ID)
+              --scrollback           Include scrollback
+              --lines <n>            Return only the last N lines (implies --scrollback)
+
+            Example:
+              programa capture-pane --workspace workspace:2 --surface surface:1 --scrollback --lines 200
+            """
+        case "resize-pane":
+            return """
+            Usage: programa resize-pane [--pane <id|ref>] [--workspace <id|ref>] [-L|-R|-U|-D] [--amount <n>]
+
+            tmux-compatible pane resize command.
+
+            Flags:
+              --pane <id|ref>        Pane to resize (default: focused pane)
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              -L|-R|-U|-D            Direction (default: -R)
+              --amount <n>           Resize amount (default: 1)
+            """
+        case "pipe-pane":
+            return """
+            Usage: programa pipe-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <shell-command> | <shell-command>]
+
+            Capture pane text and pipe it to a shell command via stdin.
+
+            Flags:
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Surface context (default: focused surface)
+              --command <command>    Shell command to run (or pass as trailing text)
+            """
+        case "wait-for":
+            return """
+            Usage: programa wait-for [-S|--signal] <name> [--timeout <seconds>]
+
+            Wait for or signal a named synchronization token.
+
+            Flags:
+              -S, --signal           Signal the token instead of waiting
+              --timeout <seconds>    Wait timeout (default: 30)
+            """
+        case "swap-pane":
+            return """
+            Usage: programa swap-pane --pane <id|ref> --target-pane <id|ref> [--workspace <id|ref>]
+
+            Swap two panes.
+
+            Flags:
+              --pane <id|ref>         Source pane (required)
+              --target-pane <id|ref>  Target pane (required)
+              --workspace <id|ref>    Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+            """
+        case "break-pane":
+            return """
+            Usage: programa break-pane [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
+
+            Move a pane/surface out into its own pane context.
+
+            Flags:
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --pane <id|ref>        Source pane
+              --surface <id|ref>     Source surface
+              --no-focus             Do not focus the result
+            """
+        case "join-pane":
+            return """
+            Usage: programa join-pane --target-pane <id|ref> [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
+
+            Join a pane/surface into another pane.
+
+            Flags:
+              --target-pane <id|ref>  Target pane (required)
+              --workspace <id|ref>    Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --pane <id|ref>         Source pane
+              --surface <id|ref>      Source surface
+              --no-focus              Do not focus the result
+            """
+        case "next-window", "previous-window", "last-window":
+            return """
+            Usage: programa \(command)
+
+            Switch workspace selection (next/previous/last) in the current window.
+            """
+        case "last-pane":
+            return """
+            Usage: programa last-pane [--workspace <id|ref>]
+
+            Focus the previously focused pane in a workspace.
+
+            Flags:
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+            """
+        case "find-window":
+            return """
+            Usage: programa find-window [--content] [--select] [query]
+
+            Find workspaces by title (and optionally terminal content).
+
+            Flags:
+              --content   Search terminal content in addition to workspace titles
+              --select    Select the first match
+            """
+        case "clear-history":
+            return """
+            Usage: programa clear-history [--workspace <id|ref>] [--surface <id|ref>]
+
+            Clear terminal scrollback history.
+
+            Flags:
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Surface context (default: focused surface)
+            """
+        case "set-hook":
+            return """
+            Usage: programa set-hook [--list] [--unset <event>] | <event> <command>
+
+            Manage tmux-compat hook definitions.
+
+            Flags:
+              --list            List configured hooks
+              --unset <event>   Remove a hook by event name
+            """
+        case "popup":
+            return """
+            Usage: programa popup
+
+            tmux compatibility placeholder. This command is currently not supported.
+            """
+        case "bind-key", "unbind-key", "copy-mode":
+            return """
+            Usage: programa \(command)
+
+            tmux compatibility placeholder. This command is currently not supported.
+            """
+        case "set-buffer":
+            return """
+            Usage: programa set-buffer [--name <name>] [--] <text>
+
+            Save text into a named tmux-compat buffer.
+
+            Flags:
+              --name <name>   Buffer name (default: default)
+            """
+        case "paste-buffer":
+            return """
+            Usage: programa paste-buffer [--name <name>] [--workspace <id|ref>] [--surface <id|ref>]
+
+            Paste a named tmux-compat buffer into a surface.
+
+            Flags:
+              --name <name>         Buffer name (default: default)
+              --workspace <id|ref>  Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>    Surface context (default: focused surface)
+            """
+        case "list-buffers":
+            return """
+            Usage: programa list-buffers
+
+            List tmux-compat buffers.
+            """
+        case "respawn-pane":
+            return """
+            Usage: programa respawn-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <cmd> | <cmd>]
+
+            Send a command (or default shell restart command) to a surface.
+
+            Flags:
+              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Surface context (default: focused surface)
+              --command <cmd>        Command text (or pass trailing command text)
+            """
+        case "display-message":
+            return """
+            Usage: programa display-message [-p|--print] <text>
+
+            Print text (or show it via notification bridge in parity mode).
+
+            Flags:
+              -p, --print   Print to stdout only
+            """
+        default:
+            return nil
+        }
+    }
 }

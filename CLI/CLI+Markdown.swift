@@ -100,4 +100,35 @@ extension CMUXCLI {
             print("OK surface=\(surfaceText) pane=\(paneText) path=\(filePath)")
         }
     }
+
+    /// Subcommand help text for Markdown commands, split out of the
+    /// central `subcommandUsage` switch (programa.swift) so each domain's
+    /// help text lives next to its command descriptors. Refs #101.
+    func markdownSubcommandUsage(_ command: String) -> String? {
+        switch command {
+        case "markdown":
+            return """
+            Usage: programa markdown open <path> [options]
+                   programa markdown <path>       (shorthand for 'open')
+
+            Open a markdown file in a formatted viewer panel with live file watching.
+            The file is rendered with rich formatting (headings, code blocks, tables,
+            lists, blockquotes) and automatically updates when the file changes on disk.
+
+            Options:
+              --workspace <id|ref|index>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref|index>     Source surface to split from (default: focused surface)
+              --window <id|ref|index>      Target window
+              --direction <left|right|up|down>  Split direction (default: right)
+
+            Examples:
+              programa markdown open plan.md
+              programa markdown ~/project/CHANGELOG.md
+              programa markdown open ./docs/design.md --workspace 0
+              programa markdown open plan.md --direction down
+            """
+        default:
+            return nil
+        }
+    }
 }

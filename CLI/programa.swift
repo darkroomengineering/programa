@@ -1631,7 +1631,11 @@ struct CMUXCLI {
     /// is externally visible; dispatch itself is by name lookup and does not
     /// depend on array order.
     private func commandDescriptors() -> [CommandDescriptor] {
-        [
+        // Built imperatively (rather than as one large `[...] + f() + [...]`
+        // expression) because the Swift type-checker times out trying to
+        // infer a single expression spanning this many array-literal +
+        // function-call concatenations.
+        var descriptors: [CommandDescriptor] = [
             // MARK: - Pre-connection specials (dispatched earlier in run();
             // documented here only so usage() has one source for help text).
             CommandDescriptor(names: ["welcome"], helpLines: ["welcome"], execute: nil),
@@ -1923,22 +1927,9 @@ struct CMUXCLI {
                 }
             ),
 
-            CommandDescriptor(
-                names: ["ssh"],
-                helpLines: ["ssh <destination> [--name <title>] [--port <n>] [--identity <path>] [--ssh-option <opt>] [--no-focus] [-- <remote-command-args>]"],
-                execute: { ctx in
-                    try self.runSSH(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-            CommandDescriptor(
-                names: ["ssh-session-end"],
-                helpLines: [],
-                execute: { ctx in
-                    try self.runSSHSessionEnd(commandArgs: ctx.commandArgs, client: ctx.client)
-                }
-            ),
-
-            CommandDescriptor(names: ["remote-daemon-status"], helpLines: ["remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]"], execute: nil),
+            ]
+        descriptors += self.sshDescriptors()
+        descriptors += [
 
             CommandDescriptor(
                 names: ["new-split"],
@@ -2023,13 +2014,9 @@ struct CMUXCLI {
                 }
             ),
 
-            CommandDescriptor(
-                names: ["tree"],
-                helpLines: ["tree [--all] [--workspace <id|ref|index>]"],
-                execute: { ctx in
-                    try self.runTreeCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
+            ]
+        descriptors += self.treeDescriptors()
+        descriptors += [
 
             CommandDescriptor(
                 names: ["focus-pane"],
@@ -2799,21 +2786,9 @@ struct CMUXCLI {
                 }
             ),
 
-            CommandDescriptor(
-                names: ["claude-hook"],
-                helpLines: ["claude-hook <session-start|stop|notification> [--workspace <id|ref>] [--surface <id|ref>]"],
-                execute: { ctx in
-                    try self.runClaudeHook(commandArgs: ctx.commandArgs, client: ctx.client)
-                }
-            ),
-
-            CommandDescriptor(
-                names: ["codex-hook"],
-                helpLines: [],
-                execute: { ctx in
-                    try self.runCodexHook(commandArgs: ctx.commandArgs, client: ctx.client)
-                }
-            ),
+            ]
+        descriptors += self.hooksDescriptors()
+        descriptors += [
 
             CommandDescriptor(
                 names: ["set-app-focus"],
@@ -2861,7 +2836,8 @@ struct CMUXCLI {
             // handler; help text preserves the original grouped layout,
             // including the two pipe-separated combo lines).
             CommandDescriptor(names: [], helpLines: ["", "# tmux compatibility commands"], execute: nil),
-        ] + Self.tmuxCompatDescriptors(runTmuxCompatCommand: { ctx in
+        ]
+        descriptors += Self.tmuxCompatDescriptors(runTmuxCompatCommand: { ctx in
             try self.runTmuxCompatCommand(
                 command: ctx.command,
                 commandArgs: ctx.commandArgs,
@@ -2870,7 +2846,8 @@ struct CMUXCLI {
                 idFormat: ctx.idFormat,
                 windowOverride: ctx.windowId
             )
-        }) + [
+        })
+        descriptors += [
             CommandDescriptor(names: [], helpLines: [""], execute: nil),
 
             CommandDescriptor(
@@ -2999,6 +2976,7 @@ struct CMUXCLI {
                 }
             ),
         ]
+        return descriptors
     }
 
     /// Looks up the descriptor whose `names` contains `command`, if any.
@@ -4174,6 +4152,14 @@ struct CMUXCLI {
 
     /// Return the help/usage text for a subcommand, or nil if the command is unknown.
     private func subcommandUsage(_ command: String) -> String? {
+        if let text = tmuxCompatSubcommandUsage(command) { return text }
+        if let text = sshSubcommandUsage(command) { return text }
+        if let text = treeSubcommandUsage(command) { return text }
+        if let text = hooksSubcommandUsage(command) { return text }
+        if let text = browserSubcommandUsage(command) { return text }
+        if let text = markdownSubcommandUsage(command) { return text }
+        if let text = themesSubcommandUsage(command) { return text }
+        if let text = agentWrapperSubcommandUsage(command) { return text }
         switch command {
         case "ping":
             return """
@@ -4228,125 +4214,6 @@ struct CMUXCLI {
               --body <text>     Feedback body (submission disabled)
               --image <path>    Attach an image file, repeat for multiple images (submission disabled)
             """
-        case "themes":
-            return """
-            Usage: programa themes
-                   programa themes list
-                   programa themes set <theme>
-                   programa themes set --light <theme> [--dark <theme>]
-                   programa themes set --dark <theme> [--light <theme>]
-                   programa themes clear
-
-            When run in a TTY, `programa themes` opens an interactive theme picker with
-            live app preview. Use `programa themes list` for a plain listing.
-
-            The picker previews the selected theme across the running programa app and
-            lets you apply it to the light theme, dark theme, or both defaults.
-
-            Commands:
-              list                      List available themes and mark the current light/dark defaults
-              set <theme>               Set the same theme for both light and dark appearance
-              set --light <theme>       Set the light appearance theme
-              set --dark <theme>        Set the dark appearance theme
-              clear                     Remove the programa theme override and fall back to other config
-
-            Examples:
-              programa themes
-              programa themes list
-              programa themes set "Catppuccin Mocha"
-              programa themes set --light "Catppuccin Latte" --dark "Catppuccin Mocha"
-              programa themes clear
-            """
-        case "claude-teams":
-            return String(localized: "cli.claude-teams.usage", defaultValue: """
-            Usage: programa claude-teams [claude-args...]
-
-            Launch Claude Code with agent teams enabled.
-
-            This command:
-              - defaults Claude teammate mode to auto
-              - sets a tmux-like environment so Claude auto mode uses programa splits
-              - sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
-              - prepends a private tmux shim to PATH
-              - forwards all remaining arguments to claude
-
-            The tmux shim translates supported tmux window/pane commands into programa
-            workspace and split operations in the current programa session.
-
-            Examples:
-              programa claude-teams
-              programa claude-teams --continue
-              programa claude-teams --model sonnet
-            """)
-        case "omo":
-            return String(localized: "cli.omo.usage", defaultValue: """
-            Usage: programa omo [opencode-args...]
-
-            Launch OpenCode with oh-my-openagent in a programa-aware environment.
-
-            oh-my-openagent orchestrates multiple AI models as specialized agents in
-            parallel. This command sets up a tmux shim so agent panes become native
-            programa splits with sidebar metadata and notifications.
-
-            This command:
-              - sets a tmux-like environment so oh-my-openagent uses programa splits
-              - prepends a private tmux shim to PATH
-              - forwards all remaining arguments to opencode
-
-            The tmux shim translates tmux window/pane commands into programa workspace
-            and split operations in the current programa session.
-
-            Examples:
-              programa omo
-              programa omo --continue
-              programa omo --model claude-sonnet-4-6
-            """)
-        case "omx":
-            return String(localized: "cli.omx.usage", defaultValue: """
-            Usage: programa omx [omx-args...]
-
-            Launch Oh My Codex (OMX) with native programa pane integration.
-
-            OMX is a multi-agent orchestration layer for OpenAI Codex CLI. This
-            command sets up a tmux shim so OMX team mode, HUD, and agent panes
-            become native programa splits.
-
-            This command:
-              - sets a tmux-like environment so OMX uses programa splits
-              - prepends a private tmux shim to PATH
-              - forwards all remaining arguments to omx
-
-            Install: npm install -g oh-my-codex
-
-            Examples:
-              programa omx
-              programa omx --madmax --high
-              programa omx team
-            """)
-        case "omc":
-            return String(localized: "cli.omc.usage", defaultValue: """
-            Usage: programa omc [omc-args...]
-
-            Launch Oh My Claude Code (OMC) with native programa pane integration.
-
-            OMC is a multi-agent orchestration system for Claude Code with
-            specialized agents, smart model routing, and team pipelines. This
-            command sets up a tmux shim so OMC team mode and agent panes become
-            native programa splits.
-
-            This command:
-              - sets a tmux-like environment so OMC uses programa splits
-              - prepends a private tmux shim to PATH
-              - injects NODE_OPTIONS restore module for Claude compatibility
-              - forwards all remaining arguments to omc
-
-            Install: npm install -g oh-my-claude-sisyphus
-
-            Examples:
-              programa omc
-              programa omc team 3:claude "implement feature"
-              programa omc --watch
-            """)
         case "identify":
             return """
             Usage: programa identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]
@@ -4599,36 +4466,6 @@ struct CMUXCLI {
             Example:
               programa list-workspaces
             """
-        case "ssh":
-            return """
-            Usage: programa ssh <destination> [flags] [-- <remote-command-args>]
-
-            Create a new workspace, mark it as remote-SSH, and start an SSH session in that workspace.
-            programa will also establish a local SSH proxy endpoint so browser traffic can egress from the remote host.
-
-            Flags:
-              --name <title>          Optional workspace title
-              --port <n>              SSH port
-              --identity <path>       SSH identity file path
-              --ssh-option <opt>      Extra SSH -o option (repeatable)
-              --no-focus              Create workspace without switching to it
-
-            Example:
-              programa ssh dev@my-host
-              programa ssh dev@my-host --name "gpu-box" --port 2222 --identity ~/.ssh/id_ed25519
-              programa ssh dev@my-host --ssh-option UserKnownHostsFile=/dev/null --ssh-option StrictHostKeyChecking=no
-            """
-        case "remote-daemon-status":
-            return """
-            Usage: programa remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]
-
-            Show the embedded programad-remote release manifest, local cache status, checksum verification state,
-            and the GitHub attestation verification command for a target platform.
-
-            Example:
-              programa remote-daemon-status
-              programa remote-daemon-status --os linux --arch arm64
-            """
         case "new-split":
             return """
             Usage: programa new-split <left|right|up|down> [flags]
@@ -4670,32 +4507,6 @@ struct CMUXCLI {
             Example:
               programa list-pane-surfaces
               programa list-pane-surfaces --workspace workspace:2 --pane pane:1
-            """
-        case "tree":
-            return """
-            Usage: programa tree [flags]
-
-            Print the hierarchy of windows, workspaces, panes, and surfaces.
-
-            Flags:
-              --all                         Include all windows (default: current window only)
-              --workspace <id|ref|index>   Show only one workspace
-              --json                        Structured JSON output
-
-            Output:
-              Text mode prints a box-drawing tree with markers:
-              - ◀ active (true focused window/workspace/pane/surface path)
-              - ◀ here (caller surface where `programa tree` was invoked)
-              - workspace [selected]
-              - pane [focused]
-              - surface [selected]
-              Browser surfaces also include their current URL.
-
-            Example:
-              programa tree
-              programa tree --all
-              programa tree --workspace workspace:2
-              programa --json tree --all
             """
         case "focus-pane":
             return """
@@ -4895,193 +4706,6 @@ struct CMUXCLI {
             Usage: programa current-workspace
 
             Print the currently selected workspace ID.
-            """
-        case "capture-pane":
-            return """
-            Usage: programa capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]
-
-            tmux-compatible alias for reading terminal text from a pane.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Surface context (default: $PROGRAMA_SURFACE_ID)
-              --scrollback           Include scrollback
-              --lines <n>            Return only the last N lines (implies --scrollback)
-
-            Example:
-              programa capture-pane --workspace workspace:2 --surface surface:1 --scrollback --lines 200
-            """
-        case "resize-pane":
-            return """
-            Usage: programa resize-pane [--pane <id|ref>] [--workspace <id|ref>] [-L|-R|-U|-D] [--amount <n>]
-
-            tmux-compatible pane resize command.
-
-            Flags:
-              --pane <id|ref>        Pane to resize (default: focused pane)
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              -L|-R|-U|-D            Direction (default: -R)
-              --amount <n>           Resize amount (default: 1)
-            """
-        case "pipe-pane":
-            return """
-            Usage: programa pipe-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <shell-command> | <shell-command>]
-
-            Capture pane text and pipe it to a shell command via stdin.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Surface context (default: focused surface)
-              --command <command>    Shell command to run (or pass as trailing text)
-            """
-        case "wait-for":
-            return """
-            Usage: programa wait-for [-S|--signal] <name> [--timeout <seconds>]
-
-            Wait for or signal a named synchronization token.
-
-            Flags:
-              -S, --signal           Signal the token instead of waiting
-              --timeout <seconds>    Wait timeout (default: 30)
-            """
-        case "swap-pane":
-            return """
-            Usage: programa swap-pane --pane <id|ref> --target-pane <id|ref> [--workspace <id|ref>]
-
-            Swap two panes.
-
-            Flags:
-              --pane <id|ref>         Source pane (required)
-              --target-pane <id|ref>  Target pane (required)
-              --workspace <id|ref>    Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-            """
-        case "break-pane":
-            return """
-            Usage: programa break-pane [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
-
-            Move a pane/surface out into its own pane context.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --pane <id|ref>        Source pane
-              --surface <id|ref>     Source surface
-              --no-focus             Do not focus the result
-            """
-        case "join-pane":
-            return """
-            Usage: programa join-pane --target-pane <id|ref> [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
-
-            Join a pane/surface into another pane.
-
-            Flags:
-              --target-pane <id|ref>  Target pane (required)
-              --workspace <id|ref>    Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --pane <id|ref>         Source pane
-              --surface <id|ref>      Source surface
-              --no-focus              Do not focus the result
-            """
-        case "next-window", "previous-window", "last-window":
-            return """
-            Usage: programa \(command)
-
-            Switch workspace selection (next/previous/last) in the current window.
-            """
-        case "last-pane":
-            return """
-            Usage: programa last-pane [--workspace <id|ref>]
-
-            Focus the previously focused pane in a workspace.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-            """
-        case "find-window":
-            return """
-            Usage: programa find-window [--content] [--select] [query]
-
-            Find workspaces by title (and optionally terminal content).
-
-            Flags:
-              --content   Search terminal content in addition to workspace titles
-              --select    Select the first match
-            """
-        case "clear-history":
-            return """
-            Usage: programa clear-history [--workspace <id|ref>] [--surface <id|ref>]
-
-            Clear terminal scrollback history.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Surface context (default: focused surface)
-            """
-        case "set-hook":
-            return """
-            Usage: programa set-hook [--list] [--unset <event>] | <event> <command>
-
-            Manage tmux-compat hook definitions.
-
-            Flags:
-              --list            List configured hooks
-              --unset <event>   Remove a hook by event name
-            """
-        case "popup":
-            return """
-            Usage: programa popup
-
-            tmux compatibility placeholder. This command is currently not supported.
-            """
-        case "bind-key", "unbind-key", "copy-mode":
-            return """
-            Usage: programa \(command)
-
-            tmux compatibility placeholder. This command is currently not supported.
-            """
-        case "set-buffer":
-            return """
-            Usage: programa set-buffer [--name <name>] [--] <text>
-
-            Save text into a named tmux-compat buffer.
-
-            Flags:
-              --name <name>   Buffer name (default: default)
-            """
-        case "paste-buffer":
-            return """
-            Usage: programa paste-buffer [--name <name>] [--workspace <id|ref>] [--surface <id|ref>]
-
-            Paste a named tmux-compat buffer into a surface.
-
-            Flags:
-              --name <name>         Buffer name (default: default)
-              --workspace <id|ref>  Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>    Surface context (default: focused surface)
-            """
-        case "list-buffers":
-            return """
-            Usage: programa list-buffers
-
-            List tmux-compat buffers.
-            """
-        case "respawn-pane":
-            return """
-            Usage: programa respawn-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <cmd> | <cmd>]
-
-            Send a command (or default shell restart command) to a surface.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Surface context (default: focused surface)
-              --command <cmd>        Command text (or pass trailing command text)
-            """
-        case "display-message":
-            return """
-            Usage: programa display-message [-p|--print] <text>
-
-            Print text (or show it via notification bridge in parity mode).
-
-            Flags:
-              -p, --print   Print to stdout only
             """
         case "read-screen":
             return """
@@ -5322,156 +4946,6 @@ struct CMUXCLI {
             Usage: programa simulate-app-active
 
             Trigger the app-active handler used by notification focus tests.
-            """
-        case "claude-hook":
-            return """
-            Usage: programa claude-hook <session-start|active|stop|idle|notification|notify|prompt-submit> [flags]
-
-            Hook for Claude Code integration. Reads JSON from stdin.
-
-            Subcommands:
-              session-start   Signal that a Claude session has started
-              active          Alias for session-start
-              stop            Signal that a Claude session has stopped
-              idle            Alias for stop
-              notification    Forward a Claude notification
-              notify          Alias for notification
-              prompt-submit   Clear notification and set Running on user prompt
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
-
-            Example:
-              echo '{"session_id":"abc"}' | programa claude-hook session-start
-              echo '{}' | programa claude-hook stop
-            """
-        case "codex":
-            return """
-            Usage: programa codex <install-hooks|uninstall-hooks>
-
-            Manage Codex CLI hooks integration.
-
-            Subcommands:
-              install-hooks     Install programa hooks into ~/.codex/hooks.json
-              uninstall-hooks   Remove programa hooks from ~/.codex/hooks.json
-            """
-        case "codex-hook":
-            return """
-            Usage: programa codex-hook <session-start|prompt-submit|stop> [flags]
-
-            Hook for Codex CLI integration. Reads JSON from stdin.
-            Gracefully no-ops when not running inside programa.
-
-            Subcommands:
-              session-start   Register a Codex session
-              prompt-submit   Set Running status on user prompt
-              stop            Send completion notification, set Idle
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
-            """
-        case "browser":
-            return """
-            Usage: programa browser [--surface <id|ref|index> | <surface>] <subcommand> [args]
-
-            Browser automation commands. Most subcommands require a surface handle.
-            A surface can be passed as `--surface <handle>` or as the first positional token.
-            `open`/`open-split`/`new`/`identify` can run without an explicit surface.
-
-            Subcommands:
-              open|open-split|new [url] [--workspace <id|ref|index>] [--window <id|ref|index>]
-                open/open-split/new default to $PROGRAMA_WORKSPACE_ID when --workspace is omitted and --window is not set
-              goto|navigate <url> [--snapshot-after]
-              back|forward|reload [--snapshot-after]
-              url|get-url
-              focus-webview | is-webview-focused
-              snapshot [--interactive|-i] [--cursor] [--compact] [--max-depth <n>] [--selector <css>]
-              eval [--script <js> | <js>]
-              wait [--selector <css>] [--text <text>] [--url-contains <text>|--url <text>] [--load-state <interactive|complete>] [--function <js>] [--timeout-ms <ms>|--timeout <seconds>]
-              click|dblclick|hover|focus|check|uncheck|scroll-into-view [--selector <css> | <css>] [--snapshot-after]
-              type|fill [--selector <css> | <css>] [--text <text> | <text>] [--snapshot-after]
-              press|key|keydown|keyup [--key <key> | <key>] [--snapshot-after]
-              select [--selector <css> | <css>] [--value <value> | <value>] [--snapshot-after]
-              scroll [--selector <css>] [--dx <n>] [--dy <n>] [--snapshot-after]
-              screenshot [--out <path>]
-              get <url|title|text|html|value|attr|count|box|styles> [...]
-                text|html|value|count|box|styles|attr: [--selector <css> | <css>]
-                attr: [--attr <name> | <name>]
-                styles: [--property <name>]
-              is <visible|enabled|checked> [--selector <css> | <css>]
-              find <role|text|label|placeholder|alt|title|testid|first|last|nth> [...]
-                role: [--name <text>] [--exact] <role>
-                text|label|placeholder|alt|title|testid: [--exact] <text>
-                first|last: [--selector <css> | <css>]
-                nth: [--index <n> | <n>] [--selector <css> | <css>]
-              frame <main|selector> [--selector <css>]
-              dialog <accept|dismiss> [text]
-              download [wait] [--path <path>] [--timeout-ms <ms>|--timeout <seconds>]
-              cookies <get|set|clear> [--name <name>] [--value <value>] [--url <url>] [--domain <domain>] [--path <path>] [--expires <unix>] [--secure] [--all]
-              storage <local|session> <get|set|clear> [...]
-              tab <new|list|switch|close|<index>> [...]
-              console <list|clear>
-              errors <list|clear>
-              highlight [--selector <css> | <css>]
-              state <save|load> <path>
-              addinitscript|addscript [--script <js> | <js>]
-              addstyle [--css <css> | <css>]
-              viewport <width> <height>
-              geolocation|geo <latitude> <longitude>
-              offline <true|false>
-              trace <start|stop> [path]
-              network <route|unroute|requests> ...
-                route <pattern> [--abort] [--body <text>]
-                unroute <pattern>
-              screencast <start|stop>
-              input <mouse|keyboard|touch> [args...]
-              input_mouse | input_keyboard | input_touch
-              identify [--surface <id|ref|index>]
-
-            Example:
-              programa browser open https://example.com
-              programa browser surface:1 navigate https://google.com
-              programa browser --surface surface:1 snapshot --interactive
-            """
-        // Legacy browser aliases — point users to `programa browser --help`
-        case "open-browser":
-            return "Legacy alias for 'programa browser open'. Run 'programa browser --help' for details."
-        case "navigate":
-            return "Legacy alias for 'programa browser navigate'. Run 'programa browser --help' for details."
-        case "browser-back":
-            return "Legacy alias for 'programa browser back'. Run 'programa browser --help' for details."
-        case "browser-forward":
-            return "Legacy alias for 'programa browser forward'. Run 'programa browser --help' for details."
-        case "browser-reload":
-            return "Legacy alias for 'programa browser reload'. Run 'programa browser --help' for details."
-        case "get-url":
-            return "Legacy alias for 'programa browser get-url'. Run 'programa browser --help' for details."
-        case "focus-webview":
-            return "Legacy alias for 'programa browser focus-webview'. Run 'programa browser --help' for details."
-        case "is-webview-focused":
-            return "Legacy alias for 'programa browser is-webview-focused'. Run 'programa browser --help' for details."
-        case "markdown":
-            return """
-            Usage: programa markdown open <path> [options]
-                   programa markdown <path>       (shorthand for 'open')
-
-            Open a markdown file in a formatted viewer panel with live file watching.
-            The file is rendered with rich formatting (headings, code blocks, tables,
-            lists, blockquotes) and automatically updates when the file changes on disk.
-
-            Options:
-              --workspace <id|ref|index>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref|index>     Source surface to split from (default: focused surface)
-              --window <id|ref|index>      Target window
-              --direction <left|right|up|down>  Split direction (default: right)
-
-            Examples:
-              programa markdown open plan.md
-              programa markdown ~/project/CHANGELOG.md
-              programa markdown open ./docs/design.md --workspace 0
-              programa markdown open plan.md --direction down
             """
         default:
             return nil

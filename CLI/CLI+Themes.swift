@@ -724,4 +724,43 @@ extension CMUXCLI {
 
         return nil
     }
+
+    /// Subcommand help text for Themes commands, split out of the
+    /// central `subcommandUsage` switch (programa.swift) so each domain's
+    /// help text lives next to its command descriptors. Refs #101.
+    func themesSubcommandUsage(_ command: String) -> String? {
+        switch command {
+        case "themes":
+            return """
+            Usage: programa themes
+                   programa themes list
+                   programa themes set <theme>
+                   programa themes set --light <theme> [--dark <theme>]
+                   programa themes set --dark <theme> [--light <theme>]
+                   programa themes clear
+
+            When run in a TTY, `programa themes` opens an interactive theme picker with
+            live app preview. Use `programa themes list` for a plain listing.
+
+            The picker previews the selected theme across the running programa app and
+            lets you apply it to the light theme, dark theme, or both defaults.
+
+            Commands:
+              list                      List available themes and mark the current light/dark defaults
+              set <theme>               Set the same theme for both light and dark appearance
+              set --light <theme>       Set the light appearance theme
+              set --dark <theme>        Set the dark appearance theme
+              clear                     Remove the programa theme override and fall back to other config
+
+            Examples:
+              programa themes
+              programa themes list
+              programa themes set "Catppuccin Mocha"
+              programa themes set --light "Catppuccin Latte" --dark "Catppuccin Mocha"
+              programa themes clear
+            """
+        default:
+            return nil
+        }
+    }
 }

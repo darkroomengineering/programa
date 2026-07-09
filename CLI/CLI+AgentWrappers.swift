@@ -890,4 +890,104 @@ extension CMUXCLI {
             )
         )
     }
+
+    /// Subcommand help text for AgentWrappers commands, split out of the
+    /// central `subcommandUsage` switch (programa.swift) so each domain's
+    /// help text lives next to its command descriptors. Refs #101.
+    func agentWrapperSubcommandUsage(_ command: String) -> String? {
+        switch command {
+        case "claude-teams":
+            return String(localized: "cli.claude-teams.usage", defaultValue: """
+            Usage: programa claude-teams [claude-args...]
+
+            Launch Claude Code with agent teams enabled.
+
+            This command:
+              - defaults Claude teammate mode to auto
+              - sets a tmux-like environment so Claude auto mode uses programa splits
+              - sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+              - prepends a private tmux shim to PATH
+              - forwards all remaining arguments to claude
+
+            The tmux shim translates supported tmux window/pane commands into programa
+            workspace and split operations in the current programa session.
+
+            Examples:
+              programa claude-teams
+              programa claude-teams --continue
+              programa claude-teams --model sonnet
+            """)
+        case "omo":
+            return String(localized: "cli.omo.usage", defaultValue: """
+            Usage: programa omo [opencode-args...]
+
+            Launch OpenCode with oh-my-openagent in a programa-aware environment.
+
+            oh-my-openagent orchestrates multiple AI models as specialized agents in
+            parallel. This command sets up a tmux shim so agent panes become native
+            programa splits with sidebar metadata and notifications.
+
+            This command:
+              - sets a tmux-like environment so oh-my-openagent uses programa splits
+              - prepends a private tmux shim to PATH
+              - forwards all remaining arguments to opencode
+
+            The tmux shim translates tmux window/pane commands into programa workspace
+            and split operations in the current programa session.
+
+            Examples:
+              programa omo
+              programa omo --continue
+              programa omo --model claude-sonnet-4-6
+            """)
+        case "omx":
+            return String(localized: "cli.omx.usage", defaultValue: """
+            Usage: programa omx [omx-args...]
+
+            Launch Oh My Codex (OMX) with native programa pane integration.
+
+            OMX is a multi-agent orchestration layer for OpenAI Codex CLI. This
+            command sets up a tmux shim so OMX team mode, HUD, and agent panes
+            become native programa splits.
+
+            This command:
+              - sets a tmux-like environment so OMX uses programa splits
+              - prepends a private tmux shim to PATH
+              - forwards all remaining arguments to omx
+
+            Install: npm install -g oh-my-codex
+
+            Examples:
+              programa omx
+              programa omx --madmax --high
+              programa omx team
+            """)
+        case "omc":
+            return String(localized: "cli.omc.usage", defaultValue: """
+            Usage: programa omc [omc-args...]
+
+            Launch Oh My Claude Code (OMC) with native programa pane integration.
+
+            OMC is a multi-agent orchestration system for Claude Code with
+            specialized agents, smart model routing, and team pipelines. This
+            command sets up a tmux shim so OMC team mode and agent panes become
+            native programa splits.
+
+            This command:
+              - sets a tmux-like environment so OMC uses programa splits
+              - prepends a private tmux shim to PATH
+              - injects NODE_OPTIONS restore module for Claude compatibility
+              - forwards all remaining arguments to omc
+
+            Install: npm install -g oh-my-claude-sisyphus
+
+            Examples:
+              programa omc
+              programa omc team 3:claude "implement feature"
+              programa omc --watch
+            """)
+        default:
+            return nil
+        }
+    }
 }
