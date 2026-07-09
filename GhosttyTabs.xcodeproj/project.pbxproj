@@ -18,6 +18,7 @@
 		A5FF0073 /* TabManager+Splits.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0063 /* TabManager+Splits.swift */; };
 		A5FF0072 /* TabManager+Browser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0062 /* TabManager+Browser.swift */; };
 		A5FF0071 /* TabManager+GitMetadataPolling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0061 /* TabManager+GitMetadataPolling.swift */; };
+		NRTM00000004 /* GitMetadataProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000003 /* GitMetadataProber.swift */; };
 		NRTM00000002 /* TabManager+UITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000001 /* TabManager+UITestHarness.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
 			A5001005 /* GhosttyTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001015 /* GhosttyTerminalView.swift */; };
@@ -243,6 +244,7 @@
 		A5FF0063 /* TabManager+Splits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+Splits.swift"; sourceTree = "<group>"; };
 		A5FF0062 /* TabManager+Browser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+Browser.swift"; sourceTree = "<group>"; };
 		A5FF0061 /* TabManager+GitMetadataPolling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+GitMetadataPolling.swift"; sourceTree = "<group>"; };
+		NRTM00000003 /* GitMetadataProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitMetadataProber.swift; sourceTree = "<group>"; };
 		NRTM00000001 /* TabManager+UITestHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+UITestHarness.swift"; sourceTree = "<group>"; };
 			A5001014 /* GhosttyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfig.swift; sourceTree = "<group>"; };
 			A5001015 /* GhosttyTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTerminalView.swift; sourceTree = "<group>"; };
@@ -518,6 +520,7 @@
 					A5FF0062 /* TabManager+Browser.swift */,
 					A5FF0061 /* TabManager+GitMetadataPolling.swift */,
 					NRTM00000001 /* TabManager+UITestHarness.swift */,
+					NRTM00000003 /* GitMetadataProber.swift */,
 					A5001511 /* UITestRecorder.swift */,
 					A5001416 /* Workspace.swift */,
 					A5FF0002 /* WorkspaceRemoteSession.swift */,
@@ -849,6 +852,7 @@
 						A5FF0072 /* TabManager+Browser.swift in Sources */,
 						A5FF0071 /* TabManager+GitMetadataPolling.swift in Sources */,
 						NRTM00000002 /* TabManager+UITestHarness.swift in Sources */,
+						NRTM00000004 /* GitMetadataProber.swift in Sources */,
 						A5001501 /* UITestRecorder.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
 						A5FF0012 /* WorkspaceRemoteSession.swift in Sources */,
