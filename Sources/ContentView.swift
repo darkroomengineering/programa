@@ -7,7 +7,7 @@ import ObjectiveC
 import UniformTypeIdentifiers
 import WebKit
 
-private extension Color {
+extension Color {
     init?(hex: String) {
         let hex = hex.trimmingCharacters(in: .init(charactersIn: "#"))
         guard hex.count == 6, let value = UInt64(hex, radix: 16) else { return nil }
@@ -19,7 +19,7 @@ private extension Color {
     }
 }
 
-private func coloredCircleImage(color: NSColor) -> NSImage {
+func coloredCircleImage(color: NSColor) -> NSImage {
     let size = NSSize(width: 14, height: 14)
     let image = NSImage(size: size, flipped: false) { rect in
         color.setFill()
@@ -536,7 +536,7 @@ private func debugCommandPaletteKeyEventSummary(_ event: NSEvent) -> String {
         "chars=\(chars) charsIgnoring=\(charsIgnoring)"
 }
 
-private func debugCommandPaletteTextPreview(_ text: String, limit: Int = 120) -> String {
+func debugCommandPaletteTextPreview(_ text: String, limit: Int = 120) -> String {
     let escaped = text
         .replacingOccurrences(of: "\\", with: "\\\\")
         .replacingOccurrences(of: "\n", with: "\\n")
@@ -7262,7 +7262,7 @@ private struct SidebarResizerAccessibilityModifier: ViewModifier {
     }
 }
 
-private struct SidebarTabItemSettingsSnapshot: Equatable {
+struct SidebarTabItemSettingsSnapshot: Equatable {
     let sidebarShortcutHintXOffset: Double
     let sidebarShortcutHintYOffset: Double
     let alwaysShowShortcutHints: Bool
@@ -8962,7 +8962,7 @@ enum SidebarDragAutoScrollPlanner {
 }
 
 @MainActor
-private final class SidebarDragAutoScrollController: ObservableObject {
+final class SidebarDragAutoScrollController: ObservableObject {
     private weak var scrollView: NSScrollView?
     private var timer: Timer?
     private var activePlan: SidebarAutoScrollPlan?
@@ -9095,7 +9095,7 @@ private final class SidebarDragAutoScrollController: ObservableObject {
     }
 }
 
-private enum SidebarTabDragPayload {
+enum SidebarTabDragPayload {
     static let typeIdentifier = "com.darkroom.programa.sidebar-tab-reorder"
     static let dropContentType = UTType(exportedAs: typeIdentifier)
     static let dropContentTypes: [UTType] = [dropContentType]
@@ -9112,7 +9112,7 @@ private enum SidebarTabDragPayload {
     }
 }
 
-private enum BonsplitTabDragPayload {
+enum BonsplitTabDragPayload {
     static let typeIdentifier = "com.splittabbar.tabtransfer"
     static let dropContentType = UTType(exportedAs: typeIdentifier)
     static let dropContentTypes: [UTType] = [dropContentType]
@@ -9167,7 +9167,7 @@ private enum BonsplitTabDragPayload {
     }
 }
 
-private struct SidebarBonsplitTabDropDelegate: DropDelegate {
+struct SidebarBonsplitTabDropDelegate: DropDelegate {
     let targetWorkspaceId: UUID
     let tabManager: TabManager
     @Binding var selectedTabIds: Set<UUID>
@@ -9219,7 +9219,7 @@ private struct SidebarBonsplitTabDropDelegate: DropDelegate {
     }
 }
 
-private struct SidebarTabDropDelegate: DropDelegate {
+struct SidebarTabDropDelegate: DropDelegate {
     let targetTabId: UUID?
     let tabManager: TabManager
     @Binding var draggedTabId: UUID?
@@ -9358,7 +9358,7 @@ private struct SidebarTabDropDelegate: DropDelegate {
     }
 }
 
-private struct MiddleClickCapture: NSViewRepresentable {
+struct MiddleClickCapture: NSViewRepresentable {
     let onMiddleClick: () -> Void
 
     func makeNSView(context: Context) -> MiddleClickCaptureView {
@@ -9372,7 +9372,7 @@ private struct MiddleClickCapture: NSViewRepresentable {
     }
 }
 
-private final class MiddleClickCaptureView: NSView {
+final class MiddleClickCaptureView: NSView {
     var onMiddleClick: (() -> Void)?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
