@@ -33,6 +33,14 @@
 			A5001006 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5001016 /* GhosttyKit.xcframework */; };
 		A5001007 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001019 /* TerminalController.swift */; };
 		A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0004 /* TerminalController+BrowserAutomation.swift */; };
+		NRTC0011 /* TerminalController+System.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0001 /* TerminalController+System.swift */; };
+		NRTC0012 /* TerminalController+Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0002 /* TerminalController+Telemetry.swift */; };
+		NRTC0013 /* TerminalController+Window.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0003 /* TerminalController+Window.swift */; };
+		NRTC0014 /* TerminalController+Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0004 /* TerminalController+Workspace.swift */; };
+		NRTC0015 /* TerminalController+Surface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0005 /* TerminalController+Surface.swift */; };
+		NRTC0016 /* TerminalController+Pane.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0006 /* TerminalController+Pane.swift */; };
+		NRTC0017 /* TerminalController+Notification.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0007 /* TerminalController+Notification.swift */; };
+		NRTC0018 /* TerminalController+Debug.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0008 /* TerminalController+Debug.swift */; };
 		A5001500 /* ProgramaWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001510 /* ProgramaWebView.swift */; };
 		A5001501 /* UITestRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001511 /* UITestRecorder.swift */; };
 		A5001226 /* SocketControlSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001225 /* SocketControlSettings.swift */; };
@@ -259,6 +267,14 @@
 		A5001018 /* programa-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "programa-Bridging-Header.h"; sourceTree = "<group>"; };
 		A5001019 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
 		A5FF0004 /* TerminalController+BrowserAutomation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+BrowserAutomation.swift"; sourceTree = "<group>"; };
+		NRTC0001 /* TerminalController+System.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+System.swift"; sourceTree = "<group>"; };
+		NRTC0002 /* TerminalController+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Telemetry.swift"; sourceTree = "<group>"; };
+		NRTC0003 /* TerminalController+Window.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Window.swift"; sourceTree = "<group>"; };
+		NRTC0004 /* TerminalController+Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Workspace.swift"; sourceTree = "<group>"; };
+		NRTC0005 /* TerminalController+Surface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Surface.swift"; sourceTree = "<group>"; };
+		NRTC0006 /* TerminalController+Pane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Pane.swift"; sourceTree = "<group>"; };
+		NRTC0007 /* TerminalController+Notification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Notification.swift"; sourceTree = "<group>"; };
+		NRTC0008 /* TerminalController+Debug.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Debug.swift"; sourceTree = "<group>"; };
 		A5001620 /* AppleScriptSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleScriptSupport.swift; sourceTree = "<group>"; };
 		D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconDockTilePlugin.swift; sourceTree = "<group>"; };
 		A5001510 /* ProgramaWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ProgramaWebView.swift; sourceTree = "<group>"; };
@@ -531,6 +547,14 @@
 				A5FF0018 /* HostedViewPortalRegistry.swift */,
 				A5001019 /* TerminalController.swift */,
 				A5FF0004 /* TerminalController+BrowserAutomation.swift */,
+				NRTC0001 /* TerminalController+System.swift */,
+				NRTC0002 /* TerminalController+Telemetry.swift */,
+				NRTC0003 /* TerminalController+Window.swift */,
+				NRTC0004 /* TerminalController+Workspace.swift */,
+				NRTC0005 /* TerminalController+Surface.swift */,
+				NRTC0006 /* TerminalController+Pane.swift */,
+				NRTC0007 /* TerminalController+Notification.swift */,
+				NRTC0008 /* TerminalController+Debug.swift */,
 				A5001541 /* PortScanner.swift */,
 				A5001544 /* TerminalImageTransfer.swift */,
 				A5001545 /* TerminalSSHSessionDetector.swift */,
@@ -861,6 +885,14 @@
 				A5FF0008 /* HostedViewPortalRegistry.swift in Sources */,
 				A5001007 /* TerminalController.swift in Sources */,
 				A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */,
+				NRTC0011 /* TerminalController+System.swift in Sources */,
+				NRTC0012 /* TerminalController+Telemetry.swift in Sources */,
+				NRTC0013 /* TerminalController+Window.swift in Sources */,
+				NRTC0014 /* TerminalController+Workspace.swift in Sources */,
+				NRTC0015 /* TerminalController+Surface.swift in Sources */,
+				NRTC0016 /* TerminalController+Pane.swift in Sources */,
+				NRTC0017 /* TerminalController+Notification.swift in Sources */,
+				NRTC0018 /* TerminalController+Debug.swift in Sources */,
 				A5001540 /* PortScanner.swift in Sources */,
 				A5001542 /* TerminalImageTransfer.swift in Sources */,
 				A5001543 /* TerminalSSHSessionDetector.swift in Sources */,
