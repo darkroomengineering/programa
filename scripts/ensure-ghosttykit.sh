@@ -120,7 +120,7 @@ else
     echo "==> Building GhosttyKit.xcframework (this may take a few minutes)..."
     (
       cd ghostty
-      zig build -Demit-xcframework=true -Demit-macos-app=false -Dxcframework-target=universal -Doptimize=ReleaseFast
+      zig build -Demit-xcframework=true -Demit-macos-app=false -Dxcframework-target=native -Doptimize=ReleaseFast
     )
     echo "$GHOSTTY_KEY" > "$LOCAL_KEY_STAMP"
     echo "$GHOSTTY_SHA" > "$LEGACY_LOCAL_SHA_STAMP"
@@ -140,10 +140,19 @@ else
   echo "==> Cached GhosttyKit.xcframework at $CACHE_XCFRAMEWORK"
 fi
 
-MACOS_ARCHIVE="$CACHE_XCFRAMEWORK/macos-arm64_x86_64/libghostty.a"
-if [[ -f "$MACOS_ARCHIVE" ]]; then
-  # Xcode 26 can fail to resolve symbols from Ghostty's universal static archive
-  # until its ranlib index is refreshed after reuse or copy.
+# The macos slice dir is named by its arch(s): macos-arm64 (native, arm64-only) or
+# macos-arm64_x86_64 (universal) — match whichever exists. A non-matching glob leaves
+# the literal pattern, which the -f guard rejects, so this is safe under `set -e`.
+MACOS_ARCHIVE=""
+for _macos_archive in "$CACHE_XCFRAMEWORK"/macos-*/libghostty.a; do
+  if [[ -f "$_macos_archive" ]]; then
+    MACOS_ARCHIVE="$_macos_archive"
+    break
+  fi
+done
+if [[ -n "$MACOS_ARCHIVE" ]]; then
+  # Xcode 26 can fail to resolve symbols from Ghostty's static archive until its
+  # ranlib index is refreshed after reuse or copy.
   echo "==> Refreshing libghostty archive index..."
   if ! command -v xcrun >/dev/null 2>&1; then
     echo "error: xcrun is required to refresh libghostty archive index." >&2

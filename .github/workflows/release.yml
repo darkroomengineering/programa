@@ -198,8 +198,16 @@ jobs:
           fi
           npm install --global "create-dmg@${CREATE_DMG_VERSION}"
 
-      - name: Download pre-built GhosttyKit.xcframework
+      - name: Cache GhosttyKit.xcframework
+        id: cache-ghosttykit-release
         if: steps.guard_release_assets.outputs.skip_all != 'true'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: GhosttyKit.xcframework
+          key: ghosttykit-v2-${{ hashFiles('.gitmodules', 'ghostty') }}
+
+      - name: Download pre-built GhosttyKit.xcframework
+        if: steps.guard_release_assets.outputs.skip_all != 'true' && steps.cache-ghosttykit-release.outputs.cache-hit != 'true'
         run: |
           ./scripts/download-prebuilt-ghosttykit.sh
 
@@ -236,7 +244,7 @@ jobs:
           xcodebuild -scheme programa -configuration Release -derivedDataPath build-universal \
             -destination 'generic/platform=macOS' \
             -clonedSourcePackagesDirPath .spm-cache \
-            ARCHS="arm64 x86_64" \
+            ARCHS="arm64" \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO build
 
@@ -253,9 +261,9 @@ jobs:
           echo "App binary architectures: $APP_ARCHS"
           echo "CLI binary architectures: $CLI_ARCHS"
           echo "Ghostty helper architectures: $HELPER_ARCHS"
-          [[ "$APP_ARCHS" == *arm64* && "$APP_ARCHS" == *x86_64* ]]
-          [[ "$CLI_ARCHS" == *arm64* && "$CLI_ARCHS" == *x86_64* ]]
-          [[ "$HELPER_ARCHS" == *arm64* && "$HELPER_ARCHS" == *x86_64* ]]
+          [[ "$APP_ARCHS" == "arm64" ]]
+          [[ "$CLI_ARCHS" == "arm64" ]]
+          [[ "$HELPER_ARCHS" == "arm64" ]]
 
       - name: Build remote daemon release assets and inject manifest
         if: steps.guard_release_assets.outputs.skip_all != 'true'
