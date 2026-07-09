@@ -606,17 +606,6 @@
         }
       }
     },
-    "browser.action.newTab": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "new tab"
-          }
-        }
-      }
-    },
     "browser.addressBar.placeholder": {
       "extractionState": "manual",
       "localizations": {
@@ -771,17 +760,6 @@
         }
       }
     },
-    "browser.error.frameLoadInterrupted": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Frame load interrupted"
-          }
-        }
-      }
-    },
     "browser.error.insecure.message": {
       "extractionState": "manual",
       "localizations": {
@@ -855,17 +833,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Go Forward"
-          }
-        }
-      }
-    },
-    "browser.goToURL": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "go to URL"
           }
         }
       }
@@ -1108,17 +1075,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Create \"%@\""
-          }
-        }
-      }
-    },
-    "browser.import.destinationProfile.help": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Imported data goes into the selected Programa profile."
           }
         }
       }
@@ -1717,17 +1673,6 @@
         }
       }
     },
-    "browser.proceedInCmux": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Proceed in Programa"
-          }
-        }
-      }
-    },
     "browser.profile.buttonHelp": {
       "extractionState": "manual",
       "localizations": {
@@ -1856,17 +1801,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reload"
-          }
-        }
-      }
-    },
-    "browser.search.placeholder": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search"
           }
         }
       }
@@ -3609,17 +3543,6 @@
         }
       }
     },
-    "common.dontSave": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Don't Save"
-          }
-        }
-      }
-    },
     "common.installAndRelaunch": {
       "extractionState": "manual",
       "localizations": {
@@ -4214,50 +4137,6 @@
         }
       }
     },
-    "dialog.closeLastTabWindow.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This will close the last tab and close the window."
-          }
-        }
-      }
-    },
-    "dialog.closeLastTabWorkspace.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This will close the last tab and close its workspace."
-          }
-        }
-      }
-    },
-    "dialog.closeOtherTabs.message.one": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This will close 1 tab in this pane:\n%@"
-          }
-        }
-      }
-    },
-    "dialog.closeOtherTabs.message.other": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This will close %1$lld tabs in this pane:\n%2$@"
-          }
-        }
-      }
-    },
     "dialog.closeOtherTabs.title": {
       "extractionState": "manual",
       "localizations": {
@@ -4434,17 +4313,6 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmCommand.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Are you sure you want to run this command?"
-          }
-        }
-      }
-    },
     "dialog.cmuxConfig.confirmCommand.run": {
       "extractionState": "manual",
       "localizations": {
@@ -4562,149 +4430,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enable Notifications for Programa"
-          }
-        }
-      }
-    },
-    "dialog.moveFailed.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Programa could not move this tab to the selected destination."
-          }
-        }
-      }
-    },
-    "dialog.moveFailed.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Move Failed"
-          }
-        }
-      }
-    },
-    "dialog.moveTab.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose a destination for this tab."
-          }
-        }
-      }
-    },
-    "dialog.moveTab.move": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Move"
-          }
-        }
-      }
-    },
-    "dialog.moveTab.newWorkspaceCurrentWindow": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Workspace in Current Window"
-          }
-        }
-      }
-    },
-    "dialog.moveTab.selectedWorkspaceNewWindow": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Selected Workspace in New Window"
-          }
-        }
-      }
-    },
-    "dialog.moveTab.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Move Tab"
-          }
-        }
-      }
-    },
-    "dialog.quitCmux.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This will close all windows and workspaces."
-          }
-        }
-      }
-    },
-    "dialog.quitCmux.quit": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quit"
-          }
-        }
-      }
-    },
-    "dialog.quitCmux.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quit Programa?"
-          }
-        }
-      }
-    },
-    "dialog.renameTab.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enter a custom name for this tab."
-          }
-        }
-      }
-    },
-    "dialog.renameTab.placeholder": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tab name"
-          }
-        }
-      }
-    },
-    "dialog.renameTab.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rename Tab"
           }
         }
       }
@@ -4848,17 +4573,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ghostty Settings…"
-          }
-        }
-      }
-    },
-    "menu.app.openCmuxSettingsFile": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open settings.json"
           }
         }
       }
@@ -5354,28 +5068,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preferences…"
-          }
-        }
-      }
-    },
-    "menu.quitCmux": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quit Programa"
-          }
-        }
-      }
-    },
-    "menu.showNotifications": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Notifications"
           }
         }
       }
@@ -5996,39 +5688,6 @@
         }
       }
     },
-    "settings.app.fadeButtons": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fade Buttons"
-          }
-        }
-      }
-    },
-    "settings.app.fadeButtons.subtitleOff": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keep action buttons always visible."
-          }
-        }
-      }
-    },
-    "settings.app.fadeButtons.subtitleOn": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show action buttons only on hover."
-          }
-        }
-      }
-    },
     "settings.app.hideAllSidebarDetails": {
       "extractionState": "manual",
       "localizations": {
@@ -6575,39 +6234,6 @@
         }
       }
     },
-    "settings.app.showWorkspaceTitlebar": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Workspace Title Bar"
-          }
-        }
-      }
-    },
-    "settings.app.showWorkspaceTitlebar.subtitleOff": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide the folder and active title above pane tabs."
-          }
-        }
-      }
-    },
-    "settings.app.showWorkspaceTitlebar.subtitleOn": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show the folder and active title above pane tabs."
-          }
-        }
-      }
-    },
     "settings.app.sidebarBranchLayout": {
       "extractionState": "manual",
       "localizations": {
@@ -7077,28 +6703,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Within Window"
-          }
-        }
-      }
-    },
-    "settings.browser.emptyImport.choose": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose What to Import…"
-          }
-        }
-      }
-    },
-    "settings.browser.emptyImport.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import browser data"
           }
         }
       }
@@ -8159,17 +7763,6 @@
         }
       }
     },
-    "settings.sidebarAppearance.tintColorDark.picker": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dark tint"
-          }
-        }
-      }
-    },
     "settings.sidebarAppearance.tintColorDark.subtitle": {
       "extractionState": "manual",
       "localizations": {
@@ -8188,17 +7781,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Light Mode Tint"
-          }
-        }
-      }
-    },
-    "settings.sidebarAppearance.tintColorLight.picker": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Light tint"
           }
         }
       }
@@ -8291,17 +7873,6 @@
         }
       }
     },
-    "settings.workspaceColors.customColors": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Custom Colors"
-          }
-        }
-      }
-    },
     "settings.workspaceColors.customEntry": {
       "extractionState": "manual",
       "localizations": {
@@ -8346,28 +7917,6 @@
         }
       }
     },
-    "settings.workspaceColors.noCustomColors": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Custom colors: none yet. Use \"Choose Custom Color...\" from a workspace context menu."
-          }
-        }
-      }
-    },
-    "settings.workspaceColors.paletteNote": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Customize the workspace color palette used by Sidebar > Workspace Color. \"Choose Custom Color...\" entries are persisted below."
-          }
-        }
-      }
-    },
     "settings.workspaceColors.remove": {
       "extractionState": "manual",
       "localizations": {
@@ -8397,17 +7946,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reset"
-          }
-        }
-      }
-    },
-    "settings.workspaceColors.resetPalette.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Restore built-in defaults and clear all custom colors."
           }
         }
       }
@@ -8929,28 +8467,6 @@
         }
       }
     },
-    "sidebar.indicator.leftRail": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Left Rail"
-          }
-        }
-      }
-    },
-    "sidebar.indicator.solidFill": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Solid Fill"
-          }
-        }
-      }
-    },
     "sidebar.metadata.showLess": {
       "extractionState": "manual",
       "localizations": {
@@ -9083,17 +8599,6 @@
         }
       }
     },
-    "sidebar.remote.badge": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SSH"
-          }
-        }
-      }
-    },
     "sidebar.remote.help.connected": {
       "extractionState": "manual",
       "localizations": {
@@ -9156,17 +8661,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "remote host"
-          }
-        }
-      }
-    },
-    "sidebar.remote.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SSH • %@"
           }
         }
       }
@@ -9431,17 +8925,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld unread notifications"
-          }
-        }
-      }
-    },
-    "tab.untitled": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Untitled Tab"
           }
         }
       }
@@ -10355,50 +9838,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Insert new workspaces at the top of the list."
-          }
-        }
-      }
-    },
-    "workspace.tooltip.newBrowser": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Browser"
-          }
-        }
-      }
-    },
-    "workspace.tooltip.newTerminal": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Terminal"
-          }
-        }
-      }
-    },
-    "workspace.tooltip.splitDown": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Split Down"
-          }
-        }
-      }
-    },
-    "workspace.tooltip.splitRight": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Split Right"
           }
         }
       }
