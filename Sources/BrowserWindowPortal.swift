@@ -951,8 +951,8 @@ final class WindowBrowserHostView: NSView {
     }
 
     private func hostedInspectorDividerCandidate(in slot: WindowBrowserSlotView) -> HostedInspectorDividerHit? {
-        let inspectorCandidates = Self.visibleDescendants(in: slot)
-            .filter { Self.isVisibleHostedInspectorCandidate($0) && Self.isInspectorView($0) }
+        let inspectorCandidates = InspectorDock.visibleDescendants(in: slot)
+            .filter { InspectorDock.isVisibleCandidate($0) && InspectorDock.isInspectorView($0) }
             .sorted { lhs, rhs in
                 let lhsFrame = slot.convert(lhs.bounds, from: lhs)
                 let rhsFrame = slot.convert(rhs.bounds, from: rhs)
@@ -987,9 +987,9 @@ final class WindowBrowserHostView: NSView {
             guard let containerView = inspectorView.superview else { break }
 
             let pageCandidates = containerView.subviews.compactMap { candidate -> (view: NSView, dockSide: HostedInspectorDockSide)? in
-                guard Self.isVisibleHostedInspectorSiblingCandidate(candidate) else { return nil }
+                guard InspectorDock.isVisibleSiblingCandidate(candidate, requireMinWidth: false) else { return nil }
                 guard candidate !== inspectorView else { return nil }
-                guard Self.verticalOverlap(between: candidate.frame, and: inspectorView.frame) > 8 else {
+                guard InspectorDock.verticalOverlap(between: candidate.frame, and: inspectorView.frame) > 8 else {
                     return nil
                 }
                 guard let dockSide = HostedInspectorDockSide.resolve(
@@ -1035,13 +1035,13 @@ final class WindowBrowserHostView: NSView {
     private func hostedInspectorDividerCandidateScore(_ hit: HostedInspectorDividerHit) -> CGFloat {
         let pageFrame = hit.slotView.convert(hit.pageView.bounds, from: hit.pageView)
         let inspectorFrame = hit.slotView.convert(hit.inspectorView.bounds, from: hit.inspectorView)
-        let overlap = Self.verticalOverlap(between: pageFrame, and: inspectorFrame)
+        let overlap = InspectorDock.verticalOverlap(between: pageFrame, and: inspectorFrame)
         let coverageWidth = max(pageFrame.maxX, inspectorFrame.maxX) - min(pageFrame.minX, inspectorFrame.minX)
         return (overlap * 1_000) + coverageWidth + pageFrame.width
     }
 
     private func hostedInspectorPageCandidateScore(_ pageView: NSView, inspectorView: NSView) -> CGFloat {
-        let overlap = Self.verticalOverlap(between: pageView.frame, and: inspectorView.frame)
+        let overlap = InspectorDock.verticalOverlap(between: pageView.frame, and: inspectorView.frame)
         let coverageWidth = max(pageView.frame.maxX, inspectorView.frame.maxX) - min(pageView.frame.minX, inspectorView.frame.minX)
         return (overlap * 1_000) + coverageWidth + pageView.frame.width
     }
@@ -1083,8 +1083,8 @@ final class WindowBrowserHostView: NSView {
             minimumInspectorWidth: Self.minimumHostedInspectorWidth,
             reason: reason
         )
-        return !Self.rectApproximatelyEqual(oldPageFrame, hit.pageView.frame, epsilon: 0.5) ||
-            !Self.rectApproximatelyEqual(oldInspectorFrame, hit.inspectorView.frame, epsilon: 0.5)
+        return !InspectorDock.rectApproximatelyEqual(oldPageFrame, hit.pageView.frame, epsilon: 0.5) ||
+            !InspectorDock.rectApproximatelyEqual(oldInspectorFrame, hit.inspectorView.frame, epsilon: 0.5)
     }
 
     @discardableResult
@@ -1107,8 +1107,8 @@ final class WindowBrowserHostView: NSView {
 
         let oldPageFrame = hit.pageView.frame
         let oldInspectorFrame = hit.inspectorView.frame
-        let pageChanged = !Self.rectApproximatelyEqual(pageFrame, oldPageFrame, epsilon: 0.5)
-        let inspectorChanged = !Self.rectApproximatelyEqual(inspectorFrame, oldInspectorFrame, epsilon: 0.5)
+        let pageChanged = !InspectorDock.rectApproximatelyEqual(pageFrame, oldPageFrame, epsilon: 0.5)
+        let inspectorChanged = !InspectorDock.rectApproximatelyEqual(inspectorFrame, oldInspectorFrame, epsilon: 0.5)
         guard pageChanged || inspectorChanged else {
             return (pageFrame, inspectorFrame)
         }
@@ -1145,47 +1145,9 @@ final class WindowBrowserHostView: NSView {
         return (pageFrame, inspectorFrame)
     }
 
-    private static func verticalOverlap(between lhs: NSRect, and rhs: NSRect) -> CGFloat {
-        max(0, min(lhs.maxY, rhs.maxY) - max(lhs.minY, rhs.minY))
-    }
-
-    private static func rectApproximatelyEqual(_ lhs: NSRect, _ rhs: NSRect, epsilon: CGFloat = 0.01) -> Bool {
-        abs(lhs.origin.x - rhs.origin.x) <= epsilon &&
-            abs(lhs.origin.y - rhs.origin.y) <= epsilon &&
-            abs(lhs.size.width - rhs.size.width) <= epsilon &&
-            abs(lhs.size.height - rhs.size.height) <= epsilon
-    }
-
     private static func sizeApproximatelyEqual(_ lhs: NSSize, _ rhs: NSSize, epsilon: CGFloat = 0.01) -> Bool {
         abs(lhs.width - rhs.width) <= epsilon &&
             abs(lhs.height - rhs.height) <= epsilon
-    }
-
-    private static func visibleDescendants(in root: NSView) -> [NSView] {
-        var descendants: [NSView] = []
-        var stack = Array(root.subviews.reversed())
-        while let view = stack.popLast() {
-            descendants.append(view)
-            stack.append(contentsOf: view.subviews.reversed())
-        }
-        return descendants
-    }
-
-    private static func isInspectorView(_ view: NSView) -> Bool {
-        String(describing: type(of: view)).contains("WKInspector")
-    }
-
-    private static func isVisibleHostedInspectorCandidate(_ view: NSView) -> Bool {
-        !view.isHidden &&
-            view.alphaValue > 0 &&
-            view.frame.width > 1 &&
-            view.frame.height > 1
-    }
-
-    private static func isVisibleHostedInspectorSiblingCandidate(_ view: NSView) -> Bool {
-        !view.isHidden &&
-            view.alphaValue > 0 &&
-            view.frame.height > 1
     }
 
     private static func collectSplitDividerRegions(
@@ -2400,15 +2362,10 @@ final class WindowBrowserPortal: HostedViewPortalRegistry {
     private static func hasVisibleInspectorDescendant(in root: NSView) -> Bool {
         var stack: [NSView] = [root]
         while let current = stack.popLast() {
-            if current !== root {
-                let className = String(describing: type(of: current))
-                if className.contains("WKInspector"),
-                   !current.isHidden,
-                   current.alphaValue > 0,
-                   current.frame.width > 1,
-                   current.frame.height > 1 {
-                    return true
-                }
+            if current !== root,
+               InspectorDock.isInspectorView(current),
+               InspectorDock.isVisibleCandidate(current) {
+                return true
             }
             stack.append(contentsOf: current.subviews)
         }
@@ -2468,7 +2425,7 @@ final class WindowBrowserPortal: HostedViewPortalRegistry {
         var count = 0
         while let current = stack.popLast() {
             for subview in current.subviews {
-                if String(describing: type(of: subview)).contains("WKInspector") {
+                if InspectorDock.isInspectorView(subview) {
                     count += 1
                 }
                 stack.append(subview)
@@ -2519,8 +2476,7 @@ final class WindowBrowserPortal: HostedViewPortalRegistry {
             if view === primaryWebView { continue }
             let className = String(describing: type(of: view))
             guard className.contains("WK") else { continue }
-            if className.contains("WKInspector") &&
-                (view.isHidden || view.alphaValue <= 0 || view.frame.width <= 1 || view.frame.height <= 1) {
+            if InspectorDock.isInspectorView(view) && !InspectorDock.isVisibleCandidate(view) {
                 continue
             }
             append(view)
