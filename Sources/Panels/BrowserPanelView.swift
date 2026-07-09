@@ -4747,8 +4747,8 @@ struct WebViewRepresentable: NSViewRepresentable {
 
             let nextFrames = (page: hit.pageView.frame, inspector: hit.inspectorView.frame)
             if let lastLoggedHostedInspectorFrames,
-               Self.rectApproximatelyEqual(lastLoggedHostedInspectorFrames.page, nextFrames.page),
-               Self.rectApproximatelyEqual(lastLoggedHostedInspectorFrames.inspector, nextFrames.inspector) {
+               InspectorDock.rectApproximatelyEqual(lastLoggedHostedInspectorFrames.page, nextFrames.page),
+               InspectorDock.rectApproximatelyEqual(lastLoggedHostedInspectorFrames.inspector, nextFrames.inspector) {
                 return
             }
 
@@ -4756,13 +4756,6 @@ struct WebViewRepresentable: NSViewRepresentable {
             debugLogHostedInspectorFrames(stage: "\(reason).layout", hit: hit)
         }
 #endif
-
-        private static func rectApproximatelyEqual(_ lhs: NSRect, _ rhs: NSRect, epsilon: CGFloat = 0.5) -> Bool {
-            abs(lhs.origin.x - rhs.origin.x) <= epsilon &&
-                abs(lhs.origin.y - rhs.origin.y) <= epsilon &&
-                abs(lhs.width - rhs.width) <= epsilon &&
-                abs(lhs.height - rhs.height) <= epsilon
-        }
 
         private static func sizeApproximatelyEqual(_ lhs: NSSize, _ rhs: NSSize, epsilon: CGFloat = 0.5) -> Bool {
             abs(lhs.width - rhs.width) <= epsilon &&
@@ -5612,8 +5605,8 @@ struct WebViewRepresentable: NSViewRepresentable {
                 return preferredHit
             }
 
-            let inspectorCandidates = Self.visibleDescendants(in: root)
-                .filter { Self.isVisibleHostedInspectorCandidate($0) && Self.isInspectorView($0) }
+            let inspectorCandidates = InspectorDock.visibleDescendants(in: root)
+                .filter { InspectorDock.isVisibleCandidate($0) && InspectorDock.isInspectorView($0) }
                 .sorted { lhs, rhs in
                     let lhsFrame = root.convert(lhs.bounds, from: lhs)
                     let rhsFrame = root.convert(rhs.bounds, from: rhs)
@@ -5642,7 +5635,7 @@ struct WebViewRepresentable: NSViewRepresentable {
                   let inspectorLeaf = hostedInspectorFrontendWebView,
                   pageLeaf.isDescendant(of: root),
                   inspectorLeaf.isDescendant(of: root),
-                  Self.isVisibleHostedInspectorCandidate(inspectorLeaf) else {
+                  InspectorDock.isVisibleCandidate(inspectorLeaf) else {
                 return nil
             }
             return hostedInspectorDividerCandidate(
@@ -5670,8 +5663,8 @@ struct WebViewRepresentable: NSViewRepresentable {
                     continue
                 }
                 guard pageView !== inspectorView,
-                      Self.isVisibleHostedInspectorSiblingCandidate(pageView),
-                      Self.verticalOverlap(between: pageView.frame, and: inspectorView.frame) > 8,
+                      InspectorDock.isVisibleSiblingCandidate(pageView, requireMinWidth: false),
+                      InspectorDock.verticalOverlap(between: pageView.frame, and: inspectorView.frame) > 8,
                       let dockSide = HostedInspectorDockSide.resolve(
                           pageFrame: pageView.frame,
                           inspectorFrame: inspectorView.frame
@@ -5709,9 +5702,9 @@ struct WebViewRepresentable: NSViewRepresentable {
                 guard let containerView = inspectorView.superview else { break }
 
                 let pageCandidates = containerView.subviews.compactMap { candidate -> (view: NSView, dockSide: HostedInspectorDockSide)? in
-                    guard Self.isVisibleHostedInspectorSiblingCandidate(candidate) else { return nil }
+                    guard InspectorDock.isVisibleSiblingCandidate(candidate, requireMinWidth: false) else { return nil }
                     guard candidate !== inspectorView else { return nil }
-                    guard Self.verticalOverlap(between: candidate.frame, and: inspectorView.frame) > 8 else {
+                    guard InspectorDock.verticalOverlap(between: candidate.frame, and: inspectorView.frame) > 8 else {
                         return nil
                     }
                     guard let dockSide = HostedInspectorDockSide.resolve(
@@ -5744,13 +5737,13 @@ struct WebViewRepresentable: NSViewRepresentable {
         private func hostedInspectorDividerCandidateScore(_ hit: HostedInspectorDividerHit) -> CGFloat {
             let pageFrame = convert(hit.pageView.bounds, from: hit.pageView)
             let inspectorFrame = convert(hit.inspectorView.bounds, from: hit.inspectorView)
-            let overlap = Self.verticalOverlap(between: pageFrame, and: inspectorFrame)
+            let overlap = InspectorDock.verticalOverlap(between: pageFrame, and: inspectorFrame)
             let coverageWidth = max(pageFrame.maxX, inspectorFrame.maxX) - min(pageFrame.minX, inspectorFrame.minX)
             return (overlap * 1_000) + coverageWidth + pageFrame.width
         }
 
         private func hostedInspectorPageCandidateScore(_ pageView: NSView, inspectorView: NSView) -> CGFloat {
-            let overlap = Self.verticalOverlap(between: pageView.frame, and: inspectorView.frame)
+            let overlap = InspectorDock.verticalOverlap(between: pageView.frame, and: inspectorView.frame)
             let coverageWidth = max(pageView.frame.maxX, inspectorView.frame.maxX) - min(pageView.frame.minX, inspectorView.frame.minX)
             return (overlap * 1_000) + coverageWidth + pageView.frame.width
         }
@@ -5857,8 +5850,8 @@ struct WebViewRepresentable: NSViewRepresentable {
 
             let oldPageFrame = hit.pageView.frame
             let oldInspectorFrame = hit.inspectorView.frame
-            let pageChanged = !Self.rectApproximatelyEqual(pageFrame, oldPageFrame, epsilon: 0.5)
-            let inspectorChanged = !Self.rectApproximatelyEqual(inspectorFrame, oldInspectorFrame, epsilon: 0.5)
+            let pageChanged = !InspectorDock.rectApproximatelyEqual(pageFrame, oldPageFrame, epsilon: 0.5)
+            let inspectorChanged = !InspectorDock.rectApproximatelyEqual(inspectorFrame, oldInspectorFrame, epsilon: 0.5)
             guard pageChanged || inspectorChanged else {
                 return (pageFrame, inspectorFrame)
             }
@@ -5900,16 +5893,6 @@ struct WebViewRepresentable: NSViewRepresentable {
             return (pageFrame, inspectorFrame)
         }
 
-        private static func visibleDescendants(in root: NSView) -> [NSView] {
-            var descendants: [NSView] = []
-            var stack = Array(root.subviews.reversed())
-            while let view = stack.popLast() {
-                descendants.append(view)
-                stack.append(contentsOf: view.subviews.reversed())
-            }
-            return descendants
-        }
-
         private static func directChild(of container: NSView, containing descendant: NSView) -> NSView? {
             var current: NSView? = descendant
             var directChild: NSView?
@@ -5919,27 +5902,6 @@ struct WebViewRepresentable: NSViewRepresentable {
             }
             guard current === container else { return nil }
             return directChild
-        }
-
-        fileprivate static func isInspectorView(_ view: NSView) -> Bool {
-            String(describing: type(of: view)).contains("WKInspector")
-        }
-
-        fileprivate static func isVisibleHostedInspectorCandidate(_ view: NSView) -> Bool {
-            !view.isHidden &&
-                view.alphaValue > 0 &&
-                view.frame.width > 1 &&
-                view.frame.height > 1
-        }
-
-        private static func isVisibleHostedInspectorSiblingCandidate(_ view: NSView) -> Bool {
-            !view.isHidden &&
-                view.alphaValue > 0 &&
-                view.frame.height > 1
-        }
-
-        private static func verticalOverlap(between lhs: NSRect, and rhs: NSRect) -> CGFloat {
-            max(0, min(lhs.maxY, rhs.maxY) - max(lhs.minY, rhs.minY))
         }
     }
 
@@ -5980,42 +5942,12 @@ struct WebViewRepresentable: NSViewRepresentable {
     }
     #endif
 
-    private static func responderChainContains(_ start: NSResponder?, target: NSResponder) -> Bool {
-        var r = start
-        var hops = 0
-        while let cur = r, hops < 64 {
-            if cur === target { return true }
-            r = cur.nextResponder
-            hops += 1
-        }
-        return false
-    }
-
-    private static func isLikelyInspectorResponder(_ responder: NSResponder?) -> Bool {
-        guard let responder else { return false }
-        let responderType = String(describing: type(of: responder))
-        if responderType.contains("WKInspector") {
-            return true
-        }
-        guard let view = responder as? NSView else { return false }
-        var node: NSView? = view
-        var hops = 0
-        while let current = node, hops < 64 {
-            if String(describing: type(of: current)).contains("WKInspector") {
-                return true
-            }
-            node = current.superview
-            hops += 1
-        }
-        return false
-    }
-
     private static func firstResponderResignState(
         _ responder: NSResponder?,
         webView: WKWebView
     ) -> (needsResign: Bool, flags: String) {
-        let inWebViewChain = responderChainContains(responder, target: webView)
-        let inspectorResponder = isLikelyInspectorResponder(responder)
+        let inWebViewChain = InspectorDock.responderChainContains(responder, target: webView)
+        let inspectorResponder = InspectorDock.isLikelyInspectorResponder(responder)
         let needsResign = inWebViewChain || inspectorResponder
         return (
             needsResign: needsResign,
@@ -6100,8 +6032,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             if view === primaryWebView { continue }
             let className = String(describing: type(of: view))
             guard className.contains("WK") else { continue }
-            if className.contains("WKInspector") &&
-                (view.isHidden || view.alphaValue <= 0 || view.frame.width <= 1 || view.frame.height <= 1) {
+            if InspectorDock.isInspectorView(view) && !InspectorDock.isVisibleCandidate(view) {
                 continue
             }
             append(view)
@@ -6671,7 +6602,7 @@ struct WebViewRepresentable: NSViewRepresentable {
 #endif
             return
         }
-        if isPanelFocused && responderChainContains(window.firstResponder, target: webView) {
+        if isPanelFocused && InspectorDock.responderChainContains(window.firstResponder, target: webView) {
             panel.noteWebViewFocused()
         }
         if shouldFocusWebView {
@@ -6684,7 +6615,7 @@ struct WebViewRepresentable: NSViewRepresentable {
 #endif
                 return
             }
-            if responderChainContains(window.firstResponder, target: webView) {
+            if InspectorDock.responderChainContains(window.firstResponder, target: webView) {
 #if DEBUG
                 dlog(
                     "browser.focus.content.apply panel=\(panel.id.uuidString.prefix(5)) " +
@@ -6703,7 +6634,7 @@ struct WebViewRepresentable: NSViewRepresentable {
                 "action=focus result=\(result ? 1 : 0) fr=\(responderDescription(window.firstResponder))"
             )
 #endif
-        } else if !isPanelFocused && responderChainContains(window.firstResponder, target: webView) {
+        } else if !isPanelFocused && InspectorDock.responderChainContains(window.firstResponder, target: webView) {
             // Only force-resign WebView focus when this panel itself is not focused.
             // If the panel is focused but the omnibar-focus state is briefly stale, aggressively
             // clearing first responder here can undo programmatic webview focus (socket tests).

@@ -358,15 +358,7 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = String(localized: "browser.error.insecure.title", defaultValue: "Connection isn\u{2019}t secure")
-        alert.informativeText = String(localized: "browser.error.insecure.message", defaultValue: "\(host) uses plain HTTP, so traffic can be read or modified on the network.\n\nOpen this URL in your default browser, or proceed in Programa.")
-        alert.addButton(withTitle: String(localized: "browser.openInDefaultBrowser", defaultValue: "Open in Default Browser"))
-        alert.addButton(withTitle: String(localized: "browser.proceedInPrograma", defaultValue: "Proceed in Programa"))
-        alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
-        alert.showsSuppressionButton = true
-        alert.suppressionButton?.title = String(localized: "browser.alwaysAllowHost", defaultValue: "Always allow this host in Programa")
+        let alert = BrowserInsecureHTTPAlertBuilder.makeAlert(host: host)
 
         let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak alert] response in
             if browserShouldPersistInsecureHTTPAllowlistSelection(
@@ -443,37 +435,13 @@ private class PopupUIDelegate: NSObject, WKUIDelegate {
 
     // MARK: - JS Dialogs (parity with main browser)
 
-    private func javaScriptDialogTitle(for webView: WKWebView) -> String {
-        if let absolute = webView.url?.absoluteString, !absolute.isEmpty {
-            return String(localized: "browser.dialog.pageSaysAt", defaultValue: "The page at \(absolute) says:")
-        }
-        return String(localized: "browser.dialog.pageSays", defaultValue: "This page says:")
-    }
-
-    private func presentDialog(
-        _ alert: NSAlert,
-        for webView: WKWebView,
-        completion: @escaping (NSApplication.ModalResponse) -> Void
-    ) {
-        if let window = webView.window {
-            alert.beginSheetModal(for: window, completionHandler: completion)
-            return
-        }
-        completion(alert.runModal())
-    }
-
     func webView(
         _ webView: WKWebView,
         runJavaScriptAlertPanelWithMessage message: String,
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping () -> Void
     ) {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = javaScriptDialogTitle(for: webView)
-        alert.informativeText = message
-        alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
-        presentDialog(alert, for: webView) { _ in completionHandler() }
+        BrowserJSDialogPresenter.presentAlert(message: message, webView: webView, completionHandler: completionHandler)
     }
 
     func webView(
@@ -482,15 +450,7 @@ private class PopupUIDelegate: NSObject, WKUIDelegate {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping (Bool) -> Void
     ) {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = javaScriptDialogTitle(for: webView)
-        alert.informativeText = message
-        alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
-        alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
-        presentDialog(alert, for: webView) { response in
-            completionHandler(response == .alertFirstButtonReturn)
-        }
+        BrowserJSDialogPresenter.presentConfirm(message: message, webView: webView, completionHandler: completionHandler)
     }
 
     func webView(
@@ -500,24 +460,12 @@ private class PopupUIDelegate: NSObject, WKUIDelegate {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping (String?) -> Void
     ) {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = javaScriptDialogTitle(for: webView)
-        alert.informativeText = prompt
-        alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
-        alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
-
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        field.stringValue = defaultText ?? ""
-        alert.accessoryView = field
-
-        presentDialog(alert, for: webView) { response in
-            if response == .alertFirstButtonReturn {
-                completionHandler(field.stringValue)
-            } else {
-                completionHandler(nil)
-            }
-        }
+        BrowserJSDialogPresenter.presentTextInput(
+            prompt: prompt,
+            defaultText: defaultText,
+            webView: webView,
+            completionHandler: completionHandler
+        )
     }
 
     func webView(
@@ -526,13 +474,7 @@ private class PopupUIDelegate: NSObject, WKUIDelegate {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping ([URL]?) -> Void
     ) {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-        panel.canChooseDirectories = parameters.allowsDirectories
-        panel.canChooseFiles = true
-        panel.begin { result in
-            completionHandler(result == .OK ? panel.urls : nil)
-        }
+        BrowserJSDialogPresenter.presentOpenPanel(parameters: parameters, completionHandler: completionHandler)
     }
 
     func webView(
@@ -542,7 +484,7 @@ private class PopupUIDelegate: NSObject, WKUIDelegate {
         type: WKMediaCaptureType,
         decisionHandler: @escaping (WKPermissionDecision) -> Void
     ) {
-        decisionHandler(.prompt)
+        BrowserJSDialogPresenter.decideMediaCapturePermission(decisionHandler: decisionHandler)
     }
 }
 

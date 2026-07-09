@@ -3274,7 +3274,7 @@ final class BrowserPanel: Panel, ObservableObject {
             }
         }
 
-        if Self.responderChainContains(window.firstResponder, target: webView) {
+        if InspectorDock.responderChainContains(window.firstResponder, target: webView) {
             noteWebViewFocused()
             return
         }
@@ -3293,7 +3293,7 @@ final class BrowserPanel: Panel, ObservableObject {
 
         guard let window = webView.window, !webView.isHiddenOrHasHiddenAncestor else { return false }
 
-        if Self.responderChainContains(window.firstResponder, target: webView) {
+        if InspectorDock.responderChainContains(window.firstResponder, target: webView) {
             // Prevent omnibar auto-focus from immediately stealing first responder back.
             suppressOmnibarAutofocus(for: 1.5)
             noteWebViewFocused()
@@ -3308,7 +3308,7 @@ final class BrowserPanel: Panel, ObservableObject {
         DispatchQueue.main.async { [weak self, weak window, weak webView] in
             guard let self, let window, let webView else { return }
             guard webView.window === window else { return }
-            if !Self.responderChainContains(window.firstResponder, target: webView),
+            if !InspectorDock.responderChainContains(window.firstResponder, target: webView),
                window.makeFirstResponder(webView) {
                 self.suppressOmnibarAutofocus(for: 1.5)
                 self.noteWebViewFocused()
@@ -3321,7 +3321,7 @@ final class BrowserPanel: Panel, ObservableObject {
     func unfocus() {
         invalidateSearchFocusRequests(reason: "panelUnfocus")
         guard let window = webView.window else { return }
-        if Self.responderChainContains(window.firstResponder, target: webView) {
+        if InspectorDock.responderChainContains(window.firstResponder, target: webView) {
             window.makeFirstResponder(nil)
         }
     }
@@ -3893,14 +3893,7 @@ final class BrowserPanel: Panel, ObservableObject {
         guard let host = BrowserInsecureHTTPSettings.normalizeHost(url.host ?? "") else { return }
 
         let alert = insecureHTTPAlertFactory()
-        alert.alertStyle = .warning
-        alert.messageText = String(localized: "browser.error.insecure.title", defaultValue: "Connection isn\u{2019}t secure")
-        alert.informativeText = String(localized: "browser.error.insecure.message", defaultValue: "\(host) uses plain HTTP, so traffic can be read or modified on the network.\n\nOpen this URL in your default browser, or proceed in Programa.")
-        alert.addButton(withTitle: String(localized: "browser.openInDefaultBrowser", defaultValue: "Open in Default Browser"))
-        alert.addButton(withTitle: String(localized: "browser.proceedInPrograma", defaultValue: "Proceed in Programa"))
-        alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
-        alert.showsSuppressionButton = true
-        alert.suppressionButton?.title = String(localized: "browser.alwaysAllowHost", defaultValue: "Always allow this host in Programa")
+        BrowserInsecureHTTPAlertBuilder.configure(alert, host: host)
 
         let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self, weak alert] response in
             self?.handleInsecureHTTPAlertResponse(
@@ -4253,36 +4246,20 @@ extension BrowserPanel {
         webView.stopLoading()
     }
 
-    private static func windowContainsInspectorViews(_ root: NSView) -> Bool {
-        if String(describing: type(of: root)).contains("WKInspector") {
-            return true
-        }
-        for subview in root.subviews where windowContainsInspectorViews(subview) {
-            return true
-        }
-        return false
-    }
-
-    private static func isDetachedInspectorWindow(_ window: NSWindow) -> Bool {
-        guard window.title.hasPrefix("Web Inspector") else { return false }
-        guard let contentView = window.contentView else { return false }
-        return windowContainsInspectorViews(contentView)
-    }
-
     private func detachedDeveloperToolsWindows() -> [NSWindow] {
         let mainWindow = webView.window
         return NSApp.windows.filter { candidate in
             if let mainWindow, candidate === mainWindow {
                 return false
             }
-            return Self.isDetachedInspectorWindow(candidate)
+            return InspectorDock.isDetachedInspectorWindow(candidate)
         }
     }
 
     private func hasAttachedDeveloperToolsLayout() -> Bool {
         guard let container = webView.superview else { return false }
-        return Self.visibleDescendants(in: container)
-            .contains { Self.isVisibleSideDockInspectorCandidate($0) && Self.isInspectorView($0) }
+        return InspectorDock.visibleDescendants(in: container)
+            .contains { InspectorDock.isVisibleCandidate($0) && InspectorDock.isInspectorView($0) }
     }
 
     private func setPreferredDeveloperToolsPresentation(_ next: DeveloperToolsPresentation) {
@@ -4317,7 +4294,7 @@ extension BrowserPanel {
             guard let self,
                   let window = notification.object as? NSWindow else { return }
             let isDetachedInspectorWindow = MainActor.assumeIsolated {
-                Self.isDetachedInspectorWindow(window)
+                InspectorDock.isDetachedInspectorWindow(window)
             }
             guard isDetachedInspectorWindow else { return }
             DispatchQueue.main.async { [weak self] in
@@ -4346,7 +4323,7 @@ extension BrowserPanel {
         guard shouldDismissDetachedDeveloperToolsWindows() else { return }
         guard preferredDeveloperToolsVisible || isDeveloperToolsVisible(),
               let mainWindow = webView.window else { return }
-        for window in NSApp.windows where window !== mainWindow && Self.isDetachedInspectorWindow(window) {
+        for window in NSApp.windows where window !== mainWindow && InspectorDock.isDetachedInspectorWindow(window) {
 #if DEBUG
             dlog(
                 "browser.devtools strayWindow.close panel=\(id.uuidString.prefix(5)) " +
@@ -5132,7 +5109,7 @@ extension BrowserPanel {
         }
 
         if let window,
-           Self.responderChainContains(window.firstResponder, target: webView) {
+           InspectorDock.responderChainContains(window.firstResponder, target: webView) {
             return .browser(.webView)
         }
 
@@ -5206,7 +5183,7 @@ extension BrowserPanel {
             return .browser(.findField)
         }
 
-        if Self.responderChainContains(responder, target: webView) {
+        if InspectorDock.responderChainContains(responder, target: webView) {
             return .browser(.webView)
         }
 
@@ -5237,7 +5214,7 @@ extension BrowserPanel {
 #endif
             return yielded
         case .webView:
-            guard Self.responderChainContains(window.firstResponder, target: webView) else { return false }
+            guard InspectorDock.responderChainContains(window.firstResponder, target: webView) else { return false }
             return window.makeFirstResponder(nil)
         }
     }
@@ -5571,7 +5548,7 @@ extension BrowserPanel {
         var count = 0
         while let current = stack.popLast() {
             for subview in current.subviews {
-                if String(describing: type(of: subview)).contains("WKInspector") {
+                if InspectorDock.isInspectorView(subview) {
                     count += 1
                 }
                 stack.append(subview)
@@ -5618,21 +5595,10 @@ private extension BrowserPanel {
         return true
     }
 
-    static func responderChainContains(_ start: NSResponder?, target: NSResponder) -> Bool {
-        var r = start
-        var hops = 0
-        while let cur = r, hops < 64 {
-            if cur === target { return true }
-            r = cur.nextResponder
-            hops += 1
-        }
-        return false
-    }
-
     func hasSideDockedDeveloperToolsLayout() -> Bool {
         guard let container = webView.superview else { return false }
-        return Self.visibleDescendants(in: container)
-            .filter { Self.isVisibleSideDockInspectorCandidate($0) && Self.isInspectorView($0) }
+        return InspectorDock.visibleDescendants(in: container)
+            .filter { InspectorDock.isVisibleCandidate($0) && InspectorDock.isInspectorView($0) }
             .contains { inspectorCandidate in
                 hasSideDockedInspectorSibling(startingAt: inspectorCandidate, root: container)
             }
@@ -5644,13 +5610,13 @@ private extension BrowserPanel {
         while let inspectorView = current, inspectorView !== root {
             guard let containerView = inspectorView.superview else { break }
             let hasSideDockedSibling = containerView.subviews.contains { candidate in
-                guard Self.isVisibleSideDockSiblingCandidate(candidate) else { return false }
+                guard InspectorDock.isVisibleSiblingCandidate(candidate, requireMinWidth: true) else { return false }
                 guard candidate !== inspectorView else { return false }
                 let horizontallyAdjacent =
                     candidate.frame.maxX <= inspectorView.frame.minX + 1 ||
                     candidate.frame.minX >= inspectorView.frame.maxX - 1
                 guard horizontallyAdjacent else { return false }
-                return Self.verticalOverlap(between: candidate.frame, and: inspectorView.frame) > 8
+                return InspectorDock.verticalOverlap(between: candidate.frame, and: inspectorView.frame) > 8
             }
             if hasSideDockedSibling {
                 return true
@@ -5660,38 +5626,6 @@ private extension BrowserPanel {
         }
 
         return false
-    }
-
-    static func visibleDescendants(in root: NSView) -> [NSView] {
-        var descendants: [NSView] = []
-        var stack = Array(root.subviews.reversed())
-        while let view = stack.popLast() {
-            descendants.append(view)
-            stack.append(contentsOf: view.subviews.reversed())
-        }
-        return descendants
-    }
-
-    static func isInspectorView(_ view: NSView) -> Bool {
-        String(describing: type(of: view)).contains("WKInspector")
-    }
-
-    static func isVisibleSideDockInspectorCandidate(_ view: NSView) -> Bool {
-        !view.isHidden &&
-            view.alphaValue > 0 &&
-            view.frame.width > 1 &&
-            view.frame.height > 1
-    }
-
-    static func isVisibleSideDockSiblingCandidate(_ view: NSView) -> Bool {
-        !view.isHidden &&
-            view.alphaValue > 0 &&
-            view.frame.width > 1 &&
-            view.frame.height > 1
-    }
-
-    static func verticalOverlap(between lhs: NSRect, and rhs: NSRect) -> CGFloat {
-        max(0, min(lhs.maxY, rhs.maxY) - max(lhs.minY, rhs.minY))
     }
 }
 
@@ -6286,25 +6220,6 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
     var requestNavigation: ((URLRequest, BrowserInsecureHTTPNavigationIntent) -> Void)?
     var openPopup: ((WKWebViewConfiguration, WKWindowFeatures) -> WKWebView?)?
 
-    private func javaScriptDialogTitle(for webView: WKWebView) -> String {
-        if let absolute = webView.url?.absoluteString, !absolute.isEmpty {
-            return String(localized: "browser.dialog.pageSaysAt", defaultValue: "The page at \(absolute) says:")
-        }
-        return String(localized: "browser.dialog.pageSays", defaultValue: "This page says:")
-    }
-
-    private func presentDialog(
-        _ alert: NSAlert,
-        for webView: WKWebView,
-        completion: @escaping (NSApplication.ModalResponse) -> Void
-    ) {
-        if let window = webView.window {
-            alert.beginSheetModal(for: window, completionHandler: completion)
-            return
-        }
-        completion(alert.runModal())
-    }
-
     /// Called when the page requests a new window (window.open(), target=_blank, etc.).
     ///
     /// Returns a live popup WKWebView created with WebKit's supplied configuration
@@ -6388,13 +6303,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping ([URL]?) -> Void
     ) {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-        panel.canChooseDirectories = parameters.allowsDirectories
-        panel.canChooseFiles = true
-        panel.begin { result in
-            completionHandler(result == .OK ? panel.urls : nil)
-        }
+        BrowserJSDialogPresenter.presentOpenPanel(parameters: parameters, completionHandler: completionHandler)
     }
 
     func webView(
@@ -6404,7 +6313,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
         type: WKMediaCaptureType,
         decisionHandler: @escaping (WKPermissionDecision) -> Void
     ) {
-        decisionHandler(.prompt)
+        BrowserJSDialogPresenter.decideMediaCapturePermission(decisionHandler: decisionHandler)
     }
 
     func webView(
@@ -6413,12 +6322,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping () -> Void
     ) {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = javaScriptDialogTitle(for: webView)
-        alert.informativeText = message
-        alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
-        presentDialog(alert, for: webView) { _ in completionHandler() }
+        BrowserJSDialogPresenter.presentAlert(message: message, webView: webView, completionHandler: completionHandler)
     }
 
     func webView(
@@ -6427,15 +6331,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping (Bool) -> Void
     ) {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = javaScriptDialogTitle(for: webView)
-        alert.informativeText = message
-        alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
-        alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
-        presentDialog(alert, for: webView) { response in
-            completionHandler(response == .alertFirstButtonReturn)
-        }
+        BrowserJSDialogPresenter.presentConfirm(message: message, webView: webView, completionHandler: completionHandler)
     }
 
     func webView(
@@ -6445,24 +6341,12 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping (String?) -> Void
     ) {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = javaScriptDialogTitle(for: webView)
-        alert.informativeText = prompt
-        alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
-        alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
-
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        field.stringValue = defaultText ?? ""
-        alert.accessoryView = field
-
-        presentDialog(alert, for: webView) { response in
-            if response == .alertFirstButtonReturn {
-                completionHandler(field.stringValue)
-            } else {
-                completionHandler(nil)
-            }
-        }
+        BrowserJSDialogPresenter.presentTextInput(
+            prompt: prompt,
+            defaultText: defaultText,
+            webView: webView,
+            completionHandler: completionHandler
+        )
     }
 }
 
