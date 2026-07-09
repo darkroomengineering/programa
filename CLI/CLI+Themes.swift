@@ -8,7 +8,7 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+extension ProgramaCLI {
     private static let programaThemeOverrideBundleIdentifier = "com.darkroom.programa"
     private static let programaThemesBlockStart = "# programa themes start"
     private static let programaThemesBlockEnd = "# programa themes end"

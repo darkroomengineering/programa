@@ -8,7 +8,7 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+extension ProgramaCLI {
     // MARK: - Markdown Commands
 
     func runMarkdownCommand(

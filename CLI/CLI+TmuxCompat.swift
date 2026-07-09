@@ -8,7 +8,7 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+extension ProgramaCLI {
     /// The 23 tmux-emulation command names, all dispatched through the same
     /// `runTmuxCompatCommand`. Help text preserves the original grouped
     /// layout, including the two pipe-separated combo lines

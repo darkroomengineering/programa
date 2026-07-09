@@ -219,7 +219,7 @@ let codexHookWrapperProcessNames: Set<String> = [
     "env"
 ]
 
-extension CMUXCLI {
+extension ProgramaCLI {
     func runClaudeHook(
         commandArgs: [String],
         client: SocketClient

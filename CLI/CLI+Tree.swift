@@ -8,7 +8,7 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+extension ProgramaCLI {
     private struct TreeCommandOptions {
         let includeAllWindows: Bool
         let workspaceHandle: String?

@@ -1120,7 +1120,7 @@ struct CommandDescriptor {
     let execute: ((CommandContext) throws -> Void)?
 }
 
-struct CMUXCLI {
+struct ProgramaCLI {
     let args: [String]
 
     private static let debugLastSocketHintPath = "/tmp/programa-last-socket-path"
@@ -5473,7 +5473,7 @@ struct CMUXTermMain {
     static func main() {
         // CLI tools should ignore SIGPIPE so closed stdout pipes do not terminate the process.
         _ = signal(SIGPIPE, SIG_IGN)
-        let cli = CMUXCLI(args: CommandLine.arguments)
+        let cli = ProgramaCLI(args: CommandLine.arguments)
         do {
             try cli.run()
         } catch {

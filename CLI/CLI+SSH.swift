@@ -8,7 +8,7 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+extension ProgramaCLI {
     private func generateRemoteRelayPort() -> Int {
         // Random port in the ephemeral range (49152-65535)
         Int.random(in: 49152...65535)

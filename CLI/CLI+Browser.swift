@@ -8,7 +8,7 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+extension ProgramaCLI {
     func runBrowserCommand(
         commandArgs: [String],
         client: SocketClient,
