@@ -38,7 +38,6 @@
 | `./scripts/reload.sh` | Build Debug app (pass `--launch` to also open it) |
 | `./scripts/reloadp.sh` | Build and launch Release app |
 | `./scripts/reload2.sh` | Reload both Debug and Release |
-| `./scripts/rebuild.sh` | Clean rebuild |
 
 ## Rebuilding GhosttyKit
 
