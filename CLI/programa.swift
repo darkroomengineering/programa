@@ -14,217 +14,6 @@ struct CLIError: Error, CustomStringConvertible {
     var description: String { message }
 }
 
-struct ClaudeHookParsedInput {
-    let object: [String: Any]?
-    let rawFallback: String?
-    let sessionId: String?
-    let cwd: String?
-    let transcriptPath: String?
-}
-
-struct ClaudeHookSessionRecord: Codable {
-    var sessionId: String
-    var workspaceId: String
-    var surfaceId: String
-    var cwd: String?
-    var pid: Int?
-    var lastSubtitle: String?
-    var lastBody: String?
-    var startedAt: TimeInterval
-    var updatedAt: TimeInterval
-}
-
-private struct ClaudeHookSessionStoreFile: Codable {
-    var version: Int = 1
-    var sessions: [String: ClaudeHookSessionRecord] = [:]
-}
-
-final class ClaudeHookSessionStore {
-    private static let defaultStatePath = "~/.programa/claude-hook-sessions.json"
-    private static let maxStateAgeSeconds: TimeInterval = 60 * 60 * 24 * 7
-
-    private let statePath: String
-    private let fileManager: FileManager
-    private let decoder = JSONDecoder()
-    private let encoder = JSONEncoder()
-
-    init(
-        processEnv: [String: String] = ProcessInfo.processInfo.environment,
-        fileManager: FileManager = .default
-    ) {
-        if let overridePath = processEnv["PROGRAMA_CLAUDE_HOOK_STATE_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !overridePath.isEmpty {
-            self.statePath = NSString(string: overridePath).expandingTildeInPath
-        } else {
-            self.statePath = NSString(string: Self.defaultStatePath).expandingTildeInPath
-        }
-        self.fileManager = fileManager
-        self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    }
-
-    func lookup(sessionId: String) throws -> ClaudeHookSessionRecord? {
-        let normalized = normalizeSessionId(sessionId)
-        guard !normalized.isEmpty else { return nil }
-        return try withLockedState { state in
-            state.sessions[normalized]
-        }
-    }
-
-    func upsert(
-        sessionId: String,
-        workspaceId: String,
-        surfaceId: String,
-        cwd: String?,
-        pid: Int? = nil,
-        lastSubtitle: String? = nil,
-        lastBody: String? = nil
-    ) throws {
-        let normalized = normalizeSessionId(sessionId)
-        guard !normalized.isEmpty else { return }
-        try withLockedState { state in
-            let now = Date().timeIntervalSince1970
-            var record = state.sessions[normalized] ?? ClaudeHookSessionRecord(
-                sessionId: normalized,
-                workspaceId: workspaceId,
-                surfaceId: surfaceId,
-                cwd: nil,
-                pid: nil,
-                lastSubtitle: nil,
-                lastBody: nil,
-                startedAt: now,
-                updatedAt: now
-            )
-            record.workspaceId = workspaceId
-            if !surfaceId.isEmpty {
-                record.surfaceId = surfaceId
-            }
-            if let cwd = normalizeOptional(cwd) {
-                record.cwd = cwd
-            }
-            if let pid {
-                record.pid = pid
-            }
-            if let subtitle = normalizeOptional(lastSubtitle) {
-                record.lastSubtitle = subtitle
-            }
-            if let body = normalizeOptional(lastBody) {
-                record.lastBody = body
-            }
-            record.updatedAt = now
-            state.sessions[normalized] = record
-        }
-    }
-
-    func consume(
-        sessionId: String?,
-        workspaceId: String?,
-        surfaceId: String?
-    ) throws -> ClaudeHookSessionRecord? {
-        let normalizedSessionId = normalizeOptional(sessionId)
-        let normalizedWorkspace = normalizeOptional(workspaceId)
-        let normalizedSurface = normalizeOptional(surfaceId)
-        return try withLockedState { state in
-            if let normalizedSessionId,
-               let removed = state.sessions.removeValue(forKey: normalizedSessionId) {
-                return removed
-            }
-
-            guard let fallback = fallbackRecord(
-                sessions: Array(state.sessions.values),
-                workspaceId: normalizedWorkspace,
-                surfaceId: normalizedSurface
-            ) else {
-                return nil
-            }
-            state.sessions.removeValue(forKey: fallback.sessionId)
-            return fallback
-        }
-    }
-
-    private func fallbackRecord(
-        sessions: [ClaudeHookSessionRecord],
-        workspaceId: String?,
-        surfaceId: String?
-    ) -> ClaudeHookSessionRecord? {
-        if let surfaceId {
-            let matches = sessions.filter { $0.surfaceId == surfaceId }
-            return matches.max(by: { $0.updatedAt < $1.updatedAt })
-        }
-        if let workspaceId {
-            let matches = sessions.filter { $0.workspaceId == workspaceId }
-            if matches.count == 1 {
-                return matches[0]
-            }
-        }
-        return nil
-    }
-
-    private func withLockedState<T>(_ body: (inout ClaudeHookSessionStoreFile) throws -> T) throws -> T {
-        let lockPath = statePath + ".lock"
-        let fd = open(lockPath, O_CREAT | O_RDWR, mode_t(S_IRUSR | S_IWUSR))
-        if fd < 0 {
-            throw CLIError(message: "Failed to open Claude hook state lock: \(lockPath)")
-        }
-        defer { Darwin.close(fd) }
-
-        if flock(fd, LOCK_EX) != 0 {
-            throw CLIError(message: "Failed to lock Claude hook state: \(lockPath)")
-        }
-        defer { _ = flock(fd, LOCK_UN) }
-
-        var state = loadUnlocked()
-        pruneExpired(&state)
-        let result = try body(&state)
-        try saveUnlocked(state)
-        return result
-    }
-
-    private func loadUnlocked() -> ClaudeHookSessionStoreFile {
-        guard fileManager.fileExists(atPath: statePath) else {
-            return ClaudeHookSessionStoreFile()
-        }
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: statePath)),
-              let decoded = try? decoder.decode(ClaudeHookSessionStoreFile.self, from: data) else {
-            return ClaudeHookSessionStoreFile()
-        }
-        return decoded
-    }
-
-    private func saveUnlocked(_ state: ClaudeHookSessionStoreFile) throws {
-        let stateURL = URL(fileURLWithPath: statePath)
-        let parentURL = stateURL.deletingLastPathComponent()
-        try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true, attributes: nil)
-        let data = try encoder.encode(state)
-        try data.write(to: stateURL, options: .atomic)
-    }
-
-    private func pruneExpired(_ state: inout ClaudeHookSessionStoreFile) {
-        let now = Date().timeIntervalSince1970
-        let cutoff = now - Self.maxStateAgeSeconds
-        state.sessions = state.sessions.filter { _, record in
-            record.updatedAt >= cutoff
-        }
-    }
-
-    private func normalizeSessionId(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func normalizeOptional(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
-            return nil
-        }
-        return value
-    }
-}
-
-let codexHookWrapperProcessNames: Set<String> = [
-    "sh",
-    "bash",
-    "zsh",
-    "env"
-]
-
 enum CLIIDFormat: String {
     case refs
     case uuids
@@ -1331,7 +1120,7 @@ struct CommandDescriptor {
     let execute: ((CommandContext) throws -> Void)?
 }
 
-struct CMUXCLI {
+struct ProgramaCLI {
     let args: [String]
 
     private static let debugLastSocketHintPath = "/tmp/programa-last-socket-path"
@@ -1631,7 +1420,11 @@ struct CMUXCLI {
     /// is externally visible; dispatch itself is by name lookup and does not
     /// depend on array order.
     private func commandDescriptors() -> [CommandDescriptor] {
-        [
+        // Built imperatively (rather than as one large `[...] + f() + [...]`
+        // expression) because the Swift type-checker times out trying to
+        // infer a single expression spanning this many array-literal +
+        // function-call concatenations.
+        var descriptors: [CommandDescriptor] = [
             // MARK: - Pre-connection specials (dispatched earlier in run();
             // documented here only so usage() has one source for help text).
             CommandDescriptor(names: ["welcome"], helpLines: ["welcome"], execute: nil),
@@ -1923,22 +1716,9 @@ struct CMUXCLI {
                 }
             ),
 
-            CommandDescriptor(
-                names: ["ssh"],
-                helpLines: ["ssh <destination> [--name <title>] [--port <n>] [--identity <path>] [--ssh-option <opt>] [--no-focus] [-- <remote-command-args>]"],
-                execute: { ctx in
-                    try self.runSSH(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-            CommandDescriptor(
-                names: ["ssh-session-end"],
-                helpLines: [],
-                execute: { ctx in
-                    try self.runSSHSessionEnd(commandArgs: ctx.commandArgs, client: ctx.client)
-                }
-            ),
-
-            CommandDescriptor(names: ["remote-daemon-status"], helpLines: ["remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]"], execute: nil),
+            ]
+        descriptors += self.sshDescriptors()
+        descriptors += [
 
             CommandDescriptor(
                 names: ["new-split"],
@@ -2023,13 +1803,9 @@ struct CMUXCLI {
                 }
             ),
 
-            CommandDescriptor(
-                names: ["tree"],
-                helpLines: ["tree [--all] [--workspace <id|ref|index>]"],
-                execute: { ctx in
-                    try self.runTreeCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
+            ]
+        descriptors += self.treeDescriptors()
+        descriptors += [
 
             CommandDescriptor(
                 names: ["focus-pane"],
@@ -2799,21 +2575,9 @@ struct CMUXCLI {
                 }
             ),
 
-            CommandDescriptor(
-                names: ["claude-hook"],
-                helpLines: ["claude-hook <session-start|stop|notification> [--workspace <id|ref>] [--surface <id|ref>]"],
-                execute: { ctx in
-                    try self.runClaudeHook(commandArgs: ctx.commandArgs, client: ctx.client)
-                }
-            ),
-
-            CommandDescriptor(
-                names: ["codex-hook"],
-                helpLines: [],
-                execute: { ctx in
-                    try self.runCodexHook(commandArgs: ctx.commandArgs, client: ctx.client)
-                }
-            ),
+            ]
+        descriptors += self.hooksDescriptors()
+        descriptors += [
 
             CommandDescriptor(
                 names: ["set-app-focus"],
@@ -2861,7 +2625,8 @@ struct CMUXCLI {
             // handler; help text preserves the original grouped layout,
             // including the two pipe-separated combo lines).
             CommandDescriptor(names: [], helpLines: ["", "# tmux compatibility commands"], execute: nil),
-        ] + Self.tmuxCompatDescriptors(runTmuxCompatCommand: { ctx in
+        ]
+        descriptors += Self.tmuxCompatDescriptors(runTmuxCompatCommand: { ctx in
             try self.runTmuxCompatCommand(
                 command: ctx.command,
                 commandArgs: ctx.commandArgs,
@@ -2870,7 +2635,8 @@ struct CMUXCLI {
                 idFormat: ctx.idFormat,
                 windowOverride: ctx.windowId
             )
-        }) + [
+        })
+        descriptors += [
             CommandDescriptor(names: [], helpLines: [""], execute: nil),
 
             CommandDescriptor(
@@ -2999,6 +2765,7 @@ struct CMUXCLI {
                 }
             ),
         ]
+        return descriptors
     }
 
     /// Looks up the descriptor whose `names` contains `command`, if any.
@@ -3364,11 +3131,19 @@ struct CMUXCLI {
         return Int(String(pieces[1])) != nil
     }
 
-    func normalizeWindowHandle(_ raw: String?, client: SocketClient, allowCurrent: Bool = false) throws -> String? {
+    /// Generic handle normalizer shared by window/workspace/pane/surface lookups.
+    /// Resolves a raw CLI argument (UUID, handle ref, or list index) to a canonical
+    /// handle ref/id, optionally scoped to a parent handle and falling back to a
+    /// caller-supplied "current"/"focused" resolver when `raw` is nil.
+    private func normalizeHandle(
+        _ raw: String?,
+        client: SocketClient,
+        kind: String,
+        filterParam: (key: String, value: String)? = nil,
+        fallback: () throws -> String?
+    ) throws -> String? {
         guard let raw else {
-            if !allowCurrent { return nil }
-            let current = try client.sendV2(method: "window.current")
-            return (current["window_ref"] as? String) ?? (current["window_id"] as? String)
+            return try fallback()
         }
 
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3377,15 +3152,27 @@ struct CMUXCLI {
             return trimmed
         }
         guard let wantedIndex = Int(trimmed) else {
-            throw CLIError(message: "Invalid window handle: \(trimmed) (expected UUID, ref like window:1, or index)")
+            throw CLIError(message: "Invalid \(kind) handle: \(trimmed) (expected UUID, ref like \(kind):1, or index)")
         }
 
-        let listed = try client.sendV2(method: "window.list")
-        let windows = listed["windows"] as? [[String: Any]] ?? []
-        for item in windows where intFromAny(item["index"]) == wantedIndex {
+        var params: [String: Any] = [:]
+        if let filterParam {
+            params[filterParam.key] = filterParam.value
+        }
+        let listed = try client.sendV2(method: "\(kind).list", params: params)
+        let items = listed["\(kind)s"] as? [[String: Any]] ?? []
+        for item in items where intFromAny(item["index"]) == wantedIndex {
             return (item["ref"] as? String) ?? (item["id"] as? String)
         }
-        throw CLIError(message: "Window index not found")
+        throw CLIError(message: "\(kind.capitalized) index not found")
+    }
+
+    func normalizeWindowHandle(_ raw: String?, client: SocketClient, allowCurrent: Bool = false) throws -> String? {
+        try normalizeHandle(raw, client: client, kind: "window") {
+            guard allowCurrent else { return nil }
+            let current = try client.sendV2(method: "window.current")
+            return (current["window_ref"] as? String) ?? (current["window_id"] as? String)
+        }
     }
 
     func normalizeWorkspaceHandle(
@@ -3394,31 +3181,16 @@ struct CMUXCLI {
         windowHandle: String? = nil,
         allowCurrent: Bool = false
     ) throws -> String? {
-        guard let raw else {
-            if !allowCurrent { return nil }
+        try normalizeHandle(
+            raw,
+            client: client,
+            kind: "workspace",
+            filterParam: windowHandle.map { ("window_id", $0) }
+        ) {
+            guard allowCurrent else { return nil }
             let current = try client.sendV2(method: "workspace.current")
             return (current["workspace_ref"] as? String) ?? (current["workspace_id"] as? String)
         }
-
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return nil }
-        if isUUID(trimmed) || isHandleRef(trimmed) {
-            return trimmed
-        }
-        guard let wantedIndex = Int(trimmed) else {
-            throw CLIError(message: "Invalid workspace handle: \(trimmed) (expected UUID, ref like workspace:1, or index)")
-        }
-
-        var params: [String: Any] = [:]
-        if let windowHandle {
-            params["window_id"] = windowHandle
-        }
-        let listed = try client.sendV2(method: "workspace.list", params: params)
-        let items = listed["workspaces"] as? [[String: Any]] ?? []
-        for item in items where intFromAny(item["index"]) == wantedIndex {
-            return (item["ref"] as? String) ?? (item["id"] as? String)
-        }
-        throw CLIError(message: "Workspace index not found")
     }
 
     func normalizePaneHandle(
@@ -3427,32 +3199,17 @@ struct CMUXCLI {
         workspaceHandle: String? = nil,
         allowFocused: Bool = false
     ) throws -> String? {
-        guard let raw else {
-            if !allowFocused { return nil }
+        try normalizeHandle(
+            raw,
+            client: client,
+            kind: "pane",
+            filterParam: workspaceHandle.map { ("workspace_id", $0) }
+        ) {
+            guard allowFocused else { return nil }
             let ident = try client.sendV2(method: "system.identify")
             let focused = ident["focused"] as? [String: Any] ?? [:]
             return (focused["pane_ref"] as? String) ?? (focused["pane_id"] as? String)
         }
-
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return nil }
-        if isUUID(trimmed) || isHandleRef(trimmed) {
-            return trimmed
-        }
-        guard let wantedIndex = Int(trimmed) else {
-            throw CLIError(message: "Invalid pane handle: \(trimmed) (expected UUID, ref like pane:1, or index)")
-        }
-
-        var params: [String: Any] = [:]
-        if let workspaceHandle {
-            params["workspace_id"] = workspaceHandle
-        }
-        let listed = try client.sendV2(method: "pane.list", params: params)
-        let items = listed["panes"] as? [[String: Any]] ?? []
-        for item in items where intFromAny(item["index"]) == wantedIndex {
-            return (item["ref"] as? String) ?? (item["id"] as? String)
-        }
-        throw CLIError(message: "Pane index not found")
     }
 
     func normalizeSurfaceHandle(
@@ -3461,32 +3218,17 @@ struct CMUXCLI {
         workspaceHandle: String? = nil,
         allowFocused: Bool = false
     ) throws -> String? {
-        guard let raw else {
-            if !allowFocused { return nil }
+        try normalizeHandle(
+            raw,
+            client: client,
+            kind: "surface",
+            filterParam: workspaceHandle.map { ("workspace_id", $0) }
+        ) {
+            guard allowFocused else { return nil }
             let ident = try client.sendV2(method: "system.identify")
             let focused = ident["focused"] as? [String: Any] ?? [:]
             return (focused["surface_ref"] as? String) ?? (focused["surface_id"] as? String)
         }
-
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return nil }
-        if isUUID(trimmed) || isHandleRef(trimmed) {
-            return trimmed
-        }
-        guard let wantedIndex = Int(trimmed) else {
-            throw CLIError(message: "Invalid surface handle: \(trimmed) (expected UUID, ref like surface:1, or index)")
-        }
-
-        var params: [String: Any] = [:]
-        if let workspaceHandle {
-            params["workspace_id"] = workspaceHandle
-        }
-        let listed = try client.sendV2(method: "surface.list", params: params)
-        let items = listed["surfaces"] as? [[String: Any]] ?? []
-        for item in items where intFromAny(item["index"]) == wantedIndex {
-            return (item["ref"] as? String) ?? (item["id"] as? String)
-        }
-        throw CLIError(message: "Surface index not found")
     }
 
     private func canonicalSurfaceHandleFromTabInput(_ value: String) -> String {
@@ -4199,6 +3941,14 @@ struct CMUXCLI {
 
     /// Return the help/usage text for a subcommand, or nil if the command is unknown.
     private func subcommandUsage(_ command: String) -> String? {
+        if let text = tmuxCompatSubcommandUsage(command) { return text }
+        if let text = sshSubcommandUsage(command) { return text }
+        if let text = treeSubcommandUsage(command) { return text }
+        if let text = hooksSubcommandUsage(command) { return text }
+        if let text = browserSubcommandUsage(command) { return text }
+        if let text = markdownSubcommandUsage(command) { return text }
+        if let text = themesSubcommandUsage(command) { return text }
+        if let text = agentWrapperSubcommandUsage(command) { return text }
         switch command {
         case "ping":
             return """
@@ -4253,125 +4003,6 @@ struct CMUXCLI {
               --body <text>     Feedback body (submission disabled)
               --image <path>    Attach an image file, repeat for multiple images (submission disabled)
             """
-        case "themes":
-            return """
-            Usage: programa themes
-                   programa themes list
-                   programa themes set <theme>
-                   programa themes set --light <theme> [--dark <theme>]
-                   programa themes set --dark <theme> [--light <theme>]
-                   programa themes clear
-
-            When run in a TTY, `programa themes` opens an interactive theme picker with
-            live app preview. Use `programa themes list` for a plain listing.
-
-            The picker previews the selected theme across the running programa app and
-            lets you apply it to the light theme, dark theme, or both defaults.
-
-            Commands:
-              list                      List available themes and mark the current light/dark defaults
-              set <theme>               Set the same theme for both light and dark appearance
-              set --light <theme>       Set the light appearance theme
-              set --dark <theme>        Set the dark appearance theme
-              clear                     Remove the programa theme override and fall back to other config
-
-            Examples:
-              programa themes
-              programa themes list
-              programa themes set "Catppuccin Mocha"
-              programa themes set --light "Catppuccin Latte" --dark "Catppuccin Mocha"
-              programa themes clear
-            """
-        case "claude-teams":
-            return String(localized: "cli.claude-teams.usage", defaultValue: """
-            Usage: programa claude-teams [claude-args...]
-
-            Launch Claude Code with agent teams enabled.
-
-            This command:
-              - defaults Claude teammate mode to auto
-              - sets a tmux-like environment so Claude auto mode uses programa splits
-              - sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
-              - prepends a private tmux shim to PATH
-              - forwards all remaining arguments to claude
-
-            The tmux shim translates supported tmux window/pane commands into programa
-            workspace and split operations in the current programa session.
-
-            Examples:
-              programa claude-teams
-              programa claude-teams --continue
-              programa claude-teams --model sonnet
-            """)
-        case "omo":
-            return String(localized: "cli.omo.usage", defaultValue: """
-            Usage: programa omo [opencode-args...]
-
-            Launch OpenCode with oh-my-openagent in a programa-aware environment.
-
-            oh-my-openagent orchestrates multiple AI models as specialized agents in
-            parallel. This command sets up a tmux shim so agent panes become native
-            programa splits with sidebar metadata and notifications.
-
-            This command:
-              - sets a tmux-like environment so oh-my-openagent uses programa splits
-              - prepends a private tmux shim to PATH
-              - forwards all remaining arguments to opencode
-
-            The tmux shim translates tmux window/pane commands into programa workspace
-            and split operations in the current programa session.
-
-            Examples:
-              programa omo
-              programa omo --continue
-              programa omo --model claude-sonnet-4-6
-            """)
-        case "omx":
-            return String(localized: "cli.omx.usage", defaultValue: """
-            Usage: programa omx [omx-args...]
-
-            Launch Oh My Codex (OMX) with native programa pane integration.
-
-            OMX is a multi-agent orchestration layer for OpenAI Codex CLI. This
-            command sets up a tmux shim so OMX team mode, HUD, and agent panes
-            become native programa splits.
-
-            This command:
-              - sets a tmux-like environment so OMX uses programa splits
-              - prepends a private tmux shim to PATH
-              - forwards all remaining arguments to omx
-
-            Install: npm install -g oh-my-codex
-
-            Examples:
-              programa omx
-              programa omx --madmax --high
-              programa omx team
-            """)
-        case "omc":
-            return String(localized: "cli.omc.usage", defaultValue: """
-            Usage: programa omc [omc-args...]
-
-            Launch Oh My Claude Code (OMC) with native programa pane integration.
-
-            OMC is a multi-agent orchestration system for Claude Code with
-            specialized agents, smart model routing, and team pipelines. This
-            command sets up a tmux shim so OMC team mode and agent panes become
-            native programa splits.
-
-            This command:
-              - sets a tmux-like environment so OMC uses programa splits
-              - prepends a private tmux shim to PATH
-              - injects NODE_OPTIONS restore module for Claude compatibility
-              - forwards all remaining arguments to omc
-
-            Install: npm install -g oh-my-claude-sisyphus
-
-            Examples:
-              programa omc
-              programa omc team 3:claude "implement feature"
-              programa omc --watch
-            """)
         case "identify":
             return """
             Usage: programa identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]
@@ -4624,36 +4255,6 @@ struct CMUXCLI {
             Example:
               programa list-workspaces
             """
-        case "ssh":
-            return """
-            Usage: programa ssh <destination> [flags] [-- <remote-command-args>]
-
-            Create a new workspace, mark it as remote-SSH, and start an SSH session in that workspace.
-            programa will also establish a local SSH proxy endpoint so browser traffic can egress from the remote host.
-
-            Flags:
-              --name <title>          Optional workspace title
-              --port <n>              SSH port
-              --identity <path>       SSH identity file path
-              --ssh-option <opt>      Extra SSH -o option (repeatable)
-              --no-focus              Create workspace without switching to it
-
-            Example:
-              programa ssh dev@my-host
-              programa ssh dev@my-host --name "gpu-box" --port 2222 --identity ~/.ssh/id_ed25519
-              programa ssh dev@my-host --ssh-option UserKnownHostsFile=/dev/null --ssh-option StrictHostKeyChecking=no
-            """
-        case "remote-daemon-status":
-            return """
-            Usage: programa remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]
-
-            Show the embedded programad-remote release manifest, local cache status, checksum verification state,
-            and the GitHub attestation verification command for a target platform.
-
-            Example:
-              programa remote-daemon-status
-              programa remote-daemon-status --os linux --arch arm64
-            """
         case "new-split":
             return """
             Usage: programa new-split <left|right|up|down> [flags]
@@ -4695,32 +4296,6 @@ struct CMUXCLI {
             Example:
               programa list-pane-surfaces
               programa list-pane-surfaces --workspace workspace:2 --pane pane:1
-            """
-        case "tree":
-            return """
-            Usage: programa tree [flags]
-
-            Print the hierarchy of windows, workspaces, panes, and surfaces.
-
-            Flags:
-              --all                         Include all windows (default: current window only)
-              --workspace <id|ref|index>   Show only one workspace
-              --json                        Structured JSON output
-
-            Output:
-              Text mode prints a box-drawing tree with markers:
-              - ◀ active (true focused window/workspace/pane/surface path)
-              - ◀ here (caller surface where `programa tree` was invoked)
-              - workspace [selected]
-              - pane [focused]
-              - surface [selected]
-              Browser surfaces also include their current URL.
-
-            Example:
-              programa tree
-              programa tree --all
-              programa tree --workspace workspace:2
-              programa --json tree --all
             """
         case "focus-pane":
             return """
@@ -4920,193 +4495,6 @@ struct CMUXCLI {
             Usage: programa current-workspace
 
             Print the currently selected workspace ID.
-            """
-        case "capture-pane":
-            return """
-            Usage: programa capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]
-
-            tmux-compatible alias for reading terminal text from a pane.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Surface context (default: $PROGRAMA_SURFACE_ID)
-              --scrollback           Include scrollback
-              --lines <n>            Return only the last N lines (implies --scrollback)
-
-            Example:
-              programa capture-pane --workspace workspace:2 --surface surface:1 --scrollback --lines 200
-            """
-        case "resize-pane":
-            return """
-            Usage: programa resize-pane [--pane <id|ref>] [--workspace <id|ref>] [-L|-R|-U|-D] [--amount <n>]
-
-            tmux-compatible pane resize command.
-
-            Flags:
-              --pane <id|ref>        Pane to resize (default: focused pane)
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              -L|-R|-U|-D            Direction (default: -R)
-              --amount <n>           Resize amount (default: 1)
-            """
-        case "pipe-pane":
-            return """
-            Usage: programa pipe-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <shell-command> | <shell-command>]
-
-            Capture pane text and pipe it to a shell command via stdin.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Surface context (default: focused surface)
-              --command <command>    Shell command to run (or pass as trailing text)
-            """
-        case "wait-for":
-            return """
-            Usage: programa wait-for [-S|--signal] <name> [--timeout <seconds>]
-
-            Wait for or signal a named synchronization token.
-
-            Flags:
-              -S, --signal           Signal the token instead of waiting
-              --timeout <seconds>    Wait timeout (default: 30)
-            """
-        case "swap-pane":
-            return """
-            Usage: programa swap-pane --pane <id|ref> --target-pane <id|ref> [--workspace <id|ref>]
-
-            Swap two panes.
-
-            Flags:
-              --pane <id|ref>         Source pane (required)
-              --target-pane <id|ref>  Target pane (required)
-              --workspace <id|ref>    Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-            """
-        case "break-pane":
-            return """
-            Usage: programa break-pane [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
-
-            Move a pane/surface out into its own pane context.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --pane <id|ref>        Source pane
-              --surface <id|ref>     Source surface
-              --no-focus             Do not focus the result
-            """
-        case "join-pane":
-            return """
-            Usage: programa join-pane --target-pane <id|ref> [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]
-
-            Join a pane/surface into another pane.
-
-            Flags:
-              --target-pane <id|ref>  Target pane (required)
-              --workspace <id|ref>    Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --pane <id|ref>         Source pane
-              --surface <id|ref>      Source surface
-              --no-focus              Do not focus the result
-            """
-        case "next-window", "previous-window", "last-window":
-            return """
-            Usage: programa \(command)
-
-            Switch workspace selection (next/previous/last) in the current window.
-            """
-        case "last-pane":
-            return """
-            Usage: programa last-pane [--workspace <id|ref>]
-
-            Focus the previously focused pane in a workspace.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-            """
-        case "find-window":
-            return """
-            Usage: programa find-window [--content] [--select] [query]
-
-            Find workspaces by title (and optionally terminal content).
-
-            Flags:
-              --content   Search terminal content in addition to workspace titles
-              --select    Select the first match
-            """
-        case "clear-history":
-            return """
-            Usage: programa clear-history [--workspace <id|ref>] [--surface <id|ref>]
-
-            Clear terminal scrollback history.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Surface context (default: focused surface)
-            """
-        case "set-hook":
-            return """
-            Usage: programa set-hook [--list] [--unset <event>] | <event> <command>
-
-            Manage tmux-compat hook definitions.
-
-            Flags:
-              --list            List configured hooks
-              --unset <event>   Remove a hook by event name
-            """
-        case "popup":
-            return """
-            Usage: programa popup
-
-            tmux compatibility placeholder. This command is currently not supported.
-            """
-        case "bind-key", "unbind-key", "copy-mode":
-            return """
-            Usage: programa \(command)
-
-            tmux compatibility placeholder. This command is currently not supported.
-            """
-        case "set-buffer":
-            return """
-            Usage: programa set-buffer [--name <name>] [--] <text>
-
-            Save text into a named tmux-compat buffer.
-
-            Flags:
-              --name <name>   Buffer name (default: default)
-            """
-        case "paste-buffer":
-            return """
-            Usage: programa paste-buffer [--name <name>] [--workspace <id|ref>] [--surface <id|ref>]
-
-            Paste a named tmux-compat buffer into a surface.
-
-            Flags:
-              --name <name>         Buffer name (default: default)
-              --workspace <id|ref>  Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>    Surface context (default: focused surface)
-            """
-        case "list-buffers":
-            return """
-            Usage: programa list-buffers
-
-            List tmux-compat buffers.
-            """
-        case "respawn-pane":
-            return """
-            Usage: programa respawn-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <cmd> | <cmd>]
-
-            Send a command (or default shell restart command) to a surface.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Surface context (default: focused surface)
-              --command <cmd>        Command text (or pass trailing command text)
-            """
-        case "display-message":
-            return """
-            Usage: programa display-message [-p|--print] <text>
-
-            Print text (or show it via notification bridge in parity mode).
-
-            Flags:
-              -p, --print   Print to stdout only
             """
         case "read-screen":
             return """
@@ -5348,156 +4736,6 @@ struct CMUXCLI {
 
             Trigger the app-active handler used by notification focus tests.
             """
-        case "claude-hook":
-            return """
-            Usage: programa claude-hook <session-start|active|stop|idle|notification|notify|prompt-submit> [flags]
-
-            Hook for Claude Code integration. Reads JSON from stdin.
-
-            Subcommands:
-              session-start   Signal that a Claude session has started
-              active          Alias for session-start
-              stop            Signal that a Claude session has stopped
-              idle            Alias for stop
-              notification    Forward a Claude notification
-              notify          Alias for notification
-              prompt-submit   Clear notification and set Running on user prompt
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
-
-            Example:
-              echo '{"session_id":"abc"}' | programa claude-hook session-start
-              echo '{}' | programa claude-hook stop
-            """
-        case "codex":
-            return """
-            Usage: programa codex <install-hooks|uninstall-hooks>
-
-            Manage Codex CLI hooks integration.
-
-            Subcommands:
-              install-hooks     Install programa hooks into ~/.codex/hooks.json
-              uninstall-hooks   Remove programa hooks from ~/.codex/hooks.json
-            """
-        case "codex-hook":
-            return """
-            Usage: programa codex-hook <session-start|prompt-submit|stop> [flags]
-
-            Hook for Codex CLI integration. Reads JSON from stdin.
-            Gracefully no-ops when not running inside programa.
-
-            Subcommands:
-              session-start   Register a Codex session
-              prompt-submit   Set Running status on user prompt
-              stop            Send completion notification, set Idle
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
-            """
-        case "browser":
-            return """
-            Usage: programa browser [--surface <id|ref|index> | <surface>] <subcommand> [args]
-
-            Browser automation commands. Most subcommands require a surface handle.
-            A surface can be passed as `--surface <handle>` or as the first positional token.
-            `open`/`open-split`/`new`/`identify` can run without an explicit surface.
-
-            Subcommands:
-              open|open-split|new [url] [--workspace <id|ref|index>] [--window <id|ref|index>]
-                open/open-split/new default to $PROGRAMA_WORKSPACE_ID when --workspace is omitted and --window is not set
-              goto|navigate <url> [--snapshot-after]
-              back|forward|reload [--snapshot-after]
-              url|get-url
-              focus-webview | is-webview-focused
-              snapshot [--interactive|-i] [--cursor] [--compact] [--max-depth <n>] [--selector <css>]
-              eval [--script <js> | <js>]
-              wait [--selector <css>] [--text <text>] [--url-contains <text>|--url <text>] [--load-state <interactive|complete>] [--function <js>] [--timeout-ms <ms>|--timeout <seconds>]
-              click|dblclick|hover|focus|check|uncheck|scroll-into-view [--selector <css> | <css>] [--snapshot-after]
-              type|fill [--selector <css> | <css>] [--text <text> | <text>] [--snapshot-after]
-              press|key|keydown|keyup [--key <key> | <key>] [--snapshot-after]
-              select [--selector <css> | <css>] [--value <value> | <value>] [--snapshot-after]
-              scroll [--selector <css>] [--dx <n>] [--dy <n>] [--snapshot-after]
-              screenshot [--out <path>]
-              get <url|title|text|html|value|attr|count|box|styles> [...]
-                text|html|value|count|box|styles|attr: [--selector <css> | <css>]
-                attr: [--attr <name> | <name>]
-                styles: [--property <name>]
-              is <visible|enabled|checked> [--selector <css> | <css>]
-              find <role|text|label|placeholder|alt|title|testid|first|last|nth> [...]
-                role: [--name <text>] [--exact] <role>
-                text|label|placeholder|alt|title|testid: [--exact] <text>
-                first|last: [--selector <css> | <css>]
-                nth: [--index <n> | <n>] [--selector <css> | <css>]
-              frame <main|selector> [--selector <css>]
-              dialog <accept|dismiss> [text]
-              download [wait] [--path <path>] [--timeout-ms <ms>|--timeout <seconds>]
-              cookies <get|set|clear> [--name <name>] [--value <value>] [--url <url>] [--domain <domain>] [--path <path>] [--expires <unix>] [--secure] [--all]
-              storage <local|session> <get|set|clear> [...]
-              tab <new|list|switch|close|<index>> [...]
-              console <list|clear>
-              errors <list|clear>
-              highlight [--selector <css> | <css>]
-              state <save|load> <path>
-              addinitscript|addscript [--script <js> | <js>]
-              addstyle [--css <css> | <css>]
-              viewport <width> <height>
-              geolocation|geo <latitude> <longitude>
-              offline <true|false>
-              trace <start|stop> [path]
-              network <route|unroute|requests> ...
-                route <pattern> [--abort] [--body <text>]
-                unroute <pattern>
-              screencast <start|stop>
-              input <mouse|keyboard|touch> [args...]
-              input_mouse | input_keyboard | input_touch
-              identify [--surface <id|ref|index>]
-
-            Example:
-              programa browser open https://example.com
-              programa browser surface:1 navigate https://google.com
-              programa browser --surface surface:1 snapshot --interactive
-            """
-        // Legacy browser aliases — point users to `programa browser --help`
-        case "open-browser":
-            return "Legacy alias for 'programa browser open'. Run 'programa browser --help' for details."
-        case "navigate":
-            return "Legacy alias for 'programa browser navigate'. Run 'programa browser --help' for details."
-        case "browser-back":
-            return "Legacy alias for 'programa browser back'. Run 'programa browser --help' for details."
-        case "browser-forward":
-            return "Legacy alias for 'programa browser forward'. Run 'programa browser --help' for details."
-        case "browser-reload":
-            return "Legacy alias for 'programa browser reload'. Run 'programa browser --help' for details."
-        case "get-url":
-            return "Legacy alias for 'programa browser get-url'. Run 'programa browser --help' for details."
-        case "focus-webview":
-            return "Legacy alias for 'programa browser focus-webview'. Run 'programa browser --help' for details."
-        case "is-webview-focused":
-            return "Legacy alias for 'programa browser is-webview-focused'. Run 'programa browser --help' for details."
-        case "markdown":
-            return """
-            Usage: programa markdown open <path> [options]
-                   programa markdown <path>       (shorthand for 'open')
-
-            Open a markdown file in a formatted viewer panel with live file watching.
-            The file is rendered with rich formatting (headings, code blocks, tables,
-            lists, blockquotes) and automatically updates when the file changes on disk.
-
-            Options:
-              --workspace <id|ref|index>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref|index>     Source surface to split from (default: focused surface)
-              --window <id|ref|index>      Target window
-              --direction <left|right|up|down>  Split direction (default: right)
-
-            Examples:
-              programa markdown open plan.md
-              programa markdown ~/project/CHANGELOG.md
-              programa markdown open ./docs/design.md --workspace 0
-              programa markdown open plan.md --direction down
-            """
         default:
             return nil
         }
@@ -5526,32 +4764,10 @@ struct CMUXCLI {
             .replacingOccurrences(of: "\r", with: "\\r")
         return "\"\(escaped)\""
     }
-    func parseOption(_ args: [String], name: String) -> (String?, [String]) {
-        var remaining: [String] = []
-        var value: String?
-        var skipNext = false
-        var pastTerminator = false
-        for (idx, arg) in args.enumerated() {
-            if skipNext {
-                skipNext = false
-                continue
-            }
-            if arg == "--" {
-                pastTerminator = true
-                remaining.append(arg)
-                continue
-            }
-            if !pastTerminator, arg == name, idx + 1 < args.count {
-                value = args[idx + 1]
-                skipNext = true
-                continue
-            }
-            remaining.append(arg)
-        }
-        return (value, remaining)
-    }
-
-    private func parseRepeatedOption(_ args: [String], name: String) -> ([String], [String]) {
+    /// Shared scan loop for `parseOption`/`parseRepeatedOption`: walks `args`,
+    /// collecting every value that follows `name` (honoring a `--` terminator)
+    /// and returning the leftover args with those option/value pairs removed.
+    private func scanOption(_ args: [String], name: String) -> ([String], [String]) {
         var remaining: [String] = []
         var values: [String] = []
         var skipNext = false
@@ -5574,6 +4790,15 @@ struct CMUXCLI {
             remaining.append(arg)
         }
         return (values, remaining)
+    }
+
+    func parseOption(_ args: [String], name: String) -> (String?, [String]) {
+        let (values, remaining) = scanOption(args, name: name)
+        return (values.last, remaining)
+    }
+
+    private func parseRepeatedOption(_ args: [String], name: String) -> ([String], [String]) {
+        scanOption(args, name: name)
     }
 
     func optionValue(_ args: [String], name: String) -> String? {
@@ -6248,7 +5473,7 @@ struct CMUXTermMain {
     static func main() {
         // CLI tools should ignore SIGPIPE so closed stdout pipes do not terminate the process.
         _ = signal(SIGPIPE, SIG_IGN)
-        let cli = CMUXCLI(args: CommandLine.arguments)
+        let cli = ProgramaCLI(args: CommandLine.arguments)
         do {
             try cli.run()
         } catch {

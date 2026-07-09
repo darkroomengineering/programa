@@ -8,7 +8,218 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+struct ClaudeHookParsedInput {
+    let object: [String: Any]?
+    let rawFallback: String?
+    let sessionId: String?
+    let cwd: String?
+    let transcriptPath: String?
+}
+
+struct ClaudeHookSessionRecord: Codable {
+    var sessionId: String
+    var workspaceId: String
+    var surfaceId: String
+    var cwd: String?
+    var pid: Int?
+    var lastSubtitle: String?
+    var lastBody: String?
+    var startedAt: TimeInterval
+    var updatedAt: TimeInterval
+}
+
+private struct ClaudeHookSessionStoreFile: Codable {
+    var version: Int = 1
+    var sessions: [String: ClaudeHookSessionRecord] = [:]
+}
+
+final class ClaudeHookSessionStore {
+    private static let defaultStatePath = "~/.programa/claude-hook-sessions.json"
+    private static let maxStateAgeSeconds: TimeInterval = 60 * 60 * 24 * 7
+
+    private let statePath: String
+    private let fileManager: FileManager
+    private let decoder = JSONDecoder()
+    private let encoder = JSONEncoder()
+
+    init(
+        processEnv: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default
+    ) {
+        if let overridePath = processEnv["PROGRAMA_CLAUDE_HOOK_STATE_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !overridePath.isEmpty {
+            self.statePath = NSString(string: overridePath).expandingTildeInPath
+        } else {
+            self.statePath = NSString(string: Self.defaultStatePath).expandingTildeInPath
+        }
+        self.fileManager = fileManager
+        self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    }
+
+    func lookup(sessionId: String) throws -> ClaudeHookSessionRecord? {
+        let normalized = normalizeSessionId(sessionId)
+        guard !normalized.isEmpty else { return nil }
+        return try withLockedState { state in
+            state.sessions[normalized]
+        }
+    }
+
+    func upsert(
+        sessionId: String,
+        workspaceId: String,
+        surfaceId: String,
+        cwd: String?,
+        pid: Int? = nil,
+        lastSubtitle: String? = nil,
+        lastBody: String? = nil
+    ) throws {
+        let normalized = normalizeSessionId(sessionId)
+        guard !normalized.isEmpty else { return }
+        try withLockedState { state in
+            let now = Date().timeIntervalSince1970
+            var record = state.sessions[normalized] ?? ClaudeHookSessionRecord(
+                sessionId: normalized,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                cwd: nil,
+                pid: nil,
+                lastSubtitle: nil,
+                lastBody: nil,
+                startedAt: now,
+                updatedAt: now
+            )
+            record.workspaceId = workspaceId
+            if !surfaceId.isEmpty {
+                record.surfaceId = surfaceId
+            }
+            if let cwd = normalizeOptional(cwd) {
+                record.cwd = cwd
+            }
+            if let pid {
+                record.pid = pid
+            }
+            if let subtitle = normalizeOptional(lastSubtitle) {
+                record.lastSubtitle = subtitle
+            }
+            if let body = normalizeOptional(lastBody) {
+                record.lastBody = body
+            }
+            record.updatedAt = now
+            state.sessions[normalized] = record
+        }
+    }
+
+    func consume(
+        sessionId: String?,
+        workspaceId: String?,
+        surfaceId: String?
+    ) throws -> ClaudeHookSessionRecord? {
+        let normalizedSessionId = normalizeOptional(sessionId)
+        let normalizedWorkspace = normalizeOptional(workspaceId)
+        let normalizedSurface = normalizeOptional(surfaceId)
+        return try withLockedState { state in
+            if let normalizedSessionId,
+               let removed = state.sessions.removeValue(forKey: normalizedSessionId) {
+                return removed
+            }
+
+            guard let fallback = fallbackRecord(
+                sessions: Array(state.sessions.values),
+                workspaceId: normalizedWorkspace,
+                surfaceId: normalizedSurface
+            ) else {
+                return nil
+            }
+            state.sessions.removeValue(forKey: fallback.sessionId)
+            return fallback
+        }
+    }
+
+    private func fallbackRecord(
+        sessions: [ClaudeHookSessionRecord],
+        workspaceId: String?,
+        surfaceId: String?
+    ) -> ClaudeHookSessionRecord? {
+        if let surfaceId {
+            let matches = sessions.filter { $0.surfaceId == surfaceId }
+            return matches.max(by: { $0.updatedAt < $1.updatedAt })
+        }
+        if let workspaceId {
+            let matches = sessions.filter { $0.workspaceId == workspaceId }
+            if matches.count == 1 {
+                return matches[0]
+            }
+        }
+        return nil
+    }
+
+    private func withLockedState<T>(_ body: (inout ClaudeHookSessionStoreFile) throws -> T) throws -> T {
+        let lockPath = statePath + ".lock"
+        let fd = open(lockPath, O_CREAT | O_RDWR, mode_t(S_IRUSR | S_IWUSR))
+        if fd < 0 {
+            throw CLIError(message: "Failed to open Claude hook state lock: \(lockPath)")
+        }
+        defer { Darwin.close(fd) }
+
+        if flock(fd, LOCK_EX) != 0 {
+            throw CLIError(message: "Failed to lock Claude hook state: \(lockPath)")
+        }
+        defer { _ = flock(fd, LOCK_UN) }
+
+        var state = loadUnlocked()
+        pruneExpired(&state)
+        let result = try body(&state)
+        try saveUnlocked(state)
+        return result
+    }
+
+    private func loadUnlocked() -> ClaudeHookSessionStoreFile {
+        guard fileManager.fileExists(atPath: statePath) else {
+            return ClaudeHookSessionStoreFile()
+        }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: statePath)),
+              let decoded = try? decoder.decode(ClaudeHookSessionStoreFile.self, from: data) else {
+            return ClaudeHookSessionStoreFile()
+        }
+        return decoded
+    }
+
+    private func saveUnlocked(_ state: ClaudeHookSessionStoreFile) throws {
+        let stateURL = URL(fileURLWithPath: statePath)
+        let parentURL = stateURL.deletingLastPathComponent()
+        try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true, attributes: nil)
+        let data = try encoder.encode(state)
+        try data.write(to: stateURL, options: .atomic)
+    }
+
+    private func pruneExpired(_ state: inout ClaudeHookSessionStoreFile) {
+        let now = Date().timeIntervalSince1970
+        let cutoff = now - Self.maxStateAgeSeconds
+        state.sessions = state.sessions.filter { _, record in
+            record.updatedAt >= cutoff
+        }
+    }
+
+    private func normalizeSessionId(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizeOptional(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+}
+
+let codexHookWrapperProcessNames: Set<String> = [
+    "sh",
+    "bash",
+    "zsh",
+    "env"
+]
+
+extension ProgramaCLI {
     func runClaudeHook(
         commandArgs: [String],
         client: SocketClient
@@ -1656,5 +1867,86 @@ extension CMUXCLI {
             return nil
         }
         return URL(fileURLWithPath: output).lastPathComponent.lowercased()
+    }
+
+    /// Subcommand help text for Hooks commands, split out of the
+    /// central `subcommandUsage` switch (programa.swift) so each domain's
+    /// help text lives next to its command descriptors. Refs #101.
+    func hooksSubcommandUsage(_ command: String) -> String? {
+        switch command {
+        case "claude-hook":
+            return """
+            Usage: programa claude-hook <session-start|active|stop|idle|notification|notify|prompt-submit> [flags]
+
+            Hook for Claude Code integration. Reads JSON from stdin.
+
+            Subcommands:
+              session-start   Signal that a Claude session has started
+              active          Alias for session-start
+              stop            Signal that a Claude session has stopped
+              idle            Alias for stop
+              notification    Forward a Claude notification
+              notify          Alias for notification
+              prompt-submit   Clear notification and set Running on user prompt
+
+            Flags:
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+
+            Example:
+              echo '{"session_id":"abc"}' | programa claude-hook session-start
+              echo '{}' | programa claude-hook stop
+            """
+        case "codex":
+            return """
+            Usage: programa codex <install-hooks|uninstall-hooks>
+
+            Manage Codex CLI hooks integration.
+
+            Subcommands:
+              install-hooks     Install programa hooks into ~/.codex/hooks.json
+              uninstall-hooks   Remove programa hooks from ~/.codex/hooks.json
+            """
+        case "codex-hook":
+            return """
+            Usage: programa codex-hook <session-start|prompt-submit|stop> [flags]
+
+            Hook for Codex CLI integration. Reads JSON from stdin.
+            Gracefully no-ops when not running inside programa.
+
+            Subcommands:
+              session-start   Register a Codex session
+              prompt-submit   Set Running status on user prompt
+              stop            Send completion notification, set Idle
+
+            Flags:
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+            """
+        default:
+            return nil
+        }
+    }
+
+    /// Hook command descriptors, split out of the central
+    /// `commandDescriptors()` array (programa.swift) so they live next to
+    /// their implementation. Refs #101.
+    func hooksDescriptors() -> [CommandDescriptor] {
+        [
+            CommandDescriptor(
+                names: ["claude-hook"],
+                helpLines: ["claude-hook <session-start|stop|notification> [--workspace <id|ref>] [--surface <id|ref>]"],
+                execute: { ctx in
+                    try self.runClaudeHook(commandArgs: ctx.commandArgs, client: ctx.client)
+                }
+            ),
+            CommandDescriptor(
+                names: ["codex-hook"],
+                helpLines: [],
+                execute: { ctx in
+                    try self.runCodexHook(commandArgs: ctx.commandArgs, client: ctx.client)
+                }
+            ),
+        ]
     }
 }

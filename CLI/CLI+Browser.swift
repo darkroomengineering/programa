@@ -8,7 +8,7 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+extension ProgramaCLI {
     func runBrowserCommand(
         commandArgs: [String],
         client: SocketClient,
@@ -1306,5 +1306,95 @@ extension CMUXCLI {
         }
 
         throw CLIError(message: "Unsupported browser subcommand: \(subcommand)")
+    }
+
+    /// Subcommand help text for Browser commands, split out of the
+    /// central `subcommandUsage` switch (programa.swift) so each domain's
+    /// help text lives next to its command descriptors. Refs #101.
+    func browserSubcommandUsage(_ command: String) -> String? {
+        switch command {
+        case "browser":
+            return """
+            Usage: programa browser [--surface <id|ref|index> | <surface>] <subcommand> [args]
+
+            Browser automation commands. Most subcommands require a surface handle.
+            A surface can be passed as `--surface <handle>` or as the first positional token.
+            `open`/`open-split`/`new`/`identify` can run without an explicit surface.
+
+            Subcommands:
+              open|open-split|new [url] [--workspace <id|ref|index>] [--window <id|ref|index>]
+                open/open-split/new default to $PROGRAMA_WORKSPACE_ID when --workspace is omitted and --window is not set
+              goto|navigate <url> [--snapshot-after]
+              back|forward|reload [--snapshot-after]
+              url|get-url
+              focus-webview | is-webview-focused
+              snapshot [--interactive|-i] [--cursor] [--compact] [--max-depth <n>] [--selector <css>]
+              eval [--script <js> | <js>]
+              wait [--selector <css>] [--text <text>] [--url-contains <text>|--url <text>] [--load-state <interactive|complete>] [--function <js>] [--timeout-ms <ms>|--timeout <seconds>]
+              click|dblclick|hover|focus|check|uncheck|scroll-into-view [--selector <css> | <css>] [--snapshot-after]
+              type|fill [--selector <css> | <css>] [--text <text> | <text>] [--snapshot-after]
+              press|key|keydown|keyup [--key <key> | <key>] [--snapshot-after]
+              select [--selector <css> | <css>] [--value <value> | <value>] [--snapshot-after]
+              scroll [--selector <css>] [--dx <n>] [--dy <n>] [--snapshot-after]
+              screenshot [--out <path>]
+              get <url|title|text|html|value|attr|count|box|styles> [...]
+                text|html|value|count|box|styles|attr: [--selector <css> | <css>]
+                attr: [--attr <name> | <name>]
+                styles: [--property <name>]
+              is <visible|enabled|checked> [--selector <css> | <css>]
+              find <role|text|label|placeholder|alt|title|testid|first|last|nth> [...]
+                role: [--name <text>] [--exact] <role>
+                text|label|placeholder|alt|title|testid: [--exact] <text>
+                first|last: [--selector <css> | <css>]
+                nth: [--index <n> | <n>] [--selector <css> | <css>]
+              frame <main|selector> [--selector <css>]
+              dialog <accept|dismiss> [text]
+              download [wait] [--path <path>] [--timeout-ms <ms>|--timeout <seconds>]
+              cookies <get|set|clear> [--name <name>] [--value <value>] [--url <url>] [--domain <domain>] [--path <path>] [--expires <unix>] [--secure] [--all]
+              storage <local|session> <get|set|clear> [...]
+              tab <new|list|switch|close|<index>> [...]
+              console <list|clear>
+              errors <list|clear>
+              highlight [--selector <css> | <css>]
+              state <save|load> <path>
+              addinitscript|addscript [--script <js> | <js>]
+              addstyle [--css <css> | <css>]
+              viewport <width> <height>
+              geolocation|geo <latitude> <longitude>
+              offline <true|false>
+              trace <start|stop> [path]
+              network <route|unroute|requests> ...
+                route <pattern> [--abort] [--body <text>]
+                unroute <pattern>
+              screencast <start|stop>
+              input <mouse|keyboard|touch> [args...]
+              input_mouse | input_keyboard | input_touch
+              identify [--surface <id|ref|index>]
+
+            Example:
+              programa browser open https://example.com
+              programa browser surface:1 navigate https://google.com
+              programa browser --surface surface:1 snapshot --interactive
+            """
+        // Legacy browser aliases — point users to `programa browser --help`
+        case "open-browser":
+            return "Legacy alias for 'programa browser open'. Run 'programa browser --help' for details."
+        case "navigate":
+            return "Legacy alias for 'programa browser navigate'. Run 'programa browser --help' for details."
+        case "browser-back":
+            return "Legacy alias for 'programa browser back'. Run 'programa browser --help' for details."
+        case "browser-forward":
+            return "Legacy alias for 'programa browser forward'. Run 'programa browser --help' for details."
+        case "browser-reload":
+            return "Legacy alias for 'programa browser reload'. Run 'programa browser --help' for details."
+        case "get-url":
+            return "Legacy alias for 'programa browser get-url'. Run 'programa browser --help' for details."
+        case "focus-webview":
+            return "Legacy alias for 'programa browser focus-webview'. Run 'programa browser --help' for details."
+        case "is-webview-focused":
+            return "Legacy alias for 'programa browser is-webview-focused'. Run 'programa browser --help' for details."
+        default:
+            return nil
+        }
     }
 }
