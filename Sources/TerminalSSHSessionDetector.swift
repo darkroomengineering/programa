@@ -84,12 +84,10 @@ struct DetectedSSHSession: Equatable {
         _ fileURLs: [URL],
         operation: TerminalImageTransferOperation
     ) throws -> [String] {
-        guard !fileURLs.isEmpty else { return [] }
-
-        var uploadedRemotePaths: [String] = []
-        do {
-            for localURL in fileURLs {
-                try operation.throwIfCancelled()
+        try performSCPUploadWithCancelCleanup(
+            items: fileURLs,
+            checkCancelled: { try operation.throwIfCancelled() },
+            performUpload: { localURL, record in
                 let normalizedLocalURL = localURL.standardizedFileURL
                 guard normalizedLocalURL.isFileURL else {
                     throw NSError(domain: "programa.detected-ssh.drop", code: 1, userInfo: [
@@ -112,25 +110,16 @@ struct DetectedSSHSession: Equatable {
                     ])
                 }
 
-                uploadedRemotePaths.append(remotePath)
-            }
-
-            return uploadedRemotePaths
-        } catch {
-            cleanupUploadedRemotePaths(uploadedRemotePaths)
-            throw error
-        }
+                record(remotePath)
+            },
+            cleanup: { cleanupUploadedRemotePaths($0) }
+        )
     }
 
     private func scpArguments(localPath: String, remotePath: String) -> [String] {
-        var args: [String] = [
-            "-q",
-            "-o", "ConnectTimeout=6",
-            "-o", "ServerAliveInterval=20",
-            "-o", "ServerAliveCountMax=2",
-            "-o", "BatchMode=yes",
-            "-o", "ControlMaster=no",
-        ]
+        var args: [String] = ["-q"]
+            + RemoteSSHConnectionPolicy.keepaliveArguments
+            + RemoteSSHConnectionPolicy.batchModeArguments
 
         if useIPv4 {
             args.append("-4")
@@ -157,12 +146,10 @@ struct DetectedSSHSession: Equatable {
         }
         if let controlPath,
            !controlPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           !Self.hasSSHOptionKey(sshOptions, key: "ControlPath") {
+           !RemoteSSHConnectionPolicy.hasOptionKey(sshOptions, key: "ControlPath") {
             args += ["-o", "ControlPath=\(controlPath)"]
         }
-        if !Self.hasSSHOptionKey(sshOptions, key: "StrictHostKeyChecking") {
-            args += ["-o", "StrictHostKeyChecking=accept-new"]
-        }
+        args += RemoteSSHConnectionPolicy.strictHostKeyCheckingArguments(unlessSetIn: sshOptions)
         for option in sshOptions {
             args += ["-o", option]
         }
@@ -172,14 +159,9 @@ struct DetectedSSHSession: Equatable {
     }
 
     private func sshArguments(command: String) -> [String] {
-        var args: [String] = [
-            "-T",
-            "-o", "ConnectTimeout=6",
-            "-o", "ServerAliveInterval=20",
-            "-o", "ServerAliveCountMax=2",
-            "-o", "BatchMode=yes",
-            "-o", "ControlMaster=no",
-        ]
+        var args: [String] = ["-T"]
+            + RemoteSSHConnectionPolicy.keepaliveArguments
+            + RemoteSSHConnectionPolicy.batchModeArguments
 
         if useIPv4 {
             args.append("-4")
@@ -206,12 +188,10 @@ struct DetectedSSHSession: Equatable {
         }
         if let controlPath,
            !controlPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           !Self.hasSSHOptionKey(sshOptions, key: "ControlPath") {
+           !RemoteSSHConnectionPolicy.hasOptionKey(sshOptions, key: "ControlPath") {
             args += ["-o", "ControlPath=\(controlPath)"]
         }
-        if !Self.hasSSHOptionKey(sshOptions, key: "StrictHostKeyChecking") {
-            args += ["-o", "StrictHostKeyChecking=accept-new"]
-        }
+        args += RemoteSSHConnectionPolicy.strictHostKeyCheckingArguments(unlessSetIn: sshOptions)
         for option in sshOptions {
             args += ["-o", option]
         }
@@ -222,8 +202,8 @@ struct DetectedSSHSession: Equatable {
 
     private func cleanupUploadedRemotePaths(_ remotePaths: [String]) {
         guard !remotePaths.isEmpty else { return }
-        let cleanupScript = "rm -f -- " + remotePaths.map(Self.shellSingleQuoted).joined(separator: " ")
-        let cleanupCommand = "sh -c \(Self.shellSingleQuoted(cleanupScript))"
+        let cleanupScript = "rm -f -- " + remotePaths.map(RemoteSSHConnectionPolicy.shellSingleQuoted).joined(separator: " ")
+        let cleanupCommand = "sh -c \(RemoteSSHConnectionPolicy.shellSingleQuoted(cleanupScript))"
         _ = try? Self.runProcess(
             executable: "/usr/bin/ssh",
             arguments: sshArguments(command: cleanupCommand),
@@ -331,21 +311,6 @@ struct DetectedSSHSession: Equatable {
             .first(where: { !$0.isEmpty })
     }
 
-    private static func hasSSHOptionKey(_ options: [String], key: String) -> Bool {
-        let loweredKey = key.lowercased()
-        return options.contains { optionKey($0) == loweredKey }
-    }
-
-    private static func optionKey(_ option: String) -> String? {
-        let trimmed = option.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return trimmed
-            .split(whereSeparator: { $0 == "=" || $0.isWhitespace })
-            .first
-            .map(String.init)?
-            .lowercased()
-    }
-
     private static func scpRemoteDestination(_ destination: String) -> String {
         let trimmedDestination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDestination.isEmpty else { return destination }
@@ -378,10 +343,6 @@ struct DetectedSSHSession: Equatable {
             trimmedHost.contains(":") &&
             !trimmedHost.hasPrefix("[") &&
             !trimmedHost.hasSuffix("]")
-    }
-
-    private static func shellSingleQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
 
 #if DEBUG
@@ -727,7 +688,7 @@ enum TerminalSSHSessionDetector {
     ) -> Bool {
         let trimmed = option.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        let key = sshOptionKey(trimmed)
+        let key = RemoteSSHConnectionPolicy.optionKey(trimmed)
         let value = sshOptionValue(trimmed)
 
         switch key {
@@ -778,16 +739,6 @@ enum TerminalSSHSessionDetector {
             return trimmedDestination
         }
         return "\(loginName)@\(trimmedDestination)"
-    }
-
-    private static func sshOptionKey(_ option: String) -> String? {
-        let trimmed = option.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return trimmed
-            .split(whereSeparator: { $0 == "=" || $0.isWhitespace })
-            .first
-            .map(String.init)?
-            .lowercased()
     }
 
     private static func sshOptionValue(_ option: String) -> String? {

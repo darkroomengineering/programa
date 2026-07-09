@@ -312,26 +312,26 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         """
 
         XCTAssertEqual(
-            TabManager.githubRepositorySlugs(fromGitRemoteVOutput: output),
+            GitMetadataProber.githubRepositorySlugs(fromGitRemoteVOutput: output),
             ["manaflow-ai/cmux", "austinwang/cmux"]
         )
     }
 
     func testPreferredPullRequestPrefersOpenOverMergedAndClosed() {
         let candidates = [
-            TabManager.GitHubPullRequestProbeItem(
+            GitMetadataProber.GitHubPullRequestProbeItem(
                 number: 1889,
                 state: "MERGED",
                 url: "https://github.com/manaflow-ai/cmux/pull/1889",
                 updatedAt: "2026-03-20T18:00:00Z"
             ),
-            TabManager.GitHubPullRequestProbeItem(
+            GitMetadataProber.GitHubPullRequestProbeItem(
                 number: 1891,
                 state: "OPEN",
                 url: "https://github.com/manaflow-ai/cmux/pull/1891",
                 updatedAt: "2026-03-19T18:00:00Z"
             ),
-            TabManager.GitHubPullRequestProbeItem(
+            GitMetadataProber.GitHubPullRequestProbeItem(
                 number: 1800,
                 state: "CLOSED",
                 url: "https://github.com/manaflow-ai/cmux/pull/1800",
@@ -340,19 +340,19 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         ]
 
         XCTAssertEqual(
-            TabManager.preferredPullRequest(from: candidates),
+            GitMetadataProber.preferredPullRequest(from: candidates),
             candidates[1]
         )
     }
 
     func testPreferredPullRequestPrefersMostRecentlyUpdatedWithinSameStatus() {
-        let olderOpen = TabManager.GitHubPullRequestProbeItem(
+        let olderOpen = GitMetadataProber.GitHubPullRequestProbeItem(
             number: 1880,
             state: "OPEN",
             url: "https://github.com/manaflow-ai/cmux/pull/1880",
             updatedAt: "2026-03-18T18:00:00Z"
         )
-        let newerOpen = TabManager.GitHubPullRequestProbeItem(
+        let newerOpen = GitMetadataProber.GitHubPullRequestProbeItem(
             number: 1890,
             state: "OPEN",
             url: "https://github.com/manaflow-ai/cmux/pull/1890",
@@ -360,13 +360,13 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            TabManager.preferredPullRequest(from: [olderOpen, newerOpen]),
+            GitMetadataProber.preferredPullRequest(from: [olderOpen, newerOpen]),
             newerOpen
         )
     }
 
     func testPreferredPullRequestIgnoresMalformedCandidates() {
-        let valid = TabManager.GitHubPullRequestProbeItem(
+        let valid = GitMetadataProber.GitHubPullRequestProbeItem(
             number: 1888,
             state: "OPEN",
             url: "https://github.com/manaflow-ai/cmux/pull/1888",
@@ -374,14 +374,14 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            TabManager.preferredPullRequest(from: [
-                TabManager.GitHubPullRequestProbeItem(
+            GitMetadataProber.preferredPullRequest(from: [
+                GitMetadataProber.GitHubPullRequestProbeItem(
                     number: 9999,
                     state: "WHATEVER",
                     url: "https://github.com/manaflow-ai/cmux/pull/9999",
                     updatedAt: "2026-03-21T18:00:00Z"
                 ),
-                TabManager.GitHubPullRequestProbeItem(
+                GitMetadataProber.GitHubPullRequestProbeItem(
                     number: 10000,
                     state: "OPEN",
                     url: "not a url",
@@ -394,14 +394,14 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
     }
 
     func testShouldSkipWorkspacePullRequestLookupOnlyForExactMainAndMaster() {
-        XCTAssertTrue(TabManager.shouldSkipWorkspacePullRequestLookup(branch: "main"))
-        XCTAssertTrue(TabManager.shouldSkipWorkspacePullRequestLookup(branch: "master"))
-        XCTAssertTrue(TabManager.shouldSkipWorkspacePullRequestLookup(branch: " master \n"))
+        XCTAssertTrue(GitMetadataProber.shouldSkipWorkspacePullRequestLookup(branch: "main"))
+        XCTAssertTrue(GitMetadataProber.shouldSkipWorkspacePullRequestLookup(branch: "master"))
+        XCTAssertTrue(GitMetadataProber.shouldSkipWorkspacePullRequestLookup(branch: " master \n"))
 
-        XCTAssertFalse(TabManager.shouldSkipWorkspacePullRequestLookup(branch: "Main"))
-        XCTAssertFalse(TabManager.shouldSkipWorkspacePullRequestLookup(branch: "mainline"))
-        XCTAssertFalse(TabManager.shouldSkipWorkspacePullRequestLookup(branch: "feature/main"))
-        XCTAssertFalse(TabManager.shouldSkipWorkspacePullRequestLookup(branch: "release/master-fix"))
+        XCTAssertFalse(GitMetadataProber.shouldSkipWorkspacePullRequestLookup(branch: "Main"))
+        XCTAssertFalse(GitMetadataProber.shouldSkipWorkspacePullRequestLookup(branch: "mainline"))
+        XCTAssertFalse(GitMetadataProber.shouldSkipWorkspacePullRequestLookup(branch: "feature/main"))
+        XCTAssertFalse(GitMetadataProber.shouldSkipWorkspacePullRequestLookup(branch: "release/master-fix"))
     }
 
     func testTrackedWorkspaceGitMetadataPollCandidatesIncludeMainAndMasterPanels() throws {
@@ -676,7 +676,7 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
 
         XCTAssertEqual(
-            TabManager.resolvedCommandPathForTesting(
+            GitMetadataProber.resolvedCommandPathForTesting(
                 executable: executableName,
                 environment: ["PATH": "/usr/bin:/bin"],
                 fallbackDirectories: [tempDir.path]

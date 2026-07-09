@@ -18,7 +18,7 @@ extension TabManager {
         preferredProfileID: UUID? = nil,
         focus: Bool = true
     ) -> UUID? {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
+        guard let tab = workspace(withId: tabId) else { return nil }
         return tab.newBrowserSplit(
             from: fromPanelId,
             orientation: orientation,
@@ -36,7 +36,7 @@ extension TabManager {
         url: URL? = nil,
         preferredProfileID: UUID? = nil
     ) -> UUID? {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
+        guard let tab = workspace(withId: tabId) else { return nil }
         return tab.newBrowserSurface(
             inPane: paneId,
             url: url,
@@ -46,7 +46,7 @@ extension TabManager {
 
     /// Get a browser panel by ID
     func browserPanel(tabId: UUID, panelId: UUID) -> BrowserPanel? {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
+        guard let tab = workspace(withId: tabId) else { return nil }
         return tab.browserPanel(for: panelId)
     }
 
@@ -59,7 +59,7 @@ extension TabManager {
         preferredProfileID: UUID? = nil,
         insertAtEnd: Bool = false
     ) -> UUID? {
-        guard let workspace = tabs.first(where: { $0.id == tabId }) else { return nil }
+        guard let workspace = workspace(withId: tabId) else { return nil }
         if selectedTabId != tabId {
             selectedTabId = tabId
         }
@@ -142,7 +142,7 @@ extension TabManager {
     func reopenMostRecentlyClosedBrowserPanel() -> Bool {
         while let snapshot = recentlyClosedBrowsers.pop() {
             guard let targetWorkspace =
-                tabs.first(where: { $0.id == snapshot.workspaceId })
+                workspace(withId: snapshot.workspaceId)
                 ?? selectedWorkspace
                 ?? tabs.first else {
                 return false
@@ -204,7 +204,7 @@ extension TabManager {
         preReopenFocusedPanelId: UUID?
     ) {
         guard selectedTabId == tabId,
-              let tab = tabs.first(where: { $0.id == tabId }),
+              let tab = workspace(withId: tabId),
               tab.panels[reopenedPanelId] != nil else {
             return
         }

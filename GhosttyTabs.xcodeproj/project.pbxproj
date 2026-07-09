@@ -8,9 +8,19 @@
 
 		/* Begin PBXBuildFile section */
 			A5001001 /* ProgramaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001011 /* ProgramaApp.swift */; };
+		NRPA00003 /* DebugWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00004 /* DebugWindows.swift */; };
+		NRPA00005 /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00006 /* SettingsModels.swift */; };
+		NRPA00007 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00008 /* SettingsComponents.swift */; };
+		NRPA00009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00010 /* SettingsView.swift */; };
 			A5FF0007 /* SettingDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0017 /* SettingDefinition.swift */; };
 			A5001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001012 /* ContentView.swift */; };
 			A5FF0005 /* ContentView+CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0015 /* ContentView+CommandPalette.swift */; };
+			NRCV00000000000000000005 /* TabItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000006 /* TabItemView.swift */; };
+			NRCV00000000000000000003 /* FileDropOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000004 /* FileDropOverlayView.swift */; };
+			NRCV00000000000000000001 /* CommandPaletteSearchEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */; };
+			NRCV00000000000000000007 /* SidebarDragDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000008 /* SidebarDragDrop.swift */; };
+			NRCV00000000000000000009 /* SidebarVisuals.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000010 /* SidebarVisuals.swift */; };
+			NRCV00000000000000000011 /* CommandPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000012 /* CommandPaletteController.swift */; };
 			E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */; };
 			B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */; };
 			A5001003 /* TabManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001013 /* TabManager.swift */; };
@@ -18,12 +28,17 @@
 		A5FF0073 /* TabManager+Splits.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0063 /* TabManager+Splits.swift */; };
 		A5FF0072 /* TabManager+Browser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0062 /* TabManager+Browser.swift */; };
 		A5FF0071 /* TabManager+GitMetadataPolling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0061 /* TabManager+GitMetadataPolling.swift */; };
+		NRTM00000004 /* GitMetadataProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000003 /* GitMetadataProber.swift */; };
+		NRTM00000002 /* TabManager+UITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000001 /* TabManager+UITestHarness.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
 			A5001005 /* GhosttyTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001015 /* GhosttyTerminalView.swift */; };
 			A5FF0051 /* GhosttyTerminalView+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0041 /* GhosttyTerminalView+Keyboard.swift */; };
 			A5FF0052 /* GhosttyTerminalView+Mouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0042 /* GhosttyTerminalView+Mouse.swift */; };
 			A5FF0053 /* GhosttyTerminalView+DragDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0043 /* GhosttyTerminalView+DragDrop.swift */; };
 			A5FF0054 /* GhosttyTerminalView+Accessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0044 /* GhosttyTerminalView+Accessibility.swift */; };
+			NRGV0001 /* GhosttyTerminalView+IME.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRGV0002 /* GhosttyTerminalView+IME.swift */; };
+			NRGV0003 /* GhosttyTerminalView+SwiftUIWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRGV0004 /* GhosttyTerminalView+SwiftUIWrapper.swift */; };
+			NRGV0005 /* GhosttyTerminalView+RenderStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRGV0006 /* GhosttyTerminalView+RenderStats.swift */; };
 			A5001532 /* TerminalWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001531 /* TerminalWindowPortal.swift */; };
 			A5001534 /* BrowserWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001533 /* BrowserWindowPortal.swift */; };
 			A5FF0008 /* HostedViewPortalRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0018 /* HostedViewPortalRegistry.swift */; };
@@ -50,6 +65,15 @@
 		A5001400 /* Panel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001410 /* Panel.swift */; };
 		A5001401 /* TerminalPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001411 /* TerminalPanel.swift */; };
 		A5001402 /* BrowserPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001412 /* BrowserPanel.swift */; };
+		NRBR0001 /* InspectorDock.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0002 /* InspectorDock.swift */; };
+		NRBR0003 /* BrowserWebDialogPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0004 /* BrowserWebDialogPresenter.swift */; };
+		NRBR0005 /* BrowserProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0006 /* BrowserProfileStore.swift */; };
+		NRBR0007 /* BrowserHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0008 /* BrowserHistoryStore.swift */; };
+		NRBR0009 /* BrowserDownloadDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0010 /* BrowserDownloadDelegate.swift */; };
+		NRBR0011 /* BrowserPanelWebDelegates.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0012 /* BrowserPanelWebDelegates.swift */; };
+		NRBR0013 /* BrowserUserProxySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0014 /* BrowserUserProxySettings.swift */; };
+		NRBR0015 /* IMECompositionMessageHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0016 /* IMECompositionMessageHandler.swift */; };
+		NRBR0017 /* WebViewRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0018 /* WebViewRepresentable.swift */; };
 		A5FF0013 /* BrowserDataImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0003 /* BrowserDataImport.swift */; };
 		A500RG01 /* ReactGrab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A500RG00 /* ReactGrab.swift */; };
 		A5001403 /* TerminalPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001413 /* TerminalPanelView.swift */; };
@@ -60,21 +84,45 @@
 		A5001290 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A5001291 /* MarkdownUI */; };
 		A5001405 /* PanelContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001415 /* PanelContentView.swift */; };
 		A5001406 /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001416 /* Workspace.swift */; };
+		NRWS00000000000000000028 /* Workspace+Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000027 /* Workspace+Persistence.swift */; };
+		NRWS00000000000000000030 /* Workspace+Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000029 /* Workspace+Layout.swift */; };
+		NRWS00000000000000000032 /* Workspace+Bonsplit.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000031 /* Workspace+Bonsplit.swift */; };
 		A5FF0012 /* WorkspaceRemoteSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0002 /* WorkspaceRemoteSession.swift */; };
-		A5FF0011 /* WorkspaceRemoteDaemon.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0001 /* WorkspaceRemoteDaemon.swift */; };
+		NRWS00000000000000000018 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000017 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift */; };
+		NRWS00000000000000000020 /* WorkspaceRemoteSessionController+ProcessExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000019 /* WorkspaceRemoteSessionController+ProcessExecution.swift */; };
+		NRWS00000000000000000022 /* WorkspaceRemoteSessionController+DaemonInstall.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000021 /* WorkspaceRemoteSessionController+DaemonInstall.swift */; };
+		NRWS00000000000000000024 /* WorkspaceRemoteSessionController+ScriptBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000023 /* WorkspaceRemoteSessionController+ScriptBuilders.swift */; };
+		NRWS00000000000000000026 /* WorkspaceRemoteSessionController+PortScanning.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000025 /* WorkspaceRemoteSessionController+PortScanning.swift */; };
+		NRWS00000000000000000006 /* WorkspaceRemoteDaemonPendingCallRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000005 /* WorkspaceRemoteDaemonPendingCallRegistry.swift */; };
+		NRWS00000000000000000008 /* WorkspaceRemoteSSHBatchCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000007 /* WorkspaceRemoteSSHBatchCommandBuilder.swift */; };
+		NRWS00000000000000000010 /* WorkspaceRemoteDaemonRPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000009 /* WorkspaceRemoteDaemonRPCClient.swift */; };
+		NRWS00000000000000000012 /* WorkspaceRemoteLoopbackHTTPRewriting.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000011 /* WorkspaceRemoteLoopbackHTTPRewriting.swift */; };
+		NRWS00000000000000000014 /* WorkspaceRemoteProxyBroker.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000013 /* WorkspaceRemoteProxyBroker.swift */; };
+		NRWS00000000000000000016 /* WorkspaceRemoteCLIRelayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000015 /* WorkspaceRemoteCLIRelayServer.swift */; };
+		NRWS00000000000000000002 /* RemoteSSHConnectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000001 /* RemoteSSHConnectionPolicy.swift */; };
+		NRWS00000000000000000004 /* RemoteSCPUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000003 /* RemoteSCPUpload.swift */; };
 		A5001407 /* WorkspaceContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001417 /* WorkspaceContentView.swift */; };
 			A5001093 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001090 /* AppDelegate.swift */; };
+			NRAD1001 /* MainWindowHostingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0001 /* MainWindowHostingView.swift */; };
+			NRAD1002 /* TypingProfiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0002 /* TypingProfiler.swift */; };
+			NRAD1003 /* TerminalDirectoryOpener.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0003 /* TerminalDirectoryOpener.swift */; };
+			NRAD1004 /* VSCodeIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0004 /* VSCodeIntegration.swift */; };
+			NRAD1005 /* WorkspaceShortcutMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0005 /* WorkspaceShortcutMapper.swift */; };
+			NRAD1006 /* CLIInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0006 /* CLIInstaller.swift */; };
+			NRAD1007 /* MenuBarIconRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0007 /* MenuBarIconRenderer.swift */; };
+			NRAD1008 /* WindowSwizzles.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0008 /* WindowSwizzles.swift */; };
 			A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0021 /* AppDelegate+UITestCmdClick.swift */; };
 			A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */; };
 			A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0023 /* AppDelegate+UITestHarnesses.swift */; };
 			A5001094 /* NotificationsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001091 /* NotificationsPage.swift */; };
 			A5001095 /* TerminalNotificationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001092 /* TerminalNotificationStore.swift */; };
+			NRTM00000006 /* NotificationSoundStaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000005 /* NotificationSoundStaging.swift */; };
 			A5001303 /* SurfaceSearchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001301 /* SurfaceSearchOverlay.swift */; };
 			A5008371 /* BrowserSearchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5008370 /* BrowserSearchOverlay.swift */; };
 			A5008373 /* BrowserFindJavaScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5008372 /* BrowserFindJavaScript.swift */; };
 			A50012F1 /* Backport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50012F0 /* Backport.swift */; };
 			A50012F3 /* KeyboardShortcutSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50012F2 /* KeyboardShortcutSettings.swift */; };
-			A5F10011A1B2C3D4E5F60719 /* KeyboardShortcutSettingsFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F10010A1B2C3D4E5F60719 /* KeyboardShortcutSettingsFileStore.swift */; };
+			A5F10011A1B2C3D4E5F60719 /* ProgramaSettingsFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F10010A1B2C3D4E5F60719 /* ProgramaSettingsFileStore.swift */; };
 			A50012F5 /* KeyboardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50012F4 /* KeyboardLayout.swift */; };
 			A5001201 /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001211 /* UpdateController.swift */; };
 		A5001202 /* UpdateDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001212 /* UpdateDelegate.swift */; };
@@ -94,8 +142,8 @@
 		A5001640 /* RemoteRelayZshBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001641 /* RemoteRelayZshBootstrap.swift */; };
 		A5001650 /* ProgramaConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001651 /* ProgramaConfig.swift */; };
 		A5001652 /* ProgramaConfigExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001653 /* ProgramaConfigExecutor.swift */; };
+		NRPA00001 /* FileWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00002 /* FileWatcher.swift */; };
 		A5001654 /* ProgramaDirectoryTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001655 /* ProgramaDirectoryTrust.swift */; };
-		A5001660 /* SurfacePool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001661 /* SurfacePool.swift */; };
 		A5001100 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A5001101 /* Assets.xcassets */; };
 		A5001230 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A5001231 /* Sparkle */; };
 		B9000002A1B2C3D4E5F60719 /* programa.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000001A1B2C3D4E5F60719 /* programa.swift */; };
@@ -240,9 +288,19 @@
 			F1000002A1B2C3D4E5F60718 /* programaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			A5001011 /* ProgramaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaApp.swift; sourceTree = "<group>"; };
+		NRPA00004 /* DebugWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugWindows.swift; sourceTree = "<group>"; };
+		NRPA00006 /* SettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModels.swift; sourceTree = "<group>"; };
+		NRPA00008 /* SettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsComponents.swift; sourceTree = "<group>"; };
+		NRPA00010 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 			A5FF0017 /* SettingDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingDefinition.swift; sourceTree = "<group>"; };
 			A5001012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 			A5FF0015 /* ContentView+CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+CommandPalette.swift"; sourceTree = "<group>"; };
+		NRCV00000000000000000006 /* TabItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabItemView.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000004 /* FileDropOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropOverlayView.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteSearchEngine.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000008 /* SidebarDragDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarDragDrop.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000010 /* SidebarVisuals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarVisuals.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000012 /* CommandPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteController.swift; sourceTree = "<group>"; };
 			9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSelectionState.swift; sourceTree = "<group>"; };
 			B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDragHandleView.swift; sourceTree = "<group>"; };
 			A5001013 /* TabManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManager.swift; sourceTree = "<group>"; };
@@ -250,12 +308,17 @@
 		A5FF0063 /* TabManager+Splits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+Splits.swift"; sourceTree = "<group>"; };
 		A5FF0062 /* TabManager+Browser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+Browser.swift"; sourceTree = "<group>"; };
 		A5FF0061 /* TabManager+GitMetadataPolling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+GitMetadataPolling.swift"; sourceTree = "<group>"; };
+		NRTM00000003 /* GitMetadataProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitMetadataProber.swift; sourceTree = "<group>"; };
+		NRTM00000001 /* TabManager+UITestHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+UITestHarness.swift"; sourceTree = "<group>"; };
 			A5001014 /* GhosttyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfig.swift; sourceTree = "<group>"; };
 			A5001015 /* GhosttyTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTerminalView.swift; sourceTree = "<group>"; };
 			A5FF0041 /* GhosttyTerminalView+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+Keyboard.swift"; sourceTree = "<group>"; };
 			A5FF0042 /* GhosttyTerminalView+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+Mouse.swift"; sourceTree = "<group>"; };
 			A5FF0043 /* GhosttyTerminalView+DragDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+DragDrop.swift"; sourceTree = "<group>"; };
 			A5FF0044 /* GhosttyTerminalView+Accessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+Accessibility.swift"; sourceTree = "<group>"; };
+			NRGV0002 /* GhosttyTerminalView+IME.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+IME.swift"; sourceTree = "<group>"; };
+			NRGV0004 /* GhosttyTerminalView+SwiftUIWrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+SwiftUIWrapper.swift"; sourceTree = "<group>"; };
+			NRGV0006 /* GhosttyTerminalView+RenderStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+RenderStats.swift"; sourceTree = "<group>"; };
 			A5001531 /* TerminalWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalWindowPortal.swift; sourceTree = "<group>"; };
 			A5001533 /* BrowserWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserWindowPortal.swift; sourceTree = "<group>"; };
 			A5FF0018 /* HostedViewPortalRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedViewPortalRegistry.swift; sourceTree = "<group>"; };
@@ -283,6 +346,15 @@
 		A5001410 /* Panel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/Panel.swift; sourceTree = "<group>"; };
 		A5001411 /* TerminalPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/TerminalPanel.swift; sourceTree = "<group>"; };
 		A5001412 /* BrowserPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserPanel.swift; sourceTree = "<group>"; };
+		NRBR0002 /* InspectorDock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/InspectorDock.swift; sourceTree = "<group>"; };
+		NRBR0004 /* BrowserWebDialogPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserWebDialogPresenter.swift; sourceTree = "<group>"; };
+		NRBR0006 /* BrowserProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserProfileStore.swift; sourceTree = "<group>"; };
+		NRBR0008 /* BrowserHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserHistoryStore.swift; sourceTree = "<group>"; };
+		NRBR0010 /* BrowserDownloadDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserDownloadDelegate.swift; sourceTree = "<group>"; };
+		NRBR0012 /* BrowserPanelWebDelegates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserPanelWebDelegates.swift; sourceTree = "<group>"; };
+		NRBR0014 /* BrowserUserProxySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserUserProxySettings.swift; sourceTree = "<group>"; };
+		NRBR0016 /* IMECompositionMessageHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/IMECompositionMessageHandler.swift; sourceTree = "<group>"; };
+		NRBR0018 /* WebViewRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/WebViewRepresentable.swift; sourceTree = "<group>"; };
 		A5FF0003 /* BrowserDataImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserDataImport.swift; sourceTree = "<group>"; };
 		A500RG00 /* ReactGrab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ReactGrab.swift; sourceTree = "<group>"; };
 		A5001413 /* TerminalPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/TerminalPanelView.swift; sourceTree = "<group>"; };
@@ -292,21 +364,45 @@
 		A5001418 /* MarkdownPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanel.swift; sourceTree = "<group>"; };
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
 		A5001416 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000027 /* Workspace+Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Persistence.swift"; sourceTree = "<group>"; };
+		NRWS00000000000000000029 /* Workspace+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Layout.swift"; sourceTree = "<group>"; };
+		NRWS00000000000000000031 /* Workspace+Bonsplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Bonsplit.swift"; sourceTree = "<group>"; };
 		A5FF0002 /* WorkspaceRemoteSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteSession.swift; sourceTree = "<group>"; };
-		A5FF0001 /* WorkspaceRemoteDaemon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteDaemon.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000017 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkspaceRemoteSessionController+ConnectionOrchestration.swift"; sourceTree = "<group>"; };
+		NRWS00000000000000000019 /* WorkspaceRemoteSessionController+ProcessExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkspaceRemoteSessionController+ProcessExecution.swift"; sourceTree = "<group>"; };
+		NRWS00000000000000000021 /* WorkspaceRemoteSessionController+DaemonInstall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkspaceRemoteSessionController+DaemonInstall.swift"; sourceTree = "<group>"; };
+		NRWS00000000000000000023 /* WorkspaceRemoteSessionController+ScriptBuilders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkspaceRemoteSessionController+ScriptBuilders.swift"; sourceTree = "<group>"; };
+		NRWS00000000000000000025 /* WorkspaceRemoteSessionController+PortScanning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkspaceRemoteSessionController+PortScanning.swift"; sourceTree = "<group>"; };
+		NRWS00000000000000000005 /* WorkspaceRemoteDaemonPendingCallRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteDaemonPendingCallRegistry.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000007 /* WorkspaceRemoteSSHBatchCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteSSHBatchCommandBuilder.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000009 /* WorkspaceRemoteDaemonRPCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteDaemonRPCClient.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000011 /* WorkspaceRemoteLoopbackHTTPRewriting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteLoopbackHTTPRewriting.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000013 /* WorkspaceRemoteProxyBroker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteProxyBroker.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000015 /* WorkspaceRemoteCLIRelayServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteCLIRelayServer.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000001 /* RemoteSSHConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSSHConnectionPolicy.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000003 /* RemoteSCPUpload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSCPUpload.swift; sourceTree = "<group>"; };
 		A5001417 /* WorkspaceContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceContentView.swift; sourceTree = "<group>"; };
 		A5001090 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		NRAD0001 /* MainWindowHostingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowHostingView.swift; sourceTree = "<group>"; };
+		NRAD0002 /* TypingProfiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingProfiler.swift; sourceTree = "<group>"; };
+		NRAD0003 /* TerminalDirectoryOpener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalDirectoryOpener.swift; sourceTree = "<group>"; };
+		NRAD0004 /* VSCodeIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeIntegration.swift; sourceTree = "<group>"; };
+		NRAD0005 /* WorkspaceShortcutMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceShortcutMapper.swift; sourceTree = "<group>"; };
+		NRAD0006 /* CLIInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIInstaller.swift; sourceTree = "<group>"; };
+		NRAD0007 /* MenuBarIconRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconRenderer.swift; sourceTree = "<group>"; };
+		NRAD0008 /* WindowSwizzles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSwizzles.swift; sourceTree = "<group>"; };
 		A5FF0021 /* AppDelegate+UITestCmdClick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestCmdClick.swift"; sourceTree = "<group>"; };
 		A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestStressWorkspaces.swift"; sourceTree = "<group>"; };
 		A5FF0023 /* AppDelegate+UITestHarnesses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestHarnesses.swift"; sourceTree = "<group>"; };
 		A5001091 /* NotificationsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsPage.swift; sourceTree = "<group>"; };
 		A5001092 /* TerminalNotificationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalNotificationStore.swift; sourceTree = "<group>"; };
+		NRTM00000005 /* NotificationSoundStaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundStaging.swift; sourceTree = "<group>"; };
 		A5001301 /* SurfaceSearchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Find/SurfaceSearchOverlay.swift; sourceTree = "<group>"; };
 		A5008370 /* BrowserSearchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Find/BrowserSearchOverlay.swift; sourceTree = "<group>"; };
 		A5008372 /* BrowserFindJavaScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Find/BrowserFindJavaScript.swift; sourceTree = "<group>"; };
 		A50012F0 /* Backport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Backport.swift; sourceTree = "<group>"; };
 		A50012F2 /* KeyboardShortcutSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutSettings.swift; sourceTree = "<group>"; };
-		A5F10010A1B2C3D4E5F60719 /* KeyboardShortcutSettingsFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutSettingsFileStore.swift; sourceTree = "<group>"; };
+		A5F10010A1B2C3D4E5F60719 /* ProgramaSettingsFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaSettingsFileStore.swift; sourceTree = "<group>"; };
 		A50012F4 /* KeyboardLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardLayout.swift; sourceTree = "<group>"; };
 		A5001211 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Update/UpdateController.swift; sourceTree = "<group>"; };
 		A5001212 /* UpdateDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Update/UpdateDelegate.swift; sourceTree = "<group>"; };
@@ -325,8 +421,8 @@
 		A5001611 /* SessionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPersistence.swift; sourceTree = "<group>"; };
 		A5001651 /* ProgramaConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfig.swift; sourceTree = "<group>"; };
 		A5001653 /* ProgramaConfigExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfigExecutor.swift; sourceTree = "<group>"; };
+		NRPA00002 /* FileWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileWatcher.swift; sourceTree = "<group>"; };
 		A5001655 /* ProgramaDirectoryTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaDirectoryTrust.swift; sourceTree = "<group>"; };
-		A5001661 /* SurfacePool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfacePool.swift; sourceTree = "<group>"; };
 		A5001641 /* RemoteRelayZshBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteRelayZshBootstrap.swift; sourceTree = "<group>"; };
 		818DBCD4AB69EB72573E8138 /* SidebarResizeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarResizeUITests.swift; sourceTree = "<group>"; };
 		B8F266256A1A3D9A45BD840F /* SidebarHelpMenuUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarHelpMenuUITests.swift; sourceTree = "<group>"; };
@@ -517,24 +613,51 @@
 				isa = PBXGroup;
 				children = (
 					A5001011 /* ProgramaApp.swift */,
+					NRPA00004 /* DebugWindows.swift */,
+					NRPA00006 /* SettingsModels.swift */,
+					NRPA00008 /* SettingsComponents.swift */,
+					NRPA00010 /* SettingsView.swift */,
 					A5FF0017 /* SettingDefinition.swift */,
 					A5001012 /* ContentView.swift */,
 					A5FF0015 /* ContentView+CommandPalette.swift */,
+					NRCV00000000000000000006 /* TabItemView.swift */,
+					NRCV00000000000000000004 /* FileDropOverlayView.swift */,
+					NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */,
+					NRCV00000000000000000008 /* SidebarDragDrop.swift */,
+					NRCV00000000000000000010 /* SidebarVisuals.swift */,
+					NRCV00000000000000000012 /* CommandPaletteController.swift */,
 					9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */,
 					B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */,
 					A50012F0 /* Backport.swift */,
 					A50012F2 /* KeyboardShortcutSettings.swift */,
-					A5F10010A1B2C3D4E5F60719 /* KeyboardShortcutSettingsFileStore.swift */,
+					A5F10010A1B2C3D4E5F60719 /* ProgramaSettingsFileStore.swift */,
 					A50012F4 /* KeyboardLayout.swift */,
 					A5001013 /* TabManager.swift */,
 					A5FF0064 /* TabManager+SessionPersistence.swift */,
 					A5FF0063 /* TabManager+Splits.swift */,
 					A5FF0062 /* TabManager+Browser.swift */,
 					A5FF0061 /* TabManager+GitMetadataPolling.swift */,
+					NRTM00000001 /* TabManager+UITestHarness.swift */,
+					NRTM00000003 /* GitMetadataProber.swift */,
 					A5001511 /* UITestRecorder.swift */,
 					A5001416 /* Workspace.swift */,
+					NRWS00000000000000000027 /* Workspace+Persistence.swift */,
+					NRWS00000000000000000029 /* Workspace+Layout.swift */,
+					NRWS00000000000000000031 /* Workspace+Bonsplit.swift */,
 					A5FF0002 /* WorkspaceRemoteSession.swift */,
-					A5FF0001 /* WorkspaceRemoteDaemon.swift */,
+					NRWS00000000000000000017 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift */,
+					NRWS00000000000000000019 /* WorkspaceRemoteSessionController+ProcessExecution.swift */,
+					NRWS00000000000000000021 /* WorkspaceRemoteSessionController+DaemonInstall.swift */,
+					NRWS00000000000000000023 /* WorkspaceRemoteSessionController+ScriptBuilders.swift */,
+					NRWS00000000000000000025 /* WorkspaceRemoteSessionController+PortScanning.swift */,
+					NRWS00000000000000000005 /* WorkspaceRemoteDaemonPendingCallRegistry.swift */,
+					NRWS00000000000000000007 /* WorkspaceRemoteSSHBatchCommandBuilder.swift */,
+					NRWS00000000000000000009 /* WorkspaceRemoteDaemonRPCClient.swift */,
+					NRWS00000000000000000011 /* WorkspaceRemoteLoopbackHTTPRewriting.swift */,
+					NRWS00000000000000000013 /* WorkspaceRemoteProxyBroker.swift */,
+					NRWS00000000000000000015 /* WorkspaceRemoteCLIRelayServer.swift */,
+					NRWS00000000000000000001 /* RemoteSSHConnectionPolicy.swift */,
+					NRWS00000000000000000003 /* RemoteSCPUpload.swift */,
 				A5001417 /* WorkspaceContentView.swift */,
 				A5001014 /* GhosttyConfig.swift */,
 				A5001015 /* GhosttyTerminalView.swift */,
@@ -542,6 +665,9 @@
 				A5FF0042 /* GhosttyTerminalView+Mouse.swift */,
 				A5FF0043 /* GhosttyTerminalView+DragDrop.swift */,
 				A5FF0044 /* GhosttyTerminalView+Accessibility.swift */,
+				NRGV0002 /* GhosttyTerminalView+IME.swift */,
+				NRGV0004 /* GhosttyTerminalView+SwiftUIWrapper.swift */,
+				NRGV0006 /* GhosttyTerminalView+RenderStats.swift */,
 				A5001531 /* TerminalWindowPortal.swift */,
 				A5001533 /* BrowserWindowPortal.swift */,
 				A5FF0018 /* HostedViewPortalRegistry.swift */,
@@ -562,17 +688,35 @@
 				A5001620 /* AppleScriptSupport.swift */,
 				D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */,
 				A5001090 /* AppDelegate.swift */,
+				NRAD0001 /* MainWindowHostingView.swift */,
+				NRAD0002 /* TypingProfiler.swift */,
+				NRAD0003 /* TerminalDirectoryOpener.swift */,
+				NRAD0004 /* VSCodeIntegration.swift */,
+				NRAD0005 /* WorkspaceShortcutMapper.swift */,
+				NRAD0006 /* CLIInstaller.swift */,
+				NRAD0007 /* MenuBarIconRenderer.swift */,
+				NRAD0008 /* WindowSwizzles.swift */,
 				A5FF0021 /* AppDelegate+UITestCmdClick.swift */,
 				A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */,
 				A5FF0023 /* AppDelegate+UITestHarnesses.swift */,
 				A5001091 /* NotificationsPage.swift */,
 				A5001092 /* TerminalNotificationStore.swift */,
+				NRTM00000005 /* NotificationSoundStaging.swift */,
 				A5001301 /* SurfaceSearchOverlay.swift */,
 				A5008370 /* BrowserSearchOverlay.swift */,
 				A5008372 /* BrowserFindJavaScript.swift */,
 				A5001410 /* Panel.swift */,
 				A5001411 /* TerminalPanel.swift */,
 				A5001412 /* BrowserPanel.swift */,
+				NRBR0002 /* InspectorDock.swift */,
+				NRBR0004 /* BrowserWebDialogPresenter.swift */,
+				NRBR0006 /* BrowserProfileStore.swift */,
+				NRBR0008 /* BrowserHistoryStore.swift */,
+				NRBR0010 /* BrowserDownloadDelegate.swift */,
+				NRBR0012 /* BrowserPanelWebDelegates.swift */,
+				NRBR0014 /* BrowserUserProxySettings.swift */,
+				NRBR0016 /* IMECompositionMessageHandler.swift */,
+				NRBR0018 /* WebViewRepresentable.swift */,
 				A5FF0003 /* BrowserDataImport.swift */,
 				A500RG00 /* ReactGrab.swift */,
 				A5001413 /* TerminalPanelView.swift */,
@@ -600,8 +744,8 @@
 				A5001641 /* RemoteRelayZshBootstrap.swift */,
 				A5001651 /* ProgramaConfig.swift */,
 				A5001653 /* ProgramaConfigExecutor.swift */,
+				NRPA00002 /* FileWatcher.swift */,
 				A5001655 /* ProgramaDirectoryTrust.swift */,
-				A5001661 /* SurfacePool.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -855,24 +999,51 @@
 				buildActionMask = 2147483647;
 				files = (
 					A5001001 /* ProgramaApp.swift in Sources */,
+					NRPA00003 /* DebugWindows.swift in Sources */,
+					NRPA00005 /* SettingsModels.swift in Sources */,
+					NRPA00007 /* SettingsComponents.swift in Sources */,
+					NRPA00009 /* SettingsView.swift in Sources */,
 					A5FF0007 /* SettingDefinition.swift in Sources */,
 					A5001002 /* ContentView.swift in Sources */,
 					A5FF0005 /* ContentView+CommandPalette.swift in Sources */,
+					NRCV00000000000000000005 /* TabItemView.swift in Sources */,
+					NRCV00000000000000000003 /* FileDropOverlayView.swift in Sources */,
+					NRCV00000000000000000001 /* CommandPaletteSearchEngine.swift in Sources */,
+					NRCV00000000000000000007 /* SidebarDragDrop.swift in Sources */,
+					NRCV00000000000000000009 /* SidebarVisuals.swift in Sources */,
+					NRCV00000000000000000011 /* CommandPaletteController.swift in Sources */,
 					E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */,
 					B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */,
 					A50012F1 /* Backport.swift in Sources */,
 					A50012F3 /* KeyboardShortcutSettings.swift in Sources */,
-					A5F10011A1B2C3D4E5F60719 /* KeyboardShortcutSettingsFileStore.swift in Sources */,
+					A5F10011A1B2C3D4E5F60719 /* ProgramaSettingsFileStore.swift in Sources */,
 					A50012F5 /* KeyboardLayout.swift in Sources */,
 						A5001003 /* TabManager.swift in Sources */,
 						A5FF0074 /* TabManager+SessionPersistence.swift in Sources */,
 						A5FF0073 /* TabManager+Splits.swift in Sources */,
 						A5FF0072 /* TabManager+Browser.swift in Sources */,
 						A5FF0071 /* TabManager+GitMetadataPolling.swift in Sources */,
+						NRTM00000002 /* TabManager+UITestHarness.swift in Sources */,
+						NRTM00000004 /* GitMetadataProber.swift in Sources */,
 						A5001501 /* UITestRecorder.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
+						NRWS00000000000000000028 /* Workspace+Persistence.swift in Sources */,
+						NRWS00000000000000000030 /* Workspace+Layout.swift in Sources */,
+						NRWS00000000000000000032 /* Workspace+Bonsplit.swift in Sources */,
 						A5FF0012 /* WorkspaceRemoteSession.swift in Sources */,
-						A5FF0011 /* WorkspaceRemoteDaemon.swift in Sources */,
+						NRWS00000000000000000018 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift in Sources */,
+						NRWS00000000000000000020 /* WorkspaceRemoteSessionController+ProcessExecution.swift in Sources */,
+						NRWS00000000000000000022 /* WorkspaceRemoteSessionController+DaemonInstall.swift in Sources */,
+						NRWS00000000000000000024 /* WorkspaceRemoteSessionController+ScriptBuilders.swift in Sources */,
+						NRWS00000000000000000026 /* WorkspaceRemoteSessionController+PortScanning.swift in Sources */,
+						NRWS00000000000000000006 /* WorkspaceRemoteDaemonPendingCallRegistry.swift in Sources */,
+						NRWS00000000000000000008 /* WorkspaceRemoteSSHBatchCommandBuilder.swift in Sources */,
+						NRWS00000000000000000010 /* WorkspaceRemoteDaemonRPCClient.swift in Sources */,
+						NRWS00000000000000000012 /* WorkspaceRemoteLoopbackHTTPRewriting.swift in Sources */,
+						NRWS00000000000000000014 /* WorkspaceRemoteProxyBroker.swift in Sources */,
+						NRWS00000000000000000016 /* WorkspaceRemoteCLIRelayServer.swift in Sources */,
+						NRWS00000000000000000002 /* RemoteSSHConnectionPolicy.swift in Sources */,
+						NRWS00000000000000000004 /* RemoteSCPUpload.swift in Sources */,
 				A5001407 /* WorkspaceContentView.swift in Sources */,
 				A5001004 /* GhosttyConfig.swift in Sources */,
 				A5001005 /* GhosttyTerminalView.swift in Sources */,
@@ -880,6 +1051,9 @@
 				A5FF0052 /* GhosttyTerminalView+Mouse.swift in Sources */,
 				A5FF0053 /* GhosttyTerminalView+DragDrop.swift in Sources */,
 				A5FF0054 /* GhosttyTerminalView+Accessibility.swift in Sources */,
+				NRGV0001 /* GhosttyTerminalView+IME.swift in Sources */,
+				NRGV0003 /* GhosttyTerminalView+SwiftUIWrapper.swift in Sources */,
+				NRGV0005 /* GhosttyTerminalView+RenderStats.swift in Sources */,
 				A5001532 /* TerminalWindowPortal.swift in Sources */,
 				A5001534 /* BrowserWindowPortal.swift in Sources */,
 				A5FF0008 /* HostedViewPortalRegistry.swift in Sources */,
@@ -899,17 +1073,35 @@
 				A5001226 /* SocketControlSettings.swift in Sources */,
 				A5001621 /* AppleScriptSupport.swift in Sources */,
 				A5001093 /* AppDelegate.swift in Sources */,
+				NRAD1001 /* MainWindowHostingView.swift in Sources */,
+				NRAD1002 /* TypingProfiler.swift in Sources */,
+				NRAD1003 /* TerminalDirectoryOpener.swift in Sources */,
+				NRAD1004 /* VSCodeIntegration.swift in Sources */,
+				NRAD1005 /* WorkspaceShortcutMapper.swift in Sources */,
+				NRAD1006 /* CLIInstaller.swift in Sources */,
+				NRAD1007 /* MenuBarIconRenderer.swift in Sources */,
+				NRAD1008 /* WindowSwizzles.swift in Sources */,
 				A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */,
 				A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */,
 				A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */,
 				A5001094 /* NotificationsPage.swift in Sources */,
 				A5001095 /* TerminalNotificationStore.swift in Sources */,
+				NRTM00000006 /* NotificationSoundStaging.swift in Sources */,
 				A5001303 /* SurfaceSearchOverlay.swift in Sources */,
 				A5008371 /* BrowserSearchOverlay.swift in Sources */,
 				A5008373 /* BrowserFindJavaScript.swift in Sources */,
 				A5001400 /* Panel.swift in Sources */,
 				A5001401 /* TerminalPanel.swift in Sources */,
 				A5001402 /* BrowserPanel.swift in Sources */,
+				NRBR0001 /* InspectorDock.swift in Sources */,
+				NRBR0003 /* BrowserWebDialogPresenter.swift in Sources */,
+				NRBR0005 /* BrowserProfileStore.swift in Sources */,
+				NRBR0007 /* BrowserHistoryStore.swift in Sources */,
+				NRBR0009 /* BrowserDownloadDelegate.swift in Sources */,
+				NRBR0011 /* BrowserPanelWebDelegates.swift in Sources */,
+				NRBR0013 /* BrowserUserProxySettings.swift in Sources */,
+				NRBR0015 /* IMECompositionMessageHandler.swift in Sources */,
+				NRBR0017 /* WebViewRepresentable.swift in Sources */,
 				A5FF0013 /* BrowserDataImport.swift in Sources */,
 				A500RG01 /* ReactGrab.swift in Sources */,
 				A5001403 /* TerminalPanelView.swift in Sources */,
@@ -937,8 +1129,8 @@
 				A5001640 /* RemoteRelayZshBootstrap.swift in Sources */,
 				A5001650 /* ProgramaConfig.swift in Sources */,
 			A5001652 /* ProgramaConfigExecutor.swift in Sources */,
+				NRPA00001 /* FileWatcher.swift in Sources */,
 			A5001654 /* ProgramaDirectoryTrust.swift in Sources */,
-			A5001660 /* SurfacePool.swift in Sources */,
 		);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -104,7 +104,7 @@ extension TabManager {
 
     func trackedWorkspaceGitMetadataPollCandidatePanelIdsForTesting(workspaceId: UUID) -> Set<UUID> {
         let activeProbeKeys = Set(workspaceGitProbeGenerationByKey.keys)
-        guard let workspace = tabs.first(where: { $0.id == workspaceId }) else {
+        guard let workspace = workspace(withId: workspaceId) else {
             return []
         }
         return trackedWorkspaceGitMetadataPollCandidatePanelIds(
@@ -198,7 +198,7 @@ extension TabManager {
         panelId: UUID,
         reason: String = "initial"
     ) {
-        guard let workspace = tabs.first(where: { $0.id == workspaceId }),
+        guard let workspace = workspace(withId: workspaceId),
               !workspace.isRemoteWorkspace else {
             return
         }
@@ -216,7 +216,7 @@ extension TabManager {
         reason: String,
         delays: [TimeInterval] = [0]
     ) {
-        guard let workspace = tabs.first(where: { $0.id == workspaceId }),
+        guard let workspace = workspace(withId: workspaceId),
               workspace.panels[panelId] != nil,
               let directory = gitProbeDirectory(for: workspace, panelId: panelId) else {
             return
