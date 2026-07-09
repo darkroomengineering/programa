@@ -1183,6 +1183,64 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
         return true
     }
 
+    /// Hide `hostedView` for a `synchronizeHostedView` entry that can't be positioned this
+    /// pass (missing anchor/window, anchor moved to a different window, or host bounds not
+    /// yet laid out), scheduling a transient-recovery retry so a genuinely-transient geometry
+    /// hiccup doesn't get stuck hidden. Falls back to a full `synchronizeAllHostedViews` when
+    /// transient recovery is disabled (production builds), so that path isn't left with no
+    /// recovery at all.
+    ///
+    /// Returns `true` if the caller should return immediately because the current visible
+    /// frame was preserved pending a transient-recovery retry (i.e. `hostedView.isHidden`
+    /// was deliberately left unchanged this pass).
+    @discardableResult
+    private func hideHostedViewSchedulingRecovery(
+        hostedId: ObjectIdentifier,
+        entry: inout Entry,
+        hostedView: GhosttySurfaceScrollView,
+        reason: String
+    ) -> Bool {
+        if entry.visibleInUI {
+            let shouldPreserveVisibleOnTransient = !hostedView.isHidden &&
+                scheduleTransientRecoveryRetryIfNeeded(
+                    forHostedId: hostedId,
+                    entry: &entry,
+                    hostedView: hostedView,
+                    reason: reason
+                )
+            if shouldPreserveVisibleOnTransient {
+#if DEBUG
+                dlog(
+                    "portal.hidden.deferKeep hosted=\(portalDebugToken(hostedView)) " +
+                    "reason=\(reason) frame=\(portalDebugFrame(hostedView.frame))"
+                )
+#endif
+                return true
+            }
+        } else {
+            resetTransientRecoveryRetryIfNeeded(forHostedId: hostedId, entry: &entry)
+        }
+#if DEBUG
+        if !hostedView.isHidden {
+            dlog("portal.hidden hosted=\(portalDebugToken(hostedView)) value=1 reason=\(reason)")
+        }
+#endif
+        hostedView.isHidden = true
+        if entry.visibleInUI {
+            if Self.transientRecoveryEnabled {
+                _ = scheduleTransientRecoveryRetryIfNeeded(
+                    forHostedId: hostedId,
+                    entry: &entry,
+                    hostedView: hostedView,
+                    reason: reason
+                )
+            } else {
+                scheduleDeferredFullSynchronizeAll()
+            }
+        }
+        return false
+    }
+
     private func synchronizeHostedView(withId hostedId: ObjectIdentifier) {
         guard ensureInstalled() else { return }
         guard var entry = entriesByHostedId[hostedId] else { return }
@@ -1191,40 +1249,12 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
             return
         }
         guard let anchorView = entry.anchorView, let window else {
-            if entry.visibleInUI {
-                let shouldPreserveVisibleOnTransient = !hostedView.isHidden &&
-                    scheduleTransientRecoveryRetryIfNeeded(
-                        forHostedId: hostedId,
-                        entry: &entry,
-                        hostedView: hostedView,
-                        reason: "missingAnchorOrWindow"
-                    )
-                if shouldPreserveVisibleOnTransient {
-#if DEBUG
-                    dlog(
-                        "portal.hidden.deferKeep hosted=\(portalDebugToken(hostedView)) " +
-                        "reason=missingAnchorOrWindow frame=\(portalDebugFrame(hostedView.frame))"
-                    )
-#endif
-                    return
-                }
-            } else {
-                resetTransientRecoveryRetryIfNeeded(forHostedId: hostedId, entry: &entry)
-            }
-#if DEBUG
-            if !hostedView.isHidden {
-                dlog("portal.hidden hosted=\(portalDebugToken(hostedView)) value=1 reason=missingAnchorOrWindow")
-            }
-#endif
-            hostedView.isHidden = true
-            if entry.visibleInUI {
-                _ = scheduleTransientRecoveryRetryIfNeeded(
-                    forHostedId: hostedId,
-                    entry: &entry,
-                    hostedView: hostedView,
-                    reason: "missingAnchorOrWindow"
-                )
-            }
+            _ = hideHostedViewSchedulingRecovery(
+                hostedId: hostedId,
+                entry: &entry,
+                hostedView: hostedView,
+                reason: "missingAnchorOrWindow"
+            )
             return
         }
         guard anchorView.window === window else {
@@ -1236,35 +1266,12 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
                 )
             }
 #endif
-            if entry.visibleInUI {
-                let shouldPreserveVisibleOnTransient = !hostedView.isHidden &&
-                    scheduleTransientRecoveryRetryIfNeeded(
-                        forHostedId: hostedId,
-                        entry: &entry,
-                        hostedView: hostedView,
-                        reason: "anchorWindowMismatch"
-                    )
-                if shouldPreserveVisibleOnTransient {
-#if DEBUG
-                    dlog(
-                        "portal.hidden.deferKeep hosted=\(portalDebugToken(hostedView)) " +
-                        "reason=anchorWindowMismatch frame=\(portalDebugFrame(hostedView.frame))"
-                    )
-#endif
-                    return
-                }
-            } else {
-                resetTransientRecoveryRetryIfNeeded(forHostedId: hostedId, entry: &entry)
-            }
-            hostedView.isHidden = true
-            if entry.visibleInUI {
-                _ = scheduleTransientRecoveryRetryIfNeeded(
-                    forHostedId: hostedId,
-                    entry: &entry,
-                    hostedView: hostedView,
-                    reason: "anchorWindowMismatch"
-                )
-            }
+            _ = hideHostedViewSchedulingRecovery(
+                hostedId: hostedId,
+                entry: &entry,
+                hostedView: hostedView,
+                reason: "anchorWindowMismatch"
+            )
             return
         }
 
@@ -1290,39 +1297,12 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
                 "anchor=\(portalDebugFrame(frameInHost)) visibleInUI=\(entry.visibleInUI ? 1 : 0)"
             )
 #endif
-            if entry.visibleInUI {
-                let shouldPreserveVisibleOnTransient = !hostedView.isHidden &&
-                    scheduleTransientRecoveryRetryIfNeeded(
-                        forHostedId: hostedId,
-                        entry: &entry,
-                        hostedView: hostedView,
-                        reason: "hostBoundsNotReady"
-                    )
-                if shouldPreserveVisibleOnTransient {
-#if DEBUG
-                    dlog(
-                        "portal.hidden.deferKeep hosted=\(portalDebugToken(hostedView)) " +
-                        "reason=hostBoundsNotReady frame=\(portalDebugFrame(hostedView.frame))"
-                    )
-#endif
-                    return
-                }
-            } else {
-                resetTransientRecoveryRetryIfNeeded(forHostedId: hostedId, entry: &entry)
-            }
-            hostedView.isHidden = true
-            if entry.visibleInUI {
-                if Self.transientRecoveryEnabled {
-                    _ = scheduleTransientRecoveryRetryIfNeeded(
-                        forHostedId: hostedId,
-                        entry: &entry,
-                        hostedView: hostedView,
-                        reason: "hostBoundsNotReady"
-                    )
-                } else {
-                    scheduleDeferredFullSynchronizeAll()
-                }
-            }
+            _ = hideHostedViewSchedulingRecovery(
+                hostedId: hostedId,
+                entry: &entry,
+                hostedView: hostedView,
+                reason: "hostBoundsNotReady"
+            )
             return
         }
         let hasFiniteFrame =
