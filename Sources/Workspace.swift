@@ -3314,37 +3314,21 @@ final class Workspace: Identifiable, ObservableObject {
     }
 
     func configureRemoteConnection(_ configuration: WorkspaceRemoteConfiguration, autoConnect: Bool = true) {
-        skipControlMasterCleanupAfterDetachedRemoteTransfer = false
-        remoteConfiguration = configuration
-        seedInitialRemoteTerminalSessionIfNeeded(configuration: configuration)
-        clearRemoteDetectedSurfacePorts()
-        remoteDetectedPorts = []
-        remoteForwardedPorts = []
-        remotePortConflicts = []
-        remoteProxyEndpoint = nil
-        remoteHeartbeatCount = 0
-        remoteLastHeartbeatAt = nil
-        remoteConnectionDetail = nil
-        remoteDaemonStatus = WorkspaceRemoteDaemonStatus()
-        statusEntries.removeValue(forKey: Self.remoteErrorStatusKey)
-        statusEntries.removeValue(forKey: Self.remotePortConflictStatusKey)
-        remoteLastErrorFingerprint = nil
-        remoteLastDaemonErrorFingerprint = nil
-        remoteLastPortConflictFingerprint = nil
-        recomputeListeningPorts()
-
-        let previousController = remoteSessionController
-        activeRemoteSessionControllerID = nil
-        remoteSessionController = nil
-        previousController?.stop()
-        applyRemoteProxyEndpointUpdate(nil)
-        applyBrowserRemoteWorkspaceStatusToPanels()
-
+        // Capture before resetRemoteState() nulls pendingRemoteForegroundAuthToken.
         let foregroundAuthToken = Self.normalizedForegroundAuthToken(configuration.foregroundAuthToken)
         let shouldAutoConnect =
             autoConnect
             || (foregroundAuthToken != nil && foregroundAuthToken == pendingRemoteForegroundAuthToken)
-        pendingRemoteForegroundAuthToken = nil
+
+        remoteConfiguration = configuration
+        resetRemoteState()
+        // Seed after the reset so a reconfigure of an already-connected workspace doesn't see
+        // stale per-panel bookkeeping from the previous destination and skip seeding. Refs #83.
+        seedInitialRemoteTerminalSessionIfNeeded(configuration: configuration)
+        recomputeListeningPorts()
+        applyRemoteProxyEndpointUpdate(nil)
+        applyBrowserRemoteWorkspaceStatusToPanels()
+
         guard shouldAutoConnect else {
             remoteConnectionState = .disconnected
             applyBrowserRemoteWorkspaceStatusToPanels()
@@ -3402,6 +3386,26 @@ final class Workspace: Identifiable, ObservableObject {
             && pendingDetachedSurfaces.isEmpty
             && !skipControlMasterCleanupAfterDetachedRemoteTransfer
         let configurationForCleanup = shouldCleanupControlMaster ? remoteConfiguration : nil
+        resetRemoteState()
+        remoteConnectionState = .disconnected
+        if clearConfiguration {
+            remoteConfiguration = nil
+            skipControlMasterCleanupAfterDetachedRemoteTransfer = false
+        }
+        applyRemoteProxyEndpointUpdate(nil)
+        applyBrowserRemoteWorkspaceStatusToPanels()
+        recomputeListeningPorts()
+        if let configurationForCleanup {
+            Self.requestSSHControlMasterCleanupIfNeeded(configuration: configurationForCleanup)
+        }
+    }
+
+    /// Resets all per-connection and per-panel remote-session bookkeeping. This is the
+    /// complete union of what `configureRemoteConnection` and `disconnectRemoteConnection`
+    /// each need to clear before establishing (or tearing down) a remote connection, so a
+    /// reconfigure to a new destination can't leave stale state from the previous one. Refs #83.
+    private func resetRemoteState() {
+        skipControlMasterCleanupAfterDetachedRemoteTransfer = false
         let previousController = remoteSessionController
         activeRemoteSessionControllerID = nil
         remoteSessionController = nil
@@ -3420,7 +3424,6 @@ final class Workspace: Identifiable, ObservableObject {
         remoteProxyEndpoint = nil
         remoteHeartbeatCount = 0
         remoteLastHeartbeatAt = nil
-        remoteConnectionState = .disconnected
         remoteConnectionDetail = nil
         remoteDaemonStatus = WorkspaceRemoteDaemonStatus()
         statusEntries.removeValue(forKey: Self.remoteErrorStatusKey)
@@ -3428,16 +3431,6 @@ final class Workspace: Identifiable, ObservableObject {
         remoteLastErrorFingerprint = nil
         remoteLastDaemonErrorFingerprint = nil
         remoteLastPortConflictFingerprint = nil
-        if clearConfiguration {
-            remoteConfiguration = nil
-            skipControlMasterCleanupAfterDetachedRemoteTransfer = false
-        }
-        applyRemoteProxyEndpointUpdate(nil)
-        applyBrowserRemoteWorkspaceStatusToPanels()
-        recomputeListeningPorts()
-        if let configurationForCleanup {
-            Self.requestSSHControlMasterCleanupIfNeeded(configuration: configurationForCleanup)
-        }
     }
 
     private func clearRemoteConfigurationIfWorkspaceBecameLocal() {
