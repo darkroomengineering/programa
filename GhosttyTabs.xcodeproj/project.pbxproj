@@ -54,6 +54,8 @@
 		A5001406 /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001416 /* Workspace.swift */; };
 		A5FF0012 /* WorkspaceRemoteSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0002 /* WorkspaceRemoteSession.swift */; };
 		A5FF0011 /* WorkspaceRemoteDaemon.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0001 /* WorkspaceRemoteDaemon.swift */; };
+		NRWS00000000000000000002 /* RemoteSSHConnectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000001 /* RemoteSSHConnectionPolicy.swift */; };
+		NRWS00000000000000000004 /* RemoteSCPUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000003 /* RemoteSCPUpload.swift */; };
 		A5001407 /* WorkspaceContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001417 /* WorkspaceContentView.swift */; };
 			A5001093 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001090 /* AppDelegate.swift */; };
 			A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0021 /* AppDelegate+UITestCmdClick.swift */; };
@@ -278,6 +280,8 @@
 		A5001416 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
 		A5FF0002 /* WorkspaceRemoteSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteSession.swift; sourceTree = "<group>"; };
 		A5FF0001 /* WorkspaceRemoteDaemon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteDaemon.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000001 /* RemoteSSHConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSSHConnectionPolicy.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000003 /* RemoteSCPUpload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSCPUpload.swift; sourceTree = "<group>"; };
 		A5001417 /* WorkspaceContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceContentView.swift; sourceTree = "<group>"; };
 		A5001090 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A5FF0021 /* AppDelegate+UITestCmdClick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestCmdClick.swift"; sourceTree = "<group>"; };
@@ -519,6 +523,8 @@
 					A5001416 /* Workspace.swift */,
 					A5FF0002 /* WorkspaceRemoteSession.swift */,
 					A5FF0001 /* WorkspaceRemoteDaemon.swift */,
+					NRWS00000000000000000001 /* RemoteSSHConnectionPolicy.swift */,
+					NRWS00000000000000000003 /* RemoteSCPUpload.swift */,
 				A5001417 /* WorkspaceContentView.swift */,
 				A5001014 /* GhosttyConfig.swift */,
 				A5001015 /* GhosttyTerminalView.swift */,
@@ -849,6 +855,8 @@
 						A5001406 /* Workspace.swift in Sources */,
 						A5FF0012 /* WorkspaceRemoteSession.swift in Sources */,
 						A5FF0011 /* WorkspaceRemoteDaemon.swift in Sources */,
+						NRWS00000000000000000002 /* RemoteSSHConnectionPolicy.swift in Sources */,
+						NRWS00000000000000000004 /* RemoteSCPUpload.swift in Sources */,
 				A5001407 /* WorkspaceContentView.swift in Sources */,
 				A5001004 /* GhosttyConfig.swift in Sources */,
 				A5001005 /* GhosttyTerminalView.swift in Sources */,
