@@ -854,6 +854,18 @@ final class ProgramaSettingsFileStore {
         return .some(normalized)
     }
 
+    // NOTE (tint precedence, refs #100): among the UserDefaults keys this writes via
+    // `applyManagedUserDefaultsValue` below, `sidebarTintHex(Light/Dark)` and
+    // `sidebarTintOpacity` are ALSO written independently by
+    // `GhosttyConfig.applySidebarAppearanceToUserDefaults()` (GhosttyConfig.swift), driven by
+    // the legacy `~/.config/ghostty/config` file rather than settings.json. There is no single
+    // ordered apply path between the two; the effective value for each key is whichever source
+    // wrote it most recently. See the detailed comment on
+    // `GhosttyConfig.applySidebarAppearanceToUserDefaults()` for the full load-order
+    // walkthrough (settings.json applies first at launch via this store's synchronous init,
+    // ghostty config applies afterward and again on view lifecycle events, and both re-fire
+    // reactively after that). Documented here rather than changed, since unifying them requires
+    // coordinating two independently triggered reactive systems, not a file-reorg-safe edit.
     private func applyManagedSettings(
         snapshot: ResolvedSettingsSnapshot,
         updateBackups: Bool = true
@@ -1547,29 +1559,30 @@ private enum JSONCParser {
     }
 }
 
+// NOTE (drift, refs #100): unlike ProgramaConfigStore's local/global config watchers, this
+// watcher has no delayed retry/backoff at all — on delete/rename it re-evaluates and
+// reattaches (or falls back to directory watching) immediately, synchronously, on the watch
+// queue. That immediate-reattach behavior is preserved as-is; only the raw DispatchSource
+// open/create/resume/cancel plumbing is shared via `FileWatcher`.
 private final class ShortcutSettingsFileWatcher {
     private let path: String
     private let fileManager: FileManager
     private let onChange: () -> Void
-    private let watchQueue = DispatchQueue(label: "com.cmux.shortcut-settings-file-watch")
-
-    private var source: DispatchSourceFileSystemObject?
+    private let watcher: FileWatcher
 
     init(path: String, fileManager: FileManager = .default, onChange: @escaping () -> Void) {
         self.path = path
         self.fileManager = fileManager
         self.onChange = onChange
+        self.watcher = FileWatcher(queue: DispatchQueue(label: "com.cmux.shortcut-settings-file-watch"))
         start()
     }
 
     func stop() {
-        source?.cancel()
-        source = nil
+        watcher.stop()
     }
 
     private func start() {
-        stop()
-
         if fileManager.fileExists(atPath: path) {
             startFileWatcher()
         } else {
@@ -1578,47 +1591,27 @@ private final class ShortcutSettingsFileWatcher {
     }
 
     private func startFileWatcher() {
-        let fd = open(path, O_EVTONLY)
-        guard fd >= 0 else {
-            startDirectoryWatcher()
-            return
-        }
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .delete, .rename, .extend],
-            queue: watchQueue
-        )
-
-        source.setEventHandler { [weak self] in
+        let started = watcher.start(
+            path: path,
+            eventMask: [.write, .delete, .rename, .extend]
+        ) { [weak self] flags in
             guard let self else { return }
-            let flags = source.data
             if flags.contains(.delete) || flags.contains(.rename) {
                 self.start()
             }
             self.onChange()
         }
-
-        source.setCancelHandler {
-            close(fd)
+        if !started {
+            startDirectoryWatcher()
         }
-
-        self.source = source
-        source.resume()
     }
 
     private func startDirectoryWatcher() {
         let directoryPath = (path as NSString).deletingLastPathComponent
-        let fd = open(directoryPath, O_EVTONLY)
-        guard fd >= 0 else { return }
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .rename, .delete],
-            queue: watchQueue
-        )
-
-        source.setEventHandler { [weak self] in
+        watcher.start(
+            path: directoryPath,
+            eventMask: [.write, .rename, .delete]
+        ) { [weak self] _ in
             guard let self else { return }
             if self.fileManager.fileExists(atPath: self.path) {
                 self.start()
@@ -1626,12 +1619,5 @@ private final class ShortcutSettingsFileWatcher {
                 self.onChange()
             }
         }
-
-        source.setCancelHandler {
-            close(fd)
-        }
-
-        self.source = source
-        source.resume()
     }
 }

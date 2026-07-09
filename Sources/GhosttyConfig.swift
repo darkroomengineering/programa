@@ -165,6 +165,34 @@ struct GhosttyConfig {
         }
     }
 
+    // NOTE (tint precedence, refs #100): `sidebarTintHex(Light/Dark)` and `sidebarTintOpacity`
+    // in UserDefaults are written from two independent sources that are never coordinated
+    // through a single ordered pipeline:
+    //   1. This method, driven by the legacy `~/.config/ghostty/config` `sidebar-background` /
+    //      `sidebar-tint-opacity` directives (see `GhosttyConfig.load()` call sites).
+    //   2. `ProgramaSettingsFileStore.applyManagedSettings` (see ProgramaSettingsFileStore.swift),
+    //      driven by `~/.config/programa/settings.json`'s `sidebarAppearance` block.
+    // Effective winner is "whichever wrote most recently," not a fixed precedence:
+    //   - At app launch, settings.json applies first — `ProgramaApp.init()` forces
+    //     `KeyboardShortcutSettings.settingsFileStore` (== ProgramaSettingsFileStore.shared) to
+    //     initialize synchronously before any SwiftUI view exists. GhosttyConfig.load() only
+    //     runs later, when the first WorkspaceContentView's `@State config` is constructed —
+    //     so at launch, ghostty config (this method) wins for any key it actually sets.
+    //   - This method is a SPARSE writer: it only overwrites a key when the parsed ghostty
+    //     config actually specifies a value for it (see the guard above and the per-key
+    //     `if let ... else removeObject` pairs below); if the user's ghostty config doesn't set
+    //     `sidebar-background`, nothing here is touched and whatever settings.json (or a prior
+    //     write) left in UserDefaults stands.
+    //   - After launch both sides are reactive and can re-fire independently: settings.json
+    //     re-applies on every file-watcher change to settings.json/its fallback (and on
+    //     `.reload()` call sites such as GhosttyTerminalView.swift), while this method re-runs
+    //     whenever `GhosttyConfig.load()` is called again (WorkspaceContentView's `onAppear`,
+    //     `ghosttyConfigDidReload` notification, color-scheme changes). Whichever fires most
+    //     recently wins, per key.
+    // Unifying this into one ordered apply path would mean coordinating two independently
+    // triggered reactive systems (a real design change, not a safe file-reorg edit) — flagging
+    // here instead of changing behavior. See also the analogous comment in
+    // ProgramaSettingsFileStore.swift's `applyManagedSettings`.
     func applySidebarAppearanceToUserDefaults() {
         guard rawSidebarBackground != nil else {
             if let opacity = sidebarTintOpacity {
