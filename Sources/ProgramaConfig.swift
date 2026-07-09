@@ -278,22 +278,22 @@ final class ProgramaConfigStore: ObservableObject {
     }()
 
     private var cancellables = Set<AnyCancellable>()
-    private var localFileWatchSource: DispatchSourceFileSystemObject?
-    private var localFileDescriptor: Int32 = -1
-    private var globalFileWatchSource: DispatchSourceFileSystemObject?
-    private var globalFileDescriptor: Int32 = -1
     private let watchQueue = DispatchQueue(label: "com.cmux.config-file-watch")
+    private let localFileWatcher: FileWatcher
+    private let globalFileWatcher: FileWatcher
 
     private static let maxReattachAttempts = 5
     private static let reattachDelay: TimeInterval = 0.5
 
     init() {
+        localFileWatcher = FileWatcher(queue: watchQueue)
+        globalFileWatcher = FileWatcher(queue: watchQueue)
         startGlobalFileWatcher()
     }
 
     deinit {
-        localFileWatchSource?.cancel()
-        globalFileWatchSource?.cancel()
+        localFileWatcher.stop()
+        globalFileWatcher.stop()
     }
 
     // MARK: - Public API
@@ -410,26 +410,24 @@ final class ProgramaConfigStore: ObservableObject {
     }
 
     // MARK: - File watching (local)
+    //
+    // NOTE (drift, refs #100): the local and global watchers below look symmetric but their
+    // reattach policy on delete/rename genuinely differs, and that difference is preserved
+    // here rather than "fixed" as part of the FileWatcher dedup:
+    // - Local: `scheduleLocalReattach` makes exactly ONE delayed existence check (0.5s) after
+    //   a delete/rename, then permanently falls back to directory watching if the file is
+    //   still missing — it does not recurse to retry further despite `maxReattachAttempts`
+    //   being defined (a leftover from copy/pasting the global watcher).
+    // - Global: `scheduleGlobalReattach` actually recurses up to `maxReattachAttempts` times
+    //   (2.5s total) before falling back to directory watching.
 
     private func startLocalFileWatcher() {
         guard let path = localConfigPath else { return }
-        let fd = open(path, O_EVTONLY)
-        guard fd >= 0 else {
-            // File doesn't exist yet — watch the directory instead
-            startLocalDirectoryWatcher()
-            return
-        }
-        localFileDescriptor = fd
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .delete, .rename, .extend],
-            queue: watchQueue
-        )
-
-        source.setEventHandler { [weak self] in
+        let started = localFileWatcher.start(
+            path: path,
+            eventMask: [.write, .delete, .rename, .extend]
+        ) { [weak self] flags in
             guard let self else { return }
-            let flags = source.data
             if flags.contains(.delete) || flags.contains(.rename) {
                 DispatchQueue.main.async {
                     self.stopLocalFileWatcher()
@@ -442,29 +440,19 @@ final class ProgramaConfigStore: ObservableObject {
                 }
             }
         }
-
-        source.setCancelHandler {
-            Darwin.close(fd)
+        if !started {
+            // File doesn't exist yet — watch the directory instead
+            startLocalDirectoryWatcher()
         }
-
-        source.resume()
-        localFileWatchSource = source
     }
 
     private func startLocalDirectoryWatcher() {
         guard let path = localConfigPath else { return }
         let dirPath = (path as NSString).deletingLastPathComponent
-        let fd = open(dirPath, O_EVTONLY)
-        guard fd >= 0 else { return }
-        localFileDescriptor = fd
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .link, .rename],
-            queue: watchQueue
-        )
-
-        source.setEventHandler { [weak self] in
+        localFileWatcher.start(
+            path: dirPath,
+            eventMask: [.write, .link, .rename]
+        ) { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
                 guard let configPath = self.localConfigPath,
@@ -475,13 +463,6 @@ final class ProgramaConfigStore: ObservableObject {
                 self.startLocalFileWatcher()
             }
         }
-
-        source.setCancelHandler {
-            Darwin.close(fd)
-        }
-
-        source.resume()
-        localFileWatchSource = source
     }
 
     private func scheduleLocalReattach(attempt: Int) {
@@ -501,32 +482,17 @@ final class ProgramaConfigStore: ObservableObject {
     }
 
     private func stopLocalFileWatcher() {
-        if let source = localFileWatchSource {
-            source.cancel()
-            localFileWatchSource = nil
-        }
-        localFileDescriptor = -1
+        localFileWatcher.stop()
     }
 
     // MARK: - File watching (global)
 
     private func startGlobalFileWatcher() {
-        let fd = open(globalConfigPath, O_EVTONLY)
-        guard fd >= 0 else {
-            startGlobalDirectoryWatcher()
-            return
-        }
-        globalFileDescriptor = fd
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .delete, .rename, .extend],
-            queue: watchQueue
-        )
-
-        source.setEventHandler { [weak self] in
+        let started = globalFileWatcher.start(
+            path: globalConfigPath,
+            eventMask: [.write, .delete, .rename, .extend]
+        ) { [weak self] flags in
             guard let self else { return }
-            let flags = source.data
             if flags.contains(.delete) || flags.contains(.rename) {
                 DispatchQueue.main.async {
                     self.stopGlobalFileWatcher()
@@ -539,13 +505,9 @@ final class ProgramaConfigStore: ObservableObject {
                 }
             }
         }
-
-        source.setCancelHandler {
-            Darwin.close(fd)
+        if !started {
+            startGlobalDirectoryWatcher()
         }
-
-        source.resume()
-        globalFileWatchSource = source
     }
 
     private func scheduleGlobalReattach(attempt: Int) {
@@ -572,17 +534,10 @@ final class ProgramaConfigStore: ObservableObject {
         if !fm.fileExists(atPath: dirPath) {
             try? fm.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
         }
-        let fd = open(dirPath, O_EVTONLY)
-        guard fd >= 0 else { return }
-        globalFileDescriptor = fd
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .link, .rename],
-            queue: watchQueue
-        )
-
-        source.setEventHandler { [weak self] in
+        globalFileWatcher.start(
+            path: dirPath,
+            eventMask: [.write, .link, .rename]
+        ) { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
                 guard FileManager.default.fileExists(atPath: self.globalConfigPath) else { return }
@@ -591,21 +546,10 @@ final class ProgramaConfigStore: ObservableObject {
                 self.startGlobalFileWatcher()
             }
         }
-
-        source.setCancelHandler {
-            Darwin.close(fd)
-        }
-
-        source.resume()
-        globalFileWatchSource = source
     }
 
     private func stopGlobalFileWatcher() {
-        if let source = globalFileWatchSource {
-            source.cancel()
-            globalFileWatchSource = nil
-        }
-        globalFileDescriptor = -1
+        globalFileWatcher.stop()
     }
 }
 
