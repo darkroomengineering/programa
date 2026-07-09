@@ -854,6 +854,18 @@ final class ProgramaSettingsFileStore {
         return .some(normalized)
     }
 
+    // NOTE (tint precedence, refs #100): among the UserDefaults keys this writes via
+    // `applyManagedUserDefaultsValue` below, `sidebarTintHex(Light/Dark)` and
+    // `sidebarTintOpacity` are ALSO written independently by
+    // `GhosttyConfig.applySidebarAppearanceToUserDefaults()` (GhosttyConfig.swift), driven by
+    // the legacy `~/.config/ghostty/config` file rather than settings.json. There is no single
+    // ordered apply path between the two; the effective value for each key is whichever source
+    // wrote it most recently. See the detailed comment on
+    // `GhosttyConfig.applySidebarAppearanceToUserDefaults()` for the full load-order
+    // walkthrough (settings.json applies first at launch via this store's synchronous init,
+    // ghostty config applies afterward and again on view lifecycle events, and both re-fire
+    // reactively after that). Documented here rather than changed, since unifying them requires
+    // coordinating two independently triggered reactive systems, not a file-reorg-safe edit.
     private func applyManagedSettings(
         snapshot: ResolvedSettingsSnapshot,
         updateBackups: Bool = true
