@@ -56,6 +56,14 @@
 		A5FF0011 /* WorkspaceRemoteDaemon.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0001 /* WorkspaceRemoteDaemon.swift */; };
 		A5001407 /* WorkspaceContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001417 /* WorkspaceContentView.swift */; };
 			A5001093 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001090 /* AppDelegate.swift */; };
+			NRAD1001 /* MainWindowHostingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0001 /* MainWindowHostingView.swift */; };
+			NRAD1002 /* TypingProfiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0002 /* TypingProfiler.swift */; };
+			NRAD1003 /* TerminalDirectoryOpener.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0003 /* TerminalDirectoryOpener.swift */; };
+			NRAD1004 /* VSCodeIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0004 /* VSCodeIntegration.swift */; };
+			NRAD1005 /* WorkspaceShortcutMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0005 /* WorkspaceShortcutMapper.swift */; };
+			NRAD1006 /* CLIInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0006 /* CLIInstaller.swift */; };
+			NRAD1007 /* MenuBarIconRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0007 /* MenuBarIconRenderer.swift */; };
+			NRAD1008 /* WindowSwizzles.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0008 /* WindowSwizzles.swift */; };
 			A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0021 /* AppDelegate+UITestCmdClick.swift */; };
 			A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */; };
 			A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0023 /* AppDelegate+UITestHarnesses.swift */; };
@@ -280,6 +288,14 @@
 		A5FF0001 /* WorkspaceRemoteDaemon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteDaemon.swift; sourceTree = "<group>"; };
 		A5001417 /* WorkspaceContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceContentView.swift; sourceTree = "<group>"; };
 		A5001090 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		NRAD0001 /* MainWindowHostingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowHostingView.swift; sourceTree = "<group>"; };
+		NRAD0002 /* TypingProfiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingProfiler.swift; sourceTree = "<group>"; };
+		NRAD0003 /* TerminalDirectoryOpener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalDirectoryOpener.swift; sourceTree = "<group>"; };
+		NRAD0004 /* VSCodeIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeIntegration.swift; sourceTree = "<group>"; };
+		NRAD0005 /* WorkspaceShortcutMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceShortcutMapper.swift; sourceTree = "<group>"; };
+		NRAD0006 /* CLIInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIInstaller.swift; sourceTree = "<group>"; };
+		NRAD0007 /* MenuBarIconRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconRenderer.swift; sourceTree = "<group>"; };
+		NRAD0008 /* WindowSwizzles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSwizzles.swift; sourceTree = "<group>"; };
 		A5FF0021 /* AppDelegate+UITestCmdClick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestCmdClick.swift"; sourceTree = "<group>"; };
 		A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestStressWorkspaces.swift"; sourceTree = "<group>"; };
 		A5FF0023 /* AppDelegate+UITestHarnesses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestHarnesses.swift"; sourceTree = "<group>"; };
@@ -538,6 +554,14 @@
 				A5001620 /* AppleScriptSupport.swift */,
 				D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */,
 				A5001090 /* AppDelegate.swift */,
+				NRAD0001 /* MainWindowHostingView.swift */,
+				NRAD0002 /* TypingProfiler.swift */,
+				NRAD0003 /* TerminalDirectoryOpener.swift */,
+				NRAD0004 /* VSCodeIntegration.swift */,
+				NRAD0005 /* WorkspaceShortcutMapper.swift */,
+				NRAD0006 /* CLIInstaller.swift */,
+				NRAD0007 /* MenuBarIconRenderer.swift */,
+				NRAD0008 /* WindowSwizzles.swift */,
 				A5FF0021 /* AppDelegate+UITestCmdClick.swift */,
 				A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */,
 				A5FF0023 /* AppDelegate+UITestHarnesses.swift */,
@@ -867,6 +891,14 @@
 				A5001226 /* SocketControlSettings.swift in Sources */,
 				A5001621 /* AppleScriptSupport.swift in Sources */,
 				A5001093 /* AppDelegate.swift in Sources */,
+				NRAD1001 /* MainWindowHostingView.swift in Sources */,
+				NRAD1002 /* TypingProfiler.swift in Sources */,
+				NRAD1003 /* TerminalDirectoryOpener.swift in Sources */,
+				NRAD1004 /* VSCodeIntegration.swift in Sources */,
+				NRAD1005 /* WorkspaceShortcutMapper.swift in Sources */,
+				NRAD1006 /* CLIInstaller.swift in Sources */,
+				NRAD1007 /* MenuBarIconRenderer.swift in Sources */,
+				NRAD1008 /* WindowSwizzles.swift in Sources */,
 				A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */,
 				A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */,
 				A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */,
