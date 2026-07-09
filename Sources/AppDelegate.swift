@@ -3042,7 +3042,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         VSCodeServeWebController.shared.stop()
         BrowserProfileStore.shared.flushPendingSaves()
         notificationStore?.clearAll()
-        SurfacePool.shared.teardownAll()
         enableSuddenTerminationIfNeeded()
     }
 

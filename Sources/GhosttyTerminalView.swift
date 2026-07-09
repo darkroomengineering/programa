@@ -1558,12 +1558,6 @@ class GhosttyApp {
         lastAppearanceColorScheme = GhosttyConfig.currentColorSchemePreference()
         NotificationCenter.default.post(name: .ghosttyConfigDidReload, object: nil)
 
-        // Pre-warm the surface pool so the first new tab opens instantly.
-        // Deferred to the next main-queue tick so the app is fully initialized.
-        DispatchQueue.main.async {
-            SurfacePool.shared.warmIfNeeded()
-        }
-
         #if os(macOS)
         if let app {
             ghostty_app_set_focus(app, NSApp.isActive)
