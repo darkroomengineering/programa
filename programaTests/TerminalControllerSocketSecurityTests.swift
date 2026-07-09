@@ -280,7 +280,14 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         XCTAssertFalse(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: focusedPanelId))
     }
 
-    func testSurfaceRelayRPCsReturnResolvedFocusedSurfaceWhenSurfaceIDOmitted() async throws {
+    /// Regression for #82: `surface.report_tty`/`surface.ports_kick` used to block the socket
+    /// thread with `DispatchQueue.main.sync` so the response could echo the surface resolved on
+    /// main (e.g. falling back to the focused surface when `surface_id` is omitted). They now
+    /// follow the same off-main-parse + main.async-mutate telemetry shape as
+    /// `workspace.set_status`/`workspace.report_meta_block`: the JSON-RPC response acknowledges
+    /// immediately (echoing the request, not a value resolved on main) and the surface-resolving
+    /// model mutation is fire-and-forget.
+    func testSurfaceRelayRPCsAcknowledgeImmediatelyAndResolveFocusedSurfaceAsync() async throws {
         let socketPath = makeSocketPath("relay-fallback")
         let manager = TabManager()
         let workspace = manager.addWorkspace(select: true)
@@ -314,8 +321,11 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
 
         XCTAssertEqual(reportTTYResponse["ok"] as? Bool, true, "Unexpected JSON-RPC response: \(reportTTYResponse)")
         let reportTTYResult = try XCTUnwrap(reportTTYResponse["result"] as? [String: Any], "Unexpected JSON-RPC response: \(reportTTYResponse)")
-        XCTAssertEqual(reportTTYResult["surface_id"] as? String, focusedPanelId.uuidString)
-        XCTAssertEqual(workspace.surfaceTTYNames[focusedPanelId], "ttys999")
+        // surface_id was omitted from the request, so the immediate ack echoes null — the actual
+        // surface is resolved asynchronously on main.
+        XCTAssertNil(reportTTYResult["surface_id"] as? String)
+        XCTAssertTrue(waitUntil { workspace.surfaceTTYNames[focusedPanelId] == "ttys999" },
+                      "Expected fire-and-forget mutation to eventually register the TTY on the focused surface")
 
         let portsKickResponse = try await sendV2RequestAsync(
             method: "surface.ports_kick",
@@ -324,11 +334,10 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         )
 
         XCTAssertEqual(portsKickResponse["ok"] as? Bool, true, "Unexpected JSON-RPC response: \(portsKickResponse)")
-        let portsKickResult = try XCTUnwrap(portsKickResponse["result"] as? [String: Any], "Unexpected JSON-RPC response: \(portsKickResponse)")
-        XCTAssertEqual(portsKickResult["surface_id"] as? String, focusedPanelId.uuidString)
+        _ = try XCTUnwrap(portsKickResponse["result"] as? [String: Any], "Unexpected JSON-RPC response: \(portsKickResponse)")
     }
 
-    func testSurfaceRelayRPCsRejectExplicitUnknownSurfaceID() async throws {
+    func testSurfaceRelayRPCsAcknowledgeImmediatelyAndNoOpForUnknownSurfaceID() async throws {
         let socketPath = makeSocketPath("relay-invalid")
         let manager = TabManager()
         let workspace = manager.addWorkspace(select: true)
@@ -358,12 +367,12 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
             to: socketPath
         )
 
-        XCTAssertEqual(reportTTYResponse["ok"] as? Bool, false, "Unexpected JSON-RPC response: \(reportTTYResponse)")
-        let reportTTYError = try XCTUnwrap(reportTTYResponse["error"] as? [String: Any], "Unexpected JSON-RPC response: \(reportTTYResponse)")
-        XCTAssertEqual(reportTTYError["code"] as? String, "not_found")
-        let reportTTYData = try XCTUnwrap(reportTTYError["data"] as? [String: Any], "Expected error data payload")
-        XCTAssertEqual(reportTTYData["surface_id"] as? String, unknownSurfaceId.uuidString)
-        XCTAssertTrue(workspace.surfaceTTYNames.isEmpty)
+        // The unknown surface_id can no longer be validated synchronously (that check now
+        // happens inside the fire-and-forget main.async mutation), so the request is acked
+        // immediately and the mutation silently no-ops once it resolves.
+        XCTAssertEqual(reportTTYResponse["ok"] as? Bool, true, "Unexpected JSON-RPC response: \(reportTTYResponse)")
+        let reportTTYResult = try XCTUnwrap(reportTTYResponse["result"] as? [String: Any], "Unexpected JSON-RPC response: \(reportTTYResponse)")
+        XCTAssertEqual(reportTTYResult["surface_id"] as? String, unknownSurfaceId.uuidString)
 
         let portsKickResponse = try await sendV2RequestAsync(
             method: "surface.ports_kick",
@@ -374,11 +383,14 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
             to: socketPath
         )
 
-        XCTAssertEqual(portsKickResponse["ok"] as? Bool, false, "Unexpected JSON-RPC response: \(portsKickResponse)")
-        let portsKickError = try XCTUnwrap(portsKickResponse["error"] as? [String: Any], "Unexpected JSON-RPC response: \(portsKickResponse)")
-        XCTAssertEqual(portsKickError["code"] as? String, "not_found")
-        let portsKickData = try XCTUnwrap(portsKickError["data"] as? [String: Any], "Expected error data payload")
-        XCTAssertEqual(portsKickData["surface_id"] as? String, unknownSurfaceId.uuidString)
+        XCTAssertEqual(portsKickResponse["ok"] as? Bool, true, "Unexpected JSON-RPC response: \(portsKickResponse)")
+        let portsKickResult = try XCTUnwrap(portsKickResponse["result"] as? [String: Any], "Unexpected JSON-RPC response: \(portsKickResponse)")
+        XCTAssertEqual(portsKickResult["surface_id"] as? String, unknownSurfaceId.uuidString)
+
+        // Give the async mutation a beat to run, then confirm it never registered a TTY for the
+        // nonexistent surface.
+        waitUntil(timeout: 0.5) { false }
+        XCTAssertTrue(workspace.surfaceTTYNames.isEmpty)
     }
 
     func testWorkspaceCloseRejectsPinnedWorkspace() async throws {
@@ -431,6 +443,19 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         }
         XCTFail("Timed out waiting for socket at \(path)")
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(ETIMEDOUT))
+    }
+
+    /// Polls `condition` on the main run loop until it returns true or `timeout` elapses.
+    /// Used to observe fire-and-forget telemetry mutations (see #82: `surface.report_tty` /
+    /// `surface.ports_kick` schedule their model mutation via `DispatchQueue.main.async` and
+    /// acknowledge the JSON-RPC request before it runs).
+    @discardableResult
+    private func waitUntil(timeout: TimeInterval = 5.0, _ condition: @escaping () -> Bool) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in condition() },
+            object: NSObject()
+        )
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func socketMode(at path: String) throws -> UInt16 {

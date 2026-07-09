@@ -3693,6 +3693,13 @@ class TerminalController {
         return result
     }
 
+    // `surface.report_tty` and `surface.ports_kick` are high-frequency telemetry commands (see
+    // CLAUDE.md "Socket command threading policy"): they must not block the calling socket
+    // thread with `DispatchQueue.main.sync`. Both handlers now follow the same off-main-parse +
+    // main.async-mutate shape as `v2ScheduleTelemetryMutation` callers (e.g. `workspace.set_status`,
+    // `workspace.report_meta_block`) — surface resolution and the model mutation happen entirely
+    // inside the async block, and the JSON-RPC response is an optimistic `ok` echoing the request
+    // params, not the value resolved on main. Refs #82.
     private func v2SurfaceReportTTY(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
             return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
@@ -3706,21 +3713,8 @@ class TerminalController {
             return .err(code: "invalid_params", message: "Missing tty_name", data: nil)
         }
 
-        var result: V2CallResult = .err(
-            code: "not_found",
-            message: "Workspace not found",
-            data: [
-                "workspace_id": workspaceId.uuidString,
-                "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-                "surface_id": v2OrNull(requestedSurfaceId?.uuidString),
-                "surface_ref": v2Ref(kind: .surface, uuid: requestedSurfaceId),
-            ]
-        )
-
-        v2MainSync {
-            guard let tab = self.tabForSidebarMutation(id: workspaceId) else {
-                return
-            }
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { [weak self] _, tab in
+            guard let self else { return }
             let validSurfaceIds = Set(tab.panels.keys)
             tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
 
@@ -3732,26 +3726,7 @@ class TerminalController {
             guard let surfaceId, validSurfaceIds.contains(surfaceId) else {
                 if tab.isRemoteWorkspace, validSurfaceIds.isEmpty {
                     tab.rememberPendingRemoteSurfaceTTY(ttyName, requestedSurfaceId: requestedSurfaceId)
-                    result = .ok([
-                        "workspace_id": workspaceId.uuidString,
-                        "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-                        "surface_id": v2OrNull(requestedSurfaceId?.uuidString),
-                        "surface_ref": v2Ref(kind: .surface, uuid: requestedSurfaceId),
-                        "tty_name": ttyName,
-                        "pending": true,
-                    ])
-                    return
                 }
-                result = .err(
-                    code: "not_found",
-                    message: "Surface not found",
-                    data: [
-                        "workspace_id": workspaceId.uuidString,
-                        "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-                        "surface_id": v2OrNull(requestedSurfaceId?.uuidString),
-                        "surface_ref": v2Ref(kind: .surface, uuid: requestedSurfaceId),
-                    ]
-                )
                 return
             }
 
@@ -3762,17 +3737,15 @@ class TerminalController {
             } else {
                 PortScanner.shared.registerTTY(workspaceId: workspaceId, panelId: surfaceId, ttyName: ttyName)
             }
-
-            result = .ok([
-                "workspace_id": workspaceId.uuidString,
-                "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-                "surface_id": surfaceId.uuidString,
-                "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
-                "tty_name": ttyName,
-            ])
         }
 
-        return result
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": v2OrNull(requestedSurfaceId?.uuidString),
+            "surface_ref": v2Ref(kind: .surface, uuid: requestedSurfaceId),
+            "tty_name": ttyName,
+        ])
     }
 
     private func v2SurfacePortsKick(params: [String: Any]) -> V2CallResult {
@@ -3797,21 +3770,8 @@ class TerminalController {
             reason = .command
         }
 
-        var result: V2CallResult = .err(
-            code: "not_found",
-            message: "Workspace not found",
-            data: [
-                "workspace_id": workspaceId.uuidString,
-                "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-                "surface_id": v2OrNull(requestedSurfaceId?.uuidString),
-                "surface_ref": v2Ref(kind: .surface, uuid: requestedSurfaceId),
-            ]
-        )
-
-        v2MainSync {
-            guard let tab = self.tabForSidebarMutation(id: workspaceId) else {
-                return
-            }
+        v2ScheduleTelemetryMutation(workspaceId: workspaceId) { [weak self] _, tab in
+            guard let self else { return }
             let validSurfaceIds = Set(tab.panels.keys)
             tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
 
@@ -3826,26 +3786,7 @@ class TerminalController {
                         reason: reason,
                         requestedSurfaceId: requestedSurfaceId
                     )
-                    result = .ok([
-                        "workspace_id": workspaceId.uuidString,
-                        "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-                        "surface_id": v2OrNull(requestedSurfaceId?.uuidString),
-                        "surface_ref": v2Ref(kind: .surface, uuid: requestedSurfaceId),
-                        "reason": reason.rawValue,
-                        "pending": true,
-                    ])
-                    return
                 }
-                result = .err(
-                    code: "not_found",
-                    message: "Surface not found",
-                    data: [
-                        "workspace_id": workspaceId.uuidString,
-                        "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-                        "surface_id": v2OrNull(requestedSurfaceId?.uuidString),
-                        "surface_ref": v2Ref(kind: .surface, uuid: requestedSurfaceId),
-                    ]
-                )
                 return
             }
 
@@ -3854,17 +3795,15 @@ class TerminalController {
             } else {
                 PortScanner.shared.kick(workspaceId: workspaceId, panelId: surfaceId)
             }
-
-            result = .ok([
-                "workspace_id": workspaceId.uuidString,
-                "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-                "surface_id": surfaceId.uuidString,
-                "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
-                "reason": reason.rawValue,
-            ])
         }
 
-        return result
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": v2OrNull(requestedSurfaceId?.uuidString),
+            "surface_ref": v2Ref(kind: .surface, uuid: requestedSurfaceId),
+            "reason": reason.rawValue,
+        ])
     }
 
     // MARK: - V2 Surface Telemetry (report_*/ports/git/pr) — off-main parse, main.async mutate.
