@@ -4,18 +4,6 @@ import Darwin
 import Bonsplit
 import UniformTypeIdentifiers
 
-enum WorkspaceTitlebarSettings {
-    static let showTitlebarKey = "workspaceTitlebarVisible"
-    static let defaultShowTitlebar = true
-
-    static func isVisible(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: showTitlebarKey) == nil {
-            return defaultShowTitlebar
-        }
-        return defaults.bool(forKey: showTitlebarKey)
-    }
-}
-
 enum WorkspacePresentationModeSettings {
     static let modeKey = "workspacePresentationMode"
 
@@ -36,54 +24,6 @@ enum WorkspacePresentationModeSettings {
 
     static func isMinimal(defaults: UserDefaults = .standard) -> Bool {
         mode(defaults: defaults) == .minimal
-    }
-}
-
-enum WorkspaceButtonFadeSettings {
-    static let modeKey = "workspaceButtonsFadeMode"
-    static let legacyTitlebarControlsVisibilityModeKey = "titlebarControlsVisibilityMode"
-    static let legacyPaneTabBarControlsVisibilityModeKey = "paneTabBarControlsVisibilityMode"
-
-    enum Mode: String {
-        case enabled
-        case disabled
-    }
-
-    static let defaultMode: Mode = .disabled
-
-    static func mode(for rawValue: String?) -> Mode {
-        Mode(rawValue: rawValue ?? "") ?? defaultMode
-    }
-
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        mode(for: defaults.string(forKey: modeKey)) == .enabled
-    }
-
-    static func initializeStoredModeIfNeeded(defaults: UserDefaults = .standard) {
-        guard defaults.string(forKey: modeKey) == nil else { return }
-
-        if let migratedMode = migratedLegacyMode(defaults: defaults) {
-            defaults.set(migratedMode.rawValue, forKey: modeKey)
-            return
-        }
-
-        let initialMode: Mode = WorkspaceTitlebarSettings.isVisible(defaults: defaults) ? .disabled : .enabled
-        defaults.set(initialMode.rawValue, forKey: modeKey)
-    }
-
-    private static func migratedLegacyMode(defaults: UserDefaults) -> Mode? {
-        let legacyValues = [
-            defaults.string(forKey: legacyTitlebarControlsVisibilityModeKey),
-            defaults.string(forKey: legacyPaneTabBarControlsVisibilityModeKey),
-        ]
-
-        if legacyValues.contains(where: { $0 == "onHover" || $0 == "hover" || $0 == "enabled" }) {
-            return .enabled
-        }
-        if legacyValues.contains(where: { $0 == "always" || $0 == "disabled" }) {
-            return .disabled
-        }
-        return nil
     }
 }
 
@@ -6018,11 +5958,6 @@ struct SettingsView: View {
         alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
         newWorkspacePlacement = WorkspacePlacementSettings.defaultPlacement.rawValue
         workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
-        let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.modeKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
         closeWorkspaceOnLastSurfaceShortcut = LastSurfaceCloseShortcutSettings.defaultValue
         paneFirstClickFocusEnabled = PaneFirstClickFocusSettings.defaultEnabled
         workspaceAutoReorder = WorkspaceAutoReorderSettings.defaultValue
