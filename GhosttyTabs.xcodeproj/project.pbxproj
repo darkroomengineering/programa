@@ -44,6 +44,12 @@
 		A5001402 /* BrowserPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001412 /* BrowserPanel.swift */; };
 		NRBR0001 /* InspectorDock.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0002 /* InspectorDock.swift */; };
 		NRBR0003 /* BrowserWebDialogPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0004 /* BrowserWebDialogPresenter.swift */; };
+		NRBR0005 /* BrowserProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0006 /* BrowserProfileStore.swift */; };
+		NRBR0007 /* BrowserHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0008 /* BrowserHistoryStore.swift */; };
+		NRBR0009 /* BrowserDownloadDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0010 /* BrowserDownloadDelegate.swift */; };
+		NRBR0011 /* BrowserPanelWebDelegates.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0012 /* BrowserPanelWebDelegates.swift */; };
+		NRBR0013 /* BrowserUserProxySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0014 /* BrowserUserProxySettings.swift */; };
+		NRBR0015 /* IMECompositionMessageHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0016 /* IMECompositionMessageHandler.swift */; };
 		A5FF0013 /* BrowserDataImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0003 /* BrowserDataImport.swift */; };
 		A500RG01 /* ReactGrab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A500RG00 /* ReactGrab.swift */; };
 		A5001403 /* TerminalPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001413 /* TerminalPanelView.swift */; };
@@ -271,6 +277,12 @@
 		A5001412 /* BrowserPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserPanel.swift; sourceTree = "<group>"; };
 		NRBR0002 /* InspectorDock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/InspectorDock.swift; sourceTree = "<group>"; };
 		NRBR0004 /* BrowserWebDialogPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserWebDialogPresenter.swift; sourceTree = "<group>"; };
+		NRBR0006 /* BrowserProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserProfileStore.swift; sourceTree = "<group>"; };
+		NRBR0008 /* BrowserHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserHistoryStore.swift; sourceTree = "<group>"; };
+		NRBR0010 /* BrowserDownloadDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserDownloadDelegate.swift; sourceTree = "<group>"; };
+		NRBR0012 /* BrowserPanelWebDelegates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserPanelWebDelegates.swift; sourceTree = "<group>"; };
+		NRBR0014 /* BrowserUserProxySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserUserProxySettings.swift; sourceTree = "<group>"; };
+		NRBR0016 /* IMECompositionMessageHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/IMECompositionMessageHandler.swift; sourceTree = "<group>"; };
 		A5FF0003 /* BrowserDataImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserDataImport.swift; sourceTree = "<group>"; };
 		A500RG00 /* ReactGrab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ReactGrab.swift; sourceTree = "<group>"; };
 		A5001413 /* TerminalPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/TerminalPanelView.swift; sourceTree = "<group>"; };
@@ -555,6 +567,12 @@
 				A5001412 /* BrowserPanel.swift */,
 				NRBR0002 /* InspectorDock.swift */,
 				NRBR0004 /* BrowserWebDialogPresenter.swift */,
+				NRBR0006 /* BrowserProfileStore.swift */,
+				NRBR0008 /* BrowserHistoryStore.swift */,
+				NRBR0010 /* BrowserDownloadDelegate.swift */,
+				NRBR0012 /* BrowserPanelWebDelegates.swift */,
+				NRBR0014 /* BrowserUserProxySettings.swift */,
+				NRBR0016 /* IMECompositionMessageHandler.swift */,
 				A5FF0003 /* BrowserDataImport.swift */,
 				A500RG00 /* ReactGrab.swift */,
 				A5001413 /* TerminalPanelView.swift */,
@@ -886,6 +904,12 @@
 				A5001402 /* BrowserPanel.swift in Sources */,
 				NRBR0001 /* InspectorDock.swift in Sources */,
 				NRBR0003 /* BrowserWebDialogPresenter.swift in Sources */,
+				NRBR0005 /* BrowserProfileStore.swift in Sources */,
+				NRBR0007 /* BrowserHistoryStore.swift in Sources */,
+				NRBR0009 /* BrowserDownloadDelegate.swift in Sources */,
+				NRBR0011 /* BrowserPanelWebDelegates.swift in Sources */,
+				NRBR0013 /* BrowserUserProxySettings.swift in Sources */,
+				NRBR0015 /* IMECompositionMessageHandler.swift in Sources */,
 				A5FF0013 /* BrowserDataImport.swift in Sources */,
 				A500RG01 /* ReactGrab.swift in Sources */,
 				A5001403 /* TerminalPanelView.swift in Sources */,
