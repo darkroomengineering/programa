@@ -8,7 +8,7 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+extension ProgramaCLI {
     private func generateRemoteRelayPort() -> Int {
         // Random port in the ephemeral range (49152-65535)
         Int.random(in: 49152...65535)
@@ -1325,5 +1325,68 @@ extension CMUXCLI {
             timeout: timeout
         )
         return (result.status, result.stdout, result.stderr)
+    }
+
+    /// Subcommand help text for SSH commands, split out of the
+    /// central `subcommandUsage` switch (programa.swift) so each domain's
+    /// help text lives next to its command descriptors. Refs #101.
+    func sshSubcommandUsage(_ command: String) -> String? {
+        switch command {
+        case "ssh":
+            return """
+            Usage: programa ssh <destination> [flags] [-- <remote-command-args>]
+
+            Create a new workspace, mark it as remote-SSH, and start an SSH session in that workspace.
+            programa will also establish a local SSH proxy endpoint so browser traffic can egress from the remote host.
+
+            Flags:
+              --name <title>          Optional workspace title
+              --port <n>              SSH port
+              --identity <path>       SSH identity file path
+              --ssh-option <opt>      Extra SSH -o option (repeatable)
+              --no-focus              Create workspace without switching to it
+
+            Example:
+              programa ssh dev@my-host
+              programa ssh dev@my-host --name "gpu-box" --port 2222 --identity ~/.ssh/id_ed25519
+              programa ssh dev@my-host --ssh-option UserKnownHostsFile=/dev/null --ssh-option StrictHostKeyChecking=no
+            """
+        case "remote-daemon-status":
+            return """
+            Usage: programa remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]
+
+            Show the embedded programad-remote release manifest, local cache status, checksum verification state,
+            and the GitHub attestation verification command for a target platform.
+
+            Example:
+              programa remote-daemon-status
+              programa remote-daemon-status --os linux --arch arm64
+            """
+        default:
+            return nil
+        }
+    }
+
+    /// SSH-related command descriptors, split out of the central
+    /// `commandDescriptors()` array (programa.swift) so they live next to
+    /// their implementation. Refs #101.
+    func sshDescriptors() -> [CommandDescriptor] {
+        [
+            CommandDescriptor(
+                names: ["ssh"],
+                helpLines: ["ssh <destination> [--name <title>] [--port <n>] [--identity <path>] [--ssh-option <opt>] [--no-focus] [-- <remote-command-args>]"],
+                execute: { ctx in
+                    try self.runSSH(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+            CommandDescriptor(
+                names: ["ssh-session-end"],
+                helpLines: [],
+                execute: { ctx in
+                    try self.runSSHSessionEnd(commandArgs: ctx.commandArgs, client: ctx.client)
+                }
+            ),
+            CommandDescriptor(names: ["remote-daemon-status"], helpLines: ["remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]"], execute: nil),
+        ]
     }
 }

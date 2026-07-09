@@ -8,7 +8,7 @@ import LocalAuthentication
 import Security
 #endif
 
-extension CMUXCLI {
+extension ProgramaCLI {
     private struct TreeCommandOptions {
         let includeAllWindows: Bool
         let workspaceHandle: String?
@@ -540,5 +540,56 @@ extension CMUXCLI {
             parts.append(url)
         }
         return parts.joined(separator: " ")
+    }
+
+    /// Subcommand help text for Tree commands, split out of the
+    /// central `subcommandUsage` switch (programa.swift) so each domain's
+    /// help text lives next to its command descriptors. Refs #101.
+    func treeSubcommandUsage(_ command: String) -> String? {
+        switch command {
+        case "tree":
+            return """
+            Usage: programa tree [flags]
+
+            Print the hierarchy of windows, workspaces, panes, and surfaces.
+
+            Flags:
+              --all                         Include all windows (default: current window only)
+              --workspace <id|ref|index>   Show only one workspace
+              --json                        Structured JSON output
+
+            Output:
+              Text mode prints a box-drawing tree with markers:
+              - ◀ active (true focused window/workspace/pane/surface path)
+              - ◀ here (caller surface where `programa tree` was invoked)
+              - workspace [selected]
+              - pane [focused]
+              - surface [selected]
+              Browser surfaces also include their current URL.
+
+            Example:
+              programa tree
+              programa tree --all
+              programa tree --workspace workspace:2
+              programa --json tree --all
+            """
+        default:
+            return nil
+        }
+    }
+
+    /// Tree command descriptors, split out of the central
+    /// `commandDescriptors()` array (programa.swift) so they live next to
+    /// their implementation. Refs #101.
+    func treeDescriptors() -> [CommandDescriptor] {
+        [
+            CommandDescriptor(
+                names: ["tree"],
+                helpLines: ["tree [--all] [--workspace <id|ref|index>]"],
+                execute: { ctx in
+                    try self.runTreeCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+        ]
     }
 }
