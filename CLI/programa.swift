@@ -3364,11 +3364,19 @@ struct CMUXCLI {
         return Int(String(pieces[1])) != nil
     }
 
-    func normalizeWindowHandle(_ raw: String?, client: SocketClient, allowCurrent: Bool = false) throws -> String? {
+    /// Generic handle normalizer shared by window/workspace/pane/surface lookups.
+    /// Resolves a raw CLI argument (UUID, handle ref, or list index) to a canonical
+    /// handle ref/id, optionally scoped to a parent handle and falling back to a
+    /// caller-supplied "current"/"focused" resolver when `raw` is nil.
+    private func normalizeHandle(
+        _ raw: String?,
+        client: SocketClient,
+        kind: String,
+        filterParam: (key: String, value: String)? = nil,
+        fallback: () throws -> String?
+    ) throws -> String? {
         guard let raw else {
-            if !allowCurrent { return nil }
-            let current = try client.sendV2(method: "window.current")
-            return (current["window_ref"] as? String) ?? (current["window_id"] as? String)
+            return try fallback()
         }
 
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3377,15 +3385,27 @@ struct CMUXCLI {
             return trimmed
         }
         guard let wantedIndex = Int(trimmed) else {
-            throw CLIError(message: "Invalid window handle: \(trimmed) (expected UUID, ref like window:1, or index)")
+            throw CLIError(message: "Invalid \(kind) handle: \(trimmed) (expected UUID, ref like \(kind):1, or index)")
         }
 
-        let listed = try client.sendV2(method: "window.list")
-        let windows = listed["windows"] as? [[String: Any]] ?? []
-        for item in windows where intFromAny(item["index"]) == wantedIndex {
+        var params: [String: Any] = [:]
+        if let filterParam {
+            params[filterParam.key] = filterParam.value
+        }
+        let listed = try client.sendV2(method: "\(kind).list", params: params)
+        let items = listed["\(kind)s"] as? [[String: Any]] ?? []
+        for item in items where intFromAny(item["index"]) == wantedIndex {
             return (item["ref"] as? String) ?? (item["id"] as? String)
         }
-        throw CLIError(message: "Window index not found")
+        throw CLIError(message: "\(kind.capitalized) index not found")
+    }
+
+    func normalizeWindowHandle(_ raw: String?, client: SocketClient, allowCurrent: Bool = false) throws -> String? {
+        try normalizeHandle(raw, client: client, kind: "window") {
+            guard allowCurrent else { return nil }
+            let current = try client.sendV2(method: "window.current")
+            return (current["window_ref"] as? String) ?? (current["window_id"] as? String)
+        }
     }
 
     func normalizeWorkspaceHandle(
@@ -3394,31 +3414,16 @@ struct CMUXCLI {
         windowHandle: String? = nil,
         allowCurrent: Bool = false
     ) throws -> String? {
-        guard let raw else {
-            if !allowCurrent { return nil }
+        try normalizeHandle(
+            raw,
+            client: client,
+            kind: "workspace",
+            filterParam: windowHandle.map { ("window_id", $0) }
+        ) {
+            guard allowCurrent else { return nil }
             let current = try client.sendV2(method: "workspace.current")
             return (current["workspace_ref"] as? String) ?? (current["workspace_id"] as? String)
         }
-
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return nil }
-        if isUUID(trimmed) || isHandleRef(trimmed) {
-            return trimmed
-        }
-        guard let wantedIndex = Int(trimmed) else {
-            throw CLIError(message: "Invalid workspace handle: \(trimmed) (expected UUID, ref like workspace:1, or index)")
-        }
-
-        var params: [String: Any] = [:]
-        if let windowHandle {
-            params["window_id"] = windowHandle
-        }
-        let listed = try client.sendV2(method: "workspace.list", params: params)
-        let items = listed["workspaces"] as? [[String: Any]] ?? []
-        for item in items where intFromAny(item["index"]) == wantedIndex {
-            return (item["ref"] as? String) ?? (item["id"] as? String)
-        }
-        throw CLIError(message: "Workspace index not found")
     }
 
     func normalizePaneHandle(
@@ -3427,32 +3432,17 @@ struct CMUXCLI {
         workspaceHandle: String? = nil,
         allowFocused: Bool = false
     ) throws -> String? {
-        guard let raw else {
-            if !allowFocused { return nil }
+        try normalizeHandle(
+            raw,
+            client: client,
+            kind: "pane",
+            filterParam: workspaceHandle.map { ("workspace_id", $0) }
+        ) {
+            guard allowFocused else { return nil }
             let ident = try client.sendV2(method: "system.identify")
             let focused = ident["focused"] as? [String: Any] ?? [:]
             return (focused["pane_ref"] as? String) ?? (focused["pane_id"] as? String)
         }
-
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return nil }
-        if isUUID(trimmed) || isHandleRef(trimmed) {
-            return trimmed
-        }
-        guard let wantedIndex = Int(trimmed) else {
-            throw CLIError(message: "Invalid pane handle: \(trimmed) (expected UUID, ref like pane:1, or index)")
-        }
-
-        var params: [String: Any] = [:]
-        if let workspaceHandle {
-            params["workspace_id"] = workspaceHandle
-        }
-        let listed = try client.sendV2(method: "pane.list", params: params)
-        let items = listed["panes"] as? [[String: Any]] ?? []
-        for item in items where intFromAny(item["index"]) == wantedIndex {
-            return (item["ref"] as? String) ?? (item["id"] as? String)
-        }
-        throw CLIError(message: "Pane index not found")
     }
 
     func normalizeSurfaceHandle(
@@ -3461,32 +3451,17 @@ struct CMUXCLI {
         workspaceHandle: String? = nil,
         allowFocused: Bool = false
     ) throws -> String? {
-        guard let raw else {
-            if !allowFocused { return nil }
+        try normalizeHandle(
+            raw,
+            client: client,
+            kind: "surface",
+            filterParam: workspaceHandle.map { ("workspace_id", $0) }
+        ) {
+            guard allowFocused else { return nil }
             let ident = try client.sendV2(method: "system.identify")
             let focused = ident["focused"] as? [String: Any] ?? [:]
             return (focused["surface_ref"] as? String) ?? (focused["surface_id"] as? String)
         }
-
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return nil }
-        if isUUID(trimmed) || isHandleRef(trimmed) {
-            return trimmed
-        }
-        guard let wantedIndex = Int(trimmed) else {
-            throw CLIError(message: "Invalid surface handle: \(trimmed) (expected UUID, ref like surface:1, or index)")
-        }
-
-        var params: [String: Any] = [:]
-        if let workspaceHandle {
-            params["workspace_id"] = workspaceHandle
-        }
-        let listed = try client.sendV2(method: "surface.list", params: params)
-        let items = listed["surfaces"] as? [[String: Any]] ?? []
-        for item in items where intFromAny(item["index"]) == wantedIndex {
-            return (item["ref"] as? String) ?? (item["id"] as? String)
-        }
-        throw CLIError(message: "Surface index not found")
     }
 
     private func canonicalSurfaceHandleFromTabInput(_ value: String) -> String {
@@ -5526,32 +5501,10 @@ struct CMUXCLI {
             .replacingOccurrences(of: "\r", with: "\\r")
         return "\"\(escaped)\""
     }
-    func parseOption(_ args: [String], name: String) -> (String?, [String]) {
-        var remaining: [String] = []
-        var value: String?
-        var skipNext = false
-        var pastTerminator = false
-        for (idx, arg) in args.enumerated() {
-            if skipNext {
-                skipNext = false
-                continue
-            }
-            if arg == "--" {
-                pastTerminator = true
-                remaining.append(arg)
-                continue
-            }
-            if !pastTerminator, arg == name, idx + 1 < args.count {
-                value = args[idx + 1]
-                skipNext = true
-                continue
-            }
-            remaining.append(arg)
-        }
-        return (value, remaining)
-    }
-
-    private func parseRepeatedOption(_ args: [String], name: String) -> ([String], [String]) {
+    /// Shared scan loop for `parseOption`/`parseRepeatedOption`: walks `args`,
+    /// collecting every value that follows `name` (honoring a `--` terminator)
+    /// and returning the leftover args with those option/value pairs removed.
+    private func scanOption(_ args: [String], name: String) -> ([String], [String]) {
         var remaining: [String] = []
         var values: [String] = []
         var skipNext = false
@@ -5574,6 +5527,15 @@ struct CMUXCLI {
             remaining.append(arg)
         }
         return (values, remaining)
+    }
+
+    func parseOption(_ args: [String], name: String) -> (String?, [String]) {
+        let (values, remaining) = scanOption(args, name: name)
+        return (values.last, remaining)
+    }
+
+    private func parseRepeatedOption(_ args: [String], name: String) -> ([String], [String]) {
+        scanOption(args, name: name)
     }
 
     func optionValue(_ args: [String], name: String) -> String? {
