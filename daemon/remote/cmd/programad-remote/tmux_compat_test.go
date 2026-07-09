@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -431,6 +435,114 @@ func TestTmuxWaitForSignalRoundTrip(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Error("signal file should be removed after wait")
+	}
+}
+
+// startMockNewWindowSocket returns a mock relay socket that resolves
+// workspace.list to a single "target" workspace and records the params
+// passed to every workspace.create call (guarded by a mutex, since the
+// listener services requests on their own goroutines).
+func startMockNewWindowSocket(t *testing.T) (sockPath string, createCalls *[]map[string]any, mu *sync.Mutex) {
+	t.Helper()
+	sockPath = makeShortUnixSocketPath(t)
+	calls := []map[string]any{}
+	var lock sync.Mutex
+
+	ln, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer conn.Close()
+				reader := bufio.NewReader(conn)
+				line, err := reader.ReadBytes('\n')
+				if err != nil {
+					return
+				}
+
+				var req map[string]any
+				if err := json.Unmarshal(line, &req); err != nil {
+					_, _ = conn.Write([]byte(`{"ok":false,"error":{"code":"parse","message":"bad json"}}` + "\n"))
+					return
+				}
+
+				method, _ := req["method"].(string)
+				params, _ := req["params"].(map[string]any)
+				resp := map[string]any{"id": req["id"], "ok": true}
+
+				switch method {
+				case "workspace.list":
+					resp["result"] = map[string]any{
+						"workspaces": []map[string]any{{
+							"id":    "22222222-2222-4222-8222-222222222222",
+							"ref":   "workspace:9",
+							"index": 9,
+							"title": "target-session",
+						}},
+					}
+				case "workspace.create":
+					lock.Lock()
+					calls = append(calls, params)
+					lock.Unlock()
+					resp["result"] = map[string]any{"workspace_id": "33333333-3333-4333-8333-333333333333"}
+				case "workspace.rename":
+					resp["result"] = map[string]any{"ok": true}
+				default:
+					resp["ok"] = false
+					resp["error"] = map[string]any{"code": "unsupported", "message": method}
+				}
+
+				payload, _ := json.Marshal(resp)
+				_, _ = conn.Write(append(payload, '\n'))
+			}(conn)
+		}
+	}()
+
+	return sockPath, &calls, &lock
+}
+
+func TestTmuxNewWindowHonorsTargetSession(t *testing.T) {
+	sockPath, calls, mu := startMockNewWindowSocket(t)
+	rc := &rpcContext{socketPath: sockPath}
+
+	if err := dispatchTmuxCommand(rc, "new-window", []string{"-t", "target-session"}); err != nil {
+		t.Fatalf("new-window: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(*calls) != 1 {
+		t.Fatalf("workspace.create calls = %d, want 1", len(*calls))
+	}
+	got, _ := (*calls)[0]["workspace_id"].(string)
+	if got != "22222222-2222-4222-8222-222222222222" {
+		t.Errorf("workspace.create routed workspace_id = %q, want the resolved -t target", got)
+	}
+}
+
+func TestTmuxNewWindowWithoutTargetDoesNotRoute(t *testing.T) {
+	sockPath, calls, mu := startMockNewWindowSocket(t)
+	rc := &rpcContext{socketPath: sockPath}
+
+	if err := dispatchTmuxCommand(rc, "new-window", nil); err != nil {
+		t.Fatalf("new-window: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(*calls) != 1 {
+		t.Fatalf("workspace.create calls = %d, want 1", len(*calls))
+	}
+	if _, ok := (*calls)[0]["workspace_id"]; ok {
+		t.Errorf("workspace.create params should not carry workspace_id routing when -t is absent, got %v", (*calls)[0])
 	}
 }
 
