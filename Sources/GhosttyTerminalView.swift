@@ -4339,6 +4339,13 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// Keep `desiredFocusState` in sync when the hosted view's responder chain
     /// calls `ghostty_surface_set_focus` directly (bypassing `setFocus`).
     /// Without this, `createSurface` would replay a stale state on recreation.
+    ///
+    /// `desiredFocusState` must have exactly one writer per focus transition:
+    /// either this method (paired with a direct `ghostty_surface_set_focus` call,
+    /// or standing in for one that's deferred) or `setFocus`, never both for the
+    /// same transition. Calling this immediately before `setFocus` for the same
+    /// transition pre-sets the value `setFocus`'s dedup guard checks against,
+    /// which makes it silently skip the real `ghostty_surface_set_focus` push.
     func recordExternalFocusState(_ focused: Bool) {
         desiredFocusState = focused
     }
@@ -7710,9 +7717,19 @@ final class GhosttySurfaceScrollView: NSView {
 
         guard surfaceView.desiredFocus || surfaceOwnsFirstResponder else { return }
         guard surfaceView.isVisibleInUI else { return }
-        surfaceView.terminalSurface?.recordExternalFocusState(true)
-        guard let window, window.isKeyWindow else { return }
+        // NOTE: recordExternalFocusState(true) is only called in the branches below that
+        // do NOT reach reassertTerminalSurfaceFocus(). Calling it unconditionally here used
+        // to pre-set TerminalSurface.desiredFocusState to true before reassertTerminalSurfaceFocus
+        // -> setFocus(true) ran; setFocus's dedup guard (`focused != desiredFocusState`) then
+        // saw no change and silently skipped the real ghostty_surface_set_focus push, leaving
+        // the surface's actual Ghostty-level focus stuck false after a reparent/split. Each
+        // branch below now has exactly one writer of desiredFocusState for this transition.
+        guard let window, window.isKeyWindow else {
+            surfaceView.terminalSurface?.recordExternalFocusState(true)
+            return
+        }
         guard !isHiddenForFocus, hasUsablePortalGeometry else {
+            surfaceView.terminalSurface?.recordExternalFocusState(true)
 #if DEBUG
             dlog(
                 "focus.reparent.resume.defer surface=\(surfaceShort) " +
@@ -7735,6 +7752,10 @@ final class GhosttySurfaceScrollView: NSView {
 #if DEBUG
         dlog("focus.reparent.resume surface=\(surfaceShort) firstResponder=\(String(describing: window.firstResponder))")
 #endif
+        // reassertTerminalSurfaceFocus() -> setFocus(true) is the sole writer of
+        // desiredFocusState on this path; it both updates the dedup guard and pushes
+        // ghostty_surface_set_focus in one place, so no separate recordExternalFocusState
+        // call is made here (see NOTE above).
         reassertTerminalSurfaceFocus(reason: "clearSuppressReparentFocus")
     }
 
