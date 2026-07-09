@@ -1112,74 +1112,85 @@ func dispatchTmuxCommand(rc *rpcContext, command string, args []string) error {
 
 // --- Command implementations ---
 
+// tmuxCreateWorkspace implements the body shared by `new-session` and
+// `new-window`: create a workspace (optionally routed into the macOS window
+// that owns targetWsId, mirroring tmux's "new window goes into the target's
+// session"), rename it, and pipe in a shell command if one was given.
+func tmuxCreateWorkspace(rc *rpcContext, p *tmuxParsed, title string, targetWsId string) (string, error) {
+	params := map[string]any{"focus": false}
+	if cwd := p.value("-c"); cwd != "" {
+		params["cwd"] = cwd
+	}
+	if targetWsId != "" {
+		// Route the new workspace into the same top-level window as the
+		// resolved target instead of always landing in the active window.
+		params["workspace_id"] = targetWsId
+	}
+	created, err := rc.call("workspace.create", params)
+	if err != nil {
+		return "", err
+	}
+	wsId, _ := created["workspace_id"].(string)
+	if wsId == "" {
+		return "", fmt.Errorf("workspace.create did not return workspace_id")
+	}
+	if strings.TrimSpace(title) != "" {
+		rc.call("workspace.rename", map[string]any{"workspace_id": wsId, "title": title})
+	}
+	if text := tmuxShellCommandText(p.positional, p.value("-c")); text != "" {
+		surfaceId, err := tmuxGetFirstSurface(rc, wsId)
+		if err == nil {
+			rc.call("surface.send_text", map[string]any{"workspace_id": wsId, "surface_id": surfaceId, "text": text})
+		}
+	}
+	return wsId, nil
+}
+
+// tmuxPrintWorkspaceRef prints the `-P`/`-F` formatted reference for a
+// newly created workspace, shared by `new-session` and `new-window`.
+func tmuxPrintWorkspaceRef(rc *rpcContext, p *tmuxParsed, wsId string) {
+	if !p.hasFlag("-P") {
+		return
+	}
+	ctx, err := tmuxFormatContext(rc, wsId, "", "")
+	if err != nil {
+		fmt.Printf("@%s\n", wsId)
+		return
+	}
+	fmt.Println(tmuxRenderFormat(p.value("-F"), ctx, "@"+wsId))
+}
+
 func tmuxNewSession(rc *rpcContext, args []string) error {
 	p := parseTmuxArgs(args, []string{"-c", "-F", "-n", "-s"}, []string{"-A", "-d", "-P"})
 	if p.hasFlag("-A") {
 		return fmt.Errorf("new-session -A is not supported")
 	}
-	params := map[string]any{"focus": false}
-	if cwd := p.value("-c"); cwd != "" {
-		params["cwd"] = cwd
-	}
-	created, err := rc.call("workspace.create", params)
+	title := firstNonEmpty(p.value("-n"), p.value("-s"))
+	wsId, err := tmuxCreateWorkspace(rc, p, title, "")
 	if err != nil {
 		return err
 	}
-	wsId, _ := created["workspace_id"].(string)
-	if wsId == "" {
-		return fmt.Errorf("workspace.create did not return workspace_id")
-	}
-	if title := firstNonEmpty(p.value("-n"), p.value("-s")); strings.TrimSpace(title) != "" {
-		rc.call("workspace.rename", map[string]any{"workspace_id": wsId, "title": title})
-	}
-	if text := tmuxShellCommandText(p.positional, p.value("-c")); text != "" {
-		surfaceId, err := tmuxGetFirstSurface(rc, wsId)
-		if err == nil {
-			rc.call("surface.send_text", map[string]any{"workspace_id": wsId, "surface_id": surfaceId, "text": text})
-		}
-	}
-	if p.hasFlag("-P") {
-		ctx, err := tmuxFormatContext(rc, wsId, "", "")
-		if err != nil {
-			fmt.Printf("@%s\n", wsId)
-			return nil
-		}
-		fmt.Println(tmuxRenderFormat(p.value("-F"), ctx, "@"+wsId))
-	}
+	tmuxPrintWorkspaceRef(rc, p, wsId)
 	return nil
 }
 
 func tmuxNewWindow(rc *rpcContext, args []string) error {
 	p := parseTmuxArgs(args, []string{"-c", "-F", "-n", "-t"}, []string{"-d", "-P"})
-	params := map[string]any{"focus": false}
-	if cwd := p.value("-c"); cwd != "" {
-		params["cwd"] = cwd
+
+	targetWsId := ""
+	if raw := strings.TrimSpace(p.value("-t")); raw != "" {
+		resolved, err := tmuxResolveWorkspaceTarget(rc, raw)
+		if err != nil {
+			return err
+		}
+		targetWsId = resolved
 	}
-	created, err := rc.call("workspace.create", params)
+
+	wsId, err := tmuxCreateWorkspace(rc, p, p.value("-n"), targetWsId)
 	if err != nil {
 		return err
 	}
-	wsId, _ := created["workspace_id"].(string)
-	if wsId == "" {
-		return fmt.Errorf("workspace.create did not return workspace_id")
-	}
-	if title := p.value("-n"); strings.TrimSpace(title) != "" {
-		rc.call("workspace.rename", map[string]any{"workspace_id": wsId, "title": title})
-	}
-	if text := tmuxShellCommandText(p.positional, p.value("-c")); text != "" {
-		surfaceId, err := tmuxGetFirstSurface(rc, wsId)
-		if err == nil {
-			rc.call("surface.send_text", map[string]any{"workspace_id": wsId, "surface_id": surfaceId, "text": text})
-		}
-	}
-	if p.hasFlag("-P") {
-		ctx, err := tmuxFormatContext(rc, wsId, "", "")
-		if err != nil {
-			fmt.Printf("@%s\n", wsId)
-			return nil
-		}
-		fmt.Println(tmuxRenderFormat(p.value("-F"), ctx, "@"+wsId))
-	}
+	tmuxPrintWorkspaceRef(rc, p, wsId)
 	return nil
 }
 
