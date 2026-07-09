@@ -52,6 +52,9 @@
 		A5001290 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A5001291 /* MarkdownUI */; };
 		A5001405 /* PanelContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001415 /* PanelContentView.swift */; };
 		A5001406 /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001416 /* Workspace.swift */; };
+		NRWS00000000000000000028 /* Workspace+Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000027 /* Workspace+Persistence.swift */; };
+		NRWS00000000000000000030 /* Workspace+Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000029 /* Workspace+Layout.swift */; };
+		NRWS00000000000000000032 /* Workspace+Bonsplit.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000031 /* Workspace+Bonsplit.swift */; };
 		A5FF0012 /* WorkspaceRemoteSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0002 /* WorkspaceRemoteSession.swift */; };
 		NRWS00000000000000000018 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000017 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift */; };
 		NRWS00000000000000000020 /* WorkspaceRemoteSessionController+ProcessExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000019 /* WorkspaceRemoteSessionController+ProcessExecution.swift */; };
@@ -288,6 +291,9 @@
 		A5001418 /* MarkdownPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanel.swift; sourceTree = "<group>"; };
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
 		A5001416 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000027 /* Workspace+Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Persistence.swift"; sourceTree = "<group>"; };
+		NRWS00000000000000000029 /* Workspace+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Layout.swift"; sourceTree = "<group>"; };
+		NRWS00000000000000000031 /* Workspace+Bonsplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Bonsplit.swift"; sourceTree = "<group>"; };
 		A5FF0002 /* WorkspaceRemoteSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteSession.swift; sourceTree = "<group>"; };
 		NRWS00000000000000000017 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkspaceRemoteSessionController+ConnectionOrchestration.swift"; sourceTree = "<group>"; };
 		NRWS00000000000000000019 /* WorkspaceRemoteSessionController+ProcessExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkspaceRemoteSessionController+ProcessExecution.swift"; sourceTree = "<group>"; };
@@ -541,6 +547,9 @@
 					A5FF0061 /* TabManager+GitMetadataPolling.swift */,
 					A5001511 /* UITestRecorder.swift */,
 					A5001416 /* Workspace.swift */,
+					NRWS00000000000000000027 /* Workspace+Persistence.swift */,
+					NRWS00000000000000000029 /* Workspace+Layout.swift */,
+					NRWS00000000000000000031 /* Workspace+Bonsplit.swift */,
 					A5FF0002 /* WorkspaceRemoteSession.swift */,
 					NRWS00000000000000000017 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift */,
 					NRWS00000000000000000019 /* WorkspaceRemoteSessionController+ProcessExecution.swift */,
@@ -883,6 +892,9 @@
 						A5FF0071 /* TabManager+GitMetadataPolling.swift in Sources */,
 						A5001501 /* UITestRecorder.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
+						NRWS00000000000000000028 /* Workspace+Persistence.swift in Sources */,
+						NRWS00000000000000000030 /* Workspace+Layout.swift in Sources */,
+						NRWS00000000000000000032 /* Workspace+Bonsplit.swift in Sources */,
 						A5FF0012 /* WorkspaceRemoteSession.swift in Sources */,
 						NRWS00000000000000000018 /* WorkspaceRemoteSessionController+ConnectionOrchestration.swift in Sources */,
 						NRWS00000000000000000020 /* WorkspaceRemoteSessionController+ProcessExecution.swift in Sources */,
