@@ -6903,7 +6903,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         id.map { String($0.uuidString.prefix(5)) } ?? "nil"
     }
 
-    static func resolveTerminalPanelForTextSend(in tab: Tab, preferredPanelId: UUID? = nil) -> TerminalPanel? {
+    static func resolveTerminalPanelForTextSend(in tab: Workspace, preferredPanelId: UUID? = nil) -> TerminalPanel? {
         if let preferredPanelId {
             return tab.terminalPanel(for: preferredPanelId)
         }
@@ -6912,7 +6912,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func sendTextWhenReady(
         _ text: String,
-        to tab: Tab,
+        to tab: Workspace,
         preferredPanelId: UUID? = nil,
         beforeSend: (() -> Void)? = nil
     ) {

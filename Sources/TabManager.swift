@@ -5,10 +5,6 @@ import Bonsplit
 import CoreVideo
 import Combine
 
-// MARK: - Tab Type Alias for Backwards Compatibility
-// The old Tab class is replaced by Workspace
-typealias Tab = Workspace
-
 enum NewWorkspacePlacement: String, CaseIterable, Identifiable {
     case top
     case afterCurrent

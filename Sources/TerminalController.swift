@@ -9107,7 +9107,7 @@ class TerminalController {
         }
     }
 
-    private func resolveTab(from arg: String, tabManager: TabManager) -> Tab? {
+    private func resolveTab(from arg: String, tabManager: TabManager) -> Workspace? {
         let trimmed = arg.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             guard let selected = tabManager.selectedTabId else { return nil }
@@ -9501,7 +9501,7 @@ class TerminalController {
         return (.selected, nil)
     }
 
-    private func resolveSidebarMutationTab(_ target: SidebarMutationTabTarget) -> Tab? {
+    private func resolveSidebarMutationTab(_ target: SidebarMutationTabTarget) -> Workspace? {
         switch target {
         case .selected:
             guard let tabManager = self.tabManager,
@@ -9520,7 +9520,7 @@ class TerminalController {
         }
     }
 
-    private func tabForSidebarMutation(id: UUID) -> Tab? {
+    private func tabForSidebarMutation(id: UUID) -> Workspace? {
         if let tab = tabManager?.tabs.first(where: { $0.id == id }) {
             return tab
         }
@@ -9549,7 +9549,7 @@ class TerminalController {
 
     private func scheduleSidebarMutation(
         target: SidebarMutationTabTarget,
-        mutation: @escaping (TerminalController, Tab) -> Void
+        mutation: @escaping (TerminalController, Workspace) -> Void
     ) {
         DispatchQueue.main.async { [weak self] in
             guard let self, let tab = self.resolveSidebarMutationTab(target) else { return }

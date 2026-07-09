@@ -10295,7 +10295,7 @@ private struct TabItemView: View, Equatable {
     let tabManager: TabManager
     let notificationStore: TerminalNotificationStore
     @Environment(\.colorScheme) private var colorScheme
-    let tab: Tab
+    let tab: Workspace
     let index: Int
     let isActive: Bool
     let workspaceShortcutDigit: Int?
