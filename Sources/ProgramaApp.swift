@@ -440,9 +440,6 @@ struct programaApp: App {
                     Button("Background Debug…") {
                         BackgroundDebugWindowController.shared.show()
                     }
-                    Button("Browser Import Hint Debug…") {
-                        BrowserImportHintDebugWindowController.shared.show()
-                    }
                     Button(
                         String(
                             localized: "debug.menu.browserProfilePopoverDebug",
@@ -1093,7 +1090,6 @@ struct programaApp: App {
     }
 
     private func openAllDebugWindows() {
-        BrowserImportHintDebugWindowController.shared.show()
         BrowserProfilePopoverDebugWindowController.shared.show()
         SettingsAboutTitlebarDebugWindowController.shared.show()
         SidebarDebugWindowController.shared.show()
@@ -1725,9 +1721,6 @@ private struct DebugWindowControlsView: View {
 
                 GroupBox("Open") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Button("Browser Import Hint Debug…") {
-                            BrowserImportHintDebugWindowController.shared.show()
-                        }
                         Button(
                             String(
                                 localized: "debug.menu.browserProfilePopoverDebug",
@@ -1749,7 +1742,6 @@ private struct DebugWindowControlsView: View {
                             MenuBarExtraDebugWindowController.shared.show()
                         }
                         Button("Open All Debug Windows") {
-                            BrowserImportHintDebugWindowController.shared.show()
                             BrowserProfilePopoverDebugWindowController.shared.show()
                             SettingsAboutTitlebarDebugWindowController.shared.show()
                             SidebarDebugWindowController.shared.show()
@@ -1954,40 +1946,6 @@ private struct DebugWindowControlsView: View {
     }
 }
 
-private final class BrowserImportHintDebugWindowController: NSWindowController, NSWindowDelegate {
-    static let shared = BrowserImportHintDebugWindowController()
-
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 420),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Browser Import Hint Debug"
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.browserImportHintDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: BrowserImportHintDebugView())
-        AppDelegate.shared?.applyWindowDecorations(to: window)
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
-    }
-}
-
 private final class BrowserProfilePopoverDebugWindowController: NSWindowController, NSWindowDelegate {
     static let shared = BrowserProfilePopoverDebugWindowController()
 
@@ -2183,178 +2141,6 @@ private struct BrowserProfilePopoverDebugView: View {
                 .font(.caption)
                 .monospacedDigit()
                 .frame(width: 32, alignment: .trailing)
-        }
-    }
-}
-
-private struct BrowserImportHintDebugView: View {
-    @AppStorage(BrowserImportHintSettings.variantKey)
-    private var variantRaw = BrowserImportHintSettings.defaultVariant.rawValue
-    @AppStorage(BrowserImportHintSettings.showOnBlankTabsKey)
-    private var showOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
-    @AppStorage(BrowserImportHintSettings.dismissedKey)
-    private var isDismissed = BrowserImportHintSettings.defaultDismissed
-
-    private var selectedVariant: BrowserImportHintVariant {
-        BrowserImportHintSettings.variant(for: variantRaw)
-    }
-
-    private var variantSelection: Binding<String> {
-        Binding(
-            get: { selectedVariant.rawValue },
-            set: { variantRaw = BrowserImportHintSettings.variant(for: $0).rawValue }
-        )
-    }
-
-    private var showOnBlankTabsBinding: Binding<Bool> {
-        Binding(
-            get: { showOnBlankTabs },
-            set: { newValue in
-                showOnBlankTabs = newValue
-                if newValue {
-                    isDismissed = false
-                }
-            }
-        )
-    }
-
-    private var presentation: BrowserImportHintPresentation {
-        BrowserImportHintPresentation(
-            variant: selectedVariant,
-            showOnBlankTabs: showOnBlankTabs,
-            isDismissed: isDismissed
-        )
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Browser Import Hint")
-                    .font(.headline)
-
-                Text("Try lighter blank-tab import surfaces and dismissal states without touching the permanent Browser settings home.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                GroupBox("Variant") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Picker("Blank Tab Style", selection: variantSelection) {
-                            ForEach(BrowserImportHintVariant.allCases) { variant in
-                                Text(title(for: variant)).tag(variant.rawValue)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        Text(description(for: selectedVariant))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox("State") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Toggle("Show on blank browser tabs", isOn: showOnBlankTabsBinding)
-                        Toggle("Pretend the user dismissed it", isOn: $isDismissed)
-
-                        Text("Current blank-tab placement: \(placementTitle(presentation.blankTabPlacement))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Settings status: \(settingsStatusTitle(presentation.settingsStatus))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox("Quick Actions") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 10) {
-                            Button("Open Browser Settings") {
-                                AppDelegate.presentPreferencesWindow(navigationTarget: .browser)
-                            }
-                            Button("Open Import Dialog") {
-                                DispatchQueue.main.async {
-                                    BrowserDataImportCoordinator.shared.presentImportDialog()
-                                }
-                            }
-                        }
-
-                        Button("Reset Hint Debug State") {
-                            BrowserImportHintSettings.reset()
-                        }
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox("Ideas") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Inline strip: default candidate, visible but quieter than the old floating card.")
-                        Text("Floating card: strongest nudge, useful when we want more explanation.")
-                        Text("Toolbar chip: most subtle, best when the hint should stay out of the content area.")
-                        Text("Settings only: no in-browser nudge, Browser settings becomes the only permanent home.")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private func title(for variant: BrowserImportHintVariant) -> String {
-        switch variant {
-        case .inlineStrip:
-            return "Inline Strip"
-        case .floatingCard:
-            return "Floating Card"
-        case .toolbarChip:
-            return "Toolbar Chip"
-        case .settingsOnly:
-            return "Settings Only"
-        }
-    }
-
-    private func description(for variant: BrowserImportHintVariant) -> String {
-        switch variant {
-        case .inlineStrip:
-            return "Shows a thin hint bar at the top of blank browser tabs."
-        case .floatingCard:
-            return "Shows the fuller callout card inside blank browser tabs."
-        case .toolbarChip:
-            return "Moves the hint into a small toolbar chip beside the browser controls."
-        case .settingsOnly:
-            return "Hides the blank-tab hint and leaves Browser settings as the only home."
-        }
-    }
-
-    private func placementTitle(_ placement: BrowserImportHintBlankTabPlacement) -> String {
-        switch placement {
-        case .hidden:
-            return "Hidden"
-        case .inlineStrip:
-            return "Inline Strip"
-        case .floatingCard:
-            return "Floating Card"
-        case .toolbarChip:
-            return "Toolbar Chip"
-        }
-    }
-
-    private func settingsStatusTitle(_ status: BrowserImportHintSettingsStatus) -> String {
-        switch status {
-        case .visible:
-            return "Visible"
-        case .hidden:
-            return "Hidden"
-        case .settingsOnly:
-            return "Settings Only"
         }
     }
 }
@@ -3867,10 +3653,8 @@ struct SettingsView: View {
     @AppStorage(BrowserSearchSettings.searchEngineKey) private var browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
     @AppStorage(BrowserSearchSettings.searchSuggestionsEnabledKey) private var browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled
     @AppStorage(BrowserThemeSettings.modeKey) private var browserThemeMode = BrowserThemeSettings.defaultMode.rawValue
-    @AppStorage(BrowserImportHintSettings.variantKey) private var browserImportHintVariantRaw = BrowserImportHintSettings.defaultVariant.rawValue
     @AppStorage(BrowserImportHintSettings.showOnBlankTabsKey) private var showBrowserImportHintOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
     @AppStorage(BrowserImportHintSettings.dismissedKey) private var isBrowserImportHintDismissed = BrowserImportHintSettings.defaultDismissed
-    @AppStorage(ReactGrabSettings.versionKey) private var reactGrabVersion = ReactGrabSettings.defaultVersion
     @AppStorage(BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowserKey) private var openTerminalLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser
     @AppStorage(BrowserLinkOpenSettings.interceptTerminalOpenCommandInProgramaBrowserKey)
     private var interceptTerminalOpenCommandInProgramaBrowser = BrowserLinkOpenSettings.initialInterceptTerminalOpenCommandInProgramaBrowserValue()
@@ -4033,13 +3817,8 @@ struct SettingsView: View {
         )
     }
 
-    private var browserImportHintVariant: BrowserImportHintVariant {
-        BrowserImportHintSettings.variant(for: browserImportHintVariantRaw)
-    }
-
     private var browserImportHintPresentation: BrowserImportHintPresentation {
         BrowserImportHintPresentation(
-            variant: browserImportHintVariant,
             showOnBlankTabs: showBrowserImportHintOnBlankTabs,
             isDismissed: isBrowserImportHintDismissed
         )
@@ -4113,8 +3892,6 @@ struct SettingsView: View {
             return String(localized: "settings.browser.import.hint.note.visible", defaultValue: "Blank browser tabs can show this import suggestion. Hide or re-enable it here.")
         case .hidden:
             return String(localized: "settings.browser.import.hint.note.hidden", defaultValue: "The blank-tab import hint is hidden. Turn it back on here any time.")
-        case .settingsOnly:
-            return String(localized: "settings.browser.import.hint.note.settingsOnly", defaultValue: "Blank tabs are currently using Settings only mode from the debug window.")
         }
     }
 
@@ -5401,19 +5178,6 @@ struct SettingsView: View {
 
                         SettingsCardDivider()
 
-                        SettingsCardRow(
-                            String(localized: "settings.browser.reactGrabVersion", defaultValue: "React Grab Version"),
-                            subtitle: String(localized: "settings.browser.reactGrabVersion.subtitle", defaultValue: "Pinned npm version of react-grab injected by the toolbar button (Cmd+Shift+G). Only versions with a known integrity hash are accepted.")
-                        ) {
-                            TextField("", text: $reactGrabVersion)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 100)
-                                .font(.system(.body, design: .monospaced))
-                                .accessibilityIdentifier("SettingsReactGrabVersionField")
-                        }
-
-                        SettingsCardDivider()
-
                         SettingsCardRow(String(localized: "settings.browser.history", defaultValue: "Browsing History"), subtitle: browserHistorySubtitle) {
                             Button(String(localized: "settings.browser.history.clearButton", defaultValue: "Clear History…")) {
                                 showClearBrowserHistoryConfirmation = true
@@ -5582,7 +5346,6 @@ struct SettingsView: View {
             BrowserHistoryStore.shared.loadIfNeeded()
             notificationStore.refreshAuthorizationStatus()
             browserThemeMode = BrowserThemeSettings.mode(defaults: .standard).rawValue
-            browserImportHintVariantRaw = BrowserImportHintSettings.variant(for: browserImportHintVariantRaw).rawValue
             browserHistoryEntryCount = BrowserHistoryStore.shared.entries.count
             browserInsecureHTTPAllowlistDraft = browserInsecureHTTPAllowlist
             refreshDetectedImportBrowsers()
@@ -5665,7 +5428,6 @@ struct SettingsView: View {
         browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
         browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled
         browserThemeMode = BrowserThemeSettings.defaultMode.rawValue
-        browserImportHintVariantRaw = BrowserImportHintSettings.defaultVariant.rawValue
         showBrowserImportHintOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
         isBrowserImportHintDismissed = BrowserImportHintSettings.defaultDismissed
         openTerminalLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser

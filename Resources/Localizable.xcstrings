@@ -6784,17 +6784,6 @@
         }
       }
     },
-    "settings.browser.import.hint.note.settingsOnly": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Blank tabs are currently using Settings only mode from the debug window."
-          }
-        }
-      }
-    },
     "settings.browser.import.hint.note.visible": {
       "extractionState": "manual",
       "localizations": {
@@ -6868,28 +6857,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "When off, links clicked in terminal output open in your default browser."
-          }
-        }
-      }
-    },
-    "settings.browser.reactGrabVersion": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "React Grab Version"
-          }
-        }
-      }
-    },
-    "settings.browser.reactGrabVersion.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pinned npm version of react-grab injected by the toolbar button (Cmd+Shift+G). Only versions with a known integrity hash are accepted."
           }
         }
       }

@@ -701,9 +701,6 @@ final class ProgramaSettingsFileStore {
         if let value = jsonBool(section["showImportHintOnBlankTabs"]) {
             snapshot.managedUserDefaults[BrowserImportHintSettings.showOnBlankTabsKey] = .bool(value)
         }
-        if let raw = jsonString(section["reactGrabVersion"]) {
-            snapshot.managedUserDefaults[ReactGrabSettings.versionKey] = .string(raw)
-        }
         if let proxyRaw = section["proxy"] {
             guard let proxyDict = proxyRaw as? [String: Any] else {
                 logInvalid("browser.proxy", sourcePath: sourcePath)
@@ -1320,7 +1317,6 @@ final class ProgramaSettingsFileStore {
                     "urlsToAlwaysOpenExternally": [String](),
                     "insecureHttpHostsAllowedInEmbeddedBrowser": BrowserInsecureHTTPSettings.defaultAllowlistPatterns,
                     "showImportHintOnBlankTabs": BrowserImportHintSettings.defaultShowOnBlankTabs,
-                    "reactGrabVersion": ReactGrabSettings.defaultVersion,
                 ],
             ],
             [

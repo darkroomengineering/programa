@@ -158,7 +158,6 @@ final class BrowserImportMappingTests: XCTestCase {
 
     func testBrowserImportHintPresentationHidesBlankTabHintWhenDismissed() {
         let presentation = BrowserImportHintPresentation(
-            variant: .floatingCard,
             showOnBlankTabs: true,
             isDismissed: true
         )
@@ -169,24 +168,12 @@ final class BrowserImportMappingTests: XCTestCase {
 
     func testBrowserImportHintPresentationUsesToolbarChipWhenEnabled() {
         let presentation = BrowserImportHintPresentation(
-            variant: .toolbarChip,
             showOnBlankTabs: true,
             isDismissed: false
         )
 
         XCTAssertEqual(presentation.blankTabPlacement, .toolbarChip)
         XCTAssertEqual(presentation.settingsStatus, .visible)
-    }
-
-    func testBrowserImportHintPresentationSettingsOnlyVariantStaysInSettings() {
-        let presentation = BrowserImportHintPresentation(
-            variant: .settingsOnly,
-            showOnBlankTabs: true,
-            isDismissed: false
-        )
-
-        XCTAssertEqual(presentation.blankTabPlacement, .hidden)
-        XCTAssertEqual(presentation.settingsStatus, .settingsOnly)
     }
 
     @MainActor

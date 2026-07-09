@@ -386,11 +386,6 @@
           "default": true,
           "description": "Show the browser import hint on blank tabs."
         },
-        "reactGrabVersion": {
-          "type": "string",
-          "default": "0.1.29",
-          "description": "Pinned react-grab version for the browser toolbar helper."
-        },
         "proxy": {
           "type": "object",
           "additionalProperties": false,

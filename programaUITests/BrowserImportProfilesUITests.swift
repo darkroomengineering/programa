@@ -158,7 +158,6 @@ final class BrowserImportProfilesUITests: XCTestCase {
         app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_DESTINATIONS"] = #"["Default"]"#
         app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_MODE"] = "capture-only"
         app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_CAPTURE_PATH"] = capturePath
-        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_VARIANT"] = "inlineStrip"
         app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_SHOW"] = "1"
         app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_DISMISSED"] = "0"
         app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_OPEN_BLANK_BROWSER"] = "1"
@@ -170,7 +169,6 @@ final class BrowserImportProfilesUITests: XCTestCase {
     private func launchAppForBlankImportHint() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_VARIANT"] = "inlineStrip"
         app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_SHOW"] = "1"
         app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_DISMISSED"] = "0"
         app.launchEnvironment["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_OPEN_BLANK_BROWSER"] = "1"
@@ -187,10 +185,15 @@ final class BrowserImportProfilesUITests: XCTestCase {
     }
 
     private func waitForBlankImportHint(_ app: XCUIApplication) {
+        // The hint renders as a toolbar chip whose actions live in a popover.
+        let chip = app.buttons["BrowserImportHintToolbarChip"]
+        let chipAppeared = browserImportPollUntil(timeout: 5.0) { chip.exists }
+        XCTAssertTrue(chipAppeared, "Expected the blank browser import hint chip to appear")
+        chip.click()
         let hintOpened = browserImportPollUntil(timeout: 5.0) {
             app.buttons["BrowserImportHintImportButton"].exists
         }
-        XCTAssertTrue(hintOpened, "Expected the blank browser import hint to appear")
+        XCTAssertTrue(hintOpened, "Expected the import hint popover to open")
     }
 
     private func openImportWizardFromBlankImportHint(_ app: XCUIApplication) {
