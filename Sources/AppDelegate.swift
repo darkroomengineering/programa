@@ -5981,6 +5981,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    // Precedence encoded by this function's evaluation order (each phase is checked
+    // strictly after the previous one; the first phase that returns wins). Refs #95.
+    //   1. Setup: chord-prefix bookkeeping, Ctrl+D debug probe, close-confirmation-alert
+    //      passthrough, modal/sheet passthrough, command-palette window/state computation.
+    //   2. Palette (highest real precedence): Escape-key routing (palette dismiss /
+    //      suppressed-escape grace window), palette selection-navigation (arrow keys),
+    //      palette interactive Return/dismiss handling, stale browser-address-bar-focus
+    //      clear, palette "effective" actions (open palette / go-to-workspace + their
+    //      chord arming), shouldConsumeShortcutWhileCommandPaletteVisible catch-all.
+    //   3. Browser/terminal pre-checks: terminal IME marked-text passthrough, notifications
+    //      popover escape/typing consumption, shortcut-routing-context sync guard, Ctrl+D
+    //      terminal-focus reconcile bypass, browser omnibar Cmd/Ctrl+N/P and arrow-key
+    //      selection, empty-flags fast-path passthrough, browser-address-bar Emacs-nav
+    //      bypass.
+    //   4. App-shortcut (lowest precedence, only reached once nothing above claimed the
+    //      event): the flat table of ~55 `matchConfiguredShortcut`/digit/directional/tab
+    //      checks, extracted verbatim into handleConfiguredAppShortcutActions(event:...).
     private func handleCustomShortcut(event: NSEvent) -> Bool {
         // `charactersIgnoringModifiers` can be nil for some synthetic NSEvents and certain special keys.
         // Treat nil as "" and rely on keyCode/layout-aware fallback logic where needed.
@@ -6389,6 +6406,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return false
         }
 
+        return handleConfiguredAppShortcutActions(
+            event: event,
+            commandPaletteTargetWindow: commandPaletteTargetWindow,
+            hasFocusedAddressBarInShortcutContext: hasFocusedAddressBarInShortcutContext
+        )
+    }
+
+    // Extracted verbatim from the tail of handleCustomShortcut(event:) -- the flat table of
+    // ~55 app-level shortcut checks (lowest precedence phase; only reached once the palette
+    // and browser/terminal pre-checks above have declined the event). Evaluation order is
+    // preserved exactly: this is pure code motion, not a reordering. Refs #95.
+    private func handleConfiguredAppShortcutActions(
+        event: NSEvent,
+        commandPaletteTargetWindow: NSWindow?,
+        hasFocusedAddressBarInShortcutContext: Bool
+    ) -> Bool {
         if activeConfiguredShortcutChordPrefixForCurrentEvent == nil,
            armConfiguredShortcutChordIfNeeded(event: event) {
             return true
