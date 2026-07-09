@@ -12852,14 +12852,9 @@ enum SidebarSelection {
 
 private struct ClearScrollBackground: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(macOS 13.0, *) {
-            content
-                .scrollContentBackground(.hidden)
-                .background(ScrollBackgroundClearer())
-        } else {
-            content
-                .background(ScrollBackgroundClearer())
-        }
+        content
+            .scrollContentBackground(.hidden)
+            .background(ScrollBackgroundClearer())
     }
 }
 

@@ -2528,9 +2528,7 @@ final class BrowserPanel: Panel, ObservableObject {
 
         let webView = ProgramaWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
-        if #available(macOS 13.3, *) {
-            webView.isInspectable = true
-        }
+        webView.isInspectable = true
         // Match only the unpainted/loading background so newly-created browsers don't flash
         // white before content loads. Do not force page appearance or inject color-scheme CSS;
         // websites must keep control of their own theme.
@@ -2790,8 +2788,6 @@ final class BrowserPanel: Panel, ObservableObject {
     }
 
     private func applyRemoteProxyConfigurationIfAvailable() {
-        guard #available(macOS 14.0, *) else { return }
-
         let store = webView.configuration.websiteDataStore
 
         // Relay endpoint takes precedence: when active, configure both SOCKS and
