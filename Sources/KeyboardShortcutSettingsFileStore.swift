@@ -322,13 +322,6 @@ final class ProgramaSettingsFileStore {
         sourcePath: String,
         snapshot: inout ResolvedSettingsSnapshot
     ) {
-        if let raw = jsonString(section["language"]) {
-            guard let language = AppLanguage(rawValue: raw) else {
-                logInvalid("app.language", sourcePath: sourcePath)
-                return
-            }
-            snapshot.managedUserDefaults[LanguageSettings.languageKey] = .string(language.rawValue)
-        }
         if let raw = jsonString(section["appearance"]) {
             let normalized = AppearanceSettings.mode(for: raw).rawValue
             let accepted = Set(AppearanceMode.allCases.map(\.rawValue))
@@ -1108,14 +1101,6 @@ final class ProgramaSettingsFileStore {
                 defaults.set(next, forKey: defaultsKey)
             }
         }
-
-        switch defaultsKey {
-        case LanguageSettings.languageKey:
-            let language = AppLanguage(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .system
-            LanguageSettings.apply(language)
-        default:
-            break
-        }
     }
 
     private func restoreUserDefaultsBackup(_ backup: BackupValue, for defaultsKey: String) {
@@ -1147,14 +1132,6 @@ final class ProgramaSettingsFileStore {
             defaults.set(value, forKey: defaultsKey)
         case .stringDictionary(let value):
             defaults.set(value, forKey: defaultsKey)
-        }
-
-        switch defaultsKey {
-        case LanguageSettings.languageKey:
-            let language = AppLanguage(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .system
-            LanguageSettings.apply(language)
-        default:
-            break
         }
     }
 
@@ -1271,7 +1248,6 @@ final class ProgramaSettingsFileStore {
         return [
             [
                 "app": [
-                    "language": LanguageSettings.defaultLanguage.rawValue,
                     "appearance": AppearanceSettings.defaultMode.rawValue,
                     "newWorkspacePlacement": WorkspacePlacementSettings.defaultPlacement.rawValue,
                     "minimalMode": WorkspacePresentationModeSettings.defaultMode == .minimal,

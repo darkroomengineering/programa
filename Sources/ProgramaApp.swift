@@ -106,8 +106,10 @@ struct programaApp: App {
         Self.configureGhosttyEnvironment()
         _ = KeyboardShortcutSettings.settingsFileStore
 
-        // Apply saved language preference before any UI loads
-        LanguageSettings.apply(LanguageSettings.languageAtLaunch)
+        // The in-app language picker was removed; the app always follows the
+        // system language. Clear any previously chosen per-app override once,
+        // since no UI can undo it anymore.
+        Self.migrateLanguageOverrideRemovalIfNeeded(defaults: .standard)
 
         let startupAppearance = AppearanceSettings.resolvedMode()
         Self.applyAppearance(startupAppearance)
@@ -225,6 +227,15 @@ struct programaApp: App {
                 defaults.set(value, forKey: newKey)
             }
         }
+        defaults.set(targetVersion, forKey: migrationKey)
+    }
+
+    private static func migrateLanguageOverrideRemovalIfNeeded(defaults: UserDefaults) {
+        let migrationKey = "programaLanguageOverrideRemovalVersion"
+        let targetVersion = 1
+        guard defaults.integer(forKey: migrationKey) < targetVersion else { return }
+        defaults.removeObject(forKey: "AppleLanguages")
+        defaults.removeObject(forKey: "appLanguage")
         defaults.set(targetVersion, forKey: migrationKey)
     }
 
@@ -3526,72 +3537,6 @@ enum AppearanceSettings {
     }
 }
 
-enum AppLanguage: String, CaseIterable, Identifiable {
-    case system
-    case en
-    case ar
-    case bs
-    case zhHans = "zh-Hans"
-    case zhHant = "zh-Hant"
-    case da
-    case de
-    case es
-    case fr
-    case it
-    case ja
-    case ko
-    case nb
-    case pl
-    case ptBR = "pt-BR"
-    case ru
-    case th
-    case tr
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .system: return String(localized: "language.system", defaultValue: "System")
-        case .en: return "English"
-        case .ar: return "\u{200E}العربية (Arabic)"
-        case .bs: return "Bosanski (Bosnian)"
-        case .zhHans: return "简体中文 (Chinese Simplified)"
-        case .zhHant: return "繁體中文 (Chinese Traditional)"
-        case .da: return "Dansk (Danish)"
-        case .de: return "Deutsch (German)"
-        case .es: return "Español (Spanish)"
-        case .fr: return "Français (French)"
-        case .it: return "Italiano (Italian)"
-        case .ja: return "日本語 (Japanese)"
-        case .ko: return "한국어 (Korean)"
-        case .nb: return "Norsk (Norwegian)"
-        case .pl: return "Polski (Polish)"
-        case .ptBR: return "Português (Brasil)"
-        case .ru: return "Русский (Russian)"
-        case .th: return "ไทย (Thai)"
-        case .tr: return "Türkçe (Turkish)"
-        }
-    }
-}
-
-enum LanguageSettings {
-    static let languageKey = "appLanguage"
-    static let defaultLanguage: AppLanguage = .system
-
-    static func apply(_ language: AppLanguage) {
-        if language == .system {
-            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
-        } else {
-            UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
-        }
-    }
-
-    static var languageAtLaunch: AppLanguage = {
-        let stored = UserDefaults.standard.string(forKey: languageKey)
-        guard let stored, let lang = AppLanguage(rawValue: stored) else { return .system }
-        return lang
-    }()
-}
 
 
 final class AppIconAppearanceObserver: NSObject {
@@ -3908,7 +3853,6 @@ struct SettingsView: View {
     private let notificationSoundControlWidth: CGFloat = 280
     private let shortcutChordsDocsURL = URL(string: "https://github.com/darkroomengineering/programa/tree/main/docs")!
 
-    @AppStorage(LanguageSettings.languageKey) private var appLanguage = LanguageSettings.defaultLanguage.rawValue
     @AppStorage(AppearanceSettings.appearanceModeKey) private var appearanceMode = AppearanceSettings.defaultMode.rawValue
     @AppStorage(WorkspacePresentationModeSettings.modeKey)
     private var workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
@@ -4003,8 +3947,6 @@ struct SettingsView: View {
     @State private var notificationCustomSoundStatusIsError = false
     @State private var showNotificationCustomSoundErrorAlert = false
     @State private var notificationCustomSoundErrorAlertMessage = ""
-    @State private var showLanguageRestartAlert = false
-    @State private var isResettingSettings = false
     @State private var workspaceTabPaletteEntries = WorkspaceTabColorSettings.palette()
     @State private var trustedDirectoriesDraft: String = ProgramaDirectoryTrust.shared.allTrustedPaths.joined(separator: "\n")
 
@@ -4431,37 +4373,6 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     SettingsSectionHeader(title: String(localized: "settings.section.app", defaultValue: "App"))
                     SettingsCard {
-                        SettingsCardRow(
-                            String(localized: "settings.app.language", defaultValue: "Language"),
-                            subtitle: appLanguage != LanguageSettings.languageAtLaunch.rawValue
-                                ? String(localized: "settings.app.language.restartSubtitle", defaultValue: "Restart Programa to apply")
-                                : nil,
-                            controlWidth: pickerColumnWidth
-                        ) {
-                            Picker("", selection: $appLanguage) {
-                                ForEach(AppLanguage.allCases) { lang in
-                                    Text(lang.displayName).tag(lang.rawValue)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .onChange(of: appLanguage) { newValue in
-                                guard !isResettingSettings else { return }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
-                                    // Re-check current value to handle rapid changes
-                                    let current = appLanguage
-                                    if let lang = AppLanguage(rawValue: current) {
-                                        LanguageSettings.apply(lang)
-                                    }
-                                    if current != LanguageSettings.languageAtLaunch.rawValue {
-                                        showLanguageRestartAlert = true
-                                    }
-                                }
-                            }
-                        }
-
-                        SettingsCardDivider()
-
                         ThemePickerRow(
                             selectedMode: appearanceMode,
                             onSelect: { mode in
@@ -5776,16 +5687,6 @@ struct SettingsView: View {
         } message: {
             Text(String(localized: "settings.automation.openAccess.dialog.message", defaultValue: "This disables ancestry and password checks and opens the socket to all local users. Only enable when you understand the risk."))
         }
-        .confirmationDialog(
-            String(localized: "settings.app.language.restartDialog.title", defaultValue: "Restart to apply language change?"),
-            isPresented: $showLanguageRestartAlert,
-            titleVisibility: .visible
-        ) {
-            Button(String(localized: "settings.app.language.restartDialog.confirm", defaultValue: "Restart Now")) {
-                relaunchApp()
-            }
-            Button(String(localized: "settings.app.language.restartDialog.later", defaultValue: "Later"), role: .cancel) {}
-        }
         .alert(
             String(
                 localized: "settings.notifications.sound.custom.error.title",
@@ -5800,27 +5701,7 @@ struct SettingsView: View {
         }
     }
 
-    private func relaunchApp() {
-        let bundlePath = Bundle.main.bundlePath
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "sleep 1 && open -n -- \"$RELAUNCH_PATH\""]
-        task.environment = ["RELAUNCH_PATH": bundlePath]
-        do {
-            try task.run()
-        } catch {
-            return
-        }
-        NSApplication.shared.terminate(nil)
-    }
-
     private func resetAllSettings() {
-        isResettingSettings = true
-        appLanguage = LanguageSettings.defaultLanguage.rawValue
-        LanguageSettings.apply(.system)
-        if appLanguage != LanguageSettings.languageAtLaunch.rawValue {
-            showLanguageRestartAlert = true
-        }
         appearanceMode = AppearanceSettings.defaultMode.rawValue
         socketControlMode = SocketControlSettings.defaultMode.rawValue
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
@@ -5891,7 +5772,6 @@ struct SettingsView: View {
         WorkspaceTabColorSettings.reset()
         reloadWorkspaceTabColorSettings()
         shortcutResetToken = UUID()
-        DispatchQueue.main.async { isResettingSettings = false }
     }
 
     private func baseTabColorHex(for name: String) -> String? {

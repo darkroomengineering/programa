@@ -4478,17 +4478,6 @@
         }
       }
     },
-    "language.system": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "System"
-          }
-        }
-      }
-    },
     "markdown.fileUnavailable.message": {
       "extractionState": "manual",
       "localizations": {
@@ -5662,61 +5651,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show only the workspace title row. Overrides the detail toggles below."
-          }
-        }
-      }
-    },
-    "settings.app.language": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Language"
-          }
-        }
-      }
-    },
-    "settings.app.language.restartDialog.confirm": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Restart Now"
-          }
-        }
-      }
-    },
-    "settings.app.language.restartDialog.later": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Later"
-          }
-        }
-      }
-    },
-    "settings.app.language.restartDialog.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Restart to apply language change?"
-          }
-        }
-      }
-    },
-    "settings.app.language.restartSubtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Restart Programa to apply"
           }
         }
       }

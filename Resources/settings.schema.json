@@ -24,12 +24,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "language": {
-          "type": "string",
-          "enum": ["system", "en", "ar", "bs", "zh-Hans", "zh-Hant", "da", "de", "es", "fr", "it", "ja", "ko", "nb", "pl", "pt-BR", "ru", "th", "tr"],
-          "default": "system",
-          "description": "Preferred app language."
-        },
         "appearance": {
           "type": "string",
           "enum": ["system", "light", "dark"],
