@@ -36,12 +36,6 @@
           "default": "system",
           "description": "App appearance mode."
         },
-        "appIcon": {
-          "type": "string",
-          "enum": ["automatic", "light", "dark"],
-          "default": "automatic",
-          "description": "Dock and app switcher icon style."
-        },
         "newWorkspacePlacement": {
           "type": "string",
           "enum": ["top", "afterCurrent", "end"],

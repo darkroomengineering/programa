@@ -408,39 +408,6 @@
         }
       }
     },
-    "appIcon.automatic": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Automatic"
-          }
-        }
-      }
-    },
-    "appIcon.dark": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dark"
-          }
-        }
-      }
-    },
-    "appIcon.light": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Light"
-          }
-        }
-      }
-    },
     "appearance.auto": {
       "extractionState": "manual",
       "localizations": {
@@ -5574,28 +5541,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Previous match (Shift+Return)"
-          }
-        }
-      }
-    },
-    "settings.app.appIcon": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "App Icon"
-          }
-        }
-      }
-    },
-    "settings.app.appIcon.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dock and app switcher"
           }
         }
       }

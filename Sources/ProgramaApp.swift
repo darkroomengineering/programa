@@ -3593,94 +3593,6 @@ enum LanguageSettings {
     }()
 }
 
-enum AppIconMode: String, CaseIterable, Identifiable {
-    case automatic
-    case light
-    case dark
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .automatic: return String(localized: "appIcon.automatic", defaultValue: "Automatic")
-        case .light: return String(localized: "appIcon.light", defaultValue: "Light")
-        case .dark: return String(localized: "appIcon.dark", defaultValue: "Dark")
-        }
-    }
-
-    var imageName: String? {
-        switch self {
-        case .automatic: return nil
-        case .light: return "AppIconLight"
-        case .dark: return "AppIconDark"
-        }
-    }
-}
-
-enum AppIconSettings {
-    static let modeKey = "appIconMode"
-    static let defaultMode: AppIconMode = .automatic
-    private static let dockTileIconDidChangeNotification = Notification.Name("com.darkroom.programa.appIconDidChange")
-
-    struct Environment {
-        let imageForMode: (AppIconMode) -> NSImage?
-        let setApplicationIconImage: (NSImage) -> Void
-        let startAppearanceObservation: () -> Void
-        let stopAppearanceObservation: () -> Void
-        let notifyDockTilePlugin: () -> Void
-
-        static func live() -> Self {
-            Self(
-                imageForMode: { mode in
-                    guard let imageName = mode.imageName else { return nil }
-                    return NSImage(named: imageName)
-                },
-                setApplicationIconImage: { icon in
-                    NSApplication.shared.applicationIconImage = icon
-                },
-                startAppearanceObservation: {
-                    AppIconAppearanceObserver.shared.startObserving()
-                },
-                stopAppearanceObservation: {
-                    AppIconAppearanceObserver.shared.stopObserving()
-                },
-                notifyDockTilePlugin: {
-                    DistributedNotificationCenter.default().postNotificationName(
-                        AppIconSettings.dockTileIconDidChangeNotification,
-                        object: nil,
-                        userInfo: nil,
-                        deliverImmediately: true
-                    )
-                }
-            )
-        }
-    }
-
-    static func resolvedMode(defaults: UserDefaults = .standard) -> AppIconMode {
-        guard let raw = defaults.string(forKey: modeKey),
-              let mode = AppIconMode(rawValue: raw) else {
-            return defaultMode
-        }
-        return mode
-    }
-
-    static func applyIcon(_ mode: AppIconMode, environment: Environment = .live()) {
-        switch mode {
-        case .automatic:
-            environment.startAppearanceObservation()
-        case .light:
-            environment.stopAppearanceObservation()
-            guard let icon = environment.imageForMode(.light) else { return }
-            environment.setApplicationIconImage(icon)
-        case .dark:
-            environment.stopAppearanceObservation()
-            guard let icon = environment.imageForMode(.dark) else { return }
-            environment.setApplicationIconImage(icon)
-        }
-
-        environment.notifyDockTilePlugin()
-    }
-}
 
 final class AppIconAppearanceObserver: NSObject {
     static let shared = AppIconAppearanceObserver()
@@ -3998,7 +3910,6 @@ struct SettingsView: View {
 
     @AppStorage(LanguageSettings.languageKey) private var appLanguage = LanguageSettings.defaultLanguage.rawValue
     @AppStorage(AppearanceSettings.appearanceModeKey) private var appearanceMode = AppearanceSettings.defaultMode.rawValue
-    @AppStorage(AppIconSettings.modeKey) private var appIconMode = AppIconSettings.defaultMode.rawValue
     @AppStorage(WorkspacePresentationModeSettings.modeKey)
     private var workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
     @AppStorage(SocketControlSettings.appStorageKey) private var socketControlMode = SocketControlSettings.defaultMode.rawValue
@@ -4555,16 +4466,6 @@ struct SettingsView: View {
                             selectedMode: appearanceMode,
                             onSelect: { mode in
                                 appearanceMode = mode.rawValue
-                            }
-                        )
-
-                        SettingsCardDivider()
-
-                        AppIconPickerRow(
-                            selectedMode: appIconMode,
-                            onSelect: { mode in
-                                appIconMode = mode.rawValue
-                                AppIconSettings.applyIcon(mode)
                             }
                         )
 
@@ -5921,8 +5822,6 @@ struct SettingsView: View {
             showLanguageRestartAlert = true
         }
         appearanceMode = AppearanceSettings.defaultMode.rawValue
-        appIconMode = AppIconSettings.defaultMode.rawValue
-        AppIconSettings.applyIcon(.automatic)
         socketControlMode = SocketControlSettings.defaultMode.rawValue
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
         customClaudePath = ""
@@ -6494,87 +6393,6 @@ private struct ThemePickerRow: View {
     }
 }
 
-private struct AppIconPickerRow: View {
-    let selectedMode: String
-    let onSelect: (AppIconMode) -> Void
-
-    private let iconSize: CGFloat = 48
-    private let autoIconSize: CGFloat = 36
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(String(localized: "settings.app.appIcon", defaultValue: "App Icon"))
-                    .font(.system(size: 13, weight: .medium))
-                Text(String(localized: "settings.app.appIcon.subtitle", defaultValue: "Dock and app switcher"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack(spacing: 8) {
-                ForEach(AppIconMode.allCases) { mode in
-                    let isSelected = selectedMode == mode.rawValue
-                    Button {
-                        onSelect(mode)
-                    } label: {
-                        VStack(spacing: 4) {
-                            Group {
-                                if mode == .automatic {
-                                    ZStack {
-                                        Image("AppIconLight")
-                                            .resizable()
-                                            .interpolation(.high)
-                                            .frame(width: autoIconSize, height: autoIconSize)
-                                            .clipShape(RoundedRectangle(cornerRadius: autoIconSize * 0.22, style: .continuous))
-                                            .offset(x: -10)
-                                        Image("AppIconDark")
-                                            .resizable()
-                                            .interpolation(.high)
-                                            .frame(width: autoIconSize, height: autoIconSize)
-                                            .clipShape(RoundedRectangle(cornerRadius: autoIconSize * 0.22, style: .continuous))
-                                            .offset(x: 10)
-                                    }
-                                    .frame(width: iconSize, height: iconSize)
-                                } else {
-                                    Image(mode.imageName ?? "AppIconLight")
-                                        .resizable()
-                                        .interpolation(.high)
-                                        .frame(width: iconSize, height: iconSize)
-                                        .clipShape(RoundedRectangle(cornerRadius: iconSize * 0.22, style: .continuous))
-                                }
-                            }
-
-                            Text(mode.displayName)
-                                .font(.system(size: 10))
-                                .foregroundColor(isSelected ? .primary : .secondary)
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 10)
-                        .contentShape(Rectangle())
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(isSelected
-                                    ? Color.accentColor.opacity(0.12)
-                                    : Color.clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .focusable(false)
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
-                }
-            }
-            .layoutPriority(1)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
 
 private struct ShortcutSettingRow: View {
     let action: KeyboardShortcutSettings.Action

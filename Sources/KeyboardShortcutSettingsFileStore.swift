@@ -338,13 +338,6 @@ final class ProgramaSettingsFileStore {
             }
             snapshot.managedUserDefaults[AppearanceSettings.appearanceModeKey] = .string(normalized)
         }
-        if let raw = jsonString(section["appIcon"]) {
-            guard let mode = AppIconMode(rawValue: raw) else {
-                logInvalid("app.appIcon", sourcePath: sourcePath)
-                return
-            }
-            snapshot.managedUserDefaults[AppIconSettings.modeKey] = .string(mode.rawValue)
-        }
         if let raw = jsonString(section["newWorkspacePlacement"]) {
             guard let placement = NewWorkspacePlacement(rawValue: raw) else {
                 logInvalid("app.newWorkspacePlacement", sourcePath: sourcePath)
@@ -1120,8 +1113,6 @@ final class ProgramaSettingsFileStore {
         case LanguageSettings.languageKey:
             let language = AppLanguage(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .system
             LanguageSettings.apply(language)
-        case AppIconSettings.modeKey:
-            AppIconSettings.applyIcon(AppIconSettings.resolvedMode())
         default:
             break
         }
@@ -1162,8 +1153,6 @@ final class ProgramaSettingsFileStore {
         case LanguageSettings.languageKey:
             let language = AppLanguage(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .system
             LanguageSettings.apply(language)
-        case AppIconSettings.modeKey:
-            AppIconSettings.applyIcon(AppIconSettings.resolvedMode())
         default:
             break
         }
@@ -1284,7 +1273,6 @@ final class ProgramaSettingsFileStore {
                 "app": [
                     "language": LanguageSettings.defaultLanguage.rawValue,
                     "appearance": AppearanceSettings.defaultMode.rawValue,
-                    "appIcon": AppIconSettings.defaultMode.rawValue,
                     "newWorkspacePlacement": WorkspacePlacementSettings.defaultPlacement.rawValue,
                     "minimalMode": WorkspacePresentationModeSettings.defaultMode == .minimal,
                     "keepWorkspaceOpenWhenClosingLastSurface": !LastSurfaceCloseShortcutSettings.defaultValue,
