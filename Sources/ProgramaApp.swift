@@ -1588,7 +1588,6 @@ private enum DebugWindowConfigSnapshot {
         sidebarTintHexDark=\(stringValue(defaults, key: "sidebarTintHexDark", fallback: "(nil)"))
         sidebarTintOpacity=\(String(format: "%.2f", doubleValue(defaults, key: "sidebarTintOpacity", fallback: 0.18)))
         sidebarCornerRadius=\(String(format: "%.1f", doubleValue(defaults, key: "sidebarCornerRadius", fallback: 0.0)))
-        sidebarBranchVerticalLayout=\(boolValue(defaults, key: SidebarBranchLayoutSettings.key, fallback: SidebarBranchLayoutSettings.defaultVerticalLayout))
         sidebarActiveTabIndicatorStyle=\(stringValue(defaults, key: SidebarActiveTabIndicatorSettings.styleKey, fallback: SidebarActiveTabIndicatorSettings.defaultStyle.rawValue))
         sidebarDevBuildBannerVisible=\(boolValue(defaults, key: DevBuildBannerDebugSettings.sidebarBannerVisibleKey, fallback: DevBuildBannerDebugSettings.defaultShowSidebarBanner))
         shortcutHintSidebarXOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.sidebarHintXKey, fallback: ShortcutHintDebugSettings.defaultSidebarHintX)))
@@ -2522,7 +2521,6 @@ private struct SidebarDebugView: View {
     @AppStorage("sidebarState") private var sidebarState = SidebarStateOption.followWindow.rawValue
     @AppStorage("sidebarCornerRadius") private var sidebarCornerRadius = 0.0
     @AppStorage("sidebarBlurOpacity") private var sidebarBlurOpacity = 1.0
-    @AppStorage(SidebarBranchLayoutSettings.key) private var sidebarBranchVerticalLayout = SidebarBranchLayoutSettings.defaultVerticalLayout
     @AppStorage(ShortcutHintDebugSettings.sidebarHintXKey) private var sidebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultSidebarHintX
     @AppStorage(ShortcutHintDebugSettings.sidebarHintYKey) private var sidebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultSidebarHintY
     @AppStorage(ShortcutHintDebugSettings.titlebarHintXKey) private var titlebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultTitlebarHintX
@@ -2684,16 +2682,6 @@ private struct SidebarDebugView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Workspace Metadata") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Render branch list vertically", isOn: $sidebarBranchVerticalLayout)
-                        Text("When enabled, each branch appears on its own line in the sidebar.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.top, 2)
-                }
-
                 HStack(spacing: 12) {
                     Button("Reset Tint") {
                         sidebarTintOpacity = 0.62
@@ -2785,7 +2773,6 @@ private struct SidebarDebugView: View {
         sidebarTintHexDark=\(sidebarTintHexDark ?? "(nil)")
         sidebarTintOpacity=\(String(format: "%.2f", sidebarTintOpacity))
         sidebarCornerRadius=\(String(format: "%.1f", sidebarCornerRadius))
-        sidebarBranchVerticalLayout=\(sidebarBranchVerticalLayout)
         sidebarActiveTabIndicatorStyle=\(sidebarActiveTabIndicatorStyle)
         sidebarDevBuildBannerVisible=\(showSidebarDevBuildBanner)
         shortcutHintSidebarXOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(sidebarShortcutHintXOffset)))
@@ -3681,28 +3668,12 @@ struct SettingsView: View {
     @AppStorage(PaneFirstClickFocusSettings.enabledKey)
     private var paneFirstClickFocusEnabled = PaneFirstClickFocusSettings.defaultEnabled
     @AppStorage(WorkspaceAutoReorderSettings.key) private var workspaceAutoReorder = WorkspaceAutoReorderSettings.defaultValue
-    @AppStorage(SidebarWorkspaceDetailSettings.hideAllDetailsKey)
-    private var sidebarHideAllDetails = SidebarWorkspaceDetailSettings.defaultHideAllDetails
-    @AppStorage(SidebarWorkspaceDetailSettings.showNotificationMessageKey)
-    private var sidebarShowNotificationMessage = SidebarWorkspaceDetailSettings.defaultShowNotificationMessage
-    @AppStorage(SidebarBranchLayoutSettings.key) private var sidebarBranchVerticalLayout = SidebarBranchLayoutSettings.defaultVerticalLayout
     @AppStorage(SidebarActiveTabIndicatorSettings.styleKey)
     private var sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
     @AppStorage("sidebarSelectionColorHex") private var sidebarSelectionColorHex: String?
     @AppStorage("sidebarNotificationBadgeColorHex") private var sidebarNotificationBadgeColorHex: String?
-    @AppStorage("sidebarShowBranchDirectory") private var sidebarShowBranchDirectory = true
-    @AppStorage("sidebarShowPullRequest") private var sidebarShowPullRequest = true
-    @AppStorage(BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey)
-    private var openSidebarPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser
-    @AppStorage(BrowserLinkOpenSettings.openSidebarPortLinksInProgramaBrowserKey)
-    private var openSidebarPortLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInProgramaBrowser
     @AppStorage(ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
     private var showShortcutHintsOnCommandHold = ShortcutHintDebugSettings.defaultShowHintsOnCommandHold
-    @AppStorage("sidebarShowSSH") private var sidebarShowSSH = true
-    @AppStorage("sidebarShowPorts") private var sidebarShowPorts = true
-    @AppStorage("sidebarShowLog") private var sidebarShowLog = true
-    @AppStorage("sidebarShowProgress") private var sidebarShowProgress = true
-    @AppStorage("sidebarShowStatusPills") private var sidebarShowMetadata = true
     @AppStorage("sidebarTintHex") private var sidebarTintHex = SidebarTintDefaults.hex
     @AppStorage("sidebarTintHexLight") private var sidebarTintHexLight: String?
     @AppStorage("sidebarTintHexDark") private var sidebarTintHexDark: String?
@@ -4402,156 +4373,6 @@ struct SettingsView: View {
                                 )
                         }
 
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.hideAllSidebarDetails", defaultValue: "Hide All Sidebar Details"),
-                            subtitle: sidebarHideAllDetails
-                                ? String(localized: "settings.app.hideAllSidebarDetails.subtitleOn", defaultValue: "Show only the workspace title row. Overrides the detail toggles below.")
-                                : String(localized: "settings.app.hideAllSidebarDetails.subtitleOff", defaultValue: "Show secondary workspace details as controlled by the toggles below.")
-                        ) {
-                            Toggle("", isOn: $sidebarHideAllDetails)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-
-                        SettingsCardDivider()
-
-                        SettingsPickerRow(
-                            String(localized: "settings.app.sidebarBranchLayout", defaultValue: "Sidebar Branch Layout"),
-                            subtitle: sidebarBranchVerticalLayout
-                                ? String(localized: "settings.app.sidebarBranchLayout.subtitleVertical", defaultValue: "Vertical: each branch appears on its own line.")
-                                : String(localized: "settings.app.sidebarBranchLayout.subtitleInline", defaultValue: "Inline: all branches share one line."),
-                            controlWidth: pickerColumnWidth,
-                            selection: $sidebarBranchVerticalLayout
-                        ) {
-                            Text(String(localized: "settings.app.sidebarBranchLayout.vertical", defaultValue: "Vertical")).tag(true)
-                            Text(String(localized: "settings.app.sidebarBranchLayout.inline", defaultValue: "Inline")).tag(false)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showNotificationMessage", defaultValue: "Show Notification Message in Sidebar"),
-                            subtitle: String(localized: "settings.app.showNotificationMessage.subtitle", defaultValue: "Display the latest notification message below the workspace title.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowNotificationMessage)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showBranchDirectory", defaultValue: "Show Branch + Directory in Sidebar"),
-                            subtitle: String(localized: "settings.app.showBranchDirectory.subtitle", defaultValue: "Display the built-in git branch and working-directory row.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowBranchDirectory)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showPullRequests", defaultValue: "Show Pull Requests in Sidebar"),
-                            subtitle: String(localized: "settings.app.showPullRequests.subtitle", defaultValue: "Display review items (PR/MR/etc.) with status, number, and clickable link.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowPullRequest)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.openSidebarPRLinks", defaultValue: "Open Sidebar PR Links in Programa Browser"),
-                            subtitle: openSidebarPullRequestLinksInProgramaBrowser
-                                ? String(localized: "settings.app.openSidebarPRLinks.subtitleOn", defaultValue: "Clicks open inside Programa browser.")
-                                : String(localized: "settings.app.openSidebarPRLinks.subtitleOff", defaultValue: "Clicks open in your default browser.")
-                        ) {
-                            Toggle("", isOn: $openSidebarPullRequestLinksInProgramaBrowser)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.openSidebarPortLinks", defaultValue: "Open Sidebar Port Links in Programa Browser"),
-                            subtitle: openSidebarPortLinksInProgramaBrowser
-                                ? String(localized: "settings.app.openSidebarPortLinks.subtitleOn", defaultValue: "Port clicks open inside Programa browser.")
-                                : String(localized: "settings.app.openSidebarPortLinks.subtitleOff", defaultValue: "Port clicks open in your default browser.")
-                        ) {
-                            Toggle("", isOn: $openSidebarPortLinksInProgramaBrowser)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showSSH", defaultValue: "Show SSH in Sidebar"),
-                            subtitle: String(localized: "settings.app.showSSH.subtitle", defaultValue: "Display the SSH target for remote workspaces in its own row.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowSSH)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showPorts", defaultValue: "Show Listening Ports in Sidebar"),
-                            subtitle: String(localized: "settings.app.showPorts.subtitle", defaultValue: "Display detected listening ports for the active workspace.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowPorts)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showLog", defaultValue: "Show Latest Log in Sidebar"),
-                            subtitle: String(localized: "settings.app.showLog.subtitle", defaultValue: "Display the latest imperative log/status message.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowLog)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showProgress", defaultValue: "Show Progress in Sidebar"),
-                            subtitle: String(localized: "settings.app.showProgress.subtitle", defaultValue: "Display the built-in progress bar from set_progress.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowProgress)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showMetadata", defaultValue: "Show Custom Metadata in Sidebar"),
-                            subtitle: String(localized: "settings.app.showMetadata.subtitle", defaultValue: "Display custom metadata from report_meta/set_status and report_meta_block.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowMetadata)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
                     }
 
                     SettingsSectionHeader(title: String(localized: "settings.section.workspaceColors", defaultValue: "Workspace Colors"))
@@ -5455,22 +5276,10 @@ struct SettingsView: View {
         closeWorkspaceOnLastSurfaceShortcut = LastSurfaceCloseShortcutSettings.defaultValue
         paneFirstClickFocusEnabled = PaneFirstClickFocusSettings.defaultEnabled
         workspaceAutoReorder = WorkspaceAutoReorderSettings.defaultValue
-        sidebarHideAllDetails = SidebarWorkspaceDetailSettings.defaultHideAllDetails
-        sidebarShowNotificationMessage = SidebarWorkspaceDetailSettings.defaultShowNotificationMessage
-        sidebarBranchVerticalLayout = SidebarBranchLayoutSettings.defaultVerticalLayout
         sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
         sidebarSelectionColorHex = nil
         sidebarNotificationBadgeColorHex = nil
-        sidebarShowBranchDirectory = true
-        sidebarShowPullRequest = true
-        openSidebarPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser
-        openSidebarPortLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInProgramaBrowser
         showShortcutHintsOnCommandHold = ShortcutHintDebugSettings.defaultShowHintsOnCommandHold
-        sidebarShowSSH = true
-        sidebarShowPorts = true
-        sidebarShowLog = true
-        sidebarShowProgress = true
-        sidebarShowMetadata = true
         sidebarTintHex = SidebarTintDefaults.hex
         sidebarTintHexLight = nil
         sidebarTintHexDark = nil

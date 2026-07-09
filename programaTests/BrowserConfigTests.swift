@@ -3132,18 +3132,6 @@ final class BrowserLinkOpenSettingsTests: XCTestCase {
         XCTAssertTrue(BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowser(defaults: defaults))
     }
 
-    func testSidebarPullRequestLinksDefaultToProgramaBrowser() {
-        XCTAssertTrue(BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowser(defaults: defaults))
-    }
-
-    func testSidebarPullRequestLinksPreferenceUsesStoredValue() {
-        defaults.set(false, forKey: BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey)
-        XCTAssertFalse(BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowser(defaults: defaults))
-
-        defaults.set(true, forKey: BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey)
-        XCTAssertTrue(BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowser(defaults: defaults))
-    }
-
     func testOpenCommandInterceptionDefaultsToProgramaBrowser() {
         XCTAssertTrue(BrowserLinkOpenSettings.interceptTerminalOpenCommandInProgramaBrowser(defaults: defaults))
     }

@@ -292,9 +292,6 @@ final class ProgramaSettingsFileStore {
         if let notificationsSection = root["notifications"] as? [String: Any] {
             parseNotificationsSection(notificationsSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
-        if let sidebarSection = root["sidebar"] as? [String: Any] {
-            parseSidebarSection(sidebarSection, sourcePath: sourcePath, snapshot: &snapshot)
-        }
         if let workspaceColorsSection = root["workspaceColors"] as? [String: Any] {
             parseWorkspaceColorsSection(workspaceColorsSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
@@ -389,55 +386,6 @@ final class ProgramaSettingsFileStore {
         }
     }
 
-    private func parseSidebarSection(
-        _ section: [String: Any],
-        sourcePath: String,
-        snapshot: inout ResolvedSettingsSnapshot
-    ) {
-        if let value = jsonBool(section["hideAllDetails"]) {
-            snapshot.managedUserDefaults[SidebarWorkspaceDetailSettings.hideAllDetailsKey] = .bool(value)
-        }
-        if let raw = jsonString(section["branchLayout"]) {
-            switch raw {
-            case "vertical":
-                snapshot.managedUserDefaults[SidebarBranchLayoutSettings.key] = .bool(true)
-            case "inline":
-                snapshot.managedUserDefaults[SidebarBranchLayoutSettings.key] = .bool(false)
-            default:
-                logInvalid("sidebar.branchLayout", sourcePath: sourcePath)
-            }
-        }
-        if let value = jsonBool(section["showNotificationMessage"]) {
-            snapshot.managedUserDefaults[SidebarWorkspaceDetailSettings.showNotificationMessageKey] = .bool(value)
-        }
-        if let value = jsonBool(section["showBranchDirectory"]) {
-            snapshot.managedUserDefaults["sidebarShowBranchDirectory"] = .bool(value)
-        }
-        if let value = jsonBool(section["showPullRequests"]) {
-            snapshot.managedUserDefaults["sidebarShowPullRequest"] = .bool(value)
-        }
-        if let value = jsonBool(section["openPullRequestLinksInProgramaBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey] = .bool(value)
-        }
-        if let value = jsonBool(section["openPortLinksInProgramaBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPortLinksInProgramaBrowserKey] = .bool(value)
-        }
-        if let value = jsonBool(section["showSSH"]) {
-            snapshot.managedUserDefaults["sidebarShowSSH"] = .bool(value)
-        }
-        if let value = jsonBool(section["showPorts"]) {
-            snapshot.managedUserDefaults["sidebarShowPorts"] = .bool(value)
-        }
-        if let value = jsonBool(section["showLog"]) {
-            snapshot.managedUserDefaults["sidebarShowLog"] = .bool(value)
-        }
-        if let value = jsonBool(section["showProgress"]) {
-            snapshot.managedUserDefaults["sidebarShowProgress"] = .bool(value)
-        }
-        if let value = jsonBool(section["showCustomMetadata"]) {
-            snapshot.managedUserDefaults["sidebarShowStatusPills"] = .bool(value)
-        }
-    }
 
     private func parseWorkspaceColorsSection(
         _ section: [String: Any],
@@ -1254,22 +1202,6 @@ final class ProgramaSettingsFileStore {
                     "sound": NotificationSoundSettings.defaultValue,
                     "customSoundFilePath": NotificationSoundSettings.defaultCustomFilePath,
                     "command": NotificationSoundSettings.defaultCustomCommand,
-                ],
-            ],
-            [
-                "sidebar": [
-                    "hideAllDetails": SidebarWorkspaceDetailSettings.defaultHideAllDetails,
-                    "branchLayout": SidebarBranchLayoutSettings.defaultVerticalLayout ? "vertical" : "inline",
-                    "showNotificationMessage": SidebarWorkspaceDetailSettings.defaultShowNotificationMessage,
-                    "showBranchDirectory": true,
-                    "showPullRequests": true,
-                    "openPullRequestLinksInProgramaBrowser": BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser,
-                    "openPortLinksInProgramaBrowser": BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInProgramaBrowser,
-                    "showSSH": true,
-                    "showPorts": true,
-                    "showLog": true,
-                    "showProgress": true,
-                    "showCustomMetadata": true,
                 ],
             ],
             [

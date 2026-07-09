@@ -1862,8 +1862,6 @@ struct ContentView: View {
     private var commandPaletteRenameSelectAllOnFocus = CommandPaletteRenameSelectionSettings.defaultSelectAllOnFocus
     @AppStorage(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey)
     private var commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
-    @AppStorage(BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey)
-    private var openSidebarPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser
     @State private var commandPaletteShouldFocusWorkspaceDescriptionEditor = false
     @FocusState private var isCommandPaletteSearchFocused: Bool
     @FocusState private var isCommandPaletteRenameFocused: Bool
@@ -7651,19 +7649,10 @@ struct ContentView: View {
         guard !pullRequests.isEmpty else { return false }
 
         var openedCount = 0
-        if openSidebarPullRequestLinksInProgramaBrowser {
-            for pullRequest in pullRequests {
-                if tabManager.openBrowser(url: pullRequest.url, insertAtEnd: true) != nil {
-                    openedCount += 1
-                } else if NSWorkspace.shared.open(pullRequest.url) {
-                    openedCount += 1
-                }
-            }
-            return openedCount > 0
-        }
-
         for pullRequest in pullRequests {
-            if NSWorkspace.shared.open(pullRequest.url) {
+            if tabManager.openBrowser(url: pullRequest.url, insertAtEnd: true) != nil {
+                openedCount += 1
+            } else if NSWorkspace.shared.open(pullRequest.url) {
                 openedCount += 1
             }
         }
@@ -8775,39 +8764,19 @@ private struct SidebarTabItemSettingsSnapshot: Equatable {
             defaultValue: ShortcutHintDebugSettings.defaultAlwaysShowHints
         )
         showsGitBranch = Self.bool(defaults: defaults, key: "sidebarShowGitBranch", defaultValue: true)
-        usesVerticalBranchLayout = SidebarBranchLayoutSettings.usesVerticalLayout(defaults: defaults)
+        usesVerticalBranchLayout = true
         showsGitBranchIcon = Self.bool(defaults: defaults, key: "sidebarShowGitBranchIcon", defaultValue: false)
-        showsSSH = Self.bool(defaults: defaults, key: "sidebarShowSSH", defaultValue: true)
-        openPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowser(
-            defaults: defaults
-        )
-        openPortLinksInProgramaBrowser = BrowserLinkOpenSettings.openSidebarPortLinksInProgramaBrowser(
-            defaults: defaults
-        )
-
-        let hidesAllDetails = SidebarWorkspaceDetailSettings.hidesAllDetails(defaults: defaults)
-        let showsNotificationMessageSetting = SidebarWorkspaceDetailSettings.showsNotificationMessage(
-            defaults: defaults
-        )
-        showsNotificationMessage = SidebarWorkspaceDetailSettings.resolvedNotificationMessageVisibility(
-            showNotificationMessage: showsNotificationMessageSetting,
-            hideAllDetails: hidesAllDetails
-        )
-
-        let showsMetadata = Self.bool(defaults: defaults, key: "sidebarShowStatusPills", defaultValue: true)
-        let showsLog = Self.bool(defaults: defaults, key: "sidebarShowLog", defaultValue: true)
-        let showsProgress = Self.bool(defaults: defaults, key: "sidebarShowProgress", defaultValue: true)
-        let showsBranchDirectory = Self.bool(defaults: defaults, key: "sidebarShowBranchDirectory", defaultValue: true)
-        let showsPullRequests = Self.bool(defaults: defaults, key: "sidebarShowPullRequest", defaultValue: true)
-        let showsPorts = Self.bool(defaults: defaults, key: "sidebarShowPorts", defaultValue: true)
-        visibleAuxiliaryDetails = SidebarWorkspaceAuxiliaryDetailVisibility.resolved(
-            showMetadata: showsMetadata,
-            showLog: showsLog,
-            showProgress: showsProgress,
-            showBranchDirectory: showsBranchDirectory,
-            showPullRequests: showsPullRequests,
-            showPorts: showsPorts,
-            hideAllDetails: hidesAllDetails
+        showsSSH = true
+        openPullRequestLinksInProgramaBrowser = true
+        openPortLinksInProgramaBrowser = true
+        showsNotificationMessage = true
+        visibleAuxiliaryDetails = SidebarWorkspaceAuxiliaryDetailVisibility(
+            showsMetadata: true,
+            showsLog: true,
+            showsProgress: true,
+            showsBranchDirectory: true,
+            showsPullRequests: true,
+            showsPorts: true
         )
 
         activeTabIndicatorStyle = SidebarActiveTabIndicatorSettings.current(defaults: defaults)

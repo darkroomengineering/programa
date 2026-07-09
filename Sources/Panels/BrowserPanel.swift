@@ -481,12 +481,6 @@ enum BrowserLinkOpenSettings {
     static let openTerminalLinksInProgramaBrowserKey = "browserOpenTerminalLinksInProgramaBrowser"
     static let defaultOpenTerminalLinksInProgramaBrowser: Bool = true
 
-    static let openSidebarPullRequestLinksInProgramaBrowserKey = "browserOpenSidebarPullRequestLinksInProgramaBrowser"
-    static let defaultOpenSidebarPullRequestLinksInProgramaBrowser: Bool = true
-
-    static let openSidebarPortLinksInProgramaBrowserKey = "browserOpenSidebarPortLinksInProgramaBrowser"
-    static let defaultOpenSidebarPortLinksInProgramaBrowser: Bool = true
-
     static let interceptTerminalOpenCommandInProgramaBrowserKey = "browserInterceptTerminalOpenCommandInProgramaBrowser"
     static let defaultInterceptTerminalOpenCommandInProgramaBrowser: Bool = true
 
@@ -500,20 +494,6 @@ enum BrowserLinkOpenSettings {
             return defaultOpenTerminalLinksInProgramaBrowser
         }
         return defaults.bool(forKey: openTerminalLinksInProgramaBrowserKey)
-    }
-
-    static func openSidebarPullRequestLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openSidebarPullRequestLinksInProgramaBrowserKey) == nil {
-            return defaultOpenSidebarPullRequestLinksInProgramaBrowser
-        }
-        return defaults.bool(forKey: openSidebarPullRequestLinksInProgramaBrowserKey)
-    }
-
-    static func openSidebarPortLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openSidebarPortLinksInProgramaBrowserKey) == nil {
-            return defaultOpenSidebarPortLinksInProgramaBrowser
-        }
-        return defaults.bool(forKey: openSidebarPortLinksInProgramaBrowserKey)
     }
 
     static func interceptTerminalOpenCommandInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
