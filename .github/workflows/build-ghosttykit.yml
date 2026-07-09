@@ -85,7 +85,7 @@ jobs:
             export PATH="/usr/local/bin:$PATH"
             zig version
           fi
-          cd ghostty && zig build -Demit-xcframework=true -Demit-macos-app=false -Dxcframework-target=universal -Doptimize=ReleaseFast
+          cd ghostty && zig build -Demit-xcframework=true -Demit-macos-app=false -Dxcframework-target=native -Doptimize=ReleaseFast
 
       - name: Package xcframework
         if: steps.check-release.outputs.exists == 'false'
