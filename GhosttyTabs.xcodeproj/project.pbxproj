@@ -16,6 +16,7 @@
 			NRCV00000000000000000001 /* CommandPaletteSearchEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */; };
 			NRCV00000000000000000007 /* SidebarDragDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000008 /* SidebarDragDrop.swift */; };
 			NRCV00000000000000000009 /* SidebarVisuals.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000010 /* SidebarVisuals.swift */; };
+			NRCV00000000000000000011 /* CommandPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000012 /* CommandPaletteController.swift */; };
 			E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */; };
 			B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */; };
 			A5001003 /* TabManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001013 /* TabManager.swift */; };
@@ -245,6 +246,7 @@
 		NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteSearchEngine.swift; sourceTree = "<group>"; };
 		NRCV00000000000000000008 /* SidebarDragDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarDragDrop.swift; sourceTree = "<group>"; };
 		NRCV00000000000000000010 /* SidebarVisuals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarVisuals.swift; sourceTree = "<group>"; };
+		NRCV00000000000000000012 /* CommandPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteController.swift; sourceTree = "<group>"; };
 			9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSelectionState.swift; sourceTree = "<group>"; };
 			B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDragHandleView.swift; sourceTree = "<group>"; };
 			A5001013 /* TabManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManager.swift; sourceTree = "<group>"; };
@@ -519,6 +521,7 @@
 					NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */,
 					NRCV00000000000000000008 /* SidebarDragDrop.swift */,
 					NRCV00000000000000000010 /* SidebarVisuals.swift */,
+					NRCV00000000000000000012 /* CommandPaletteController.swift */,
 					9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */,
 					B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */,
 					A50012F0 /* Backport.swift */,
@@ -854,6 +857,7 @@
 					NRCV00000000000000000001 /* CommandPaletteSearchEngine.swift in Sources */,
 					NRCV00000000000000000007 /* SidebarDragDrop.swift in Sources */,
 					NRCV00000000000000000009 /* SidebarVisuals.swift in Sources */,
+					NRCV00000000000000000011 /* CommandPaletteController.swift in Sources */,
 					E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */,
 					B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */,
 					A50012F1 /* Backport.swift in Sources */,

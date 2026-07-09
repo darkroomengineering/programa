@@ -1240,50 +1240,193 @@ struct ContentView: View {
     @State private var isResizerBandActive = false
     @State private var isSidebarResizerCursorActive = false
     @State private var sidebarResizerCursorStabilizer: DispatchSourceTimer?
-    @State private var isCommandPalettePresented = false
-    @State private var commandPaletteQuery: String = ""
-    @State private var commandPaletteMode: CommandPaletteMode = .commands
-    @State private var commandPaletteRenameDraft: String = ""
-    @State private var commandPaletteWorkspaceDescriptionDraft: String = ""
-    @State private var commandPaletteWorkspaceDescriptionHeight: CGFloat = CommandPaletteMultilineTextEditorRepresentable.defaultMinimumHeight
-    @State private var commandPaletteSelectedResultIndex: Int = 0
-    @State private var commandPaletteSelectionAnchorCommandID: String?
-    @State private var commandPaletteHoveredResultIndex: Int?
-    @State private var commandPaletteScrollTargetIndex: Int?
-    @State private var commandPaletteScrollTargetAnchor: UnitPoint?
-    @State private var commandPaletteRestoreFocusTarget: CommandPaletteRestoreFocusTarget?
-    @State private var commandPaletteSearchCorpus: [CommandPaletteSearchCorpusEntry<String>] = []
-    @State private var commandPaletteSearchCorpusByID: [String: CommandPaletteSearchCorpusEntry<String>] = [:]
-    @State private var commandPaletteSearchCommandsByID: [String: CommandPaletteCommand] = [:]
-    @State private var cachedCommandPaletteResults: [CommandPaletteSearchResult] = []
-    @State private var commandPaletteVisibleResults: [CommandPaletteSearchResult] = []
-    @State private var commandPaletteVisibleResultsScope: CommandPaletteListScope?
-    @State private var commandPaletteVisibleResultsFingerprint: Int?
-    @State private var cachedCommandPaletteScope: CommandPaletteListScope?
-    @State private var cachedCommandPaletteFingerprint: Int?
-    @State private var commandPalettePendingDismissFocusTarget: CommandPaletteRestoreFocusTarget?
-    @State private var commandPaletteRestoreTimeoutWorkItem: DispatchWorkItem?
-    @State private var commandPalettePendingTextSelectionBehavior: CommandPaletteTextSelectionBehavior?
-    @State private var commandPaletteSearchTask: Task<Void, Never>?
-    @State private var commandPaletteSearchRequestID: UInt64 = 0
-    @State private var commandPaletteResolvedSearchRequestID: UInt64 = 0
-    @State private var commandPaletteResolvedSearchScope: CommandPaletteListScope?
-    @State private var commandPaletteResolvedSearchFingerprint: Int?
-    @State private var commandPaletteResolvedMatchingQuery = ""
-    @State private var commandPaletteTerminalOpenTargetAvailability: Set<TerminalDirectoryOpenTarget> = []
-    @State private var isCommandPaletteSearchPending = false
-    @State private var commandPalettePendingActivation: CommandPalettePendingActivation?
-    @State private var commandPaletteResultsRevision: UInt64 = 0
-    @State private var commandPaletteUsageHistoryByCommandId: [String: CommandPaletteUsageEntry] = [:]
-    @AppStorage(CommandPaletteRenameSelectionSettings.selectAllOnFocusKey)
-    private var commandPaletteRenameSelectAllOnFocus = CommandPaletteRenameSelectionSettings.defaultSelectAllOnFocus
-    @AppStorage(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey)
-    private var commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
-    @State private var commandPaletteShouldFocusWorkspaceDescriptionEditor = false
+    @StateObject private var commandPaletteController = CommandPaletteController()
+    private var isCommandPalettePresented: Bool {
+        get { commandPaletteController.isCommandPalettePresented }
+        nonmutating set { commandPaletteController.isCommandPalettePresented = newValue }
+    }
+    private var commandPaletteQuery: String {
+        get { commandPaletteController.commandPaletteQuery }
+        nonmutating set { commandPaletteController.commandPaletteQuery = newValue }
+    }
+    private var commandPaletteMode: CommandPaletteMode {
+        get { commandPaletteController.commandPaletteMode }
+        nonmutating set { commandPaletteController.commandPaletteMode = newValue }
+    }
+    private var commandPaletteRenameDraft: String {
+        get { commandPaletteController.commandPaletteRenameDraft }
+        nonmutating set { commandPaletteController.commandPaletteRenameDraft = newValue }
+    }
+    private var commandPaletteWorkspaceDescriptionDraft: String {
+        get { commandPaletteController.commandPaletteWorkspaceDescriptionDraft }
+        nonmutating set { commandPaletteController.commandPaletteWorkspaceDescriptionDraft = newValue }
+    }
+    private var commandPaletteWorkspaceDescriptionHeight: CGFloat {
+        get { commandPaletteController.commandPaletteWorkspaceDescriptionHeight }
+        nonmutating set { commandPaletteController.commandPaletteWorkspaceDescriptionHeight = newValue }
+    }
+    private var commandPaletteSelectedResultIndex: Int {
+        get { commandPaletteController.commandPaletteSelectedResultIndex }
+        nonmutating set { commandPaletteController.commandPaletteSelectedResultIndex = newValue }
+    }
+    private var commandPaletteSelectionAnchorCommandID: String? {
+        get { commandPaletteController.commandPaletteSelectionAnchorCommandID }
+        nonmutating set { commandPaletteController.commandPaletteSelectionAnchorCommandID = newValue }
+    }
+    private var commandPaletteHoveredResultIndex: Int? {
+        get { commandPaletteController.commandPaletteHoveredResultIndex }
+        nonmutating set { commandPaletteController.commandPaletteHoveredResultIndex = newValue }
+    }
+    private var commandPaletteScrollTargetIndex: Int? {
+        get { commandPaletteController.commandPaletteScrollTargetIndex }
+        nonmutating set { commandPaletteController.commandPaletteScrollTargetIndex = newValue }
+    }
+    private var commandPaletteScrollTargetAnchor: UnitPoint? {
+        get { commandPaletteController.commandPaletteScrollTargetAnchor }
+        nonmutating set { commandPaletteController.commandPaletteScrollTargetAnchor = newValue }
+    }
+    private var commandPaletteRestoreFocusTarget: CommandPaletteRestoreFocusTarget? {
+        get { commandPaletteController.commandPaletteRestoreFocusTarget }
+        nonmutating set { commandPaletteController.commandPaletteRestoreFocusTarget = newValue }
+    }
+    private var commandPaletteSearchCorpus: [CommandPaletteSearchCorpusEntry<String>] {
+        get { commandPaletteController.commandPaletteSearchCorpus }
+        nonmutating set { commandPaletteController.commandPaletteSearchCorpus = newValue }
+    }
+    private var commandPaletteSearchCorpusByID: [String: CommandPaletteSearchCorpusEntry<String>] {
+        get { commandPaletteController.commandPaletteSearchCorpusByID }
+        nonmutating set { commandPaletteController.commandPaletteSearchCorpusByID = newValue }
+    }
+    private var commandPaletteSearchCommandsByID: [String: CommandPaletteCommand] {
+        get { commandPaletteController.commandPaletteSearchCommandsByID }
+        nonmutating set { commandPaletteController.commandPaletteSearchCommandsByID = newValue }
+    }
+    private var cachedCommandPaletteResults: [CommandPaletteSearchResult] {
+        get { commandPaletteController.cachedCommandPaletteResults }
+        nonmutating set { commandPaletteController.cachedCommandPaletteResults = newValue }
+    }
+    private var commandPaletteVisibleResults: [CommandPaletteSearchResult] {
+        get { commandPaletteController.commandPaletteVisibleResults }
+        nonmutating set { commandPaletteController.commandPaletteVisibleResults = newValue }
+    }
+    private var commandPaletteVisibleResultsScope: CommandPaletteListScope? {
+        get { commandPaletteController.commandPaletteVisibleResultsScope }
+        nonmutating set { commandPaletteController.commandPaletteVisibleResultsScope = newValue }
+    }
+    private var commandPaletteVisibleResultsFingerprint: Int? {
+        get { commandPaletteController.commandPaletteVisibleResultsFingerprint }
+        nonmutating set { commandPaletteController.commandPaletteVisibleResultsFingerprint = newValue }
+    }
+    private var cachedCommandPaletteScope: CommandPaletteListScope? {
+        get { commandPaletteController.cachedCommandPaletteScope }
+        nonmutating set { commandPaletteController.cachedCommandPaletteScope = newValue }
+    }
+    private var cachedCommandPaletteFingerprint: Int? {
+        get { commandPaletteController.cachedCommandPaletteFingerprint }
+        nonmutating set { commandPaletteController.cachedCommandPaletteFingerprint = newValue }
+    }
+    private var commandPalettePendingDismissFocusTarget: CommandPaletteRestoreFocusTarget? {
+        get { commandPaletteController.commandPalettePendingDismissFocusTarget }
+        nonmutating set { commandPaletteController.commandPalettePendingDismissFocusTarget = newValue }
+    }
+    private var commandPaletteRestoreTimeoutWorkItem: DispatchWorkItem? {
+        get { commandPaletteController.commandPaletteRestoreTimeoutWorkItem }
+        nonmutating set { commandPaletteController.commandPaletteRestoreTimeoutWorkItem = newValue }
+    }
+    private var commandPalettePendingTextSelectionBehavior: CommandPaletteTextSelectionBehavior? {
+        get { commandPaletteController.commandPalettePendingTextSelectionBehavior }
+        nonmutating set { commandPaletteController.commandPalettePendingTextSelectionBehavior = newValue }
+    }
+    private var commandPaletteSearchTask: Task<Void, Never>? {
+        get { commandPaletteController.commandPaletteSearchTask }
+        nonmutating set { commandPaletteController.commandPaletteSearchTask = newValue }
+    }
+    private var commandPaletteSearchRequestID: UInt64 {
+        get { commandPaletteController.commandPaletteSearchRequestID }
+        nonmutating set { commandPaletteController.commandPaletteSearchRequestID = newValue }
+    }
+    private var commandPaletteResolvedSearchRequestID: UInt64 {
+        get { commandPaletteController.commandPaletteResolvedSearchRequestID }
+        nonmutating set { commandPaletteController.commandPaletteResolvedSearchRequestID = newValue }
+    }
+    private var commandPaletteResolvedSearchScope: CommandPaletteListScope? {
+        get { commandPaletteController.commandPaletteResolvedSearchScope }
+        nonmutating set { commandPaletteController.commandPaletteResolvedSearchScope = newValue }
+    }
+    private var commandPaletteResolvedSearchFingerprint: Int? {
+        get { commandPaletteController.commandPaletteResolvedSearchFingerprint }
+        nonmutating set { commandPaletteController.commandPaletteResolvedSearchFingerprint = newValue }
+    }
+    private var commandPaletteResolvedMatchingQuery: String {
+        get { commandPaletteController.commandPaletteResolvedMatchingQuery }
+        nonmutating set { commandPaletteController.commandPaletteResolvedMatchingQuery = newValue }
+    }
+    private var commandPaletteTerminalOpenTargetAvailability: Set<TerminalDirectoryOpenTarget> {
+        get { commandPaletteController.commandPaletteTerminalOpenTargetAvailability }
+        nonmutating set { commandPaletteController.commandPaletteTerminalOpenTargetAvailability = newValue }
+    }
+    private var isCommandPaletteSearchPending: Bool {
+        get { commandPaletteController.isCommandPaletteSearchPending }
+        nonmutating set { commandPaletteController.isCommandPaletteSearchPending = newValue }
+    }
+    private var commandPalettePendingActivation: CommandPalettePendingActivation? {
+        get { commandPaletteController.commandPalettePendingActivation }
+        nonmutating set { commandPaletteController.commandPalettePendingActivation = newValue }
+    }
+    private var commandPaletteResultsRevision: UInt64 {
+        get { commandPaletteController.commandPaletteResultsRevision }
+        nonmutating set { commandPaletteController.commandPaletteResultsRevision = newValue }
+    }
+    private var commandPaletteUsageHistoryByCommandId: [String: CommandPaletteUsageEntry] {
+        get { commandPaletteController.commandPaletteUsageHistoryByCommandId }
+        nonmutating set { commandPaletteController.commandPaletteUsageHistoryByCommandId = newValue }
+    }
+    private var commandPaletteRenameSelectAllOnFocus: Bool {
+        get { commandPaletteController.commandPaletteRenameSelectAllOnFocus }
+        nonmutating set { commandPaletteController.commandPaletteRenameSelectAllOnFocus = newValue }
+    }
+    private var commandPaletteSearchAllSurfaces: Bool {
+        get { commandPaletteController.commandPaletteSearchAllSurfaces }
+        nonmutating set { commandPaletteController.commandPaletteSearchAllSurfaces = newValue }
+    }
+    private var commandPaletteShouldFocusWorkspaceDescriptionEditor: Bool {
+        get { commandPaletteController.commandPaletteShouldFocusWorkspaceDescriptionEditor }
+        nonmutating set { commandPaletteController.commandPaletteShouldFocusWorkspaceDescriptionEditor = newValue }
+    }
+    private var commandPaletteQueryBinding: Binding<String> {
+        Binding(
+            get: { commandPaletteController.commandPaletteQuery },
+            set: { commandPaletteController.commandPaletteQuery = $0 }
+        )
+    }
+    private var commandPaletteRenameDraftBinding: Binding<String> {
+        Binding(
+            get: { commandPaletteController.commandPaletteRenameDraft },
+            set: { commandPaletteController.commandPaletteRenameDraft = $0 }
+        )
+    }
+    private var commandPaletteWorkspaceDescriptionDraftBinding: Binding<String> {
+        Binding(
+            get: { commandPaletteController.commandPaletteWorkspaceDescriptionDraft },
+            set: { commandPaletteController.commandPaletteWorkspaceDescriptionDraft = $0 }
+        )
+    }
+    private var commandPaletteWorkspaceDescriptionHeightBinding: Binding<CGFloat> {
+        Binding(
+            get: { commandPaletteController.commandPaletteWorkspaceDescriptionHeight },
+            set: { commandPaletteController.commandPaletteWorkspaceDescriptionHeight = $0 }
+        )
+    }
+    private var commandPaletteShouldFocusWorkspaceDescriptionEditorBinding: Binding<Bool> {
+        Binding(
+            get: { commandPaletteController.commandPaletteShouldFocusWorkspaceDescriptionEditor },
+            set: { commandPaletteController.commandPaletteShouldFocusWorkspaceDescriptionEditor = $0 }
+        )
+    }
     @FocusState private var isCommandPaletteSearchFocused: Bool
     @FocusState private var isCommandPaletteRenameFocused: Bool
 
-    private enum CommandPaletteMode {
+    enum CommandPaletteMode {
         case commands
         case renameInput(CommandPaletteRenameTarget)
         case renameConfirm(CommandPaletteRenameTarget, proposedName: String)
@@ -1305,7 +1448,7 @@ struct ContentView: View {
         case command(commandID: String)
     }
 
-    private struct CommandPaletteRenameTarget: Equatable {
+    struct CommandPaletteRenameTarget: Equatable {
         enum Kind: Equatable {
             case workspace(workspaceId: UUID)
             case tab(workspaceId: UUID, panelId: UUID)
@@ -1342,7 +1485,7 @@ struct ContentView: View {
         }
     }
 
-    private struct CommandPaletteWorkspaceDescriptionTarget: Equatable {
+    struct CommandPaletteWorkspaceDescriptionTarget: Equatable {
         let workspaceId: UUID
         let currentDescription: String
 
@@ -1361,7 +1504,7 @@ struct ContentView: View {
         }
     }
 
-    private struct CommandPaletteRestoreFocusTarget {
+    struct CommandPaletteRestoreFocusTarget {
         let workspaceId: UUID
         let panelId: UUID
         let intent: PanelFocusIntent
@@ -1372,7 +1515,7 @@ struct ContentView: View {
         case rename
     }
 
-    private enum CommandPaletteTextSelectionBehavior {
+    enum CommandPaletteTextSelectionBehavior {
         case caretAtEnd
         case selectAll
     }
@@ -3312,7 +3455,7 @@ struct ContentView: View {
             HStack(spacing: 8) {
                 CommandPaletteSearchFieldRepresentable(
                     placeholder: commandPaletteSearchPlaceholder,
-                    text: $commandPaletteQuery,
+                    text: commandPaletteQueryBinding,
                     isFocused: Binding(
                         get: { isCommandPaletteSearchFocused },
                         set: { isCommandPaletteSearchFocused = $0 }
@@ -3532,7 +3675,7 @@ struct ContentView: View {
                     onDeleteBackward: handleCommandPaletteRenameDeleteBackward(modifiers:)
                 ),
                 placeholder: target.placeholder,
-                text: $commandPaletteRenameDraft,
+                text: commandPaletteRenameDraftBinding,
                 onSubmit: { _ in continueRenameFlow(target: target) },
                 onEscape: { dismissCommandPalette() },
                 onInteraction: handleCommandPaletteRenameInputInteraction
@@ -3616,12 +3759,12 @@ struct ContentView: View {
                         localized: "command.editWorkspaceDescription.title",
                         defaultValue: "Edit Workspace Description…"
                     ),
-                    focus: $commandPaletteShouldFocusWorkspaceDescriptionEditor,
-                    measuredHeight: $commandPaletteWorkspaceDescriptionHeight,
+                    focus: commandPaletteShouldFocusWorkspaceDescriptionEditorBinding,
+                    measuredHeight: commandPaletteWorkspaceDescriptionHeightBinding,
                     maxHeight: maxEditorHeight
                 ),
                 placeholder: target.placeholder,
-                text: $commandPaletteWorkspaceDescriptionDraft,
+                text: commandPaletteWorkspaceDescriptionDraftBinding,
                 onSubmit: { proposedDescription in
                     applyWorkspaceDescriptionFlow(target: target, proposedDescription: proposedDescription)
                 },
@@ -3905,7 +4048,7 @@ struct ContentView: View {
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 
-    private final class CommandPaletteMultilineTextView: NSTextView {
+    final class CommandPaletteMultilineTextView: NSTextView {
         var onHandleKeyEvent: ((NSEvent, NSTextView?) -> Bool)?
         var onDidBecomeFirstResponder: (() -> Void)?
 
@@ -4033,7 +4176,7 @@ struct ContentView: View {
         }
     }
 
-    private final class CommandPaletteMultilineTextEditorView: NSView {
+    final class CommandPaletteMultilineTextEditorView: NSView {
         private static let font = NSFont.systemFont(ofSize: 13)
         private static let textInset = NSSize(width: 0, height: 2)
         static let defaultMinimumHeight: CGFloat = {
@@ -4238,7 +4381,7 @@ struct ContentView: View {
         }
     }
 
-    private struct CommandPaletteMultilineTextEditorRepresentable: NSViewRepresentable {
+    struct CommandPaletteMultilineTextEditorRepresentable: NSViewRepresentable {
         static let defaultMinimumHeight = CommandPaletteMultilineTextEditorView.defaultMinimumHeight
 
         let placeholder: String
