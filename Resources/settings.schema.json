@@ -24,23 +24,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "language": {
-          "type": "string",
-          "enum": ["system", "en", "ar", "bs", "zh-Hans", "zh-Hant", "da", "de", "es", "fr", "it", "ja", "ko", "nb", "pl", "pt-BR", "ru", "th", "tr"],
-          "default": "system",
-          "description": "Preferred app language."
-        },
         "appearance": {
           "type": "string",
           "enum": ["system", "light", "dark"],
           "default": "system",
           "description": "App appearance mode."
-        },
-        "appIcon": {
-          "type": "string",
-          "enum": ["automatic", "light", "dark"],
-          "default": "automatic",
-          "description": "Dock and app switcher icon style."
         },
         "newWorkspacePlacement": {
           "type": "string",
@@ -96,25 +84,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "dockBadge": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show the unread count in the Dock tile."
-        },
         "showInMenuBar": {
           "type": "boolean",
           "default": true,
           "description": "Show the menu bar extra."
-        },
-        "unreadPaneRing": {
-          "type": "boolean",
-          "default": true,
-          "description": "Highlight panes with unread notifications."
-        },
-        "paneFlash": {
-          "type": "boolean",
-          "default": true,
-          "description": "Flash the focused pane when requested."
         },
         "sound": {
           "type": "string",
@@ -131,75 +104,6 @@
           "type": "string",
           "default": "",
           "description": "Optional shell command to run alongside notification delivery."
-        }
-      }
-    },
-    "sidebar": {
-      "title": "sidebar",
-      "description": "Sidebar content and metadata visibility from Settings > Sidebar.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "hideAllDetails": {
-          "type": "boolean",
-          "default": false,
-          "description": "Hide all per-workspace detail rows."
-        },
-        "branchLayout": {
-          "type": "string",
-          "enum": ["vertical", "inline"],
-          "default": "vertical",
-          "description": "Show git branch details stacked vertically or inline."
-        },
-        "showNotificationMessage": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show the latest notification text in the sidebar."
-        },
-        "showBranchDirectory": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show the workspace working directory."
-        },
-        "showPullRequests": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show pull request metadata in the sidebar."
-        },
-        "openPullRequestLinksInCmuxBrowser": {
-          "type": "boolean",
-          "default": true,
-          "description": "Open sidebar pull request links in the embedded cmux browser."
-        },
-        "openPortLinksInCmuxBrowser": {
-          "type": "boolean",
-          "default": true,
-          "description": "Open sidebar port links in the embedded cmux browser."
-        },
-        "showSSH": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show SSH connection details."
-        },
-        "showPorts": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show listening ports."
-        },
-        "showLog": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show recent log snippets."
-        },
-        "showProgress": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show progress indicators."
-        },
-        "showCustomMetadata": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show custom metadata pills."
         }
       }
     },
@@ -412,11 +316,6 @@
           "type": "boolean",
           "default": true,
           "description": "Show the browser import hint on blank tabs."
-        },
-        "reactGrabVersion": {
-          "type": "string",
-          "default": "0.1.29",
-          "description": "Pinned react-grab version for the browser toolbar helper."
         },
         "proxy": {
           "type": "object",

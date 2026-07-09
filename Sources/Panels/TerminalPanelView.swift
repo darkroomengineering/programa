@@ -6,8 +6,6 @@ import Bonsplit
 /// View for rendering a terminal panel
 struct TerminalPanelView: View {
     @ObservedObject var panel: TerminalPanel
-    @AppStorage(NotificationPaneRingSettings.enabledKey)
-    private var notificationPaneRingEnabled = NotificationPaneRingSettings.defaultEnabled
     let paneId: PaneID
     let isFocused: Bool
     let isVisibleInUI: Bool
@@ -28,7 +26,7 @@ struct TerminalPanelView: View {
             isVisibleInUI: isVisibleInUI,
             portalZPriority: portalPriority,
             showsInactiveOverlay: isSplit && !isFocused,
-            showsUnreadNotificationRing: hasUnreadNotification && notificationPaneRingEnabled,
+            showsUnreadNotificationRing: hasUnreadNotification,
             inactiveOverlayColor: appearance.unfocusedOverlayNSColor,
             inactiveOverlayOpacity: appearance.unfocusedOverlayOpacity,
             searchState: panel.searchState,

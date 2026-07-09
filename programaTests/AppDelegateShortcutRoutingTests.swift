@@ -1551,12 +1551,9 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
         let defaults = UserDefaults.standard
         let savedMode = defaults.object(forKey: WorkspacePresentationModeSettings.modeKey)
-        let savedLegacyTitlebar = defaults.object(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
         defaults.set(WorkspacePresentationModeSettings.Mode.minimal.rawValue, forKey: WorkspacePresentationModeSettings.modeKey)
-        defaults.removeObject(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
         defer {
             restoreDefaultsValue(savedMode, forKey: WorkspacePresentationModeSettings.modeKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyTitlebar, forKey: WorkspaceTitlebarSettings.showTitlebarKey, defaults: defaults)
         }
 
         let windowId = appDelegate.createMainWindow()
@@ -1587,12 +1584,9 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
         let defaults = UserDefaults.standard
         let savedMode = defaults.object(forKey: WorkspacePresentationModeSettings.modeKey)
-        let savedLegacyTitlebar = defaults.object(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
         defaults.set(WorkspacePresentationModeSettings.Mode.standard.rawValue, forKey: WorkspacePresentationModeSettings.modeKey)
-        defaults.removeObject(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
         defer {
             restoreDefaultsValue(savedMode, forKey: WorkspacePresentationModeSettings.modeKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyTitlebar, forKey: WorkspaceTitlebarSettings.showTitlebarKey, defaults: defaults)
         }
 
         let windowId = appDelegate.createMainWindow()
@@ -1621,124 +1615,14 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         )
     }
 
-    func testWorkspaceButtonFadeModeDefaultsOffWhenTitlebarVisible() {
-        let defaults = UserDefaults.standard
-        let savedMode = defaults.object(forKey: WorkspaceButtonFadeSettings.modeKey)
-        let savedTitlebarVisibility = defaults.object(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        let savedLegacyTitlebarMode = defaults.object(forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        let savedLegacyPaneMode = defaults.object(forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
-        defer {
-            restoreDefaultsValue(savedMode, forKey: WorkspaceButtonFadeSettings.modeKey, defaults: defaults)
-            restoreDefaultsValue(savedTitlebarVisibility, forKey: WorkspaceTitlebarSettings.showTitlebarKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyTitlebarMode, forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyPaneMode, forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey, defaults: defaults)
-        }
-
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.modeKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
-        defaults.set(true, forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-
-        WorkspaceButtonFadeSettings.initializeStoredModeIfNeeded(defaults: defaults)
-
-        XCTAssertEqual(
-            defaults.string(forKey: WorkspaceButtonFadeSettings.modeKey),
-            WorkspaceButtonFadeSettings.Mode.disabled.rawValue
-        )
-    }
-
-    func testWorkspaceButtonFadeModeDefaultsOnWhenTitlebarHidden() {
-        let defaults = UserDefaults.standard
-        let savedMode = defaults.object(forKey: WorkspaceButtonFadeSettings.modeKey)
-        let savedTitlebarVisibility = defaults.object(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        let savedLegacyTitlebarMode = defaults.object(forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        let savedLegacyPaneMode = defaults.object(forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
-        defer {
-            restoreDefaultsValue(savedMode, forKey: WorkspaceButtonFadeSettings.modeKey, defaults: defaults)
-            restoreDefaultsValue(savedTitlebarVisibility, forKey: WorkspaceTitlebarSettings.showTitlebarKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyTitlebarMode, forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyPaneMode, forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey, defaults: defaults)
-        }
-
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.modeKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
-        defaults.set(false, forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-
-        WorkspaceButtonFadeSettings.initializeStoredModeIfNeeded(defaults: defaults)
-
-        XCTAssertEqual(
-            defaults.string(forKey: WorkspaceButtonFadeSettings.modeKey),
-            WorkspaceButtonFadeSettings.Mode.enabled.rawValue
-        )
-    }
-
-    func testWorkspaceButtonFadeModeMigratesLegacyHoverVisibilityPreference() {
-        let defaults = UserDefaults.standard
-        let savedMode = defaults.object(forKey: WorkspaceButtonFadeSettings.modeKey)
-        let savedTitlebarVisibility = defaults.object(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        let savedLegacyTitlebarMode = defaults.object(forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        let savedLegacyPaneMode = defaults.object(forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
-        defer {
-            restoreDefaultsValue(savedMode, forKey: WorkspaceButtonFadeSettings.modeKey, defaults: defaults)
-            restoreDefaultsValue(savedTitlebarVisibility, forKey: WorkspaceTitlebarSettings.showTitlebarKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyTitlebarMode, forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyPaneMode, forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey, defaults: defaults)
-        }
-
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.modeKey)
-        defaults.set(true, forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        defaults.set("always", forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        defaults.set("onHover", forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
-
-        WorkspaceButtonFadeSettings.initializeStoredModeIfNeeded(defaults: defaults)
-
-        XCTAssertEqual(
-            defaults.string(forKey: WorkspaceButtonFadeSettings.modeKey),
-            WorkspaceButtonFadeSettings.Mode.enabled.rawValue
-        )
-    }
-
-    func testWorkspaceButtonFadeModePreservesExistingStoredMode() {
-        let defaults = UserDefaults.standard
-        let savedMode = defaults.object(forKey: WorkspaceButtonFadeSettings.modeKey)
-        let savedTitlebarVisibility = defaults.object(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        let savedLegacyTitlebarMode = defaults.object(forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        let savedLegacyPaneMode = defaults.object(forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
-        defer {
-            restoreDefaultsValue(savedMode, forKey: WorkspaceButtonFadeSettings.modeKey, defaults: defaults)
-            restoreDefaultsValue(savedTitlebarVisibility, forKey: WorkspaceTitlebarSettings.showTitlebarKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyTitlebarMode, forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyPaneMode, forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey, defaults: defaults)
-        }
-
-        defaults.set(WorkspaceButtonFadeSettings.Mode.disabled.rawValue, forKey: WorkspaceButtonFadeSettings.modeKey)
-        defaults.set(false, forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        defaults.set("onHover", forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        defaults.set("onHover", forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
-
-        WorkspaceButtonFadeSettings.initializeStoredModeIfNeeded(defaults: defaults)
-
-        XCTAssertEqual(
-            defaults.string(forKey: WorkspaceButtonFadeSettings.modeKey),
-            WorkspaceButtonFadeSettings.Mode.disabled.rawValue
-        )
-    }
-
     func testWorkspaceMinimalModeDefaultsToMinimalPresentation() {
         let defaults = UserDefaults.standard
         let savedMode = defaults.object(forKey: WorkspacePresentationModeSettings.modeKey)
-        let savedLegacyTitlebar = defaults.object(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        let savedLegacyFade = defaults.object(forKey: WorkspaceButtonFadeSettings.modeKey)
         defer {
             restoreDefaultsValue(savedMode, forKey: WorkspacePresentationModeSettings.modeKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyTitlebar, forKey: WorkspaceTitlebarSettings.showTitlebarKey, defaults: defaults)
-            restoreDefaultsValue(savedLegacyFade, forKey: WorkspaceButtonFadeSettings.modeKey, defaults: defaults)
         }
 
         defaults.removeObject(forKey: WorkspacePresentationModeSettings.modeKey)
-        defaults.set(false, forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        defaults.set(WorkspaceButtonFadeSettings.Mode.enabled.rawValue, forKey: WorkspaceButtonFadeSettings.modeKey)
 
         XCTAssertEqual(
             WorkspacePresentationModeSettings.mode(defaults: defaults),

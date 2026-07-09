@@ -651,54 +651,6 @@ private struct BrowserImportHintContentView {
     let onOpenSettings: () -> Void
     let onDismiss: () -> Void
 
-    var cardOverlay: some View {
-        VStack {
-            Spacer(minLength: 22)
-
-            hintBody
-            .padding(12)
-            .frame(maxWidth: 360, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.9))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(
-                    Color(nsColor: .separatorColor).opacity(0.45),
-                    lineWidth: 1
-                )
-            )
-            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
-
-            Spacer()
-        }
-        .padding(.horizontal, 18)
-    }
-
-    var inlineStrip: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            hintBody
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(maxWidth: 520, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(nsColor: .windowBackgroundColor).opacity(0.84))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(
-                        Color(nsColor: .separatorColor).opacity(0.35),
-                        lineWidth: 1
-                    )
-                )
-                .shadow(color: Color.black.opacity(0.05), radius: 6, y: 2)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 14)
-    }
-
     var popover: some View {
         hintBody
             .padding(12)
@@ -790,7 +742,6 @@ struct BrowserPanelView: View {
     @AppStorage(BrowserProfilePopoverDebugSettings.verticalPaddingKey)
     private var browserProfilePopoverVerticalPaddingRaw = BrowserProfilePopoverDebugSettings.defaultVerticalPadding
     @AppStorage(BrowserThemeSettings.modeKey) private var browserThemeModeRaw = BrowserThemeSettings.defaultMode.rawValue
-    @AppStorage(BrowserImportHintSettings.variantKey) private var browserImportHintVariantRaw = BrowserImportHintSettings.defaultVariant.rawValue
     @AppStorage(BrowserImportHintSettings.showOnBlankTabsKey) private var showBrowserImportHintOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
     @AppStorage(BrowserImportHintSettings.dismissedKey) private var isBrowserImportHintDismissed = BrowserImportHintSettings.defaultDismissed
     @ObservedObject private var keyboardShortcutSettingsObserver = KeyboardShortcutSettingsObserver.shared
@@ -862,13 +813,8 @@ struct BrowserPanelView: View {
         BrowserThemeSettings.mode(for: browserThemeModeRaw)
     }
 
-    private var browserImportHintVariant: BrowserImportHintVariant {
-        BrowserImportHintSettings.variant(for: browserImportHintVariantRaw)
-    }
-
     private var browserImportHintPresentation: BrowserImportHintPresentation {
         BrowserImportHintPresentation(
-            variant: browserImportHintVariant,
             showOnBlankTabs: showBrowserImportHintOnBlankTabs,
             isDismissed: isBrowserImportHintDismissed
         )
@@ -1034,10 +980,6 @@ struct BrowserPanelView: View {
             let resolvedThemeMode = BrowserThemeSettings.mode(defaults: .standard)
             if browserThemeModeRaw != resolvedThemeMode.rawValue {
                 browserThemeModeRaw = resolvedThemeMode.rawValue
-            }
-            let resolvedHintVariant = BrowserImportHintSettings.variant(for: browserImportHintVariantRaw)
-            if browserImportHintVariantRaw != resolvedHintVariant.rawValue {
-                browserImportHintVariantRaw = resolvedHintVariant.rawValue
             }
             let resolvedToolbarAccessorySpacing = BrowserToolbarAccessorySpacingDebugSettings.resolved(browserToolbarAccessorySpacingRaw)
             if browserToolbarAccessorySpacingRaw != resolvedToolbarAccessorySpacing {
@@ -1494,18 +1436,6 @@ struct BrowserPanelView: View {
                         onRequestPanelFocus()
                         if addressBarFocused {
                             setAddressBarFocused(false, reason: "placeholderContent.tapBlur")
-                        }
-                    }
-                    .overlay(alignment: .topLeading) {
-                        if shouldShowEmptyStateImportOverlay,
-                           browserImportHintPresentation.blankTabPlacement == .inlineStrip {
-                            browserImportHintContent.inlineStrip
-                        }
-                    }
-                    .overlay {
-                        if shouldShowEmptyStateImportOverlay,
-                           browserImportHintPresentation.blankTabPlacement == .floatingCard {
-                            browserImportHintContent.cardOverlay
                         }
                     }
             }

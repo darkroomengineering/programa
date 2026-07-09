@@ -1339,13 +1339,7 @@ class GhosttyApp {
         if ProcessInfo.processInfo.environment["PROGRAMA_DEBUG_LOG"] != nil {
             return true
         }
-        if ProcessInfo.processInfo.environment["GHOSTTYTABS_DEBUG_BG"] == "1" {
-            return true
-        }
-        if UserDefaults.standard.bool(forKey: "programaDebugBG") {
-            return true
-        }
-        return UserDefaults.standard.bool(forKey: "GhosttyTabsDebugBG")
+        return UserDefaults.standard.bool(forKey: "programaDebugBG")
     }()
     private let backgroundLogURL = GhosttyApp.resolveBackgroundLogURL()
     private let backgroundLogStartUptime = ProcessInfo.processInfo.systemUptime

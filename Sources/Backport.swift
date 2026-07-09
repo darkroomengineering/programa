@@ -41,19 +41,14 @@ extension Backport where Content: View {
         #endif
     }
 
-    /// Backported onKeyPress that works on macOS 14+ and is a no-op on macOS 13.
     func onKeyPress(_ key: KeyEquivalent, action: @escaping (EventModifiers) -> BackportKeyPressResult) -> some View {
         #if canImport(AppKit)
-        if #available(macOS 14, *) {
-            return content.onKeyPress(key, phases: [.down, .repeat], action: { keyPress in
-                switch action(keyPress.modifiers) {
-                case .handled: return .handled
-                case .ignored: return .ignored
-                }
-            })
-        } else {
-            return content
-        }
+        return content.onKeyPress(key, phases: [.down, .repeat], action: { keyPress in
+            switch action(keyPress.modifiers) {
+            case .handled: return .handled
+            case .ignored: return .ignored
+            }
+        })
         #else
         return content
         #endif

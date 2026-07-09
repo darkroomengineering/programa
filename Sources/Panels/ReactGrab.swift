@@ -9,7 +9,6 @@ import Bonsplit
 // MARK: - Settings
 
 enum ReactGrabSettings {
-    static let versionKey = "reactGrabVersion"
     static let defaultVersion = "0.1.29"
 
     /// Known versions and their SHA-256 integrity hashes.
@@ -20,11 +19,6 @@ enum ReactGrabSettings {
 
     static func scriptURL(for version: String) -> URL {
         URL(string: "https://unpkg.com/react-grab@\(version)/dist/index.global.js")!
-    }
-
-    static var configuredVersion: String {
-        let stored = UserDefaults.standard.string(forKey: versionKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return stored.isEmpty ? defaultVersion : stored
     }
 }
 
@@ -94,7 +88,7 @@ enum ReactGrabScriptLoader {
     private static var prefetchTask: Task<String?, Never>?
 
     static func prefetch() {
-        let version = ReactGrabSettings.configuredVersion
+        let version = ReactGrabSettings.defaultVersion
         // Invalidate cache if version changed.
         if cachedVersion != version {
             cachedScript = nil
@@ -110,7 +104,7 @@ enum ReactGrabScriptLoader {
     }
 
     static func fetch() async -> String? {
-        let version = ReactGrabSettings.configuredVersion
+        let version = ReactGrabSettings.defaultVersion
         if cachedVersion == version, let cached = cachedScript { return cached }
         prefetch()
         return await prefetchTask?.value

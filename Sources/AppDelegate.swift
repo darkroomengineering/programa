@@ -2721,12 +2721,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // In UI tests, `WindowGroup` occasionally fails to materialize a window quickly on the VM.
         // If there are no windows shortly after launch, force-create one so XCUITest can proceed.
         if isRunningUnderXCTest {
-            if let rawVariant = env["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_VARIANT"] {
-                UserDefaults.standard.set(
-                    BrowserImportHintSettings.variant(for: rawVariant).rawValue,
-                    forKey: BrowserImportHintSettings.variantKey
-                )
-            }
             if let rawShow = env["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_SHOW"] {
                 UserDefaults.standard.set(
                     rawShow == "1",
@@ -9704,8 +9698,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     private func ensureApplicationIcon() {
-        let mode = AppIconSettings.resolvedMode()
-        AppIconSettings.applyIcon(mode)
+        // Manual light/dark override removed; the icon always tracks system
+        // appearance. Clear any stale pre-removal override so the dock-tile
+        // plugin (which reads the raw key cross-process) falls back too.
+        UserDefaults.standard.removeObject(forKey: "appIconMode")
+        AppIconAppearanceObserver.shared.startObserving()
     }
 
     private func scheduleLaunchServicesBundleRegistration(

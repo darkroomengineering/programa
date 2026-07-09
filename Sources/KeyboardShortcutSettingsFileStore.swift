@@ -292,9 +292,6 @@ final class ProgramaSettingsFileStore {
         if let notificationsSection = root["notifications"] as? [String: Any] {
             parseNotificationsSection(notificationsSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
-        if let sidebarSection = root["sidebar"] as? [String: Any] {
-            parseSidebarSection(sidebarSection, sourcePath: sourcePath, snapshot: &snapshot)
-        }
         if let workspaceColorsSection = root["workspaceColors"] as? [String: Any] {
             parseWorkspaceColorsSection(workspaceColorsSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
@@ -322,13 +319,6 @@ final class ProgramaSettingsFileStore {
         sourcePath: String,
         snapshot: inout ResolvedSettingsSnapshot
     ) {
-        if let raw = jsonString(section["language"]) {
-            guard let language = AppLanguage(rawValue: raw) else {
-                logInvalid("app.language", sourcePath: sourcePath)
-                return
-            }
-            snapshot.managedUserDefaults[LanguageSettings.languageKey] = .string(language.rawValue)
-        }
         if let raw = jsonString(section["appearance"]) {
             let normalized = AppearanceSettings.mode(for: raw).rawValue
             let accepted = Set(AppearanceMode.allCases.map(\.rawValue))
@@ -337,13 +327,6 @@ final class ProgramaSettingsFileStore {
                 return
             }
             snapshot.managedUserDefaults[AppearanceSettings.appearanceModeKey] = .string(normalized)
-        }
-        if let raw = jsonString(section["appIcon"]) {
-            guard let mode = AppIconMode(rawValue: raw) else {
-                logInvalid("app.appIcon", sourcePath: sourcePath)
-                return
-            }
-            snapshot.managedUserDefaults[AppIconSettings.modeKey] = .string(mode.rawValue)
         }
         if let raw = jsonString(section["newWorkspacePlacement"]) {
             guard let placement = NewWorkspacePlacement(rawValue: raw) else {
@@ -384,17 +367,8 @@ final class ProgramaSettingsFileStore {
         sourcePath: String,
         snapshot: inout ResolvedSettingsSnapshot
     ) {
-        if let value = jsonBool(section["dockBadge"]) {
-            snapshot.managedUserDefaults[NotificationBadgeSettings.dockBadgeEnabledKey] = .bool(value)
-        }
         if let value = jsonBool(section["showInMenuBar"]) {
             snapshot.managedUserDefaults[MenuBarExtraSettings.showInMenuBarKey] = .bool(value)
-        }
-        if let value = jsonBool(section["unreadPaneRing"]) {
-            snapshot.managedUserDefaults[NotificationPaneRingSettings.enabledKey] = .bool(value)
-        }
-        if let value = jsonBool(section["paneFlash"]) {
-            snapshot.managedUserDefaults[NotificationPaneFlashSettings.enabledKey] = .bool(value)
         }
         if let raw = jsonString(section["sound"]) {
             let allowed = Set(NotificationSoundSettings.systemSounds.map(\.value))
@@ -412,55 +386,6 @@ final class ProgramaSettingsFileStore {
         }
     }
 
-    private func parseSidebarSection(
-        _ section: [String: Any],
-        sourcePath: String,
-        snapshot: inout ResolvedSettingsSnapshot
-    ) {
-        if let value = jsonBool(section["hideAllDetails"]) {
-            snapshot.managedUserDefaults[SidebarWorkspaceDetailSettings.hideAllDetailsKey] = .bool(value)
-        }
-        if let raw = jsonString(section["branchLayout"]) {
-            switch raw {
-            case "vertical":
-                snapshot.managedUserDefaults[SidebarBranchLayoutSettings.key] = .bool(true)
-            case "inline":
-                snapshot.managedUserDefaults[SidebarBranchLayoutSettings.key] = .bool(false)
-            default:
-                logInvalid("sidebar.branchLayout", sourcePath: sourcePath)
-            }
-        }
-        if let value = jsonBool(section["showNotificationMessage"]) {
-            snapshot.managedUserDefaults[SidebarWorkspaceDetailSettings.showNotificationMessageKey] = .bool(value)
-        }
-        if let value = jsonBool(section["showBranchDirectory"]) {
-            snapshot.managedUserDefaults["sidebarShowBranchDirectory"] = .bool(value)
-        }
-        if let value = jsonBool(section["showPullRequests"]) {
-            snapshot.managedUserDefaults["sidebarShowPullRequest"] = .bool(value)
-        }
-        if let value = jsonBool(section["openPullRequestLinksInProgramaBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey] = .bool(value)
-        }
-        if let value = jsonBool(section["openPortLinksInProgramaBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPortLinksInProgramaBrowserKey] = .bool(value)
-        }
-        if let value = jsonBool(section["showSSH"]) {
-            snapshot.managedUserDefaults["sidebarShowSSH"] = .bool(value)
-        }
-        if let value = jsonBool(section["showPorts"]) {
-            snapshot.managedUserDefaults["sidebarShowPorts"] = .bool(value)
-        }
-        if let value = jsonBool(section["showLog"]) {
-            snapshot.managedUserDefaults["sidebarShowLog"] = .bool(value)
-        }
-        if let value = jsonBool(section["showProgress"]) {
-            snapshot.managedUserDefaults["sidebarShowProgress"] = .bool(value)
-        }
-        if let value = jsonBool(section["showCustomMetadata"]) {
-            snapshot.managedUserDefaults["sidebarShowStatusPills"] = .bool(value)
-        }
-    }
 
     private func parseWorkspaceColorsSection(
         _ section: [String: Any],
@@ -723,9 +648,6 @@ final class ProgramaSettingsFileStore {
         }
         if let value = jsonBool(section["showImportHintOnBlankTabs"]) {
             snapshot.managedUserDefaults[BrowserImportHintSettings.showOnBlankTabsKey] = .bool(value)
-        }
-        if let raw = jsonString(section["reactGrabVersion"]) {
-            snapshot.managedUserDefaults[ReactGrabSettings.versionKey] = .string(raw)
         }
         if let proxyRaw = section["proxy"] {
             guard let proxyDict = proxyRaw as? [String: Any] else {
@@ -1115,16 +1037,6 @@ final class ProgramaSettingsFileStore {
                 defaults.set(next, forKey: defaultsKey)
             }
         }
-
-        switch defaultsKey {
-        case LanguageSettings.languageKey:
-            let language = AppLanguage(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .system
-            LanguageSettings.apply(language)
-        case AppIconSettings.modeKey:
-            AppIconSettings.applyIcon(AppIconSettings.resolvedMode())
-        default:
-            break
-        }
     }
 
     private func restoreUserDefaultsBackup(_ backup: BackupValue, for defaultsKey: String) {
@@ -1156,16 +1068,6 @@ final class ProgramaSettingsFileStore {
             defaults.set(value, forKey: defaultsKey)
         case .stringDictionary(let value):
             defaults.set(value, forKey: defaultsKey)
-        }
-
-        switch defaultsKey {
-        case LanguageSettings.languageKey:
-            let language = AppLanguage(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .system
-            LanguageSettings.apply(language)
-        case AppIconSettings.modeKey:
-            AppIconSettings.applyIcon(AppIconSettings.resolvedMode())
-        default:
-            break
         }
     }
 
@@ -1282,9 +1184,7 @@ final class ProgramaSettingsFileStore {
         return [
             [
                 "app": [
-                    "language": LanguageSettings.defaultLanguage.rawValue,
                     "appearance": AppearanceSettings.defaultMode.rawValue,
-                    "appIcon": AppIconSettings.defaultMode.rawValue,
                     "newWorkspacePlacement": WorkspacePlacementSettings.defaultPlacement.rawValue,
                     "minimalMode": WorkspacePresentationModeSettings.defaultMode == .minimal,
                     "keepWorkspaceOpenWhenClosingLastSurface": !LastSurfaceCloseShortcutSettings.defaultValue,
@@ -1298,29 +1198,10 @@ final class ProgramaSettingsFileStore {
             ],
             [
                 "notifications": [
-                    "dockBadge": NotificationBadgeSettings.defaultDockBadgeEnabled,
                     "showInMenuBar": MenuBarExtraSettings.defaultShowInMenuBar,
-                    "unreadPaneRing": NotificationPaneRingSettings.defaultEnabled,
-                    "paneFlash": NotificationPaneFlashSettings.defaultEnabled,
                     "sound": NotificationSoundSettings.defaultValue,
                     "customSoundFilePath": NotificationSoundSettings.defaultCustomFilePath,
                     "command": NotificationSoundSettings.defaultCustomCommand,
-                ],
-            ],
-            [
-                "sidebar": [
-                    "hideAllDetails": SidebarWorkspaceDetailSettings.defaultHideAllDetails,
-                    "branchLayout": SidebarBranchLayoutSettings.defaultVerticalLayout ? "vertical" : "inline",
-                    "showNotificationMessage": SidebarWorkspaceDetailSettings.defaultShowNotificationMessage,
-                    "showBranchDirectory": true,
-                    "showPullRequests": true,
-                    "openPullRequestLinksInProgramaBrowser": BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser,
-                    "openPortLinksInProgramaBrowser": BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInProgramaBrowser,
-                    "showSSH": true,
-                    "showPorts": true,
-                    "showLog": true,
-                    "showProgress": true,
-                    "showCustomMetadata": true,
                 ],
             ],
             [
@@ -1368,7 +1249,6 @@ final class ProgramaSettingsFileStore {
                     "urlsToAlwaysOpenExternally": [String](),
                     "insecureHttpHostsAllowedInEmbeddedBrowser": BrowserInsecureHTTPSettings.defaultAllowlistPatterns,
                     "showImportHintOnBlankTabs": BrowserImportHintSettings.defaultShowOnBlankTabs,
-                    "reactGrabVersion": ReactGrabSettings.defaultVersion,
                 ],
             ],
             [

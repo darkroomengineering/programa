@@ -55,7 +55,7 @@ Release apps download and cache the matching binary locally, verify its SHA-256,
 
 To inspect what a given app build trusts, run:
 1. `programa remote-daemon-status`
-2. `cmux remote-daemon-status --os linux --arch amd64`
+2. `programa remote-daemon-status --os linux --arch amd64`
 
 The command prints the exact release asset URL, expected SHA-256, local cache status, and a copy-pasteable `gh attestation verify` command for the selected platform.
 

@@ -4,18 +4,6 @@ import Darwin
 import Bonsplit
 import UniformTypeIdentifiers
 
-enum WorkspaceTitlebarSettings {
-    static let showTitlebarKey = "workspaceTitlebarVisible"
-    static let defaultShowTitlebar = true
-
-    static func isVisible(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: showTitlebarKey) == nil {
-            return defaultShowTitlebar
-        }
-        return defaults.bool(forKey: showTitlebarKey)
-    }
-}
-
 enum WorkspacePresentationModeSettings {
     static let modeKey = "workspacePresentationMode"
 
@@ -36,54 +24,6 @@ enum WorkspacePresentationModeSettings {
 
     static func isMinimal(defaults: UserDefaults = .standard) -> Bool {
         mode(defaults: defaults) == .minimal
-    }
-}
-
-enum WorkspaceButtonFadeSettings {
-    static let modeKey = "workspaceButtonsFadeMode"
-    static let legacyTitlebarControlsVisibilityModeKey = "titlebarControlsVisibilityMode"
-    static let legacyPaneTabBarControlsVisibilityModeKey = "paneTabBarControlsVisibilityMode"
-
-    enum Mode: String {
-        case enabled
-        case disabled
-    }
-
-    static let defaultMode: Mode = .disabled
-
-    static func mode(for rawValue: String?) -> Mode {
-        Mode(rawValue: rawValue ?? "") ?? defaultMode
-    }
-
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        mode(for: defaults.string(forKey: modeKey)) == .enabled
-    }
-
-    static func initializeStoredModeIfNeeded(defaults: UserDefaults = .standard) {
-        guard defaults.string(forKey: modeKey) == nil else { return }
-
-        if let migratedMode = migratedLegacyMode(defaults: defaults) {
-            defaults.set(migratedMode.rawValue, forKey: modeKey)
-            return
-        }
-
-        let initialMode: Mode = WorkspaceTitlebarSettings.isVisible(defaults: defaults) ? .disabled : .enabled
-        defaults.set(initialMode.rawValue, forKey: modeKey)
-    }
-
-    private static func migratedLegacyMode(defaults: UserDefaults) -> Mode? {
-        let legacyValues = [
-            defaults.string(forKey: legacyTitlebarControlsVisibilityModeKey),
-            defaults.string(forKey: legacyPaneTabBarControlsVisibilityModeKey),
-        ]
-
-        if legacyValues.contains(where: { $0 == "onHover" || $0 == "hover" || $0 == "enabled" }) {
-            return .enabled
-        }
-        if legacyValues.contains(where: { $0 == "always" || $0 == "disabled" }) {
-            return .disabled
-        }
-        return nil
     }
 }
 
@@ -166,8 +106,10 @@ struct programaApp: App {
         Self.configureGhosttyEnvironment()
         _ = KeyboardShortcutSettings.settingsFileStore
 
-        // Apply saved language preference before any UI loads
-        LanguageSettings.apply(LanguageSettings.languageAtLaunch)
+        // The in-app language picker was removed; the app always follows the
+        // system language. Clear any previously chosen per-app override once,
+        // since no UI can undo it anymore.
+        Self.migrateLanguageOverrideRemovalIfNeeded(defaults: .standard)
 
         let startupAppearance = AppearanceSettings.resolvedMode()
         Self.applyAppearance(startupAppearance)
@@ -285,6 +227,15 @@ struct programaApp: App {
                 defaults.set(value, forKey: newKey)
             }
         }
+        defaults.set(targetVersion, forKey: migrationKey)
+    }
+
+    private static func migrateLanguageOverrideRemovalIfNeeded(defaults: UserDefaults) {
+        let migrationKey = "programaLanguageOverrideRemovalVersion"
+        let targetVersion = 1
+        guard defaults.integer(forKey: migrationKey) < targetVersion else { return }
+        defaults.removeObject(forKey: "AppleLanguages")
+        defaults.removeObject(forKey: "appLanguage")
         defaults.set(targetVersion, forKey: migrationKey)
     }
 
@@ -488,9 +439,6 @@ struct programaApp: App {
                 Menu("Debug Windows") {
                     Button("Background Debug…") {
                         BackgroundDebugWindowController.shared.show()
-                    }
-                    Button("Browser Import Hint Debug…") {
-                        BrowserImportHintDebugWindowController.shared.show()
                     }
                     Button(
                         String(
@@ -1142,7 +1090,6 @@ struct programaApp: App {
     }
 
     private func openAllDebugWindows() {
-        BrowserImportHintDebugWindowController.shared.show()
         BrowserProfilePopoverDebugWindowController.shared.show()
         SettingsAboutTitlebarDebugWindowController.shared.show()
         SidebarDebugWindowController.shared.show()
@@ -1641,7 +1588,6 @@ private enum DebugWindowConfigSnapshot {
         sidebarTintHexDark=\(stringValue(defaults, key: "sidebarTintHexDark", fallback: "(nil)"))
         sidebarTintOpacity=\(String(format: "%.2f", doubleValue(defaults, key: "sidebarTintOpacity", fallback: 0.18)))
         sidebarCornerRadius=\(String(format: "%.1f", doubleValue(defaults, key: "sidebarCornerRadius", fallback: 0.0)))
-        sidebarBranchVerticalLayout=\(boolValue(defaults, key: SidebarBranchLayoutSettings.key, fallback: SidebarBranchLayoutSettings.defaultVerticalLayout))
         sidebarActiveTabIndicatorStyle=\(stringValue(defaults, key: SidebarActiveTabIndicatorSettings.styleKey, fallback: SidebarActiveTabIndicatorSettings.defaultStyle.rawValue))
         sidebarDevBuildBannerVisible=\(boolValue(defaults, key: DevBuildBannerDebugSettings.sidebarBannerVisibleKey, fallback: DevBuildBannerDebugSettings.defaultShowSidebarBanner))
         shortcutHintSidebarXOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.sidebarHintXKey, fallback: ShortcutHintDebugSettings.defaultSidebarHintX)))
@@ -1774,9 +1720,6 @@ private struct DebugWindowControlsView: View {
 
                 GroupBox("Open") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Button("Browser Import Hint Debug…") {
-                            BrowserImportHintDebugWindowController.shared.show()
-                        }
                         Button(
                             String(
                                 localized: "debug.menu.browserProfilePopoverDebug",
@@ -1798,7 +1741,6 @@ private struct DebugWindowControlsView: View {
                             MenuBarExtraDebugWindowController.shared.show()
                         }
                         Button("Open All Debug Windows") {
-                            BrowserImportHintDebugWindowController.shared.show()
                             BrowserProfilePopoverDebugWindowController.shared.show()
                             SettingsAboutTitlebarDebugWindowController.shared.show()
                             SidebarDebugWindowController.shared.show()
@@ -2003,40 +1945,6 @@ private struct DebugWindowControlsView: View {
     }
 }
 
-private final class BrowserImportHintDebugWindowController: NSWindowController, NSWindowDelegate {
-    static let shared = BrowserImportHintDebugWindowController()
-
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 420),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Browser Import Hint Debug"
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.browserImportHintDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: BrowserImportHintDebugView())
-        AppDelegate.shared?.applyWindowDecorations(to: window)
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
-    }
-}
-
 private final class BrowserProfilePopoverDebugWindowController: NSWindowController, NSWindowDelegate {
     static let shared = BrowserProfilePopoverDebugWindowController()
 
@@ -2232,178 +2140,6 @@ private struct BrowserProfilePopoverDebugView: View {
                 .font(.caption)
                 .monospacedDigit()
                 .frame(width: 32, alignment: .trailing)
-        }
-    }
-}
-
-private struct BrowserImportHintDebugView: View {
-    @AppStorage(BrowserImportHintSettings.variantKey)
-    private var variantRaw = BrowserImportHintSettings.defaultVariant.rawValue
-    @AppStorage(BrowserImportHintSettings.showOnBlankTabsKey)
-    private var showOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
-    @AppStorage(BrowserImportHintSettings.dismissedKey)
-    private var isDismissed = BrowserImportHintSettings.defaultDismissed
-
-    private var selectedVariant: BrowserImportHintVariant {
-        BrowserImportHintSettings.variant(for: variantRaw)
-    }
-
-    private var variantSelection: Binding<String> {
-        Binding(
-            get: { selectedVariant.rawValue },
-            set: { variantRaw = BrowserImportHintSettings.variant(for: $0).rawValue }
-        )
-    }
-
-    private var showOnBlankTabsBinding: Binding<Bool> {
-        Binding(
-            get: { showOnBlankTabs },
-            set: { newValue in
-                showOnBlankTabs = newValue
-                if newValue {
-                    isDismissed = false
-                }
-            }
-        )
-    }
-
-    private var presentation: BrowserImportHintPresentation {
-        BrowserImportHintPresentation(
-            variant: selectedVariant,
-            showOnBlankTabs: showOnBlankTabs,
-            isDismissed: isDismissed
-        )
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Browser Import Hint")
-                    .font(.headline)
-
-                Text("Try lighter blank-tab import surfaces and dismissal states without touching the permanent Browser settings home.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                GroupBox("Variant") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Picker("Blank Tab Style", selection: variantSelection) {
-                            ForEach(BrowserImportHintVariant.allCases) { variant in
-                                Text(title(for: variant)).tag(variant.rawValue)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        Text(description(for: selectedVariant))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox("State") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Toggle("Show on blank browser tabs", isOn: showOnBlankTabsBinding)
-                        Toggle("Pretend the user dismissed it", isOn: $isDismissed)
-
-                        Text("Current blank-tab placement: \(placementTitle(presentation.blankTabPlacement))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Settings status: \(settingsStatusTitle(presentation.settingsStatus))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox("Quick Actions") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 10) {
-                            Button("Open Browser Settings") {
-                                AppDelegate.presentPreferencesWindow(navigationTarget: .browser)
-                            }
-                            Button("Open Import Dialog") {
-                                DispatchQueue.main.async {
-                                    BrowserDataImportCoordinator.shared.presentImportDialog()
-                                }
-                            }
-                        }
-
-                        Button("Reset Hint Debug State") {
-                            BrowserImportHintSettings.reset()
-                        }
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox("Ideas") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Inline strip: default candidate, visible but quieter than the old floating card.")
-                        Text("Floating card: strongest nudge, useful when we want more explanation.")
-                        Text("Toolbar chip: most subtle, best when the hint should stay out of the content area.")
-                        Text("Settings only: no in-browser nudge, Browser settings becomes the only permanent home.")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private func title(for variant: BrowserImportHintVariant) -> String {
-        switch variant {
-        case .inlineStrip:
-            return "Inline Strip"
-        case .floatingCard:
-            return "Floating Card"
-        case .toolbarChip:
-            return "Toolbar Chip"
-        case .settingsOnly:
-            return "Settings Only"
-        }
-    }
-
-    private func description(for variant: BrowserImportHintVariant) -> String {
-        switch variant {
-        case .inlineStrip:
-            return "Shows a thin hint bar at the top of blank browser tabs."
-        case .floatingCard:
-            return "Shows the fuller callout card inside blank browser tabs."
-        case .toolbarChip:
-            return "Moves the hint into a small toolbar chip beside the browser controls."
-        case .settingsOnly:
-            return "Hides the blank-tab hint and leaves Browser settings as the only home."
-        }
-    }
-
-    private func placementTitle(_ placement: BrowserImportHintBlankTabPlacement) -> String {
-        switch placement {
-        case .hidden:
-            return "Hidden"
-        case .inlineStrip:
-            return "Inline Strip"
-        case .floatingCard:
-            return "Floating Card"
-        case .toolbarChip:
-            return "Toolbar Chip"
-        }
-    }
-
-    private func settingsStatusTitle(_ status: BrowserImportHintSettingsStatus) -> String {
-        switch status {
-        case .visible:
-            return "Visible"
-        case .hidden:
-            return "Hidden"
-        case .settingsOnly:
-            return "Settings Only"
         }
     }
 }
@@ -2785,7 +2521,6 @@ private struct SidebarDebugView: View {
     @AppStorage("sidebarState") private var sidebarState = SidebarStateOption.followWindow.rawValue
     @AppStorage("sidebarCornerRadius") private var sidebarCornerRadius = 0.0
     @AppStorage("sidebarBlurOpacity") private var sidebarBlurOpacity = 1.0
-    @AppStorage(SidebarBranchLayoutSettings.key) private var sidebarBranchVerticalLayout = SidebarBranchLayoutSettings.defaultVerticalLayout
     @AppStorage(ShortcutHintDebugSettings.sidebarHintXKey) private var sidebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultSidebarHintX
     @AppStorage(ShortcutHintDebugSettings.sidebarHintYKey) private var sidebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultSidebarHintY
     @AppStorage(ShortcutHintDebugSettings.titlebarHintXKey) private var titlebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultTitlebarHintX
@@ -2947,16 +2682,6 @@ private struct SidebarDebugView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Workspace Metadata") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Render branch list vertically", isOn: $sidebarBranchVerticalLayout)
-                        Text("When enabled, each branch appears on its own line in the sidebar.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.top, 2)
-                }
-
                 HStack(spacing: 12) {
                     Button("Reset Tint") {
                         sidebarTintOpacity = 0.62
@@ -3048,7 +2773,6 @@ private struct SidebarDebugView: View {
         sidebarTintHexDark=\(sidebarTintHexDark ?? "(nil)")
         sidebarTintOpacity=\(String(format: "%.2f", sidebarTintOpacity))
         sidebarCornerRadius=\(String(format: "%.1f", sidebarCornerRadius))
-        sidebarBranchVerticalLayout=\(sidebarBranchVerticalLayout)
         sidebarActiveTabIndicatorStyle=\(sidebarActiveTabIndicatorStyle)
         sidebarDevBuildBannerVisible=\(showSidebarDevBuildBanner)
         shortcutHintSidebarXOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(sidebarShortcutHintXOffset)))
@@ -3586,161 +3310,7 @@ enum AppearanceSettings {
     }
 }
 
-enum AppLanguage: String, CaseIterable, Identifiable {
-    case system
-    case en
-    case ar
-    case bs
-    case zhHans = "zh-Hans"
-    case zhHant = "zh-Hant"
-    case da
-    case de
-    case es
-    case fr
-    case it
-    case ja
-    case ko
-    case nb
-    case pl
-    case ptBR = "pt-BR"
-    case ru
-    case th
-    case tr
 
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .system: return String(localized: "language.system", defaultValue: "System")
-        case .en: return "English"
-        case .ar: return "\u{200E}العربية (Arabic)"
-        case .bs: return "Bosanski (Bosnian)"
-        case .zhHans: return "简体中文 (Chinese Simplified)"
-        case .zhHant: return "繁體中文 (Chinese Traditional)"
-        case .da: return "Dansk (Danish)"
-        case .de: return "Deutsch (German)"
-        case .es: return "Español (Spanish)"
-        case .fr: return "Français (French)"
-        case .it: return "Italiano (Italian)"
-        case .ja: return "日本語 (Japanese)"
-        case .ko: return "한국어 (Korean)"
-        case .nb: return "Norsk (Norwegian)"
-        case .pl: return "Polski (Polish)"
-        case .ptBR: return "Português (Brasil)"
-        case .ru: return "Русский (Russian)"
-        case .th: return "ไทย (Thai)"
-        case .tr: return "Türkçe (Turkish)"
-        }
-    }
-}
-
-enum LanguageSettings {
-    static let languageKey = "appLanguage"
-    static let defaultLanguage: AppLanguage = .system
-
-    static func apply(_ language: AppLanguage) {
-        if language == .system {
-            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
-        } else {
-            UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
-        }
-    }
-
-    static var languageAtLaunch: AppLanguage = {
-        let stored = UserDefaults.standard.string(forKey: languageKey)
-        guard let stored, let lang = AppLanguage(rawValue: stored) else { return .system }
-        return lang
-    }()
-}
-
-enum AppIconMode: String, CaseIterable, Identifiable {
-    case automatic
-    case light
-    case dark
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .automatic: return String(localized: "appIcon.automatic", defaultValue: "Automatic")
-        case .light: return String(localized: "appIcon.light", defaultValue: "Light")
-        case .dark: return String(localized: "appIcon.dark", defaultValue: "Dark")
-        }
-    }
-
-    var imageName: String? {
-        switch self {
-        case .automatic: return nil
-        case .light: return "AppIconLight"
-        case .dark: return "AppIconDark"
-        }
-    }
-}
-
-enum AppIconSettings {
-    static let modeKey = "appIconMode"
-    static let defaultMode: AppIconMode = .automatic
-    private static let dockTileIconDidChangeNotification = Notification.Name("com.darkroom.programa.appIconDidChange")
-
-    struct Environment {
-        let imageForMode: (AppIconMode) -> NSImage?
-        let setApplicationIconImage: (NSImage) -> Void
-        let startAppearanceObservation: () -> Void
-        let stopAppearanceObservation: () -> Void
-        let notifyDockTilePlugin: () -> Void
-
-        static func live() -> Self {
-            Self(
-                imageForMode: { mode in
-                    guard let imageName = mode.imageName else { return nil }
-                    return NSImage(named: imageName)
-                },
-                setApplicationIconImage: { icon in
-                    NSApplication.shared.applicationIconImage = icon
-                },
-                startAppearanceObservation: {
-                    AppIconAppearanceObserver.shared.startObserving()
-                },
-                stopAppearanceObservation: {
-                    AppIconAppearanceObserver.shared.stopObserving()
-                },
-                notifyDockTilePlugin: {
-                    DistributedNotificationCenter.default().postNotificationName(
-                        AppIconSettings.dockTileIconDidChangeNotification,
-                        object: nil,
-                        userInfo: nil,
-                        deliverImmediately: true
-                    )
-                }
-            )
-        }
-    }
-
-    static func resolvedMode(defaults: UserDefaults = .standard) -> AppIconMode {
-        guard let raw = defaults.string(forKey: modeKey),
-              let mode = AppIconMode(rawValue: raw) else {
-            return defaultMode
-        }
-        return mode
-    }
-
-    static func applyIcon(_ mode: AppIconMode, environment: Environment = .live()) {
-        switch mode {
-        case .automatic:
-            environment.startAppearanceObservation()
-        case .light:
-            environment.stopAppearanceObservation()
-            guard let icon = environment.imageForMode(.light) else { return }
-            environment.setApplicationIconImage(icon)
-        case .dark:
-            environment.stopAppearanceObservation()
-            guard let icon = environment.imageForMode(.dark) else { return }
-            environment.setApplicationIconImage(icon)
-        }
-
-        environment.notifyDockTilePlugin()
-    }
-}
 
 final class AppIconAppearanceObserver: NSObject {
     static let shared = AppIconAppearanceObserver()
@@ -4056,9 +3626,7 @@ struct SettingsView: View {
     private let notificationSoundControlWidth: CGFloat = 280
     private let shortcutChordsDocsURL = URL(string: "https://github.com/darkroomengineering/programa/tree/main/docs")!
 
-    @AppStorage(LanguageSettings.languageKey) private var appLanguage = LanguageSettings.defaultLanguage.rawValue
     @AppStorage(AppearanceSettings.appearanceModeKey) private var appearanceMode = AppearanceSettings.defaultMode.rawValue
-    @AppStorage(AppIconSettings.modeKey) private var appIconMode = AppIconSettings.defaultMode.rawValue
     @AppStorage(WorkspacePresentationModeSettings.modeKey)
     private var workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
     @AppStorage(SocketControlSettings.appStorageKey) private var socketControlMode = SocketControlSettings.defaultMode.rawValue
@@ -4072,10 +3640,8 @@ struct SettingsView: View {
     @AppStorage(BrowserSearchSettings.searchEngineKey) private var browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
     @AppStorage(BrowserSearchSettings.searchSuggestionsEnabledKey) private var browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled
     @AppStorage(BrowserThemeSettings.modeKey) private var browserThemeMode = BrowserThemeSettings.defaultMode.rawValue
-    @AppStorage(BrowserImportHintSettings.variantKey) private var browserImportHintVariantRaw = BrowserImportHintSettings.defaultVariant.rawValue
     @AppStorage(BrowserImportHintSettings.showOnBlankTabsKey) private var showBrowserImportHintOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
     @AppStorage(BrowserImportHintSettings.dismissedKey) private var isBrowserImportHintDismissed = BrowserImportHintSettings.defaultDismissed
-    @AppStorage(ReactGrabSettings.versionKey) private var reactGrabVersion = ReactGrabSettings.defaultVersion
     @AppStorage(BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowserKey) private var openTerminalLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser
     @AppStorage(BrowserLinkOpenSettings.interceptTerminalOpenCommandInProgramaBrowserKey)
     private var interceptTerminalOpenCommandInProgramaBrowser = BrowserLinkOpenSettings.initialInterceptTerminalOpenCommandInProgramaBrowserValue()
@@ -4087,9 +3653,6 @@ struct SettingsView: View {
     @AppStorage(NotificationSoundSettings.customFilePathKey)
     private var notificationSoundCustomFilePath = NotificationSoundSettings.defaultCustomFilePath
     @AppStorage(NotificationSoundSettings.customCommandKey) private var notificationCustomCommand = NotificationSoundSettings.defaultCustomCommand
-    @AppStorage(NotificationBadgeSettings.dockBadgeEnabledKey) private var notificationDockBadgeEnabled = NotificationBadgeSettings.defaultDockBadgeEnabled
-    @AppStorage(NotificationPaneRingSettings.enabledKey) private var notificationPaneRingEnabled = NotificationPaneRingSettings.defaultEnabled
-    @AppStorage(NotificationPaneFlashSettings.enabledKey) private var notificationPaneFlashEnabled = NotificationPaneFlashSettings.defaultEnabled
     @AppStorage(MenuBarExtraSettings.showInMenuBarKey) private var showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
     @AppStorage(QuitWarningSettings.warnBeforeQuitKey) private var warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
     @AppStorage(ScrollbackPersistenceSettings.persistScrollbackKey) private var sessionPersistScrollback = ScrollbackPersistenceSettings.defaultPersistScrollback
@@ -4105,28 +3668,12 @@ struct SettingsView: View {
     @AppStorage(PaneFirstClickFocusSettings.enabledKey)
     private var paneFirstClickFocusEnabled = PaneFirstClickFocusSettings.defaultEnabled
     @AppStorage(WorkspaceAutoReorderSettings.key) private var workspaceAutoReorder = WorkspaceAutoReorderSettings.defaultValue
-    @AppStorage(SidebarWorkspaceDetailSettings.hideAllDetailsKey)
-    private var sidebarHideAllDetails = SidebarWorkspaceDetailSettings.defaultHideAllDetails
-    @AppStorage(SidebarWorkspaceDetailSettings.showNotificationMessageKey)
-    private var sidebarShowNotificationMessage = SidebarWorkspaceDetailSettings.defaultShowNotificationMessage
-    @AppStorage(SidebarBranchLayoutSettings.key) private var sidebarBranchVerticalLayout = SidebarBranchLayoutSettings.defaultVerticalLayout
     @AppStorage(SidebarActiveTabIndicatorSettings.styleKey)
     private var sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
     @AppStorage("sidebarSelectionColorHex") private var sidebarSelectionColorHex: String?
     @AppStorage("sidebarNotificationBadgeColorHex") private var sidebarNotificationBadgeColorHex: String?
-    @AppStorage("sidebarShowBranchDirectory") private var sidebarShowBranchDirectory = true
-    @AppStorage("sidebarShowPullRequest") private var sidebarShowPullRequest = true
-    @AppStorage(BrowserLinkOpenSettings.openSidebarPullRequestLinksInProgramaBrowserKey)
-    private var openSidebarPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser
-    @AppStorage(BrowserLinkOpenSettings.openSidebarPortLinksInProgramaBrowserKey)
-    private var openSidebarPortLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInProgramaBrowser
     @AppStorage(ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
     private var showShortcutHintsOnCommandHold = ShortcutHintDebugSettings.defaultShowHintsOnCommandHold
-    @AppStorage("sidebarShowSSH") private var sidebarShowSSH = true
-    @AppStorage("sidebarShowPorts") private var sidebarShowPorts = true
-    @AppStorage("sidebarShowLog") private var sidebarShowLog = true
-    @AppStorage("sidebarShowProgress") private var sidebarShowProgress = true
-    @AppStorage("sidebarShowStatusPills") private var sidebarShowMetadata = true
     @AppStorage("sidebarTintHex") private var sidebarTintHex = SidebarTintDefaults.hex
     @AppStorage("sidebarTintHexLight") private var sidebarTintHexLight: String?
     @AppStorage("sidebarTintHexDark") private var sidebarTintHexDark: String?
@@ -4152,8 +3699,6 @@ struct SettingsView: View {
     @State private var notificationCustomSoundStatusIsError = false
     @State private var showNotificationCustomSoundErrorAlert = false
     @State private var notificationCustomSoundErrorAlertMessage = ""
-    @State private var showLanguageRestartAlert = false
-    @State private var isResettingSettings = false
     @State private var workspaceTabPaletteEntries = WorkspaceTabColorSettings.palette()
     @State private var trustedDirectoriesDraft: String = ProgramaDirectoryTrust.shared.allTrustedPaths.joined(separator: "\n")
 
@@ -4243,13 +3788,8 @@ struct SettingsView: View {
         )
     }
 
-    private var browserImportHintVariant: BrowserImportHintVariant {
-        BrowserImportHintSettings.variant(for: browserImportHintVariantRaw)
-    }
-
     private var browserImportHintPresentation: BrowserImportHintPresentation {
         BrowserImportHintPresentation(
-            variant: browserImportHintVariant,
             showOnBlankTabs: showBrowserImportHintOnBlankTabs,
             isDismissed: isBrowserImportHintDismissed
         )
@@ -4323,8 +3863,6 @@ struct SettingsView: View {
             return String(localized: "settings.browser.import.hint.note.visible", defaultValue: "Blank browser tabs can show this import suggestion. Hide or re-enable it here.")
         case .hidden:
             return String(localized: "settings.browser.import.hint.note.hidden", defaultValue: "The blank-tab import hint is hidden. Turn it back on here any time.")
-        case .settingsOnly:
-            return String(localized: "settings.browser.import.hint.note.settingsOnly", defaultValue: "Blank tabs are currently using Settings only mode from the debug window.")
         }
     }
 
@@ -4580,51 +4118,10 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     SettingsSectionHeader(title: String(localized: "settings.section.app", defaultValue: "App"))
                     SettingsCard {
-                        SettingsCardRow(
-                            String(localized: "settings.app.language", defaultValue: "Language"),
-                            subtitle: appLanguage != LanguageSettings.languageAtLaunch.rawValue
-                                ? String(localized: "settings.app.language.restartSubtitle", defaultValue: "Restart Programa to apply")
-                                : nil,
-                            controlWidth: pickerColumnWidth
-                        ) {
-                            Picker("", selection: $appLanguage) {
-                                ForEach(AppLanguage.allCases) { lang in
-                                    Text(lang.displayName).tag(lang.rawValue)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .onChange(of: appLanguage) { newValue in
-                                guard !isResettingSettings else { return }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
-                                    // Re-check current value to handle rapid changes
-                                    let current = appLanguage
-                                    if let lang = AppLanguage(rawValue: current) {
-                                        LanguageSettings.apply(lang)
-                                    }
-                                    if current != LanguageSettings.languageAtLaunch.rawValue {
-                                        showLanguageRestartAlert = true
-                                    }
-                                }
-                            }
-                        }
-
-                        SettingsCardDivider()
-
                         ThemePickerRow(
                             selectedMode: appearanceMode,
                             onSelect: { mode in
                                 appearanceMode = mode.rawValue
-                            }
-                        )
-
-                        SettingsCardDivider()
-
-                        AppIconPickerRow(
-                            selectedMode: appIconMode,
-                            onSelect: { mode in
-                                appIconMode = mode.rawValue
-                                AppIconSettings.applyIcon(mode)
                             }
                         )
 
@@ -4706,16 +4203,6 @@ struct SettingsView: View {
                                 .controlSize(.small)
                         }
 
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.dockBadge", defaultValue: "Dock Badge"),
-                            subtitle: String(localized: "settings.app.dockBadge.subtitle", defaultValue: "Show unread count on app icon (Dock and Cmd+Tab).")
-                        ) {
-                            Toggle("", isOn: $notificationDockBadgeEnabled)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
 
                         SettingsCardDivider()
 
@@ -4731,33 +4218,6 @@ struct SettingsView: View {
                                 )
                         }
 
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.notifications.paneRing.title", defaultValue: "Unread Pane Ring"),
-                            subtitle: String(localized: "settings.notifications.paneRing.subtitle", defaultValue: "Show a blue ring around panes with unread notifications.")
-                        ) {
-                            Toggle("", isOn: $notificationPaneRingEnabled)
-                                .labelsHidden()
-                                .controlSize(.small)
-                                .accessibilityLabel(
-                                    String(localized: "settings.notifications.paneRing.title", defaultValue: "Unread Pane Ring")
-                                )
-                        }
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.notifications.paneFlash.title", defaultValue: "Pane Flash"),
-                            subtitle: String(localized: "settings.notifications.paneFlash.subtitle", defaultValue: "Briefly flash a blue outline when Programa highlights a pane.")
-                        ) {
-                            Toggle("", isOn: $notificationPaneFlashEnabled)
-                                .labelsHidden()
-                                .controlSize(.small)
-                                .accessibilityLabel(
-                                    String(localized: "settings.notifications.paneFlash.title", defaultValue: "Pane Flash")
-                                )
-                        }
 
                         SettingsCardDivider()
 
@@ -4773,11 +4233,6 @@ struct SettingsView: View {
 
                                 Button(notificationPermissionActionTitle) {
                                     handleNotificationPermissionAction()
-                                }
-                                .controlSize(.small)
-
-                                Button("Send Test") {
-                                    notificationStore.sendSettingsTestNotification()
                                 }
                                 .controlSize(.small)
                             }
@@ -4918,156 +4373,6 @@ struct SettingsView: View {
                                 )
                         }
 
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.hideAllSidebarDetails", defaultValue: "Hide All Sidebar Details"),
-                            subtitle: sidebarHideAllDetails
-                                ? String(localized: "settings.app.hideAllSidebarDetails.subtitleOn", defaultValue: "Show only the workspace title row. Overrides the detail toggles below.")
-                                : String(localized: "settings.app.hideAllSidebarDetails.subtitleOff", defaultValue: "Show secondary workspace details as controlled by the toggles below.")
-                        ) {
-                            Toggle("", isOn: $sidebarHideAllDetails)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-
-                        SettingsCardDivider()
-
-                        SettingsPickerRow(
-                            String(localized: "settings.app.sidebarBranchLayout", defaultValue: "Sidebar Branch Layout"),
-                            subtitle: sidebarBranchVerticalLayout
-                                ? String(localized: "settings.app.sidebarBranchLayout.subtitleVertical", defaultValue: "Vertical: each branch appears on its own line.")
-                                : String(localized: "settings.app.sidebarBranchLayout.subtitleInline", defaultValue: "Inline: all branches share one line."),
-                            controlWidth: pickerColumnWidth,
-                            selection: $sidebarBranchVerticalLayout
-                        ) {
-                            Text(String(localized: "settings.app.sidebarBranchLayout.vertical", defaultValue: "Vertical")).tag(true)
-                            Text(String(localized: "settings.app.sidebarBranchLayout.inline", defaultValue: "Inline")).tag(false)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showNotificationMessage", defaultValue: "Show Notification Message in Sidebar"),
-                            subtitle: String(localized: "settings.app.showNotificationMessage.subtitle", defaultValue: "Display the latest notification message below the workspace title.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowNotificationMessage)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showBranchDirectory", defaultValue: "Show Branch + Directory in Sidebar"),
-                            subtitle: String(localized: "settings.app.showBranchDirectory.subtitle", defaultValue: "Display the built-in git branch and working-directory row.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowBranchDirectory)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showPullRequests", defaultValue: "Show Pull Requests in Sidebar"),
-                            subtitle: String(localized: "settings.app.showPullRequests.subtitle", defaultValue: "Display review items (PR/MR/etc.) with status, number, and clickable link.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowPullRequest)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.openSidebarPRLinks", defaultValue: "Open Sidebar PR Links in Programa Browser"),
-                            subtitle: openSidebarPullRequestLinksInProgramaBrowser
-                                ? String(localized: "settings.app.openSidebarPRLinks.subtitleOn", defaultValue: "Clicks open inside Programa browser.")
-                                : String(localized: "settings.app.openSidebarPRLinks.subtitleOff", defaultValue: "Clicks open in your default browser.")
-                        ) {
-                            Toggle("", isOn: $openSidebarPullRequestLinksInProgramaBrowser)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.openSidebarPortLinks", defaultValue: "Open Sidebar Port Links in Programa Browser"),
-                            subtitle: openSidebarPortLinksInProgramaBrowser
-                                ? String(localized: "settings.app.openSidebarPortLinks.subtitleOn", defaultValue: "Port clicks open inside Programa browser.")
-                                : String(localized: "settings.app.openSidebarPortLinks.subtitleOff", defaultValue: "Port clicks open in your default browser.")
-                        ) {
-                            Toggle("", isOn: $openSidebarPortLinksInProgramaBrowser)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showSSH", defaultValue: "Show SSH in Sidebar"),
-                            subtitle: String(localized: "settings.app.showSSH.subtitle", defaultValue: "Display the SSH target for remote workspaces in its own row.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowSSH)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showPorts", defaultValue: "Show Listening Ports in Sidebar"),
-                            subtitle: String(localized: "settings.app.showPorts.subtitle", defaultValue: "Display detected listening ports for the active workspace.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowPorts)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showLog", defaultValue: "Show Latest Log in Sidebar"),
-                            subtitle: String(localized: "settings.app.showLog.subtitle", defaultValue: "Display the latest imperative log/status message.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowLog)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showProgress", defaultValue: "Show Progress in Sidebar"),
-                            subtitle: String(localized: "settings.app.showProgress.subtitle", defaultValue: "Display the built-in progress bar from set_progress.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowProgress)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
-
-                        SettingsCardDivider()
-
-                        SettingsCardRow(
-                            String(localized: "settings.app.showMetadata", defaultValue: "Show Custom Metadata in Sidebar"),
-                            subtitle: String(localized: "settings.app.showMetadata.subtitle", defaultValue: "Display custom metadata from report_meta/set_status and report_meta_block.")
-                        ) {
-                            Toggle("", isOn: $sidebarShowMetadata)
-                                .labelsHidden()
-                                .controlSize(.small)
-                        }
-                        .disabled(sidebarHideAllDetails)
                     }
 
                     SettingsSectionHeader(title: String(localized: "settings.section.workspaceColors", defaultValue: "Workspace Colors"))
@@ -5694,19 +4999,6 @@ struct SettingsView: View {
 
                         SettingsCardDivider()
 
-                        SettingsCardRow(
-                            String(localized: "settings.browser.reactGrabVersion", defaultValue: "React Grab Version"),
-                            subtitle: String(localized: "settings.browser.reactGrabVersion.subtitle", defaultValue: "Pinned npm version of react-grab injected by the toolbar button (Cmd+Shift+G). Only versions with a known integrity hash are accepted.")
-                        ) {
-                            TextField("", text: $reactGrabVersion)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 100)
-                                .font(.system(.body, design: .monospaced))
-                                .accessibilityIdentifier("SettingsReactGrabVersionField")
-                        }
-
-                        SettingsCardDivider()
-
                         SettingsCardRow(String(localized: "settings.browser.history", defaultValue: "Browsing History"), subtitle: browserHistorySubtitle) {
                             Button(String(localized: "settings.browser.history.clearButton", defaultValue: "Clear History…")) {
                                 showClearBrowserHistoryConfirmation = true
@@ -5875,7 +5167,6 @@ struct SettingsView: View {
             BrowserHistoryStore.shared.loadIfNeeded()
             notificationStore.refreshAuthorizationStatus()
             browserThemeMode = BrowserThemeSettings.mode(defaults: .standard).rawValue
-            browserImportHintVariantRaw = BrowserImportHintSettings.variant(for: browserImportHintVariantRaw).rawValue
             browserHistoryEntryCount = BrowserHistoryStore.shared.entries.count
             browserInsecureHTTPAllowlistDraft = browserInsecureHTTPAllowlist
             refreshDetectedImportBrowsers()
@@ -5935,16 +5226,6 @@ struct SettingsView: View {
         } message: {
             Text(String(localized: "settings.automation.openAccess.dialog.message", defaultValue: "This disables ancestry and password checks and opens the socket to all local users. Only enable when you understand the risk."))
         }
-        .confirmationDialog(
-            String(localized: "settings.app.language.restartDialog.title", defaultValue: "Restart to apply language change?"),
-            isPresented: $showLanguageRestartAlert,
-            titleVisibility: .visible
-        ) {
-            Button(String(localized: "settings.app.language.restartDialog.confirm", defaultValue: "Restart Now")) {
-                relaunchApp()
-            }
-            Button(String(localized: "settings.app.language.restartDialog.later", defaultValue: "Later"), role: .cancel) {}
-        }
         .alert(
             String(
                 localized: "settings.notifications.sound.custom.error.title",
@@ -5959,30 +5240,8 @@ struct SettingsView: View {
         }
     }
 
-    private func relaunchApp() {
-        let bundlePath = Bundle.main.bundlePath
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "sleep 1 && open -n -- \"$RELAUNCH_PATH\""]
-        task.environment = ["RELAUNCH_PATH": bundlePath]
-        do {
-            try task.run()
-        } catch {
-            return
-        }
-        NSApplication.shared.terminate(nil)
-    }
-
     private func resetAllSettings() {
-        isResettingSettings = true
-        appLanguage = LanguageSettings.defaultLanguage.rawValue
-        LanguageSettings.apply(.system)
-        if appLanguage != LanguageSettings.languageAtLaunch.rawValue {
-            showLanguageRestartAlert = true
-        }
         appearanceMode = AppearanceSettings.defaultMode.rawValue
-        appIconMode = AppIconSettings.defaultMode.rawValue
-        AppIconSettings.applyIcon(.automatic)
         socketControlMode = SocketControlSettings.defaultMode.rawValue
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
         customClaudePath = ""
@@ -5990,7 +5249,6 @@ struct SettingsView: View {
         browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
         browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled
         browserThemeMode = BrowserThemeSettings.defaultMode.rawValue
-        browserImportHintVariantRaw = BrowserImportHintSettings.defaultVariant.rawValue
         showBrowserImportHintOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
         isBrowserImportHintDismissed = BrowserImportHintSettings.defaultDismissed
         openTerminalLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser
@@ -6006,9 +5264,6 @@ struct SettingsView: View {
         showNotificationCustomSoundErrorAlert = false
         notificationCustomSoundErrorAlertMessage = ""
         notificationCustomCommand = NotificationSoundSettings.defaultCustomCommand
-        notificationDockBadgeEnabled = NotificationBadgeSettings.defaultDockBadgeEnabled
-        notificationPaneRingEnabled = NotificationPaneRingSettings.defaultEnabled
-        notificationPaneFlashEnabled = NotificationPaneFlashSettings.defaultEnabled
         showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
         warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
         sessionPersistScrollback = ScrollbackPersistenceSettings.defaultPersistScrollback
@@ -6018,30 +5273,13 @@ struct SettingsView: View {
         alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
         newWorkspacePlacement = WorkspacePlacementSettings.defaultPlacement.rawValue
         workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
-        let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: WorkspaceTitlebarSettings.showTitlebarKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.modeKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.legacyTitlebarControlsVisibilityModeKey)
-        defaults.removeObject(forKey: WorkspaceButtonFadeSettings.legacyPaneTabBarControlsVisibilityModeKey)
         closeWorkspaceOnLastSurfaceShortcut = LastSurfaceCloseShortcutSettings.defaultValue
         paneFirstClickFocusEnabled = PaneFirstClickFocusSettings.defaultEnabled
         workspaceAutoReorder = WorkspaceAutoReorderSettings.defaultValue
-        sidebarHideAllDetails = SidebarWorkspaceDetailSettings.defaultHideAllDetails
-        sidebarShowNotificationMessage = SidebarWorkspaceDetailSettings.defaultShowNotificationMessage
-        sidebarBranchVerticalLayout = SidebarBranchLayoutSettings.defaultVerticalLayout
         sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
         sidebarSelectionColorHex = nil
         sidebarNotificationBadgeColorHex = nil
-        sidebarShowBranchDirectory = true
-        sidebarShowPullRequest = true
-        openSidebarPullRequestLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInProgramaBrowser
-        openSidebarPortLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInProgramaBrowser
         showShortcutHintsOnCommandHold = ShortcutHintDebugSettings.defaultShowHintsOnCommandHold
-        sidebarShowSSH = true
-        sidebarShowPorts = true
-        sidebarShowLog = true
-        sidebarShowProgress = true
-        sidebarShowMetadata = true
         sidebarTintHex = SidebarTintDefaults.hex
         sidebarTintHexLight = nil
         sidebarTintHexDark = nil
@@ -6057,7 +5295,6 @@ struct SettingsView: View {
         WorkspaceTabColorSettings.reset()
         reloadWorkspaceTabColorSettings()
         shortcutResetToken = UUID()
-        DispatchQueue.main.async { isResettingSettings = false }
     }
 
     private func baseTabColorHex(for name: String) -> String? {
@@ -6559,87 +5796,6 @@ private struct ThemePickerRow: View {
     }
 }
 
-private struct AppIconPickerRow: View {
-    let selectedMode: String
-    let onSelect: (AppIconMode) -> Void
-
-    private let iconSize: CGFloat = 48
-    private let autoIconSize: CGFloat = 36
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(String(localized: "settings.app.appIcon", defaultValue: "App Icon"))
-                    .font(.system(size: 13, weight: .medium))
-                Text(String(localized: "settings.app.appIcon.subtitle", defaultValue: "Dock and app switcher"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack(spacing: 8) {
-                ForEach(AppIconMode.allCases) { mode in
-                    let isSelected = selectedMode == mode.rawValue
-                    Button {
-                        onSelect(mode)
-                    } label: {
-                        VStack(spacing: 4) {
-                            Group {
-                                if mode == .automatic {
-                                    ZStack {
-                                        Image("AppIconLight")
-                                            .resizable()
-                                            .interpolation(.high)
-                                            .frame(width: autoIconSize, height: autoIconSize)
-                                            .clipShape(RoundedRectangle(cornerRadius: autoIconSize * 0.22, style: .continuous))
-                                            .offset(x: -10)
-                                        Image("AppIconDark")
-                                            .resizable()
-                                            .interpolation(.high)
-                                            .frame(width: autoIconSize, height: autoIconSize)
-                                            .clipShape(RoundedRectangle(cornerRadius: autoIconSize * 0.22, style: .continuous))
-                                            .offset(x: 10)
-                                    }
-                                    .frame(width: iconSize, height: iconSize)
-                                } else {
-                                    Image(mode.imageName ?? "AppIconLight")
-                                        .resizable()
-                                        .interpolation(.high)
-                                        .frame(width: iconSize, height: iconSize)
-                                        .clipShape(RoundedRectangle(cornerRadius: iconSize * 0.22, style: .continuous))
-                                }
-                            }
-
-                            Text(mode.displayName)
-                                .font(.system(size: 10))
-                                .foregroundColor(isSelected ? .primary : .secondary)
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 10)
-                        .contentShape(Rectangle())
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(isSelected
-                                    ? Color.accentColor.opacity(0.12)
-                                    : Color.clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .focusable(false)
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
-                }
-            }
-            .layoutPriority(1)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
 
 private struct ShortcutSettingRow: View {
     let action: KeyboardShortcutSettings.Action

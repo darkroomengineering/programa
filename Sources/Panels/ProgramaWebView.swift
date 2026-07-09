@@ -519,10 +519,8 @@ final class ProgramaWebView: WKWebView {
 
     private static func filenameExtension(forMIMEType mimeType: String?) -> String? {
         guard let mimeType, !mimeType.isEmpty else { return nil }
-        if #available(macOS 11.0, *) {
-            if let preferred = UTType(mimeType: mimeType)?.preferredFilenameExtension, !preferred.isEmpty {
-                return preferred
-            }
+        if let preferred = UTType(mimeType: mimeType)?.preferredFilenameExtension, !preferred.isEmpty {
+            return preferred
         }
         switch mimeType.lowercased() {
         case "image/jpeg":

@@ -107,9 +107,7 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
         // shared cookie/storage scope and opener linkage.
         let webView = ProgramaWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
-        if #available(macOS 13.3, *) {
-            webView.isInspectable = true
-        }
+        webView.isInspectable = true
         webView.underPageBackgroundColor = GhosttyBackgroundTheme.currentColor()
         webView.customUserAgent = BrowserUserAgentSettings.safariUserAgent
         BrowserThemeSettings.apply(openerPanel?.currentBrowserThemeMode ?? BrowserThemeSettings.mode(), to: webView)

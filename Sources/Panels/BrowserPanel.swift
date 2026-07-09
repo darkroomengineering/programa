@@ -212,26 +212,14 @@ enum BrowserThemeSettings {
     }
 }
 
-enum BrowserImportHintVariant: String, CaseIterable, Identifiable {
-    case inlineStrip
-    case floatingCard
-    case toolbarChip
-    case settingsOnly
-
-    var id: String { rawValue }
-}
-
 enum BrowserImportHintBlankTabPlacement: Equatable {
     case hidden
-    case inlineStrip
-    case floatingCard
     case toolbarChip
 }
 
 enum BrowserImportHintSettingsStatus: Equatable {
     case visible
     case hidden
-    case settingsOnly
 }
 
 struct BrowserImportHintPresentation: Equatable {
@@ -239,54 +227,25 @@ struct BrowserImportHintPresentation: Equatable {
     let settingsStatus: BrowserImportHintSettingsStatus
 
     init(
-        variant: BrowserImportHintVariant,
         showOnBlankTabs: Bool,
         isDismissed: Bool
     ) {
-        if variant == .settingsOnly {
-            blankTabPlacement = .hidden
-            settingsStatus = .settingsOnly
-            return
-        }
-
         if !showOnBlankTabs || isDismissed {
             blankTabPlacement = .hidden
             settingsStatus = .hidden
             return
         }
 
-        switch variant {
-        case .inlineStrip:
-            blankTabPlacement = .inlineStrip
-        case .floatingCard:
-            blankTabPlacement = .floatingCard
-        case .toolbarChip:
-            blankTabPlacement = .toolbarChip
-        case .settingsOnly:
-            blankTabPlacement = .hidden
-        }
+        blankTabPlacement = .toolbarChip
         settingsStatus = .visible
     }
 }
 
 enum BrowserImportHintSettings {
-    static let variantKey = "browserImportHintVariant"
     static let showOnBlankTabsKey = "browserImportHintShowOnBlankTabs"
     static let dismissedKey = "browserImportHintDismissed"
-    static let defaultVariant: BrowserImportHintVariant = .toolbarChip
     static let defaultShowOnBlankTabs = true
     static let defaultDismissed = false
-
-    static func variant(for rawValue: String?) -> BrowserImportHintVariant {
-        guard let rawValue, let variant = BrowserImportHintVariant(rawValue: rawValue) else {
-            return defaultVariant
-        }
-        return variant
-    }
-
-    static func variant(defaults: UserDefaults = .standard) -> BrowserImportHintVariant {
-        variant(for: defaults.string(forKey: variantKey))
-    }
 
     static func showOnBlankTabs(defaults: UserDefaults = .standard) -> Bool {
         if defaults.object(forKey: showOnBlankTabsKey) == nil {
@@ -304,14 +263,12 @@ enum BrowserImportHintSettings {
 
     static func presentation(defaults: UserDefaults = .standard) -> BrowserImportHintPresentation {
         BrowserImportHintPresentation(
-            variant: variant(defaults: defaults),
             showOnBlankTabs: showOnBlankTabs(defaults: defaults),
             isDismissed: isDismissed(defaults: defaults)
         )
     }
 
     static func reset(defaults: UserDefaults = .standard) {
-        defaults.set(defaultVariant.rawValue, forKey: variantKey)
         defaults.set(defaultShowOnBlankTabs, forKey: showOnBlankTabsKey)
         defaults.set(defaultDismissed, forKey: dismissedKey)
     }
@@ -524,12 +481,6 @@ enum BrowserLinkOpenSettings {
     static let openTerminalLinksInProgramaBrowserKey = "browserOpenTerminalLinksInProgramaBrowser"
     static let defaultOpenTerminalLinksInProgramaBrowser: Bool = true
 
-    static let openSidebarPullRequestLinksInProgramaBrowserKey = "browserOpenSidebarPullRequestLinksInProgramaBrowser"
-    static let defaultOpenSidebarPullRequestLinksInProgramaBrowser: Bool = true
-
-    static let openSidebarPortLinksInProgramaBrowserKey = "browserOpenSidebarPortLinksInProgramaBrowser"
-    static let defaultOpenSidebarPortLinksInProgramaBrowser: Bool = true
-
     static let interceptTerminalOpenCommandInProgramaBrowserKey = "browserInterceptTerminalOpenCommandInProgramaBrowser"
     static let defaultInterceptTerminalOpenCommandInProgramaBrowser: Bool = true
 
@@ -543,20 +494,6 @@ enum BrowserLinkOpenSettings {
             return defaultOpenTerminalLinksInProgramaBrowser
         }
         return defaults.bool(forKey: openTerminalLinksInProgramaBrowserKey)
-    }
-
-    static func openSidebarPullRequestLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openSidebarPullRequestLinksInProgramaBrowserKey) == nil {
-            return defaultOpenSidebarPullRequestLinksInProgramaBrowser
-        }
-        return defaults.bool(forKey: openSidebarPullRequestLinksInProgramaBrowserKey)
-    }
-
-    static func openSidebarPortLinksInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: openSidebarPortLinksInProgramaBrowserKey) == nil {
-            return defaultOpenSidebarPortLinksInProgramaBrowser
-        }
-        return defaults.bool(forKey: openSidebarPortLinksInProgramaBrowserKey)
     }
 
     static func interceptTerminalOpenCommandInProgramaBrowser(defaults: UserDefaults = .standard) -> Bool {
@@ -2528,9 +2465,7 @@ final class BrowserPanel: Panel, ObservableObject {
 
         let webView = ProgramaWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
-        if #available(macOS 13.3, *) {
-            webView.isInspectable = true
-        }
+        webView.isInspectable = true
         // Match only the unpainted/loading background so newly-created browsers don't flash
         // white before content loads. Do not force page appearance or inject color-scheme CSS;
         // websites must keep control of their own theme.
@@ -2790,8 +2725,6 @@ final class BrowserPanel: Panel, ObservableObject {
     }
 
     private func applyRemoteProxyConfigurationIfAvailable() {
-        guard #available(macOS 14.0, *) else { return }
-
         let store = webView.configuration.websiteDataStore
 
         // Relay endpoint takes precedence: when active, configure both SOCKS and
@@ -2974,7 +2907,6 @@ final class BrowserPanel: Panel, ObservableObject {
 
     func triggerFlash(reason: WorkspaceAttentionFlashReason) {
         _ = reason
-        guard NotificationPaneFlashSettings.isEnabled() else { return }
         focusFlashToken &+= 1
     }
 
