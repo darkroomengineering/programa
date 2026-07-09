@@ -53,7 +53,12 @@
 		A5001405 /* PanelContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001415 /* PanelContentView.swift */; };
 		A5001406 /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001416 /* Workspace.swift */; };
 		A5FF0012 /* WorkspaceRemoteSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0002 /* WorkspaceRemoteSession.swift */; };
-		A5FF0011 /* WorkspaceRemoteDaemon.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0001 /* WorkspaceRemoteDaemon.swift */; };
+		NRWS00000000000000000006 /* WorkspaceRemoteDaemonPendingCallRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000005 /* WorkspaceRemoteDaemonPendingCallRegistry.swift */; };
+		NRWS00000000000000000008 /* WorkspaceRemoteSSHBatchCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000007 /* WorkspaceRemoteSSHBatchCommandBuilder.swift */; };
+		NRWS00000000000000000010 /* WorkspaceRemoteDaemonRPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000009 /* WorkspaceRemoteDaemonRPCClient.swift */; };
+		NRWS00000000000000000012 /* WorkspaceRemoteLoopbackHTTPRewriting.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000011 /* WorkspaceRemoteLoopbackHTTPRewriting.swift */; };
+		NRWS00000000000000000014 /* WorkspaceRemoteProxyBroker.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000013 /* WorkspaceRemoteProxyBroker.swift */; };
+		NRWS00000000000000000016 /* WorkspaceRemoteCLIRelayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000015 /* WorkspaceRemoteCLIRelayServer.swift */; };
 		NRWS00000000000000000002 /* RemoteSSHConnectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000001 /* RemoteSSHConnectionPolicy.swift */; };
 		NRWS00000000000000000004 /* RemoteSCPUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRWS00000000000000000003 /* RemoteSCPUpload.swift */; };
 		A5001407 /* WorkspaceContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001417 /* WorkspaceContentView.swift */; };
@@ -279,7 +284,12 @@
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
 		A5001416 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
 		A5FF0002 /* WorkspaceRemoteSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteSession.swift; sourceTree = "<group>"; };
-		A5FF0001 /* WorkspaceRemoteDaemon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteDaemon.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000005 /* WorkspaceRemoteDaemonPendingCallRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteDaemonPendingCallRegistry.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000007 /* WorkspaceRemoteSSHBatchCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteSSHBatchCommandBuilder.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000009 /* WorkspaceRemoteDaemonRPCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteDaemonRPCClient.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000011 /* WorkspaceRemoteLoopbackHTTPRewriting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteLoopbackHTTPRewriting.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000013 /* WorkspaceRemoteProxyBroker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteProxyBroker.swift; sourceTree = "<group>"; };
+		NRWS00000000000000000015 /* WorkspaceRemoteCLIRelayServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteCLIRelayServer.swift; sourceTree = "<group>"; };
 		NRWS00000000000000000001 /* RemoteSSHConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSSHConnectionPolicy.swift; sourceTree = "<group>"; };
 		NRWS00000000000000000003 /* RemoteSCPUpload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSCPUpload.swift; sourceTree = "<group>"; };
 		A5001417 /* WorkspaceContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceContentView.swift; sourceTree = "<group>"; };
@@ -522,7 +532,12 @@
 					A5001511 /* UITestRecorder.swift */,
 					A5001416 /* Workspace.swift */,
 					A5FF0002 /* WorkspaceRemoteSession.swift */,
-					A5FF0001 /* WorkspaceRemoteDaemon.swift */,
+					NRWS00000000000000000005 /* WorkspaceRemoteDaemonPendingCallRegistry.swift */,
+					NRWS00000000000000000007 /* WorkspaceRemoteSSHBatchCommandBuilder.swift */,
+					NRWS00000000000000000009 /* WorkspaceRemoteDaemonRPCClient.swift */,
+					NRWS00000000000000000011 /* WorkspaceRemoteLoopbackHTTPRewriting.swift */,
+					NRWS00000000000000000013 /* WorkspaceRemoteProxyBroker.swift */,
+					NRWS00000000000000000015 /* WorkspaceRemoteCLIRelayServer.swift */,
 					NRWS00000000000000000001 /* RemoteSSHConnectionPolicy.swift */,
 					NRWS00000000000000000003 /* RemoteSCPUpload.swift */,
 				A5001417 /* WorkspaceContentView.swift */,
@@ -854,7 +869,12 @@
 						A5001501 /* UITestRecorder.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
 						A5FF0012 /* WorkspaceRemoteSession.swift in Sources */,
-						A5FF0011 /* WorkspaceRemoteDaemon.swift in Sources */,
+						NRWS00000000000000000006 /* WorkspaceRemoteDaemonPendingCallRegistry.swift in Sources */,
+						NRWS00000000000000000008 /* WorkspaceRemoteSSHBatchCommandBuilder.swift in Sources */,
+						NRWS00000000000000000010 /* WorkspaceRemoteDaemonRPCClient.swift in Sources */,
+						NRWS00000000000000000012 /* WorkspaceRemoteLoopbackHTTPRewriting.swift in Sources */,
+						NRWS00000000000000000014 /* WorkspaceRemoteProxyBroker.swift in Sources */,
+						NRWS00000000000000000016 /* WorkspaceRemoteCLIRelayServer.swift in Sources */,
 						NRWS00000000000000000002 /* RemoteSSHConnectionPolicy.swift in Sources */,
 						NRWS00000000000000000004 /* RemoteSCPUpload.swift in Sources */,
 				A5001407 /* WorkspaceContentView.swift in Sources */,
