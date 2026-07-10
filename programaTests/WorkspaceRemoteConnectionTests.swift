@@ -1600,6 +1600,8 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
                         ok: true,
                         result: ["workspace_id": currentWorkspace]
                     )
+                case "notification.create_for_target":
+                    return self.v2Response(id: id, ok: true, result: [:])
                 default:
                     break
                 }
@@ -1635,9 +1637,18 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         XCTAssertEqual(result.status, 0, result.stderr)
         XCTAssertEqual(result.stdout, "OK\n")
         XCTAssertTrue(result.stderr.isEmpty, result.stderr)
+        let notifyRequests = state.commands.compactMap { line -> [String: Any]? in
+            guard let data = line.data(using: .utf8) else { return nil }
+            return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+        }
         XCTAssertTrue(
-            state.commands.contains("notify_target \(currentWorkspace) \(currentSurface) Notification||"),
-            "Expected notify_target to use current workspace and surface, saw \(state.commands)"
+            notifyRequests.contains { request in
+                guard request["method"] as? String == "notification.create_for_target" else { return false }
+                let params = request["params"] as? [String: Any] ?? [:]
+                return params["workspace_id"] as? String == currentWorkspace
+                    && params["surface_id"] as? String == currentSurface
+            },
+            "Expected notification.create_for_target to target current workspace and surface, saw \(state.commands)"
         )
     }
 
@@ -2328,6 +2339,8 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
                         ]
                     ]
                 )
+            case "notification.create_for_target":
+                return self.v2Response(id: id, ok: true, result: [:])
             default:
                 break
             }
@@ -2359,12 +2372,26 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         XCTAssertEqual(result.status, 0, result.stderr)
         XCTAssertEqual(result.stdout, "OK\n")
         XCTAssertTrue(result.stderr.isEmpty, result.stderr)
+        let notifyRequests = state.commands.compactMap { line -> [String: Any]? in
+            guard let data = line.data(using: .utf8) else { return nil }
+            return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+        }
         XCTAssertTrue(
-            state.commands.contains("notify_target \(workspaceId) \(callerSurface) Notification||"),
-            "Expected notify_target to use caller tty surface, saw \(state.commands)"
+            notifyRequests.contains { request in
+                guard request["method"] as? String == "notification.create_for_target" else { return false }
+                let params = request["params"] as? [String: Any] ?? [:]
+                return params["workspace_id"] as? String == workspaceId
+                    && params["surface_id"] as? String == callerSurface
+            },
+            "Expected notification.create_for_target to use caller tty surface, saw \(state.commands)"
         )
         XCTAssertFalse(
-            state.commands.contains("notify_target \(workspaceId) \(focusedSurface) Notification||"),
+            notifyRequests.contains { request in
+                guard request["method"] as? String == "notification.create_for_target" else { return false }
+                let params = request["params"] as? [String: Any] ?? [:]
+                return params["workspace_id"] as? String == workspaceId
+                    && params["surface_id"] as? String == focusedSurface
+            },
             "Focused surface should not win over caller tty, saw \(state.commands)"
         )
     }
@@ -2446,6 +2473,8 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
                         ]
                     ]
                 )
+            case "notification.create_for_target":
+                return self.v2Response(id: id, ok: true, result: [:])
             default:
                 break
             }
@@ -2478,12 +2507,26 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         XCTAssertEqual(result.status, 0, result.stderr)
         XCTAssertEqual(result.stdout, "OK\n")
         XCTAssertTrue(result.stderr.isEmpty, result.stderr)
+        let notifyRequests = state.commands.compactMap { line -> [String: Any]? in
+            guard let data = line.data(using: .utf8) else { return nil }
+            return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+        }
         XCTAssertTrue(
-            state.commands.contains("notify_target \(workspaceId) \(callerSurface) Notification||"),
-            "Expected notify_target to use caller tty surface in tmux, saw \(state.commands)"
+            notifyRequests.contains { request in
+                guard request["method"] as? String == "notification.create_for_target" else { return false }
+                let params = request["params"] as? [String: Any] ?? [:]
+                return params["workspace_id"] as? String == workspaceId
+                    && params["surface_id"] as? String == callerSurface
+            },
+            "Expected notification.create_for_target to use caller tty surface in tmux, saw \(state.commands)"
         )
         XCTAssertFalse(
-            state.commands.contains("notify_target \(workspaceId) \(staleSurface) Notification||"),
+            notifyRequests.contains { request in
+                guard request["method"] as? String == "notification.create_for_target" else { return false }
+                let params = request["params"] as? [String: Any] ?? [:]
+                return params["workspace_id"] as? String == workspaceId
+                    && params["surface_id"] as? String == staleSurface
+            },
             "Stale env surface should not win inside tmux, saw \(state.commands)"
         )
     }

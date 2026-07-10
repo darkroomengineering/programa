@@ -26,13 +26,13 @@ final class BrowserFindJavaScriptTests: XCTestCase {
     func testNextScriptReturnsValidJavaScript() {
         let js = BrowserFindJavaScript.nextScript()
         XCTAssertFalse(js.isEmpty)
-        XCTAssertTrue(js.contains("__cmuxFindMatches"))
+        XCTAssertTrue(js.contains("__programaFindMatches"))
     }
 
     func testPreviousScriptReturnsValidJavaScript() {
         let js = BrowserFindJavaScript.previousScript()
         XCTAssertFalse(js.isEmpty)
-        XCTAssertTrue(js.contains("__cmuxFindMatches"))
+        XCTAssertTrue(js.contains("__programaFindMatches"))
     }
 
     // MARK: - clearScript
@@ -40,7 +40,7 @@ final class BrowserFindJavaScriptTests: XCTestCase {
     func testClearScriptReturnsValidJavaScript() {
         let js = BrowserFindJavaScript.clearScript()
         XCTAssertFalse(js.isEmpty)
-        XCTAssertTrue(js.contains("__cmux-find"))
+        XCTAssertTrue(js.contains("__programa-find"))
     }
 
     // MARK: - jsStringEscape

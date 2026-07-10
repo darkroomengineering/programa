@@ -645,7 +645,7 @@ final class WorkspaceChromeColorTests: XCTestCase {
         )
 
         let hex = Workspace.bonsplitChromeHex(backgroundColor: color, backgroundOpacity: 0.5)
-        XCTAssertEqual(hex, "#1122337F")
+        XCTAssertEqual(hex, "#11223380")
     }
 
     func testBonsplitChromeHexOmitsAlphaWhenOpaque() {
@@ -1827,7 +1827,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertEqual(path, SocketControlSettings.stableDefaultSocketPath)
     }
 
-    func testNightlyReleaseUsesDedicatedDefaultAndIgnoresAmbientSocketOverride() {
+    func testNightlyReleaseFallsBackToStableDefaultAndIgnoresAmbientSocketOverride() {
         let path = SocketControlSettings.socketPath(
             environment: [
                 "PROGRAMA_SOCKET_PATH": "/tmp/programa-debug-issue-153-tmux-compat.sock",
@@ -1837,7 +1837,7 @@ final class SocketControlSettingsTests: XCTestCase {
             probeStableDefaultPathEntry: { _ in .missing }
         )
 
-        XCTAssertEqual(path, "/tmp/programa-nightly.sock")
+        XCTAssertEqual(path, SocketControlSettings.stableDefaultSocketPath)
     }
 
     func testDebugBundleHonorsSocketOverrideWithoutOptInFlag() {
@@ -1893,7 +1893,7 @@ final class SocketControlSettingsTests: XCTestCase {
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
-            "/tmp/programa-nightly.sock"
+            SocketControlSettings.stableDefaultSocketPath
         )
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
@@ -1901,7 +1901,7 @@ final class SocketControlSettingsTests: XCTestCase {
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
-            "/tmp/programa-debug.sock"
+            "/tmp/programa-debug-tag.sock"
         )
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
@@ -3584,7 +3584,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let integrationPath = repoRoot.appendingPathComponent("Resources/shell-integration/cmux-bash-integration.bash")
+        let integrationPath = repoRoot.appendingPathComponent("Resources/shell-integration/programa-bash-integration.bash")
         let rcfilePath = root.appendingPathComponent(".bashrc")
         let rcfileContents: String = {
             guard cmuxLoadShellIntegration else { return ":\n" }

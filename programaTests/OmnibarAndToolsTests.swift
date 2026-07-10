@@ -28,7 +28,7 @@ final class FinderServicePathResolverTests: XCTestCase {
         let input: [URL] = [
             URL(fileURLWithPath: "/tmp/programa-services/project", isDirectory: true),
             URL(fileURLWithPath: "/tmp/programa-services/project/README.md", isDirectory: false),
-            URL(fileURLWithPath: "/tmp/programa-services/../cmux-services/project", isDirectory: true),
+            URL(fileURLWithPath: "/tmp/programa-services/other/../project", isDirectory: true),
             URL(fileURLWithPath: "/tmp/programa-services/other", isDirectory: true),
         ]
 
