@@ -162,9 +162,12 @@ jobs:
       # unit test flakes later in the job.
       - name: Build programa CLI regression target
         run: |
+          CLI_REGRESSION_DIR="$RUNNER_TEMP/programa-cli-regression"
+          rm -rf "$CLI_REGRESSION_DIR"
           xcodebuild -project GhosttyTabs.xcodeproj \
             -target programa-cli \
             -configuration Debug \
+            CONFIGURATION_BUILD_DIR="$CLI_REGRESSION_DIR" \
             CODE_SIGNING_ALLOWED=NO \
             build
 
@@ -172,12 +175,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          CLI_BIN="$(
-            find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/Debug/programa" -exec stat -f '%m %N' {} \; \
-              | sort -nr \
-              | head -1 \
-              | cut -d' ' -f2-
-          )"
+          CLI_BIN="$RUNNER_TEMP/programa-cli-regression/programa"
           if [ -z "${CLI_BIN:-}" ] || [ ! -x "$CLI_BIN" ]; then
             echo "programa CLI binary not found in DerivedData" >&2
             exit 1
