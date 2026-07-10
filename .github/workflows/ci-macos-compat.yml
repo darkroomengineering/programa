@@ -203,7 +203,7 @@ jobs:
       - name: Run unit tests
         env:
           PROGRAMA_SKIP_ZIG_BUILD: ${{ matrix.skip_zig && '1' || '0' }}
-          PROGRAMA_UNIT_TEST_SCOPE: split-stateful
+          PROGRAMA_UNIT_TEST_SCOPE: serial
         run: |
           ./scripts/ci-run-unit-tests.sh
 

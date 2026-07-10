@@ -300,7 +300,7 @@ jobs:
 
       - name: Run unit tests
         env:
-          PROGRAMA_UNIT_TEST_SCOPE: split-stateful
+          PROGRAMA_UNIT_TEST_SCOPE: serial
         run: ./scripts/ci-run-unit-tests.sh
 
       - name: Run bundled Ghostty theme picker helper regression
