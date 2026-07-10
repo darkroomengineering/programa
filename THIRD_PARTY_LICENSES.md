@@ -35,6 +35,7 @@ SOFTWARE.
 - **License:** MIT License
 - **Copyright:** Copyright (c) 2026 Alasdair Monk
 - **Source:** https://github.com/almonk/bonsplit
+- **Vendored:** in-tree at `vendor/bonsplit`, from the manaflow-ai/bonsplit fork at commit `b2788b1e77d43f0c114dcf189aa59cae8abb47de` (Example app, www site, and upstream CI omitted)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
