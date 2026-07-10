@@ -100,12 +100,20 @@ class SocketRecorder:
         return {}
 
 
-def run_cli(socket_path: str, args: list[str]) -> subprocess.CompletedProcess[str]:
+def run_cli(
+    socket_path: str,
+    args: list[str],
+    *,
+    env_overrides: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     env.pop("PROGRAMA_SOCKET", None)
     env.pop("PROGRAMA_SOCKET_PATH", None)
+    env.pop("PROGRAMA_SOCKET_PASSWORD", None)
     env.pop("PROGRAMA_WORKSPACE_ID", None)
     env.pop("PROGRAMA_SURFACE_ID", None)
+    if env_overrides:
+        env.update(env_overrides)
     return subprocess.run(
         [CLI_PATH, "--socket", socket_path, *args],
         capture_output=True,
@@ -136,6 +144,7 @@ def main() -> int:
         args: list[str],
         *,
         expected_status: int | None = None,
+        expect_failure: bool = False,
         output_contains: str | None = None,
     ) -> None:
         with tempfile.TemporaryDirectory(prefix="programa-cli-registry-") as directory:
@@ -155,6 +164,11 @@ def main() -> int:
                 check(
                     process.returncode == expected_status,
                     f"{name}: exit={process.returncode}, want {expected_status}; output={output!r}",
+                )
+            if expect_failure:
+                check(
+                    process.returncode != 0,
+                    f"{name}: unexpectedly exited 0; output={output!r}",
                 )
             if output_contains is not None:
                 check(
@@ -223,6 +237,29 @@ def main() -> int:
         output_contains="panel",
     )
 
+    # Representative coverage for every shared grammar shape in the exhaustive
+    # registry: no-arg, required options, enums, typed flags, JSON, metadata,
+    # tree flags, and nested local syntax must all fail before socket focus.
+    for name, args, needle in [
+        ("no-argument command rejects extras", ["capabilities", "extra"], "unexpected"),
+        ("required option", ["focus-window"], "window"),
+        ("direction enum", ["new-split", "diagonal"], "direction"),
+        ("typed integer option", ["move-surface", "--surface", SURFACE_ID, "--index", "two"], "index"),
+        ("typed boolean option", ["move-surface", "--surface", SURFACE_ID, "--focus", "maybe"], "focus"),
+        ("window target cannot focus before validation", ["--window", WINDOW_ID, "move-surface", "--surface", SURFACE_ID, "--index", "two"], "index"),
+        ("malformed rpc params", ["rpc", "system.ping", "[]"], "params"),
+        ("focus state enum", ["set-app-focus", "sometimes"], "state"),
+        ("unknown tree flag", ["tree", "--bogus"], "unknown"),
+        ("markdown subcommand", ["markdown", "render", "README.md"], "subcommand"),
+        ("metadata cardinality", ["set-status", "build"], "missing"),
+    ]:
+        expect_without_connection(
+            name,
+            args,
+            expect_failure=True,
+            output_contains=needle,
+        )
+
     # Every malformed command above must return a usage failure.
     for name, args in [
         ("ping positional status", ["ping", "unexpected"]),
@@ -289,6 +326,46 @@ def main() -> int:
         check(recorder.accept_count == 1, f"window-targeted ping accepted {recorder.accept_count} connections, want 1")
         methods = [frame.get("method") for frame in recorder.frames]
         check(methods == ["window.focus", "system.ping"], f"window focus/ping order changed: {methods!r}")
+
+    # The implicit password file is security-sensitive: only a regular,
+    # user-owned, private file may contribute an auth frame.
+    def password_file_frames(kind: str) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
+        with tempfile.TemporaryDirectory(prefix=f"programa-cli-password-{kind}-") as home:
+            password_dir = Path(home) / "Library" / "Application Support" / "programa"
+            password_dir.mkdir(parents=True, mode=0o700)
+            password_path = password_dir / "socket-control-password"
+            if kind == "symlink":
+                target = Path(home) / "password-target"
+                target.write_text("file-secret\n", encoding="utf-8")
+                target.chmod(0o600)
+                password_path.symlink_to(target)
+            else:
+                password_path.write_text("file-secret\n", encoding="utf-8")
+                password_path.chmod(0o600 if kind == "secure" else 0o644)
+
+            with SocketRecorder(home) as recorder:
+                process = run_cli(
+                    recorder.path,
+                    ["ping"],
+                    env_overrides={"HOME": home, "CFFIXED_USER_HOME": home},
+                )
+            return process, recorder.frames
+
+    secure_process, secure_frames = password_file_frames("secure")
+    check(secure_process.returncode == 0, f"secure password file ping failed: {merged_output(secure_process)!r}")
+    secure_auth = [frame for frame in secure_frames if frame.get("method") == "auth.login"]
+    check(
+        len(secure_auth) == 1 and secure_auth[0].get("params", {}).get("password") == "file-secret",
+        f"secure password file was not used exactly once: {secure_frames!r}",
+    )
+
+    for kind in ["permissive", "symlink"]:
+        process, frames = password_file_frames(kind)
+        check(process.returncode == 0, f"{kind} password file ping failed: {merged_output(process)!r}")
+        check(
+            all(frame.get("method") != "auth.login" for frame in frames),
+            f"{kind} password file was trusted: {frames!r}",
+        )
 
     if failures:
         print(f"FAIL: {len(failures)} CLI registry behavior assertion(s) failed")
