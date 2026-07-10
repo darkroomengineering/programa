@@ -2122,6 +2122,12 @@ class TabManager: ObservableObject {
             "panelsAfterCall=\(tab.panels.count)"
         )
 #endif
+        // Clear unconditionally, matching closeRuntimeSurfaceWithConfirmation/closeRuntimeSurface:
+        // when this is the workspace's last surface, bonsplit's shouldCloseTab delegate escalates
+        // to owningTabManager.closeWorkspaceWithConfirmation(...) and returns false here (the panel
+        // itself isn't closed via this call), so gating on `closed` would leave the notification
+        // for an explicitly-closed surface stuck as unread.
+        AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id, surfaceId: panelId)
     }
 
     private func shortcutCloseTargetPanelId(in workspace: Workspace) -> UUID? {
@@ -2691,8 +2697,26 @@ class TabManager: ObservableObject {
         focusTab(tabId, surfaceId: desiredPanelId, suppressFlash: true)
         suppressFocusFlash = false
 
-        if let targetPanelId = desiredPanelId ?? tab.focusedPanelId,
-           tab.panels[targetPanelId] != nil {
+        let targetPanelId = desiredPanelId ?? tab.focusedPanelId
+
+        // This focus is applied directly above and does not go through a `selectedTabId`
+        // change (the tab is normally already selected), so it never captures a fresh
+        // FocusTransitionCoordinator request of its own. Without superseding the previous
+        // request here, a still-pending deferred completion from an earlier, unrelated
+        // workspace selection can fire on the next run loop turn and clobber this panel
+        // with its stale captured panel ID.
+        if let targetPanelId, let panel = tab.panels[targetPanelId] {
+            focusTransitionCoordinator.beginTransition(
+                to: FocusTransitionCoordinator.Owner(
+                    workspaceID: tabId,
+                    panelID: targetPanelId,
+                    intent: panel.preferredFocusIntentForActivation()
+                ),
+                reason: .workspaceSelection
+            )
+        }
+
+        if let targetPanelId, tab.panels[targetPanelId] != nil {
             _ = dismissNotificationOnDirectInteraction(tabId: tabId, surfaceId: targetPanelId)
         }
         return true
