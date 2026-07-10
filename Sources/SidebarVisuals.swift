@@ -1107,17 +1107,18 @@ private struct SidebarVisualEffectBackground: NSViewRepresentable {
     }
 
     static var liquidGlassAvailable: Bool {
-        NSClassFromString("NSGlassEffectView") != nil
+        WindowGlassEffect.isAvailable
     }
 
     func makeNSView(context: Context) -> NSView {
-        // Try NSGlassEffectView if preferred or if we want to test availability
-        if preferLiquidGlass, let glassClass = NSClassFromString("NSGlassEffectView") as? NSView.Type {
-            let glass = glassClass.init(frame: .zero)
+        #if compiler(>=6.2)
+        if preferLiquidGlass, #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView(frame: .zero)
             glass.autoresizingMask = [.width, .height]
             glass.wantsLayer = true
             return glass
         }
+        #endif
 
         // Use NSVisualEffectView
         let view = NSVisualEffectView()
@@ -1128,22 +1129,16 @@ private struct SidebarVisualEffectBackground: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        // Configure based on view type
-        if nsView.className == "NSGlassEffectView" {
-            // NSGlassEffectView configuration via private API
-            nsView.alphaValue = max(0.0, min(1.0, opacity))
-            nsView.layer?.cornerRadius = cornerRadius
-            nsView.layer?.masksToBounds = cornerRadius > 0
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), let glass = nsView as? NSGlassEffectView {
+            glass.alphaValue = max(0.0, min(1.0, opacity))
+            glass.cornerRadius = cornerRadius
+            glass.tintColor = tintColor
+            return
+        }
+        #endif
 
-            // Try to set tint color via private selector
-            if let color = tintColor {
-                let selector = NSSelectorFromString("setTintColor:")
-                if nsView.responds(to: selector) {
-                    nsView.perform(selector, with: color)
-                }
-            }
-        } else if let visualEffect = nsView as? NSVisualEffectView {
-            // NSVisualEffectView configuration
+        if let visualEffect = nsView as? NSVisualEffectView {
             visualEffect.material = material
             visualEffect.blendingMode = blendingMode
             visualEffect.state = state

@@ -910,7 +910,7 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
 
         // If NSGlassEffectView wraps the original content view, install inside the glass view
         // so terminals are above the glass background but below SwiftUI content.
-        if contentView.className == "NSGlassEffectView",
+        if WindowGlassEffect.isGlassEffectView(contentView),
            let foreground = contentView.subviews.first(where: { $0 !== hostView }) {
             return (contentView, foreground)
         }
