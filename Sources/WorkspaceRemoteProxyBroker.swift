@@ -513,7 +513,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         }
 
         private static func httpResponse(status: String, closeAfterResponse: Bool = true) -> Data {
-            var text = "HTTP/1.1 \(status)\r\nProxy-Agent: cmux\r\n"
+            var text = "HTTP/1.1 \(status)\r\nProxy-Agent: Programa\r\n"
             if closeAfterResponse {
                 text += "Connection: close\r\n"
             }

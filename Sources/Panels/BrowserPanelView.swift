@@ -885,7 +885,7 @@ struct BrowserPanelView: View {
         return currentPaneId.id == paneId.id
     }
 
-    var body: some View {
+    private var layeredBrowserContent: some View {
         // Layering contract: browser Cmd+F UI is mounted in the portal-hosted AppKit
         // container. Rendering it here can hide it behind the portal-hosted WKWebView.
         VStack(spacing: 0) {
@@ -942,6 +942,14 @@ struct BrowserPanelView: View {
                 .environment(\.colorScheme, browserChromeColorScheme)
             }
         }
+    }
+
+    var body: some View {
+        browserNotificationContent
+    }
+
+    private var browserClickContent: some View {
+        layeredBrowserContent
         .coordinateSpace(name: "BrowserPanelViewSpace")
         .onPreferenceChange(OmnibarPillFramePreferenceKey.self) { frame in
             omnibarPillFrame = frame
@@ -971,6 +979,10 @@ struct BrowserPanelView: View {
                 onRequestPanelFocus()
             }
         }
+    }
+
+    private var browserLifecycleContent: some View {
+        browserClickContent
         .onAppear {
             UserDefaults.standard.register(defaults: [
                 BrowserSearchSettings.searchEngineKey: BrowserSearchSettings.defaultSearchEngine.rawValue,
@@ -1010,10 +1022,10 @@ struct BrowserPanelView: View {
             logBrowserFocusState(event: "view.onAppear")
 #endif
         }
-        .onChange(of: panel.focusFlashToken) { _ in
+        .onChange(of: panel.focusFlashToken) {
             triggerFocusFlashAnimation()
         }
-        .onChange(of: panel.currentURL) { _ in
+        .onChange(of: panel.currentURL) {
             let addressWasEmpty = omnibarState.buffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             syncURLFromPanel()
             // If we auto-focused a blank omnibar but then a URL loads programmatically, move focus
@@ -1032,27 +1044,31 @@ struct BrowserPanelView: View {
                 reason: "panel.currentURL.changed"
             )
         }
-        .onChange(of: browserThemeModeRaw) { _ in
+        .onChange(of: browserThemeModeRaw) {
             let normalizedMode = BrowserThemeSettings.mode(for: browserThemeModeRaw)
             if browserThemeModeRaw != normalizedMode.rawValue {
                 browserThemeModeRaw = normalizedMode.rawValue
             }
             panel.setBrowserThemeMode(normalizedMode)
         }
-        .onChange(of: colorScheme) { _ in
+        .onChange(of: colorScheme) {
             refreshBrowserChromeStyle()
             panel.refreshAppearanceDrivenColors()
         }
-        .onChange(of: panel.pendingAddressBarFocusRequestId) { _ in
+        .onChange(of: panel.pendingAddressBarFocusRequestId) {
             applyPendingAddressBarFocusRequestIfNeeded()
         }
-        .onChange(of: panel.profileID) { _ in
+        .onChange(of: panel.profileID) {
             panel.historyStore.loadIfNeeded()
             if addressBarFocused {
                 refreshSuggestions()
             }
         }
-        .onChange(of: isVisibleInUI) { visibleInUI in
+    }
+
+    private var browserFocusContent: some View {
+        browserLifecycleContent
+        .onChange(of: isVisibleInUI) { _, visibleInUI in
             if visibleInUI {
                 panel.cancelPendingDeveloperToolsVisibilityLossCheck()
                 return
@@ -1069,7 +1085,7 @@ struct BrowserPanelView: View {
             // an attached-inspector X-close.
             panel.scheduleDeveloperToolsVisibilityLossCheck()
         }
-        .onChange(of: isFocused) { focused in
+        .onChange(of: isFocused) { _, focused in
 #if DEBUG
             logBrowserFocusState(
                 event: "panelFocus.onChange",
@@ -1097,7 +1113,7 @@ struct BrowserPanelView: View {
                 isPanelFocusedOverride: focused
             )
         }
-        .onChange(of: addressBarFocused) { focused in
+        .onChange(of: addressBarFocused) { _, focused in
 #if DEBUG
             logBrowserFocusState(
                 event: "addressBarFocus.onChange",
@@ -1137,6 +1153,10 @@ struct BrowserPanelView: View {
             logBrowserFocusState(event: "addressBarFocus.onChange.applied")
 #endif
         }
+    }
+
+    private var browserNotificationContent: some View {
+        browserFocusContent
         .onReceive(NotificationCenter.default.publisher(for: .browserMoveOmnibarSelection)) { notification in
             guard let panelId = notification.object as? UUID, panelId == panel.id else { return }
             guard addressBarFocused, !omnibarState.suggestions.isEmpty else { return }
@@ -1174,7 +1194,7 @@ struct BrowserPanelView: View {
 
             omnibarField
                 .accessibilityIdentifier("BrowserOmnibarPill")
-                .accessibilityLabel("Browser omnibar")
+                .accessibilityLabel(String(localized: "browser.omnibar.accessibilityLabel", defaultValue: "Browser omnibar"))
 
             HStack(spacing: browserToolbarAccessorySpacing) {
                 if shouldShowToolbarImportHintChip {

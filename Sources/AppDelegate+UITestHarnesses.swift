@@ -1,13 +1,22 @@
 // Extracted from AppDelegate.swift (nuclear-review N3): XCUITest-only instrumentation.
 import AppKit
+@preconcurrency import Dispatch
 import SwiftUI
 import Bonsplit
 import CoreServices
 import UserNotifications
 import WebKit
 import Combine
-import ObjectiveC.runtime
+@preconcurrency import ObjectiveC.runtime
 import Darwin
+
+#if DEBUG
+@MainActor
+private final class SocketListenerUITestObservationState {
+    var observer: NSObjectProtocol?
+    var timeoutWorkItem: DispatchWorkItem?
+}
+#endif
 
 extension AppDelegate {
 #if DEBUG
@@ -108,10 +117,12 @@ extension AppDelegate {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self else { return }
-            guard let tabId = notification.userInfo?[GhosttyNotificationKey.tabId] as? UUID else { return }
-            guard let surfaceId = notification.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID else { return }
-            self.recordJumpUnreadFocusIfExpected(tabId: tabId, surfaceId: surfaceId)
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let tabId = notification.userInfo?[GhosttyNotificationKey.tabId] as? UUID else { return }
+                guard let surfaceId = notification.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID else { return }
+                self.recordJumpUnreadFocusIfExpected(tabId: tabId, surfaceId: surfaceId)
+            }
         }
     }
 
@@ -462,7 +473,7 @@ extension AppDelegate {
     }
 
     private func focusWebViewForGotoSplitUITest(tab: Workspace, browserPanelId: UUID) {
-        guard let browserPanel = tab.browserPanel(for: browserPanelId) else {
+        guard tab.browserPanel(for: browserPanelId) != nil else {
             writeGotoSplitTestData([
                 "webViewFocused": "false",
                 "setupError": "Browser panel missing"
@@ -527,7 +538,7 @@ extension AppDelegate {
             object: nil,
             queue: .main
         ) { _ in
-            recordFocusedState()
+            MainActor.assumeIsolated { recordFocusedState() }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: .ghosttyDidFocusSurface,
@@ -536,11 +547,11 @@ extension AppDelegate {
         ) { note in
             guard let surfaceId = note.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID,
                   surfaceId == browserPanelId else { return }
-            recordFocusedState()
+            MainActor.assumeIsolated { recordFocusedState() }
         })
         panelsCancellable = tab.$panels
             .map { _ in () }
-            .sink { _ in recordFocusedState() }
+            .sink { _ in MainActor.assumeIsolated { recordFocusedState() } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
             guard let self else { return }
             if !resolved {
@@ -617,10 +628,12 @@ extension AppDelegate {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.recordGotoSplitUITestWebViewFocus(panelId: panelId, key: "webViewFocusedAfterAddressBarFocus")
-            self.recordGotoSplitUITestActiveElement(panelId: panelId, keyPrefix: "addressBarFocus")
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let panelId = notification.object as? UUID else { return }
+                self.recordGotoSplitUITestWebViewFocus(panelId: panelId, key: "webViewFocusedAfterAddressBarFocus")
+                self.recordGotoSplitUITestActiveElement(panelId: panelId, keyPrefix: "addressBarFocus")
+            }
         })
 
         gotoSplitUITestObservers.append(NotificationCenter.default.addObserver(
@@ -628,10 +641,12 @@ extension AppDelegate {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.recordGotoSplitUITestWebViewFocus(panelId: panelId, key: "webViewFocusedAfterAddressBarExit")
-            self.recordGotoSplitUITestActiveElement(panelId: panelId, keyPrefix: "addressBarExit")
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let panelId = notification.object as? UUID else { return }
+                self.recordGotoSplitUITestWebViewFocus(panelId: panelId, key: "webViewFocusedAfterAddressBarExit")
+                self.recordGotoSplitUITestActiveElement(panelId: panelId, keyPrefix: "addressBarExit")
+            }
         })
     }
 
@@ -691,20 +706,20 @@ extension AppDelegate {
             forName: .browserDidBecomeFirstResponderWebView,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            guard notification.object as? WKWebView === panel.webView else { return }
-            Task { @MainActor in evaluate() }
+        ) { notification in
+            MainActor.assumeIsolated {
+                guard notification.object as? WKWebView === panel.webView else { return }
+                evaluate()
+            }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: .ghosttyDidFocusSurface,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
+        ) { notification in
             guard let surfaceId = notification.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID,
                   surfaceId == panelId else { return }
-            Task { @MainActor in evaluate() }
+            MainActor.assumeIsolated { evaluate() }
         })
         panelsCancellable = tab.$panels
             .map { _ in () }
@@ -1437,7 +1452,7 @@ extension AppDelegate {
                     panelsCancellable?.cancel()
                     panelsCancellable = workspace.$panels
                         .map { _ in () }
-                        .sink { _ in attemptResolve() }
+                        .sink { _ in MainActor.assumeIsolated { attemptResolve() } }
                 }
                 if let surfaceId = resolvedSurfaceId() {
                     resolved = true
@@ -1448,7 +1463,7 @@ extension AppDelegate {
 
             tabsCancellable = tabManager.$tabs
                 .map { _ in () }
-                .sink { _ in attemptResolve() }
+                .sink { _ in MainActor.assumeIsolated { attemptResolve() } }
             focusObserver = NotificationCenter.default.addObserver(
                 forName: .ghosttyDidFocusSurface,
                 object: nil,
@@ -1456,7 +1471,7 @@ extension AppDelegate {
             ) { note in
                 guard let candidateTabId = note.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
                       candidateTabId == tabId else { return }
-                attemptResolve()
+                MainActor.assumeIsolated { attemptResolve() }
             }
             surfaceReadyObserver = NotificationCenter.default.addObserver(
                 forName: .terminalSurfaceDidBecomeReady,
@@ -1465,7 +1480,7 @@ extension AppDelegate {
             ) { note in
                 guard let workspaceId = note.userInfo?["workspaceId"] as? UUID,
                       workspaceId == tabId else { return }
-                attemptResolve()
+                MainActor.assumeIsolated { attemptResolve() }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
                 if !resolved {
@@ -1584,7 +1599,7 @@ extension AppDelegate {
             panelsCancellable?.cancel()
             panelsCancellable = workspace.$panels
                 .map { _ in () }
-                .sink { _ in attemptFocus() }
+                .sink { _ in MainActor.assumeIsolated { attemptFocus() } }
             guard let terminalPanel = workspace.terminalPanel(for: surfaceId) else {
                 resolved = true
                 cleanup()
@@ -1625,7 +1640,7 @@ extension AppDelegate {
             object: self,
             queue: .main
         ) { _ in
-            attemptFocus()
+            MainActor.assumeIsolated { attemptFocus() }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: .ghosttyDidBecomeFirstResponderSurface,
@@ -1636,7 +1651,7 @@ extension AppDelegate {
                   let candidateSurfaceId = note.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID,
                   candidateTabId == tabId,
                   candidateSurfaceId == surfaceId else { return }
-            attemptFocus()
+            MainActor.assumeIsolated { attemptFocus() }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: .ghosttyDidFocusSurface,
@@ -1647,7 +1662,7 @@ extension AppDelegate {
                   let candidateSurfaceId = note.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID,
                   candidateTabId == tabId,
                   candidateSurfaceId == surfaceId else { return }
-            attemptFocus()
+            MainActor.assumeIsolated { attemptFocus() }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: .terminalSurfaceDidBecomeReady,
@@ -1658,11 +1673,11 @@ extension AppDelegate {
                   let readySurfaceId = note.userInfo?["surfaceId"] as? UUID,
                   workspaceId == tabId,
                   readySurfaceId == surfaceId else { return }
-            attemptFocus()
+            MainActor.assumeIsolated { attemptFocus() }
         })
         selectedTabCancellable = tabManager.$selectedTabId
             .map { _ in () }
-            .sink { _ in attemptFocus() }
+            .sink { _ in MainActor.assumeIsolated { attemptFocus() } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
             if !resolved {
                 attemptFocus()
@@ -1699,8 +1714,7 @@ extension AppDelegate {
 
         let socketPath = config.path
         let socketMode = config.mode.rawValue
-        var observer: NSObjectProtocol?
-        var timeoutWorkItem: DispatchWorkItem?
+        let observationState = SocketListenerUITestObservationState()
 
         func publishCurrentState(isTimedOut: Bool) {
             let health = TerminalController.shared.socketListenerHealth(expectedSocketPath: socketPath)
@@ -1732,28 +1746,33 @@ extension AppDelegate {
                         "socketFailureSignals": failureSignals,
                     ], at: dataPath)
                     guard isReady || isTimedOut else { return }
-                    timeoutWorkItem?.cancel()
-                    if let observer {
+                    observationState.timeoutWorkItem?.cancel()
+                    if let observer = observationState.observer {
                         NotificationCenter.default.removeObserver(observer)
+                        observationState.observer = nil
                     }
                 }
             }
         }
 
-        observer = NotificationCenter.default.addObserver(
+        observationState.observer = NotificationCenter.default.addObserver(
             forName: .socketListenerDidStart,
             object: TerminalController.shared,
             queue: .main
         ) { notification in
             let startedPath = notification.userInfo?["path"] as? String
             guard startedPath == socketPath else { return }
-            publishCurrentState(isTimedOut: false)
+            MainActor.assumeIsolated {
+                publishCurrentState(isTimedOut: false)
+            }
         }
 
         let timeout = DispatchWorkItem {
-            publishCurrentState(isTimedOut: true)
+            MainActor.assumeIsolated {
+                publishCurrentState(isTimedOut: true)
+            }
         }
-        timeoutWorkItem = timeout
+        observationState.timeoutWorkItem = timeout
         DispatchQueue.main.asyncAfter(deadline: .now() + 20.0, execute: timeout)
 
         restartSocketListenerIfEnabled(source: "uiTest.multiWindowNotifications.setup")

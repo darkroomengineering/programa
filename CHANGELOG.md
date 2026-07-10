@@ -8,6 +8,8 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Changed
 - New installs now start with the minimal workspace layout (theme already follows the system). Anyone who previously toggled the mode keeps their stored setting.
+- CI and release policy checks now exercise executable helpers and built artifacts instead of asserting source-file text; release binaries are also checked for the expected architecture before signing.
+- Debug and settings UI copy is fully localized in English and Japanese, and obsolete cmux branding and unassigned dark app-icon variants have been removed.
 - Markdown panels now route full-document rendering through a renderer-neutral boundary while preserving the existing MarkdownUI appearance and macOS 14 support; relative document links and images resolve from the Markdown file's directory.
 - Sparkle was upgraded to 2.9.4, with release builds now verifying the embedded framework version and its signed updater components before notarization.
 - Whole-codebase restructuring pass (internal, no behavior change): the remote-daemon stack moved out of `Workspace.swift`, browser data-import out of `BrowserPanel.swift`, v2 browser automation out of `TerminalController.swift`, UI-test harnesses out of `AppDelegate.swift`, and `TabManager`/`GhosttyNSView`/`ContentView` split into per-concern files — the largest source files shrank by 3,000–5,000 lines each, cutting incremental build times. The copy-pasted v1 telemetry-handler skeleton, agent-wrapper commands (Go and Swift), and boilerplate settings accessors were each collapsed onto single shared implementations.

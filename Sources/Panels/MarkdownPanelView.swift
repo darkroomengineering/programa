@@ -49,7 +49,7 @@ struct MarkdownPanelView: View {
                 )
             }
         }
-        .onChange(of: panel.focusFlashToken) { _ in
+        .onChange(of: panel.focusFlashToken) {
             triggerFocusFlashAnimation()
         }
     }

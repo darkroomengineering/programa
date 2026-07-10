@@ -1373,7 +1373,7 @@ enum BrowserImportPlanResolver {
     @MainActor
     static func realize(
         plan: BrowserImportExecutionPlan,
-        profileStore: BrowserProfileStore = .shared
+        profileStore: BrowserProfileStore
     ) throws -> RealizedBrowserImportExecutionPlan {
         var realizedEntries: [RealizedBrowserImportExecutionEntry] = []
         var createdProfiles: [BrowserProfileDefinition] = []
@@ -1414,6 +1414,11 @@ enum BrowserImportPlanResolver {
             entries: realizedEntries,
             createdProfiles: createdProfiles
         )
+    }
+
+    @MainActor
+    static func realize(plan: BrowserImportExecutionPlan) throws -> RealizedBrowserImportExecutionPlan {
+        try realize(plan: plan, profileStore: .shared)
     }
 }
 
@@ -2785,7 +2790,7 @@ final class BrowserDataImportCoordinator {
 #endif
 
     @MainActor
-    private final class ImportWizardWindowController: NSObject, @preconcurrency NSWindowDelegate {
+    private final class ImportWizardWindowController: NSObject, NSWindowDelegate {
         private final class FlippedDocumentView: NSView {
             override var isFlipped: Bool { true }
         }
@@ -2870,7 +2875,7 @@ final class BrowserDataImportCoordinator {
         func runModal() -> ImportSelection? {
             panel.center()
             panel.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
 
             let response = NSApp.runModal(for: panel)
             if panel.isVisible {

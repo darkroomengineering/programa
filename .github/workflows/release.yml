@@ -196,7 +196,7 @@ jobs:
             export PATH="/usr/local/bin:$PATH"
             zig version
           fi
-          npm install --global "create-dmg@${CREATE_DMG_VERSION}"
+          ./scripts/install-create-dmg.sh
 
       - name: Cache GhosttyKit.xcframework
         id: cache-ghosttykit-release
@@ -251,19 +251,10 @@ jobs:
       - name: Verify binary architectures
         if: steps.guard_release_assets.outputs.skip_all != 'true'
         run: |
-          set -euo pipefail
-          APP_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/MacOS/Programa"
-          CLI_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/programa"
-          HELPER_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/ghostty"
-          APP_ARCHS="$(lipo -archs "$APP_BINARY")"
-          CLI_ARCHS="$(lipo -archs "$CLI_BINARY")"
-          HELPER_ARCHS="$(lipo -archs "$HELPER_BINARY")"
-          echo "App binary architectures: $APP_ARCHS"
-          echo "CLI binary architectures: $CLI_ARCHS"
-          echo "Ghostty helper architectures: $HELPER_ARCHS"
-          [[ "$APP_ARCHS" == "arm64" ]]
-          [[ "$CLI_ARCHS" == "arm64" ]]
-          [[ "$HELPER_ARCHS" == "arm64" ]]
+          ./scripts/verify-release-architectures.sh \
+            "build-universal/Build/Products/Release/Programa.app/Contents/MacOS/Programa" \
+            "build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/programa" \
+            "build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/ghostty"
 
       - name: Build remote daemon release assets and inject manifest
         if: steps.guard_release_assets.outputs.skip_all != 'true'

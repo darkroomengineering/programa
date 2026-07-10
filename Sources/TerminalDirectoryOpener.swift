@@ -85,13 +85,15 @@ enum TerminalDirectoryOpenTarget: String, CaseIterable {
         let homeDirectoryPath: String
         let fileExistsAtPath: (String) -> Bool
         let isExecutableFileAtPath: (String) -> Bool
-        let applicationPathForName: (String) -> String?
+        let applicationPathForBundleIdentifier: (String) -> String?
 
         static let live = DetectionEnvironment(
             homeDirectoryPath: FileManager.default.homeDirectoryForCurrentUser.path,
             fileExistsAtPath: { FileManager.default.fileExists(atPath: $0) },
             isExecutableFileAtPath: { FileManager.default.isExecutableFile(atPath: $0) },
-            applicationPathForName: { NSWorkspace.shared.fullPath(forApplication: $0) }
+            applicationPathForBundleIdentifier: {
+                NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)?.path
+            }
         )
     }
 
@@ -199,8 +201,8 @@ enum TerminalDirectoryOpenTarget: String, CaseIterable {
 
         // Fall back to LaunchServices so apps outside the standard bundle paths
         // still appear in the command palette.
-        for applicationName in applicationSearchNames {
-            guard let resolvedPath = environment.applicationPathForName(applicationName),
+        for bundleIdentifier in applicationBundleIdentifiers {
+            guard let resolvedPath = environment.applicationPathForBundleIdentifier(bundleIdentifier),
                   environment.fileExistsAtPath(resolvedPath) else {
                 continue
             }
@@ -226,12 +228,23 @@ enum TerminalDirectoryOpenTarget: String, CaseIterable {
         return uniquePreservingOrder(expanded)
     }
 
-    private var applicationSearchNames: [String] {
-        uniquePreservingOrder(
-            applicationBundlePathCandidates.map {
-                URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent
-            }
-        )
+    private var applicationBundleIdentifiers: [String] {
+        switch self {
+        case .androidStudio: return ["com.google.android.studio"]
+        case .antigravity: return ["com.google.antigravity"]
+        case .cursor: return ["com.todesktop.230313mzl4w4u92"]
+        case .finder: return ["com.apple.finder"]
+        case .ghostty: return ["com.mitchellh.ghostty"]
+        case .intellij: return ["com.jetbrains.intellij"]
+        case .iterm2: return ["com.googlecode.iterm2"]
+        case .terminal: return ["com.apple.Terminal"]
+        case .tower: return ["com.fournova.Tower3", "com.fournova.Tower"]
+        case .vscode, .vscodeInline: return ["com.microsoft.VSCode", "com.microsoft.VSCodeInsiders"]
+        case .warp: return ["dev.warp.Warp-Stable"]
+        case .windsurf: return ["com.exafunction.windsurf"]
+        case .xcode: return ["com.apple.dt.Xcode"]
+        case .zed: return ["dev.zed.Zed", "dev.zed.Zed-Preview", "dev.zed.Zed-Nightly"]
+        }
     }
 
     private var applicationBundlePathCandidates: [String] {

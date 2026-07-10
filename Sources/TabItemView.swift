@@ -632,7 +632,7 @@ struct TabItemView: View, Equatable {
                     .onAppear {
                         rowHeight = max(proxy.size.height, 1)
                     }
-                    .onChange(of: proxy.size.height) { newHeight in
+                    .onChange(of: proxy.size.height) { _, newHeight in
                         rowHeight = max(newHeight, 1)
                     }
             }
@@ -741,7 +741,7 @@ struct TabItemView: View, Equatable {
             // before the first debounced publisher fires.
             recomputeSidebarDetailCache()
         }
-        .onChange(of: visibleAuxiliaryDetails) { _ in
+        .onChange(of: visibleAuxiliaryDetails) {
             // Toggling branch/PR columns changes which data we need to cache.
             recomputeSidebarDetailCache()
         }
@@ -1695,7 +1695,7 @@ private struct SidebarWorkspaceDescriptionText: View {
             )
 #endif
         }
-        .onChange(of: markdown) { newValue in
+        .onChange(of: markdown) { _, newValue in
 #if DEBUG
             let newlineCount = newValue.reduce(into: 0) { count, character in
                 if character == "\n" { count += 1 }
@@ -1946,7 +1946,7 @@ private struct SidebarMetadataMarkdownBlockRow: View {
         .contentShape(Rectangle())
         .onTapGesture { onFocus() }
         .onAppear(perform: renderMarkdown)
-        .onChange(of: block.markdown) { _ in
+        .onChange(of: block.markdown) {
             renderMarkdown()
         }
     }
@@ -1962,4 +1962,3 @@ private struct SidebarMetadataMarkdownBlockRow: View {
         )
     }
 }
-

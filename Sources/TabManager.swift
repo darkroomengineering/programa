@@ -516,7 +516,7 @@ class TabManager: ObservableObject {
     weak var window: NSWindow?
 
     @Published var tabs: [Workspace] = []
-    @Published internal(set) var isWorkspaceCycleHot: Bool = false
+    @Published var isWorkspaceCycleHot: Bool = false
     @Published private(set) var pendingBackgroundWorkspaceLoadIds: Set<UUID> = []
     @Published private(set) var debugPinnedWorkspaceLoadIds: Set<UUID> = []
 
@@ -1931,7 +1931,7 @@ class TabManager: ObservableObject {
         }
 
         if NSApp.activationPolicy() == .regular {
-            NSApp.activate(ignoringOtherApps: true)
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
         }
 
         return alert.runModal() == .alertFirstButtonReturn
@@ -2636,7 +2636,7 @@ class TabManager: ObservableObject {
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            NSApp.activate(ignoringOtherApps: true)
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
             NSApp.unhide(nil)
             if let app = AppDelegate.shared,
                let windowId = app.windowId(for: self),

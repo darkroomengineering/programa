@@ -1,6 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
-import Foundation
+@preconcurrency import Foundation
 import Bonsplit
 import WebKit
 
@@ -1206,7 +1206,6 @@ class TerminalController {
         }
 
         var exitReason = "stopped"
-        var rearmRequested = false
         var resumeRequested = false
 
         defer {
@@ -1295,7 +1294,6 @@ class TerminalController {
                     exitReason = shouldRearmForFatalErrno
                         ? "fatal_accept_error"
                         : "persistent_accept_failures"
-                    rearmRequested = true
                     withListenerState {
                         pendingAcceptLoopRearmGeneration = generation
                     }
@@ -1398,7 +1396,7 @@ class TerminalController {
             let pid = peerPid ?? getPeerPid(socket)
             if let pid {
                 guard isDescendant(pid) else {
-                    let msg = "ERROR: Access denied — only processes started inside cmux can connect\n"
+                    let msg = "ERROR: Access denied — only processes started inside Programa can connect\n"
                     msg.withCString { ptr in _ = write(socket, ptr, strlen(ptr)) }
                     return
                 }

@@ -10,7 +10,7 @@ import Darwin
 import Network
 import CoreText
 
-extension Workspace: BonsplitDelegate {
+extension Workspace: @preconcurrency BonsplitDelegate {
     @MainActor
     private func shouldCloseWorkspaceOnLastSurface(for tabId: TabID) -> Bool {
         let manager = owningTabManager ?? AppDelegate.shared?.tabManagerFor(tabId: id) ?? AppDelegate.shared?.tabManager

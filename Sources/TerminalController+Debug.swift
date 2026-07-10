@@ -1,9 +1,73 @@
 // Extracted from TerminalController.swift (nuclear-review #96): debug.* command handlers plus their private implementation helpers (DEBUG-only and shared).
 import AppKit
 import Carbon.HIToolbox
-import Foundation
+@preconcurrency import Foundation
 import Bonsplit
 import WebKit
+
+#if DEBUG
+@MainActor
+private final class TerminalSurfaceWaitState {
+    let terminalSurface: TerminalSurface
+    let finish: () -> Void
+    var readyObserver: NSObjectProtocol?
+    var hostedViewObserver: NSObjectProtocol?
+    private var completed = false
+
+    init(terminalSurface: TerminalSurface, finish: @escaping () -> Void) {
+        self.terminalSurface = terminalSurface
+        self.finish = finish
+    }
+
+    func complete() {
+        guard !completed else { return }
+        completed = true
+        if let readyObserver {
+            NotificationCenter.default.removeObserver(readyObserver)
+            self.readyObserver = nil
+        }
+        if let hostedViewObserver {
+            NotificationCenter.default.removeObserver(hostedViewObserver)
+            self.hostedViewObserver = nil
+        }
+        finish()
+    }
+
+    func installReadyObserver(_ observer: NSObjectProtocol) {
+        if completed {
+            NotificationCenter.default.removeObserver(observer)
+        } else {
+            readyObserver = observer
+        }
+    }
+
+    func installHostedViewObserver(_ observer: NSObjectProtocol) {
+        if completed {
+            NotificationCenter.default.removeObserver(observer)
+        } else {
+            hostedViewObserver = observer
+        }
+    }
+
+    func completeIfSurfaceReady() {
+        guard terminalSurface.surface != nil else { return }
+        complete()
+    }
+
+    func cancel() {
+        guard !completed else { return }
+        completed = true
+        if let readyObserver {
+            NotificationCenter.default.removeObserver(readyObserver)
+            self.readyObserver = nil
+        }
+        if let hostedViewObserver {
+            NotificationCenter.default.removeObserver(hostedViewObserver)
+            self.hostedViewObserver = nil
+        }
+    }
+}
+#endif
 
 extension TerminalController {
 #if DEBUG
@@ -57,7 +121,7 @@ extension TerminalController {
                 result = .ok([:])
                 return
             }
-            (fr as? NSResponder)?.insertText(text)
+            fr.insertText(text)
             result = .ok([:])
         }
         return result
@@ -1618,22 +1682,12 @@ extension TerminalController {
                 return
             }
 
-            // Get window's CGWindowID
-            let windowNumber = CGWindowID(window.windowNumber)
-
-            // Capture the window using CGWindowListCreateImage
-            guard let cgImage = CGWindowListCreateImage(
-                .null,  // Capture just the window bounds
-                .optionIncludingWindow,
-                windowNumber,
-                [.boundsIgnoreFraming, .nominalResolution]
-            ) else {
-                captureError = "Failed to capture window image"
+            guard let contentView = window.contentView,
+                  let bitmap = contentView.bitmapImageRepForCachingDisplay(in: contentView.bounds) else {
+                captureError = "Failed to prepare window image"
                 return
             }
-
-            // Convert to NSBitmapImageRep and save as PNG
-            let bitmap = NSBitmapImageRep(cgImage: cgImage)
+            contentView.cacheDisplay(in: contentView.bounds, to: bitmap)
             guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
                 captureError = "Failed to create PNG data"
                 return
@@ -1741,42 +1795,39 @@ extension TerminalController {
 
         let terminalSurface = terminalPanel.surface
         terminalSurface.requestBackgroundSurfaceStartIfNeeded()
+        var waitState: TerminalSurfaceWaitState?
         _ = v2AwaitCallback(timeout: timeout) { finish in
-            var readyObserver: NSObjectProtocol?
-            var hostedViewObserver: NSObjectProtocol?
-            let finishOnce: () -> Void = {
-                if let readyObserver {
-                    NotificationCenter.default.removeObserver(readyObserver)
-                }
-                if let hostedViewObserver {
-                    NotificationCenter.default.removeObserver(hostedViewObserver)
-                }
-                finish(())
-            }
-
-            readyObserver = NotificationCenter.default.addObserver(
+            let state = TerminalSurfaceWaitState(
+                terminalSurface: terminalSurface,
+                finish: { finish(()) }
+            )
+            waitState = state
+            let readyObserver = NotificationCenter.default.addObserver(
                 forName: .terminalSurfaceDidBecomeReady,
                 object: terminalSurface,
                 queue: .main
-            ) { _ in
-                finishOnce()
+            ) { [state] _ in
+                MainActor.assumeIsolated {
+                    state.complete()
+                }
             }
-            hostedViewObserver = NotificationCenter.default.addObserver(
+            state.installReadyObserver(readyObserver)
+            let hostedViewObserver = NotificationCenter.default.addObserver(
                 forName: .terminalSurfaceHostedViewDidMoveToWindow,
                 object: terminalSurface,
                 queue: .main
-            ) { _ in
-                Task { @MainActor in
-                    if terminalSurface.surface != nil {
-                        finishOnce()
-                    }
+            ) { [state] _ in
+                MainActor.assumeIsolated {
+                    state.completeIfSurfaceReady()
                 }
             }
+            state.installHostedViewObserver(hostedViewObserver)
 
             if terminalSurface.surface != nil {
-                finishOnce()
+                state.complete()
             }
         }
+        waitState?.cancel()
 
         return terminalPanel.surface.surface
     }

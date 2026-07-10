@@ -16,6 +16,14 @@ final class AutomationSocketUITests: XCTestCase {
         removeSocketFile()
     }
 
+    func testUITestBundleUsesDebugBuildConfiguration() {
+        #if DEBUG
+        XCTAssertTrue(true)
+        #else
+        XCTFail("The programa scheme Test action must compile UI tests with the Debug configuration")
+        #endif
+    }
+
     func testSocketToggleDisablesAndEnables() {
         let app = configuredApp(mode: "cmuxOnly")
         app.launch()

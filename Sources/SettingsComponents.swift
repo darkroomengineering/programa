@@ -40,10 +40,10 @@ struct HexColorPicker: View {
         ColorPicker("", selection: $pickerColor, supportsOpacity: false)
             .labelsHidden()
             .frame(width: 38)
-            .onChange(of: pickerColor) { newColor in
+            .onChange(of: pickerColor) { _, newColor in
                 onHexChange(NSColor(newColor).hexString())
             }
-            .onChange(of: hex) { newHex in
+            .onChange(of: hex) { _, newHex in
                 // Keep the buffer in sync when the hex is reset externally
                 // (e.g. the Reset button sets sidebarSelectionColorHex = nil).
                 if let newHex, let ns = NSColor(hex: newHex) {
@@ -258,4 +258,3 @@ struct SettingsCardNote: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-

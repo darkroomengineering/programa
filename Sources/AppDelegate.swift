@@ -723,7 +723,7 @@ func shouldSuppressWindowMoveForFolderDrag(window: NSWindow, event: NSEvent) -> 
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, NSMenuItemValidation {
+final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuItemValidation {
     nonisolated(unsafe) static var shared: AppDelegate?
 
     private static let cachedIsRunningUnderXCTest = detectRunningUnderXCTest(ProcessInfo.processInfo.environment)
@@ -1171,7 +1171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     self.openNewMainWindow(nil)
                 }
                 self.moveUITestWindowToTargetDisplayIfNeeded()
-                NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                NSRunningApplication.current.activate(options: [.activateAllWindows])
                 // On headless CI runners, activate() silently fails (no GUI session).
                 // Force windows visible so the terminal surface starts rendering.
                 for window in NSApp.windows {
@@ -2425,7 +2425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if synchronously {
             writeBlock()
         } else {
-            sessionPersistenceQueue.async(execute: writeBlock)
+            sessionPersistenceQueue.async(execute: DispatchWorkItem(block: writeBlock))
         }
     }
 
@@ -2552,8 +2552,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 object: window,
                 queue: .main
             ) { [weak self] note in
-                guard let self, let closing = note.object as? NSWindow else { return }
-                self.unregisterMainWindow(closing)
+                MainActor.assumeIsolated {
+                    guard let self, let closing = note.object as? NSWindow else { return }
+                    self.unregisterMainWindow(closing)
+                }
             }
         }
         updateCommandPaletteState(for: windowId) { state in
@@ -3765,7 +3767,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         destinationPanelId: UUID,
         destinationManager: TabManager
     ) {
-        let reassert: () -> Void = { [weak self, weak destinationManager] in
+        let reassert: @MainActor @Sendable () -> Void = { [weak self, weak destinationManager] in
             guard let self, let destinationManager else { return }
             guard let workspace = destinationManager.tabs.first(where: { $0.id == destinationWorkspaceId }),
                   workspace.panels[destinationPanelId] != nil else {
@@ -4939,7 +4941,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         } else {
             window.makeKeyAndOrderFront(nil)
             setActiveMainWindow(window)
-            NSApp.activate(ignoringOtherApps: true)
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
         }
         if shouldTemporarilyDisallowFullScreenTiling {
             DispatchQueue.main.async { [weak window] in
@@ -5141,7 +5143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             SettingsWindowController.shared.show(navigationTarget: target)
         },
         activateApplication: @MainActor () -> Void = {
-            NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
         }
     ) {
 #if DEBUG
@@ -5495,26 +5497,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { note in
-            guard let workspaceId = note.userInfo?["workspaceId"] as? UUID,
-                  workspaceId == tab.id else { return }
-            let surfaceId = note.userInfo?["surfaceId"] as? UUID
+            MainActor.assumeIsolated {
+                guard let workspaceId = note.userInfo?["workspaceId"] as? UUID,
+                      workspaceId == tab.id else { return }
+                let surfaceId = note.userInfo?["surfaceId"] as? UUID
 #if DEBUG
-            if isReactGrabPasteback {
-                dlog(
-                    "reactGrab.pasteback h2.surfaceReadyEvent " +
-                    "workspace=\(Self.debugShortId(workspaceId)) " +
-                    "surface=\(Self.debugShortId(surfaceId)) " +
-                    "target=\(Self.debugShortId(preferredPanelId)) " +
-                    "match=\(surfaceId == preferredPanelId ? 1 : 0)"
-                )
-            }
+                if isReactGrabPasteback {
+                    dlog(
+                        "reactGrab.pasteback h2.surfaceReadyEvent " +
+                        "workspace=\(Self.debugShortId(workspaceId)) " +
+                        "surface=\(Self.debugShortId(surfaceId)) " +
+                        "target=\(Self.debugShortId(preferredPanelId)) " +
+                        "match=\(surfaceId == preferredPanelId ? 1 : 0)"
+                    )
+                }
 #endif
-            if let preferredPanelId,
-               let surfaceId,
-               surfaceId != preferredPanelId {
-                return
+                if let preferredPanelId,
+                   let surfaceId,
+                   surfaceId != preferredPanelId {
+                    return
+                }
+                finishIfReady()
             }
-            finishIfReady()
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             if !resolved {
@@ -5745,9 +5749,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshConfiguredShortcutChordActions()
-            self?.clearConfiguredShortcutChordState()
-            self?.scheduleSplitButtonTooltipRefreshAcrossWorkspaces()
+            MainActor.assumeIsolated {
+                self?.refreshConfiguredShortcutChordActions()
+                self?.clearConfiguredShortcutChordState()
+                self?.scheduleSplitButtonTooltipRefreshAcrossWorkspaces()
+            }
         }
     }
 
@@ -5795,7 +5801,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshGhosttyGotoSplitShortcuts()
+            MainActor.assumeIsolated {
+                self?.refreshGhosttyGotoSplitShortcuts()
+            }
         }
     }
 
@@ -7853,7 +7861,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // physical key code is the definitive identifier for the intended shortcut.
         // For empty-character events (synthetic/browser key equivalents), preserve the original
         // behavior: only fall back when the layout translation also failed.
-        let hasUsableEventChars = hasEventChars && eventCharsAreASCII
         let allowANSIKeyCodeFallback = flags.contains(.control)
             || (flags.contains(.command)
                 && !flags.contains(.control)
@@ -8244,7 +8251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             if !app.isTerminated {
                 _ = app.forceTerminate()
             }
-            NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
         }
     }
 
@@ -8317,8 +8324,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] note in
-            guard let self, let window = note.object as? NSWindow else { return }
-            self.setActiveMainWindow(window)
+            MainActor.assumeIsolated {
+                guard let self, let window = note.object as? NSWindow else { return }
+                self.setActiveMainWindow(window)
+            }
         }
     }
 
@@ -8330,14 +8339,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.browserPanel(for: panelId)?.beginSuppressWebViewFocusForAddressBar()
-            self.browserAddressBarFocusedPanelId = panelId
-            self.stopBrowserOmnibarSelectionRepeat()
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let panelId = notification.object as? UUID else { return }
+                self.browserPanel(for: panelId)?.beginSuppressWebViewFocusForAddressBar()
+                self.browserAddressBarFocusedPanelId = panelId
+                self.stopBrowserOmnibarSelectionRepeat()
 #if DEBUG
-            dlog("addressBar FOCUS panelId=\(panelId.uuidString.prefix(8))")
+                dlog("addressBar FOCUS panelId=\(panelId.uuidString.prefix(8))")
 #endif
+            }
         }
 
         browserAddressBarBlurObserver = NotificationCenter.default.addObserver(
@@ -8345,15 +8356,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.browserPanel(for: panelId)?.endSuppressWebViewFocusForAddressBar()
-            if self.browserAddressBarFocusedPanelId == panelId {
-                self.browserAddressBarFocusedPanelId = nil
-                self.stopBrowserOmnibarSelectionRepeat()
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let panelId = notification.object as? UUID else { return }
+                self.browserPanel(for: panelId)?.endSuppressWebViewFocusForAddressBar()
+                if self.browserAddressBarFocusedPanelId == panelId {
+                    self.browserAddressBarFocusedPanelId = nil
+                    self.stopBrowserOmnibarSelectionRepeat()
 #if DEBUG
-                dlog("addressBar BLUR panelId=\(panelId.uuidString.prefix(8))")
+                    dlog("addressBar BLUR panelId=\(panelId.uuidString.prefix(8))")
 #endif
+                }
             }
         }
     }
@@ -8790,7 +8803,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         window.makeKeyAndOrderFront(nil)
         // Improve reliability across Spaces / when other helper panels are key.
-        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
     }
 
     private func markReadIfFocused(

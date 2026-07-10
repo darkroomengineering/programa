@@ -193,7 +193,9 @@ final class TerminalNotificationStore: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshDockBadge()
+            MainActor.assumeIsolated {
+                self?.refreshDockBadge()
+            }
         }
         refreshDockBadge()
         refreshAuthorizationStatus()
@@ -576,15 +578,18 @@ final class TerminalNotificationStore: ObservableObject {
                 content: content,
                 trigger: nil
             )
+            let commandTitle = content.title
+            let commandSubtitle = content.subtitle
+            let commandBody = content.body
 
             self.center.add(request) { error in
                 if let error {
                     NSLog("Failed to schedule notification: \(error)")
                 } else {
                     NotificationSoundSettings.runCustomCommand(
-                        title: content.title,
-                        subtitle: content.subtitle,
-                        body: content.body
+                        title: commandTitle,
+                        subtitle: commandSubtitle,
+                        body: commandBody
                     )
                 }
             }

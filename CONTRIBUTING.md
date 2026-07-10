@@ -53,7 +53,7 @@ zig build -Demit-xcframework=true -Doptimize=ReleaseFast
 ### Basic tests (run on VM)
 
 ```bash
-ssh programa-vm 'cd /Users/programa/GhosttyTabs && xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug -destination "platform=macOS" build && pkill -x "programa DEV" || true && APP=$(find /Users/programa/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Debug/programa DEV.app" -print -quit) && open "$APP" && for i in {1..20}; do [ -S /tmp/programa.sock ] && break; sleep 0.5; done && python3 tests/test_update_timing.py && python3 tests/test_signals_auto.py && python3 tests/test_ctrl_socket.py && python3 tests/test_notifications.py'
+ssh programa-vm 'cd /Users/programa/GhosttyTabs && xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug -destination "platform=macOS" build && pkill -x "programa DEV" || true && APP=$(find /Users/programa/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Debug/programa DEV.app" -print -quit) && open "$APP" && for i in {1..20}; do [ -S /tmp/programa.sock ] && break; sleep 0.5; done && python3 tests/test_signals_auto.py && python3 tests/test_ctrl_socket.py && python3 tests/test_notifications.py'
 ```
 
 ### UI tests (run on VM)

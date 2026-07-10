@@ -4,6 +4,9 @@ import Darwin
 import Bonsplit
 import UniformTypeIdentifiers
 
+private func localizedDebugLabel(_ value: String) -> String {
+    String(localized: String.LocalizationValue(value))
+}
 
 enum SettingsAboutWindowKind: String, CaseIterable, Identifiable {
     case settings
@@ -14,9 +17,9 @@ enum SettingsAboutWindowKind: String, CaseIterable, Identifiable {
     var displayTitle: String {
         switch self {
         case .settings:
-            return "Settings Window"
+            return localizedDebugLabel("Settings Window")
         case .about:
-            return "About Window"
+            return localizedDebugLabel("About Window")
         }
     }
 
@@ -32,9 +35,9 @@ enum SettingsAboutWindowKind: String, CaseIterable, Identifiable {
     var fallbackTitle: String {
         switch self {
         case .settings:
-            return "Settings"
+            return localizedDebugLabel("Settings")
         case .about:
-            return "About Programa"
+            return localizedDebugLabel("About Programa")
         }
     }
 
@@ -57,9 +60,9 @@ enum TitlebarVisibilityOption: String, CaseIterable, Identifiable {
     var displayTitle: String {
         switch self {
         case .hidden:
-            return "Hidden"
+            return localizedDebugLabel("Hidden")
         case .visible:
-            return "Visible"
+            return localizedDebugLabel("Visible")
         }
     }
 
@@ -85,15 +88,15 @@ enum TitlebarToolbarStyleOption: String, CaseIterable, Identifiable {
     var displayTitle: String {
         switch self {
         case .automatic:
-            return "Automatic"
+            return localizedDebugLabel("Automatic")
         case .expanded:
-            return "Expanded"
+            return localizedDebugLabel("Expanded")
         case .preference:
-            return "Preference"
+            return localizedDebugLabel("Preference")
         case .unified:
-            return "Unified"
+            return localizedDebugLabel("Unified")
         case .unifiedCompact:
-            return "Unified Compact"
+            return localizedDebugLabel("Unified Compact")
         }
     }
 
@@ -132,7 +135,7 @@ struct SettingsAboutTitlebarDebugOptions: Equatable {
         case .settings:
             return SettingsAboutTitlebarDebugOptions(
                 overridesEnabled: false,
-                windowTitle: "Settings",
+                windowTitle: localizedDebugLabel("Settings"),
                 titleVisibility: .hidden,
                 titlebarAppearsTransparent: true,
                 movableByWindowBackground: true,
@@ -147,7 +150,7 @@ struct SettingsAboutTitlebarDebugOptions: Equatable {
         case .about:
             return SettingsAboutTitlebarDebugOptions(
                 overridesEnabled: false,
-                windowTitle: "About Programa",
+                windowTitle: localizedDebugLabel("About Programa"),
                 titleVisibility: .hidden,
                 titlebarAppearsTransparent: true,
                 movableByWindowBackground: false,
@@ -314,7 +317,7 @@ final class SettingsAboutTitlebarDebugWindowController: NSWindowController, NSWi
             backing: .buffered,
             defer: false
         )
-        window.title = "Settings/About Titlebar Debug"
+        window.title = localizedDebugLabel("Settings/About Titlebar Debug")
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
@@ -345,22 +348,22 @@ private struct SettingsAboutTitlebarDebugView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Settings/About Titlebar Debug")
+                Text(localizedDebugLabel("Settings/About Titlebar Debug"))
                     .font(.headline)
 
                 editor(for: .settings)
                 editor(for: .about)
 
-                GroupBox("Actions") {
+                GroupBox(localizedDebugLabel("Actions")) {
                     HStack(spacing: 10) {
-                        Button("Reset All") {
+                        Button(localizedDebugLabel("Reset All")) {
                             store.reset(.settings)
                             store.reset(.about)
                         }
-                        Button("Reapply to Open Windows") {
+                        Button(localizedDebugLabel("Reapply to Open Windows")) {
                             store.applyToOpenWindows()
                         }
-                        Button("Copy Config") {
+                        Button(localizedDebugLabel("Copy Config")) {
                             store.copyConfigToPasteboard()
                         }
                     }
@@ -381,9 +384,9 @@ private struct SettingsAboutTitlebarDebugView: View {
 
         return GroupBox(kind.displayTitle) {
             VStack(alignment: .leading, spacing: 10) {
-                Toggle("Enable Debug Overrides", isOn: overridesEnabled)
+                Toggle(localizedDebugLabel("Enable Debug Overrides"), isOn: overridesEnabled)
 
-                Text("When disabled, Programa uses normal default titlebar behavior for this window.")
+                Text(localizedDebugLabel("When disabled, Programa uses normal default titlebar behavior for this window."))
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -391,44 +394,48 @@ private struct SettingsAboutTitlebarDebugView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
-                        Text("Window Title")
+                        Text(localizedDebugLabel("Window Title"))
                         TextField("", text: binding(for: kind, keyPath: \.windowTitle))
                     }
 
                     HStack(spacing: 10) {
-                        Picker("Title Visibility", selection: binding(for: kind, keyPath: \.titleVisibility)) {
+                        Picker(localizedDebugLabel("Title Visibility"), selection: binding(for: kind, keyPath: \.titleVisibility)) {
                             ForEach(TitlebarVisibilityOption.allCases) { option in
                                 Text(option.displayTitle).tag(option)
                             }
                         }
-                        Picker("Toolbar Style", selection: binding(for: kind, keyPath: \.toolbarStyle)) {
+                        Picker(localizedDebugLabel("Toolbar Style"), selection: binding(for: kind, keyPath: \.toolbarStyle)) {
                             ForEach(TitlebarToolbarStyleOption.allCases) { option in
                                 Text(option.displayTitle).tag(option)
                             }
                         }
                     }
 
-                    Toggle("Show Toolbar", isOn: binding(for: kind, keyPath: \.showToolbar))
-                    Toggle("Transparent Titlebar", isOn: binding(for: kind, keyPath: \.titlebarAppearsTransparent))
-                    Toggle("Movable by Window Background", isOn: binding(for: kind, keyPath: \.movableByWindowBackground))
+                    Toggle(localizedDebugLabel("Show Toolbar"), isOn: binding(for: kind, keyPath: \.showToolbar))
+                    Toggle(localizedDebugLabel("Transparent Titlebar"), isOn: binding(for: kind, keyPath: \.titlebarAppearsTransparent))
+                    Toggle(localizedDebugLabel("Movable by Window Background"), isOn: binding(for: kind, keyPath: \.movableByWindowBackground))
 
                     Divider()
 
-                    Text("Style Mask")
+                    Text(localizedDebugLabel("Style Mask"))
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    Toggle("Titled", isOn: binding(for: kind, keyPath: \.titled))
-                    Toggle("Closable", isOn: binding(for: kind, keyPath: \.closable))
-                    Toggle("Miniaturizable", isOn: binding(for: kind, keyPath: \.miniaturizable))
-                    Toggle("Resizable", isOn: binding(for: kind, keyPath: \.resizable))
-                    Toggle("Full Size Content View", isOn: binding(for: kind, keyPath: \.fullSizeContentView))
+                    Toggle(localizedDebugLabel("Titled"), isOn: binding(for: kind, keyPath: \.titled))
+                    Toggle(localizedDebugLabel("Closable"), isOn: binding(for: kind, keyPath: \.closable))
+                    Toggle(localizedDebugLabel("Miniaturizable"), isOn: binding(for: kind, keyPath: \.miniaturizable))
+                    Toggle(localizedDebugLabel("Resizable"), isOn: binding(for: kind, keyPath: \.resizable))
+                    Toggle(localizedDebugLabel("Full Size Content View"), isOn: binding(for: kind, keyPath: \.fullSizeContentView))
 
                     HStack(spacing: 10) {
-                        Button("Reset \(kind == .settings ? "Settings" : "About")") {
+                        Button(
+                            kind == .settings
+                                ? localizedDebugLabel("Reset Settings")
+                                : localizedDebugLabel("Reset About")
+                        ) {
                             store.reset(kind)
                         }
-                        Button("Apply Now") {
+                        Button(localizedDebugLabel("Apply Now")) {
                             store.applyToOpenWindows(for: kind)
                         }
                     }
@@ -541,7 +548,7 @@ final class DebugWindowControlsWindowController: NSWindowController, NSWindowDel
             backing: .buffered,
             defer: false
         )
-        window.title = "Debug Window Controls"
+        window.title = localizedDebugLabel("Debug Window Controls")
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
@@ -601,10 +608,10 @@ private struct DebugWindowControlsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Debug Window Controls")
+                Text(localizedDebugLabel("Debug Window Controls"))
                     .font(.headline)
 
-                GroupBox("Open") {
+                GroupBox(localizedDebugLabel("Open")) {
                     VStack(alignment: .leading, spacing: 8) {
                         Button(
                             String(
@@ -614,19 +621,19 @@ private struct DebugWindowControlsView: View {
                         ) {
                             BrowserProfilePopoverDebugWindowController.shared.show()
                         }
-                        Button("Settings/About Titlebar Debug…") {
+                        Button(localizedDebugLabel("Settings/About Titlebar Debug…")) {
                             SettingsAboutTitlebarDebugWindowController.shared.show()
                         }
-                        Button("Sidebar Debug…") {
+                        Button(localizedDebugLabel("Sidebar Debug…")) {
                             SidebarDebugWindowController.shared.show()
                         }
-                        Button("Background Debug…") {
+                        Button(localizedDebugLabel("Background Debug…")) {
                             BackgroundDebugWindowController.shared.show()
                         }
-                        Button("Menu Bar Extra Debug…") {
+                        Button(localizedDebugLabel("Menu Bar Extra Debug…")) {
                             MenuBarExtraDebugWindowController.shared.show()
                         }
-                        Button("Open All Debug Windows") {
+                        Button(localizedDebugLabel("Open All Debug Windows")) {
                             BrowserProfilePopoverDebugWindowController.shared.show()
                             SettingsAboutTitlebarDebugWindowController.shared.show()
                             SidebarDebugWindowController.shared.show()
@@ -638,33 +645,33 @@ private struct DebugWindowControlsView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Shortcut Hints") {
+                GroupBox(localizedDebugLabel("Shortcut Hints")) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Toggle("Always show shortcut hints", isOn: $alwaysShowShortcutHints)
+                        Toggle(localizedDebugLabel("Always show shortcut hints"), isOn: $alwaysShowShortcutHints)
 
                         hintOffsetSection(
-                            "Sidebar Cmd+1…9",
+                            localizedDebugLabel("Sidebar Cmd+1…9"),
                             x: $sidebarShortcutHintXOffset,
                             y: $sidebarShortcutHintYOffset
                         )
 
                         hintOffsetSection(
-                            "Titlebar Buttons",
+                            localizedDebugLabel("Titlebar Buttons"),
                             x: $titlebarShortcutHintXOffset,
                             y: $titlebarShortcutHintYOffset
                         )
 
                         hintOffsetSection(
-                            "Pane Ctrl/Cmd+1…9",
+                            localizedDebugLabel("Pane Ctrl/Cmd+1…9"),
                             x: $paneShortcutHintXOffset,
                             y: $paneShortcutHintYOffset
                         )
 
                         HStack(spacing: 12) {
-                            Button("Reset Hints") {
+                            Button(localizedDebugLabel("Reset Hints")) {
                                 resetShortcutHintOffsets()
                             }
-                            Button("Copy Hint Config") {
+                            Button(localizedDebugLabel("Copy Hint Config")) {
                                 copyShortcutHintConfig()
                             }
                         }
@@ -672,44 +679,44 @@ private struct DebugWindowControlsView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Active Workspace Indicator") {
+                GroupBox(localizedDebugLabel("Active Workspace Indicator")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Picker("Style", selection: sidebarIndicatorStyleSelection) {
+                        Picker(localizedDebugLabel("Style"), selection: sidebarIndicatorStyleSelection) {
                             ForEach(SidebarActiveTabIndicatorStyle.allCases) { style in
                                 Text(style.displayName).tag(style.rawValue)
                             }
                         }
                         .pickerStyle(.menu)
 
-                        Button("Reset Indicator Style") {
+                        Button(localizedDebugLabel("Reset Indicator Style")) {
                             sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
                         }
                     }
                     .padding(.top, 2)
                 }
 
-                GroupBox("Titlebar Spacing") {
+                GroupBox(localizedDebugLabel("Titlebar Spacing")) {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
-                            Text("Leading extra")
+                            Text(localizedDebugLabel("Leading extra"))
                             Slider(value: $titlebarLeadingExtra, in: 0...40)
                             Text(String(format: "%.0f", titlebarLeadingExtra))
                                 .font(.caption)
                                 .monospacedDigit()
                                 .frame(width: 30, alignment: .trailing)
                         }
-                        Button("Reset (0)") {
+                        Button(localizedDebugLabel("Reset (0)")) {
                             titlebarLeadingExtra = 0
                         }
                     }
                     .padding(.top, 2)
                 }
 
-                GroupBox("Browser DevTools Button") {
+                GroupBox(localizedDebugLabel("Browser DevTools Button")) {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 8) {
-                            Text("Icon")
-                            Picker("Icon", selection: $browserDevToolsIconNameRaw) {
+                            Text(localizedDebugLabel("Icon"))
+                            Picker(localizedDebugLabel("Icon"), selection: $browserDevToolsIconNameRaw) {
                                 ForEach(BrowserDevToolsIconOption.allCases) { option in
                                     Text(option.title).tag(option.rawValue)
                                 }
@@ -720,8 +727,8 @@ private struct DebugWindowControlsView: View {
                         }
 
                         HStack(spacing: 8) {
-                            Text("Color")
-                            Picker("Color", selection: $browserDevToolsIconColorRaw) {
+                            Text(localizedDebugLabel("Color"))
+                            Picker(localizedDebugLabel("Color"), selection: $browserDevToolsIconColorRaw) {
                                 ForEach(BrowserDevToolsIconColorOption.allCases) { option in
                                     Text(option.title).tag(option.rawValue)
                                 }
@@ -732,7 +739,7 @@ private struct DebugWindowControlsView: View {
                         }
 
                         HStack(spacing: 8) {
-                            Text("Preview")
+                            Text(localizedDebugLabel("Preview"))
                             Spacer()
                             Image(systemName: selectedDevToolsIconOption.rawValue)
                                 .font(.system(size: 12, weight: .medium))
@@ -740,10 +747,10 @@ private struct DebugWindowControlsView: View {
                         }
 
                         HStack(spacing: 12) {
-                            Button("Reset Button") {
+                            Button(localizedDebugLabel("Reset Button")) {
                                 resetBrowserDevToolsButton()
                             }
-                            Button("Copy Button Config") {
+                            Button(localizedDebugLabel("Copy Button Config")) {
                                 copyBrowserDevToolsButtonConfig()
                             }
                         }
@@ -751,12 +758,12 @@ private struct DebugWindowControlsView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Copy") {
+                GroupBox(localizedDebugLabel("Copy")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Button("Copy All Debug Config") {
+                        Button(localizedDebugLabel("Copy All Debug Config")) {
                             DebugWindowConfigSnapshot.copyCombinedToPasteboard()
                         }
-                        Text("Copies sidebar, background, menu bar, and browser devtools settings as one payload.")
+                        Text(localizedDebugLabel("Copies sidebar, background, menu bar, and browser devtools settings as one payload."))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -784,7 +791,7 @@ private struct DebugWindowControlsView: View {
 
     private func sliderRow(_ label: String, value: Binding<Double>) -> some View {
         HStack(spacing: 8) {
-            Text(label)
+            Text(localizedDebugLabel(label))
             Slider(value: value, in: ShortcutHintDebugSettings.offsetRange)
             Text(String(format: "%.1f", ShortcutHintDebugSettings.clamped(value.wrappedValue)))
                 .font(.caption)
@@ -1020,7 +1027,7 @@ private struct BrowserProfilePopoverDebugView: View {
 
     private func sliderRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         HStack(spacing: 8) {
-            Text(label)
+            Text(localizedDebugLabel(label))
             Slider(value: value, in: range, step: 1)
             Text(String(format: "%.0f", value.wrappedValue))
                 .font(.caption)
@@ -1040,7 +1047,7 @@ final class SidebarDebugWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Sidebar Debug"
+        window.title = localizedDebugLabel("Sidebar Debug")
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
@@ -1118,45 +1125,45 @@ private struct SidebarDebugView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Sidebar Appearance")
+                Text(localizedDebugLabel("Sidebar Appearance"))
                     .font(.headline)
 
                 Toggle(String(localized: "settings.sidebarAppearance.matchTerminalBackground", defaultValue: "Match Terminal Background"), isOn: $matchTerminalBackground)
 
-                GroupBox("Presets") {
-                    Picker("Preset", selection: $sidebarPreset) {
+                GroupBox(localizedDebugLabel("Presets")) {
+                    Picker(localizedDebugLabel("Preset"), selection: $sidebarPreset) {
                         ForEach(SidebarPresetOption.allCases) { option in
                             Text(option.title).tag(option.rawValue)
                         }
                     }
-                    .onChange(of: sidebarPreset) { _ in
+                    .onChange(of: sidebarPreset) {
                         applyPreset()
                     }
                     .padding(.top, 2)
                 }
 
-                GroupBox("Blur") {
+                GroupBox(localizedDebugLabel("Blur")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Picker("Material", selection: $sidebarMaterial) {
+                        Picker(localizedDebugLabel("Material"), selection: $sidebarMaterial) {
                             ForEach(SidebarMaterialOption.allCases) { option in
                                 Text(option.title).tag(option.rawValue)
                             }
                         }
 
-                        Picker("Blending", selection: $sidebarBlendMode) {
+                        Picker(localizedDebugLabel("Blending"), selection: $sidebarBlendMode) {
                             ForEach(SidebarBlendModeOption.allCases) { option in
                                 Text(option.title).tag(option.rawValue)
                             }
                         }
 
-                        Picker("State", selection: $sidebarState) {
+                        Picker(localizedDebugLabel("State"), selection: $sidebarState) {
                             ForEach(SidebarStateOption.allCases) { option in
                                 Text(option.title).tag(option.rawValue)
                             }
                         }
 
                         HStack(spacing: 8) {
-                            Text("Strength")
+                            Text(localizedDebugLabel("Strength"))
                             Slider(value: $sidebarBlurOpacity, in: 0...1)
                             Text(String(format: "%.0f%%", sidebarBlurOpacity * 100))
                                 .font(.caption)
@@ -1166,12 +1173,12 @@ private struct SidebarDebugView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Tint") {
+                GroupBox(localizedDebugLabel("Tint")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        ColorPicker("Tint Color", selection: tintColorBinding, supportsOpacity: false)
+                        ColorPicker(localizedDebugLabel("Tint Color"), selection: tintColorBinding, supportsOpacity: false)
 
                         HStack(spacing: 8) {
-                            Text("Opacity")
+                            Text(localizedDebugLabel("Opacity"))
                             Slider(value: $sidebarTintOpacity, in: 0...0.7)
                             Text(String(format: "%.0f%%", sidebarTintOpacity * 100))
                                 .font(.caption)
@@ -1181,9 +1188,9 @@ private struct SidebarDebugView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Shape") {
+                GroupBox(localizedDebugLabel("Shape")) {
                     HStack(spacing: 8) {
-                        Text("Corner Radius")
+                        Text(localizedDebugLabel("Corner Radius"))
                         Slider(value: $sidebarCornerRadius, in: 0...20)
                         Text(String(format: "%.0f", sidebarCornerRadius))
                             .font(.caption)
@@ -1192,24 +1199,24 @@ private struct SidebarDebugView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Shortcut Hints") {
+                GroupBox(localizedDebugLabel("Shortcut Hints")) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Toggle("Always show shortcut hints", isOn: $alwaysShowShortcutHints)
+                        Toggle(localizedDebugLabel("Always show shortcut hints"), isOn: $alwaysShowShortcutHints)
 
                         hintOffsetSection(
-                            "Sidebar Cmd+1…9",
+                            localizedDebugLabel("Sidebar Cmd+1…9"),
                             x: $sidebarShortcutHintXOffset,
                             y: $sidebarShortcutHintYOffset
                         )
 
                         hintOffsetSection(
-                            "Titlebar Buttons",
+                            localizedDebugLabel("Titlebar Buttons"),
                             x: $titlebarShortcutHintXOffset,
                             y: $titlebarShortcutHintYOffset
                         )
 
                         hintOffsetSection(
-                            "Pane Ctrl/Cmd+1…9",
+                            localizedDebugLabel("Pane Ctrl/Cmd+1…9"),
                             x: $paneShortcutHintXOffset,
                             y: $paneShortcutHintYOffset
                         )
@@ -1217,9 +1224,9 @@ private struct SidebarDebugView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Active Workspace Indicator") {
+                GroupBox(localizedDebugLabel("Active Workspace Indicator")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Picker("Style", selection: sidebarIndicatorStyleSelection) {
+                        Picker(localizedDebugLabel("Style"), selection: sidebarIndicatorStyleSelection) {
                             ForEach(SidebarActiveTabIndicatorStyle.allCases) { style in
                                 Text(style.displayName).tag(style.rawValue)
                             }
@@ -1238,31 +1245,31 @@ private struct SidebarDebugView: View {
                 }
 
                 HStack(spacing: 12) {
-                    Button("Reset Tint") {
+                    Button(localizedDebugLabel("Reset Tint")) {
                         sidebarTintOpacity = 0.62
                         sidebarTintHex = SidebarTintDefaults.hex
                         sidebarTintHexLight = nil
                         sidebarTintHexDark = nil
                     }
-                    Button("Reset Blur") {
+                    Button(localizedDebugLabel("Reset Blur")) {
                         sidebarMaterial = SidebarMaterialOption.hudWindow.rawValue
                         sidebarBlendMode = SidebarBlendModeOption.withinWindow.rawValue
                         sidebarState = SidebarStateOption.active.rawValue
                         sidebarBlurOpacity = 0.98
                     }
-                    Button("Reset Shape") {
+                    Button(localizedDebugLabel("Reset Shape")) {
                         sidebarCornerRadius = 0.0
                     }
-                    Button("Reset Hints") {
+                    Button(localizedDebugLabel("Reset Hints")) {
                         resetShortcutHintOffsets()
                     }
-                    Button("Reset Active Indicator") {
+                    Button(localizedDebugLabel("Reset Active Indicator")) {
                         sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
                         sidebarSelectionColorHex = nil
                     }
                 }
 
-                Button("Copy Config") {
+                Button(localizedDebugLabel("Copy Config")) {
                     copySidebarConfig()
                 }
 
@@ -1297,7 +1304,7 @@ private struct SidebarDebugView: View {
 
     private func sliderRow(_ label: String, value: Binding<Double>) -> some View {
         HStack(spacing: 8) {
-            Text(label)
+            Text(localizedDebugLabel(label))
             Slider(value: value, in: ShortcutHintDebugSettings.offsetRange)
             Text(String(format: "%.1f", ShortcutHintDebugSettings.clamped(value.wrappedValue)))
                 .font(.caption)
@@ -1369,7 +1376,7 @@ final class MenuBarExtraDebugWindowController: NSWindowController, NSWindowDeleg
             backing: .buffered,
             defer: false
         )
-        window.title = "Menu Bar Extra Debug"
+        window.title = localizedDebugLabel("Menu Bar Extra Debug")
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
@@ -1411,16 +1418,16 @@ private struct MenuBarExtraDebugView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Menu Bar Extra Icon")
+                Text(localizedDebugLabel("Menu Bar Extra Icon"))
                     .font(.headline)
 
-                GroupBox("Preview Count") {
+                GroupBox(localizedDebugLabel("Preview Count")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Override unread count", isOn: $previewEnabled)
+                        Toggle(localizedDebugLabel("Override unread count"), isOn: $previewEnabled)
 
                         Stepper(value: $previewCount, in: 0...99) {
                             HStack {
-                                Text("Unread Count")
+                                Text(localizedDebugLabel("Unread Count"))
                                 Spacer()
                                 Text("\(previewCount)")
                                     .font(.caption)
@@ -1432,7 +1439,7 @@ private struct MenuBarExtraDebugView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Badge Rect") {
+                GroupBox(localizedDebugLabel("Badge Rect")) {
                     VStack(alignment: .leading, spacing: 8) {
                         sliderRow("X", value: $badgeRectX, range: 0...20, format: "%.2f")
                         sliderRow("Y", value: $badgeRectY, range: 0...20, format: "%.2f")
@@ -1442,7 +1449,7 @@ private struct MenuBarExtraDebugView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Badge Text") {
+                GroupBox(localizedDebugLabel("Badge Text")) {
                     VStack(alignment: .leading, spacing: 8) {
                         sliderRow("1-digit size", value: $singleDigitFontSize, range: 6...14, format: "%.2f")
                         sliderRow("2-digit size", value: $multiDigitFontSize, range: 6...14, format: "%.2f")
@@ -1456,7 +1463,7 @@ private struct MenuBarExtraDebugView: View {
                 }
 
                 HStack(spacing: 12) {
-                    Button("Reset") {
+                    Button(localizedDebugLabel("Reset")) {
                         previewEnabled = false
                         previewCount = 1
                         badgeRectX = Double(MenuBarIconDebugSettings.defaultBadgeRect.origin.x)
@@ -1473,7 +1480,7 @@ private struct MenuBarExtraDebugView: View {
                         applyLiveUpdate()
                     }
 
-                    Button("Copy Config") {
+                    Button(localizedDebugLabel("Copy Config")) {
                         let payload = MenuBarIconDebugSettings.copyPayload()
                         let pasteboard = NSPasteboard.general
                         pasteboard.clearContents()
@@ -1481,7 +1488,7 @@ private struct MenuBarExtraDebugView: View {
                     }
                 }
 
-                Text("Tip: enable override count, then tune until the menu bar icon looks right.")
+                Text(localizedDebugLabel("Tip: enable override count, then tune until the menu bar icon looks right."))
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -1491,19 +1498,19 @@ private struct MenuBarExtraDebugView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .onAppear { applyLiveUpdate() }
-        .onChange(of: previewEnabled) { _ in applyLiveUpdate() }
-        .onChange(of: previewCount) { _ in applyLiveUpdate() }
-        .onChange(of: badgeRectX) { _ in applyLiveUpdate() }
-        .onChange(of: badgeRectY) { _ in applyLiveUpdate() }
-        .onChange(of: badgeRectWidth) { _ in applyLiveUpdate() }
-        .onChange(of: badgeRectHeight) { _ in applyLiveUpdate() }
-        .onChange(of: singleDigitFontSize) { _ in applyLiveUpdate() }
-        .onChange(of: multiDigitFontSize) { _ in applyLiveUpdate() }
-        .onChange(of: singleDigitXAdjust) { _ in applyLiveUpdate() }
-        .onChange(of: multiDigitXAdjust) { _ in applyLiveUpdate() }
-        .onChange(of: singleDigitYOffset) { _ in applyLiveUpdate() }
-        .onChange(of: multiDigitYOffset) { _ in applyLiveUpdate() }
-        .onChange(of: textRectWidthAdjust) { _ in applyLiveUpdate() }
+        .onChange(of: previewEnabled) { applyLiveUpdate() }
+        .onChange(of: previewCount) { applyLiveUpdate() }
+        .onChange(of: badgeRectX) { applyLiveUpdate() }
+        .onChange(of: badgeRectY) { applyLiveUpdate() }
+        .onChange(of: badgeRectWidth) { applyLiveUpdate() }
+        .onChange(of: badgeRectHeight) { applyLiveUpdate() }
+        .onChange(of: singleDigitFontSize) { applyLiveUpdate() }
+        .onChange(of: multiDigitFontSize) { applyLiveUpdate() }
+        .onChange(of: singleDigitXAdjust) { applyLiveUpdate() }
+        .onChange(of: multiDigitXAdjust) { applyLiveUpdate() }
+        .onChange(of: singleDigitYOffset) { applyLiveUpdate() }
+        .onChange(of: multiDigitYOffset) { applyLiveUpdate() }
+        .onChange(of: textRectWidthAdjust) { applyLiveUpdate() }
     }
 
     private func sliderRow(
@@ -1513,7 +1520,7 @@ private struct MenuBarExtraDebugView: View {
         format: String
     ) -> some View {
         HStack(spacing: 8) {
-            Text(label)
+            Text(localizedDebugLabel(label))
             Slider(value: value, in: range)
             Text(String(format: format, value.wrappedValue))
                 .font(.caption)
@@ -1539,7 +1546,7 @@ final class SplitButtonLayoutDebugWindowController: NSWindowController, NSWindow
             backing: .buffered,
             defer: false
         )
-        window.title = "Split Button Layout"
+        window.title = localizedDebugLabel("Split Button Layout")
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
@@ -1575,20 +1582,20 @@ private struct SplitButtonLayoutDebugView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Button Backdrop Color")
+            Text(localizedDebugLabel("Button Backdrop Color"))
                 .font(.headline)
 
             ForEach(options, id: \.0) { id, label in
                 HStack {
                     Image(systemName: backdropStyle == id ? "checkmark.circle.fill" : "circle")
                         .foregroundColor(backdropStyle == id ? .accentColor : .secondary)
-                    Text(label)
+                    Text(localizedDebugLabel(label))
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { backdropStyle = id }
             }
 
-            Text("Changes apply live.")
+            Text(localizedDebugLabel("Changes apply live."))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -1609,7 +1616,7 @@ final class BackgroundDebugWindowController: NSWindowController, NSWindowDelegat
             backing: .buffered,
             defer: false
         )
-        window.title = "Background Debug"
+        window.title = localizedDebugLabel("Background Debug")
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
@@ -1642,32 +1649,32 @@ private struct BackgroundDebugView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Window Background Glass")
+                Text(localizedDebugLabel("Window Background Glass"))
                     .font(.headline)
 
-                GroupBox("Glass Effect") {
+                GroupBox(localizedDebugLabel("Glass Effect")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Enable Glass Effect", isOn: $bgGlassEnabled)
+                        Toggle(localizedDebugLabel("Enable Glass Effect"), isOn: $bgGlassEnabled)
 
-                        Picker("Material", selection: $bgGlassMaterial) {
-                            Text("HUD Window").tag("hudWindow")
-                            Text("Under Window").tag("underWindowBackground")
-                            Text("Sidebar").tag("sidebar")
-                            Text("Menu").tag("menu")
-                            Text("Popover").tag("popover")
+                        Picker(localizedDebugLabel("Material"), selection: $bgGlassMaterial) {
+                            Text(localizedDebugLabel("HUD Window")).tag("hudWindow")
+                            Text(localizedDebugLabel("Under Window")).tag("underWindowBackground")
+                            Text(localizedDebugLabel("Sidebar")).tag("sidebar")
+                            Text(localizedDebugLabel("Menu")).tag("menu")
+                            Text(localizedDebugLabel("Popover")).tag("popover")
                         }
                         .disabled(!bgGlassEnabled)
                     }
                     .padding(.top, 2)
                 }
 
-                GroupBox("Tint") {
+                GroupBox(localizedDebugLabel("Tint")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        ColorPicker("Tint Color", selection: tintColorBinding, supportsOpacity: false)
+                        ColorPicker(localizedDebugLabel("Tint Color"), selection: tintColorBinding, supportsOpacity: false)
                             .disabled(!bgGlassEnabled)
 
                         HStack(spacing: 8) {
-                            Text("Opacity")
+                            Text(localizedDebugLabel("Opacity"))
                             Slider(value: $bgGlassTintOpacity, in: 0...0.8)
                                 .disabled(!bgGlassEnabled)
                             Text(String(format: "%.0f%%", bgGlassTintOpacity * 100))
@@ -1679,7 +1686,7 @@ private struct BackgroundDebugView: View {
                 }
 
                 HStack(spacing: 12) {
-                    Button("Reset") {
+                    Button(localizedDebugLabel("Reset")) {
                         bgGlassTintHex = "#000000"
                         bgGlassTintOpacity = 0.03
                         bgGlassMaterial = "hudWindow"
@@ -1687,12 +1694,12 @@ private struct BackgroundDebugView: View {
                         updateWindowGlassTint()
                     }
 
-                    Button("Copy Config") {
+                    Button(localizedDebugLabel("Copy Config")) {
                         copyBgConfig()
                     }
                 }
 
-                Text("Tint changes apply live. Enable/disable requires reload.")
+                Text(localizedDebugLabel("Tint changes apply live. Enable/disable requires reload."))
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -1701,8 +1708,8 @@ private struct BackgroundDebugView: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .onChange(of: bgGlassTintHex) { _ in updateWindowGlassTint() }
-        .onChange(of: bgGlassTintOpacity) { _ in updateWindowGlassTint() }
+        .onChange(of: bgGlassTintHex) { updateWindowGlassTint() }
+        .onChange(of: bgGlassTintOpacity) { updateWindowGlassTint() }
     }
 
     private func updateWindowGlassTint() {
@@ -1746,4 +1753,3 @@ private struct BackgroundDebugView: View {
         pasteboard.setString(payload, forType: .string)
     }
 }
-

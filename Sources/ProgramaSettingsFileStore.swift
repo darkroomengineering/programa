@@ -1151,7 +1151,7 @@ final class ProgramaSettingsFileStore {
             "  // This file uses JSON with comments (JSONC).",
             "  // Uncomment and edit any setting to make it file-managed.",
             "  // Remove a setting to fall back to the value saved in Settings.",
-            "  // cmux creates this template on launch when both settings file locations are missing.",
+            "  // Programa creates this template on launch when both settings file locations are missing.",
             "  // ~/.config/programa/settings.json takes precedence over the Application Support fallback.",
             "",
         ]

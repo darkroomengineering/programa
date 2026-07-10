@@ -1374,7 +1374,7 @@ class GhosttyApp {
             handle.write(Data(line.utf8))
             handle.closeFile()
         } else {
-            FileManager.default.createFile(atPath: initLogPath, contents: line.data(using: .utf8))
+            _ = FileManager.default.createFile(atPath: initLogPath, contents: line.data(using: .utf8))
         }
     }
 
@@ -3112,11 +3112,11 @@ class GhosttyApp {
             "\(timestamp) seq=\(sequence) t+\(String(format: "%.3f", uptimeMs))ms thread=\(threadLabel) frame60=\(frame60) frame120=\(frame120) cmux bg: \(message)\n"
         if let data = line.data(using: .utf8) {
             if FileManager.default.fileExists(atPath: backgroundLogURL.path) == false {
-                FileManager.default.createFile(atPath: backgroundLogURL.path, contents: nil)
+                _ = FileManager.default.createFile(atPath: backgroundLogURL.path, contents: nil)
             }
             if let handle = try? FileHandle(forWritingTo: backgroundLogURL) {
                 defer { try? handle.close() }
-                try? handle.seekToEnd()
+                _ = try? handle.seekToEnd()
                 try? handle.write(contentsOf: data)
             }
         }
@@ -3770,7 +3770,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             handle.write(Data(line.utf8))
             handle.closeFile()
         } else {
-            FileManager.default.createFile(atPath: surfaceLogPath, contents: line.data(using: .utf8))
+            _ = FileManager.default.createFile(atPath: surfaceLogPath, contents: line.data(using: .utf8))
         }
     }
 
@@ -3784,7 +3784,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             handle.write(Data(line.utf8))
             handle.closeFile()
         } else {
-            FileManager.default.createFile(atPath: sizeLogPath, contents: line.data(using: .utf8))
+            _ = FileManager.default.createFile(atPath: sizeLogPath, contents: line.data(using: .utf8))
         }
     }
     #endif
@@ -4306,7 +4306,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         dlog("forceRefresh: \(id) reason=\(reason) \(viewState)")
         #endif
         guard let view = attachedView,
-              let surface,
               view.window != nil,
               view.bounds.width > 0,
               view.bounds.height > 0 else {
@@ -8330,4 +8329,3 @@ final class GhosttySurfaceScrollView: NSView {
         return contentHeight
     }
 }
-
