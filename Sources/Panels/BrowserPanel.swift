@@ -1943,14 +1943,21 @@ final class BrowserPanel: Panel, ObservableObject {
             return
         }
 
-        guard !restoredForwardHistoryStack.isEmpty else { return }
+        // Live current not found in either restored stack: a new live navigation moved past
+        // both, so restoredHistoryCurrentURL is stale. Push the stale current onto the back
+        // stack and adopt the live current, mirroring the nativeBack fallback that
+        // sessionNavigationHistorySnapshot's read path already applies for this case (:1875).
 #if DEBUG
         dlog(
-            "browser.history.restore.forward.clear panel=\(id.uuidString.prefix(5)) " +
+            "browser.history.restore.desync.realign panel=\(id.uuidString.prefix(5)) " +
             "current=\(liveCurrentString)"
         )
 #endif
+        if let restoredHistoryCurrentURL {
+            restoredBackHistoryStack.append(restoredHistoryCurrentURL)
+        }
         restoredForwardHistoryStack.removeAll(keepingCapacity: false)
+        restoredHistoryCurrentURL = liveCurrent
         refreshNavigationAvailability()
     }
 
@@ -3287,10 +3294,15 @@ extension BrowserPanel {
 
         prepareDeveloperToolsForRevealIfNeeded(inspector)
 
-        let showSelector = NSSelectorFromString("show")
-        guard inspector.responds(to: showSelector) else { return false }
-        inspector.programaCallVoid(selector: showSelector)
-        let visibleAfterShow = inspector.programaCallBool(selector: isVisibleSelector) ?? false
+        // prepareDeveloperToolsForRevealIfNeeded may already attach (and thus show) the
+        // inspector; re-check before calling show again to avoid double-showing it.
+        var visibleAfterShow = inspector.programaCallBool(selector: isVisibleSelector) ?? false
+        if !visibleAfterShow {
+            let showSelector = NSSelectorFromString("show")
+            guard inspector.responds(to: showSelector) else { return false }
+            inspector.programaCallVoid(selector: showSelector)
+            visibleAfterShow = inspector.programaCallBool(selector: isVisibleSelector) ?? false
+        }
         if visibleAfterShow {
             developerToolsLastKnownVisibleAt = Date()
         }
@@ -3412,8 +3424,12 @@ extension BrowserPanel {
             developerToolsDetachedOpenGraceDeadline = nil
         }
 
+        // Use the POST-transition visibility (not the stale pre-transition `visible`) to decide
+        // whether a settle timer is needed — a transition that already reached its target
+        // synchronously must not be left looking "in flight".
+        let visibleAfterTransition = inspector.programaCallBool(selector: isVisibleSelector) ?? false
+
         if targetVisible {
-            let visibleAfterTransition = inspector.programaCallBool(selector: isVisibleSelector) ?? false
             if visibleAfterTransition {
                 syncDeveloperToolsPresentationPreferenceFromUI()
                 cancelDeveloperToolsRestoreRetry()
@@ -3427,7 +3443,7 @@ extension BrowserPanel {
             forceDeveloperToolsRefreshOnNextAttach = false
         }
 
-        if visible != targetVisible {
+        if visibleAfterTransition != targetVisible {
             scheduleDeveloperToolsTransitionSettle(source: source)
         } else {
             developerToolsTransitionTargetVisible = nil

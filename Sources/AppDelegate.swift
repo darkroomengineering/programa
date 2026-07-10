@@ -5744,10 +5744,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private func installShortcutDefaultsObserver() {
         guard shortcutDefaultsObserver == nil else { return }
         refreshConfiguredShortcutChordActions()
+        // queue: nil (not .main) is required so this runs synchronously on the
+        // posting thread. All call sites post this notification from the main
+        // thread (see Sources/KeyboardShortcutSettings.swift setShortcut/resetShortcut/
+        // resetAll, and Sources/ProgramaSettingsFileStore.swift's file watcher, which
+        // hops to DispatchQueue.main.async before calling reload()). A .main queue
+        // would enqueue delivery asynchronously even when posted from the main thread,
+        // leaving configuredShortcutChordActions stale for one run-loop turn if a key
+        // event arrives immediately after a shortcut change.
         shortcutDefaultsObserver = NotificationCenter.default.addObserver(
             forName: KeyboardShortcutSettings.didChangeNotification,
             object: nil,
-            queue: .main
+            queue: nil
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.refreshConfiguredShortcutChordActions()

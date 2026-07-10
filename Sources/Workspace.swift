@@ -3213,8 +3213,7 @@ final class Workspace: Identifiable, ObservableObject {
             // by `surface` (the TerminalSurface) — ARC must not release it while
             // ghostty_surface_inherited_config or programaCurrentSurfaceFontSizePoints
             // is still reading through the pointer.
-            let surface = terminalPanel.surface
-            guard let sourceSurface = surface.surface else { continue }
+            guard let sourceSurface = terminalPanel.surface.liveSurfaceForGhosttyAccess(reason: "inheritedTerminalConfig") else { continue }
             var config = programaInheritedSurfaceConfig(
                 sourceSurface: sourceSurface,
                 context: GHOSTTY_SURFACE_CONTEXT_SPLIT
@@ -3228,7 +3227,7 @@ final class Workspace: Identifiable, ObservableObject {
                 terminalInheritanceFontPointsByPanelId[terminalPanel.id] = rootedFontPoints
             }
             // Prevent ARC from releasing panel/surface before the C calls above complete.
-            withExtendedLifetime((terminalPanel, surface)) {}
+            withExtendedLifetime((terminalPanel, terminalPanel.surface)) {}
             rememberTerminalConfigInheritanceSource(terminalPanel)
             if config.fontSize > 0 {
                 lastTerminalConfigInheritanceFontPoints = config.fontSize
