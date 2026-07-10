@@ -29,7 +29,7 @@ EOF
   chmod +x "$STUB_BIN/$name"
 }
 
-for command in xcodebuild pkill sleep open; do
+for command in ensure-ghosttykit xcodebuild pkill sleep open; do
   write_logging_stub "$command"
 done
 
@@ -50,7 +50,10 @@ export TEST_COMMAND_LOG="$COMMAND_LOG"
 set +e
 OUTPUT="$({
   cd "$ROOT_DIR"
-  HOME="$FAKE_HOME" PATH="$STUB_BIN:/usr/bin:/bin" bash scripts/reloadp.sh
+  HOME="$FAKE_HOME" \
+    PATH="$STUB_BIN:/usr/bin:/bin" \
+    PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND="$STUB_BIN/ensure-ghosttykit" \
+    bash scripts/reloadp.sh
 } 2>&1)"
 STATUS=$?
 set -e

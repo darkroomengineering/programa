@@ -26,9 +26,6 @@ jobs:
       - name: Validate create-dmg version pinning
         run: ./tests/test_ci_create_dmg_pinned.sh
 
-      - name: Validate unit-test SwiftPM retry guard
-        run: ./tests/test_ci_unit_test_spm_retry.sh
-
       - name: Validate unit-test runner behavior
         run: ./tests/test_ci_unit_test_runner_behavior.sh
 
@@ -88,6 +85,12 @@ jobs:
           echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
           export DEVELOPER_DIR="$XCODE_DIR"
           xcodebuild -version
+
+      - name: Validate Release reload artifact discovery
+        run: ./tests/test_reloadp_programa_artifact.sh
+
+      - name: Validate reload entrypoint artifacts and dependency preparation
+        run: ./tests/test_reload_entrypoints_artifacts.sh
 
       - name: Cache GhosttyKit.xcframework
         id: cache-ghosttykit
@@ -161,56 +164,7 @@ jobs:
           done
 
       - name: Run unit tests
-        run: |
-          set -euo pipefail
-          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
-          run_unit_tests() {
-            xcodebuild -project GhosttyTabs.xcodeproj -scheme programa-unit -configuration Debug \
-              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
-              -disableAutomaticPackageResolution \
-              -destination "platform=macOS" \
-              -skip-testing:programaTests/AppDelegateShortcutRoutingTests/testCmdWClosesWindowWhenClosingLastSurfaceInLastWorkspace \
-              test 2>&1
-          }
-
-          # Stream output via tee so CI logs are visible in real time, while still
-          # capturing for post-run analysis of expected vs unexpected failures.
-          set +e
-          run_unit_tests | tee /tmp/test-output.txt
-          EXIT_CODE=${PIPESTATUS[0]}
-          OUTPUT=$(cat /tmp/test-output.txt)
-          set -e
-
-          # SwiftPM binary artifact resolution can occasionally fail on ephemeral
-          # runners with "Could not resolve package dependencies". Retry once after
-          # clearing SwiftPM/DerivedData caches to recover from transient corruption.
-          if [ "$EXIT_CODE" -ne 0 ] && echo "$OUTPUT" | grep -q "Could not resolve package dependencies"; then
-            echo "SwiftPM package resolution failed, clearing caches and retrying once"
-            rm -rf ~/Library/Caches/org.swift.swiftpm
-            mkdir -p ~/Library/Caches/org.swift.swiftpm
-            rm -rf ~/Library/Developer/Xcode/DerivedData/GhosttyTabs-*
-            set +e
-            run_unit_tests | tee /tmp/test-output.txt
-            EXIT_CODE=${PIPESTATUS[0]}
-            OUTPUT=$(cat /tmp/test-output.txt)
-            set -e
-          fi
-
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            SUMMARY=$(echo "$OUTPUT" | grep "Executed.*tests.*with.*failures" | tail -1)
-            if echo "$SUMMARY" | grep -q "(0 unexpected)"; then
-              echo "All failures are expected, treating as pass"
-            else
-              echo "Unexpected test failures detected"
-              exit 1
-            fi
-          fi
-
-      - name: Validate Release reload artifact discovery
-        run: ./tests/test_reloadp_programa_artifact.sh
-
-      - name: Validate reload entrypoint artifacts and dependency preparation
-        run: ./tests/test_reload_entrypoints_artifacts.sh
+        run: ./scripts/ci-run-unit-tests.sh
 
       - name: Run bundled Ghostty theme picker helper regression
         run: |

@@ -42,11 +42,6 @@ if [[ "$EXIT_CODE" -ne 0 ]] && grep -q "Could not resolve package dependencies" 
 fi
 
 if [[ "$EXIT_CODE" -ne 0 ]]; then
-  SUMMARY="$(grep "Executed.*tests.*with.*failures" <<< "$OUTPUT" | tail -1 || true)"
-  if grep -q "(0 unexpected)" <<< "$SUMMARY"; then
-    echo "All failures are expected, treating as pass"
-  else
-    echo "Unexpected test failures detected"
-    exit "$EXIT_CODE"
-  fi
+  echo "Unit tests failed with exit code $EXIT_CODE"
+  exit "$EXIT_CODE"
 fi
