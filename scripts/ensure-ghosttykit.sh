@@ -91,7 +91,8 @@ mkdir -p "$CACHE_ROOT"
 
 echo "==> Ghostty build key: $GHOSTTY_KEY"
 
-LOCK_TIMEOUT=300
+LOCK_TIMEOUT="${PROGRAMA_GHOSTTYKIT_LOCK_TIMEOUT:-300}"
+LOCK_POLL_INTERVAL="${PROGRAMA_GHOSTTYKIT_LOCK_POLL_INTERVAL:-1}"
 LOCK_START=$SECONDS
 while ! mkdir "$LOCK_DIR" 2>/dev/null; do
   if (( SECONDS - LOCK_START > LOCK_TIMEOUT )); then
@@ -100,7 +101,7 @@ while ! mkdir "$LOCK_DIR" 2>/dev/null; do
     continue
   fi
   echo "==> Waiting for GhosttyKit cache lock for $GHOSTTY_KEY..."
-  sleep 1
+  sleep "$LOCK_POLL_INTERVAL"
 done
 trap 'rmdir "$LOCK_DIR" >/dev/null 2>&1 || true' EXIT
 

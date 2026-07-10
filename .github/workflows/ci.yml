@@ -17,6 +17,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      - name: Validate GhosttyKit lock ownership
+        run: ./tests/test_ensure_ghosttykit_locking.sh
+
       - name: Validate GitHub-hosted runner guards
         run: ./tests/test_ci_self_hosted_guard.sh
 
@@ -225,6 +228,23 @@ jobs:
           fi
 
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_version_memory_guard.py
+
+      - name: Run typed CLI registry behavior regression
+        run: |
+          set -euo pipefail
+
+          CLI_BIN="$(
+            find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/Debug/programa" -exec stat -f '%m %N' {} \; \
+              | sort -nr \
+              | head -1 \
+              | cut -d' ' -f2-
+          )"
+          if [ -z "${CLI_BIN:-}" ] || [ ! -x "$CLI_BIN" ]; then
+            echo "programa CLI binary not found in DerivedData" >&2
+            exit 1
+          fi
+
+          PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_registry_behavior.py
 
   tests-build-and-lag:
     needs: tests
