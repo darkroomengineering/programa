@@ -1721,6 +1721,11 @@ class TabManager: ObservableObject {
     }
 
     func closeWorkspace(_ workspace: Workspace) {
+        // Guard against tearing down a workspace this manager doesn't own (e.g. a
+        // stray/external Workspace instance never inserted into `tabs`). Without
+        // this check, teardownAllPanels()/teardownRemoteConnection() below would
+        // unconditionally mutate whatever workspace was passed in.
+        guard tabs.contains(where: { $0.id == workspace.id }) else { return }
         guard tabs.count > 1 else { return }
         clearWorkspaceGitProbes(workspaceId: workspace.id)
         sidebarSelectedWorkspaceIds.remove(workspace.id)

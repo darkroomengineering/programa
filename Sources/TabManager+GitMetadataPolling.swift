@@ -123,11 +123,20 @@ extension TabManager {
         in workspace: Workspace,
         activeProbeKeys: Set<WorkspaceGitProbeKey>
     ) -> Set<UUID> {
+        // Panels with already-confirmed git branch/PR metadata are always eligible
+        // for periodic re-verification (to catch drift, e.g. a checkout or a PR
+        // opening/merging) regardless of whether some other probe (e.g. the
+        // multi-attempt startup probe, or the probe scheduled by the very branch
+        // update that populated this metadata) happens to still be in flight for
+        // that panel. Excluding them here would starve confirmed panels of
+        // periodic refresh for as long as any unrelated probe stays active.
         var candidatePanelIds = Set(workspace.panelGitBranches.keys)
         candidatePanelIds.formUnion(workspace.panelPullRequests.keys)
         // Only keep background polling panels whose current directory has already
         // proven to yield sidebar git metadata. Initial multi-attempt probes handle
-        // startup races; this avoids polling non-repo directories forever.
+        // startup races; this avoids polling non-repo directories forever. Skip
+        // panels whose own probe for this exact directory is still actively
+        // resolving so the periodic sweep doesn't redundantly interrupt/reset it.
         candidatePanelIds.formUnion(
             workspace.panels.keys.compactMap { panelId in
                 guard let currentDirectory = gitProbeDirectory(for: workspace, panelId: panelId) else {
@@ -135,6 +144,9 @@ extension TabManager {
                 }
                 let probeKey = WorkspaceGitProbeKey(workspaceId: workspace.id, panelId: panelId)
                 guard workspaceGitTrackedDirectoryByKey[probeKey] == currentDirectory else {
+                    return nil
+                }
+                guard !activeProbeKeys.contains(probeKey) else {
                     return nil
                 }
                 return panelId
@@ -148,10 +160,7 @@ extension TabManager {
             candidatePanelIds.insert(focusedPanelId)
         }
 
-        return Set(candidatePanelIds.filter { panelId in
-            let probeKey = WorkspaceGitProbeKey(workspaceId: workspace.id, panelId: panelId)
-            return !activeProbeKeys.contains(probeKey)
-        })
+        return candidatePanelIds
     }
 
     private func sweepStaleAgentPIDs() {
