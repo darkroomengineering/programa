@@ -648,6 +648,18 @@ final class BrowserHistoryStore: ObservableObject {
 actor BrowserSearchSuggestionService {
     static let shared = BrowserSearchSuggestionService()
 
+    typealias RequestLoader = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+
+    private let requestLoader: RequestLoader
+
+    init(
+        requestLoader: @escaping RequestLoader = { request in
+            try await URLSession.shared.data(for: request)
+        }
+    ) {
+        self.requestLoader = requestLoader
+    }
+
     func suggestions(engine: BrowserSearchEngine, query: String) async -> [String] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
@@ -746,7 +758,7 @@ actor BrowserSearchSuggestionService {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: req)
+            (data, response) = try await requestLoader(req)
         } catch {
             return []
         }

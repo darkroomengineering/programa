@@ -10,10 +10,32 @@ import Darwin
 import Network
 import CoreText
 
+struct WorkspaceRemoteLoopbackProxyRoute: Equatable {
+    let targetHost: String
+    let rewriteAliasHost: String?
+}
+
+/// Resolves the host contract used by the live proxy session. This is intentionally
+/// factored out as a small runtime seam so browser URL rewriting and proxy routing
+/// can be regression-tested together.
+func workspaceRemoteLoopbackProxyRoute(for host: String) -> WorkspaceRemoteLoopbackProxyRoute {
+    let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalized = trimmed
+        .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        .lowercased()
+    let recognizedAliasHost = "programa-loopback.localtest.me"
+    if normalized == recognizedAliasHost {
+        return WorkspaceRemoteLoopbackProxyRoute(
+            targetHost: "127.0.0.1",
+            rewriteAliasHost: recognizedAliasHost
+        )
+    }
+    return WorkspaceRemoteLoopbackProxyRoute(targetHost: host, rewriteAliasHost: nil)
+}
+
 private final class WorkspaceRemoteDaemonProxyTunnel {
     private final class ProxySession {
         private static let maxHandshakeBytes = 64 * 1024
-        private static let remoteLoopbackProxyAliasHost = "programa-loopback.localtest.me"
 
         private enum HandshakeProtocol {
             case undecided
@@ -47,6 +69,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         private var streamID: String?
         private var localInputEOF = false
         private var rewritesLoopbackHTTPHeaders = false
+        private var loopbackRewriteAliasHost: String?
         private var loopbackRequestHeaderRewriter: RemoteLoopbackHTTPRequestStreamRewriter?
         private var pendingRemoteHTTPHeaderBytes = Data()
         private var hasForwardedRemoteHTTPHeaders = false
@@ -297,16 +320,19 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         ) {
             guard !isClosed else { return }
             do {
-                rewritesLoopbackHTTPHeaders =
-                    BrowserInsecureHTTPSettings.normalizeHost(host)
-                    == BrowserInsecureHTTPSettings.normalizeHost(Self.remoteLoopbackProxyAliasHost)
-                loopbackRequestHeaderRewriter = rewritesLoopbackHTTPHeaders
-                    ? RemoteLoopbackHTTPRequestStreamRewriter(aliasHost: Self.remoteLoopbackProxyAliasHost)
-                    : nil
+                let route = workspaceRemoteLoopbackProxyRoute(for: host)
+                rewritesLoopbackHTTPHeaders = route.rewriteAliasHost != nil
+                loopbackRewriteAliasHost = route.rewriteAliasHost
+                if let rewriteAliasHost = route.rewriteAliasHost {
+                    loopbackRequestHeaderRewriter = RemoteLoopbackHTTPRequestStreamRewriter(
+                        aliasHost: rewriteAliasHost
+                    )
+                } else {
+                    loopbackRequestHeaderRewriter = nil
+                }
                 pendingRemoteHTTPHeaderBytes = Data()
                 hasForwardedRemoteHTTPHeaders = false
-                let targetHost = Self.normalizedProxyTargetHost(host)
-                let streamID = try rpcClient.openStream(host: targetHost, port: port)
+                let streamID = try rpcClient.openStream(host: route.targetHost, port: port)
                 self.streamID = streamID
                 try rpcClient.attachStream(streamID: streamID, queue: queue) { [weak self] event in
                     self?.handleRemoteStreamEvent(streamID: streamID, event: event)
@@ -402,9 +428,12 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
             hasForwardedRemoteHTTPHeaders = true
             let payload = pendingRemoteHTTPHeaderBytes
             pendingRemoteHTTPHeaderBytes = Data()
+            guard let rewriteAliasHost = loopbackRewriteAliasHost else {
+                return payload
+            }
             return RemoteLoopbackHTTPResponseRewriter.rewriteIfNeeded(
                 data: payload,
-                aliasHost: Self.remoteLoopbackProxyAliasHost
+                aliasHost: rewriteAliasHost
             )
         }
 
@@ -459,19 +488,6 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
             guard !host.isEmpty else { return nil }
             guard let port = Int(portString), port > 0, port <= 65535 else { return nil }
             return (host, port)
-        }
-
-        private static func normalizedProxyTargetHost(_ host: String) -> String {
-            let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalized = trimmed
-                .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-                .lowercased()
-            // BrowserPanel rewrites loopback URLs to this alias so proxy routing works.
-            // Resolve it back to true loopback before dialing from the remote daemon.
-            if normalized == remoteLoopbackProxyAliasHost {
-                return "127.0.0.1"
-            }
-            return host
         }
 
         private static func httpResponse(status: String, closeAfterResponse: Bool = true) -> Data {

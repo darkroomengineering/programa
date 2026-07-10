@@ -766,6 +766,119 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         )
     }
 
+    func testInvalidAppEnumDoesNotPreventValidLaterSiblingSettings() throws {
+        let defaults = UserDefaults.standard
+        let backupsKey = "programa.settingsFile.backups.v1"
+        let appearanceKey = AppearanceSettings.appearanceModeKey
+        let placementKey = WorkspacePlacementSettings.placementKey
+        let warningKey = QuitWarningSettings.warnBeforeQuitKey
+        let previousAppearance = defaults.object(forKey: appearanceKey)
+        let previousPlacement = defaults.object(forKey: placementKey)
+        let previousWarning = defaults.object(forKey: warningKey)
+        let previousBackups = defaults.data(forKey: backupsKey)
+        defer {
+            restoreDefaultsValue(previousAppearance, key: appearanceKey, defaults: defaults)
+            restoreDefaultsValue(previousPlacement, key: placementKey, defaults: defaults)
+            restoreDefaultsValue(previousWarning, key: warningKey, defaults: defaults)
+            if let previousBackups {
+                defaults.set(previousBackups, forKey: backupsKey)
+            } else {
+                defaults.removeObject(forKey: backupsKey)
+            }
+        }
+
+        defaults.set(AppearanceMode.system.rawValue, forKey: appearanceKey)
+        defaults.set(NewWorkspacePlacement.top.rawValue, forKey: placementKey)
+        defaults.set(true, forKey: warningKey)
+        defaults.removeObject(forKey: backupsKey)
+
+        let directoryURL = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
+        try writeSettingsFile(
+            """
+            {
+              "app": {
+                "appearance": "not-a-real-mode",
+                "newWorkspacePlacement": "end",
+                "warnBeforeQuit": false
+              }
+            }
+            """,
+            to: settingsFileURL
+        )
+
+        _ = KeyboardShortcutSettingsFileStore(
+            primaryPath: settingsFileURL.path,
+            fallbackPath: nil,
+            startWatching: false
+        )
+
+        XCTAssertEqual(WorkspacePlacementSettings.current(defaults: defaults), .end)
+        XCTAssertFalse(QuitWarningSettings.isEnabled(defaults: defaults))
+    }
+
+    func testReloadWithInvalidEnumKeepsValidLaterSiblingManaged() throws {
+        let defaults = UserDefaults.standard
+        let backupsKey = "programa.settingsFile.backups.v1"
+        let appearanceKey = AppearanceSettings.appearanceModeKey
+        let warningKey = QuitWarningSettings.warnBeforeQuitKey
+        let previousAppearance = defaults.object(forKey: appearanceKey)
+        let previousWarning = defaults.object(forKey: warningKey)
+        let previousBackups = defaults.data(forKey: backupsKey)
+        defer {
+            restoreDefaultsValue(previousAppearance, key: appearanceKey, defaults: defaults)
+            restoreDefaultsValue(previousWarning, key: warningKey, defaults: defaults)
+            if let previousBackups {
+                defaults.set(previousBackups, forKey: backupsKey)
+            } else {
+                defaults.removeObject(forKey: backupsKey)
+            }
+        }
+
+        defaults.set(AppearanceMode.system.rawValue, forKey: appearanceKey)
+        defaults.set(false, forKey: warningKey)
+        defaults.removeObject(forKey: backupsKey)
+
+        let directoryURL = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
+        try writeSettingsFile(
+            """
+            {
+              "app": {
+                "appearance": "dark",
+                "warnBeforeQuit": false
+              }
+            }
+            """,
+            to: settingsFileURL
+        )
+        let store = KeyboardShortcutSettingsFileStore(
+            primaryPath: settingsFileURL.path,
+            fallbackPath: nil,
+            startWatching: false
+        )
+
+        try writeSettingsFile(
+            """
+            {
+              "app": {
+                "appearance": "not-a-real-mode",
+                "warnBeforeQuit": true
+              }
+            }
+            """,
+            to: settingsFileURL
+        )
+        store.reload()
+
+        XCTAssertTrue(
+            QuitWarningSettings.isEnabled(defaults: defaults),
+            "A malformed appearance value must not unmanage a valid warnBeforeQuit sibling during reload"
+        )
+    }
+
     func testManagedUserDefaultSettingRestoresBackedUpValueWhenFileSettingIsRemoved() throws {
         let defaults = UserDefaults.standard
         let managedKey = WorkspaceAutoReorderSettings.key
@@ -1076,6 +1189,14 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
 
     private func writeSettingsFile(_ contents: String, to url: URL) throws {
         try contents.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func restoreDefaultsValue(_ value: Any?, key: String, defaults: UserDefaults) {
+        if let value {
+            defaults.set(value, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
     }
 }
 

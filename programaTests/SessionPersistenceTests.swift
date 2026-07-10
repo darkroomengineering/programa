@@ -139,6 +139,72 @@ final class SessionPersistenceTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testAutosaveFingerprintChangesWhenPersistedStatusValueChangesWithoutCountChange() throws {
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+
+        workspace.statusEntries["build"] = SidebarStatusEntry(
+            key: "build",
+            value: "queued",
+            timestamp: timestamp
+        )
+        let beforeSnapshot = manager.sessionSnapshot(includeScrollback: false)
+        let beforeFingerprint = manager.sessionAutosaveFingerprint()
+
+        workspace.statusEntries["build"] = SidebarStatusEntry(
+            key: "build",
+            value: "complete",
+            timestamp: timestamp
+        )
+        let afterSnapshot = manager.sessionSnapshot(includeScrollback: false)
+        let afterFingerprint = manager.sessionAutosaveFingerprint()
+
+        XCTAssertEqual(
+            beforeSnapshot.workspaces.first?.statusEntries.first?.value,
+            "queued"
+        )
+        XCTAssertEqual(
+            afterSnapshot.workspaces.first?.statusEntries.first?.value,
+            "complete"
+        )
+        XCTAssertNotEqual(
+            beforeFingerprint,
+            afterFingerprint,
+            "Autosave identity must change whenever persisted status content changes"
+        )
+    }
+
+    @MainActor
+    func testAutosaveFingerprintChangesWhenPersistedPanelTitleChangesWithoutCountChange() throws {
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let panelID = try XCTUnwrap(workspace.focusedPanelId)
+
+        workspace.setPanelCustomTitle(panelId: panelID, title: "Before")
+        let beforeSnapshot = manager.sessionSnapshot(includeScrollback: false)
+        let beforeFingerprint = manager.sessionAutosaveFingerprint()
+
+        workspace.setPanelCustomTitle(panelId: panelID, title: "After")
+        let afterSnapshot = manager.sessionSnapshot(includeScrollback: false)
+        let afterFingerprint = manager.sessionAutosaveFingerprint()
+
+        XCTAssertEqual(
+            beforeSnapshot.workspaces.first?.panels.first(where: { $0.id == panelID })?.customTitle,
+            "Before"
+        )
+        XCTAssertEqual(
+            afterSnapshot.workspaces.first?.panels.first(where: { $0.id == panelID })?.customTitle,
+            "After"
+        )
+        XCTAssertNotEqual(
+            beforeFingerprint,
+            afterFingerprint,
+            "Autosave identity must change whenever persisted panel content changes"
+        )
+    }
+
     func testWorkspaceCustomColorDecodeSupportsMissingLegacyField() throws {
         var snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
         snapshot.windows[0].tabManager.workspaces[0].customColor = nil

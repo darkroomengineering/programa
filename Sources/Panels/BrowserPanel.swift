@@ -2833,7 +2833,10 @@ final class BrowserPanel: Panel, ObservableObject {
         return components?.url ?? url
     }
 
-    private static func remoteProxyLoopbackAliasURL(for url: URL) -> URL? {
+    // Internal so the browser-to-proxy routing contract can be exercised as one
+    // behavioral path by the unit tests. Keep this as the production implementation,
+    // rather than duplicating the URL transformation in a test-only helper.
+    static func remoteProxyLoopbackAliasURL(for url: URL) -> URL? {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" else { return nil }
         guard let host = BrowserInsecureHTTPSettings.normalizeHost(url.host ?? "") else { return nil }
         guard remoteLoopbackHosts.contains(host) else { return nil }
