@@ -4,11 +4,25 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "ghostty/**"
+      - ".gitmodules"
+      - "scripts/ensure-ghosttykit.sh"
+      - "scripts/download-prebuilt-ghosttykit.sh"
+      - "scripts/update-ghosttykit.sh"
+      - ".github/workflows/build-ghosttykit.yml"
   pull_request:
+    paths:
+      - "ghostty/**"
+      - ".gitmodules"
+      - "scripts/ensure-ghosttykit.sh"
+      - "scripts/download-prebuilt-ghosttykit.sh"
+      - "scripts/update-ghosttykit.sh"
+      - ".github/workflows/build-ghosttykit.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   build-ghosttykit:

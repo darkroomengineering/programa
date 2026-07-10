@@ -4,11 +4,40 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/ci-macos-compat.yml"
+      - ".github/workflows/build-ghosttykit.yml"
+      - "Sources/**"
+      - "CLI/**"
+      - "daemon/**"
+      - "programaTests/**"
+      - "vendor/**"
+      - "scripts/**"
+      - "GhosttyTabs.xcodeproj/**"
+      - "ghostty/**"
+      - "vendor/bonsplit/**"
+      - ".gitmodules"
   pull_request:
+    paths:
+      - "Sources/**"
+      - "CLI/**"
+      - "daemon/**"
+      - "programaTests/**"
+      - "tests/**"
+      - "tests_v2/**"
+      - "vendor/**"
+      - "scripts/**"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/ci-macos-compat.yml"
+      - ".github/workflows/build-ghosttykit.yml"
+      - "GhosttyTabs.xcodeproj/**"
+      - "ghostty/**"
+      - ".gitmodules"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   change-detection:
@@ -40,8 +69,10 @@ jobs:
           git fetch --no-tags --depth=1 origin "${BASE_SHA}" "${HEAD_SHA}"
           CHANGED_FILES="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"
           RUN_APP_JOBS=false
+          RUN_REMOTE_DAEMON_JOBS=false
           if [[ -z "${CHANGED_FILES}" ]]; then
             RUN_APP_JOBS=true
+            RUN_REMOTE_DAEMON_JOBS=true
           fi
 
           while IFS= read -r path; do
@@ -64,6 +95,9 @@ jobs:
               Resources/*.lproj/*)
                 continue
                 ;;
+              daemon/**)
+                RUN_REMOTE_DAEMON_JOBS=true
+                ;;
               *)
                 RUN_APP_JOBS=true
                 break
@@ -72,7 +106,7 @@ jobs:
           done <<< "$CHANGED_FILES"
 
           echo "run_app_jobs=${RUN_APP_JOBS}" >> "$GITHUB_OUTPUT"
-          echo "run_remote_daemon_jobs=${RUN_APP_JOBS}" >> "$GITHUB_OUTPUT"
+          echo "run_remote_daemon_jobs=${RUN_REMOTE_DAEMON_JOBS}" >> "$GITHUB_OUTPUT"
           {
             echo "### CI scope decision"
             if [[ "$RUN_APP_JOBS" == "true" ]]; then
@@ -296,7 +330,7 @@ jobs:
     needs:
       - tests
       - change-detection
-    if: needs.change-detection.outputs.run_app_jobs == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.change-detection.outputs.run_app_jobs == 'true'
     # Build the full cmux scheme and run the lag regression on GitHub-hosted runners.
     # Keep lag validation separate from UI regressions so functional UI failures
     # and performance regressions stay isolated. Broader interactive UI suites
@@ -473,7 +507,7 @@ jobs:
     needs:
       - tests
       - change-detection
-    if: needs.change-detection.outputs.run_app_jobs == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-15
     timeout-minutes: 45
     steps:

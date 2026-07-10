@@ -143,6 +143,9 @@ class TerminalController {
         .pane: 1,
         .surface: 1,
     ]
+    // Socket v2 commands execute from detached threads; these mappings are shared across
+    // commands and must be serialized to avoid concurrent mutation crashes.
+    private let v2HandleRefStateLock = NSLock()
     private var v2RefByUUID: [V2HandleKind: [UUID: String]] = [
         .window: [:],
         .workspace: [:],
@@ -2250,6 +2253,9 @@ class TerminalController {
     }
 
     private func v2EnsureHandleRef(kind: V2HandleKind, uuid: UUID) -> String {
+        v2HandleRefStateLock.lock()
+        defer { v2HandleRefStateLock.unlock() }
+
         if let existing = v2RefByUUID[kind]?[uuid] {
             return existing
         }
@@ -2266,6 +2272,9 @@ class TerminalController {
     }
 
     private func v2ResolveHandleRef(_ handle: String) -> UUID? {
+        v2HandleRefStateLock.lock()
+        defer { v2HandleRefStateLock.unlock() }
+
         for kind in V2HandleKind.allCases {
             if let id = v2UUIDByRef[kind]?[handle] {
                 return id
