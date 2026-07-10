@@ -11,6 +11,7 @@ DERIVED_SET=0
 TAG=""
 LAST_SOCKET_PATH_DIR="$HOME/Library/Application Support/programa"
 LAST_SOCKET_PATH_FILE="${LAST_SOCKET_PATH_DIR}/last-socket-path"
+ENSURE_GHOSTTYKIT_COMMAND="${PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND:-$PWD/scripts/ensure-ghosttykit.sh}"
 
 write_last_socket_path() {
   local socket_path="$1"

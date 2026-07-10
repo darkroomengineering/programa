@@ -29,6 +29,9 @@ jobs:
       - name: Validate unit-test SwiftPM retry guard
         run: ./tests/test_ci_unit_test_spm_retry.sh
 
+      - name: Validate unit-test runner behavior
+        run: ./tests/test_ci_unit_test_runner_behavior.sh
+
       - name: Validate cmux scheme test configuration
         run: ./tests/test_ci_scheme_testaction_debug.sh
 
@@ -205,6 +208,9 @@ jobs:
 
       - name: Validate Release reload artifact discovery
         run: ./tests/test_reloadp_programa_artifact.sh
+
+      - name: Validate reload entrypoint artifacts and dependency preparation
+        run: ./tests/test_reload_entrypoints_artifacts.sh
 
       - name: Run bundled Ghostty theme picker helper regression
         run: |

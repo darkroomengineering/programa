@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ENSURE_GHOSTTYKIT_COMMAND="${PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND:-$PWD/scripts/ensure-ghosttykit.sh}"
+
 xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Release -destination 'platform=macOS' build
 pkill -x Programa || true
 sleep 0.2
