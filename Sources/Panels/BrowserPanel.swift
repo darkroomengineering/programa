@@ -2300,6 +2300,9 @@ final class BrowserPanel: Panel, ObservableObject {
         configuration: WKWebViewConfiguration,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
+        // Share the opener's process pool so popups (e.g. OAuth flows) participate in the
+        // same renderer/process group as the opener rather than defaulting to a fresh one.
+        configuration.processPool = webView.configuration.processPool
         let controller = BrowserPopupWindowController(
             configuration: configuration,
             windowFeatures: windowFeatures,
@@ -3367,13 +3370,18 @@ extension BrowserPanel {
 
         guard let pendingTargetVisible else { return }
         guard pendingTargetVisible != isDeveloperToolsVisible() else { return }
-        _ = performDeveloperToolsVisibilityTransition(to: pendingTargetVisible, source: "\(source).queued")
+        _ = performDeveloperToolsVisibilityTransition(
+            to: pendingTargetVisible,
+            source: "\(source).queued",
+            debounceSettle: true
+        )
     }
 
     @discardableResult
     private func enqueueDeveloperToolsVisibilityTransition(
         to targetVisible: Bool,
-        source: String
+        source: String,
+        debounceSettle: Bool = false
     ) -> Bool {
         if isDeveloperToolsTransitionInFlight {
             pendingDeveloperToolsTransitionTargetVisible = targetVisible
@@ -3392,13 +3400,14 @@ extension BrowserPanel {
             return true
         }
 
-        return performDeveloperToolsVisibilityTransition(to: targetVisible, source: source)
+        return performDeveloperToolsVisibilityTransition(to: targetVisible, source: source, debounceSettle: debounceSettle)
     }
 
     @discardableResult
     private func performDeveloperToolsVisibilityTransition(
         to targetVisible: Bool,
-        source: String
+        source: String,
+        debounceSettle: Bool = false
     ) -> Bool {
         guard let inspector = webView.programaInspectorObject() else { return false }
 
@@ -3445,6 +3454,11 @@ extension BrowserPanel {
 
         if visibleAfterTransition != targetVisible {
             scheduleDeveloperToolsTransitionSettle(source: source)
+        } else if debounceSettle {
+            // Even though this transition already reached its target synchronously, keep it
+            // briefly "in flight" so a rapid follow-up toggle coalesces into the final intent
+            // instead of issuing an extra, unnecessary inspector call.
+            scheduleDeveloperToolsTransitionSettle(source: source)
         } else {
             developerToolsTransitionTargetVisible = nil
         }
@@ -3461,7 +3475,7 @@ extension BrowserPanel {
         )
 #endif
         let targetVisible = !effectiveDeveloperToolsVisibilityIntent()
-        let handled = enqueueDeveloperToolsVisibilityTransition(to: targetVisible, source: "toggle")
+        let handled = enqueueDeveloperToolsVisibilityTransition(to: targetVisible, source: "toggle", debounceSettle: true)
 #if DEBUG
         dlog(
             "browser.devtools toggle.end panel=\(id.uuidString.prefix(5)) targetVisible=\(targetVisible ? 1 : 0) " +
