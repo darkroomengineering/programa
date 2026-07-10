@@ -142,73 +142,68 @@ final class WindowTerminalHostView: NSView {
         clearActiveDividerCursor(restoreArrow: true)
     }
 
-    // PERF: hitTest is called on EVERY event including keyboard. Keep non-pointer
-    // path minimal. Do not add work outside the isPointerEvent guard.
+    // PERF: hitTest is called on EVERY event including keyboard. Fast-path only the
+    // keyboard-typing events known to trigger hitTest as a side effect
+    // (keyDown/keyUp/flagsChanged). Everything else — including all pointer events
+    // AND an ambiguous/nil currentEvent (e.g. hitTest invoked directly, outside
+    // AppKit's real event dispatch: unit tests, programmatic hit-testing) — must
+    // still run the full routing below, or dividers/pass-through silently break.
+    // Do not add work to the keyboard fast path below.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let currentEvent = NSApp.currentEvent
-        let isPointerEvent: Bool
         switch currentEvent?.type {
-        case .mouseMoved, .mouseEntered, .mouseExited,
-             .leftMouseDown, .leftMouseUp, .leftMouseDragged,
-             .rightMouseDown, .rightMouseUp, .rightMouseDragged,
-             .otherMouseDown, .otherMouseUp, .otherMouseDragged,
-             .scrollWheel, .cursorUpdate:
-            isPointerEvent = true
+        case .keyDown, .keyUp, .flagsChanged:
+            let hitView = super.hitTest(point)
+            return hitView === self ? nil : hitView
         default:
-            isPointerEvent = false
+            break
         }
 
-        if isPointerEvent {
-            if shouldPassThroughToSidebarResizer(at: point) {
-                clearActiveDividerCursor(restoreArrow: false)
-                return nil
-            }
+        if shouldPassThroughToSidebarResizer(at: point) {
+            clearActiveDividerCursor(restoreArrow: false)
+            return nil
+        }
 
-            // Compute divider hit once and reuse for both cursor update and pass-through.
-            if let kind = splitDividerCursorKind(at: point) {
-                activeDividerCursorKind = kind
-                kind.cursor.set()
-                TerminalWindowPortalRegistry.noteSplitDividerInteraction(
-                    in: window,
-                    event: currentEvent
-                )
-                return nil
-            }
-
-            clearActiveDividerCursor(restoreArrow: true)
-
-            let dragPasteboardTypes = NSPasteboard(name: .drag).types
-            let eventType = currentEvent?.type
-            let shouldPassThrough = DragOverlayRoutingPolicy.shouldPassThroughPortalHitTesting(
-                pasteboardTypes: dragPasteboardTypes,
-                eventType: eventType
+        // Compute divider hit once and reuse for both cursor update and pass-through.
+        if let kind = splitDividerCursorKind(at: point) {
+            activeDividerCursorKind = kind
+            kind.cursor.set()
+            TerminalWindowPortalRegistry.noteSplitDividerInteraction(
+                in: window,
+                event: currentEvent
             )
-            if shouldPassThrough {
-#if DEBUG
-                logDragRouteDecision(
-                    passThrough: true,
-                    eventType: eventType,
-                    pasteboardTypes: dragPasteboardTypes,
-                    hitView: nil
-                )
-#endif
-                return nil
-            }
+            return nil
+        }
 
-            let hitView = super.hitTest(point)
+        clearActiveDividerCursor(restoreArrow: true)
+
+        let dragPasteboardTypes = NSPasteboard(name: .drag).types
+        let eventType = currentEvent?.type
+        let shouldPassThrough = DragOverlayRoutingPolicy.shouldPassThroughPortalHitTesting(
+            pasteboardTypes: dragPasteboardTypes,
+            eventType: eventType
+        )
+        if shouldPassThrough {
 #if DEBUG
             logDragRouteDecision(
-                passThrough: false,
-                eventType: currentEvent?.type,
+                passThrough: true,
+                eventType: eventType,
                 pasteboardTypes: dragPasteboardTypes,
-                hitView: hitView
+                hitView: nil
             )
 #endif
-            return hitView === self ? nil : hitView
+            return nil
         }
 
-        // Non-pointer event: skip divider/drag routing, just do standard hit testing.
         let hitView = super.hitTest(point)
+#if DEBUG
+        logDragRouteDecision(
+            passThrough: false,
+            eventType: currentEvent?.type,
+            pasteboardTypes: dragPasteboardTypes,
+            hitView: hitView
+        )
+#endif
         return hitView === self ? nil : hitView
     }
 
@@ -306,15 +301,57 @@ final class WindowTerminalHostView: NSView {
     private func splitDividerCursorKind(at point: NSPoint) -> DividerCursorKind? {
         guard window != nil else { return nil }
         let windowPoint = convert(point, to: nil)
-        let expansion: CGFloat = 5
+        // Only vertical dividers need the asymmetric-overlap treatment below,
+        // so only pay for the hosted-view scan when a vertical region is present.
+        var visibleHostedRectsInWindow: [NSRect]?
         for region in dividerRegions() {
-            // Mirror the original dividerCursorKind expansion: expand in all directions.
-            let expanded = region.rectInWindow.insetBy(dx: -expansion, dy: -expansion)
+            let expanded: NSRect
+            if region.isVertical {
+                let hostedRects = visibleHostedRectsInWindow ?? computeVisibleHostedRectsInWindow()
+                visibleHostedRectsInWindow = hostedRects
+                expanded = Self.expandedVerticalDividerRect(region.rectInWindow, hostedRectsInWindow: hostedRects)
+            } else {
+                // Mirror the original dividerCursorKind expansion: expand in all directions.
+                expanded = region.rectInWindow.insetBy(dx: -Self.defaultDividerExpansion, dy: -Self.defaultDividerExpansion)
+            }
             if expanded.contains(windowPoint) {
                 return region.isVertical ? .vertical : .horizontal
             }
         }
         return nil
+    }
+
+    private static let defaultDividerExpansion: CGFloat = 5
+    // Matches SidebarResizeInteraction.contentSideHitWidth's rationale: keep a
+    // minimal overlap on whichever side of a divider is actually covered by
+    // portal-hosted terminal content, so column-0 text selection isn't stolen by
+    // the divider's drag handle. The non-hosted side keeps the full generous
+    // defaultDividerExpansion grab area.
+    private static let hostedTerminalDividerOverlapWidth: CGFloat = 2
+
+    private func computeVisibleHostedRectsInWindow() -> [NSRect] {
+        subviews
+            .compactMap { $0 as? GhosttySurfaceScrollView }
+            .filter { !$0.isHidden && $0.window != nil && $0.frame.width > 1 && $0.frame.height > 1 }
+            .map { convert($0.frame, to: nil) }
+    }
+
+    // A vertical divider's default expansion is generous (defaultDividerExpansion)
+    // on both sides. When a visible hosted terminal view's frame actually spans
+    // across one side of the divider, shrink that side's overlap so hit-testing
+    // near column 0 of the terminal favors terminal content over the divider's
+    // drag handle, while the other (non-hosted) side keeps the full grab area.
+    private static func expandedVerticalDividerRect(_ rect: NSRect, hostedRectsInWindow: [NSRect]) -> NSRect {
+        let hostedSpansLeft = hostedRectsInWindow.contains { $0.minX < rect.minX && $0.maxX >= rect.minX }
+        let hostedSpansRight = hostedRectsInWindow.contains { $0.minX <= rect.maxX && $0.maxX > rect.maxX }
+        let leftExpansion = hostedSpansLeft ? hostedTerminalDividerOverlapWidth : defaultDividerExpansion
+        let rightExpansion = hostedSpansRight ? hostedTerminalDividerOverlapWidth : defaultDividerExpansion
+        return NSRect(
+            x: rect.minX - leftExpansion,
+            y: rect.minY - defaultDividerExpansion,
+            width: rect.width + leftExpansion + rightExpansion,
+            height: rect.height + defaultDividerExpansion * 2
+        )
     }
 
     static func hasSplitDivider(atScreenPoint screenPoint: NSPoint, in window: NSWindow) -> Bool {
@@ -955,8 +992,13 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
             "anchor=\(portalDebugToken(entry.anchorView)) hadSuperview=\(hadSuperview)"
         )
 #endif
-        if let hostedView = entry.hostedView, hostedView.superview === hostView {
-            hostedView.removeFromSuperview()
+        if let hostedView = entry.hostedView {
+            // A detached (no longer tracked) hosted view must never remain visible in
+            // the host; callers that rebind elsewhere reveal explicitly via bind().
+            hostedView.isHidden = true
+            if hostedView.superview === hostView {
+                hostedView.removeFromSuperview()
+            }
         }
     }
 
@@ -1486,7 +1528,11 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
         let deadHostedIds = entriesByHostedId.compactMap { hostedId, entry -> ObjectIdentifier? in
             guard entry.hostedView != nil else { return hostedId }
             guard let anchor = entry.anchorView else {
-                return entry.visibleInUI ? nil : hostedId
+                // The anchor has been fully deallocated (weak ref auto-nil'd), unlike a
+                // transient anchor that's merely off-tree (still alive, superview nil) and
+                // can be recovered on the next bind/sync. There is nothing left to
+                // reconcile against here, so always prune regardless of visibleInUI.
+                return hostedId
             }
 
             let anchorInvalidForCurrentHost =
@@ -1580,6 +1626,14 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
 
     func debugEntryCount() -> Int {
         entriesByHostedId.count
+    }
+
+    // Base-class debugHostedSubviewCount() counts raw hostView.subviews, which for
+    // Terminal also includes the permanently-attached dividerOverlayView (not a
+    // hosted terminal view). Override so debug tooling reports only actual hosted
+    // terminal subviews, matching the Browser portal (which has no such overlay).
+    override func debugHostedSubviewCount() -> Int {
+        hostView.subviews.filter { $0 is GhosttySurfaceScrollView }.count
     }
 #endif
 

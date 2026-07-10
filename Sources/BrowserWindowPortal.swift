@@ -94,6 +94,16 @@ private extension WKWebView {
         browserPortalNeedsRenderingStateReattach
     }
 
+    /// Flags that a future reveal should nudge WebKit's rendering state back in,
+    /// without firing the heavier `viewDidHide`/`_exitInWindow` lifecycle pair.
+    /// Use this for simple tab/workspace visibility toggles where the surface isn't
+    /// actually leaving the window/render tree — merely un-hiding the container
+    /// (`isHidden = false`) isn't enough to resume WebKit compositing, but the full
+    /// exit/enter pair would fire `visibilitychange` and can trigger page reloads.
+    func browserPortalMarkNeedsRenderingStateReattach() {
+        browserPortalNeedsRenderingStateReattach = true
+    }
+
     func browserPortalNotifyHidden(reason: String) {
         browserPortalNeedsRenderingStateReattach = true
         let firedSelectors = ["viewDidHide", "_exitInWindow"].filter {
@@ -481,26 +491,22 @@ final class WindowBrowserHostView: NSView {
         clearActiveDividerCursor(restoreArrow: true)
     }
 
+    // PERF: hitTest is called on EVERY event including keyboard. Fast-path only the
+    // keyboard-typing events known to trigger hitTest as a side effect
+    // (keyDown/keyUp/flagsChanged). Everything else — including all pointer events
+    // AND an ambiguous/nil currentEvent (e.g. hitTest invoked directly, outside
+    // AppKit's real event dispatch: unit tests, programmatic hit-testing) — must
+    // still run the full routing below, or dividers/pass-through silently break.
+    // Mirrors the guard in WindowTerminalHostView. Do not add work to the keyboard
+    // fast path below.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        // PERF: hitTest is called on EVERY event including keyboard. Keep non-pointer
-        // path minimal. Mirror the isPointerEvent guard from WindowTerminalHostView.
         let currentEvent = NSApp.currentEvent
-        let isPointerEvent: Bool
         switch currentEvent?.type {
-        case .mouseMoved, .mouseEntered, .mouseExited,
-             .leftMouseDown, .leftMouseUp, .leftMouseDragged,
-             .rightMouseDown, .rightMouseUp, .rightMouseDragged,
-             .otherMouseDown, .otherMouseUp, .otherMouseDragged,
-             .scrollWheel, .cursorUpdate:
-            isPointerEvent = true
-        default:
-            isPointerEvent = false
-        }
-
-        if !isPointerEvent {
-            // Non-pointer event: skip divider/drag routing, just do standard hit testing.
+        case .keyDown, .keyUp, .flagsChanged:
             let hitView = super.hitTest(point)
             return hitView === self ? nil : hitView
+        default:
+            break
         }
 
         let dividerHit = splitDividerHit(at: point)
@@ -879,17 +885,29 @@ final class WindowBrowserHostView: NSView {
         guard window != nil else { return nil }
         let windowPoint = convert(point, to: nil)
         let expansion: CGFloat = 5
+        var fallback: DividerHit?
         for region in dividerRegions() {
             // Mirror the original dividerHit expansion: expand in all directions.
             let expanded = region.rectInWindow.insetBy(dx: -expansion, dy: -expansion)
-            if expanded.contains(windowPoint) {
-                return DividerHit(
-                    kind: region.isVertical ? .vertical : .horizontal,
-                    isInHostedContent: region.isInHostedContent
-                )
+            guard expanded.contains(windowPoint) else { continue }
+            let hit = DividerHit(
+                kind: region.isVertical ? .vertical : .horizontal,
+                isInHostedContent: region.isInHostedContent
+            )
+            // Hosted (portal-internal, e.g. WebKit inspector) dividers are drawn on
+            // top of the underlying app layout, so they must win hit-testing over an
+            // app-level divider that only coincidentally overlaps this point — e.g. an
+            // app split's full-height vertical divider sharing an x-coordinate with a
+            // hosted horizontal inspector divider elsewhere on the same column. Keep
+            // scanning for a hosted match before settling for a non-hosted one.
+            if region.isInHostedContent {
+                return hit
+            }
+            if fallback == nil {
+                fallback = hit
             }
         }
-        return nil
+        return fallback
     }
 
     private func dividerSearchRootView() -> NSView? {
@@ -3220,13 +3238,22 @@ final class WindowBrowserPortal: HostedViewPortalRegistry {
             // Tab/workspace visibility changes should hide the portal slot without forcing
             // WebKit through `_exitInWindow`/`_enterInWindow`, which fires visibilitychange
             // and can trigger page reloads. Reserve the full lifecycle notify for cases
-            // where the visible surface is actually leaving the window/render tree.
-            if entry.visibleInUI, !containerView.isHidden, webView.superview === containerView {
-                notifyHostedWebKitHidden(
-                    in: containerView,
-                    primaryWebView: webView,
-                    reason: reason
-                )
+            // where the visible surface is actually leaving the window/render tree; for a
+            // simple visibility toggle, still flag that the next reveal should nudge
+            // WebKit's rendering state back in (just un-hiding the container isn't enough
+            // to resume compositing).
+            if !containerView.isHidden, webView.superview === containerView {
+                if entry.visibleInUI {
+                    notifyHostedWebKitHidden(
+                        in: containerView,
+                        primaryWebView: webView,
+                        reason: reason
+                    )
+                } else {
+                    for webKitSubview in hostedWebKitSubviews(in: containerView, primaryWebView: webView) {
+                        webKitSubview.browserPortalMarkNeedsRenderingStateReattach()
+                    }
+                }
             }
             containerView.isHidden = true
         }
@@ -3294,14 +3321,23 @@ final class WindowBrowserPortal: HostedViewPortalRegistry {
                     hideContainerView(reason: "anchorWindowMismatch")
                     return
                 }
+            } else if anchorView.superview != nil {
+                // Anchor is parented somewhere (just not under this window) but not via
+                // the off-window-reparent pattern above (e.g. visibleInUI already false).
+                // Still parented is a meaningfully weaker "gone" signal than no superview
+                // at all, so keep the same lenient grace period.
+                if preserveVisibleDuringTransientDetach(reason: "anchorWindowMismatch") {
+                    return
+                }
+                if scheduleTransientDetachRecovery(reason: "anchorWindowMismatch") {
+                    hideContainerView(reason: "anchorWindowMismatch")
+                    return
+                }
             }
-            if preserveVisibleDuringTransientDetach(reason: "anchorWindowMismatch") {
-                return
-            }
-            if scheduleTransientDetachRecovery(reason: "anchorWindowMismatch") {
-                hideContainerView(reason: "anchorWindowMismatch")
-                return
-            }
+            // Reached when either: the anchor has no superview at all (a much
+            // stronger "genuinely gone" signal than an off-window-but-still-parented
+            // reparent mid-drag, so no grace period was granted above), or the grace
+            // period above was granted but is now exhausted/not applicable. Hide now.
 #if DEBUG
             if !containerView.isHidden {
                 dlog(
