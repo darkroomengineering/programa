@@ -16,6 +16,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Debug, Release, and Staging reload entrypoints now prepare GhosttyKit before building; Staging uses the canonical `Programa STAGING` name and `com.darkroom.programa.staging` identity.
 - CI now retries only genuine SwiftPM resolution failures and always propagates XCTest failures, including deterministic failures reported as “0 unexpected.”
 - CLI command lookup, help, and typed argument validation now complete before opening the app socket, so unknown or malformed invocations cannot connect or trigger focus side effects.
+- CLI socket authentication now ignores symlinked, non-regular, foreign-owned, or group/world-accessible password files.
 - GhosttyKit cache hits now bypass build locks, stale owners are recovered without stealing live builds, and validated frameworks publish atomically with ownership-safe cleanup.
 - Rapid workspace switching and non-focus split reparenting now share one generation-checked focus owner, so delayed callbacks cannot move AppKit input back to a stale workspace or pane.
 - Remote agent wrappers now avoid occupied implicit OpenCode ports, keep OMO package metadata isolated from the user's config, and use Programa-owned shim paths. The Release reload helper now locates and launches `Programa.app` after the rebrand.
