@@ -123,9 +123,19 @@ struct TabBarView: View {
 
                             // Unified drop zone after the last tab.
                             dropZoneAfterTabs
+
+                            // Reserved gutter behind the split-action icon cluster. This used to
+                            // be plain `.padding(.trailing, 114)` — dead space with no NSView, so
+                            // AppKit's hit-test walk fell into the ScrollView's own hosting/clip
+                            // view here instead of reaching the tab bar's window-drag background,
+                            // silently swallowing clicks (#window-drag-areas). A real (still
+                            // fully transparent) drag-capture view makes window drag work in this
+                            // strip the same way it already does in the 30pt zone before it.
+                            if showSplitButtons {
+                                splitButtonsGutterDragZone
+                            }
                         }
                         .padding(.horizontal, TabBarMetrics.barPadding)
-                        .padding(.trailing, showSplitButtons ? 114 : 0)
                         .animation(nil, value: pane.tabs.map(\.id))
                         .background(
                             GeometryReader { contentGeo in
@@ -457,6 +467,19 @@ struct TabBarView: View {
         }
     }
 
+    // MARK: - Split Buttons Gutter Drag Zone
+
+    /// Fixed-width gutter reserved behind the split-action icon cluster (terminal/browser/
+    /// split buttons), matching the 114pt previously consumed by trailing padding. Kept as a
+    /// real drag-capturing view (not bare padding) so window drag works there. Double-click
+    /// falls through to the same drag path (no new-tab action) — consistent with the rest of
+    /// this empty strip in standard presentation mode.
+    @ViewBuilder
+    private var splitButtonsGutterDragZone: some View {
+        TabBarDragZoneView { false }
+            .frame(width: 114, height: TabBarMetrics.tabHeight)
+    }
+
     // MARK: - Drop Indicator
 
     @ViewBuilder
@@ -713,11 +736,15 @@ private struct TabBarDragAndHoverView: NSViewRepresentable {
         }
 
         override func mouseDown(with event: NSEvent) {
-            guard isMinimalMode, let window else {
+            guard let window else {
                 super.mouseDown(with: event)
                 return
             }
             if event.clickCount >= 2 {
+                guard isMinimalMode else {
+                    super.mouseDown(with: event)
+                    return
+                }
                 let action = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleActionOnDoubleClick"] as? String
                 switch action {
                 case "Minimize": window.miniaturize(nil)
@@ -752,7 +779,7 @@ private struct TabBarDragZoneView: NSViewRepresentable {
         var onDoubleClick: (() -> Bool)?
 
         override var mouseDownCanMoveWindow: Bool {
-            return UserDefaults.standard.string(forKey: "workspacePresentationMode") == "minimal"
+            return true
         }
 
         override func hitTest(_ point: NSPoint) -> NSView? {
@@ -780,14 +807,10 @@ private struct TabBarDragZoneView: NSViewRepresentable {
                 }
             }
 
-            if UserDefaults.standard.string(forKey: "workspacePresentationMode") == "minimal" {
-                let wasMovable = window.isMovable
-                window.isMovable = true
-                window.performDrag(with: event)
-                window.isMovable = wasMovable
-            } else {
-                super.mouseDown(with: event)
-            }
+            let wasMovable = window.isMovable
+            window.isMovable = true
+            window.performDrag(with: event)
+            window.isMovable = wasMovable
         }
     }
 }
