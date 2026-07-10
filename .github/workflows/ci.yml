@@ -227,6 +227,7 @@ jobs:
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_version_memory_guard.py
 
   tests-build-and-lag:
+    needs: tests
     # Build the full cmux scheme and run the lag regression on GitHub-hosted runners.
     # Keep lag validation separate from UI regressions so functional UI failures
     # and performance regressions stay isolated. Broader interactive UI suites
@@ -400,6 +401,7 @@ jobs:
           rm -f /tmp/create-virtual-display
 
   ui-regressions:
+    needs: tests
     runs-on: macos-15
     timeout-minutes: 45
     steps:
