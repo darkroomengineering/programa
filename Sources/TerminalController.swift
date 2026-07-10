@@ -1488,7 +1488,15 @@ class TerminalController {
 
         let id: Any? = dict["id"]
         let method = (dict["method"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let params = dict["params"] as? [String: Any] ?? [:]
+        let params: [String: Any]
+        if let rawParams = dict["params"] {
+            guard let objectParams = rawParams as? [String: Any] else {
+                return v2Error(id: id, code: "invalid_request", message: "params must be a JSON object")
+            }
+            params = objectParams
+        } else {
+            params = [:]
+        }
 
         guard !method.isEmpty else {
             return v2Error(id: id, code: "invalid_request", message: "Missing method")
@@ -2406,10 +2414,7 @@ class TerminalController {
         return nil
     }
     func v2Int(_ params: [String: Any], _ key: String) -> Int? {
-        if let i = params[key] as? Int { return i }
-        if let n = params[key] as? NSNumber { return n.intValue }
-        if let s = params[key] as? String { return Int(s) }
-        return nil
+        v2StrictIntAny(params[key])
     }
 
     func v2Double(_ params: [String: Any], _ key: String) -> Double? {
@@ -2429,15 +2434,10 @@ class TerminalController {
         var result: [Int] = []
         result.reserveCapacity(raw.count)
         for element in raw {
-            if let i = element as? Int {
-                result.append(i)
-            } else if let n = element as? NSNumber {
-                result.append(n.intValue)
-            } else if let s = element as? String, let i = Int(s) {
-                result.append(i)
-            } else {
+            guard let value = v2StrictIntAny(element) else {
                 return nil
             }
+            result.append(value)
         }
         return result
     }

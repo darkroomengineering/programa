@@ -678,36 +678,7 @@ actor BrowserSearchSuggestionService {
             }
         }
 
-        // Google's endpoint can intermittently throttle/block app-style traffic.
-        // Query fallbacks in parallel so we can show predictions quickly.
-        if engine == .google {
-            return await fetchRemoteSuggestionsWithGoogleFallbacks(query: trimmed)
-        }
-
         return await fetchRemoteSuggestions(engine: engine, query: trimmed)
-    }
-
-    private func fetchRemoteSuggestionsWithGoogleFallbacks(query: String) async -> [String] {
-        await withTaskGroup(of: [String].self, returning: [String].self) { group in
-            group.addTask {
-                await self.fetchRemoteSuggestions(engine: .google, query: query)
-            }
-            group.addTask {
-                await self.fetchRemoteSuggestions(engine: .duckduckgo, query: query)
-            }
-            group.addTask {
-                await self.fetchRemoteSuggestions(engine: .bing, query: query)
-            }
-
-            while let result = await group.next() {
-                if !result.isEmpty {
-                    group.cancelAll()
-                    return result
-                }
-            }
-
-            return []
-        }
     }
 
     private func fetchRemoteSuggestions(engine: BrowserSearchEngine, query: String) async -> [String] {

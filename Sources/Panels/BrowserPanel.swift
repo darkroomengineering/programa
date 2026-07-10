@@ -657,14 +657,6 @@ final class BrowserPortalAnchorView: NSView {
 
 @MainActor
 final class BrowserPanel: Panel, ObservableObject {
-    private static let remoteLoopbackProxyAliasHost = "cmux-loopback.localtest.me"
-    private static let remoteLoopbackHosts: Set<String> = [
-        "localhost",
-        "127.0.0.1",
-        "::1",
-        "0.0.0.0",
-    ]
-
     /// Shared process pool for cookie sharing across all browser panels
     private static let sharedProcessPool = WKProcessPool()
 
@@ -2824,26 +2816,14 @@ final class BrowserPanel: Panel, ObservableObject {
     }
 
     private static func remoteProxyDisplayURL(for url: URL?) -> URL? {
-        guard let url else { return nil }
-        guard let host = BrowserInsecureHTTPSettings.normalizeHost(url.host ?? "") else { return url }
-        guard host == BrowserInsecureHTTPSettings.normalizeHost(remoteLoopbackProxyAliasHost) else { return url }
-
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        components?.host = "localhost"
-        return components?.url ?? url
+        WorkspaceRemoteLoopbackPolicy.displayURL(for: url)
     }
 
     // Internal so the browser-to-proxy routing contract can be exercised as one
     // behavioral path by the unit tests. Keep this as the production implementation,
     // rather than duplicating the URL transformation in a test-only helper.
     static func remoteProxyLoopbackAliasURL(for url: URL) -> URL? {
-        guard let scheme = url.scheme?.lowercased(), scheme == "http" else { return nil }
-        guard let host = BrowserInsecureHTTPSettings.normalizeHost(url.host ?? "") else { return nil }
-        guard remoteLoopbackHosts.contains(host) else { return nil }
-
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        components?.host = remoteLoopbackProxyAliasHost
-        return components?.url
+        WorkspaceRemoteLoopbackPolicy.browserAliasURL(for: url)
     }
 
     /// Navigate with smart URL/search detection

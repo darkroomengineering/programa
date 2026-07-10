@@ -322,18 +322,18 @@ final class ProgramaSettingsFileStore {
         if let raw = jsonString(section["appearance"]) {
             let normalized = AppearanceSettings.mode(for: raw).rawValue
             let accepted = Set(AppearanceMode.allCases.map(\.rawValue))
-            guard accepted.contains(raw) else {
+            if accepted.contains(raw) {
+                snapshot.managedUserDefaults[AppearanceSettings.appearanceModeKey] = .string(normalized)
+            } else {
                 logInvalid("app.appearance", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults[AppearanceSettings.appearanceModeKey] = .string(normalized)
         }
         if let raw = jsonString(section["newWorkspacePlacement"]) {
-            guard let placement = NewWorkspacePlacement(rawValue: raw) else {
+            if let placement = NewWorkspacePlacement(rawValue: raw) {
+                snapshot.managedUserDefaults[WorkspacePlacementSettings.placementKey] = .string(placement.rawValue)
+            } else {
                 logInvalid("app.newWorkspacePlacement", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults[WorkspacePlacementSettings.placementKey] = .string(placement.rawValue)
         }
         if let value = jsonBool(section["minimalMode"]) {
             let mode = value ? WorkspacePresentationModeSettings.Mode.minimal : .standard
@@ -372,11 +372,11 @@ final class ProgramaSettingsFileStore {
         }
         if let raw = jsonString(section["sound"]) {
             let allowed = Set(NotificationSoundSettings.systemSounds.map(\.value))
-            guard allowed.contains(raw) else {
+            if allowed.contains(raw) {
+                snapshot.managedUserDefaults[NotificationSoundSettings.key] = .string(raw)
+            } else {
                 logInvalid("notifications.sound", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults[NotificationSoundSettings.key] = .string(raw)
         }
         if let raw = jsonString(section["customSoundFilePath"]) {
             snapshot.managedUserDefaults[NotificationSoundSettings.customFilePathKey] = .string(raw)
@@ -397,11 +397,11 @@ final class ProgramaSettingsFileStore {
             let accepted = Set(SidebarActiveTabIndicatorStyle.allCases.map(\.rawValue)).union([
                 "rail", "border", "wash", "lift", "typography", "washRail", "blueWashColorRail",
             ])
-            guard accepted.contains(raw) else {
+            if accepted.contains(raw) {
+                snapshot.managedUserDefaults[SidebarActiveTabIndicatorSettings.styleKey] = .string(normalized)
+            } else {
                 logInvalid("workspaceColors.indicatorStyle", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults[SidebarActiveTabIndicatorSettings.styleKey] = .string(normalized)
         }
         if section.keys.contains("selectionColor") {
             guard let value = parseNullableHex(
@@ -496,27 +496,29 @@ final class ProgramaSettingsFileStore {
             snapshot.managedUserDefaults["sidebarMatchTerminalBackground"] = .bool(value)
         }
         if let raw = jsonString(section["tintColor"]) {
-            guard let normalized = WorkspaceTabColorSettings.normalizedHex(raw) else {
+            if let normalized = WorkspaceTabColorSettings.normalizedHex(raw) {
+                snapshot.managedUserDefaults["sidebarTintHex"] = .string(normalized)
+            } else {
                 logInvalid("sidebarAppearance.tintColor", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults["sidebarTintHex"] = .string(normalized)
         }
         if section.keys.contains("lightModeTintColor") {
-            guard let value = parseNullableHex(
+            if let value = parseNullableHex(
                 section["lightModeTintColor"],
                 path: "sidebarAppearance.lightModeTintColor",
                 sourcePath: sourcePath
-            ) else { return }
-            snapshot.managedUserDefaults["sidebarTintHexLight"] = .nullableString(value)
+            ) {
+                snapshot.managedUserDefaults["sidebarTintHexLight"] = .nullableString(value)
+            }
         }
         if section.keys.contains("darkModeTintColor") {
-            guard let value = parseNullableHex(
+            if let value = parseNullableHex(
                 section["darkModeTintColor"],
                 path: "sidebarAppearance.darkModeTintColor",
                 sourcePath: sourcePath
-            ) else { return }
-            snapshot.managedUserDefaults["sidebarTintHexDark"] = .nullableString(value)
+            ) {
+                snapshot.managedUserDefaults["sidebarTintHexDark"] = .nullableString(value)
+            }
         }
         if let value = jsonDouble(section["tintOpacity"]) {
             let clamped = min(max(value, 0), 1)
@@ -535,13 +537,13 @@ final class ProgramaSettingsFileStore {
                 "notifications", "full",
             ])
             let normalizedRaw = raw.replacingOccurrences(of: "-", with: "").lowercased()
-            guard knownModes.contains(normalizedRaw) else {
+            if knownModes.contains(normalizedRaw) {
+                snapshot.managedUserDefaults[SocketControlSettings.appStorageKey] = .string(
+                    SocketControlSettings.migrateMode(raw).rawValue
+                )
+            } else {
                 logInvalid("automation.socketControlMode", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults[SocketControlSettings.appStorageKey] = .string(
-                SocketControlSettings.migrateMode(raw).rawValue
-            )
         }
         if section.keys.contains("socketPassword") {
             if section["socketPassword"] is NSNull {
@@ -550,7 +552,6 @@ final class ProgramaSettingsFileStore {
                 snapshot.managedCustomSettings.socketPassword = raw.isEmpty ? .clear : .set(raw)
             } else {
                 logInvalid("automation.socketPassword", sourcePath: sourcePath)
-                return
             }
         }
         if let value = jsonBool(section["claudeCodeIntegration"]) {
@@ -560,18 +561,18 @@ final class ProgramaSettingsFileStore {
             snapshot.managedUserDefaults[ClaudeCodeIntegrationSettings.customClaudePathKey] = .string(raw)
         }
         if let value = jsonInt(section["portBase"]) {
-            guard value > 0 else {
+            if value > 0 {
+                snapshot.managedUserDefaults["cmuxPortBase"] = .int(value)
+            } else {
                 logInvalid("automation.portBase", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults["cmuxPortBase"] = .int(value)
         }
         if let value = jsonInt(section["portRange"]) {
-            guard value > 0 else {
+            if value > 0 {
+                snapshot.managedUserDefaults["cmuxPortRange"] = .int(value)
+            } else {
                 logInvalid("automation.portRange", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults["cmuxPortRange"] = .int(value)
         }
     }
 
@@ -596,21 +597,21 @@ final class ProgramaSettingsFileStore {
         snapshot: inout ResolvedSettingsSnapshot
     ) {
         if let raw = jsonString(section["defaultSearchEngine"]) {
-            guard let engine = BrowserSearchEngine(rawValue: raw) else {
+            if let engine = BrowserSearchEngine(rawValue: raw) {
+                snapshot.managedUserDefaults[BrowserSearchSettings.searchEngineKey] = .string(engine.rawValue)
+            } else {
                 logInvalid("browser.defaultSearchEngine", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults[BrowserSearchSettings.searchEngineKey] = .string(engine.rawValue)
         }
         if let value = jsonBool(section["showSearchSuggestions"]) {
             snapshot.managedUserDefaults[BrowserSearchSettings.searchSuggestionsEnabledKey] = .bool(value)
         }
         if let raw = jsonString(section["theme"]) {
-            guard let mode = BrowserThemeMode(rawValue: raw) else {
+            if let mode = BrowserThemeMode(rawValue: raw) {
+                snapshot.managedUserDefaults[BrowserThemeSettings.modeKey] = .string(mode.rawValue)
+            } else {
                 logInvalid("browser.theme", sourcePath: sourcePath)
-                return
             }
-            snapshot.managedUserDefaults[BrowserThemeSettings.modeKey] = .string(mode.rawValue)
         }
         if let value = jsonBool(section["openTerminalLinksInProgramaBrowser"]) {
             snapshot.managedUserDefaults[BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowserKey] = .bool(value)

@@ -973,7 +973,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private nonisolated static func enqueueLaunchServicesRegistrationWork(_ work: @escaping @Sendable () -> Void) {
         launchServicesRegistrationQueue.async(execute: work)
     }
-    private var lastSessionAutosaveFingerprint: Int?
+    private var lastSessionAutosaveFingerprint: Data?
     private var lastSessionAutosavePersistedAt: Date = .distantPast
     private var lastTypingActivityAt: TimeInterval = 0
     private var didHandleExplicitOpenIntentAtStartup = false
@@ -2166,42 +2166,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         didDisableSuddenTermination = false
     }
 
-    private func sessionAutosaveFingerprint(includeScrollback: Bool) -> Int? {
-        guard !includeScrollback else { return nil }
-
-        var hasher = Hasher()
-        let contexts = mainWindowContexts.values.sorted { lhs, rhs in
-            lhs.windowId.uuidString < rhs.windowId.uuidString
-        }
-        hasher.combine(contexts.count)
-
-        for context in contexts.prefix(SessionPersistencePolicy.maxWindowsPerSnapshot) {
-            hasher.combine(context.windowId)
-            hasher.combine(context.tabManager.sessionAutosaveFingerprint())
-            hasher.combine(context.sidebarState.isVisible)
-            hasher.combine(
-                Int(SessionPersistencePolicy.sanitizedSidebarWidth(Double(context.sidebarState.persistedWidth)).rounded())
-            )
-
-            switch context.sidebarSelectionState.selection {
-            case .tabs:
-                hasher.combine(0)
-            case .notifications:
-                hasher.combine(1)
-            }
-
-            if let window = context.window ?? windowForMainWindowId(context.windowId) {
-                Self.hashFrame(window.frame, into: &hasher)
-            } else {
-                hasher.combine(-1)
-            }
-        }
-
-        return hasher.finalize()
-    }
-
     @discardableResult
-    private func saveSessionSnapshot(includeScrollback: Bool, removeWhenEmpty: Bool = false) -> Bool {
+    private func saveSessionSnapshot(
+        includeScrollback: Bool,
+        removeWhenEmpty: Bool = false,
+        prebuiltSnapshot: AppSessionSnapshot? = nil
+    ) -> Bool {
         if Self.shouldSkipSessionSaveDuringStartupRestore(
             isApplyingStartupSessionRestore: isApplyingStartupSessionRestore,
             includeScrollback: includeScrollback
@@ -2227,7 +2197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
 #endif
 
-        guard let snapshot = buildSessionSnapshot(includeScrollback: includeScrollback) else {
+        guard let snapshot = prebuiltSnapshot ?? buildSessionSnapshot(includeScrollback: includeScrollback) else {
             persistSessionSnapshot(
                 nil,
                 removeWhenEmpty: removeWhenEmpty,
@@ -2346,7 +2316,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 #if DEBUG
         let fingerprintStart = ProcessInfo.processInfo.systemUptime
 #endif
-        let autosaveFingerprint = sessionAutosaveFingerprint(includeScrollback: false)
+        let autosaveSnapshot = buildSessionSnapshot(includeScrollback: false)
+        let autosaveFingerprint = autosaveSnapshot.flatMap {
+            SessionPersistenceStore.contentIdentity(for: $0)
+        }
 #if DEBUG
         fingerprintMs = (ProcessInfo.processInfo.systemUptime - fingerprintStart) * 1000.0
 #endif
@@ -2369,7 +2342,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 #if DEBUG
         let saveStart = ProcessInfo.processInfo.systemUptime
 #endif
-        _ = saveSessionSnapshot(includeScrollback: false)
+        _ = saveSessionSnapshot(
+            includeScrollback: false,
+            prebuiltSnapshot: autosaveSnapshot
+        )
 #if DEBUG
         saveMs = (ProcessInfo.processInfo.systemUptime - saveStart) * 1000.0
 #endif
@@ -2393,11 +2369,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         isTerminatingApp && includeScrollback
     }
 
-    nonisolated static func shouldSkipSessionAutosaveForUnchangedFingerprint(
+    nonisolated static func shouldSkipSessionAutosaveForUnchangedFingerprint<Fingerprint: Equatable>(
         isTerminatingApp: Bool,
         includeScrollback: Bool,
-        previousFingerprint: Int?,
-        currentFingerprint: Int?,
+        previousFingerprint: Fingerprint?,
+        currentFingerprint: Fingerprint?,
         lastPersistedAt: Date,
         now: Date,
         maximumAutosaveSkippableInterval: TimeInterval = 60
@@ -2416,22 +2392,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func updateSessionAutosaveSaveState(
         includeScrollback: Bool,
         persistedAt: Date,
-        fingerprint: Int?
+        fingerprint: Data?
     ) {
         guard !isTerminatingApp, !includeScrollback else { return }
         lastSessionAutosaveFingerprint = fingerprint
         lastSessionAutosavePersistedAt = persistedAt
-    }
-
-    private nonisolated static func hashFrame(_ frame: NSRect, into hasher: inout Hasher) {
-        let standardized = frame.standardized
-        let quantized = [
-            standardized.origin.x,
-            standardized.origin.y,
-            standardized.size.width,
-            standardized.size.height,
-        ].map { Int(($0 * 2).rounded()) }
-        quantized.forEach { hasher.combine($0) }
     }
 
     private func persistSessionSnapshot(
@@ -8971,4 +8936,3 @@ private extension AppDelegate {
         }
     }
 }
-

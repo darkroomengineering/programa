@@ -1,4 +1,5 @@
 import CoreGraphics
+import CryptoKit
 import Foundation
 import Bonsplit
 
@@ -389,10 +390,25 @@ enum SessionPersistenceStore {
         }
     }
 
+    static func contentIdentity(for snapshot: AppSessionSnapshot) -> Data? {
+        var normalized = snapshot
+        normalized.createdAt = 0
+        return canonicalContentIdentity(for: normalized)
+    }
+
+    static func canonicalContentIdentity<Value: Encodable>(for value: Value) -> Data? {
+        guard let data = try? encodedData(value) else { return nil }
+        return Data(SHA256.hash(data: data))
+    }
+
     private static func encodedSnapshotData(_ snapshot: AppSessionSnapshot) throws -> Data {
+        try encodedData(snapshot)
+    }
+
+    private static func encodedData<Value: Encodable>(_ value: Value) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(snapshot)
+        return try encoder.encode(value)
     }
 
     static func removeSnapshot(fileURL: URL? = nil) {

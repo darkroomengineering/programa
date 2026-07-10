@@ -10,27 +10,11 @@ import Darwin
 import Network
 import CoreText
 
-struct WorkspaceRemoteLoopbackProxyRoute: Equatable {
-    let targetHost: String
-    let rewriteAliasHost: String?
-}
-
 /// Resolves the host contract used by the live proxy session. This is intentionally
 /// factored out as a small runtime seam so browser URL rewriting and proxy routing
 /// can be regression-tested together.
 func workspaceRemoteLoopbackProxyRoute(for host: String) -> WorkspaceRemoteLoopbackProxyRoute {
-    let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-    let normalized = trimmed
-        .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        .lowercased()
-    let recognizedAliasHost = "programa-loopback.localtest.me"
-    if normalized == recognizedAliasHost {
-        return WorkspaceRemoteLoopbackProxyRoute(
-            targetHost: "127.0.0.1",
-            rewriteAliasHost: recognizedAliasHost
-        )
-    }
-    return WorkspaceRemoteLoopbackProxyRoute(targetHost: host, rewriteAliasHost: nil)
+    WorkspaceRemoteLoopbackPolicy.proxyRoute(for: host)
 }
 
 private final class WorkspaceRemoteDaemonProxyTunnel {
