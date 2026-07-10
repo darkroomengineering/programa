@@ -16,6 +16,7 @@ run_unit_tests() {
     -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
     -disableAutomaticPackageResolution \
     -destination "platform=macOS" \
+    -parallel-testing-enabled NO \
     -skip-testing:programaTests/AppDelegateShortcutRoutingTests/testCmdWClosesWindowWhenClosingLastSurfaceInLastWorkspace \
     test 2>&1
 }
