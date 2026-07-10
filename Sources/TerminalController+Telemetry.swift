@@ -18,12 +18,19 @@ extension TerminalController {
         workspaceId: UUID,
         _ mutation: @escaping (TabManager, Workspace) -> Void
     ) {
-        DispatchQueue.main.async {
-            guard let tabManager = AppDelegate.shared?.tabManagerFor(tabId: workspaceId),
-                  let tab = tabManager.tabs.first(where: { $0.id == workspaceId }) else {
+        DispatchQueue.main.async { [weak self] in
+            // Prefer explicit window-routed lookup (mirrors `v2ResolveTabManager`), but fall
+            // back to `self.tabManager` — the TabManager registered via `start(tabManager:)`.
+            // Without this fallback, a workspace that only exists in the TabManager passed to
+            // `start()` (single-window callers, and unit tests that construct a bare
+            // `TabManager` without registering it with `AppDelegate`) is invisible to this
+            // async hop: `AppDelegate.shared?.tabManagerFor(tabId:)` returns nil and the
+            // mutation silently no-ops, losing the fire-and-forget telemetry write.
+            guard let resolvedTabManager = AppDelegate.shared?.tabManagerFor(tabId: workspaceId) ?? self?.tabManager,
+                  let tab = resolvedTabManager.tabs.first(where: { $0.id == workspaceId }) else {
                 return
             }
-            mutation(tabManager, tab)
+            mutation(resolvedTabManager, tab)
         }
     }
 

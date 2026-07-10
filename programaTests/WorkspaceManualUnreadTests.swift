@@ -168,7 +168,14 @@ final class CommandPaletteFuzzyMatcherTests: XCTestCase {
         )
 
         XCTAssertNotNil(renameScore)
-        XCTAssertNotNil(unrelatedScore)
+        // None of the unrelated candidates share a leading character with "rename" (no word
+        // starts with "r"), so no matcher strategy (word/prefix/single-edit/contains/
+        // initialism/stitched) can link them — this mirrors the already-covered
+        // testLongTokenLooseSubsequenceDoesNotMatch, which asserts the same nil result for
+        // "rename" against "open current directory in ide" (a subset of this candidate list).
+        // A `nil` here is the correct, stronger signal that the command is unrelated, not a
+        // low-but-present score.
+        XCTAssertNil(unrelatedScore)
         XCTAssertGreaterThan(renameScore ?? 0, unrelatedScore ?? 0)
     }
 

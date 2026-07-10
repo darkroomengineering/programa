@@ -245,8 +245,15 @@ extension ContentView {
             return false
         }
 
+        // Only an exact match to the already-resolved (empty) query may reuse that empty
+        // state. `CommandPaletteFuzzyMatcher` is typo-tolerant (single-edit prefix matches,
+        // transpositions, etc.), so it is NOT monotonic: appending characters to a
+        // currently-empty-result query can turn a non-match into a match (e.g. a query that
+        // was one edit short of "finder" gains an exact completion once more of the word is
+        // typed). Treating any query with `resolvedMatchingQuery` as a prefix as "safe to
+        // keep empty" assumed monotonicity that doesn't hold here, and could paper over a
+        // search that would have produced real results once it resolves.
         return currentMatchingQuery == resolvedMatchingQuery
-            || currentMatchingQuery.hasPrefix(resolvedMatchingQuery)
     }
     func commandPaletteEntriesFingerprint(for scope: CommandPaletteListScope) -> Int {
         commandPaletteEntriesFingerprint(

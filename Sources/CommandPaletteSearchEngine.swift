@@ -98,8 +98,18 @@ enum CommandPaletteSwitcherSearchIndexer {
         case .workspace:
             return [trimmed]
         case .surface:
+            // Include the branch's last path segment (split only on "/", preserving internal
+            // hyphens/underscores) alongside the fully-atomized components — mirrors
+            // directoryTokensForSearch's `basename`, which likewise keeps the final path
+            // component intact via URL.lastPathComponent instead of shattering it on every
+            // delimiter. Without this, a branch like "feature/cmd-palette-indexing" only ever
+            // indexed the whole string and single words ("feature", "cmd", "palette",
+            // "indexing"), never the compound "cmd-palette-indexing" segment users actually type.
+            let lastPathSegment = trimmed
+                .components(separatedBy: "/")
+                .last(where: { !$0.isEmpty }) ?? trimmed
             let components = trimmed.components(separatedBy: metadataDelimiters).filter { !$0.isEmpty }
-            return uniqueNormalizedPreservingOrder([trimmed] + components)
+            return uniqueNormalizedPreservingOrder([trimmed, lastPathSegment] + components)
         }
     }
 
@@ -153,7 +163,19 @@ enum CommandPaletteFuzzyMatcher {
             case .candidateExtraCharacter:
                 return 0
             case .tokenExtraCharacter:
-                return 10
+                // Deliberately much larger than the other single-edit penalties (not just
+                // `.candidateExtraCharacter`, which is the more common "typed too fast, dropped
+                // a letter" typo). Distinguishing an omitted-character match (query is a
+                // truncated prefix of a real word, e.g. "findr" -> "finder") from an
+                // inserted-character match (query exactly completes a SHORTER real word plus
+                // one stray trailing character, e.g. "findr" -> "find" + "r") matters most when
+                // the two interpretations point at candidates of very different lengths/title
+                // positions: `distancePenalty`/`trailingPenalty` (both scale with the matched
+                // word's position and the candidate's overall length) can swing by hundreds of
+                // points, which used to swamp a mere 10-point base gap and let a shorter,
+                // less-relevant command's stray-extra-character interpretation outrank a
+                // longer command's genuine one-character-omitted match on its own keyword.
+                return 260
             case .transposedCharacters:
                 return 24
             case .substitutedCharacter:
