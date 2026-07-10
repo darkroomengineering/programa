@@ -1117,6 +1117,45 @@ final class BrowserPanelPopupContextTests: XCTestCase {
 
 @MainActor
 final class BrowserPanelRemoteStoreTests: XCTestCase {
+    private var previousProfileStore: BrowserProfileStore?
+    private var isolatedProfileStoreSuiteName: String?
+
+    override func setUp() {
+        super.setUp()
+        // BrowserProfileStore.shared is a process-wide @MainActor singleton that
+        // persists `browserProfiles.lastUsed` into the real UserDefaults.standard.
+        // Other tests (e.g. BrowserPanelTests createProfile()/switchToProfile()) call
+        // noteUsed() on that same shared instance, which leaves a non-default
+        // lastUsedProfileID behind — on this run and even across dev-machine runs,
+        // since UserDefaults.standard persists to disk. That pollution makes
+        // BrowserPanel(workspaceId:, isRemoteWorkspace: false) resolve a profile-scoped
+        // WKWebsiteDataStore instead of WKWebsiteDataStore.default(), which these tests
+        // assert against. Isolate by swapping in a fresh store backed by an ephemeral,
+        // uniquely-named UserDefaults suite for the duration of each test, then restore
+        // the previous shared instance in tearDown so other test classes are unaffected.
+        let suiteName = "com.darkroom.programa.tests.browserProfileStore.\(UUID().uuidString)"
+        isolatedProfileStoreSuiteName = suiteName
+        let isolatedDefaults = UserDefaults(suiteName: suiteName)!
+        isolatedDefaults.removePersistentDomain(forName: suiteName)
+        previousProfileStore = BrowserProfileStore.replaceSharedForTesting(
+            BrowserProfileStore(defaults: isolatedDefaults)
+        )
+    }
+
+    override func tearDown() {
+        if let previousProfileStore {
+            BrowserProfileStore.replaceSharedForTesting(previousProfileStore)
+        }
+        if let isolatedProfileStoreSuiteName {
+            UserDefaults(suiteName: isolatedProfileStoreSuiteName)?.removePersistentDomain(
+                forName: isolatedProfileStoreSuiteName
+            )
+        }
+        previousProfileStore = nil
+        isolatedProfileStoreSuiteName = nil
+        super.tearDown()
+    }
+
     func testRemoteWorkspacePanelsShareWorkspaceScopedWebsiteDataStore() {
         let localPanel = BrowserPanel(workspaceId: UUID(), isRemoteWorkspace: false)
         let remoteWorkspaceId = UUID()
