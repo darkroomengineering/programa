@@ -147,7 +147,7 @@ def main() -> int:
         expect_failure: bool = False,
         output_contains: str | None = None,
     ) -> None:
-        with tempfile.TemporaryDirectory(prefix="programa-cli-registry-") as directory:
+        with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
             with SocketRecorder(directory) as recorder:
                 try:
                     process = run_cli(recorder.path, args)
@@ -201,7 +201,7 @@ def main() -> int:
         ("unknown command help status", ["definitely-not-a-command", "--help"]),
         ("unknown global option status", ["--bogus", "ping"]),
     ]:
-        with tempfile.TemporaryDirectory(prefix="programa-cli-registry-") as directory:
+        with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
             with SocketRecorder(directory) as recorder:
                 try:
                     process = run_cli(recorder.path, args)
@@ -268,7 +268,7 @@ def main() -> int:
         ("lines status", ["read-screen", "--lines", "0"]),
         ("panel status", ["focus-panel", "--panel"]),
     ]:
-        with tempfile.TemporaryDirectory(prefix="programa-cli-registry-") as directory:
+        with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
             with SocketRecorder(directory) as recorder:
                 try:
                     process = run_cli(recorder.path, args)
@@ -287,7 +287,7 @@ def main() -> int:
         )
 
     # Outgoing values retain their CLI-side types after the registry refactor.
-    with tempfile.TemporaryDirectory(prefix="programa-cli-registry-") as directory:
+    with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
         with SocketRecorder(directory) as recorder:
             progress = run_cli(
                 recorder.path,
@@ -303,7 +303,7 @@ def main() -> int:
             check(params.get("label") == "Build", f"progress label mismatch: {params!r}")
             check(params.get("workspace_id") == WORKSPACE_ID, f"progress workspace mismatch: {params!r}")
 
-    with tempfile.TemporaryDirectory(prefix="programa-cli-registry-") as directory:
+    with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
         with SocketRecorder(directory) as recorder:
             move = run_cli(
                 recorder.path,
@@ -319,7 +319,7 @@ def main() -> int:
             check(type(params.get("focus")) is bool and params["focus"] is False, f"move focus lost boolean type: {params!r}")
 
     # Global window targeting stays ordered and shares one lazy connection.
-    with tempfile.TemporaryDirectory(prefix="programa-cli-registry-") as directory:
+    with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
         with SocketRecorder(directory) as recorder:
             ping = run_cli(recorder.path, ["--window", WINDOW_ID, "ping"])
         check(ping.returncode == 0, f"window-targeted ping failed: {merged_output(ping)!r}")
@@ -343,12 +343,13 @@ def main() -> int:
                 password_path.write_text("file-secret\n", encoding="utf-8")
                 password_path.chmod(0o600 if kind == "secure" else 0o644)
 
-            with SocketRecorder(home) as recorder:
-                process = run_cli(
-                    recorder.path,
-                    ["ping"],
-                    env_overrides={"HOME": home, "CFFIXED_USER_HOME": home},
-                )
+            with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as socket_directory:
+                with SocketRecorder(socket_directory) as recorder:
+                    process = run_cli(
+                        recorder.path,
+                        ["ping"],
+                        env_overrides={"HOME": home, "CFFIXED_USER_HOME": home},
+                    )
             return process, recorder.frames
 
     secure_process, secure_frames = password_file_frames("secure")
