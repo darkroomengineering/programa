@@ -1,6 +1,6 @@
 // Extracted from Workspace.swift (nuclear-review #98): programa.json custom layout application (applyCustomLayout and its tree/pane helpers).
 
-import Foundation
+@preconcurrency import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
@@ -9,6 +9,12 @@ import CryptoKit
 import Darwin
 import Network
 import CoreText
+
+@MainActor
+private final class PendingTerminalInputState {
+    var resolved = false
+    var observer: NSObjectProtocol?
+}
 
 extension Workspace {
 
@@ -206,24 +212,27 @@ extension Workspace {
             return
         }
 
-        var resolved = false
-        var observer: NSObjectProtocol?
+        let state = PendingTerminalInputState()
 
-        observer = NotificationCenter.default.addObserver(
+        state.observer = NotificationCenter.default.addObserver(
             forName: .terminalSurfaceDidBecomeReady,
             object: panel.surface,
             queue: .main
-        ) { [weak panel] _ in
-            guard !resolved, let panel else { return }
-            resolved = true
-            if let observer { NotificationCenter.default.removeObserver(observer) }
-            panel.sendInput(text)
+        ) { [weak panel, state] _ in
+            MainActor.assumeIsolated {
+                guard !state.resolved, let panel else { return }
+                state.resolved = true
+                if let observer = state.observer { NotificationCenter.default.removeObserver(observer) }
+                state.observer = nil
+                panel.sendInput(text)
+            }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard !resolved else { return }
-            resolved = true
-            if let observer { NotificationCenter.default.removeObserver(observer) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { @MainActor [state] in
+            guard !state.resolved else { return }
+            state.resolved = true
+            if let observer = state.observer { NotificationCenter.default.removeObserver(observer) }
+            state.observer = nil
             NSLog("[ProgramaConfig] surface not ready after 3s, dropping command (%d chars)", text.count)
         }
     }

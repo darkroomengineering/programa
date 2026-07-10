@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="programa STAGING"
-BUNDLE_ID="com.programaterm.app.staging"
-BASE_APP_NAME="programa"
+APP_NAME="Programa STAGING"
+BUNDLE_ID="com.darkroom.programa.staging"
+BASE_APP_NAME="Programa"
 DERIVED_DATA=""
 NAME_SET=0
 BUNDLE_SET=0
@@ -11,6 +11,7 @@ DERIVED_SET=0
 TAG=""
 LAST_SOCKET_PATH_DIR="$HOME/Library/Application Support/programa"
 LAST_SOCKET_PATH_FILE="${LAST_SOCKET_PATH_DIR}/last-socket-path"
+ENSURE_GHOSTTYKIT_COMMAND="${PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND:-$PWD/scripts/ensure-ghosttykit.sh}"
 
 write_last_socket_path() {
   local socket_path="$1"
@@ -23,8 +24,8 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/reloads.sh [options]
 
-Release build with isolated "programa STAGING" identity. Runs side-by-side with
-the production programa app.
+Release build with isolated "Programa STAGING" identity. Runs side-by-side with
+the production Programa app.
 
 Options:
   --tag <name>           Short tag for parallel builds (e.g., feature-xyz-lol).
@@ -109,10 +110,10 @@ if [[ -n "$TAG" ]]; then
   TAG_ID="$(sanitize_bundle "$TAG")"
   TAG_SLUG="$(sanitize_path "$TAG")"
   if [[ "$NAME_SET" -eq 0 ]]; then
-    APP_NAME="programa STAGING ${TAG}"
+    APP_NAME="Programa STAGING ${TAG}"
   fi
   if [[ "$BUNDLE_SET" -eq 0 ]]; then
-    BUNDLE_ID="com.programaterm.app.staging.${TAG_ID}"
+    BUNDLE_ID="com.darkroom.programa.staging.${TAG_ID}"
   fi
   if [[ "$DERIVED_SET" -eq 0 ]]; then
     DERIVED_DATA="/tmp/programa-staging-${TAG_SLUG}"
@@ -137,6 +138,7 @@ if [[ -z "$TAG" ]]; then
 fi
 XCODEBUILD_ARGS+=(build)
 
+"$ENSURE_GHOSTTYKIT_COMMAND"
 xcodebuild "${XCODEBUILD_ARGS[@]}"
 sleep 0.2
 

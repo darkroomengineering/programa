@@ -331,6 +331,12 @@ extension ProgramaCLI {
         )
     }
 
+    /// Syntax-only entrypoint used by the central registry before it opens or
+    /// focuses an app socket. Remote arguments after `--` remain passthrough.
+    func validateSSHCommandArguments(_ commandArgs: [String]) throws {
+        _ = try parseSSHCommandOptions(commandArgs)
+    }
+
     /// Normalizes an SSH destination: unwraps a bracketed IPv6 literal and extracts an
     /// inline port. Returns `(destination, port?)`. Only bracketed forms are altered;
     /// `user@host`, plain hostnames, and bare IPv6 (`2001:db8::1`) pass through unchanged.
@@ -1386,7 +1392,12 @@ extension ProgramaCLI {
                     try self.runSSHSessionEnd(commandArgs: ctx.commandArgs, client: ctx.client)
                 }
             ),
-            CommandDescriptor(names: ["remote-daemon-status"], helpLines: ["remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]"], execute: nil),
+            CommandDescriptor(
+                names: ["remote-daemon-status"],
+                helpLines: ["remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]"],
+                connectionPolicy: .local,
+                execute: nil
+            ),
         ]
     }
 }

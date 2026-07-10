@@ -4339,6 +4339,21 @@ final class Workspace: Identifiable, ObservableObject {
             preferredPanelId: preferredPanelId,
             splitPanelId: splitPanelId
         )
+        let focusTransitionRequest: FocusTransitionCoordinator.Request? = {
+            guard let owningTabManager,
+                  let panel = panels[preferredPanelId] else {
+                return nil
+            }
+            let owner = FocusTransitionCoordinator.Owner(
+                workspaceID: id,
+                panelID: preferredPanelId,
+                intent: panel.preferredFocusIntentForActivation()
+            )
+            return owningTabManager.focusTransitionCoordinator.captureCurrentGeneration(
+                for: owner,
+                reason: .nonFocusSplit
+            )
+        }()
 
         // Bonsplit splitPane focuses the newly created pane and may emit one delayed
         // didSelect/didFocus callback. Re-assert focus over multiple turns so model
@@ -4348,7 +4363,8 @@ final class Workspace: Identifiable, ObservableObject {
             preferredPanelId: preferredPanelId,
             splitPanelId: splitPanelId,
             previousHostedView: previousHostedView,
-            allowPreviousHostedView: true
+            allowPreviousHostedView: true,
+            focusTransitionRequest: focusTransitionRequest
         )
 
         DispatchQueue.main.async { [weak self] in
@@ -4358,7 +4374,8 @@ final class Workspace: Identifiable, ObservableObject {
                 preferredPanelId: preferredPanelId,
                 splitPanelId: splitPanelId,
                 previousHostedView: previousHostedView,
-                allowPreviousHostedView: false
+                allowPreviousHostedView: false,
+                focusTransitionRequest: focusTransitionRequest
             )
 
             DispatchQueue.main.async { [weak self] in
@@ -4368,7 +4385,8 @@ final class Workspace: Identifiable, ObservableObject {
                     preferredPanelId: preferredPanelId,
                     splitPanelId: splitPanelId,
                     previousHostedView: previousHostedView,
-                    allowPreviousHostedView: false
+                    allowPreviousHostedView: false,
+                    focusTransitionRequest: focusTransitionRequest
                 )
                 self.scheduleFocusReconcile()
                 self.clearNonFocusSplitFocusReassert(generation: generation)
@@ -4381,7 +4399,8 @@ final class Workspace: Identifiable, ObservableObject {
         preferredPanelId: UUID,
         splitPanelId: UUID,
         previousHostedView: GhosttySurfaceScrollView?,
-        allowPreviousHostedView: Bool
+        allowPreviousHostedView: Bool,
+        focusTransitionRequest: FocusTransitionCoordinator.Request?
     ) {
         guard matchesPendingNonFocusSplitFocusReassert(
             generation: generation,
@@ -4391,15 +4410,23 @@ final class Workspace: Identifiable, ObservableObject {
             return
         }
 
+        if let focusTransitionRequest,
+           owningTabManager?.focusTransitionCoordinator.isCurrentGeneration(focusTransitionRequest) != true {
+            clearNonFocusSplitFocusReassert(generation: generation)
+            return
+        }
+
         guard panels[preferredPanelId] != nil else {
             clearNonFocusSplitFocusReassert(generation: generation)
             return
         }
 
         if focusedPanelId == splitPanelId {
+            let shouldReassertAppKitFocus = owningTabManager.map { $0.selectedTabId == id } ?? true
             focusPanel(
                 preferredPanelId,
-                previousHostedView: allowPreviousHostedView ? previousHostedView : nil
+                previousHostedView: allowPreviousHostedView ? previousHostedView : nil,
+                reassertAppKitFocus: shouldReassertAppKitFocus
             )
             return
         }
@@ -4408,12 +4435,16 @@ final class Workspace: Identifiable, ObservableObject {
               let terminalPanel = terminalPanel(for: preferredPanelId) else {
             return
         }
+        if let owningTabManager, owningTabManager.selectedTabId != id {
+            return
+        }
         terminalPanel.hostedView.ensureFocus(for: id, surfaceId: preferredPanelId)
     }
 
     func focusPanel(
         _ panelId: UUID,
         previousHostedView: GhosttySurfaceScrollView? = nil,
+        reassertAppKitFocus: Bool = true,
         trigger: FocusPanelTrigger = .standard
     ) {
         markExplicitFocusIntent(on: panelId)
@@ -4494,13 +4525,14 @@ final class Workspace: Identifiable, ObservableObject {
             applyTabSelection(
                 tabId: tabId,
                 inPane: targetPaneId,
-                reassertAppKitFocus: !shouldSuppressReentrantRefocus,
+                reassertAppKitFocus: reassertAppKitFocus && !shouldSuppressReentrantRefocus,
                 focusIntent: activationIntent,
                 previousTerminalHostedView: previousTerminalHostedView
             )
         }
 
-        if let browserPanel = panels[panelId] as? BrowserPanel {
+        if reassertAppKitFocus,
+           let browserPanel = panels[panelId] as? BrowserPanel {
             maybeAutoFocusBrowserAddressBarOnPanelFocus(browserPanel, trigger: trigger)
         }
 

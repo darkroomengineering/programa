@@ -239,7 +239,7 @@ extension GhosttyNSView {
     }
 
     func debugRegisteredDropTypes() -> [String] {
-        (registeredDraggedTypes ?? []).map(\.rawValue)
+        registeredDraggedTypes.map(\.rawValue)
     }
 #endif
 

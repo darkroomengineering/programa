@@ -14,6 +14,45 @@ import UserNotifications
 @testable import Programa
 #endif
 
+private actor BrowserSuggestionRequestRecorder {
+    private(set) var requestedHosts: [String] = []
+
+    func load(_ request: URLRequest) throws -> (Data, URLResponse) {
+        guard let url = request.url else {
+            throw URLError(.badURL)
+        }
+        requestedHosts.append(url.host ?? "")
+        guard let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        ) else {
+            throw URLError(.badServerResponse)
+        }
+        return (Data("[]".utf8), response)
+    }
+}
+
+final class BrowserSearchSuggestionServicePrivacyTests: XCTestCase {
+    func testGoogleSuggestionsRequestOnlyTheSelectedProvider() async throws {
+        let recorder = BrowserSuggestionRequestRecorder()
+        let service = BrowserSearchSuggestionService { request in
+            try await recorder.load(request)
+        }
+
+        let suggestions = await service.suggestions(engine: .google, query: "private query")
+        let requestedHosts = await recorder.requestedHosts
+
+        XCTAssertTrue(suggestions.isEmpty)
+        XCTAssertEqual(
+            requestedHosts,
+            ["suggestqueries.google.com"],
+            "Selecting Google must not disclose the query to DuckDuckGo or Bing fallback endpoints"
+        )
+    }
+}
+
 var cmuxUnitTestInspectorAssociationKey: UInt8 = 0
 var cmuxUnitTestInspectorOverrideInstalled = false
 var cmuxUnitTestWKWebViewPerformKeyEquivalentOverrideInstalled = false

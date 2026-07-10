@@ -307,9 +307,9 @@ extension TerminalController {
             if shouldActivate {
                 if let targetWindow {
                     targetWindow.makeKeyAndOrderFront(nil)
-                    NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                    NSRunningApplication.current.activate(options: [.activateAllWindows])
                 } else {
-                    NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                    NSRunningApplication.current.activate(options: [.activateAllWindows])
                 }
             }
 

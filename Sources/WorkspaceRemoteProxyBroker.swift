@@ -10,10 +10,43 @@ import Darwin
 import Network
 import CoreText
 
+/// Resolves the host contract used by the live proxy session. This is intentionally
+/// factored out as a small runtime seam so browser URL rewriting and proxy routing
+/// can be regression-tested together.
+func workspaceRemoteLoopbackProxyRoute(for host: String) -> WorkspaceRemoteLoopbackProxyRoute {
+    WorkspaceRemoteLoopbackPolicy.proxyRoute(for: host)
+}
+
+/// Chooses the executor used by each accepted proxy connection. Keeping this decision
+/// in the live path makes cross-session scheduling behavior directly testable.
+final class WorkspaceRemoteProxySessionQueueProvider {
+    private let queueLabelPrefix: String
+    private var queuesBySessionID: [UUID: DispatchQueue] = [:]
+
+    init(tunnelQueue: DispatchQueue) {
+        self.queueLabelPrefix = "\(tunnelQueue.label).session"
+    }
+
+    func queue(for sessionID: UUID) -> DispatchQueue {
+        if let existing = queuesBySessionID[sessionID] {
+            return existing
+        }
+        let queue = DispatchQueue(
+            label: "\(queueLabelPrefix).\(sessionID.uuidString)",
+            qos: .utility
+        )
+        queuesBySessionID[sessionID] = queue
+        return queue
+    }
+
+    func removeQueue(for sessionID: UUID) {
+        queuesBySessionID.removeValue(forKey: sessionID)
+    }
+}
+
 private final class WorkspaceRemoteDaemonProxyTunnel {
     private final class ProxySession {
         private static let maxHandshakeBytes = 64 * 1024
-        private static let remoteLoopbackProxyAliasHost = "programa-loopback.localtest.me"
 
         private enum HandshakeProtocol {
             case undecided
@@ -33,7 +66,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
             let consumedBytes: Int
         }
 
-        let id = UUID()
+        let id: UUID
 
         private let connection: NWConnection
         private let rpcClient: WorkspaceRemoteDaemonRPCClient
@@ -47,16 +80,19 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         private var streamID: String?
         private var localInputEOF = false
         private var rewritesLoopbackHTTPHeaders = false
+        private var loopbackRewriteAliasHost: String?
         private var loopbackRequestHeaderRewriter: RemoteLoopbackHTTPRequestStreamRewriter?
         private var pendingRemoteHTTPHeaderBytes = Data()
         private var hasForwardedRemoteHTTPHeaders = false
 
         init(
+            id: UUID,
             connection: NWConnection,
             rpcClient: WorkspaceRemoteDaemonRPCClient,
             queue: DispatchQueue,
             onClose: @escaping (UUID) -> Void
         ) {
+            self.id = id
             self.connection = connection
             self.rpcClient = rpcClient
             self.queue = queue
@@ -64,6 +100,13 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         }
 
         func start() {
+            queue.async { [weak self] in
+                self?.startOnSessionQueue()
+            }
+        }
+
+        private func startOnSessionQueue() {
+            guard !isClosed else { return }
             connection.stateUpdateHandler = { [weak self] state in
                 guard let self else { return }
                 switch state {
@@ -80,7 +123,9 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         }
 
         func stop() {
-            close(reason: nil)
+            queue.async { [weak self] in
+                self?.close(reason: nil)
+            }
         }
 
         private func receiveNext() {
@@ -297,16 +342,19 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         ) {
             guard !isClosed else { return }
             do {
-                rewritesLoopbackHTTPHeaders =
-                    BrowserInsecureHTTPSettings.normalizeHost(host)
-                    == BrowserInsecureHTTPSettings.normalizeHost(Self.remoteLoopbackProxyAliasHost)
-                loopbackRequestHeaderRewriter = rewritesLoopbackHTTPHeaders
-                    ? RemoteLoopbackHTTPRequestStreamRewriter(aliasHost: Self.remoteLoopbackProxyAliasHost)
-                    : nil
+                let route = workspaceRemoteLoopbackProxyRoute(for: host)
+                rewritesLoopbackHTTPHeaders = route.rewriteAliasHost != nil
+                loopbackRewriteAliasHost = route.rewriteAliasHost
+                if let rewriteAliasHost = route.rewriteAliasHost {
+                    loopbackRequestHeaderRewriter = RemoteLoopbackHTTPRequestStreamRewriter(
+                        aliasHost: rewriteAliasHost
+                    )
+                } else {
+                    loopbackRequestHeaderRewriter = nil
+                }
                 pendingRemoteHTTPHeaderBytes = Data()
                 hasForwardedRemoteHTTPHeaders = false
-                let targetHost = Self.normalizedProxyTargetHost(host)
-                let streamID = try rpcClient.openStream(host: targetHost, port: port)
+                let streamID = try rpcClient.openStream(host: route.targetHost, port: port)
                 self.streamID = streamID
                 try rpcClient.attachStream(streamID: streamID, queue: queue) { [weak self] event in
                     self?.handleRemoteStreamEvent(streamID: streamID, event: event)
@@ -402,9 +450,12 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
             hasForwardedRemoteHTTPHeaders = true
             let payload = pendingRemoteHTTPHeaderBytes
             pendingRemoteHTTPHeaderBytes = Data()
+            guard let rewriteAliasHost = loopbackRewriteAliasHost else {
+                return payload
+            }
             return RemoteLoopbackHTTPResponseRewriter.rewriteIfNeeded(
                 data: payload,
-                aliasHost: Self.remoteLoopbackProxyAliasHost
+                aliasHost: rewriteAliasHost
             )
         }
 
@@ -461,21 +512,8 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
             return (host, port)
         }
 
-        private static func normalizedProxyTargetHost(_ host: String) -> String {
-            let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalized = trimmed
-                .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-                .lowercased()
-            // BrowserPanel rewrites loopback URLs to this alias so proxy routing works.
-            // Resolve it back to true loopback before dialing from the remote daemon.
-            if normalized == remoteLoopbackProxyAliasHost {
-                return "127.0.0.1"
-            }
-            return host
-        }
-
         private static func httpResponse(status: String, closeAfterResponse: Bool = true) -> Data {
-            var text = "HTTP/1.1 \(status)\r\nProxy-Agent: cmux\r\n"
+            var text = "HTTP/1.1 \(status)\r\nProxy-Agent: Programa\r\n"
             if closeAfterResponse {
                 text += "Connection: close\r\n"
             }
@@ -489,6 +527,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
     private let localPort: Int
     private let onFatalError: (String) -> Void
     private let queue = DispatchQueue(label: "com.cmux.remote-ssh.daemon-tunnel.\(UUID().uuidString)", qos: .utility)
+    private lazy var sessionQueueProvider = WorkspaceRemoteProxySessionQueueProvider(tunnelQueue: queue)
 
     private var listener: NWListener?
     private var rpcClient: WorkspaceRemoteDaemonRPCClient?
@@ -578,13 +617,16 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
             return
         }
 
+        let sessionID = UUID()
         let session = ProxySession(
+            id: sessionID,
             connection: connection,
             rpcClient: rpcClient,
-            queue: queue
+            queue: sessionQueueProvider.queue(for: sessionID)
         ) { [weak self] id in
             self?.queue.async {
                 self?.sessions.removeValue(forKey: id)
+                self?.sessionQueueProvider.removeQueue(for: id)
             }
         }
         sessions[session.id] = session

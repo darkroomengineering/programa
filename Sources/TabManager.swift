@@ -509,13 +509,14 @@ class TabManager: ObservableObject {
     /// Its API is invoked as static calls (`GitMetadataProber.foo(...)`); this instance exists as
     /// TabManager's ownership point for that responsibility.
     let gitMetadataProber = GitMetadataProber()
+    let focusTransitionCoordinator = FocusTransitionCoordinator()
 
     /// The window that owns this TabManager. Set by AppDelegate.registerMainWindow().
     /// Used to apply title updates to the correct window instead of NSApp.keyWindow.
     weak var window: NSWindow?
 
     @Published var tabs: [Workspace] = []
-    @Published internal(set) var isWorkspaceCycleHot: Bool = false
+    @Published var isWorkspaceCycleHot: Bool = false
     @Published private(set) var pendingBackgroundWorkspaceLoadIds: Set<UUID> = []
     @Published private(set) var debugPinnedWorkspaceLoadIds: Set<UUID> = []
 
@@ -563,6 +564,9 @@ class TabManager: ObservableObject {
             if !isNavigatingHistory, let selectedTabId {
                 recordTabInHistory(selectedTabId)
             }
+            let focusTransitionRequest = selectedTabId.flatMap {
+                beginWorkspaceSelectionFocusTransition(workspaceId: $0)
+            }
 #if DEBUG
             let switchId = debugWorkspaceSwitchId
             let switchDtMs = debugWorkspaceSwitchStartTime > 0
@@ -577,7 +581,17 @@ class TabManager: ObservableObject {
             let generation = selectionSideEffectsGeneration
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.selectionSideEffectsGeneration == generation else { return }
-                self.focusSelectedTabPanel(previousTabId: previousTabId)
+                if let focusTransitionRequest {
+                    guard self.focusTransitionCoordinator.completeTransition(focusTransitionRequest) else {
+                        return
+                    }
+                    self.focusSelectedTabPanel(
+                        previousTabId: previousTabId,
+                        requestedPanelId: focusTransitionRequest.owner.panelID
+                    )
+                } else {
+                    self.focusSelectedTabPanel(previousTabId: previousTabId)
+                }
                 self.updateWindowTitleForSelectedTab()
                 if let selectedTabId = self.selectedTabId {
                     self.dismissFocusedPanelNotificationIfActive(tabId: selectedTabId)
@@ -1917,7 +1931,7 @@ class TabManager: ObservableObject {
         }
 
         if NSApp.activationPolicy() == .regular {
-            NSApp.activate(ignoringOtherApps: true)
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
         }
 
         return alert.runModal() == .alertFirstButtonReturn
@@ -2353,12 +2367,44 @@ class TabManager: ObservableObject {
         terminalPanel.applyWindowBackgroundIfActive()
     }
 
-    private func focusSelectedTabPanel(previousTabId: UUID?) {
+    private func beginWorkspaceSelectionFocusTransition(
+        workspaceId: UUID
+    ) -> FocusTransitionCoordinator.Request? {
+        guard let workspace = workspace(withId: workspaceId) else { return nil }
+        let panelId: UUID
+        if let restoredPanelId = lastFocusedPanelByTab[workspaceId],
+           workspace.panels[restoredPanelId] != nil {
+            panelId = restoredPanelId
+        } else if let focusedPanelId = workspace.focusedPanelId,
+                  workspace.panels[focusedPanelId] != nil {
+            panelId = focusedPanelId
+        } else {
+            return nil
+        }
+        guard let panel = workspace.panels[panelId] else { return nil }
+        let owner = FocusTransitionCoordinator.Owner(
+            workspaceID: workspaceId,
+            panelID: panelId,
+            intent: panel.preferredFocusIntentForActivation()
+        )
+        return focusTransitionCoordinator.beginTransition(
+            to: owner,
+            reason: .workspaceSelection
+        )
+    }
+
+    private func focusSelectedTabPanel(
+        previousTabId: UUID?,
+        requestedPanelId: UUID? = nil
+    ) {
         guard let selectedTabId,
               let tab = workspace(withId: selectedTabId) else { return }
 
         let panelId: UUID
-        if let restoredPanelId = lastFocusedPanelByTab[selectedTabId],
+        if let requestedPanelId {
+            guard tab.panels[requestedPanelId] != nil else { return }
+            panelId = requestedPanelId
+        } else if let restoredPanelId = lastFocusedPanelByTab[selectedTabId],
            tab.panels[restoredPanelId] != nil {
             panelId = restoredPanelId
         } else if let focusedPanelId = tab.focusedPanelId,
@@ -2590,7 +2636,7 @@ class TabManager: ObservableObject {
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            NSApp.activate(ignoringOtherApps: true)
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
             NSApp.unhide(nil)
             if let app = AppDelegate.shared,
                let windowId = app.windowId(for: self),

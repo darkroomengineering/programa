@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/darkroomengineering/programa/main/Resources/settings.schema.json",
-  "title": "cmux settings.json",
-  "description": "User-level cmux settings. cmux accepts JSON with comments (JSONC) and trailing commas, but the underlying data model matches this schema.",
+  "title": "Programa settings.json",
+  "description": "User-level Programa settings. Programa accepts JSON with comments (JSONC) and trailing commas, but the underlying data model matches this schema.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -49,12 +49,12 @@
         "focusPaneOnFirstClick": {
           "type": "boolean",
           "default": true,
-          "description": "When cmux is inactive, the first click can activate and focus the clicked pane."
+          "description": "When Programa is inactive, the first click can activate and focus the clicked pane."
         },
         "preferredEditor": {
           "type": "string",
           "default": "",
-          "description": "Custom editor command used by cmux where applicable. Leave empty to use the default."
+          "description": "Custom editor command used by Programa where applicable. Leave empty to use the default."
         },
         "reorderOnNotification": {
           "type": "boolean",
@@ -64,7 +64,7 @@
         "warnBeforeQuit": {
           "type": "boolean",
           "default": true,
-          "description": "Show a confirmation before quitting cmux."
+          "description": "Show a confirmation before quitting Programa."
         },
         "renameSelectsExistingName": {
           "type": "boolean",
@@ -218,7 +218,7 @@
         "claudeCodeIntegration": {
           "type": "boolean",
           "default": true,
-          "description": "Enable cmux integration hooks for Claude Code."
+          "description": "Enable Programa integration hooks for Claude Code."
         },
         "claudeBinaryPath": {
           "type": "string",
@@ -251,7 +251,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Directories whose cmux.json commands can run without confirmation."
+          "description": "Directories whose programa.json (or legacy cmux.json) commands can run without confirmation."
         }
       }
     },
@@ -355,7 +355,7 @@
         "bindings": {
           "type": "object",
           "default": {},
-          "description": "Shortcut overrides keyed by cmux action id. Use a string for a single shortcut or an array for a chord.",
+          "description": "Shortcut overrides keyed by Programa action id. Use a string for a single shortcut or an array for a chord.",
           "propertyNames": {
             "enum": [
               "openSettings",

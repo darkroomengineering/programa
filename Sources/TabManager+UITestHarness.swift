@@ -438,9 +438,9 @@ extension TabManager {
 
                 // Close the two right panes via the same path as Cmd+W.
                 tab.focusPanel(topRight.id)
-                tab.closePanel(topRight.id, force: true)
+                _ = tab.closePanel(topRight.id, force: true)
                 tab.focusPanel(bottomRight.id)
-                tab.closePanel(bottomRight.id, force: true)
+                _ = tab.closePanel(bottomRight.id, force: true)
 
 
                 // Capture final state after Bonsplit/AppKit/Ghostty geometry reconciliation.
@@ -565,7 +565,7 @@ extension TabManager {
             tab.focusPanel(topLeftPanelId)
             let toClose = Array(tab.panels.keys).filter { $0 != topLeftPanelId }
             for pid in toClose {
-                tab.closePanel(pid, force: true)
+                _ = tab.closePanel(pid, force: true)
             }
 
             // Create the repro layout. Most patterns use a 2x2 grid, but keep a single-split
@@ -647,7 +647,7 @@ extension TabManager {
                     return [
                         (frame: closeFrame, action: {
                             tab.focusPanel(topRight.id)
-                            tab.closePanel(topRight.id, force: true)
+                            _ = tab.closePanel(topRight.id, force: true)
                         }),
                     ]
                 case "close_bottom":
@@ -656,11 +656,11 @@ extension TabManager {
                     return [
                         (frame: closeFrame, action: {
                             tab.focusPanel(bottomRight.id)
-                            tab.closePanel(bottomRight.id, force: true)
+                            _ = tab.closePanel(bottomRight.id, force: true)
                         }),
                         (frame: secondCloseFrame, action: {
                             tab.focusPanel(bottomLeft.id)
-                            tab.closePanel(bottomLeft.id, force: true)
+                            _ = tab.closePanel(bottomLeft.id, force: true)
                         }),
                     ]
                 case "close_right_lrtd_bottom_first", "close_right_bottom_first":
@@ -669,11 +669,11 @@ extension TabManager {
                     return [
                         (frame: closeFrame, action: {
                             tab.focusPanel(bottomRight.id)
-                            tab.closePanel(bottomRight.id, force: true)
+                            _ = tab.closePanel(bottomRight.id, force: true)
                         }),
                         (frame: secondCloseFrame, action: {
                             tab.focusPanel(topRight.id)
-                            tab.closePanel(topRight.id, force: true)
+                            _ = tab.closePanel(topRight.id, force: true)
                         }),
                     ]
                 case "close_right_lrtd_unfocused":
@@ -681,10 +681,10 @@ extension TabManager {
                     closeOrder = "TR_THEN_BR_UNFOCUSED"
                     return [
                         (frame: closeFrame, action: {
-                            tab.closePanel(topRight.id, force: true)
+                            _ = tab.closePanel(topRight.id, force: true)
                         }),
                         (frame: secondCloseFrame, action: {
-                            tab.closePanel(bottomRight.id, force: true)
+                            _ = tab.closePanel(bottomRight.id, force: true)
                         }),
                     ]
                 default:
@@ -693,11 +693,11 @@ extension TabManager {
                     return [
                         (frame: closeFrame, action: {
                             tab.focusPanel(topRight.id)
-                            tab.closePanel(topRight.id, force: true)
+                            _ = tab.closePanel(topRight.id, force: true)
                         }),
                         (frame: secondCloseFrame, action: {
                             tab.focusPanel(bottomRight.id)
-                            tab.closePanel(bottomRight.id, force: true)
+                            _ = tab.closePanel(bottomRight.id, force: true)
                         }),
                     ]
                 }
@@ -904,7 +904,7 @@ extension TabManager {
                 // Start each iteration from a deterministic 1x1 workspace.
                 if tab.panels.count > 1 {
                     for panelId in tab.panels.keys where panelId != leftPanelId {
-                        tab.closePanel(panelId, force: true)
+                        _ = tab.closePanel(panelId, force: true)
                     }
                     let collapsed = await self.waitForWorkspacePanelsCondition(
                         tab: tab,
@@ -1080,9 +1080,9 @@ extension TabManager {
                 // Repro flow: with a 2x2 (left/right then top/down), close both right panes,
                 // then trigger Ctrl+D in top-left.
                 tab.focusPanel(rightPanel.id)
-                tab.closePanel(rightPanel.id, force: true)
+                _ = tab.closePanel(rightPanel.id, force: true)
                 tab.focusPanel(bottomRight.id)
-                tab.closePanel(bottomRight.id, force: true)
+                _ = tab.closePanel(bottomRight.id, force: true)
                 exitPanelId = leftPanelId
 
                 let collapsed = await self.waitForWorkspacePanelsCondition(
@@ -1123,7 +1123,7 @@ extension TabManager {
                 let keepPanels: Set<UUID> = [leftPanelId, topRight.id]
                 for panelId in Array(tab.panels.keys) where !keepPanels.contains(panelId) {
                     tab.focusPanel(panelId)
-                    tab.closePanel(panelId, force: true)
+                    _ = tab.closePanel(panelId, force: true)
                     let closed = await self.waitForWorkspacePanelsCondition(
                         tab: tab,
                         timeoutSeconds: 1.0

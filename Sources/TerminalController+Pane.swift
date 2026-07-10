@@ -337,7 +337,15 @@ extension TerminalController {
         }
 
         let directionRaw = (v2String(params, "direction") ?? "").lowercased()
-        let amount = v2Int(params, "amount") ?? 1
+        let amount: Int
+        if v2HasNonNullParam(params, "amount") {
+            guard let parsedAmount = v2Int(params, "amount") else {
+                return .err(code: "invalid_params", message: "amount must be an integer", data: nil)
+            }
+            amount = parsedAmount
+        } else {
+            amount = 1
+        }
         guard let direction = V2PaneResizeDirection(rawValue: directionRaw), amount > 0 else {
             return .err(code: "invalid_params", message: "direction must be one of left|right|up|down and amount must be > 0", data: nil)
         }

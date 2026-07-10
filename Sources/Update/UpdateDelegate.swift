@@ -128,6 +128,8 @@ private func describeNoUpdateFoundReason(_ reason: SPUNoUpdateFoundReason) -> St
         return "systemIsTooOld"
     case .systemIsTooNew:
         return "systemIsTooNew"
+    case .hardwareDoesNotSupportARM64:
+        return "hardwareDoesNotSupportARM64"
     @unknown default:
         return "unknown"
     }

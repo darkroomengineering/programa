@@ -55,7 +55,7 @@ final class UpdateLogStore {
     private func appendToFile(line: String) {
         let data = Data((line + "\n").utf8)
         if let handle = try? FileHandle(forWritingTo: logURL) {
-            try? handle.seekToEnd()
+            _ = try? handle.seekToEnd()
             try? handle.write(contentsOf: data)
             try? handle.close()
         } else {
@@ -118,7 +118,7 @@ final class FocusLogStore {
     private func appendToFile(line: String) {
         let data = Data((line + "\n").utf8)
         if let handle = try? FileHandle(forWritingTo: logURL) {
-            try? handle.seekToEnd()
+            _ = try? handle.seekToEnd()
             try? handle.write(contentsOf: data)
             try? handle.close()
         } else {

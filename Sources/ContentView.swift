@@ -1562,7 +1562,7 @@ struct ContentView: View {
     }
 
     static func tmuxWorkspacePaneExactRect(
-        for panel: Panel,
+        for panel: any Panel,
         in contentView: NSView
     ) -> CGRect? {
         let targetView: NSView?
@@ -2556,7 +2556,7 @@ struct ContentView: View {
                     }
                 }
             }
-            .onChange(of: tabManager.selectedTabId) { newValue in
+            .onChange(of: tabManager.selectedTabId) { _, newValue in
     #if DEBUG
                 if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
                     let dtMs = (CACurrentMediaTime() - snapshot.startedAt) * 1000
@@ -2586,10 +2586,10 @@ struct ContentView: View {
                 }
                 updateTitlebarText()
             }
-            .onChange(of: selectedTabIds) { _ in
+            .onChange(of: selectedTabIds) {
                 syncSidebarSelectedWorkspaceIds()
             }
-            .onChange(of: tabManager.isWorkspaceCycleHot) { _ in
+            .onChange(of: tabManager.isWorkspaceCycleHot) {
     #if DEBUG
                 if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
                     let dtMs = (CACurrentMediaTime() - snapshot.startedAt) * 1000
@@ -2602,7 +2602,7 @@ struct ContentView: View {
     #endif
                 reconcileMountedWorkspaceIds()
             }
-            .onChange(of: retiringWorkspaceId) { _ in
+            .onChange(of: retiringWorkspaceId) {
                 reconcileMountedWorkspaceIds()
             }
             .onReceive(tabManager.$pendingBackgroundWorkspaceLoadIds) { _ in
@@ -2890,10 +2890,10 @@ struct ContentView: View {
     @ViewBuilder
     private func attachWindowGlassAndFullscreenHandlers(to view: some View) -> some View {
         view
-            .onChange(of: bgGlassTintHex) { _ in
+            .onChange(of: bgGlassTintHex) {
                 updateWindowGlassTint()
             }
-            .onChange(of: bgGlassTintOpacity) { _ in
+            .onChange(of: bgGlassTintOpacity) {
                 updateWindowGlassTint()
             }
             .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { notification in
@@ -2923,7 +2923,7 @@ struct ContentView: View {
     @ViewBuilder
     private func attachSidebarSyncHandlers(to view: some View) -> some View {
         view
-            .onChange(of: sidebarWidth) { _ in
+            .onChange(of: sidebarWidth) {
                 let sanitized = normalizedSidebarWidth(sidebarWidth)
                 if abs(sidebarWidth - sanitized) > 0.5 {
                     sidebarWidth = sanitized
@@ -2941,7 +2941,7 @@ struct ContentView: View {
                 }
                 updateSidebarResizerBandState()
             }
-            .onChange(of: sidebarState.isVisible) { _ in
+            .onChange(of: sidebarState.isVisible) {
                 if let observedWindow {
                     TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: observedWindow)
                 } else {
@@ -2950,7 +2950,7 @@ struct ContentView: View {
                 updateSidebarResizerBandState()
                 syncTrafficLightInset()
             }
-            .onChange(of: sidebarMatchTerminalBackground) { _ in
+            .onChange(of: sidebarMatchTerminalBackground) {
                 guard sidebarState.isVisible,
                       sidebarBlendMode == SidebarBlendModeOption.withinWindow.rawValue else { return }
                 if let observedWindow {
@@ -2962,7 +2962,7 @@ struct ContentView: View {
             .onChange(of: isMinimalMode) { _, _ in
                 syncTrafficLightInset()
             }
-            .onChange(of: sidebarState.persistedWidth) { newValue in
+            .onChange(of: sidebarState.persistedWidth) { _, newValue in
                 let sanitized = normalizedSidebarWidth(newValue)
                 if abs(newValue - sanitized) > 0.5 {
                     sidebarState.persistedWidth = sanitized
@@ -3537,7 +3537,7 @@ struct ContentView: View {
                 ),
                 anchor: commandPaletteScrollTargetAnchor
             )
-            .onChange(of: commandPaletteSelectedResultIndex) { _ in
+            .onChange(of: commandPaletteSelectedResultIndex) {
                 updateCommandPaletteScrollTarget(resultCount: visibleResults.count, animated: true)
             }
 
@@ -3576,7 +3576,7 @@ struct ContentView: View {
             updateCommandPaletteScrollTarget(resultCount: commandPaletteVisibleResults.count, animated: false)
             syncCommandPaletteDebugStateForObservedWindow()
         }
-        .onChange(of: commandPaletteCurrentSearchFingerprint) { _ in
+        .onChange(of: commandPaletteCurrentSearchFingerprint) {
             Task { @MainActor in
                 // Let the query-state transition settle first so the forced corpus refresh
                 // cannot rebuild the old command list after deleting the ">" prefix.
@@ -3589,7 +3589,7 @@ struct ContentView: View {
                 syncCommandPaletteDebugStateForObservedWindow()
             }
         }
-        .onChange(of: commandPaletteResultsRevision) { _ in
+        .onChange(of: commandPaletteResultsRevision) {
             let resultIDs = cachedCommandPaletteResults.map(\.id)
             commandPaletteSelectedResultIndex = Self.commandPaletteResolvedSelectionIndex(
                 preferredCommandID: commandPaletteSelectionAnchorCommandID,
@@ -3604,7 +3604,7 @@ struct ContentView: View {
             }
             syncCommandPaletteDebugStateForObservedWindow()
         }
-        .onChange(of: commandPaletteSelectedResultIndex) { _ in
+        .onChange(of: commandPaletteSelectedResultIndex) {
             syncCommandPaletteDebugStateForObservedWindow()
         }
     }
@@ -7608,7 +7608,7 @@ struct VerticalTabsSidebar: View {
                 reason: "sidebar_disappear"
             )
         }
-        .onChange(of: draggedTabId) { newDraggedTabId in
+        .onChange(of: draggedTabId) { _, newDraggedTabId in
             SidebarDragLifecycleNotification.postStateDidChange(
                 tabId: newDraggedTabId,
                 reason: "drag_state_change"
@@ -7899,4 +7899,3 @@ private final class SidebarShortcutHintModifierMonitor: ObservableObject {
         }
     }
 }
-

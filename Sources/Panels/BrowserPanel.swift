@@ -625,7 +625,6 @@ enum BrowserUserAgentSettings {
 }
 
 /// BrowserPanel provides a WKWebView-based browser panel.
-/// All browser panels share a WKProcessPool for cookie sharing.
 ///
 /// Widened from `private` to `internal` (file-reorg for #99): also referenced by
 /// `BrowserNavigationDelegate`/`BrowserUIDelegate` in BrowserPanelWebDelegates.swift.
@@ -657,17 +656,6 @@ final class BrowserPortalAnchorView: NSView {
 
 @MainActor
 final class BrowserPanel: Panel, ObservableObject {
-    private static let remoteLoopbackProxyAliasHost = "cmux-loopback.localtest.me"
-    private static let remoteLoopbackHosts: Set<String> = [
-        "localhost",
-        "127.0.0.1",
-        "::1",
-        "0.0.0.0",
-    ]
-
-    /// Shared process pool for cookie sharing across all browser panels
-    private static let sharedProcessPool = WKProcessPool()
-
     /// Popup windows owned by this panel (for lifecycle cleanup)
     private var popupControllers: [BrowserPopupWindowController] = []
 
@@ -765,44 +753,6 @@ final class BrowserPanel: Panel, ObservableObject {
       return true;
     })()
     """
-
-    private static func clampedGhosttyBackgroundOpacity(_ opacity: Double) -> CGFloat {
-        CGFloat(max(0.0, min(1.0, opacity)))
-    }
-
-    private static func isDarkAppearance(
-        appAppearance: NSAppearance? = NSApp?.effectiveAppearance
-    ) -> Bool {
-        guard let appAppearance else { return false }
-        return appAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-    }
-
-    private static func resolvedGhosttyBackgroundColor(from notification: Notification? = nil) -> NSColor {
-        let userInfo = notification?.userInfo
-        let baseColor = (userInfo?[GhosttyNotificationKey.backgroundColor] as? NSColor)
-            ?? GhosttyApp.shared.defaultBackgroundColor
-
-        let opacity: Double
-        if let value = userInfo?[GhosttyNotificationKey.backgroundOpacity] as? Double {
-            opacity = value
-        } else if let value = userInfo?[GhosttyNotificationKey.backgroundOpacity] as? NSNumber {
-            opacity = value.doubleValue
-        } else {
-            opacity = GhosttyApp.shared.defaultBackgroundOpacity
-        }
-
-        return baseColor.withAlphaComponent(clampedGhosttyBackgroundOpacity(opacity))
-    }
-
-    private static func resolvedBrowserChromeBackgroundColor(
-        from notification: Notification? = nil,
-        appAppearance: NSAppearance? = NSApp?.effectiveAppearance
-    ) -> NSColor {
-        if isDarkAppearance(appAppearance: appAppearance) {
-            return resolvedGhosttyBackgroundColor(from: notification)
-        }
-        return NSColor.windowBackgroundColor
-    }
 
     let id: UUID
     let panelType: PanelType = .browser
@@ -1478,10 +1428,8 @@ final class BrowserPanel: Panel, ObservableObject {
 
     static func configureWebViewConfiguration(
         _ configuration: WKWebViewConfiguration,
-        websiteDataStore: WKWebsiteDataStore,
-        processPool: WKProcessPool = BrowserPanel.sharedProcessPool
+        websiteDataStore: WKWebsiteDataStore
     ) {
-        configuration.processPool = processPool
         configuration.mediaTypesRequiringUserActionForPlayback = []
         // Ensure browser cookies/storage persist across navigations and launches.
         // This reduces repeated consent/bot-challenge flows on sites like Google.
@@ -1767,27 +1715,13 @@ final class BrowserPanel: Panel, ObservableObject {
     }
 
     private func beginDownloadActivity() {
-        let apply = {
-            self.activeDownloadCount += 1
-            self.isDownloading = self.activeDownloadCount > 0
-        }
-        if Thread.isMainThread {
-            apply()
-        } else {
-            DispatchQueue.main.async(execute: apply)
-        }
+        activeDownloadCount += 1
+        isDownloading = activeDownloadCount > 0
     }
 
     private func endDownloadActivity() {
-        let apply = {
-            self.activeDownloadCount = max(0, self.activeDownloadCount - 1)
-            self.isDownloading = self.activeDownloadCount > 0
-        }
-        if Thread.isMainThread {
-            apply()
-        } else {
-            DispatchQueue.main.async(execute: apply)
-        }
+        activeDownloadCount = max(0, activeDownloadCount - 1)
+        isDownloading = activeDownloadCount > 0
     }
 
     func updateWorkspaceId(_ newWorkspaceId: UUID) {
@@ -2824,23 +2758,14 @@ final class BrowserPanel: Panel, ObservableObject {
     }
 
     private static func remoteProxyDisplayURL(for url: URL?) -> URL? {
-        guard let url else { return nil }
-        guard let host = BrowserInsecureHTTPSettings.normalizeHost(url.host ?? "") else { return url }
-        guard host == BrowserInsecureHTTPSettings.normalizeHost(remoteLoopbackProxyAliasHost) else { return url }
-
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        components?.host = "localhost"
-        return components?.url ?? url
+        WorkspaceRemoteLoopbackPolicy.displayURL(for: url)
     }
 
-    private static func remoteProxyLoopbackAliasURL(for url: URL) -> URL? {
-        guard let scheme = url.scheme?.lowercased(), scheme == "http" else { return nil }
-        guard let host = BrowserInsecureHTTPSettings.normalizeHost(url.host ?? "") else { return nil }
-        guard remoteLoopbackHosts.contains(host) else { return nil }
-
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        components?.host = remoteLoopbackProxyAliasHost
-        return components?.url
+    // Internal so the browser-to-proxy routing contract can be exercised as one
+    // behavioral path by the unit tests. Keep this as the production implementation,
+    // rather than duplicating the URL transformation in a test-only helper.
+    static func remoteProxyLoopbackAliasURL(for url: URL) -> URL? {
+        WorkspaceRemoteLoopbackPolicy.browserAliasURL(for: url)
     }
 
     /// Navigate with smart URL/search detection
@@ -2896,7 +2821,7 @@ final class BrowserPanel: Panel, ObservableObject {
         let alert = insecureHTTPAlertFactory()
         BrowserInsecureHTTPAlertBuilder.configure(alert, host: host)
 
-        let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self, weak alert] response in
+        let handleResponse: @MainActor @Sendable (NSApplication.ModalResponse) -> Void = { [weak self, weak alert] response in
             self?.handleInsecureHTTPAlertResponse(
                 response,
                 alert: alert,

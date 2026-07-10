@@ -1316,7 +1316,7 @@ struct SettingsView: View {
                     )
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
-                    .onChange(of: trustedDirectoriesDraft) { _ in
+                    .onChange(of: trustedDirectoriesDraft) {
                         saveTrustedDirectories()
                     }
             }
@@ -1986,7 +1986,7 @@ private struct ShortcutSettingRow: View {
             transformRecordedShortcut: { action.normalizedRecordedShortcut($0) },
             isDisabled: KeyboardShortcutSettings.isManagedBySettingsFile(action)
         )
-            .onChange(of: shortcut) { newValue in
+            .onChange(of: shortcut) { _, newValue in
                 KeyboardShortcutSettings.setShortcut(newValue, for: action)
             }
             .onReceive(NotificationCenter.default.publisher(for: KeyboardShortcutSettings.didChangeNotification)) { _ in

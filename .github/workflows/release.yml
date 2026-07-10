@@ -15,6 +15,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   attestations: write
@@ -196,7 +200,7 @@ jobs:
             export PATH="/usr/local/bin:$PATH"
             zig version
           fi
-          npm install --global "create-dmg@${CREATE_DMG_VERSION}"
+          ./scripts/install-create-dmg.sh
 
       - name: Cache GhosttyKit.xcframework
         id: cache-ghosttykit-release
@@ -251,19 +255,10 @@ jobs:
       - name: Verify binary architectures
         if: steps.guard_release_assets.outputs.skip_all != 'true'
         run: |
-          set -euo pipefail
-          APP_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/MacOS/Programa"
-          CLI_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/programa"
-          HELPER_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/ghostty"
-          APP_ARCHS="$(lipo -archs "$APP_BINARY")"
-          CLI_ARCHS="$(lipo -archs "$CLI_BINARY")"
-          HELPER_ARCHS="$(lipo -archs "$HELPER_BINARY")"
-          echo "App binary architectures: $APP_ARCHS"
-          echo "CLI binary architectures: $CLI_ARCHS"
-          echo "Ghostty helper architectures: $HELPER_ARCHS"
-          [[ "$APP_ARCHS" == "arm64" ]]
-          [[ "$CLI_ARCHS" == "arm64" ]]
-          [[ "$HELPER_ARCHS" == "arm64" ]]
+          ./scripts/verify-release-architectures.sh \
+            "build-universal/Build/Products/Release/Programa.app/Contents/MacOS/Programa" \
+            "build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/programa" \
+            "build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/ghostty"
 
       - name: Build remote daemon release assets and inject manifest
         if: steps.guard_release_assets.outputs.skip_all != 'true'
@@ -353,17 +348,17 @@ jobs:
             exit 1
           fi
           APP_PATH="build-universal/Build/Products/Release/Programa.app"
-          ENTITLEMENTS="programa.entitlements"
           CLI_PATH="$APP_PATH/Contents/Resources/bin/programa"
           HELPER_PATH="$APP_PATH/Contents/Resources/bin/ghostty"
-          if [ -f "$CLI_PATH" ]; then
-            /usr/bin/codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS" "$CLI_PATH"
-          fi
-          if [ -f "$HELPER_PATH" ]; then
-            /usr/bin/codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS" "$HELPER_PATH"
-          fi
-          /usr/bin/codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS" --deep "$APP_PATH"
-          /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          ./scripts/sign-release-app.sh "$APP_PATH" "$APPLE_SIGNING_IDENTITY" programa.entitlements
+          ./scripts/verify-release-entitlements.sh "$APP_PATH" "$CLI_PATH" "$HELPER_PATH"
+
+      - name: Verify embedded Sparkle artifact
+        if: steps.guard_release_assets.outputs.skip_all != 'true'
+        run: |
+          ./scripts/verify_sparkle_artifact.sh \
+            "build-universal/Build/Products/Release/Programa.app" \
+            "2.9.4"
 
       - name: Notarize app
         if: steps.guard_release_assets.outputs.skip_all != 'true'

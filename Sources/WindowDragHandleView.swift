@@ -309,15 +309,36 @@ func windowDragHandleShouldCaptureHit(
 /// This lets us keep `window.isMovableByWindowBackground = false` so drags in the app content
 /// (e.g. sidebar tab reordering) don't move the whole window.
 struct WindowDragHandleView: NSViewRepresentable {
+    /// When `false` (and `onDoubleClick` is `nil`), double-clicks are left untouched
+    /// (no titlebar zoom/minimize, no drag capture) so an underlying SwiftUI gesture
+    /// can still fire. Defaults to `true` to preserve existing callers.
+    var handlesDoubleClick: Bool = true
+
+    /// When set, this view owns double-click handling itself and invokes this closure
+    /// instead of the standard titlebar zoom/minimize action or the passthrough behavior.
+    /// Use this (rather than relying on a sibling SwiftUI `.onTapGesture(count: 2)`) when
+    /// this drag view is mounted in front of the gesture's content: a sibling gesture
+    /// recognizer never sees the first click of a double-click once this view has
+    /// claimed the hit-test for it, so passthrough-based double-click detection is
+    /// unreliable when this view is frontmost (see sidebar empty-area drag fix).
+    var onDoubleClick: (() -> Void)?
+
     func makeNSView(context: Context) -> NSView {
-        DraggableView()
+        let view = DraggableView()
+        view.handlesDoubleClick = handlesDoubleClick
+        view.onDoubleClick = onDoubleClick
+        return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        // No-op
+        (nsView as? DraggableView)?.handlesDoubleClick = handlesDoubleClick
+        (nsView as? DraggableView)?.onDoubleClick = onDoubleClick
     }
 
     private final class DraggableView: NSView {
+        var handlesDoubleClick = true
+        var onDoubleClick: (() -> Void)?
+
         override var mouseDownCanMoveWindow: Bool { false }
 
         override func hitTest(_ point: NSPoint) -> NSView? {
@@ -327,6 +348,13 @@ struct WindowDragHandleView: NSViewRepresentable {
             // to avoid re-entering SwiftUI view state during layout passes,
             // which causes exclusive-access crashes.
             guard currentEvent?.type == .leftMouseDown else {
+                return nil
+            }
+            // Let double-clicks pass through to whatever is underneath when this
+            // instance doesn't own double-click handling in any form (no zoom, no
+            // custom action). When `onDoubleClick` is set, this view owns the double
+            // click itself (see mouseDown) and must keep capturing the hit here too.
+            if !handlesDoubleClick, onDoubleClick == nil, (currentEvent?.clickCount ?? 1) >= 2 {
                 return nil
             }
             let shouldCapture = windowDragHandleShouldCaptureHit(
@@ -353,6 +381,20 @@ struct WindowDragHandleView: NSViewRepresentable {
             #endif
 
             if event.clickCount >= 2 {
+                if let onDoubleClick {
+                    #if DEBUG
+                    dlog("titlebar.dragHandle.mouseDownDoubleClick action=custom")
+                    #endif
+                    onDoubleClick()
+                    return
+                }
+                guard handlesDoubleClick else {
+                    #if DEBUG
+                    dlog("titlebar.dragHandle.mouseDownDoubleClick skipped=handlesDoubleClickFalse")
+                    #endif
+                    super.mouseDown(with: event)
+                    return
+                }
                 let action = performStandardTitlebarDoubleClick(window: window)
                 #if DEBUG
                 dlog("titlebar.dragHandle.mouseDownDoubleClick action=\(String(describing: action))")

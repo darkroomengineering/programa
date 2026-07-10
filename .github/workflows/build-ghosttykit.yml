@@ -4,11 +4,25 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "ghostty/**"
+      - ".gitmodules"
+      - "scripts/ensure-ghosttykit.sh"
+      - "scripts/download-prebuilt-ghosttykit.sh"
+      - "scripts/update-ghosttykit.sh"
+      - ".github/workflows/build-ghosttykit.yml"
   pull_request:
+    paths:
+      - "ghostty/**"
+      - ".gitmodules"
+      - "scripts/ensure-ghosttykit.sh"
+      - "scripts/download-prebuilt-ghosttykit.sh"
+      - "scripts/update-ghosttykit.sh"
+      - ".github/workflows/build-ghosttykit.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   build-ghosttykit:
@@ -93,6 +107,12 @@ jobs:
           set -euo pipefail
           rm -rf GhosttyKit.xcframework
           cp -R ghostty/macos/GhosttyKit.xcframework GhosttyKit.xcframework
+          ARCHIVE="$(find GhosttyKit.xcframework -type f -name 'libghostty.a' -print -quit)"
+          if [ -z "$ARCHIVE" ]; then
+            echo "GhosttyKit.xcframework does not contain libghostty.a" >&2
+            exit 1
+          fi
+          ./scripts/verify-release-architectures.sh "$ARCHIVE"
           tar czf GhosttyKit.xcframework.tar.gz GhosttyKit.xcframework
 
       - name: Upload xcframework release

@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -284,6 +285,21 @@ func TestCreateTmuxShimDir(t *testing.T) {
 	}
 }
 
+func TestCreateTmuxShimDirUsesProgramaHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	dir, err := createTmuxShimDir("test-shim-bin", claudeTeamsShimScript)
+	if err != nil {
+		t.Fatalf("createTmuxShimDir: %v", err)
+	}
+
+	want := filepath.Join(home, ".programa", "test-shim-bin")
+	if dir != want {
+		t.Fatalf("createTmuxShimDir returned %q, want Programa-owned path %q", dir, want)
+	}
+}
+
 func TestCreateOMOShimDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	origHome := os.Getenv("HOME")
@@ -392,6 +408,128 @@ func TestClaudeTeamsLaunchArgs(t *testing.T) {
 	args = claudeTeamsLaunchArgs([]string{"--teammate-mode", "off"})
 	if args[0] != "--teammate-mode" || args[1] != "off" {
 		t.Errorf("args = %v, should not prepend when already present", args)
+	}
+}
+
+func TestOMOLaunchArgsAvoidsOccupiedEnvironmentPort(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve occupied loopback port: %v", err)
+	}
+	defer listener.Close()
+
+	occupiedPort := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+	t.Setenv("OPENCODE_PORT", occupiedPort)
+
+	args := omoLaunchArgs(nil)
+	if len(args) != 2 || args[0] != "--port" {
+		t.Fatalf("omoLaunchArgs(nil) = %v, want injected --port <available-port>", args)
+	}
+	if args[1] == occupiedPort {
+		t.Fatalf("omoLaunchArgs selected occupied OPENCODE_PORT %s", occupiedPort)
+	}
+	if args[1] == "" || args[1] == "0" {
+		t.Fatalf("omoLaunchArgs selected invalid port %q", args[1])
+	}
+	if got := os.Getenv("OPENCODE_PORT"); got != args[1] {
+		t.Fatalf("OPENCODE_PORT = %q, want selected launch port %q", got, args[1])
+	}
+}
+
+func TestOMOLaunchArgsPreservesExplicitOccupiedPort(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve occupied loopback port: %v", err)
+	}
+	defer listener.Close()
+
+	occupiedPort := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+	t.Setenv("OPENCODE_PORT", "4096")
+	explicit := "--port=" + occupiedPort
+
+	args := omoLaunchArgs([]string{explicit, "--verbose"})
+	if len(args) != 2 || args[0] != explicit || args[1] != "--verbose" {
+		t.Fatalf("omoLaunchArgs changed explicit caller port: %v", args)
+	}
+}
+
+func TestOMOPluginShadowOwnsPackageState(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	userDir := filepath.Join(home, ".config", "opencode")
+	userNodeModules := filepath.Join(userDir, "node_modules")
+	pluginDir := filepath.Join(userNodeModules, omoPluginName)
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("create installed plugin fixture: %v", err)
+	}
+
+	userConfig := []byte("{}\n")
+	userPackage := []byte("{\"dependencies\":{\"stale-package\":\"0.0.1\"}}\n")
+	userLock := []byte("stale-user-lock\n")
+	if err := os.WriteFile(filepath.Join(userDir, "opencode.json"), userConfig, 0644); err != nil {
+		t.Fatalf("write user opencode config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "package.json"), userPackage, 0644); err != nil {
+		t.Fatalf("write user package manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "bun.lock"), userLock, 0644); err != nil {
+		t.Fatalf("write user lockfile: %v", err)
+	}
+
+	if err := omoEnsurePlugin(os.Getenv("PATH")); err != nil {
+		t.Fatalf("omoEnsurePlugin: %v", err)
+	}
+
+	shadowDir := omoShadowConfigDir()
+	shadowPackagePath := filepath.Join(shadowDir, "package.json")
+	shadowPackageInfo, err := os.Lstat(shadowPackagePath)
+	if err != nil {
+		t.Fatalf("stat shadow package manifest: %v", err)
+	}
+	if shadowPackageInfo.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("shadow package manifest must not symlink user package state: %s", shadowPackagePath)
+	}
+	if !shadowPackageInfo.Mode().IsRegular() {
+		t.Fatalf("shadow package manifest is not a regular file: mode=%s", shadowPackageInfo.Mode())
+	}
+
+	shadowPackageData, err := os.ReadFile(shadowPackagePath)
+	if err != nil {
+		t.Fatalf("read shadow package manifest: %v", err)
+	}
+	var shadowPackage map[string]any
+	if err := json.Unmarshal(shadowPackageData, &shadowPackage); err != nil {
+		t.Fatalf("decode shadow package manifest: %v", err)
+	}
+	if private, _ := shadowPackage["private"].(bool); !private {
+		t.Fatalf("shadow package manifest must be private: %s", shadowPackageData)
+	}
+	dependencies, _ := shadowPackage["dependencies"].(map[string]any)
+	if got, _ := dependencies[omoPluginName].(string); got != "latest" {
+		t.Fatalf("shadow package dependency %q = %q, want latest", omoPluginName, got)
+	}
+
+	shadowLockPath := filepath.Join(shadowDir, "bun.lock")
+	if info, err := os.Lstat(shadowLockPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("shadow lockfile must not symlink user lock state: %s", shadowLockPath)
+	} else if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("stat shadow lockfile: %v", err)
+	}
+
+	gotUserPackage, err := os.ReadFile(filepath.Join(userDir, "package.json"))
+	if err != nil {
+		t.Fatalf("read user package manifest after setup: %v", err)
+	}
+	if string(gotUserPackage) != string(userPackage) {
+		t.Fatalf("user package manifest changed: got %q, want %q", gotUserPackage, userPackage)
+	}
+	gotUserLock, err := os.ReadFile(filepath.Join(userDir, "bun.lock"))
+	if err != nil {
+		t.Fatalf("read user lockfile after setup: %v", err)
+	}
+	if string(gotUserLock) != string(userLock) {
+		t.Fatalf("user lockfile changed: got %q, want %q", gotUserLock, userLock)
 	}
 }
 

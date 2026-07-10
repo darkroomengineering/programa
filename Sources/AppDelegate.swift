@@ -723,7 +723,7 @@ func shouldSuppressWindowMoveForFolderDrag(window: NSWindow, event: NSEvent) -> 
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, NSMenuItemValidation {
+final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuItemValidation {
     nonisolated(unsafe) static var shared: AppDelegate?
 
     private static let cachedIsRunningUnderXCTest = detectRunningUnderXCTest(ProcessInfo.processInfo.environment)
@@ -973,7 +973,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private nonisolated static func enqueueLaunchServicesRegistrationWork(_ work: @escaping @Sendable () -> Void) {
         launchServicesRegistrationQueue.async(execute: work)
     }
-    private var lastSessionAutosaveFingerprint: Int?
+    private var lastSessionAutosaveFingerprint: Data?
     private var lastSessionAutosavePersistedAt: Date = .distantPast
     private var lastTypingActivityAt: TimeInterval = 0
     private var didHandleExplicitOpenIntentAtStartup = false
@@ -1171,7 +1171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     self.openNewMainWindow(nil)
                 }
                 self.moveUITestWindowToTargetDisplayIfNeeded()
-                NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                NSRunningApplication.current.activate(options: [.activateAllWindows])
                 // On headless CI runners, activate() silently fails (no GUI session).
                 // Force windows visible so the terminal surface starts rendering.
                 for window in NSApp.windows {
@@ -2166,42 +2166,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         didDisableSuddenTermination = false
     }
 
-    private func sessionAutosaveFingerprint(includeScrollback: Bool) -> Int? {
-        guard !includeScrollback else { return nil }
-
-        var hasher = Hasher()
-        let contexts = mainWindowContexts.values.sorted { lhs, rhs in
-            lhs.windowId.uuidString < rhs.windowId.uuidString
-        }
-        hasher.combine(contexts.count)
-
-        for context in contexts.prefix(SessionPersistencePolicy.maxWindowsPerSnapshot) {
-            hasher.combine(context.windowId)
-            hasher.combine(context.tabManager.sessionAutosaveFingerprint())
-            hasher.combine(context.sidebarState.isVisible)
-            hasher.combine(
-                Int(SessionPersistencePolicy.sanitizedSidebarWidth(Double(context.sidebarState.persistedWidth)).rounded())
-            )
-
-            switch context.sidebarSelectionState.selection {
-            case .tabs:
-                hasher.combine(0)
-            case .notifications:
-                hasher.combine(1)
-            }
-
-            if let window = context.window ?? windowForMainWindowId(context.windowId) {
-                Self.hashFrame(window.frame, into: &hasher)
-            } else {
-                hasher.combine(-1)
-            }
-        }
-
-        return hasher.finalize()
-    }
-
     @discardableResult
-    private func saveSessionSnapshot(includeScrollback: Bool, removeWhenEmpty: Bool = false) -> Bool {
+    private func saveSessionSnapshot(
+        includeScrollback: Bool,
+        removeWhenEmpty: Bool = false,
+        prebuiltSnapshot: AppSessionSnapshot? = nil
+    ) -> Bool {
         if Self.shouldSkipSessionSaveDuringStartupRestore(
             isApplyingStartupSessionRestore: isApplyingStartupSessionRestore,
             includeScrollback: includeScrollback
@@ -2227,7 +2197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
 #endif
 
-        guard let snapshot = buildSessionSnapshot(includeScrollback: includeScrollback) else {
+        guard let snapshot = prebuiltSnapshot ?? buildSessionSnapshot(includeScrollback: includeScrollback) else {
             persistSessionSnapshot(
                 nil,
                 removeWhenEmpty: removeWhenEmpty,
@@ -2346,7 +2316,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 #if DEBUG
         let fingerprintStart = ProcessInfo.processInfo.systemUptime
 #endif
-        let autosaveFingerprint = sessionAutosaveFingerprint(includeScrollback: false)
+        let autosaveSnapshot = buildSessionSnapshot(includeScrollback: false)
+        let autosaveFingerprint = autosaveSnapshot.flatMap {
+            SessionPersistenceStore.contentIdentity(for: $0)
+        }
 #if DEBUG
         fingerprintMs = (ProcessInfo.processInfo.systemUptime - fingerprintStart) * 1000.0
 #endif
@@ -2369,7 +2342,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 #if DEBUG
         let saveStart = ProcessInfo.processInfo.systemUptime
 #endif
-        _ = saveSessionSnapshot(includeScrollback: false)
+        _ = saveSessionSnapshot(
+            includeScrollback: false,
+            prebuiltSnapshot: autosaveSnapshot
+        )
 #if DEBUG
         saveMs = (ProcessInfo.processInfo.systemUptime - saveStart) * 1000.0
 #endif
@@ -2393,11 +2369,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         isTerminatingApp && includeScrollback
     }
 
-    nonisolated static func shouldSkipSessionAutosaveForUnchangedFingerprint(
+    nonisolated static func shouldSkipSessionAutosaveForUnchangedFingerprint<Fingerprint: Equatable>(
         isTerminatingApp: Bool,
         includeScrollback: Bool,
-        previousFingerprint: Int?,
-        currentFingerprint: Int?,
+        previousFingerprint: Fingerprint?,
+        currentFingerprint: Fingerprint?,
         lastPersistedAt: Date,
         now: Date,
         maximumAutosaveSkippableInterval: TimeInterval = 60
@@ -2416,22 +2392,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func updateSessionAutosaveSaveState(
         includeScrollback: Bool,
         persistedAt: Date,
-        fingerprint: Int?
+        fingerprint: Data?
     ) {
         guard !isTerminatingApp, !includeScrollback else { return }
         lastSessionAutosaveFingerprint = fingerprint
         lastSessionAutosavePersistedAt = persistedAt
-    }
-
-    private nonisolated static func hashFrame(_ frame: NSRect, into hasher: inout Hasher) {
-        let standardized = frame.standardized
-        let quantized = [
-            standardized.origin.x,
-            standardized.origin.y,
-            standardized.size.width,
-            standardized.size.height,
-        ].map { Int(($0 * 2).rounded()) }
-        quantized.forEach { hasher.combine($0) }
     }
 
     private func persistSessionSnapshot(
@@ -2460,7 +2425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if synchronously {
             writeBlock()
         } else {
-            sessionPersistenceQueue.async(execute: writeBlock)
+            sessionPersistenceQueue.async(execute: DispatchWorkItem(block: writeBlock))
         }
     }
 
@@ -2587,8 +2552,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 object: window,
                 queue: .main
             ) { [weak self] note in
-                guard let self, let closing = note.object as? NSWindow else { return }
-                self.unregisterMainWindow(closing)
+                MainActor.assumeIsolated {
+                    guard let self, let closing = note.object as? NSWindow else { return }
+                    self.unregisterMainWindow(closing)
+                }
             }
         }
         updateCommandPaletteState(for: windowId) { state in
@@ -3800,7 +3767,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         destinationPanelId: UUID,
         destinationManager: TabManager
     ) {
-        let reassert: () -> Void = { [weak self, weak destinationManager] in
+        let reassert: @MainActor @Sendable () -> Void = { [weak self, weak destinationManager] in
             guard let self, let destinationManager else { return }
             guard let workspace = destinationManager.tabs.first(where: { $0.id == destinationWorkspaceId }),
                   workspace.panels[destinationPanelId] != nil else {
@@ -4974,7 +4941,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         } else {
             window.makeKeyAndOrderFront(nil)
             setActiveMainWindow(window)
-            NSApp.activate(ignoringOtherApps: true)
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
         }
         if shouldTemporarilyDisallowFullScreenTiling {
             DispatchQueue.main.async { [weak window] in
@@ -5176,7 +5143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             SettingsWindowController.shared.show(navigationTarget: target)
         },
         activateApplication: @MainActor () -> Void = {
-            NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
         }
     ) {
 #if DEBUG
@@ -5530,26 +5497,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { note in
-            guard let workspaceId = note.userInfo?["workspaceId"] as? UUID,
-                  workspaceId == tab.id else { return }
-            let surfaceId = note.userInfo?["surfaceId"] as? UUID
+            MainActor.assumeIsolated {
+                guard let workspaceId = note.userInfo?["workspaceId"] as? UUID,
+                      workspaceId == tab.id else { return }
+                let surfaceId = note.userInfo?["surfaceId"] as? UUID
 #if DEBUG
-            if isReactGrabPasteback {
-                dlog(
-                    "reactGrab.pasteback h2.surfaceReadyEvent " +
-                    "workspace=\(Self.debugShortId(workspaceId)) " +
-                    "surface=\(Self.debugShortId(surfaceId)) " +
-                    "target=\(Self.debugShortId(preferredPanelId)) " +
-                    "match=\(surfaceId == preferredPanelId ? 1 : 0)"
-                )
-            }
+                if isReactGrabPasteback {
+                    dlog(
+                        "reactGrab.pasteback h2.surfaceReadyEvent " +
+                        "workspace=\(Self.debugShortId(workspaceId)) " +
+                        "surface=\(Self.debugShortId(surfaceId)) " +
+                        "target=\(Self.debugShortId(preferredPanelId)) " +
+                        "match=\(surfaceId == preferredPanelId ? 1 : 0)"
+                    )
+                }
 #endif
-            if let preferredPanelId,
-               let surfaceId,
-               surfaceId != preferredPanelId {
-                return
+                if let preferredPanelId,
+                   let surfaceId,
+                   surfaceId != preferredPanelId {
+                    return
+                }
+                finishIfReady()
             }
-            finishIfReady()
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             if !resolved {
@@ -5780,9 +5749,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshConfiguredShortcutChordActions()
-            self?.clearConfiguredShortcutChordState()
-            self?.scheduleSplitButtonTooltipRefreshAcrossWorkspaces()
+            MainActor.assumeIsolated {
+                self?.refreshConfiguredShortcutChordActions()
+                self?.clearConfiguredShortcutChordState()
+                self?.scheduleSplitButtonTooltipRefreshAcrossWorkspaces()
+            }
         }
     }
 
@@ -5830,7 +5801,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshGhosttyGotoSplitShortcuts()
+            MainActor.assumeIsolated {
+                self?.refreshGhosttyGotoSplitShortcuts()
+            }
         }
     }
 
@@ -7888,7 +7861,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // physical key code is the definitive identifier for the intended shortcut.
         // For empty-character events (synthetic/browser key equivalents), preserve the original
         // behavior: only fall back when the layout translation also failed.
-        let hasUsableEventChars = hasEventChars && eventCharsAreASCII
         let allowANSIKeyCodeFallback = flags.contains(.control)
             || (flags.contains(.command)
                 && !flags.contains(.control)
@@ -8279,7 +8251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             if !app.isTerminated {
                 _ = app.forceTerminate()
             }
-            NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
         }
     }
 
@@ -8352,8 +8324,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] note in
-            guard let self, let window = note.object as? NSWindow else { return }
-            self.setActiveMainWindow(window)
+            MainActor.assumeIsolated {
+                guard let self, let window = note.object as? NSWindow else { return }
+                self.setActiveMainWindow(window)
+            }
         }
     }
 
@@ -8365,14 +8339,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.browserPanel(for: panelId)?.beginSuppressWebViewFocusForAddressBar()
-            self.browserAddressBarFocusedPanelId = panelId
-            self.stopBrowserOmnibarSelectionRepeat()
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let panelId = notification.object as? UUID else { return }
+                self.browserPanel(for: panelId)?.beginSuppressWebViewFocusForAddressBar()
+                self.browserAddressBarFocusedPanelId = panelId
+                self.stopBrowserOmnibarSelectionRepeat()
 #if DEBUG
-            dlog("addressBar FOCUS panelId=\(panelId.uuidString.prefix(8))")
+                dlog("addressBar FOCUS panelId=\(panelId.uuidString.prefix(8))")
 #endif
+            }
         }
 
         browserAddressBarBlurObserver = NotificationCenter.default.addObserver(
@@ -8380,15 +8356,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.browserPanel(for: panelId)?.endSuppressWebViewFocusForAddressBar()
-            if self.browserAddressBarFocusedPanelId == panelId {
-                self.browserAddressBarFocusedPanelId = nil
-                self.stopBrowserOmnibarSelectionRepeat()
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let panelId = notification.object as? UUID else { return }
+                self.browserPanel(for: panelId)?.endSuppressWebViewFocusForAddressBar()
+                if self.browserAddressBarFocusedPanelId == panelId {
+                    self.browserAddressBarFocusedPanelId = nil
+                    self.stopBrowserOmnibarSelectionRepeat()
 #if DEBUG
-                dlog("addressBar BLUR panelId=\(panelId.uuidString.prefix(8))")
+                    dlog("addressBar BLUR panelId=\(panelId.uuidString.prefix(8))")
 #endif
+                }
             }
         }
     }
@@ -8825,7 +8803,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         window.makeKeyAndOrderFront(nil)
         // Improve reliability across Spaces / when other helper panels are key.
-        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
     }
 
     private func markReadIfFocused(
@@ -8971,4 +8949,3 @@ private extension AppDelegate {
         }
     }
 }
-

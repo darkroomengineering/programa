@@ -10,7 +10,7 @@ import Darwin
 import Network
 import CoreText
 
-extension Workspace: BonsplitDelegate {
+extension Workspace: @preconcurrency BonsplitDelegate {
     @MainActor
     private func shouldCloseWorkspaceOnLastSurface(for tabId: TabID) -> Bool {
         let manager = owningTabManager ?? AppDelegate.shared?.tabManagerFor(tabId: id) ?? AppDelegate.shared?.tabManager
@@ -313,7 +313,7 @@ extension Workspace: BonsplitDelegate {
         reassertAppKitFocus: Bool
     ) {
         if let terminalPanel = panel as? TerminalPanel {
-            let shouldFocusTerminalSurface = shouldMoveTerminalSurfaceFocus(for: focusIntent)
+            let shouldFocusTerminalSurface = reassertAppKitFocus && shouldMoveTerminalSurfaceFocus(for: focusIntent)
             terminalPanel.surface.setFocus(shouldFocusTerminalSurface)
             terminalPanel.hostedView.setActive(true)
             if reassertAppKitFocus && shouldFocusTerminalSurface {
@@ -323,7 +323,8 @@ extension Workspace: BonsplitDelegate {
         }
 
         if let browserPanel = panel as? BrowserPanel {
-            guard shouldFocusBrowserWebView(for: focusIntent) else { return }
+            guard reassertAppKitFocus,
+                  shouldFocusBrowserWebView(for: focusIntent) else { return }
             browserPanel.focus()
             return
         }
@@ -1022,6 +1023,14 @@ extension Workspace: BonsplitDelegate {
             closeTabs(tabIdsToCloseOthers(of: tab.id, inPane: pane))
         case .move:
             promptMovePanel(tabId: tab.id)
+        case .moveToLeftPane:
+            guard let panelId = panelIdFromSurfaceId(tab.id),
+                  let targetPane = controller.adjacentPane(to: pane, direction: .left) else { return }
+            moveSurface(panelId: panelId, toPane: targetPane)
+        case .moveToRightPane:
+            guard let panelId = panelIdFromSurfaceId(tab.id),
+                  let targetPane = controller.adjacentPane(to: pane, direction: .right) else { return }
+            moveSurface(panelId: panelId, toPane: targetPane)
         case .newTerminalToRight:
             createTerminalToRight(of: tab.id, inPane: pane)
         case .newBrowserToRight:

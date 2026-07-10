@@ -265,7 +265,12 @@ class UpdateController {
                     error: NSError(
                         domain: "programa.update",
                         code: 1,
-                        userInfo: [NSLocalizedDescriptionKey: "Updater is still starting. Try again in a moment."]
+                        userInfo: [
+                            NSLocalizedDescriptionKey: String(
+                                localized: "update.error.stillStarting",
+                                defaultValue: "Updater is still starting. Try again in a moment."
+                            )
+                        ]
                     ),
                     retry: { [weak self] in self?.checkForUpdates() },
                     dismiss: { [weak self] in self?.viewModel.state = .idle }

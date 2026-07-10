@@ -573,13 +573,34 @@ struct SidebarEmptyArea: View {
         Color.clear
             .contentShape(Rectangle())
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onTapGesture(count: 2) {
-                tabManager.addWorkspace(placementOverride: .end)
-                if let selectedId = tabManager.selectedTabId {
-                    selectedTabIds = [selectedId]
-                    lastSidebarSelectionIndex = tabManager.tabs.firstIndex { $0.id == selectedId }
-                }
-                selection = .tabs
+            // Drag view must be an .overlay (frontmost), not .background: as a background,
+            // the Color.clear + .contentShape content above it is the real hit-test target,
+            // so AppKit never even asks the background NSView's hitTest — that's why the
+            // titlebar.dragHandle.* logs never fired here. Once frontmost, this view's own
+            // hitTest bails out for non-mouseDown event types, so SwiftUI's onDrop target
+            // underneath is unaffected.
+            //
+            // Double-click is handled by `onDoubleClick` below rather than a sibling
+            // `.onTapGesture(count: 2)`: once this view is frontmost, it claims the hit-test
+            // for the *first* click of any double-click, so a sibling gesture recognizer on
+            // the content beneath never observes that first click and can't reliably count
+            // to two. Owning the whole click sequence here (mirroring Bonsplit's
+            // TabBarDragZoneView.onDoubleClick pattern) avoids that race entirely.
+            .overlay {
+                WindowDragHandleView(
+                    handlesDoubleClick: false,
+                    onDoubleClick: {
+                        #if DEBUG
+                        dlog("sidebar.dragHandle.doubleClick action=addWorkspace")
+                        #endif
+                        tabManager.addWorkspace(placementOverride: .end)
+                        if let selectedId = tabManager.selectedTabId {
+                            selectedTabIds = [selectedId]
+                            lastSidebarSelectionIndex = tabManager.tabs.firstIndex { $0.id == selectedId }
+                        }
+                        selection = .tabs
+                    }
+                )
             }
             .onDrop(of: SidebarTabDragPayload.dropContentTypes, delegate: SidebarTabDropDelegate(
                 targetTabId: nil,

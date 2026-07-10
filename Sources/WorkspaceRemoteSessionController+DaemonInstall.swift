@@ -264,7 +264,7 @@ extension WorkspaceRemoteSessionController {
         guard let manifestURL = URL(string: "\(releaseURL)/programad-remote-manifest.json") else { return nil }
         let request = NSMutableURLRequest(url: manifestURL)
         request.timeoutInterval = 15
-        request.setValue("cmux/\(version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("programa/\(version)", forHTTPHeaderField: "User-Agent")
         let session = URLSession(configuration: .ephemeral)
         let semaphore = DispatchSemaphore(value: 0)
         var resultData: Data?
@@ -294,7 +294,7 @@ extension WorkspaceRemoteSessionController {
 
         let request = NSMutableURLRequest(url: url)
         request.timeoutInterval = 60
-        request.setValue("cmux/\(version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("programa/\(version)", forHTTPHeaderField: "User-Agent")
         let session = URLSession(configuration: .ephemeral)
 
         let semaphore = DispatchSemaphore(value: 0)
@@ -382,25 +382,44 @@ extension WorkspaceRemoteSessionController {
 
         guard Self.allowLocalDaemonBuildFallback() else {
             throw NSError(domain: "programa.remote.daemon", code: 20, userInfo: [
-                NSLocalizedDescriptionKey: "this build does not include a verified programad-remote manifest for \(goOS)-\(goArch). Use a release build, or set PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 for a dev-only fallback.",
+                NSLocalizedDescriptionKey: String(
+                    format: String(
+                        localized: "remoteDaemon.error.missingVerifiedManifest",
+                        defaultValue: "This build does not include a verified programad-remote manifest for %@-%@. Use a release build, or set PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 for a dev-only fallback."
+                    ),
+                    goOS,
+                    goArch
+                ),
             ])
         }
 
         guard let repoRoot = Self.findRepoRoot() else {
             throw NSError(domain: "programa.remote.daemon", code: 20, userInfo: [
-                NSLocalizedDescriptionKey: "cannot locate cmux repo root for dev-only programad-remote build fallback",
+                NSLocalizedDescriptionKey: String(
+                    localized: "remoteDaemon.error.repoRootNotFound",
+                    defaultValue: "Cannot locate the Programa repository root for the development-only programad-remote build fallback."
+                ),
             ])
         }
         let daemonRoot = repoRoot.appendingPathComponent("daemon/remote", isDirectory: true)
         let goModPath = daemonRoot.appendingPathComponent("go.mod").path
         guard FileManager.default.fileExists(atPath: goModPath) else {
             throw NSError(domain: "programa.remote.daemon", code: 21, userInfo: [
-                NSLocalizedDescriptionKey: "missing daemon module at \(goModPath)",
+                NSLocalizedDescriptionKey: String(
+                    format: String(
+                        localized: "remoteDaemon.error.missingDaemonModule",
+                        defaultValue: "Missing daemon module at %@."
+                    ),
+                    goModPath
+                ),
             ])
         }
         guard let goBinary = Self.which("go") else {
             throw NSError(domain: "programa.remote.daemon", code: 22, userInfo: [
-                NSLocalizedDescriptionKey: "go is required for the dev-only programad-remote build fallback",
+                NSLocalizedDescriptionKey: String(
+                    localized: "remoteDaemon.error.goRequired",
+                    defaultValue: "Go is required for the development-only programad-remote build fallback."
+                ),
             ])
         }
 

@@ -280,10 +280,10 @@ struct programaApp: App {
                         }
                     }
                 }
-                .onChange(of: appearanceMode) { _ in
+                .onChange(of: appearanceMode) {
                     applyAppearance()
                 }
-                .onChange(of: socketControlMode) { _ in
+                .onChange(of: socketControlMode) {
                     updateSocketController()
                 }
         }
@@ -322,20 +322,20 @@ struct programaApp: App {
             }
 
 #if DEBUG
-            CommandMenu("Update Pill") {
-                Button("Show Update Pill") {
+            CommandMenu(String(localized: "debug.updatePill.menu", defaultValue: "Update Pill")) {
+                Button(String(localized: "debug.updatePill.show", defaultValue: "Show Update Pill")) {
                     appDelegate.showUpdatePill(nil)
                 }
-                Button("Show Long Nightly Pill") {
+                Button(String(localized: "debug.updatePill.showLongNightly", defaultValue: "Show Long Nightly Pill")) {
                     appDelegate.showUpdatePillLongNightly(nil)
                 }
-                Button("Show Loading State") {
+                Button(String(localized: "debug.updatePill.showLoading", defaultValue: "Show Loading State")) {
                     appDelegate.showUpdatePillLoading(nil)
                 }
-                Button("Hide Update Pill") {
+                Button(String(localized: "debug.updatePill.hide", defaultValue: "Hide Update Pill")) {
                     appDelegate.hideUpdatePill(nil)
                 }
-                Button("Automatic Update Pill") {
+                Button(String(localized: "debug.updatePill.automatic", defaultValue: "Automatic Update Pill")) {
                     appDelegate.clearUpdatePillOverride(nil)
                 }
             }
@@ -380,16 +380,16 @@ struct programaApp: App {
             }
 
 #if DEBUG
-            CommandMenu("Debug") {
-                Button("New Tab With Lorem Search Text") {
+            CommandMenu(String(localized: "debug.menu.title", defaultValue: "Debug")) {
+                Button(String(localized: "debug.menu.newLoremTab", defaultValue: "New Tab With Lorem Search Text")) {
                     appDelegate.openDebugLoremTab(nil)
                 }
 
-                Button("New Tab With Large Scrollback") {
+                Button(String(localized: "debug.menu.newLargeScrollbackTab", defaultValue: "New Tab With Large Scrollback")) {
                     appDelegate.openDebugScrollbackTab(nil)
                 }
 
-                Button("Open Workspaces for All Workspace Colors") {
+                Button(String(localized: "debug.menu.openWorkspaceColors", defaultValue: "Open Workspaces for All Workspace Colors")) {
                     appDelegate.openDebugColorComparisonWorkspaces(nil)
                 }
 
@@ -403,8 +403,8 @@ struct programaApp: App {
                 }
 
                 Divider()
-                Menu("Debug Windows") {
-                    Button("Background Debug…") {
+                Menu(String(localized: "debug.menu.windows", defaultValue: "Debug Windows")) {
+                    Button(String(localized: "debug.menu.background", defaultValue: "Background Debug…")) {
                         BackgroundDebugWindowController.shared.show()
                     }
                     Button(
@@ -415,22 +415,22 @@ struct programaApp: App {
                     ) {
                         BrowserProfilePopoverDebugWindowController.shared.show()
                     }
-                    Button("Debug Window Controls…") {
+                    Button(String(localized: "debug.menu.windowControls", defaultValue: "Debug Window Controls…")) {
                         DebugWindowControlsWindowController.shared.show()
                     }
-                    Button("Menu Bar Extra Debug…") {
+                    Button(String(localized: "debug.menu.menuBarExtra", defaultValue: "Menu Bar Extra Debug…")) {
                         MenuBarExtraDebugWindowController.shared.show()
                     }
-                    Button("Settings/About Titlebar Debug…") {
+                    Button(String(localized: "debug.menu.settingsAboutTitlebar", defaultValue: "Settings/About Titlebar Debug…")) {
                         SettingsAboutTitlebarDebugWindowController.shared.show()
                     }
-                    Button("Sidebar Debug…") {
+                    Button(String(localized: "debug.menu.sidebar", defaultValue: "Sidebar Debug…")) {
                         SidebarDebugWindowController.shared.show()
                     }
-                    Button("Split Button Layout Debug…") {
+                    Button(String(localized: "debug.menu.splitButtonLayout", defaultValue: "Split Button Layout Debug…")) {
                         SplitButtonLayoutDebugWindowController.shared.show()
                     }
-                    Button("Open All Debug Windows") {
+                    Button(String(localized: "debug.menu.openAllWindows", defaultValue: "Open All Debug Windows")) {
                         openAllDebugWindows()
                     }
                 }
@@ -458,7 +458,7 @@ struct programaApp: App {
                     }
                 }
 
-                Toggle("Always Show Shortcut Hints", isOn: $alwaysShowShortcutHints)
+                Toggle(String(localized: "debug.shortcutHints.alwaysShow", defaultValue: "Always Show Shortcut Hints"), isOn: $alwaysShowShortcutHints)
                 Toggle(
                     String(localized: "debug.devBuildBanner.show", defaultValue: "Show Dev Build Banner"),
                     isOn: $showSidebarDevBuildBanner
@@ -466,7 +466,7 @@ struct programaApp: App {
 
                 Divider()
 
-                Picker("Titlebar Controls Style", selection: $titlebarControlsStyle) {
+                Picker(String(localized: "debug.titlebarControls.style", defaultValue: "Titlebar Controls Style"), selection: $titlebarControlsStyle) {
                     ForEach(TitlebarControlsStyle.allCases) { style in
                         Text(style.menuTitle).tag(style.rawValue)
                     }
@@ -1625,7 +1625,7 @@ enum ProgramaRuntimeDebugCapture {
         var payload: [String: Any] = [
             "session_id": configuration.sessionID,
             "hypothesis_id": hypothesisID,
-            "service": "cmux-macos",
+            "service": "programa-macos",
             "source": source,
             "name": name,
             "ts": ISO8601DateFormatter().string(from: Date()),
@@ -1675,4 +1675,3 @@ func openProgramaSettingsFileInTextEdit() {
     NSWorkspace.shared.open([fileURL], withApplicationAt: editorURL, configuration: configuration)
     #endif
 }
-

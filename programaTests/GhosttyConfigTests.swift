@@ -782,6 +782,57 @@ final class WorkspaceRemoteDaemonManifestTests: XCTestCase {
 }
 
 final class RemoteLoopbackHTTPRequestRewriterTests: XCTestCase {
+    @MainActor
+    func testBrowserEmittedLoopbackAliasRoutesToRemoteLoopbackAndEnablesHeaderRewriting() throws {
+        let localhostURL = try XCTUnwrap(URL(string: "http://localhost:3000/demo"))
+        let browserURL = try XCTUnwrap(BrowserPanel.remoteProxyLoopbackAliasURL(for: localhostURL))
+        let emittedHost = try XCTUnwrap(browserURL.host)
+        let route = workspaceRemoteLoopbackProxyRoute(for: emittedHost)
+
+        XCTAssertEqual(route.targetHost, "127.0.0.1")
+        let rewriteAlias = try XCTUnwrap(
+            route.rewriteAliasHost,
+            "The exact alias emitted by BrowserPanel must enable proxy request/response rewriting"
+        )
+
+        let original = Data(
+            (
+                "GET /demo HTTP/1.1\r\n" +
+                "Host: \(emittedHost):3000\r\n" +
+                "Origin: http://\(emittedHost):3000\r\n" +
+                "\r\n"
+            ).utf8
+        )
+        let rewritten = RemoteLoopbackHTTPRequestRewriter.rewriteIfNeeded(
+            data: original,
+            aliasHost: rewriteAlias
+        )
+        let text = String(decoding: rewritten, as: UTF8.self)
+        XCTAssertTrue(text.contains("Host: localhost:3000"))
+        XCTAssertTrue(text.contains("Origin: http://localhost:3000"))
+    }
+
+    func testLegacyProgramaLoopbackAliasStillRoutesAndRewritesHeaders() throws {
+        let legacyAlias = "programa-loopback.localtest.me"
+        let route = workspaceRemoteLoopbackProxyRoute(for: legacyAlias)
+
+        XCTAssertEqual(route.targetHost, "127.0.0.1")
+        XCTAssertEqual(route.rewriteAliasHost, legacyAlias)
+
+        let original = Data(
+            (
+                "GET /legacy HTTP/1.1\r\n" +
+                "Host: \(legacyAlias):3000\r\n" +
+                "\r\n"
+            ).utf8
+        )
+        let rewritten = RemoteLoopbackHTTPRequestRewriter.rewriteIfNeeded(
+            data: original,
+            aliasHost: try XCTUnwrap(route.rewriteAliasHost)
+        )
+        XCTAssertTrue(String(decoding: rewritten, as: UTF8.self).contains("Host: localhost:3000"))
+    }
+
     func testRewritesLoopbackAliasHostHeadersToLocalhost() {
         let original = Data(
             (
@@ -1413,6 +1464,36 @@ final class WorkspaceRemoteDaemonPendingCallRegistryTests: XCTestCase {
         default:
             XCTFail("second pending call should receive shared failure")
         }
+    }
+}
+
+final class WorkspaceRemoteProxySessionQueueProviderTests: XCTestCase {
+    func testStalledProxySessionDoesNotBlockSecondAcceptedSession() {
+        let tunnelQueue = DispatchQueue(label: "programa.tests.remote-proxy.tunnel")
+        let provider = WorkspaceRemoteProxySessionQueueProvider(tunnelQueue: tunnelQueue)
+        let firstSessionQueue = provider.queue(for: UUID())
+        let secondSessionQueue = provider.queue(for: UUID())
+        let firstStarted = DispatchSemaphore(value: 0)
+        let releaseFirst = DispatchSemaphore(value: 0)
+        let secondServed = DispatchSemaphore(value: 0)
+
+        firstSessionQueue.async {
+            firstStarted.signal()
+            _ = releaseFirst.wait(timeout: .now() + 2)
+        }
+        XCTAssertEqual(firstStarted.wait(timeout: .now() + 1), .success)
+
+        secondSessionQueue.async {
+            secondServed.signal()
+        }
+        let secondResult = secondServed.wait(timeout: .now() + 0.2)
+        releaseFirst.signal()
+
+        XCTAssertEqual(
+            secondResult,
+            .success,
+            "A stalled proxy connection must not occupy the executor used to serve another accepted connection"
+        )
     }
 }
 

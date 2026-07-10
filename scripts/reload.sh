@@ -15,6 +15,7 @@ CLI_PATH=""
 LAST_SOCKET_PATH_DIR="$HOME/Library/Application Support/programa"
 LAST_SOCKET_PATH_FILE="${LAST_SOCKET_PATH_DIR}/last-socket-path"
 AUTO_SKIP_ZIG_BUILD_REASON=""
+ENSURE_GHOSTTYKIT_COMMAND="${PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND:-$PWD/scripts/ensure-ghosttykit.sh}"
 
 should_skip_ghostty_cli_helper_zig_build() {
   if [[ "${PROGRAMA_SKIP_ZIG_BUILD:-}" == "1" ]]; then
@@ -279,7 +280,7 @@ if [[ -z "$TAG" ]]; then
   exit 1
 fi
 
-"$PWD/scripts/ensure-ghosttykit.sh"
+"$ENSURE_GHOSTTYKIT_COMMAND"
 
 if should_skip_ghostty_cli_helper_zig_build; then
   if [[ "${PROGRAMA_SKIP_ZIG_BUILD:-}" != "1" ]]; then

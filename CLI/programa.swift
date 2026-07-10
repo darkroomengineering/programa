@@ -60,9 +60,35 @@ enum SocketPasswordResolver {
         let passwordURL = appSupport
             .appendingPathComponent(directoryName, isDirectory: true)
             .appendingPathComponent(fileName, isDirectory: false)
-        guard let data = try? Data(contentsOf: passwordURL) else {
+
+        var pathStat = stat()
+        guard lstat(passwordURL.path, &pathStat) == 0,
+              (pathStat.st_mode & S_IFMT) == S_IFREG,
+              pathStat.st_uid == geteuid(),
+              (pathStat.st_mode & 0o077) == 0,
+              pathStat.st_size >= 0,
+              pathStat.st_size <= 64 * 1024 else {
             return nil
         }
+
+        let descriptor = open(passwordURL.path, O_RDONLY | O_NOFOLLOW)
+        guard descriptor >= 0 else { return nil }
+        defer { close(descriptor) }
+
+        var openedStat = stat()
+        guard fstat(descriptor, &openedStat) == 0,
+              (openedStat.st_mode & S_IFMT) == S_IFREG,
+              openedStat.st_uid == geteuid(),
+              (openedStat.st_mode & 0o077) == 0,
+              openedStat.st_dev == pathStat.st_dev,
+              openedStat.st_ino == pathStat.st_ino,
+              openedStat.st_size >= 0,
+              openedStat.st_size <= 64 * 1024 else {
+            return nil
+        }
+
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
+        let data = handle.readDataToEndOfFile()
         guard let value = String(data: data, encoding: .utf8) else {
             return nil
         }
@@ -1075,6 +1101,32 @@ struct CommandContext {
     let windowId: String?
 }
 
+enum CLICommandConnectionPolicy {
+    /// The command is parsed and validated first, then receives one connected client.
+    case socket
+    /// The command owns any process/socket work it needs and must not be preconnected.
+    case local
+}
+
+enum CLICommandHelpPolicy {
+    /// `--help` is handled by Programa without acquiring a socket.
+    case programa
+    /// Help flags are forwarded verbatim to the wrapped/internal command.
+    case passthrough
+}
+
+/// Typed preflight contracts that must succeed before a socket client exists.
+/// `.registered` routes through the exhaustive command grammar table; bespoke
+/// cases retain additional semantic validation where the schema is richer.
+enum CLICommandArgumentContract {
+    case registered
+    case noArguments
+    case focusPanel
+    case readScreen
+    case setProgress
+    case listLog
+}
+
 /// Single source of truth for a CLI command's name(s), its one-line entry in
 /// the grouped `Commands:` help block, and how it executes.
 ///
@@ -1085,17 +1137,9 @@ struct CommandContext {
 /// help-list membership, and unknown-command exclusion in one place —
 /// nothing else to keep in sync.
 ///
-/// Not every command routes through this table's `execute` closure: a
-/// handful (`welcome`, `shortcuts`, `feedback`, `themes`, `claude-teams`,
-/// `omo`, `omx`, `omc`, `codex`, `version`, `remote-daemon-status`) are
-/// intercepted earlier in `run()`, before the socket connects, because they
-/// have pre-connection semantics (e.g. `version`/`welcome` must work even
-/// when Programa isn't running). Those still get a descriptor — with
-/// `execute == nil` — purely so `usage()` has one place to read their help
-/// line from. If dispatch ever reached the table for one of them (it
-/// shouldn't, given the pre-connection interception always returns first),
-/// it falls through to "Unknown command", matching prior behavior (they
-/// were never switch cases either).
+/// Commands whose implementation is intercepted in `run()` still have a
+/// descriptor so their connection, help, and argument policies are decided
+/// before any socket work begins.
 ///
 /// A descriptor with `names: []` is a pure help-text spacer/section-comment
 /// (e.g. the blank line + "# tmux compatibility commands" header) — it
@@ -1115,9 +1159,28 @@ struct CommandDescriptor {
     /// undocumented (matches several legacy/internal commands that were
     /// already missing from the old free-text help).
     let helpLines: [String]
-    /// Executes the command. `nil` for the pre-connection-special commands
-    /// described above.
+    let connectionPolicy: CLICommandConnectionPolicy
+    let helpPolicy: CLICommandHelpPolicy
+    let argumentContract: CLICommandArgumentContract
+    /// Executes the command. `nil` for commands implemented directly by
+    /// `run()` before generic socket dispatch.
     let execute: ((CommandContext) throws -> Void)?
+
+    init(
+        names: [String],
+        helpLines: [String],
+        connectionPolicy: CLICommandConnectionPolicy = .socket,
+        helpPolicy: CLICommandHelpPolicy = .programa,
+        argumentContract: CLICommandArgumentContract = .registered,
+        execute: ((CommandContext) throws -> Void)?
+    ) {
+        self.names = names
+        self.helpLines = helpLines
+        self.connectionPolicy = connectionPolicy
+        self.helpPolicy = helpPolicy
+        self.argumentContract = argumentContract
+        self.execute = execute
+    }
 }
 
 struct ProgramaCLI {
@@ -1243,6 +1306,9 @@ struct ProgramaCLI {
                 print(usage())
                 return
             }
+            if arg.hasPrefix("-") {
+                throw CLIError(message: "Unknown global option: \(arg)")
+            }
             break
         }
 
@@ -1253,11 +1319,44 @@ struct ProgramaCLI {
 
         let command = args[index]
         let commandArgs = Array(args[(index + 1)...])
-        let resolvedSocketPath = CLISocketPathResolver.resolve(
-            requestedPath: socketPath,
-            source: socketPathSource,
-            environment: processEnv
-        )
+
+        guard let descriptor = commandDescriptor(named: command) else {
+            // Filesystem opening is a fallback only after command lookup, so a
+            // registered command can never be mistaken for a path.
+            if looksLikePath(command) {
+                let resolvedSocketPath = CLISocketPathResolver.resolve(
+                    requestedPath: socketPath,
+                    source: socketPathSource,
+                    environment: processEnv
+                )
+                try openPath(command, socketPath: resolvedSocketPath)
+                return
+            }
+            throw CLIError(message: "Unknown command: \(command). Run 'programa help' to see available commands.")
+        }
+
+        if descriptor.helpPolicy == .programa,
+           commandArgs.contains(where: { $0 == "--help" || $0 == "-h" }) {
+            guard dispatchSubcommandHelp(command: command, commandArgs: commandArgs) else {
+                throw CLIError(message: "No help is available for command: \(command)")
+            }
+            return
+        }
+
+        try validateArguments(commandArgs, for: command, contract: descriptor.argumentContract)
+        let idFormat = try resolvedIDFormat(jsonOutput: jsonOutput, raw: idFormatArg)
+
+        var resolvedSocketPathCache: String?
+        func resolveSocketPath() -> String {
+            if let resolvedSocketPathCache { return resolvedSocketPathCache }
+            let resolved = CLISocketPathResolver.resolve(
+                requestedPath: socketPath,
+                source: socketPathSource,
+                environment: processEnv
+            )
+            resolvedSocketPathCache = resolved
+            return resolved
+        }
 
         if command == "version" {
             print(versionSummary())
@@ -1269,22 +1368,8 @@ struct ProgramaCLI {
             return
         }
 
-        // If the argument looks like a path (not a known command), open a workspace there.
-        if looksLikePath(command) {
-            try openPath(command, socketPath: resolvedSocketPath)
-            return
-        }
-
-        // Check for --help/-h on subcommands before connecting to the socket,
-        // so help text is available even when programa is not running.
-        if command != "__tmux-compat",
-           command != "claude-teams",
-           command != "codex",
-           (commandArgs.contains("--help") || commandArgs.contains("-h")) {
-            if dispatchSubcommandHelp(command: command, commandArgs: commandArgs) {
-                return
-            }
-            print("Unknown command '\(command)'. Run 'programa help' to see available commands.")
+        if command == "help" {
+            print(usage())
             return
         }
 
@@ -1296,7 +1381,7 @@ struct ProgramaCLI {
         if command == "shortcuts" {
             try runShortcuts(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg,
                 jsonOutput: jsonOutput
             )
@@ -1306,7 +1391,7 @@ struct ProgramaCLI {
         if command == "feedback" {
             try runFeedback(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg,
                 jsonOutput: jsonOutput
             )
@@ -1324,7 +1409,7 @@ struct ProgramaCLI {
         if command == "claude-teams" {
             try runClaudeTeams(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg
             )
             return
@@ -1333,7 +1418,7 @@ struct ProgramaCLI {
         if command == "omo" {
             try runOMO(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg
             )
             return
@@ -1342,7 +1427,7 @@ struct ProgramaCLI {
         if command == "omx" {
             try runOMX(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg
             )
             return
@@ -1351,7 +1436,7 @@ struct ProgramaCLI {
         if command == "omc" {
             try runOMC(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg
             )
             return
@@ -1378,6 +1463,15 @@ struct ProgramaCLI {
             }
         }
 
+        guard descriptor.connectionPolicy == .socket else {
+            throw CLIError(message: "Unsupported \(command) subcommand")
+        }
+        guard let execute = descriptor.execute else {
+            throw CLIError(message: "Command is unavailable: \(command)")
+        }
+
+        let resolvedSocketPath = resolveSocketPath()
+
         let client = SocketClient(path: resolvedSocketPath)
         try client.connect()
         defer { client.close() }
@@ -1387,8 +1481,6 @@ struct ProgramaCLI {
             explicitPassword: socketPasswordArg,
             socketPath: resolvedSocketPath
         )
-
-        let idFormat = try resolvedIDFormat(jsonOutput: jsonOutput, raw: idFormatArg)
 
         // If the user explicitly targets a window, focus it first so commands route correctly.
         if let windowId {
@@ -1405,12 +1497,7 @@ struct ProgramaCLI {
             idFormatArgProvided: idFormatArg != nil,
             windowId: windowId
         )
-        if let descriptor = commandDescriptor(named: command), let execute = descriptor.execute {
-            try execute(ctx)
-        } else {
-            print(usage())
-            throw CLIError(message: "Unknown command: \(command)")
-        }
+        try execute(ctx)
     }
 
     /// Single source of truth for command existence, help text, and dispatch.
@@ -1427,30 +1514,32 @@ struct ProgramaCLI {
         var descriptors: [CommandDescriptor] = [
             // MARK: - Pre-connection specials (dispatched earlier in run();
             // documented here only so usage() has one source for help text).
-            CommandDescriptor(names: ["welcome"], helpLines: ["welcome"], execute: nil),
-            CommandDescriptor(names: ["shortcuts"], helpLines: ["shortcuts"], execute: nil),
+            CommandDescriptor(names: ["welcome"], helpLines: ["welcome"], connectionPolicy: .local, execute: nil),
+            CommandDescriptor(names: ["shortcuts"], helpLines: ["shortcuts"], connectionPolicy: .local, execute: nil),
             CommandDescriptor(
                 names: ["feedback"],
                 helpLines: ["feedback [--email <email> --body <text> [--image <path> ...]]  (opens GitHub issues; direct submission disabled)"],
+                connectionPolicy: .local,
                 execute: nil
             ),
-            CommandDescriptor(names: ["themes"], helpLines: ["themes [list|set|clear]"], execute: nil),
-            CommandDescriptor(names: ["claude-teams"], helpLines: ["claude-teams [claude-args...]"], execute: nil),
-            CommandDescriptor(names: ["omo"], helpLines: ["omo [opencode-args...]"], execute: nil),
-            CommandDescriptor(names: ["omx"], helpLines: ["omx [omx-args...]"], execute: nil),
-            CommandDescriptor(names: ["omc"], helpLines: ["omc [omc-args...]"], execute: nil),
-            CommandDescriptor(names: ["codex"], helpLines: ["codex <install-hooks|uninstall-hooks>"], execute: nil),
+            CommandDescriptor(names: ["themes"], helpLines: ["themes [list|set|clear]"], connectionPolicy: .local, execute: nil),
+            CommandDescriptor(names: ["claude-teams"], helpLines: ["claude-teams [claude-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
+            CommandDescriptor(names: ["omo"], helpLines: ["omo [opencode-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
+            CommandDescriptor(names: ["omx"], helpLines: ["omx [omx-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
+            CommandDescriptor(names: ["omc"], helpLines: ["omc [omc-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
+            CommandDescriptor(names: ["codex"], helpLines: ["codex <install-hooks|uninstall-hooks>"], connectionPolicy: .local, execute: nil),
 
             CommandDescriptor(
                 names: ["ping"],
                 helpLines: ["ping"],
+                argumentContract: .noArguments,
                 execute: { ctx in
                     _ = try ctx.client.sendV2(method: "system.ping")
                     print("PONG")
                 }
             ),
 
-            CommandDescriptor(names: ["version"], helpLines: ["version"], execute: nil),
+            CommandDescriptor(names: ["version"], helpLines: ["version"], connectionPolicy: .local, execute: nil),
 
             CommandDescriptor(
                 names: ["capabilities"],
@@ -2090,6 +2179,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["focus-panel"],
                 helpLines: ["focus-panel --panel <id|ref> [--workspace <id|ref>]"],
+                argumentContract: .focusPanel,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     guard let panelRaw = self.optionValue(ctx.commandArgs, name: "--panel") else {
@@ -2178,6 +2268,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["read-screen"],
                 helpLines: ["read-screen [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]"],
+                argumentContract: .readScreen,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
@@ -2477,6 +2568,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["set-progress"],
                 helpLines: [],
+                argumentContract: .setProgress,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     guard let first = parsed.positional.first else {
@@ -2541,6 +2633,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["list-log"],
                 helpLines: [],
+                argumentContract: .listLog,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     var params: [String: Any] = [:]
@@ -2610,6 +2703,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["__tmux-compat"],
                 helpLines: [],
+                helpPolicy: .passthrough,
                 execute: { ctx in
                     try self.runClaudeTeamsTmuxCompat(
                         commandArgs: ctx.commandArgs,
@@ -2760,6 +2854,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["help"],
                 helpLines: ["help"],
+                connectionPolicy: .local,
                 execute: { ctx in
                     print(self.usage())
                 }
@@ -3975,6 +4070,12 @@ struct ProgramaCLI {
 
             Show top-level CLI usage and command list.
             """
+        case "codex":
+            return """
+            Usage: programa codex <install-hooks|uninstall-hooks>
+
+            Install or remove Programa's Codex notification hooks.
+            """
         case "welcome":
             return """
             Usage: programa welcome
@@ -4828,6 +4929,552 @@ struct ProgramaCLI {
         // When --window is explicitly targeted, don't fall back to env workspace from a different window
         if windowOverride != nil { return nil }
         return ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
+    }
+
+    /// Validates contracts whose failures can be determined without opening
+    /// the socket. Handlers retain their checks as a defensive boundary, but
+    /// malformed invocations now fail before they can affect a running app.
+    private func preflightFlagArguments(
+        _ args: [String],
+        command: String,
+        valueFlags: Set<String>,
+        booleanFlags: Set<String> = [],
+        allowEquals: Bool
+    ) throws -> (positional: [String], options: [String: String]) {
+        var positional: [String] = []
+        var options: [String: String] = [:]
+        var pastTerminator = false
+        var index = 0
+
+        while index < args.count {
+            let token = args[index]
+            if pastTerminator {
+                positional.append(token)
+                index += 1
+                continue
+            }
+            if token == "--" {
+                pastTerminator = true
+                index += 1
+                continue
+            }
+            guard token.hasPrefix("--") else {
+                positional.append(token)
+                index += 1
+                continue
+            }
+
+            let body = String(token.dropFirst(2))
+            let parts = body.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            let name = String(parts[0])
+            let hasEqualsValue = parts.count == 2
+
+            guard valueFlags.contains(name) || booleanFlags.contains(name) else {
+                throw CLIError(message: "\(command): unknown option --\(name)")
+            }
+            guard options[name] == nil else {
+                throw CLIError(message: "\(command): duplicate option --\(name)")
+            }
+
+            if booleanFlags.contains(name) {
+                guard !hasEqualsValue else {
+                    throw CLIError(message: "\(command): --\(name) does not take a value")
+                }
+                options[name] = "true"
+                index += 1
+                continue
+            }
+
+            if hasEqualsValue {
+                guard allowEquals else {
+                    throw CLIError(message: "\(command): unexpected option syntax --\(name)=; use --\(name) <value>")
+                }
+                let value = String(parts[1])
+                guard !value.isEmpty else {
+                    throw CLIError(message: "\(command): --\(name) requires a value")
+                }
+                options[name] = value
+                index += 1
+                continue
+            }
+
+            guard index + 1 < args.count, !args[index + 1].hasPrefix("--") else {
+                throw CLIError(message: "\(command): --\(name) requires a value")
+            }
+            options[name] = args[index + 1]
+            index += 2
+        }
+        return (positional, options)
+    }
+
+    /// Exhaustive grammar table for commands that use the shared registry
+    /// contract. Keeping this switch total makes a newly registered command
+    /// fail closed before socket acquisition until its grammar is declared.
+    private func validateRegisteredArguments(_ args: [String], for command: String) throws {
+        func parse(
+            values: Set<String> = [],
+            booleans: Set<String> = [],
+            minPositionals: Int = 0,
+            maxPositionals: Int? = 0,
+            allowEquals: Bool = false
+        ) throws -> (positional: [String], options: [String: String]) {
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: values,
+                booleanFlags: booleans,
+                allowEquals: allowEquals
+            )
+            guard parsed.positional.count >= minPositionals else {
+                throw CLIError(message: "\(command): missing required argument")
+            }
+            if let maxPositionals, parsed.positional.count > maxPositionals {
+                throw CLIError(message: "\(command): unexpected arguments: \(parsed.positional.dropFirst(maxPositionals).joined(separator: " "))")
+            }
+            return parsed
+        }
+
+        func require(_ names: [String], in options: [String: String]) throws {
+            for name in names where options[name] == nil {
+                throw CLIError(message: "\(command): --\(name) is required")
+            }
+        }
+
+        switch command {
+        // Socket commands with no command-specific arguments.
+        case "capabilities", "list-windows", "current-window", "new-window",
+             "list-workspaces", "refresh-surfaces", "reload-config", "debug-terminals",
+             "current-workspace", "list-notifications",
+             "simulate-app-active":
+            _ = try parse()
+
+        case "rpc":
+            let parsed = try parse(minPositionals: 1, maxPositionals: 2)
+            _ = try parseRPCParams(Array(parsed.positional.dropFirst()))
+
+        case "identify":
+            _ = try parse(values: ["workspace", "surface"], booleans: ["no-caller"])
+
+        case "focus-window", "close-window":
+            let parsed = try parse(values: ["window"])
+            try require(["window"], in: parsed.options)
+            guard let rawWindow = parsed.options["window"], isUUID(rawWindow.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                throw CLIError(message: "\(command): invalid window id")
+            }
+
+        case "move-workspace-to-window":
+            let parsed = try parse(values: ["workspace", "window"])
+            try require(["workspace", "window"], in: parsed.options)
+
+        case "reorder-workspace":
+            let parsed = try parse(values: ["workspace", "index", "before", "after", "window"])
+            try require(["workspace"], in: parsed.options)
+            let anchors = ["index", "before", "after"].filter { parsed.options[$0] != nil }
+            guard anchors.count == 1 else {
+                throw CLIError(message: "reorder-workspace requires exactly one of --index, --before, or --after")
+            }
+            if let raw = parsed.options["index"], (Int(raw) ?? -1) < 0 {
+                throw CLIError(message: "reorder-workspace: --index must be a nonnegative integer")
+            }
+
+        case "workspace-action":
+            let parsed = try parse(values: ["action", "workspace", "title", "color", "description"], maxPositionals: nil)
+            guard let rawAction = parsed.options["action"] ?? parsed.positional.first else {
+                throw CLIError(message: "workspace-action requires --action <name>")
+            }
+            let trailing = parsed.options["action"] == nil ? Array(parsed.positional.dropFirst()) : parsed.positional
+            let action = rawAction.lowercased().replacingOccurrences(of: "-", with: "_")
+            if action == "rename", parsed.options["title"] == nil, trailing.isEmpty {
+                throw CLIError(message: "workspace-action rename requires a title")
+            }
+            if action == "set_color", parsed.options["color"] == nil, trailing.isEmpty {
+                throw CLIError(message: "workspace-action set-color requires a color")
+            }
+            if action == "set_description", parsed.options["description"] == nil, trailing.isEmpty {
+                throw CLIError(message: "workspace-action set-description requires a description")
+            }
+
+        case "new-workspace":
+            _ = try parse(values: ["name", "description", "cwd", "command"])
+
+        case "new-split":
+            let parsed = try parse(values: ["workspace", "surface", "panel"], minPositionals: 1, maxPositionals: 1)
+            guard ["left", "right", "up", "down"].contains(parsed.positional[0].lowercased()) else {
+                throw CLIError(message: "new-split: direction must be left, right, up, or down")
+            }
+
+        case "list-panes", "surface-health", "list-panels":
+            _ = try parse(values: ["workspace"])
+
+        case "list-pane-surfaces":
+            _ = try parse(values: ["workspace", "pane"])
+
+        case "focus-pane":
+            let parsed = try parse(values: ["workspace", "pane"], maxPositionals: 1)
+            guard parsed.options["pane"] != nil || parsed.positional.count == 1 else {
+                throw CLIError(message: "focus-pane requires --pane <id|ref>")
+            }
+            guard !(parsed.options["pane"] != nil && !parsed.positional.isEmpty) else {
+                throw CLIError(message: "focus-pane: provide the pane once")
+            }
+
+        case "new-pane":
+            let parsed = try parse(values: ["type", "direction", "workspace", "url"])
+            if let type = parsed.options["type"], !["terminal", "browser"].contains(type.lowercased()) {
+                throw CLIError(message: "new-pane: --type must be terminal or browser")
+            }
+            if let direction = parsed.options["direction"], !["left", "right", "up", "down"].contains(direction.lowercased()) {
+                throw CLIError(message: "new-pane: invalid direction")
+            }
+
+        case "new-surface":
+            let parsed = try parse(values: ["type", "pane", "workspace", "url"])
+            if let type = parsed.options["type"], !["terminal", "browser"].contains(type.lowercased()) {
+                throw CLIError(message: "new-surface: --type must be terminal or browser")
+            }
+
+        case "close-surface":
+            _ = try parse(values: ["surface", "panel", "workspace"])
+
+        case "move-surface":
+            let parsed = try parse(values: ["surface", "pane", "workspace", "window", "before", "before-surface", "after", "after-surface", "index", "focus"], maxPositionals: 1)
+            guard parsed.options["surface"] != nil || parsed.positional.count == 1 else {
+                throw CLIError(message: "move-surface requires --surface <id|ref|index>")
+            }
+            guard !(parsed.options["surface"] != nil && !parsed.positional.isEmpty) else {
+                throw CLIError(message: "move-surface: provide the surface once")
+            }
+            if let raw = parsed.options["index"], (Int(raw) ?? -1) < 0 {
+                throw CLIError(message: "move-surface: --index must be a nonnegative integer")
+            }
+            if let raw = parsed.options["focus"], !["true", "false", "1", "0", "yes", "no", "on", "off"].contains(raw.lowercased()) {
+                throw CLIError(message: "move-surface: --focus must be true or false")
+            }
+            let anchors = ["index", "before", "before-surface", "after", "after-surface"].filter { parsed.options[$0] != nil }
+            guard anchors.count <= 1 else {
+                throw CLIError(message: "move-surface accepts only one of --index, --before, or --after")
+            }
+
+        case "reorder-surface":
+            let parsed = try parse(values: ["surface", "workspace", "index", "before", "before-surface", "after", "after-surface"], maxPositionals: 1)
+            guard parsed.options["surface"] != nil || parsed.positional.count == 1 else {
+                throw CLIError(message: "reorder-surface requires --surface <id|ref|index>")
+            }
+            guard !(parsed.options["surface"] != nil && !parsed.positional.isEmpty) else {
+                throw CLIError(message: "reorder-surface: provide the surface once")
+            }
+            let anchors = ["index", "before", "before-surface", "after", "after-surface"].filter { parsed.options[$0] != nil }
+            guard anchors.count == 1 else {
+                throw CLIError(message: "reorder-surface requires exactly one of --index, --before, or --after")
+            }
+            if let raw = parsed.options["index"], (Int(raw) ?? -1) < 0 {
+                throw CLIError(message: "reorder-surface: --index must be a nonnegative integer")
+            }
+
+        case "tab-action":
+            let parsed = try parse(values: ["action", "tab", "surface", "workspace", "title", "url"], maxPositionals: nil)
+            guard parsed.options["action"] != nil || !parsed.positional.isEmpty else {
+                throw CLIError(message: "tab-action requires --action <name>")
+            }
+
+        case "rename-tab":
+            let parsed = try parse(values: ["workspace", "tab", "surface", "title"], maxPositionals: nil)
+            guard parsed.options["title"] != nil || !parsed.positional.isEmpty else {
+                throw CLIError(message: "rename-tab requires a title")
+            }
+
+        case "drag-surface-to-split":
+            let parsed = try parse(values: ["surface", "panel"], minPositionals: 1, maxPositionals: 1)
+            guard (parsed.options["surface"] != nil) != (parsed.options["panel"] != nil) else {
+                throw CLIError(message: "drag-surface-to-split requires exactly one of --surface or --panel")
+            }
+            guard ["left", "right", "up", "down"].contains(parsed.positional[0].lowercased()) else {
+                throw CLIError(message: "drag-surface-to-split: invalid direction")
+            }
+
+        case "trigger-flash":
+            _ = try parse(values: ["workspace", "surface", "panel"])
+
+        case "close-workspace", "select-workspace":
+            let parsed = try parse(values: ["workspace"])
+            try require(["workspace"], in: parsed.options)
+
+        case "rename-workspace", "rename-window":
+            _ = try parse(values: ["workspace"], minPositionals: 1, maxPositionals: nil)
+
+        case "send":
+            _ = try parse(values: ["workspace", "surface"], minPositionals: 1, maxPositionals: nil)
+
+        case "send-key":
+            _ = try parse(values: ["workspace", "surface"], minPositionals: 1, maxPositionals: 1)
+
+        case "send-panel":
+            let parsed = try parse(values: ["panel", "workspace"], minPositionals: 1, maxPositionals: nil)
+            try require(["panel"], in: parsed.options)
+
+        case "send-key-panel":
+            let parsed = try parse(values: ["panel", "workspace"], minPositionals: 1, maxPositionals: 1)
+            try require(["panel"], in: parsed.options)
+
+        case "notify":
+            _ = try parse(values: ["title", "subtitle", "body", "workspace", "surface"])
+
+        case "clear-notifications":
+            _ = try parse(values: ["workspace"])
+
+        case "set-status":
+            let parsed = try parse(
+                values: ["icon", "color", "url", "link", "priority", "format", "pid", "workspace"],
+                minPositionals: 2,
+                maxPositionals: nil,
+                allowEquals: true
+            )
+            if let priority = parsed.options["priority"], Int(priority) == nil {
+                throw CLIError(message: "set-status: --priority must be an integer")
+            }
+            if let format = parsed.options["format"], !["plain", "markdown", "md"].contains(format.lowercased()) {
+                throw CLIError(message: "set-status: --format must be plain or markdown")
+            }
+            if let pid = parsed.options["pid"], (Int(pid) ?? 0) <= 0 {
+                throw CLIError(message: "set-status: --pid must be a positive integer")
+            }
+
+        case "clear-status":
+            _ = try parse(values: ["workspace"], minPositionals: 1, maxPositionals: 1, allowEquals: true)
+
+        case "list-status", "clear-progress", "clear-log", "sidebar-state":
+            _ = try parse(values: ["workspace"], allowEquals: true)
+
+        case "log":
+            let parsed = try parse(values: ["level", "source", "workspace"], minPositionals: 1, maxPositionals: nil, allowEquals: true)
+            if let level = parsed.options["level"], !["info", "progress", "success", "warning", "error"].contains(level) {
+                throw CLIError(message: "log: invalid --level value")
+            }
+
+        case "set-app-focus":
+            let parsed = try parse(minPositionals: 1, maxPositionals: 1)
+            guard ["active", "inactive", "clear", "1", "0", "true", "false", "none"].contains(parsed.positional[0].lowercased()) else {
+                throw CLIError(message: "set-app-focus: invalid state")
+            }
+
+        case "tree":
+            _ = try parse(values: ["workspace"], booleans: ["all"])
+
+        case "markdown":
+            let parsed = try parse(minPositionals: 1, maxPositionals: 2)
+            if parsed.positional.count == 2, parsed.positional[0].lowercased() != "open" {
+                throw CLIError(message: "markdown: unexpected subcommand \(parsed.positional[0])")
+            }
+
+        case "ssh":
+            try validateSSHCommandArguments(args)
+
+        case "ssh-session-end":
+            let parsed = try parse(values: ["relay-port", "workspace", "surface"])
+            try require(["relay-port"], in: parsed.options)
+            guard let rawPort = parsed.options["relay-port"], let port = Int(rawPort), port > 0, port <= 65535 else {
+                throw CLIError(message: "ssh-session-end: --relay-port must be 1-65535")
+            }
+            if parsed.options["workspace"] == nil,
+               ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] == nil {
+                throw CLIError(message: "ssh-session-end requires --workspace or PROGRAMA_WORKSPACE_ID")
+            }
+            if parsed.options["surface"] == nil,
+               ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] == nil {
+                throw CLIError(message: "ssh-session-end requires --surface or PROGRAMA_SURFACE_ID")
+            }
+
+        case "claude-hook":
+            let parsed = try parse(values: ["workspace", "surface"], maxPositionals: 1)
+            if let subcommand = parsed.positional.first?.lowercased(),
+               !["session-start", "active", "stop", "idle", "prompt-submit", "notification", "notify", "session-end", "pre-tool-use", "help", "--help", "-h"].contains(subcommand) {
+                throw CLIError(message: "claude-hook: unknown event \(subcommand)")
+            }
+
+        case "codex-hook":
+            guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else { return }
+            let parsed = try parse(values: ["workspace", "surface"], maxPositionals: 1)
+            if let subcommand = parsed.positional.first?.lowercased(),
+               !["session-start", "prompt-submit", "stop", "help", "--help", "-h"].contains(subcommand) {
+                throw CLIError(message: "codex-hook: unknown event \(subcommand)")
+            }
+
+        case "capture-pane":
+            let parsed = try parse(values: ["workspace", "surface", "lines"], booleans: ["scrollback"])
+            if let lines = parsed.options["lines"], (Int(lines) ?? 0) <= 0 {
+                throw CLIError(message: "capture-pane: --lines must be greater than 0")
+            }
+        case "resize-pane":
+            let parsed = try parse(values: ["pane", "workspace", "amount"], minPositionals: 1, maxPositionals: 1)
+            try require(["pane"], in: parsed.options)
+            guard ["-L", "-R", "-U", "-D"].contains(parsed.positional[0]) else {
+                throw CLIError(message: "resize-pane requires -L, -R, -U, or -D")
+            }
+            if let amount = parsed.options["amount"], (Int(amount) ?? 0) <= 0 {
+                throw CLIError(message: "resize-pane: --amount must be greater than 0")
+            }
+        case "pipe-pane":
+            let parsed = try parse(values: ["command", "workspace", "surface"], maxPositionals: nil)
+            guard parsed.options["command"] != nil || !parsed.positional.isEmpty else {
+                throw CLIError(message: "pipe-pane requires --command <shell-command>")
+            }
+        case "wait-for":
+            let parsed = try parse(values: ["timeout"], booleans: ["signal"], minPositionals: 1, maxPositionals: 2)
+            let positionals = parsed.positional.filter { $0 != "-S" }
+            guard positionals.count == 1 else { throw CLIError(message: "wait-for requires one name") }
+            if let timeout = parsed.options["timeout"] {
+                guard let seconds = Double(timeout), seconds.isFinite, seconds >= 0 else {
+                    throw CLIError(message: "wait-for: --timeout must be finite and nonnegative")
+                }
+            }
+        case "swap-pane":
+            let parsed = try parse(values: ["pane", "target-pane", "workspace"])
+            try require(["pane", "target-pane"], in: parsed.options)
+        case "break-pane":
+            _ = try parse(values: ["workspace", "pane", "surface"], booleans: ["no-focus"])
+        case "join-pane":
+            let parsed = try parse(values: ["target-pane", "workspace", "pane", "surface"], booleans: ["no-focus"])
+            try require(["target-pane"], in: parsed.options)
+        case "next-window", "previous-window", "last-window", "list-buffers":
+            _ = try parse()
+        case "last-pane":
+            _ = try parse(values: ["workspace"])
+        case "find-window":
+            _ = try parse(booleans: ["content", "select"], minPositionals: 1, maxPositionals: nil)
+        case "clear-history":
+            _ = try parse(values: ["workspace", "surface"])
+        case "set-hook":
+            let parsed = try parse(values: ["unset"], booleans: ["list"], maxPositionals: nil)
+            if parsed.options["list"] == nil, parsed.options["unset"] == nil, parsed.positional.count < 2 {
+                throw CLIError(message: "set-hook requires <event> <command>")
+            }
+        case "popup", "bind-key", "unbind-key", "copy-mode":
+            throw CLIError(message: "\(command) is not supported yet in programa CLI parity mode")
+        case "set-buffer":
+            _ = try parse(values: ["name"], minPositionals: 1, maxPositionals: nil)
+        case "paste-buffer":
+            _ = try parse(values: ["name", "workspace", "surface"])
+        case "respawn-pane":
+            _ = try parse(values: ["workspace", "surface", "command"])
+        case "display-message":
+            let parsed = try parse(booleans: ["print"], minPositionals: 1, maxPositionals: nil)
+            guard parsed.positional.filter({ $0 != "-p" }).isEmpty == false else {
+                throw CLIError(message: "display-message requires text")
+            }
+
+        // These commands own nested or foreign grammars. Their handlers do
+        // full parsing; flags must remain byte-for-byte passthrough here.
+        case "__tmux-compat",
+             "browser", "open-browser",
+             "navigate", "browser-back", "browser-forward", "browser-reload", "get-url",
+             "focus-webview", "is-webview-focused":
+            return
+
+        // Local commands are registered for unified lookup/help, but do not
+        // acquire the app socket through the generic dispatcher.
+        case "welcome", "version", "help":
+            _ = try parse()
+        case "shortcuts", "feedback", "themes", "claude-teams", "omo", "omx", "omc":
+            return
+        case "codex":
+            let parsed = try parse(minPositionals: 1, maxPositionals: 1)
+            guard ["install-hooks", "uninstall-hooks"].contains(parsed.positional[0].lowercased()) else {
+                throw CLIError(message: "codex: expected install-hooks or uninstall-hooks")
+            }
+        case "remote-daemon-status":
+            let parsed = try parse(values: ["os", "arch"])
+            if let os = parsed.options["os"], !["darwin", "linux"].contains(os.lowercased()) {
+                throw CLIError(message: "remote-daemon-status: unsupported --os value")
+            }
+            if let arch = parsed.options["arch"], !["arm64", "amd64"].contains(arch.lowercased()) {
+                throw CLIError(message: "remote-daemon-status: unsupported --arch value")
+            }
+
+        // Commands with richer bespoke contracts are validated by their
+        // dedicated cases in `validateArguments`.
+        case "ping", "focus-panel", "read-screen", "set-progress", "list-log":
+            return
+
+        default:
+            throw CLIError(message: "Internal CLI registry error: no argument contract for \(command)")
+        }
+    }
+
+    private func validateArguments(
+        _ args: [String],
+        for command: String,
+        contract: CLICommandArgumentContract
+    ) throws {
+        switch contract {
+        case .registered:
+            try validateRegisteredArguments(args, for: command)
+
+        case .noArguments:
+            guard args.isEmpty else {
+                throw CLIError(message: "\(command): unexpected arguments: \(args.joined(separator: " "))")
+            }
+
+        case .focusPanel:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["panel", "workspace"],
+                allowEquals: false
+            )
+            guard parsed.positional.isEmpty else {
+                throw CLIError(message: "focus-panel: unexpected arguments: \(parsed.positional.joined(separator: " "))")
+            }
+            guard parsed.options["panel"] != nil else {
+                throw CLIError(message: "focus-panel requires --panel <id|ref>")
+            }
+
+        case .readScreen:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["workspace", "surface", "lines"],
+                booleanFlags: ["scrollback"],
+                allowEquals: false
+            )
+            guard parsed.positional.isEmpty else {
+                throw CLIError(message: "read-screen: unexpected arguments: \(parsed.positional.joined(separator: " "))")
+            }
+            if let lines = parsed.options["lines"] {
+                guard let count = Int(lines), count > 0 else {
+                    throw CLIError(message: "read-screen: --lines must be greater than 0")
+                }
+            }
+
+        case .setProgress:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["label", "workspace"],
+                allowEquals: true
+            )
+            guard parsed.positional.count == 1, let rawValue = parsed.positional.first else {
+                throw CLIError(message: "set-progress requires a progress value")
+            }
+            guard let value = Double(rawValue), value.isFinite, (0.0...1.0).contains(value) else {
+                throw CLIError(message: "set-progress: invalid progress value '\(rawValue)'; must be between 0.0 and 1.0")
+            }
+
+        case .listLog:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["limit", "workspace"],
+                allowEquals: true
+            )
+            guard parsed.positional.isEmpty else {
+                throw CLIError(message: "list-log: unexpected arguments: \(parsed.positional.joined(separator: " "))")
+            }
+            if let rawLimit = parsed.options["limit"] {
+                guard let limit = Int(rawLimit), limit >= 0 else {
+                    throw CLIError(message: "list-log: invalid limit '\(rawLimit)'; must be >= 0")
+                }
+            }
+        }
     }
 
     /// Parses CLI-style flags (`--name value` or `--name=value`) into positional args + an

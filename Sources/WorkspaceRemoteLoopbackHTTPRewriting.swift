@@ -10,6 +10,64 @@ import Darwin
 import Network
 import CoreText
 
+struct WorkspaceRemoteLoopbackProxyRoute: Equatable {
+    let targetHost: String
+    let rewriteAliasHost: String?
+}
+
+enum WorkspaceRemoteLoopbackPolicy {
+    static let canonicalAliasHost = "cmux-loopback.localtest.me"
+
+    private static let legacyAliasHosts: Set<String> = [
+        "programa-loopback.localtest.me",
+    ]
+    private static let acceptedAliasHosts = legacyAliasHosts.union([canonicalAliasHost])
+    private static let sourceHosts: Set<String> = [
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "0.0.0.0",
+    ]
+
+    static func browserAliasURL(for url: URL) -> URL? {
+        guard url.scheme?.lowercased() == "http" else { return nil }
+        guard let host = BrowserInsecureHTTPSettings.normalizeHost(url.host ?? ""),
+              sourceHosts.contains(host) else {
+            return nil
+        }
+
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.host = canonicalAliasHost
+        return components?.url
+    }
+
+    static func displayURL(for url: URL?) -> URL? {
+        guard let url else { return nil }
+        guard let host = BrowserInsecureHTTPSettings.normalizeHost(url.host ?? ""),
+              acceptedAliasHosts.contains(host) else {
+            return url
+        }
+
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.host = "localhost"
+        return components?.url ?? url
+    }
+
+    static func proxyRoute(for host: String) -> WorkspaceRemoteLoopbackProxyRoute {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            .lowercased()
+        guard acceptedAliasHosts.contains(normalized) else {
+            return WorkspaceRemoteLoopbackProxyRoute(targetHost: host, rewriteAliasHost: nil)
+        }
+        return WorkspaceRemoteLoopbackProxyRoute(
+            targetHost: "127.0.0.1",
+            rewriteAliasHost: normalized
+        )
+    }
+}
+
 enum RemoteLoopbackHTTPRequestRewriter {
     private static let headerDelimiter = Data([0x0d, 0x0a, 0x0d, 0x0a])
     private static let canonicalLoopbackHost = "localhost"

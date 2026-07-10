@@ -165,7 +165,7 @@ extension GhosttyNSView {
         let startX = min(1, xMax)
         let endX = xMax
 
-        let mods = ghostty_input_mods_e(rawValue: GHOSTTY_MODS_NONE.rawValue) ?? GHOSTTY_MODS_NONE
+        let mods = ghostty_input_mods_e(rawValue: GHOSTTY_MODS_NONE.rawValue)
         ghostty_surface_mouse_pos(surface, startX, startY, mods)
         guard ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, mods) else {
             return false

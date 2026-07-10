@@ -1300,13 +1300,13 @@ final class TerminalDirectoryOpenTargetAvailabilityTests: XCTestCase {
     private func environment(
         existingPaths: Set<String>,
         homeDirectoryPath: String = "/Users/tester",
-        applicationPathsByName: [String: String] = [:]
+        applicationPathsByBundleIdentifier: [String: String] = [:]
     ) -> TerminalDirectoryOpenTarget.DetectionEnvironment {
         TerminalDirectoryOpenTarget.DetectionEnvironment(
             homeDirectoryPath: homeDirectoryPath,
             fileExistsAtPath: { existingPaths.contains($0) },
             isExecutableFileAtPath: { existingPaths.contains($0) },
-            applicationPathForName: { applicationPathsByName[$0] }
+            applicationPathForBundleIdentifier: { applicationPathsByBundleIdentifier[$0] }
         )
     }
 
@@ -1368,8 +1368,8 @@ final class TerminalDirectoryOpenTargetAvailabilityTests: XCTestCase {
                 vscodePath,
                 "\(vscodePath)/Contents/Resources/app/bin/code-tunnel",
             ],
-            applicationPathsByName: [
-                "Code": vscodePath,
+            applicationPathsByBundleIdentifier: [
+                "com.microsoft.VSCode": vscodePath,
             ]
         )
 
@@ -1382,8 +1382,8 @@ final class TerminalDirectoryOpenTargetAvailabilityTests: XCTestCase {
         let towerPath = "/Volumes/Setapp/Tower.app"
         let env = environment(
             existingPaths: [towerPath],
-            applicationPathsByName: [
-                "Tower": towerPath,
+            applicationPathsByBundleIdentifier: [
+                "com.fournova.Tower3": towerPath,
             ]
         )
 

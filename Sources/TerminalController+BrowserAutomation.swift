@@ -1,9 +1,54 @@
 // Extracted from TerminalController.swift (nuclear-review TC3): the v2 browser-automation surface (~3,700 lines) shares no logic with terminal/surface/workspace handling.
 import AppKit
 import Carbon.HIToolbox
-import Foundation
+@preconcurrency import Foundation
 import Bonsplit
 import WebKit
+
+@MainActor
+private final class BrowserDownloadWaitState {
+    let surfaceId: UUID
+    let finish: ([String: Any]) -> Void
+    var observer: NSObjectProtocol?
+    private var completed = false
+
+    init(surfaceId: UUID, finish: @escaping ([String: Any]) -> Void) {
+        self.surfaceId = surfaceId
+        self.finish = finish
+    }
+
+    func receive(_ note: Notification) {
+        guard !completed else { return }
+        guard let candidateSurfaceId = note.userInfo?["surfaceId"] as? UUID,
+              candidateSurfaceId == surfaceId,
+              let event = note.userInfo?["event"] as? [String: Any] else {
+            return
+        }
+        completed = true
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+            self.observer = nil
+        }
+        finish(event)
+    }
+
+    func install(_ observer: NSObjectProtocol) {
+        if completed {
+            NotificationCenter.default.removeObserver(observer)
+        } else {
+            self.observer = observer
+        }
+    }
+
+    func cancel() {
+        guard !completed else { return }
+        completed = true
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+            self.observer = nil
+        }
+    }
+}
 
 extension TerminalController {
     // MARK: - V2 Browser Methods
@@ -2793,24 +2838,22 @@ extension TerminalController {
                 ])
             }
 
+            var waitState: BrowserDownloadWaitState?
             let downloadEvent = v2AwaitCallback(timeout: timeout) { finish in
-                var observer: NSObjectProtocol?
-                observer = NotificationCenter.default.addObserver(
+                let state = BrowserDownloadWaitState(surfaceId: surfaceId, finish: finish)
+                waitState = state
+                let observer = NotificationCenter.default.addObserver(
                     forName: .browserDownloadEventDidArrive,
                     object: nil,
                     queue: .main
-                ) { note in
-                    guard let candidateSurfaceId = note.userInfo?["surfaceId"] as? UUID,
-                          candidateSurfaceId == surfaceId,
-                          let event = note.userInfo?["event"] as? [String: Any] else {
-                        return
+                ) { [state] note in
+                    MainActor.assumeIsolated {
+                        state.receive(note)
                     }
-                    if let observer {
-                        NotificationCenter.default.removeObserver(observer)
-                    }
-                    finish(event)
                 }
+                state.install(observer)
             }
+            waitState?.cancel()
             guard let downloadEvent else {
                 return .err(code: "timeout", message: "No download event observed", data: ["timeout_ms": timeoutMs])
             }

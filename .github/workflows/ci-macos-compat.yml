@@ -1,15 +1,97 @@
 name: macOS Compatibility
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
-  push:
-    branches:
-      - main
   pull_request:
+    paths:
+      - "Sources/**"
+      - "CLI/**"
+      - "daemon/**"
+      - "programaTests/**"
+      - "vendor/**"
+      - "scripts/**"
+      - ".github/workflows/ci-macos-compat.yml"
+      - "GhosttyTabs.xcodeproj/**"
+      - "ghostty/**"
+      - ".gitmodules"
+
+  workflow_dispatch:
 
 jobs:
+  change-detection:
+    runs-on: ubuntu-latest
+    outputs:
+      run_compat_tests: ${{ steps.detect.outputs.run_compat_tests }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: detect
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "run_compat_tests=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}" "${HEAD_SHA}"
+          CHANGED_FILES="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"
+          RUN_COMPAT_TESTS=false
+          if [[ -z "${CHANGED_FILES}" ]]; then
+            RUN_COMPAT_TESTS=true
+          fi
+
+          while IFS= read -r path; do
+            [[ -z "$path" ]] && continue
+
+            case "$path" in
+              *.md|docs/*|plans/*|AGENTS.md|CHANGELOG.md|PROJECTS.md|TODO.md|README.md|LICENSE*|THIRD_PARTY_LICENSES.md|.editorconfig|.gitattributes|.gitignore|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg)
+                continue
+                ;;
+              .github/*)
+                continue
+                ;;
+              Resources/*.xcstrings|Resources/*/*.xcstrings|Resources/*.strings|Resources/*/*.strings|Resources/*.lproj/*)
+                continue
+                ;;
+              *)
+                RUN_COMPAT_TESTS=true
+                break
+                ;;
+            esac
+          done <<< "$CHANGED_FILES"
+
+          echo "run_compat_tests=${RUN_COMPAT_TESTS}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### CI scope decision"
+            if [[ "$RUN_COMPAT_TESTS" == "true" ]]; then
+              echo "Changed file set contains app-relevant changes; running compat matrix."
+            else
+              echo "Pull request appears docs/localization-only; skipping compatibility matrix."
+            fi
+            echo ""
+            echo "Changed files:"
+            if [[ -z "${CHANGED_FILES}" ]]; then
+              echo "- <none>"
+            else
+              printf '%s\n' "${CHANGED_FILES}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
   compat-tests:
+    needs: change-detection
+    if: needs.change-detection.outputs.run_compat_tests == 'true'
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - os: macos-15
@@ -121,47 +203,9 @@ jobs:
       - name: Run unit tests
         env:
           PROGRAMA_SKIP_ZIG_BUILD: ${{ matrix.skip_zig && '1' || '0' }}
+          PROGRAMA_UNIT_TEST_SCOPE: split-stateful
         run: |
-          set -euo pipefail
-          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
-          run_unit_tests() {
-            xcodebuild -project GhosttyTabs.xcodeproj -scheme programa-unit -configuration Debug \
-              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
-              -disableAutomaticPackageResolution \
-              -destination "platform=macOS" \
-              -skip-testing:programaTests/AppDelegateShortcutRoutingTests/testCmdWClosesWindowWhenClosingLastSurfaceInLastWorkspace \
-              test 2>&1
-          }
-
-          set +e
-          run_unit_tests | tee /tmp/test-output.txt
-          EXIT_CODE=${PIPESTATUS[0]}
-          OUTPUT=$(cat /tmp/test-output.txt)
-          set -e
-
-          # SwiftPM binary artifact resolution can occasionally fail on ephemeral
-          # runners. Retry once after clearing caches.
-          if [ "$EXIT_CODE" -ne 0 ] && echo "$OUTPUT" | grep -q "Could not resolve package dependencies"; then
-            echo "SwiftPM package resolution failed, clearing caches and retrying once"
-            rm -rf ~/Library/Caches/org.swift.swiftpm
-            mkdir -p ~/Library/Caches/org.swift.swiftpm
-            rm -rf ~/Library/Developer/Xcode/DerivedData/GhosttyTabs-*
-            set +e
-            run_unit_tests | tee /tmp/test-output.txt
-            EXIT_CODE=${PIPESTATUS[0]}
-            OUTPUT=$(cat /tmp/test-output.txt)
-            set -e
-          fi
-
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            SUMMARY=$(echo "$OUTPUT" | grep "Executed.*tests.*with.*failures" | tail -1)
-            if echo "$SUMMARY" | grep -q "(0 unexpected)"; then
-              echo "All failures are expected, treating as pass"
-            else
-              echo "Unexpected test failures detected"
-              exit 1
-            fi
-          fi
+          ./scripts/ci-run-unit-tests.sh
 
       - name: Create virtual display
         if: matrix.smoke
