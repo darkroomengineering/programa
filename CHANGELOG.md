@@ -8,9 +8,13 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Changed
 - New installs now start with the minimal workspace layout (theme already follows the system). Anyone who previously toggled the mode keeps their stored setting.
+- Markdown panels now route full-document rendering through a renderer-neutral boundary while preserving the existing MarkdownUI appearance and macOS 14 support; relative document links and images resolve from the Markdown file's directory.
+- Sparkle was upgraded to 2.9.4, with release builds now verifying the embedded framework version and its signed updater components before notarization.
 - Whole-codebase restructuring pass (internal, no behavior change): the remote-daemon stack moved out of `Workspace.swift`, browser data-import out of `BrowserPanel.swift`, v2 browser automation out of `TerminalController.swift`, UI-test harnesses out of `AppDelegate.swift`, and `TabManager`/`GhosttyNSView`/`ContentView` split into per-concern files — the largest source files shrank by 3,000–5,000 lines each, cutting incremental build times. The copy-pasted v1 telemetry-handler skeleton, agent-wrapper commands (Go and Swift), and boilerplate settings accessors were each collapsed onto single shared implementations.
 
 ### Fixed
+- CLI command lookup, help, and typed argument validation now complete before opening the app socket, so unknown or malformed invocations cannot connect or trigger focus side effects.
+- GhosttyKit cache hits now bypass build locks, stale owners are recovered without stealing live builds, and validated frameworks publish atomically with ownership-safe cleanup.
 - Rapid workspace switching and non-focus split reparenting now share one generation-checked focus owner, so delayed callbacks cannot move AppKit input back to a stale workspace or pane.
 - Remote agent wrappers now avoid occupied implicit OpenCode ports, keep OMO package metadata isolated from the user's config, and use Programa-owned shim paths. The Release reload helper now locates and launches `Programa.app` after the rebrand.
 - Remote-workspace localhost pages now use one browser/proxy alias contract (while accepting the legacy Programa alias), concurrent proxy connections use isolated serial executors so one stalled stream cannot block another, settings files keep applying valid sibling fields when one enum or numeric value is malformed, and browser suggestions contact only the search provider the user selected.

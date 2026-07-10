@@ -1386,7 +1386,12 @@ extension ProgramaCLI {
                     try self.runSSHSessionEnd(commandArgs: ctx.commandArgs, client: ctx.client)
                 }
             ),
-            CommandDescriptor(names: ["remote-daemon-status"], helpLines: ["remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]"], execute: nil),
+            CommandDescriptor(
+                names: ["remote-daemon-status"],
+                helpLines: ["remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]"],
+                connectionPolicy: .local,
+                execute: nil
+            ),
         ]
     }
 }

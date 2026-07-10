@@ -1023,6 +1023,14 @@ extension Workspace: BonsplitDelegate {
             closeTabs(tabIdsToCloseOthers(of: tab.id, inPane: pane))
         case .move:
             promptMovePanel(tabId: tab.id)
+        case .moveToLeftPane:
+            guard let panelId = panelIdFromSurfaceId(tab.id),
+                  let targetPane = controller.adjacentPane(to: pane, direction: .left) else { return }
+            moveSurface(panelId: panelId, toPane: targetPane)
+        case .moveToRightPane:
+            guard let panelId = panelIdFromSurfaceId(tab.id),
+                  let targetPane = controller.adjacentPane(to: pane, direction: .right) else { return }
+            moveSurface(panelId: panelId, toPane: targetPane)
         case .newTerminalToRight:
             createTerminalToRight(of: tab.id, inPane: pane)
         case .newBrowserToRight:

@@ -1075,6 +1075,32 @@ struct CommandContext {
     let windowId: String?
 }
 
+enum CLICommandConnectionPolicy {
+    /// The command is parsed and validated first, then receives one connected client.
+    case socket
+    /// The command owns any process/socket work it needs and must not be preconnected.
+    case local
+}
+
+enum CLICommandHelpPolicy {
+    /// `--help` is handled by Programa without acquiring a socket.
+    case programa
+    /// Help flags are forwarded verbatim to the wrapped/internal command.
+    case passthrough
+}
+
+/// Typed preflight contracts that must succeed before a socket client exists.
+/// `.legacy` is the migration bridge for commands whose parsers still live in
+/// their handlers; new and migrated commands should choose an explicit case.
+enum CLICommandArgumentContract {
+    case legacy
+    case noArguments
+    case focusPanel
+    case readScreen
+    case setProgress
+    case listLog
+}
+
 /// Single source of truth for a CLI command's name(s), its one-line entry in
 /// the grouped `Commands:` help block, and how it executes.
 ///
@@ -1085,17 +1111,9 @@ struct CommandContext {
 /// help-list membership, and unknown-command exclusion in one place —
 /// nothing else to keep in sync.
 ///
-/// Not every command routes through this table's `execute` closure: a
-/// handful (`welcome`, `shortcuts`, `feedback`, `themes`, `claude-teams`,
-/// `omo`, `omx`, `omc`, `codex`, `version`, `remote-daemon-status`) are
-/// intercepted earlier in `run()`, before the socket connects, because they
-/// have pre-connection semantics (e.g. `version`/`welcome` must work even
-/// when Programa isn't running). Those still get a descriptor — with
-/// `execute == nil` — purely so `usage()` has one place to read their help
-/// line from. If dispatch ever reached the table for one of them (it
-/// shouldn't, given the pre-connection interception always returns first),
-/// it falls through to "Unknown command", matching prior behavior (they
-/// were never switch cases either).
+/// Commands whose implementation is intercepted in `run()` still have a
+/// descriptor so their connection, help, and argument policies are decided
+/// before any socket work begins.
 ///
 /// A descriptor with `names: []` is a pure help-text spacer/section-comment
 /// (e.g. the blank line + "# tmux compatibility commands" header) — it
@@ -1115,9 +1133,28 @@ struct CommandDescriptor {
     /// undocumented (matches several legacy/internal commands that were
     /// already missing from the old free-text help).
     let helpLines: [String]
-    /// Executes the command. `nil` for the pre-connection-special commands
-    /// described above.
+    let connectionPolicy: CLICommandConnectionPolicy
+    let helpPolicy: CLICommandHelpPolicy
+    let argumentContract: CLICommandArgumentContract
+    /// Executes the command. `nil` for commands implemented directly by
+    /// `run()` before generic socket dispatch.
     let execute: ((CommandContext) throws -> Void)?
+
+    init(
+        names: [String],
+        helpLines: [String],
+        connectionPolicy: CLICommandConnectionPolicy = .socket,
+        helpPolicy: CLICommandHelpPolicy = .programa,
+        argumentContract: CLICommandArgumentContract = .legacy,
+        execute: ((CommandContext) throws -> Void)?
+    ) {
+        self.names = names
+        self.helpLines = helpLines
+        self.connectionPolicy = connectionPolicy
+        self.helpPolicy = helpPolicy
+        self.argumentContract = argumentContract
+        self.execute = execute
+    }
 }
 
 struct ProgramaCLI {
@@ -1243,6 +1280,9 @@ struct ProgramaCLI {
                 print(usage())
                 return
             }
+            if arg.hasPrefix("-") {
+                throw CLIError(message: "Unknown global option: \(arg)")
+            }
             break
         }
 
@@ -1253,11 +1293,44 @@ struct ProgramaCLI {
 
         let command = args[index]
         let commandArgs = Array(args[(index + 1)...])
-        let resolvedSocketPath = CLISocketPathResolver.resolve(
-            requestedPath: socketPath,
-            source: socketPathSource,
-            environment: processEnv
-        )
+
+        guard let descriptor = commandDescriptor(named: command) else {
+            // Filesystem opening is a fallback only after command lookup, so a
+            // registered command can never be mistaken for a path.
+            if looksLikePath(command) {
+                let resolvedSocketPath = CLISocketPathResolver.resolve(
+                    requestedPath: socketPath,
+                    source: socketPathSource,
+                    environment: processEnv
+                )
+                try openPath(command, socketPath: resolvedSocketPath)
+                return
+            }
+            throw CLIError(message: "Unknown command: \(command). Run 'programa help' to see available commands.")
+        }
+
+        if descriptor.helpPolicy == .programa,
+           commandArgs.contains(where: { $0 == "--help" || $0 == "-h" }) {
+            guard dispatchSubcommandHelp(command: command, commandArgs: commandArgs) else {
+                throw CLIError(message: "No help is available for command: \(command)")
+            }
+            return
+        }
+
+        try validateArguments(commandArgs, for: command, contract: descriptor.argumentContract)
+        let idFormat = try resolvedIDFormat(jsonOutput: jsonOutput, raw: idFormatArg)
+
+        var resolvedSocketPathCache: String?
+        func resolveSocketPath() -> String {
+            if let resolvedSocketPathCache { return resolvedSocketPathCache }
+            let resolved = CLISocketPathResolver.resolve(
+                requestedPath: socketPath,
+                source: socketPathSource,
+                environment: processEnv
+            )
+            resolvedSocketPathCache = resolved
+            return resolved
+        }
 
         if command == "version" {
             print(versionSummary())
@@ -1269,22 +1342,8 @@ struct ProgramaCLI {
             return
         }
 
-        // If the argument looks like a path (not a known command), open a workspace there.
-        if looksLikePath(command) {
-            try openPath(command, socketPath: resolvedSocketPath)
-            return
-        }
-
-        // Check for --help/-h on subcommands before connecting to the socket,
-        // so help text is available even when programa is not running.
-        if command != "__tmux-compat",
-           command != "claude-teams",
-           command != "codex",
-           (commandArgs.contains("--help") || commandArgs.contains("-h")) {
-            if dispatchSubcommandHelp(command: command, commandArgs: commandArgs) {
-                return
-            }
-            print("Unknown command '\(command)'. Run 'programa help' to see available commands.")
+        if command == "help" {
+            print(usage())
             return
         }
 
@@ -1296,7 +1355,7 @@ struct ProgramaCLI {
         if command == "shortcuts" {
             try runShortcuts(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg,
                 jsonOutput: jsonOutput
             )
@@ -1306,7 +1365,7 @@ struct ProgramaCLI {
         if command == "feedback" {
             try runFeedback(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg,
                 jsonOutput: jsonOutput
             )
@@ -1324,7 +1383,7 @@ struct ProgramaCLI {
         if command == "claude-teams" {
             try runClaudeTeams(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg
             )
             return
@@ -1333,7 +1392,7 @@ struct ProgramaCLI {
         if command == "omo" {
             try runOMO(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg
             )
             return
@@ -1342,7 +1401,7 @@ struct ProgramaCLI {
         if command == "omx" {
             try runOMX(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg
             )
             return
@@ -1351,7 +1410,7 @@ struct ProgramaCLI {
         if command == "omc" {
             try runOMC(
                 commandArgs: commandArgs,
-                socketPath: resolvedSocketPath,
+                socketPath: resolveSocketPath(),
                 explicitPassword: socketPasswordArg
             )
             return
@@ -1378,6 +1437,15 @@ struct ProgramaCLI {
             }
         }
 
+        guard descriptor.connectionPolicy == .socket else {
+            throw CLIError(message: "Unsupported \(command) subcommand")
+        }
+        guard let execute = descriptor.execute else {
+            throw CLIError(message: "Command is unavailable: \(command)")
+        }
+
+        let resolvedSocketPath = resolveSocketPath()
+
         let client = SocketClient(path: resolvedSocketPath)
         try client.connect()
         defer { client.close() }
@@ -1387,8 +1455,6 @@ struct ProgramaCLI {
             explicitPassword: socketPasswordArg,
             socketPath: resolvedSocketPath
         )
-
-        let idFormat = try resolvedIDFormat(jsonOutput: jsonOutput, raw: idFormatArg)
 
         // If the user explicitly targets a window, focus it first so commands route correctly.
         if let windowId {
@@ -1405,12 +1471,7 @@ struct ProgramaCLI {
             idFormatArgProvided: idFormatArg != nil,
             windowId: windowId
         )
-        if let descriptor = commandDescriptor(named: command), let execute = descriptor.execute {
-            try execute(ctx)
-        } else {
-            print(usage())
-            throw CLIError(message: "Unknown command: \(command)")
-        }
+        try execute(ctx)
     }
 
     /// Single source of truth for command existence, help text, and dispatch.
@@ -1427,30 +1488,32 @@ struct ProgramaCLI {
         var descriptors: [CommandDescriptor] = [
             // MARK: - Pre-connection specials (dispatched earlier in run();
             // documented here only so usage() has one source for help text).
-            CommandDescriptor(names: ["welcome"], helpLines: ["welcome"], execute: nil),
-            CommandDescriptor(names: ["shortcuts"], helpLines: ["shortcuts"], execute: nil),
+            CommandDescriptor(names: ["welcome"], helpLines: ["welcome"], connectionPolicy: .local, execute: nil),
+            CommandDescriptor(names: ["shortcuts"], helpLines: ["shortcuts"], connectionPolicy: .local, execute: nil),
             CommandDescriptor(
                 names: ["feedback"],
                 helpLines: ["feedback [--email <email> --body <text> [--image <path> ...]]  (opens GitHub issues; direct submission disabled)"],
+                connectionPolicy: .local,
                 execute: nil
             ),
-            CommandDescriptor(names: ["themes"], helpLines: ["themes [list|set|clear]"], execute: nil),
-            CommandDescriptor(names: ["claude-teams"], helpLines: ["claude-teams [claude-args...]"], execute: nil),
-            CommandDescriptor(names: ["omo"], helpLines: ["omo [opencode-args...]"], execute: nil),
-            CommandDescriptor(names: ["omx"], helpLines: ["omx [omx-args...]"], execute: nil),
-            CommandDescriptor(names: ["omc"], helpLines: ["omc [omc-args...]"], execute: nil),
-            CommandDescriptor(names: ["codex"], helpLines: ["codex <install-hooks|uninstall-hooks>"], execute: nil),
+            CommandDescriptor(names: ["themes"], helpLines: ["themes [list|set|clear]"], connectionPolicy: .local, execute: nil),
+            CommandDescriptor(names: ["claude-teams"], helpLines: ["claude-teams [claude-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
+            CommandDescriptor(names: ["omo"], helpLines: ["omo [opencode-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
+            CommandDescriptor(names: ["omx"], helpLines: ["omx [omx-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
+            CommandDescriptor(names: ["omc"], helpLines: ["omc [omc-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
+            CommandDescriptor(names: ["codex"], helpLines: ["codex <install-hooks|uninstall-hooks>"], connectionPolicy: .local, execute: nil),
 
             CommandDescriptor(
                 names: ["ping"],
                 helpLines: ["ping"],
+                argumentContract: .noArguments,
                 execute: { ctx in
                     _ = try ctx.client.sendV2(method: "system.ping")
                     print("PONG")
                 }
             ),
 
-            CommandDescriptor(names: ["version"], helpLines: ["version"], execute: nil),
+            CommandDescriptor(names: ["version"], helpLines: ["version"], connectionPolicy: .local, execute: nil),
 
             CommandDescriptor(
                 names: ["capabilities"],
@@ -2090,6 +2153,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["focus-panel"],
                 helpLines: ["focus-panel --panel <id|ref> [--workspace <id|ref>]"],
+                argumentContract: .focusPanel,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     guard let panelRaw = self.optionValue(ctx.commandArgs, name: "--panel") else {
@@ -2178,6 +2242,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["read-screen"],
                 helpLines: ["read-screen [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]"],
+                argumentContract: .readScreen,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
@@ -2477,6 +2542,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["set-progress"],
                 helpLines: [],
+                argumentContract: .setProgress,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     guard let first = parsed.positional.first else {
@@ -2541,6 +2607,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["list-log"],
                 helpLines: [],
+                argumentContract: .listLog,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     var params: [String: Any] = [:]
@@ -2610,6 +2677,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["__tmux-compat"],
                 helpLines: [],
+                helpPolicy: .passthrough,
                 execute: { ctx in
                     try self.runClaudeTeamsTmuxCompat(
                         commandArgs: ctx.commandArgs,
@@ -2760,6 +2828,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["help"],
                 helpLines: ["help"],
+                connectionPolicy: .local,
                 execute: { ctx in
                     print(self.usage())
                 }
@@ -3975,6 +4044,12 @@ struct ProgramaCLI {
 
             Show top-level CLI usage and command list.
             """
+        case "codex":
+            return """
+            Usage: programa codex <install-hooks|uninstall-hooks>
+
+            Install or remove Programa's Codex notification hooks.
+            """
         case "welcome":
             return """
             Usage: programa welcome
@@ -4828,6 +4903,159 @@ struct ProgramaCLI {
         // When --window is explicitly targeted, don't fall back to env workspace from a different window
         if windowOverride != nil { return nil }
         return ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
+    }
+
+    /// Validates contracts whose failures can be determined without opening
+    /// the socket. Handlers retain their checks as a defensive boundary, but
+    /// malformed invocations now fail before they can affect a running app.
+    private func preflightFlagArguments(
+        _ args: [String],
+        command: String,
+        valueFlags: Set<String>,
+        booleanFlags: Set<String> = [],
+        allowEquals: Bool
+    ) throws -> (positional: [String], options: [String: String]) {
+        var positional: [String] = []
+        var options: [String: String] = [:]
+        var pastTerminator = false
+        var index = 0
+
+        while index < args.count {
+            let token = args[index]
+            if pastTerminator {
+                positional.append(token)
+                index += 1
+                continue
+            }
+            if token == "--" {
+                pastTerminator = true
+                index += 1
+                continue
+            }
+            guard token.hasPrefix("--") else {
+                positional.append(token)
+                index += 1
+                continue
+            }
+
+            let body = String(token.dropFirst(2))
+            let parts = body.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            let name = String(parts[0])
+            let hasEqualsValue = parts.count == 2
+
+            guard valueFlags.contains(name) || booleanFlags.contains(name) else {
+                throw CLIError(message: "\(command): unknown option --\(name)")
+            }
+            guard options[name] == nil else {
+                throw CLIError(message: "\(command): duplicate option --\(name)")
+            }
+
+            if booleanFlags.contains(name) {
+                guard !hasEqualsValue else {
+                    throw CLIError(message: "\(command): --\(name) does not take a value")
+                }
+                options[name] = "true"
+                index += 1
+                continue
+            }
+
+            if hasEqualsValue {
+                guard allowEquals else {
+                    throw CLIError(message: "\(command): unexpected option syntax --\(name)=; use --\(name) <value>")
+                }
+                let value = String(parts[1])
+                guard !value.isEmpty else {
+                    throw CLIError(message: "\(command): --\(name) requires a value")
+                }
+                options[name] = value
+                index += 1
+                continue
+            }
+
+            guard index + 1 < args.count, !args[index + 1].hasPrefix("--") else {
+                throw CLIError(message: "\(command): --\(name) requires a value")
+            }
+            options[name] = args[index + 1]
+            index += 2
+        }
+        return (positional, options)
+    }
+
+    private func validateArguments(
+        _ args: [String],
+        for command: String,
+        contract: CLICommandArgumentContract
+    ) throws {
+        switch contract {
+        case .legacy:
+            return
+
+        case .noArguments:
+            guard args.isEmpty else {
+                throw CLIError(message: "\(command): unexpected arguments: \(args.joined(separator: " "))")
+            }
+
+        case .focusPanel:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["panel", "workspace"],
+                allowEquals: false
+            )
+            guard parsed.positional.isEmpty else {
+                throw CLIError(message: "focus-panel: unexpected arguments: \(parsed.positional.joined(separator: " "))")
+            }
+            guard parsed.options["panel"] != nil else {
+                throw CLIError(message: "focus-panel requires --panel <id|ref>")
+            }
+
+        case .readScreen:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["workspace", "surface", "lines"],
+                booleanFlags: ["scrollback"],
+                allowEquals: false
+            )
+            guard parsed.positional.isEmpty else {
+                throw CLIError(message: "read-screen: unexpected arguments: \(parsed.positional.joined(separator: " "))")
+            }
+            if let lines = parsed.options["lines"] {
+                guard let count = Int(lines), count > 0 else {
+                    throw CLIError(message: "read-screen: --lines must be greater than 0")
+                }
+            }
+
+        case .setProgress:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["label", "workspace"],
+                allowEquals: true
+            )
+            guard parsed.positional.count == 1, let rawValue = parsed.positional.first else {
+                throw CLIError(message: "set-progress requires a progress value")
+            }
+            guard let value = Double(rawValue), value.isFinite, (0.0...1.0).contains(value) else {
+                throw CLIError(message: "set-progress: invalid progress value '\(rawValue)'; must be between 0.0 and 1.0")
+            }
+
+        case .listLog:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["limit", "workspace"],
+                allowEquals: true
+            )
+            guard parsed.positional.isEmpty else {
+                throw CLIError(message: "list-log: unexpected arguments: \(parsed.positional.joined(separator: " "))")
+            }
+            if let rawLimit = parsed.options["limit"] {
+                guard let limit = Int(rawLimit), limit >= 0 else {
+                    throw CLIError(message: "list-log: invalid limit '\(rawLimit)'; must be >= 0")
+                }
+            }
+        }
     }
 
     /// Parses CLI-style flags (`--name value` or `--name=value`) into positional args + an
