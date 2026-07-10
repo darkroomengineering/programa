@@ -26,6 +26,49 @@ public enum PanelFocusIntent: Equatable {
     case browser(BrowserPanelFocusIntent)
 }
 
+@MainActor
+final class FocusTransitionCoordinator {
+    struct Owner: Equatable {
+        let workspaceID: UUID
+        let panelID: UUID
+        let intent: PanelFocusIntent
+    }
+
+    enum Reason: Equatable {
+        case workspaceSelection
+        case nonFocusSplit
+    }
+
+    struct Request: Equatable {
+        let generation: UInt64
+        let owner: Owner
+        let reason: Reason
+    }
+
+    private(set) var newestRequest: Request?
+    private(set) var committedOwner: Owner?
+    private var nextGeneration: UInt64 = 0
+
+    func beginTransition(to owner: Owner, reason: Reason) -> Request {
+        nextGeneration &+= 1
+        let request = Request(
+            generation: nextGeneration,
+            owner: owner,
+            reason: reason
+        )
+        newestRequest = request
+        return request
+    }
+
+    @discardableResult
+    func completeTransition(_ request: Request) -> Bool {
+        // Completion currently follows callback arrival order. The coordinator will
+        // become authoritative when focus ownership moves out of the individual layers.
+        committedOwner = request.owner
+        return true
+    }
+}
+
 public enum WorkspaceAttentionFlashReason: String, Equatable, Sendable {
     case navigation
     case notificationArrival

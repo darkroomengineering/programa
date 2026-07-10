@@ -3688,3 +3688,60 @@ final class SidebarWorkspaceShortcutHintMetricsTests: XCTestCase {
         XCTAssertGreaterThan(widened, base)
     }
 }
+
+@MainActor
+final class FocusTransitionCoordinatorTests: XCTestCase {
+    func testStaleWorkspaceCompletionCannotOverrideNewestOwner() {
+        let coordinator = FocusTransitionCoordinator()
+        let firstOwner = makeOwner(intent: .terminal(.surface))
+        let newestOwner = makeOwner(intent: .browser(.addressBar))
+
+        let staleRequest = coordinator.beginTransition(
+            to: firstOwner,
+            reason: .workspaceSelection
+        )
+        let newestRequest = coordinator.beginTransition(
+            to: newestOwner,
+            reason: .workspaceSelection
+        )
+
+        XCTAssertTrue(coordinator.completeTransition(newestRequest))
+        XCTAssertEqual(coordinator.committedOwner, newestOwner)
+        XCTAssertFalse(
+            coordinator.completeTransition(staleRequest),
+            "A completion from an older workspace generation must be rejected"
+        )
+        XCTAssertEqual(coordinator.committedOwner, newestOwner)
+    }
+
+    func testStaleSplitReassertCannotOverrideNewerExplicitWorkspaceOwner() {
+        let coordinator = FocusTransitionCoordinator()
+        let preservedSplitOwner = makeOwner(intent: .terminal(.surface))
+        let explicitWorkspaceOwner = makeOwner(intent: .terminal(.findField))
+
+        let staleSplitRequest = coordinator.beginTransition(
+            to: preservedSplitOwner,
+            reason: .nonFocusSplit
+        )
+        let explicitWorkspaceRequest = coordinator.beginTransition(
+            to: explicitWorkspaceOwner,
+            reason: .workspaceSelection
+        )
+
+        XCTAssertTrue(coordinator.completeTransition(explicitWorkspaceRequest))
+        XCTAssertFalse(
+            coordinator.completeTransition(staleSplitRequest),
+            "A delayed non-focus split reassert must not replace newer explicit focus"
+        )
+        XCTAssertEqual(coordinator.committedOwner, explicitWorkspaceOwner)
+        XCTAssertEqual(coordinator.newestRequest, explicitWorkspaceRequest)
+    }
+
+    private func makeOwner(intent: PanelFocusIntent) -> FocusTransitionCoordinator.Owner {
+        FocusTransitionCoordinator.Owner(
+            workspaceID: UUID(),
+            panelID: UUID(),
+            intent: intent
+        )
+    }
+}
