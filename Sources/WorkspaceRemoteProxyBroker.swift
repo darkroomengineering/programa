@@ -17,6 +17,20 @@ func workspaceRemoteLoopbackProxyRoute(for host: String) -> WorkspaceRemoteLoopb
     WorkspaceRemoteLoopbackPolicy.proxyRoute(for: host)
 }
 
+/// Chooses the executor used by each accepted proxy connection. Keeping this decision
+/// in the live path makes cross-session scheduling behavior directly testable.
+final class WorkspaceRemoteProxySessionQueueProvider {
+    private let tunnelQueue: DispatchQueue
+
+    init(tunnelQueue: DispatchQueue) {
+        self.tunnelQueue = tunnelQueue
+    }
+
+    func queue(for sessionID: UUID) -> DispatchQueue {
+        tunnelQueue
+    }
+}
+
 private final class WorkspaceRemoteDaemonProxyTunnel {
     private final class ProxySession {
         private static let maxHandshakeBytes = 64 * 1024
@@ -39,7 +53,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
             let consumedBytes: Int
         }
 
-        let id = UUID()
+        let id: UUID
 
         private let connection: NWConnection
         private let rpcClient: WorkspaceRemoteDaemonRPCClient
@@ -59,11 +73,13 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         private var hasForwardedRemoteHTTPHeaders = false
 
         init(
+            id: UUID,
             connection: NWConnection,
             rpcClient: WorkspaceRemoteDaemonRPCClient,
             queue: DispatchQueue,
             onClose: @escaping (UUID) -> Void
         ) {
+            self.id = id
             self.connection = connection
             self.rpcClient = rpcClient
             self.queue = queue
@@ -489,6 +505,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
     private let localPort: Int
     private let onFatalError: (String) -> Void
     private let queue = DispatchQueue(label: "com.cmux.remote-ssh.daemon-tunnel.\(UUID().uuidString)", qos: .utility)
+    private lazy var sessionQueueProvider = WorkspaceRemoteProxySessionQueueProvider(tunnelQueue: queue)
 
     private var listener: NWListener?
     private var rpcClient: WorkspaceRemoteDaemonRPCClient?
@@ -578,10 +595,12 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
             return
         }
 
+        let sessionID = UUID()
         let session = ProxySession(
+            id: sessionID,
             connection: connection,
             rpcClient: rpcClient,
-            queue: queue
+            queue: sessionQueueProvider.queue(for: sessionID)
         ) { [weak self] id in
             self?.queue.async {
                 self?.sessions.removeValue(forKey: id)

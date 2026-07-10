@@ -1467,6 +1467,36 @@ final class WorkspaceRemoteDaemonPendingCallRegistryTests: XCTestCase {
     }
 }
 
+final class WorkspaceRemoteProxySessionQueueProviderTests: XCTestCase {
+    func testStalledProxySessionDoesNotBlockSecondAcceptedSession() {
+        let tunnelQueue = DispatchQueue(label: "programa.tests.remote-proxy.tunnel")
+        let provider = WorkspaceRemoteProxySessionQueueProvider(tunnelQueue: tunnelQueue)
+        let firstSessionQueue = provider.queue(for: UUID())
+        let secondSessionQueue = provider.queue(for: UUID())
+        let firstStarted = DispatchSemaphore(value: 0)
+        let releaseFirst = DispatchSemaphore(value: 0)
+        let secondServed = DispatchSemaphore(value: 0)
+
+        firstSessionQueue.async {
+            firstStarted.signal()
+            _ = releaseFirst.wait(timeout: .now() + 2)
+        }
+        XCTAssertEqual(firstStarted.wait(timeout: .now() + 1), .success)
+
+        secondSessionQueue.async {
+            secondServed.signal()
+        }
+        let secondResult = secondServed.wait(timeout: .now() + 0.2)
+        releaseFirst.signal()
+
+        XCTAssertEqual(
+            secondResult,
+            .success,
+            "A stalled proxy connection must not occupy the executor used to serve another accepted connection"
+        )
+    }
+}
+
 final class WindowBackgroundSelectionGateTests: XCTestCase {
     func testShouldApplyWindowBackgroundUsesOwningWindowSelectionWhenAvailable() {
         let tabId = UUID()
