@@ -2327,7 +2327,7 @@ final class WindowBrowserPortal: HostedViewPortalRegistry {
     private func installationTarget(for window: NSWindow) -> (container: NSView, reference: NSView)? {
         guard let contentView = window.contentView else { return nil }
 
-        if contentView.className == "NSGlassEffectView",
+        if WindowGlassEffect.isGlassEffectView(contentView),
            let foreground = contentView.subviews.first(where: { $0 !== hostView }) {
             return (contentView, foreground)
         }
