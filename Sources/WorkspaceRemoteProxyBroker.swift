@@ -20,14 +20,27 @@ func workspaceRemoteLoopbackProxyRoute(for host: String) -> WorkspaceRemoteLoopb
 /// Chooses the executor used by each accepted proxy connection. Keeping this decision
 /// in the live path makes cross-session scheduling behavior directly testable.
 final class WorkspaceRemoteProxySessionQueueProvider {
-    private let tunnelQueue: DispatchQueue
+    private let queueLabelPrefix: String
+    private var queuesBySessionID: [UUID: DispatchQueue] = [:]
 
     init(tunnelQueue: DispatchQueue) {
-        self.tunnelQueue = tunnelQueue
+        self.queueLabelPrefix = "\(tunnelQueue.label).session"
     }
 
     func queue(for sessionID: UUID) -> DispatchQueue {
-        tunnelQueue
+        if let existing = queuesBySessionID[sessionID] {
+            return existing
+        }
+        let queue = DispatchQueue(
+            label: "\(queueLabelPrefix).\(sessionID.uuidString)",
+            qos: .utility
+        )
+        queuesBySessionID[sessionID] = queue
+        return queue
+    }
+
+    func removeQueue(for sessionID: UUID) {
+        queuesBySessionID.removeValue(forKey: sessionID)
     }
 }
 
@@ -87,6 +100,13 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         }
 
         func start() {
+            queue.async { [weak self] in
+                self?.startOnSessionQueue()
+            }
+        }
+
+        private func startOnSessionQueue() {
+            guard !isClosed else { return }
             connection.stateUpdateHandler = { [weak self] state in
                 guard let self else { return }
                 switch state {
@@ -103,7 +123,9 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         }
 
         func stop() {
-            close(reason: nil)
+            queue.async { [weak self] in
+                self?.close(reason: nil)
+            }
         }
 
         private func receiveNext() {
@@ -604,6 +626,7 @@ private final class WorkspaceRemoteDaemonProxyTunnel {
         ) { [weak self] id in
             self?.queue.async {
                 self?.sessions.removeValue(forKey: id)
+                self?.sessionQueueProvider.removeQueue(for: id)
             }
         }
         sessions[session.id] = session

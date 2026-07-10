@@ -60,10 +60,21 @@ final class FocusTransitionCoordinator {
         return request
     }
 
+    func captureCurrentGeneration(for owner: Owner, reason: Reason) -> Request {
+        Request(
+            generation: nextGeneration,
+            owner: owner,
+            reason: reason
+        )
+    }
+
+    func isCurrentGeneration(_ request: Request) -> Bool {
+        request.generation == nextGeneration
+    }
+
     @discardableResult
     func completeTransition(_ request: Request) -> Bool {
-        // Completion currently follows callback arrival order. The coordinator will
-        // become authoritative when focus ownership moves out of the individual layers.
+        guard newestRequest == request else { return false }
         committedOwner = request.owner
         return true
     }

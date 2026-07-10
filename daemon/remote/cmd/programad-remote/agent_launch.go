@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -147,28 +149,55 @@ func runAgentRelay(socketPath string, args []string, refreshAddr func() string, 
 	return 1
 }
 
-// omoLaunchArgs implements omo's --port default: it sets OPENCODE_PORT if
-// unset, then injects "--port <value>" into the CLI args unless the caller
-// already passed --port/--port=.
+// omoLaunchArgs implements omo's --port default. Explicit caller choices are
+// preserved; otherwise it prefers a bindable OPENCODE_PORT, then 4096, then an
+// ephemeral loopback port.
 func omoLaunchArgs(args []string) []string {
-	if os.Getenv("OPENCODE_PORT") == "" {
-		os.Setenv("OPENCODE_PORT", "4096")
-	}
-	hasPort := false
 	for _, arg := range args {
 		if arg == "--port" || strings.HasPrefix(arg, "--port=") {
-			hasPort = true
-			break
+			return args
 		}
 	}
-	if !hasPort {
-		port := os.Getenv("OPENCODE_PORT")
-		if port == "" {
-			port = "4096"
+
+	selectedPort := 0
+	if rawPort := strings.TrimSpace(os.Getenv("OPENCODE_PORT")); rawPort != "" {
+		if port, err := strconv.Atoi(rawPort); err == nil && port > 0 && port <= 65535 {
+			if bindablePort, ok := omoBindableLoopbackPort(port); ok {
+				selectedPort = bindablePort
+			}
 		}
-		return append([]string{"--port", port}, args...)
 	}
-	return args
+	if selectedPort == 0 {
+		if bindablePort, ok := omoBindableLoopbackPort(4096); ok {
+			selectedPort = bindablePort
+		}
+	}
+	if selectedPort == 0 {
+		if bindablePort, ok := omoBindableLoopbackPort(0); ok {
+			selectedPort = bindablePort
+		}
+	}
+	if selectedPort == 0 {
+		// Match the local CLI's last-resort behavior when the bind probe itself
+		// is unavailable; OpenCode will surface the actual bind failure.
+		selectedPort = 4096
+	}
+
+	port := strconv.Itoa(selectedPort)
+	os.Setenv("OPENCODE_PORT", port)
+	return append([]string{"--port", port}, args...)
+}
+
+func omoBindableLoopbackPort(port int) (int, bool) {
+	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{
+		IP:   net.IPv4(127, 0, 0, 1),
+		Port: port,
+	})
+	if err != nil {
+		return 0, false
+	}
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port, true
 }
 
 // runClaudeTeamsRelay implements `programa claude-teams` on the remote side.
@@ -310,7 +339,7 @@ func createTmuxShimDir(dirName string, tmuxScript string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, ".programaterm", dirName)
+	dir := filepath.Join(home, ".programa", dirName)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", err
 	}
@@ -561,7 +590,33 @@ func omoUserConfigDir() string {
 
 func omoShadowConfigDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".programaterm", "omo-config")
+	return filepath.Join(home, ".programa", "omo-config")
+}
+
+func ensureOMOShadowPackageManifest(path string) error {
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	manifest := map[string]any{
+		"dependencies": map[string]string{
+			omoPluginName: "latest",
+		},
+		"name":    "programa-omo-shadow",
+		"private": true,
+	}
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(path, data, 0644)
 }
 
 // omoEnsurePlugin creates a shadow config directory that layers the
@@ -628,13 +683,19 @@ func omoEnsurePlugin(searchPath string) error {
 		}
 	}
 
-	// Symlink package.json and bun.lock
-	for _, filename := range []string{"package.json", "bun.lock"} {
-		userFile := filepath.Join(userDir, filename)
-		shadowFile := filepath.Join(shadowDir, filename)
-		if fileExists(userFile) && !fileExists(shadowFile) {
-			os.Symlink(userFile, shadowFile)
+	// The shadow config owns its package metadata so stale or yanked pins in
+	// the user's package.json/bun.lock cannot poison plugin installation.
+	shadowPackagePath := filepath.Join(shadowDir, "package.json")
+	if err := ensureOMOShadowPackageManifest(shadowPackagePath); err != nil {
+		return fmt.Errorf("write shadow package manifest: %w", err)
+	}
+	shadowLockPath := filepath.Join(shadowDir, "bun.lock")
+	if info, err := os.Lstat(shadowLockPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if err := os.Remove(shadowLockPath); err != nil {
+			return fmt.Errorf("remove shadow lockfile symlink: %w", err)
 		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("inspect shadow lockfile: %w", err)
 	}
 
 	// Symlink oh-my-opencode config files
@@ -649,11 +710,16 @@ func omoEnsurePlugin(searchPath string) error {
 	// Install the plugin if not available
 	pluginPackageDir := filepath.Join(shadowNodeModules, omoPluginName)
 	if !dirExists(pluginPackageDir) {
-		installDir := userDir
-		if !dirExists(userNodeModules) {
-			installDir = shadowDir
-			os.Remove(shadowNodeModules) // Remove symlink so we can install directly
+		// A missing plugin must be installed into the shadow config, not into
+		// the user's package state through the node_modules compatibility link.
+		if info, err := os.Lstat(shadowNodeModules); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(shadowNodeModules); err != nil {
+				return fmt.Errorf("remove shadow node_modules symlink: %w", err)
+			}
+		} else if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("inspect shadow node_modules: %w", err)
 		}
+		installDir := shadowDir
 		os.MkdirAll(installDir, 0755)
 
 		bunPath := findExecutableInPath("bun", searchPath, "")
@@ -676,11 +742,6 @@ func omoEnsurePlugin(searchPath string) error {
 			return fmt.Errorf("failed to install oh-my-opencode: %v\nTry manually: npm install -g oh-my-opencode", err)
 		}
 		fmt.Fprintf(os.Stderr, "oh-my-opencode plugin installed\n")
-
-		// Re-create symlink if we installed into user dir
-		if installDir == userDir && !fileExists(shadowNodeModules) {
-			os.Symlink(userNodeModules, shadowNodeModules)
-		}
 	}
 
 	// Configure oh-my-opencode.json with tmux settings

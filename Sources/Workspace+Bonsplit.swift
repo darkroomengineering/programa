@@ -313,7 +313,7 @@ extension Workspace: BonsplitDelegate {
         reassertAppKitFocus: Bool
     ) {
         if let terminalPanel = panel as? TerminalPanel {
-            let shouldFocusTerminalSurface = shouldMoveTerminalSurfaceFocus(for: focusIntent)
+            let shouldFocusTerminalSurface = reassertAppKitFocus && shouldMoveTerminalSurfaceFocus(for: focusIntent)
             terminalPanel.surface.setFocus(shouldFocusTerminalSurface)
             terminalPanel.hostedView.setActive(true)
             if reassertAppKitFocus && shouldFocusTerminalSurface {
@@ -323,7 +323,8 @@ extension Workspace: BonsplitDelegate {
         }
 
         if let browserPanel = panel as? BrowserPanel {
-            guard shouldFocusBrowserWebView(for: focusIntent) else { return }
+            guard reassertAppKitFocus,
+                  shouldFocusBrowserWebView(for: focusIntent) else { return }
             browserPanel.focus()
             return
         }
