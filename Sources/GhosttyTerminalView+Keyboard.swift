@@ -36,6 +36,20 @@ extension GhosttyNSView {
     }
 
     private func requestInputRecoveryAfterSurfaceMiss(reason: String) {
+        // A view with no window can never be the legitimate first responder for its
+        // terminal surface — AppKit only dispatches real keyDown events to views inside
+        // an active window's responder chain, so reaching this path with `window == nil`
+        // means the view was detached without going through the normal
+        // resignFirstResponder()/becomeFirstResponder() protocol (e.g. removeFromSuperview
+        // while still the window's stale first responder). Clear any stale "desired
+        // focus" now, synchronously, so the background surface recreation requested below
+        // does not resurrect focus for a pane that isn't the real focus owner anymore.
+        // Only `window == nil` triggers this — a live but surface-less view (e.g. during
+        // layout restoration) must keep its desired focus so createSurface can apply it.
+        if window == nil {
+            desiredFocus = false
+            terminalSurface?.recordExternalFocusState(false)
+        }
         terminalSurface?.requestBackgroundSurfaceStartIfNeeded()
 #if DEBUG
         dlog(
@@ -733,8 +747,22 @@ extension GhosttyNSView {
         // the prior input characters (prior to the composing).
         keyEvent.composing = markedText.length > 0 || markedTextBefore
 
-        // Use accumulated text from insertText (for IME), or compute text for key
-        let accumulatedText = keyTextAccumulator ?? []
+        // Use accumulated text from insertText (for IME), or compute text for key.
+        //
+        // Some AppKit key paths route Shift+` through interpretKeyEvents' insertText
+        // as a literal ESC control character (0x1B) instead of dispatching it as a
+        // command, even though the physical key should produce "~". When that exact
+        // quirk is detected against the original event, substitute the accumulated
+        // ESC text with the correct "~" before it's evaluated below — otherwise
+        // shouldSendText correctly (but wrongly, for this quirk) rejects the ESC
+        // control character and no text is ever sent.
+        let accumulatedText: [String] = {
+            let raw = keyTextAccumulator ?? []
+            guard raw == ["\u{1B}"], let escTildeOverride = shiftBackquoteEscFallbackText(for: event) else {
+                return raw
+            }
+            return [escTildeOverride]
+        }()
         var shouldRefreshAfterTextInput = false
         if !accumulatedText.isEmpty {
             // Accumulated text comes from insertText (IME composition result).
@@ -818,7 +846,10 @@ extension GhosttyNSView {
                     markedTextBefore: markedTextBefore
                 )
             let suppressComposingFallbackText = keyEvent.composing
-            if let text = textForKeyEvent(translationEvent) {
+            // Check the Shift+`-reported-as-ESC quirk against the original event
+            // before falling back to the (possibly mods-translated) textForKeyEvent
+            // result — see shiftBackquoteEscFallbackText's doc comment.
+            if let text = shiftBackquoteEscFallbackText(for: event) ?? textForKeyEvent(translationEvent) {
                 if shouldSendText(text),
                    !suppressShiftSpaceFallbackText,
                    !suppressComposingFallbackText {
@@ -1027,6 +1058,22 @@ extension GhosttyNSView {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard flags.isEmpty else { return false }
         return isFindEscapeSuppressionArmed
+    }
+
+    /// Detect AppKit key paths that report Shift+` as a bare ESC control character
+    /// even though the physical key should produce "~". This must be checked against
+    /// the original, untranslated keyDown event: Ghostty's mods-translation step
+    /// (`translationEvent` in keyDown) can consume the shift bit for printable keys
+    /// and recompute `.characters` from `characters(byApplyingModifiers:)`, which
+    /// erases this signal entirely (and returns nil for synthetic/test events with
+    /// no backing hardware report), silently dropping the "~" fallback below.
+    private func shiftBackquoteEscFallbackText(for event: NSEvent) -> String? {
+        guard let chars = event.characters, chars.count == 1,
+              let scalar = chars.unicodeScalars.first,
+              scalar.value == 0x1B else { return nil }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard flags == [.shift], event.charactersIgnoringModifiers == "`" else { return nil }
+        return "~"
     }
 
     /// Get the characters for a key event with control character handling.

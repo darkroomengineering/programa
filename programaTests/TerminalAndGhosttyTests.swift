@@ -1706,9 +1706,18 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         hostedView.removeFromSuperview()
         RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         XCTAssertNil(surfaceView.window, "Expected hosted terminal view to be detached from any window")
+        // AppKit resets window.firstResponder to the window itself when the view holding
+        // first-responder status is removed from the hierarchy — this happens through
+        // internal view-teardown bookkeeping, not through the normal resignFirstResponder()
+        // negotiation (confirmed empirically: GhosttyNSView.resignFirstResponder() is never
+        // invoked for this removal path). So the detached view never remains window.firstResponder
+        // itself. What *does* stay stale is this app's own desired-focus bookkeeping, since nothing
+        // observed a real focus-loss transition for this view — that staleness is exactly what the
+        // rest of this regression test exercises (the keyDown-triggered recovery path below must
+        // still end up clearing it).
         XCTAssertTrue(
-            (window.firstResponder as? NSView) === surfaceView,
-            "Expected the detached Ghostty view to remain the stale first responder during the regression setup"
+            surface.debugDesiredFocusState(),
+            "Expected the detached Ghostty view's desired Ghostty focus to remain stale during the regression setup"
         )
 
         let event = makeKeyEvent(characters: "a", keyCode: 0, window: window)
@@ -2430,11 +2439,21 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         hostedView.autoresizingMask = [.width, .height]
         contentView.addSubview(hostedView)
 
+        // requestMountedSearchFieldFocus gates on window.isKeyWindow (production
+        // guard against stealing keyboard focus into a background window's field).
+        // This XCTest host has no attached WindowServer session, so a plain NSWindow
+        // can never genuinely become key here (confirmed: NSApp.activate does not
+        // change window.isKeyWindow in this harness either) — use the DEBUG-only
+        // override so this test can exercise the real focus-push behavior without
+        // weakening the production guard for real windows.
+        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.displayIfNeeded()
         contentView.layoutSubtreeIfNeeded()
         hostedView.setVisibleInUI(true)
         hostedView.setActive(true)
+        hostedView.setIsKeyWindowOverrideForTesting(true)
+        defer { hostedView.setIsKeyWindowOverrideForTesting(nil) }
 
         let searchState = TerminalSurface.SearchState(needle: "")
         surface.searchState = searchState
@@ -2916,12 +2935,17 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
             surfaceView: GhosttyNSView(frame: NSRect(x: 0, y: 0, width: 40, height: 30))
         )
 
-        var anchor1: NSView? = NSView(frame: NSRect(x: 20, y: 20, width: 120, height: 80))
-        contentView.addSubview(anchor1!)
-        portal.bind(hostedView: hosted1, to: anchor1!, visibleInUI: true)
+        // Drop the anchor inside an autoreleasepool so the portal's weak
+        // reference actually nils out before pruneDeadEntries runs — AppKit
+        // teardown is not synchronous with the last strong-reference drop.
+        autoreleasepool {
+            var anchor1: NSView? = NSView(frame: NSRect(x: 20, y: 20, width: 120, height: 80))
+            contentView.addSubview(anchor1!)
+            portal.bind(hostedView: hosted1, to: anchor1!, visibleInUI: true)
 
-        anchor1?.removeFromSuperview()
-        anchor1 = nil
+            anchor1?.removeFromSuperview()
+            anchor1 = nil
+        }
 
         let hosted2 = GhosttySurfaceScrollView(
             surfaceView: GhosttyNSView(frame: NSRect(x: 0, y: 0, width: 40, height: 30))
@@ -3751,9 +3775,15 @@ final class TerminalControllerSocketTextChunkTests: XCTestCase {
 
 final class GhosttyTerminalViewVisibilityPolicyTests: XCTestCase {
     func testImmediateStateUpdateAllowedWhenHostNotInWindow() {
+        // hostedViewHasSuperview must be false here to actually represent "not in a
+        // window" per this test's name. With `true` it is byte-for-byte identical to
+        // testImmediateStateUpdateSkippedForStaleHostBoundElsewhere below (same params,
+        // opposite expectation) — a self-contradiction for a pure function that has
+        // existed since this test was authored (PR #1717). shouldApplyImmediateHostedStateUpdate
+        // only returns true for a not-bound host when it truly has no superview anywhere.
         XCTAssertTrue(
             GhosttyTerminalView.shouldApplyImmediateHostedStateUpdate(
-                hostedViewHasSuperview: true,
+                hostedViewHasSuperview: false,
                 isBoundToCurrentHost: false
             )
         )
