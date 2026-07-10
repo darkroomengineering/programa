@@ -11,6 +11,83 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  change-detection:
+    runs-on: ubuntu-latest
+    outputs:
+      run_app_jobs: ${{ steps.detect.outputs.run_app_jobs }}
+      run_remote_daemon_jobs: ${{ steps.detect.outputs.run_remote_daemon_jobs }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: detect
+        run: |
+          set -euo pipefail
+
+          # Keep full CI for push events and non-PR runs.
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "run_app_jobs=true" >> "$GITHUB_OUTPUT"
+            echo "run_remote_daemon_jobs=true" >> "$GITHUB_OUTPUT"
+            echo "Changed files: full suite (non-PR context)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}" "${HEAD_SHA}"
+          CHANGED_FILES="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"
+          RUN_APP_JOBS=false
+          if [[ -z "${CHANGED_FILES}" ]]; then
+            RUN_APP_JOBS=true
+          fi
+
+          while IFS= read -r path; do
+            [[ -z "$path" ]] && continue
+
+            case "$path" in
+              # Documentation and prose
+              *.md|docs/*|plans/*|AGENTS.md|CHANGELOG.md|PROJECTS.md|TODO.md|README.md|LICENSE*|THIRD_PARTY_LICENSES.md|.editorconfig|.gitattributes|.gitignore|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg)
+                continue
+                ;;
+              # Repository metadata / workflow-only edits are not app/runtime changes
+              .github/*)
+                continue
+                ;;
+              # Localization-only resource edits are scoped out per request
+              Resources/*.xcstrings|Resources/*/*.xcstrings|Resources/*.strings|Resources/*/*.strings)
+                continue
+                ;;
+              # Explicitly skip doc-only translation assets
+              Resources/*.lproj/*)
+                continue
+                ;;
+              *)
+                RUN_APP_JOBS=true
+                break
+                ;;
+            esac
+          done <<< "$CHANGED_FILES"
+
+          echo "run_app_jobs=${RUN_APP_JOBS}" >> "$GITHUB_OUTPUT"
+          echo "run_remote_daemon_jobs=${RUN_APP_JOBS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### CI scope decision"
+            if [[ "$RUN_APP_JOBS" == "true" ]]; then
+              echo "Changed file set contains app-relevant changes; running full macOS jobs."
+            else
+              echo "Pull request appears docs/localization-only; skipping heavy app/daemon jobs."
+            fi
+            echo ""
+            echo "Changed files:"
+            if [[ -z "${CHANGED_FILES}" ]]; then
+              echo "- <none>"
+            else
+              printf '%s\n' "${CHANGED_FILES}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
   workflow-guard-tests:
     runs-on: ubuntu-latest
     steps:
@@ -36,6 +113,8 @@ jobs:
         run: node scripts/release_asset_guard.test.js
 
   remote-daemon-tests:
+    needs: change-detection
+    if: needs.change-detection.outputs.run_remote_daemon_jobs == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -54,6 +133,8 @@ jobs:
         run: ./tests/test_remote_daemon_release_assets.sh
 
   tests:
+    needs: change-detection
+    if: needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -184,6 +265,8 @@ jobs:
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_registry_behavior.py
 
       - name: Run unit tests
+        env:
+          PROGRAMA_UNIT_TEST_SCOPE: split-stateful
         run: ./scripts/ci-run-unit-tests.sh
 
       - name: Run bundled Ghostty theme picker helper regression
@@ -210,7 +293,10 @@ jobs:
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_version_memory_guard.py
 
   tests-build-and-lag:
-    needs: tests
+    needs:
+      - tests
+      - change-detection
+    if: needs.change-detection.outputs.run_app_jobs == 'true'
     # Build the full cmux scheme and run the lag regression on GitHub-hosted runners.
     # Keep lag validation separate from UI regressions so functional UI failures
     # and performance regressions stay isolated. Broader interactive UI suites
@@ -384,7 +470,10 @@ jobs:
           rm -f /tmp/create-virtual-display
 
   ui-regressions:
-    needs: tests
+    needs:
+      - tests
+      - change-detection
+    if: needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-15
     timeout-minutes: 45
     steps:

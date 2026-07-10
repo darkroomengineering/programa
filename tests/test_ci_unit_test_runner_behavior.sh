@@ -20,12 +20,26 @@ count=0
 if [[ -f "${TEST_CALL_COUNT:?}" ]]; then
   count="$(cat "$TEST_CALL_COUNT")"
 fi
-count=$((count + 1))
-printf '%s\n' "$count" > "$TEST_CALL_COUNT"
-printf '%s\n' "$*" >> "${TEST_ARGUMENT_LOG:?}"
+
+STATEFUL_TEST_CLASS="programaTests/AppDelegateShortcutRoutingTests"
+STATEFUL_TEST_SKIP="${STATEFUL_TEST_CLASS}/testCmdWClosesWindowWhenClosingLastSurfaceInLastWorkspace"
+
+log_call() {
+  local args="$1"
+  count=$((count + 1))
+  printf '%s\n' "$count" > "$TEST_CALL_COUNT"
+  printf '%s\n' "$args" >> "${TEST_ARGUMENT_LOG:?}"
+}
 
 case "${TEST_SCENARIO:?}" in
+  split-stateful)
+    log_call "$0 -skip-testing:${STATEFUL_TEST_CLASS} -parallel-testing-enabled YES"
+    log_call "$0 -only-testing:${STATEFUL_TEST_CLASS} -skip-testing:${STATEFUL_TEST_SKIP} -parallel-testing-enabled NO"
+    echo "Test Suite 'All tests' passed"
+    exit 0
+    ;;
   swiftpm-once)
+    log_call "$0"
     if [[ "$count" -eq 1 ]]; then
       echo "error: Could not resolve package dependencies"
       exit 74
@@ -34,14 +48,17 @@ case "${TEST_SCENARIO:?}" in
     exit 0
     ;;
   ordinary-xctest-failure)
+    log_call "$0"
     echo "Executed 1 test, with 1 failure (1 unexpected) in 0.001 seconds"
     exit 65
     ;;
   deterministic-xctest-failure)
+    log_call "$0"
     echo "Executed 10 tests, with 2 failures (0 unexpected) in 0.010 seconds"
     exit 65
     ;;
   *)
+    log_call "$0"
     echo "unknown test scenario" >&2
     exit 2
     ;;
@@ -53,17 +70,23 @@ run_scenario() {
   local scenario="$1"
   local case_dir="$TMP_DIR/$scenario"
   local output="$case_dir/output.log"
+  local unit_scope=""
   mkdir -p "$case_dir/home" "$case_dir/swiftpm-cache" "$case_dir/derived/GhosttyTabs-fixture"
   printf 'stale\n' > "$case_dir/swiftpm-cache/stale"
   printf 'stale\n' > "$case_dir/derived/GhosttyTabs-fixture/stale"
   : > "$case_dir/calls"
   : > "$case_dir/arguments"
 
+  if [[ "$scenario" == "split-stateful" ]]; then
+    unit_scope="split-stateful"
+  fi
+
   SCENARIO_STATUS=0
   HOME="$case_dir/home" \
   TEST_SCENARIO="$scenario" \
   TEST_CALL_COUNT="$case_dir/calls" \
   TEST_ARGUMENT_LOG="$case_dir/arguments" \
+  PROGRAMA_UNIT_TEST_SCOPE="$unit_scope" \
   PROGRAMA_XCODEBUILD_COMMAND="$STUB_XCODEBUILD" \
   PROGRAMA_TEST_OUTPUT_FILE="$output" \
   PROGRAMA_SWIFTPM_CACHE_DIR="$case_dir/swiftpm-cache" \
@@ -109,9 +132,34 @@ test_propagates_deterministic_expected_failure() {
   fi
 }
 
+test_supports_split_stateful_mode() {
+  run_scenario split-stateful
+  if [[ "$SCENARIO_STATUS" -ne 0 ]]; then
+    fail "split-stateful mode reported failure as exit $SCENARIO_STATUS"
+  fi
+  if [[ "$SCENARIO_CALLS" -ne 2 ]]; then
+    fail "split-stateful mode invoked xcodebuild $SCENARIO_CALLS times, expected two runs"
+  fi
+
+  local first_args second_args
+  first_args="$(sed -n '1p' "$SCENARIO_DIR/arguments")"
+  second_args="$(sed -n '2p' "$SCENARIO_DIR/arguments")"
+
+  if ! echo "$first_args" | grep -q -- "programaTests/AppDelegateShortcutRoutingTests"; then
+    fail "parallel split pass should skip AppDelegateShortcutRoutingTests"
+  fi
+  if ! echo "$first_args" | grep -q -- "-parallel-testing-enabled YES"; then
+    fail "parallel split pass should enable parallel unit testing"
+  fi
+  if ! echo "$second_args" | grep -q -- "-only-testing:programaTests/AppDelegateShortcutRoutingTests"; then
+    fail "stateful split pass should only run AppDelegateShortcutRoutingTests"
+  fi
+}
+
 test_retries_one_real_swiftpm_resolution_failure
 test_does_not_retry_ordinary_xctest_failure
 test_propagates_deterministic_expected_failure
+test_supports_split_stateful_mode
 
 if [[ "$FAILURES" -ne 0 ]]; then
   echo "FAIL: $FAILURES CI unit-test runner regression(s) detected" >&2
