@@ -83,9 +83,6 @@ jobs:
           export DEVELOPER_DIR="$XCODE_DIR"
           xcodebuild -version
 
-      - name: Validate Release reload artifact discovery
-        run: ./tests/test_reloadp_programa_artifact.sh
-
       - name: Cache GhosttyKit.xcframework
         id: cache-ghosttykit
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
@@ -202,6 +199,9 @@ jobs:
               exit 1
             fi
           fi
+
+      - name: Validate Release reload artifact discovery
+        run: ./tests/test_reloadp_programa_artifact.sh
 
       - name: Run bundled Ghostty theme picker helper regression
         run: |
