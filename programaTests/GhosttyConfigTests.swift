@@ -2761,6 +2761,11 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             fi
 
             cmux_test_ready() {
+              # Run once: precmd fires again before the next prompt (e.g. right
+              # before "exit" is read), which would otherwise clobber this
+              # snapshot with post-restoration TERM values before the test
+              # harness's own "CMD=..." append runs.
+              precmd_functions=(${precmd_functions:#cmux_test_ready})
               print -r -- "PRE=$PROGRAMA_STARTUP_THEME_TERM|$PROGRAMA_STARTUP_THEME_BRANCH|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}" > "$PROGRAMA_TEST_OUTPUT"
               : > "$PROGRAMA_TEST_READY"
             }
@@ -3012,7 +3017,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(output, "report_tty ttys999 --tab=11111111-1111-1111-1111-111111111111")
+        XCTAssertEqual(
+            output,
+            #"{"id":1,"method":"surface.report_tty","params":{"workspace_id":"11111111-1111-1111-1111-111111111111","tty_name":"ttys999"}}"#
+        )
     }
 
     func testShellIntegrationRelayReportTTYUsesWorkspaceIDInZsh() throws {
@@ -3222,7 +3230,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             _PROGRAMA_TTY_REPORTED=0
             _cmux_preexec_command "python3 -m http.server 8899"
             for _cmux_i in $(seq 1 20); do
-              [ -s "\(logPath.path)" ] && break
+              grep -q ports_kick "\(logPath.path)" 2>/dev/null && break
               sleep 0.05
             done
             cat "\(logPath.path)"
