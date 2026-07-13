@@ -471,21 +471,11 @@ extension WorkspaceRemoteSessionController {
             ])
         }
 
-        let scpSSHOptions = RemoteSSHConnectionPolicy.backgroundOptions(configuration.sshOptions)
-        var scpArgs: [String] = ["-q"]
-        scpArgs += RemoteSSHConnectionPolicy.strictHostKeyCheckingArguments(unlessSetIn: scpSSHOptions)
-        scpArgs += ["-o", "ControlMaster=no"]
-        if let port = configuration.port {
-            scpArgs += ["-P", String(port)]
-        }
-        if let identityFile = configuration.identityFile,
-           !identityFile.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            scpArgs += ["-i", identityFile]
-        }
-        for option in scpSSHOptions {
-            scpArgs += ["-o", option]
-        }
-        scpArgs += [localBinary.path, "\(configuration.destination):\(remoteTempPath)"]
+        let scpArgs = WorkspaceRemoteSSHBatchCommandBuilder.scpUploadArguments(
+            configuration: configuration,
+            localPath: localBinary.path,
+            remotePath: remoteTempPath
+        )
         let scpResult = try scpExec(arguments: scpArgs, timeout: 45)
         guard scpResult.status == 0 else {
             let detail = Self.bestErrorLine(stderr: scpResult.stderr, stdout: scpResult.stdout) ?? "scp exited \(scpResult.status)"
@@ -512,7 +502,6 @@ extension WorkspaceRemoteSessionController {
         _ fileURLs: [URL],
         operation: TerminalImageTransferOperation
     ) throws -> [String] {
-        let scpSSHOptions = RemoteSSHConnectionPolicy.backgroundOptions(configuration.sshOptions)
         return try performSCPUploadWithCancelCleanup(
             items: fileURLs,
             checkCancelled: { try operation.throwIfCancelled() },
@@ -524,19 +513,11 @@ extension WorkspaceRemoteSessionController {
 
                 let remotePath = Self.remoteDropPath(for: normalizedLocalURL)
                 record(remotePath)
-                var scpArgs: [String] = ["-q", "-o", "ControlMaster=no"]
-                scpArgs += RemoteSSHConnectionPolicy.strictHostKeyCheckingArguments(unlessSetIn: scpSSHOptions)
-                if let port = configuration.port {
-                    scpArgs += ["-P", String(port)]
-                }
-                if let identityFile = configuration.identityFile,
-                   !identityFile.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    scpArgs += ["-i", identityFile]
-                }
-                for option in scpSSHOptions {
-                    scpArgs += ["-o", option]
-                }
-                scpArgs += [normalizedLocalURL.path, "\(configuration.destination):\(remotePath)"]
+                let scpArgs = WorkspaceRemoteSSHBatchCommandBuilder.scpUploadArguments(
+                    configuration: configuration,
+                    localPath: normalizedLocalURL.path,
+                    remotePath: remotePath
+                )
 
                 let scpResult = try scpExec(arguments: scpArgs, timeout: 45, operation: operation)
                 guard scpResult.status == 0 else {

@@ -39,6 +39,32 @@ enum WorkspaceRemoteSSHBatchCommandBuilder {
         return args
     }
 
+    /// Builds the `scp` argument list for staging a local file to `configuration.destination`.
+    /// Shared by the `programad-remote` binary upload and the dropped-file upload so the
+    /// IPv6-bracketing fix (see `RemoteSSHConnectionPolicy.scpRemoteDestination`) only has
+    /// to be applied once.
+    static func scpUploadArguments(
+        configuration: WorkspaceRemoteConfiguration,
+        localPath: String,
+        remotePath: String
+    ) -> [String] {
+        let scpSSHOptions = RemoteSSHConnectionPolicy.backgroundOptions(configuration.sshOptions)
+        var args: [String] = ["-q", "-o", "ControlMaster=no"]
+        args += RemoteSSHConnectionPolicy.strictHostKeyCheckingArguments(unlessSetIn: scpSSHOptions)
+        if let port = configuration.port {
+            args += ["-P", String(port)]
+        }
+        if let identityFile = configuration.identityFile,
+           !identityFile.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            args += ["-i", identityFile]
+        }
+        for option in scpSSHOptions {
+            args += ["-o", option]
+        }
+        args += [localPath, "\(RemoteSSHConnectionPolicy.scpRemoteDestination(configuration.destination)):\(remotePath)"]
+        return args
+    }
+
     private static func batchArguments(configuration: WorkspaceRemoteConfiguration) -> [String] {
         let effectiveSSHOptions = RemoteSSHConnectionPolicy.backgroundOptions(configuration.sshOptions)
         var args = RemoteSSHConnectionPolicy.keepaliveArguments
