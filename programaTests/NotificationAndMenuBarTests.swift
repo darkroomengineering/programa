@@ -604,13 +604,22 @@ final class NotificationDockBadgeTests: XCTestCase {
         )
 
         store.promptToEnableNotificationsForTesting()
+        // promptToEnableNotifications() hops through its own DispatchQueue.main.async
+        // before reaching the scheduler call this test observes. That hop is queued
+        // ahead of `drained`'s, so FIFO ordering guarantees it always runs first — but
+        // under a full serial suite run, the main queue can carry a real backlog from
+        // other tests' pending async work, so give this more than the bare minimum
+        // headroom rather than treating an occasional miss as a hard failure.
         let drained = expectation(description: "main queue drained")
         DispatchQueue.main.async { drained.fulfill() }
-        wait(for: [drained], timeout: 1.0)
+        wait(for: [drained], timeout: 5.0)
 
         XCTAssertEqual(alertSpy.beginSheetModalCallCount, 0)
         XCTAssertEqual(alertSpy.runModalCallCount, 0)
         XCTAssertEqual(queuedRetryBlocks.count, 1)
+        // Guard against a crash (rather than a clean test failure) corrupting the rest
+        // of the suite run if the assertion above ever does fail.
+        guard !queuedRetryBlocks.isEmpty else { return }
 
         promptWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),

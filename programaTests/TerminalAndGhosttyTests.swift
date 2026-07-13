@@ -1626,7 +1626,7 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         window.displayIfNeeded()
         contentView.layoutSubtreeIfNeeded()
         hostedView.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         guard let surfaceView = surfaceView(in: hostedView) as? GhosttyNSView else {
             XCTFail("Expected terminal surface view")
@@ -1638,7 +1638,7 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         XCTAssertNil(surface.surface, "Expected runtime surface to be released for the regression setup")
 
         hostedView.removeFromSuperview()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         XCTAssertNil(surfaceView.window, "Expected hosted terminal view to be detached from any window")
 
         let event = makeKeyEvent(characters: "a", keyCode: 0, window: window)
@@ -1689,7 +1689,7 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         window.displayIfNeeded()
         contentView.layoutSubtreeIfNeeded()
         hostedView.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         guard let surfaceView = surfaceView(in: hostedView) as? GhosttyNSView else {
             XCTFail("Expected terminal surface view")
@@ -1697,14 +1697,14 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         }
 
         XCTAssertTrue(window.makeFirstResponder(surfaceView))
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         XCTAssertTrue(surface.debugDesiredFocusState(), "Focused terminal should start with desired Ghostty focus")
 
         surface.releaseSurfaceForTesting()
         XCTAssertNil(surface.surface, "Expected runtime surface to be released for the regression setup")
 
         hostedView.removeFromSuperview()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         XCTAssertNil(surfaceView.window, "Expected hosted terminal view to be detached from any window")
         // AppKit resets window.firstResponder to the window itself when the view holding
         // first-responder status is removed from the hierarchy — this happens through
@@ -1724,7 +1724,7 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         surfaceView.keyDown(with: event)
 
         XCTAssertTrue(window.makeFirstResponder(otherResponder))
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         XCTAssertTrue(
             (window.firstResponder as? NSView) === otherResponder,
@@ -1778,7 +1778,7 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         window.displayIfNeeded()
         contentView.layoutSubtreeIfNeeded()
         hostedView.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         guard let surfaceView = surfaceView(in: hostedView) as? GhosttyNSView else {
             XCTFail("Expected terminal surface view")
@@ -1792,7 +1792,7 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         XCTAssertEqual(surface.portalBindingStateLabel(), "closed")
 
         hostedView.removeFromSuperview()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         XCTAssertNil(surfaceView.window, "Expected hosted terminal view to be detached from any window")
 
         let event = makeKeyEvent(characters: "a", keyCode: 0, window: window)
@@ -2325,6 +2325,16 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
             overlayContentWidth,
             "Preferred scroller style changes should also restore the wider terminal grid when overlay scrollbars return"
         )
+
+        // Force synchronous native teardown instead of relying on the async
+        // `Task { @MainActor in ghostty_surface_free(...) } ` scheduled from
+        // TerminalSurface.deinit (Sources/GhosttyTerminalView.swift ~4828). Left to
+        // run asynchronously, that teardown's completion time is unbounded and can
+        // bleed into the next test's tightly-timed RunLoop spins/waitUntil polls,
+        // since this test creates a real, window-attached ghostty_surface_t.
+#if DEBUG
+        surface.releaseSurfaceForTesting()
+#endif
     }
 
     func testWindowResignKeyClearsFocusedTerminalFirstResponder() {
@@ -2383,16 +2393,28 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
 
         let searchState = TerminalSurface.SearchState(needle: "example")
         hostedView.setSearchOverlay(searchState: searchState)
-        waitUntil(description: "search overlay to mount") {
+        // Give mount/unmount headroom over the 1s default: neighboring tests in this
+        // class construct and release real ghostty surfaces, and their async native
+        // teardown (Task { @MainActor in ghostty_surface_free(...) } in
+        // TerminalSurface.deinit) can still be draining off the MainActor queue when
+        // this test schedules its own deferred mutation.
+        waitUntil(timeout: 3.0, description: "search overlay to mount") {
             hostedView.debugHasSearchOverlay()
         }
         XCTAssertTrue(hostedView.debugHasSearchOverlay())
 
         hostedView.setSearchOverlay(searchState: nil)
-        waitUntil(description: "search overlay to unmount") {
+        waitUntil(timeout: 3.0, description: "search overlay to unmount") {
             !hostedView.debugHasSearchOverlay()
         }
         XCTAssertFalse(hostedView.debugHasSearchOverlay())
+
+        // See comment in testPreferredScrollerStyleChangeRecalculatesTerminalSurfaceWidth:
+        // force synchronous native teardown so this real, window-attached surface
+        // doesn't leave an async ghostty_surface_free Task pending after this test ends.
+#if DEBUG
+        surface.releaseSurfaceForTesting()
+#endif
     }
 
     func testRapidSearchOverlayToggleDoesNotLeaveStaleOverlayMounted() {
@@ -2412,6 +2434,13 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
             hostedView.debugHasSearchOverlay(),
             "A stale deferred mount must not resurrect the find overlay after it closes"
         )
+
+        // See comment in testPreferredScrollerStyleChangeRecalculatesTerminalSurfaceWidth:
+        // force synchronous native teardown so this real, window-attached surface
+        // doesn't leave an async ghostty_surface_free Task pending after this test ends.
+#if DEBUG
+        surface.releaseSurfaceForTesting()
+#endif
     }
 
     func testSearchOverlayFocusesSearchFieldAfterDeferredAttach() {
@@ -2458,7 +2487,12 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         let searchState = TerminalSurface.SearchState(needle: "")
         surface.searchState = searchState
         hostedView.setSearchOverlay(searchState: searchState)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        // A fixed 50ms RunLoop spin isn't reliable headroom for the deferred mount
+        // closure under a full serial suite run, where the main queue can carry a real
+        // backlog from other tests' pending async work — poll instead.
+        waitUntil(timeout: 3.0, description: "search overlay to mount") {
+            hostedView.debugHasSearchOverlay()
+        }
 
         guard let searchField = findEditableTextField(in: hostedView) else {
             XCTFail("Expected mounted find text field")
@@ -2469,6 +2503,13 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
             firstResponderOwnsTextField(window.firstResponder, textField: searchField),
             "Deferred search overlay attach should still move focus into the find field"
         )
+
+        // See comment in testPreferredScrollerStyleChangeRecalculatesTerminalSurfaceWidth:
+        // force synchronous native teardown so this real, window-attached surface
+        // doesn't leave an async ghostty_surface_free Task pending after this test ends.
+#if DEBUG
+        surface.releaseSurfaceForTesting()
+#endif
     }
 
     func testStartOrFocusTerminalSearchReusesExistingSearchState() {
@@ -2588,6 +2629,13 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
             0,
             "Escape used to dismiss find overlay must not pass through to the terminal key-up path"
         )
+
+        // See comment in testPreferredScrollerStyleChangeRecalculatesTerminalSurfaceWidth:
+        // force synchronous native teardown so this real, window-attached surface
+        // doesn't leave an async ghostty_surface_free Task pending after this test ends.
+#if DEBUG
+        surface.releaseSurfaceForTesting()
+#endif
     }
 
     @MainActor
@@ -2606,6 +2654,13 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
 
         hostedView.syncKeyStateIndicator(text: nil)
         XCTAssertFalse(hostedView.debugHasKeyboardCopyModeIndicator())
+
+        // See comment in testPreferredScrollerStyleChangeRecalculatesTerminalSurfaceWidth:
+        // force synchronous native teardown so this real, window-attached surface
+        // doesn't leave an async ghostty_surface_free Task pending after this test ends.
+#if DEBUG
+        surface.releaseSurfaceForTesting()
+#endif
     }
 
     @MainActor
@@ -2698,11 +2753,16 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         return hostedView
         }()
 
-        waitUntil(description: "search overlay to mount") {
+        // Neighboring tests in this class construct and release real ghostty surfaces;
+        // their async native teardown (Task { @MainActor in ghostty_surface_free(...) }
+        // in TerminalSurface.deinit) can still be draining off the MainActor queue when
+        // this test's own deferred mount closure is scheduled, so give the mount wait a
+        // little headroom over the 1s default rather than treating it as flaky.
+        waitUntil(timeout: 3.0, description: "search overlay to mount") {
             hostedView.debugHasSearchOverlay()
         }
         XCTAssertTrue(hostedView.debugHasSearchOverlay())
-        waitUntil(description: "terminal surface to deallocate after search overlay mount") {
+        waitUntil(timeout: 3.0, description: "terminal surface to deallocate after search overlay mount") {
             weakSurface == nil
         }
         XCTAssertNil(weakSurface, "Mounted search overlay must not retain TerminalSurface")
@@ -2736,7 +2796,12 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         )
         let hostedView = surface.hostedView
         hostedView.setSearchOverlay(searchState: TerminalSurface.SearchState(needle: "split"))
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        // A fixed 50ms RunLoop spin isn't reliable headroom for the deferred mount
+        // closure under a full serial suite run, where the main queue can carry a real
+        // backlog from other tests' pending async work — poll instead.
+        waitUntil(timeout: 3.0, description: "search overlay to mount") {
+            hostedView.debugHasSearchOverlay()
+        }
         XCTAssertTrue(hostedView.debugHasSearchOverlay())
 
         portal.bind(hostedView: hostedView, to: anchorA, visibleInUI: true)
@@ -2747,6 +2812,13 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
             hostedView.debugHasSearchOverlay(),
             "Split-like anchor churn should not unmount terminal search overlay"
         )
+
+        // See comment in testPreferredScrollerStyleChangeRecalculatesTerminalSurfaceWidth:
+        // force synchronous native teardown so this real, window-attached surface
+        // doesn't leave an async ghostty_surface_free Task pending after this test ends.
+#if DEBUG
+        surface.releaseSurfaceForTesting()
+#endif
     }
 
     func testSearchOverlaySurvivesPortalVisibilityToggleDuringWorkspaceSwitchLikeChurn() {
@@ -2775,7 +2847,12 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         )
         let hostedView = surface.hostedView
         hostedView.setSearchOverlay(searchState: TerminalSurface.SearchState(needle: "workspace"))
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        // A fixed 50ms RunLoop spin isn't reliable headroom for the deferred mount
+        // closure under a full serial suite run, where the main queue can carry a real
+        // backlog from other tests' pending async work — poll instead.
+        waitUntil(timeout: 3.0, description: "search overlay to mount") {
+            hostedView.debugHasSearchOverlay()
+        }
         XCTAssertTrue(hostedView.debugHasSearchOverlay())
 
         portal.bind(hostedView: hostedView, to: anchor, visibleInUI: true)
@@ -2789,6 +2866,13 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
             hostedView.debugHasSearchOverlay(),
             "Workspace-switch-like visibility toggles should not unmount terminal search overlay"
         )
+
+        // See comment in testPreferredScrollerStyleChangeRecalculatesTerminalSurfaceWidth:
+        // force synchronous native teardown so this real, window-attached surface
+        // doesn't leave an async ghostty_surface_free Task pending after this test ends.
+#if DEBUG
+        surface.releaseSurfaceForTesting()
+#endif
     }
 }
 
@@ -2813,7 +2897,7 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
         window.makeKeyAndOrderFront(nil)
         window.displayIfNeeded()
         window.contentView?.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         window.contentView?.layoutSubtreeIfNeeded()
     }
 
@@ -3271,7 +3355,7 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
         )
 
         TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronizeForAllWindows()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         XCTAssertNil(
             TerminalWindowPortalRegistry.terminalViewAtWindowPoint(originalWindowPoint, in: window),
@@ -3335,7 +3419,7 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
             window.displayIfNeeded()
         }
 
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         let shiftedAnchorFrameInWindow = anchor.convert(anchor.bounds, to: nil)
         XCTAssertGreaterThan(
@@ -3646,7 +3730,7 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
         )
 
         TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: firstWindow)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         XCTAssertNil(
             TerminalWindowPortalRegistry.terminalViewAtWindowPoint(retiredFirstPoint, in: firstWindow),

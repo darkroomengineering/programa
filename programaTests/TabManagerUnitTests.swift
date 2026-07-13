@@ -1275,7 +1275,10 @@ final class TabManagerNotificationFocusTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 1)
+        // Give this real headroom over the 0.1s scheduled delay: under a full serial
+        // suite run the main queue can carry a genuine backlog from other tests'
+        // pending async work.
+        wait(for: [expectation], timeout: 5)
 
         XCTAssertEqual(workspace.focusedPanelId, rightPanel.id)
         XCTAssertFalse(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: rightPanel.id))

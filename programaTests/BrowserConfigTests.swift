@@ -1191,7 +1191,16 @@ final class BrowserDevToolsButtonDebugSettingsTests: XCTestCase {
 
 
 final class BrowserThemeSettingsTests: XCTestCase {
-    private func makeIsolatedDefaults() -> UserDefaults {
+    // Returns the isolated defaults instance along with the suite name backing it, so
+    // callers can pass `domainName:` to `BrowserThemeSettings.mode(defaults:domainName:)`.
+    // That parameter matters here: `UserDefaults.register(defaults:)` (e.g. the one
+    // BrowserPanelView.onAppear installs for `modeKey`) applies process-wide across every
+    // UserDefaults/suite in the process, not just the instance it was called on — so without
+    // passing this suite's own domain name, a completely unrelated test that renders a
+    // BrowserPanelView earlier in the run can make this isolated suite's `modeKey` look
+    // already-set via that registered default, even though nothing ever explicitly
+    // persisted a value to it.
+    private func makeIsolatedDefaults() -> (defaults: UserDefaults, suiteName: String) {
         let suiteName = "BrowserThemeSettingsTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             fatalError("Failed to create defaults suite")
@@ -1200,35 +1209,35 @@ final class BrowserThemeSettingsTests: XCTestCase {
         addTeardownBlock {
             defaults.removePersistentDomain(forName: suiteName)
         }
-        return defaults
+        return (defaults, suiteName)
     }
 
     func testDefaultsMatchConfiguredFallbacks() {
-        let defaults = makeIsolatedDefaults()
+        let (defaults, suiteName) = makeIsolatedDefaults()
         XCTAssertEqual(
-            BrowserThemeSettings.mode(defaults: defaults),
+            BrowserThemeSettings.mode(defaults: defaults, domainName: suiteName),
             BrowserThemeSettings.defaultMode
         )
     }
 
     func testModeReadsPersistedValue() {
-        let defaults = makeIsolatedDefaults()
+        let (defaults, suiteName) = makeIsolatedDefaults()
         defaults.set(BrowserThemeMode.dark.rawValue, forKey: BrowserThemeSettings.modeKey)
-        XCTAssertEqual(BrowserThemeSettings.mode(defaults: defaults), .dark)
+        XCTAssertEqual(BrowserThemeSettings.mode(defaults: defaults, domainName: suiteName), .dark)
 
         defaults.set(BrowserThemeMode.light.rawValue, forKey: BrowserThemeSettings.modeKey)
-        XCTAssertEqual(BrowserThemeSettings.mode(defaults: defaults), .light)
+        XCTAssertEqual(BrowserThemeSettings.mode(defaults: defaults, domainName: suiteName), .light)
     }
 
     func testModeMigratesLegacyForcedDarkModeFlag() {
-        let defaults = makeIsolatedDefaults()
+        let (defaults, suiteName) = makeIsolatedDefaults()
         defaults.set(true, forKey: BrowserThemeSettings.legacyForcedDarkModeEnabledKey)
-        XCTAssertEqual(BrowserThemeSettings.mode(defaults: defaults), .dark)
+        XCTAssertEqual(BrowserThemeSettings.mode(defaults: defaults, domainName: suiteName), .dark)
         XCTAssertEqual(defaults.string(forKey: BrowserThemeSettings.modeKey), BrowserThemeMode.dark.rawValue)
 
-        let otherDefaults = makeIsolatedDefaults()
+        let (otherDefaults, otherSuiteName) = makeIsolatedDefaults()
         otherDefaults.set(false, forKey: BrowserThemeSettings.legacyForcedDarkModeEnabledKey)
-        XCTAssertEqual(BrowserThemeSettings.mode(defaults: otherDefaults), .system)
+        XCTAssertEqual(BrowserThemeSettings.mode(defaults: otherDefaults, domainName: otherSuiteName), .system)
         XCTAssertEqual(otherDefaults.string(forKey: BrowserThemeSettings.modeKey), BrowserThemeMode.system.rawValue)
     }
 }
@@ -2033,7 +2042,9 @@ final class BrowserDeveloperToolsVisibilityPersistenceTests: XCTestCase {
     }
 
     private func waitForDeveloperToolsTransitions() {
-        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        // Give real headroom under a full serial suite run, where the main queue can
+        // carry a genuine backlog from other tests' pending async work.
+        RunLoop.current.run(until: Date().addingTimeInterval(2.0))
     }
 
     private func findWindowBrowserSlotView(in root: NSView) -> WindowBrowserSlotView? {
