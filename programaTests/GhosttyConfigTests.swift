@@ -3749,6 +3749,274 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     }
 }
 
+final class FishShellIntegrationHandoffTests: XCTestCase {
+    func testFishReportTtyPayloadIncludesSurfaceIdWithoutTmux() throws {
+        let output = try runInteractiveFish(
+            command: """
+            set -g _PROGRAMA_TTY_NAME ttys999
+            _cmux_report_tty_payload
+            """,
+            extraEnvironment: [
+                "PROGRAMA_TAB_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_PANEL_ID": "99999999-9999-9999-9999-999999999999",
+            ]
+        )
+
+        XCTAssertEqual(
+            output,
+            #"{"id":1,"method":"surface.report_tty","params":{"workspace_id":"11111111-1111-1111-1111-111111111111","tty_name":"ttys999","surface_id":"99999999-9999-9999-9999-999999999999"}}"#
+        )
+    }
+
+    func testFishReportTtyPayloadOmitsSurfaceIdWithTmux() throws {
+        let output = try runInteractiveFish(
+            command: """
+            set -g _PROGRAMA_TTY_NAME ttys555
+            _cmux_report_tty_payload
+            """,
+            extraEnvironment: [
+                "TMUX": "/tmp/tmux-current,123,0",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_TAB_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_PANEL_ID": "99999999-9999-9999-9999-999999999999",
+            ]
+        )
+
+        XCTAssertEqual(
+            output,
+            #"{"id":1,"method":"surface.report_tty","params":{"workspace_id":"11111111-1111-1111-1111-111111111111","tty_name":"ttys555"}}"#
+        )
+    }
+
+    func testFishRelayReportTtyUsesWorkspaceId() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("cmux-fish-relay-report-tty-\(UUID().uuidString)")
+        let binDir = root.appendingPathComponent("bin", isDirectory: true)
+        let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
+
+        try fileManager.createDirectory(at: binDir, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        try writeExecutableScript(
+            at: binDir.appendingPathComponent("programa", isDirectory: false),
+            contents: """
+            #!/bin/sh
+            printf '%s\\n' "$*" >> "\(logPath.path)"
+            exit 0
+            """
+        )
+
+        let output = try runInteractiveFish(
+            command: """
+            : > "\(logPath.path)"
+            set -g _PROGRAMA_TTY_NAME ttys777
+            _cmux_report_tty_via_relay
+            cat "\(logPath.path)"
+            """,
+            extraEnvironment: [
+                "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
+                "PROGRAMA_SOCKET_PATH": "127.0.0.1:64011",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_TAB_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+            ]
+        )
+
+        XCTAssertTrue(
+            output.contains(#"rpc surface.report_tty {"workspace_id":"11111111-1111-1111-1111-111111111111","tty_name":"ttys777","surface_id":"22222222-2222-2222-2222-222222222222"}"#),
+            output
+        )
+    }
+
+    func testFishRelayPortsKickOmitsSurfaceIdUntilAvailable() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("cmux-fish-relay-kick-\(UUID().uuidString)")
+        let binDir = root.appendingPathComponent("bin", isDirectory: true)
+        let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
+
+        try fileManager.createDirectory(at: binDir, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        try writeExecutableScript(
+            at: binDir.appendingPathComponent("programa", isDirectory: false),
+            contents: """
+            #!/bin/sh
+            printf '%s\\n' "$*" >> "\(logPath.path)"
+            exit 0
+            """
+        )
+
+        let output = try runInteractiveFish(
+            command: """
+            : > "\(logPath.path)"
+            _cmux_ports_kick_via_relay refresh
+            for _cmux_i in (seq 1 20)
+                test -s "\(logPath.path)"; and break
+                sleep 0.05
+            end
+            cat "\(logPath.path)"
+            """,
+            extraEnvironment: [
+                "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
+                "PROGRAMA_SOCKET_PATH": "127.0.0.1:64011",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_TAB_ID": "22222222-2222-2222-2222-222222222222",
+            ]
+        )
+
+        XCTAssertTrue(
+            output.contains(#"rpc surface.ports_kick {"workspace_id":"11111111-1111-1111-1111-111111111111","reason":"refresh"}"#),
+            output
+        )
+        XCTAssertFalse(output.contains("surface_id"), output)
+    }
+
+    func testFishTmuxSyncPublishesOnlyWorkspaceScopedProgramaEnvironment() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("cmux-fish-tmux-publish-\(UUID().uuidString)")
+        let binDir = root.appendingPathComponent("bin", isDirectory: true)
+        let logPath = root.appendingPathComponent("tmux.log", isDirectory: false)
+
+        try fileManager.createDirectory(at: binDir, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        try writeExecutableScript(
+            at: binDir.appendingPathComponent("tmux", isDirectory: false),
+            contents: """
+            #!/bin/sh
+            if [ "$1" = "show-environment" ] && [ "$2" = "-g" ]; then
+              exit 0
+            fi
+            printf '%s\\n' "$*" >> "\(logPath.path)"
+            exit 0
+            """
+        )
+
+        let output = try runInteractiveFish(
+            command: """
+            _cmux_tmux_sync_cmux_environment
+            cat "\(logPath.path)"
+            """,
+            extraEnvironment: [
+                "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
+                "PROGRAMA_SOCKET_PATH": "/tmp/programa-current.sock",
+                "PROGRAMA_TAG": "feat-fish-shell-integration",
+                "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_SURFACE_ID": "22222222-2222-2222-2222-222222222222",
+                "PROGRAMA_TAB_ID": "11111111-1111-1111-1111-111111111111",
+                "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+            ]
+        )
+
+        XCTAssertTrue(output.contains("set-environment -g PROGRAMA_TAG feat-fish-shell-integration"), output)
+        XCTAssertTrue(output.contains("set-environment -g PROGRAMA_SOCKET_PATH /tmp/programa-current.sock"), output)
+        XCTAssertTrue(output.contains("set-environment -g PROGRAMA_WORKSPACE_ID 11111111-1111-1111-1111-111111111111"), output)
+        XCTAssertTrue(output.contains("set-environment -gu PROGRAMA_SURFACE_ID"), output)
+        XCTAssertTrue(output.contains("set-environment -gu PROGRAMA_PANEL_ID"), output)
+        XCTAssertFalse(output.contains("set-environment -g PROGRAMA_SURFACE_ID"), output)
+        XCTAssertFalse(output.contains("set-environment -g PROGRAMA_PANEL_ID"), output)
+    }
+
+    func testFishResetTerminalKeyboardProtocolsPrintsSequenceWhenForced() throws {
+        let output = try runInteractiveFish(
+            command: "_cmux_reset_terminal_keyboard_protocols",
+            extraEnvironment: [
+                "PROGRAMA_TEST_FORCE_KEYBOARD_RESET": "1",
+            ]
+        )
+
+        XCTAssertEqual(output, "\u{1B}[>m\u{1B}[<8u")
+    }
+
+    private func resolveFishExecutablePath() -> String? {
+        let candidates = [
+            "/opt/homebrew/bin/fish",
+            "/usr/local/bin/fish",
+            "/usr/bin/fish",
+            "/bin/fish",
+        ]
+        for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+        return nil
+    }
+
+    private func requireFishExecutablePath() throws -> String {
+        guard let path = resolveFishExecutablePath() else {
+            throw XCTSkip("fish is not installed on this host")
+        }
+        return path
+    }
+
+    private func runInteractiveFish(
+        command: String,
+        extraEnvironment: [String: String] = [:]
+    ) throws -> String {
+        let fishPath = try requireFishExecutablePath()
+
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("cmux-fish-shell-integration-\(UUID().uuidString)")
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let integrationPath = repoRoot.appendingPathComponent("Resources/shell-integration/fish/config.fish")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: fishPath)
+        process.arguments = [
+            "--no-config",
+            "--init-command", "source \"\(integrationPath.path)\"",
+            "-c", command,
+        ]
+        process.environment = [
+            "HOME": root.path,
+            "TERM": "xterm-256color",
+            "SHELL": fishPath,
+            "USER": NSUserName(),
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            "PROGRAMA_FISH_USER_CONFIG_ALREADY_LOADED": "1",
+            "PROGRAMA_SHELL_INTEGRATION": "1",
+        ]
+        for (key, value) in extraEnvironment {
+            process.environment?[key] = value
+        }
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        let deadline = Date().addingTimeInterval(5)
+        while process.isRunning && Date() < deadline {
+            _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+            XCTFail("Timed out waiting for fish to exit")
+        }
+
+        let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let error = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+        XCTAssertEqual(process.terminationStatus, 0, error)
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func writeExecutableScript(at url: URL, contents: String) throws {
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+    }
+}
+
 final class BrowserInstallDetectorTests: XCTestCase {
     func testDetectInstalledBrowsersUsesBundleIdAndProfileData() throws {
         let home = makeTemporaryHome()
