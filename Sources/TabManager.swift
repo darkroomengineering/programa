@@ -1408,10 +1408,6 @@ class TabManager: ObservableObject {
         return candidates.first
     }
 
-    private func inheritedTerminalConfigForNewWorkspace() -> ProgramaSurfaceConfigTemplate? {
-        inheritedTerminalConfigForNewWorkspace(workspace: selectedWorkspace)
-    }
-
     private func cachedInheritedTerminalFontPointsForNewWorkspace(
         workspace: Workspace?
     ) -> Float? {
@@ -1427,17 +1423,6 @@ class TabManager: ObservableObject {
             }
             return fontPoints
         }
-    }
-
-    func inheritedTerminalConfigForNewWorkspace(
-        workspace: Workspace?
-    ) -> ProgramaSurfaceConfigTemplate? {
-        guard let fontPoints = cachedInheritedTerminalFontPointsForNewWorkspace(workspace: workspace) else {
-            return nil
-        }
-        var config = ProgramaSurfaceConfigTemplate()
-        config.fontSize = fontPoints
-        return config
     }
 
     private func inheritedTerminalFontPointsForNewWorkspace() -> Float? {
