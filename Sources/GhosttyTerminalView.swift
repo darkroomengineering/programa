@@ -4069,21 +4069,27 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 }
                 // macOS ships /bin/bash 3.2, where Ghostty's automatic bash
                 // integration is unsupported and HOME-based wrapper startup is
-                // not reliable. Bootstrap cmux bash integration on the first
-                // interactive prompt instead.
-                setManagedEnvironmentValue("PROMPT_COMMAND", """
-                unset PROMPT_COMMAND; \
-                if [[ "${PROGRAMA_LOAD_GHOSTTY_BASH_INTEGRATION:-0}" == "1" && -n "${GHOSTTY_RESOURCES_DIR:-}" ]]; then \
-                _programa_ghostty_bash="$GHOSTTY_RESOURCES_DIR/shell-integration/bash/ghostty.bash"; \
-                [[ -r "$_programa_ghostty_bash" ]] && source "$_programa_ghostty_bash"; \
-                fi; \
-                if [[ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" && -n "${PROGRAMA_SHELL_INTEGRATION_DIR:-}" ]]; then \
-                _programa_bash_integration="$PROGRAMA_SHELL_INTEGRATION_DIR/programa-bash-integration.bash"; \
-                [[ -r "$_programa_bash_integration" ]] && source "$_programa_bash_integration"; \
-                fi; \
-                unset _programa_ghostty_bash _programa_bash_integration; \
-                if declare -F _programa_prompt_command >/dev/null 2>&1; then _programa_prompt_command; fi
-                """)
+                // not reliable. Bootstrap Programa bash integration on the
+                // first interactive prompt by exporting the shared bootstrap
+                // script as PROMPT_COMMAND. The script lives in
+                // Resources/shell-integration so the app and the regression
+                // test share one source of truth. Doc comments and blank
+                // lines are stripped so users never see them in
+                // $PROMPT_COMMAND; the test mirrors this.
+                let bashBootstrapPath = (integrationDir as NSString)
+                    .appendingPathComponent("programa-bash-bootstrap.bash")
+                if let rawBootstrap = try? String(contentsOfFile: bashBootstrapPath, encoding: .utf8) {
+                    let bootstrap = rawBootstrap
+                        .components(separatedBy: "\n")
+                        .filter { line in
+                            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                            return !trimmed.isEmpty && !trimmed.hasPrefix("#")
+                        }
+                        .joined(separator: "\n")
+                    if !bootstrap.isEmpty {
+                        setManagedEnvironmentValue("PROMPT_COMMAND", bootstrap)
+                    }
+                }
             }
         }
         env = Self.mergedStartupEnvironment(
