@@ -171,6 +171,10 @@ jobs:
     if: needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      PROGRAMA_SKIP_ZIG_BUILD: "1"
+    env:
+      PROGRAMA_SKIP_ZIG_BUILD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -304,6 +308,7 @@ jobs:
       - name: Run unit tests
         env:
           PROGRAMA_UNIT_TEST_SCOPE: serial
+          PROGRAMA_SKIP_ZIG_BUILD: "1"
         run: ./scripts/ci-run-unit-tests.sh
 
       - name: Run bundled Ghostty theme picker helper regression
@@ -340,6 +345,10 @@ jobs:
     # still run via test-e2e.yml on GitHub-hosted runners.
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      PROGRAMA_SKIP_ZIG_BUILD: "1"
+    env:
+      PROGRAMA_SKIP_ZIG_BUILD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -516,6 +525,10 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      PROGRAMA_SKIP_ZIG_BUILD: "1"
+    env:
+      PROGRAMA_SKIP_ZIG_BUILD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
