@@ -743,6 +743,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return false
     }
 
+    /// True only when the XCTest bundle is injected directly into *this* process
+    /// (unit tests hosted inside the app, e.g. the `programa-unit` scheme). This is
+    /// distinct from a genuine XCUITest run: there the `.xctest` bundle loads into a
+    /// separate XCTRunner process, and this app-under-test process is launched fresh
+    /// with none of `XCTestBundlePath`/`XCInjectBundle`/`XCInjectBundleInto` set.
+    /// `PROGRAMA_UI_TEST_*` keys (set explicitly by UI tests via `launchEnvironment`)
+    /// are excluded from this check on purpose so it can't misclassify a real UI test
+    /// run as an embedded unit-test host.
+    private func isEmbeddedUnitTestHost(_ env: [String: String]) -> Bool {
+        env["XCTestBundlePath"] != nil || env["XCInjectBundle"] != nil || env["XCInjectBundleInto"] != nil
+    }
+
     private func isRunningUnderXCTest(_ env: [String: String]) -> Bool {
         // On some macOS/Xcode setups, the app-under-test process doesn't get
         // `XCTestConfigurationFilePath`. Use a broader set of signals so UI tests
@@ -1152,7 +1164,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         // In UI tests, `WindowGroup` occasionally fails to materialize a window quickly on the VM.
         // If there are no windows shortly after launch, force-create one so XCUITest can proceed.
-        if isRunningUnderXCTest {
+        // Unit tests (embedded XCTest bundle hosted in this same process) manage their own
+        // windows explicitly per test and never want a phantom default window lingering in
+        // `mainWindowContexts` for the lifetime of the test run, so exclude that case here.
+        if isRunningUnderXCTest, !isEmbeddedUnitTestHost(env) {
             if let rawShow = env["PROGRAMA_UI_TEST_BROWSER_IMPORT_HINT_SHOW"] {
                 UserDefaults.standard.set(
                     rawShow == "1",
@@ -2528,6 +2543,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         sidebarState: SidebarState,
         sidebarSelectionState: SidebarSelectionState
     ) {
+        // A window can be deallocated without ever going through the normal
+        // close/NSWindow.willCloseNotification teardown path (e.g. released directly
+        // by its owner). That leaves its MainWindowContext behind indefinitely, since
+        // nothing else proactively sweeps for dead-window contexts. Registering a new
+        // main window is a natural, frequent checkpoint to clean those up so they don't
+        // linger and skew context-selection/fallback logic for the lifetime of the app.
+        discardOrphanedMainWindowContexts()
+
         tabManager.window = window
 
         let key = ObjectIdentifier(window)
@@ -3687,11 +3710,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     @discardableResult
     func closeWindowWithConfirmation(_ window: NSWindow) -> Bool {
         guard isMainTerminalWindow(window) else {
-            window.performClose(nil)
+            window.close()
             return true
         }
         guard confirmCloseMainWindow(window) else { return true }
-        window.performClose(nil)
+        window.close()
         return true
     }
 
@@ -3921,6 +3944,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             for tab in context.tabManager.tabs {
                 store.clearNotifications(forTabId: tab.id)
             }
+        }
+    }
+
+    /// Prune every registered main window context whose window has already been
+    /// deallocated. Snapshot into an array first: `discardOrphanedMainWindowContext`
+    /// mutates `mainWindowContexts`, and mutating a dictionary while iterating its
+    /// `.values` view directly would trap.
+    private func discardOrphanedMainWindowContexts() {
+        let orphans = mainWindowContexts.values.filter { resolvedWindow(for: $0) == nil }
+        for orphan in orphans {
+            discardOrphanedMainWindowContext(orphan)
         }
     }
 
@@ -4540,6 +4574,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             workingDirectory: workingDirectory
         )
         #endif
+        // Prune unconditionally, before context selection: a deallocated-window context
+        // (the owning NSWindow was released without going through the normal
+        // close/unregister path) must not keep reporting a non-nil
+        // tabManagerFor(windowId:) just because *some other* live window ends up being
+        // selected below. Selection succeeding elsewhere is not evidence the orphan was
+        // ever a candidate -- only that a different, legitimate window was available.
+        discardOrphanedMainWindowContexts()
         guard let context = preferredMainWindowContextForWorkspaceCreation(event: event, debugSource: debugSource) else {
             #if DEBUG
             logWorkspaceCreationRouting(
@@ -5744,10 +5785,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private func installShortcutDefaultsObserver() {
         guard shortcutDefaultsObserver == nil else { return }
         refreshConfiguredShortcutChordActions()
+        // queue: nil (not .main) is required so this runs synchronously on the
+        // posting thread. All call sites post this notification from the main
+        // thread (see Sources/KeyboardShortcutSettings.swift setShortcut/resetShortcut/
+        // resetAll, and Sources/ProgramaSettingsFileStore.swift's file watcher, which
+        // hops to DispatchQueue.main.async before calling reload()). A .main queue
+        // would enqueue delivery asynchronously even when posted from the main thread,
+        // leaving configuredShortcutChordActions stale for one run-loop turn if a key
+        // event arrives immediately after a shortcut change.
         shortcutDefaultsObserver = NotificationCenter.default.addObserver(
             forName: KeyboardShortcutSettings.didChangeNotification,
             object: nil,
-            queue: .main
+            queue: nil
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.refreshConfiguredShortcutChordActions()
@@ -6675,7 +6724,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         if matchConfiguredShortcut(event: event, action: .closeWindow) {
-            guard let targetWindow = event.window ?? NSApp.keyWindow ?? NSApp.mainWindow else {
+            // `event.window` is often nil for synthetic/XCUITest key events that only carry a
+            // windowNumber; fall back through the same windowNumber-aware resolver the rest of
+            // the shortcut-routing code uses so Cmd+Ctrl+W targets the event's actual window
+            // instead of silently no-op'ing when NSApp.keyWindow/mainWindow are stale.
+            guard let targetWindow = mainWindowForShortcutEvent(event) ?? event.window ?? NSApp.keyWindow ?? NSApp.mainWindow else {
                 NSSound.beep()
                 return true
             }
@@ -8463,6 +8516,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             for tab in removed.tabManager.tabs {
                 store.clearNotifications(forTabId: tab.id)
             }
+        }
+
+        // `browserAddressBarFocusedPanelId` is a single app-wide pointer, not scoped to
+        // any particular window, and nothing else proactively invalidates it when its
+        // owning panel goes away. A stale non-nil value here makes
+        // `commandOmnibarSelectionDelta` report `hasFocusedAddressBar = true` for every
+        // window afterward, silently hijacking Cmd+N/Cmd+P/Ctrl+N/Ctrl+P in *other*
+        // windows as omnibar-suggestion navigation instead of their normal shortcut
+        // action. Check across all *remaining* live windows -- rather than just this
+        // window's (possibly already-torn-down) tab list -- since teardown order
+        // between this window's own workspace/panel cleanup and this notification
+        // handler is not guaranteed, and checking only `removed.tabManager` can miss a
+        // panel that was already removed from it by the time this runs.
+        if let focusedPanelId = browserAddressBarFocusedPanelId,
+           !mainWindowContexts.values.contains(where: { context in
+               context.tabManager.tabs.contains(where: { $0.panels[focusedPanelId] != nil })
+           }) {
+            browserAddressBarFocusedPanelId = nil
+            stopBrowserOmnibarSelectionRepeat()
         }
 
         if tabManager === removed.tabManager {

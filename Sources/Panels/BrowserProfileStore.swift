@@ -24,7 +24,21 @@ struct BrowserProfileDefinition: Codable, Hashable, Identifiable, Sendable {
 
 @MainActor
 final class BrowserProfileStore: ObservableObject {
-    static let shared = BrowserProfileStore()
+    private(set) static var shared = BrowserProfileStore()
+
+    #if DEBUG
+    /// Test-only seam: swaps the process-wide singleton for an isolated instance
+    /// (typically backed by an ephemeral `UserDefaults` suite) so tests don't read or
+    /// write `browserProfiles.lastUsed` in the real `UserDefaults.standard` domain, and
+    /// aren't polluted by `lastUsedProfileID` mutations made by other tests/processes.
+    /// Callers should restore the previous instance (returned here) in `tearDown`.
+    @discardableResult
+    static func replaceSharedForTesting(_ store: BrowserProfileStore) -> BrowserProfileStore {
+        let previous = shared
+        shared = store
+        return previous
+    }
+    #endif
 
     private static let profilesDefaultsKey = "browserProfiles.v1"
     private static let lastUsedProfileDefaultsKey = "browserProfiles.lastUsed"

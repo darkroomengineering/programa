@@ -43,7 +43,7 @@ jobs:
 
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          git fetch --no-tags --depth=1 origin "${BASE_SHA}" "${HEAD_SHA}"
+          git fetch --no-tags origin "${BASE_SHA}" "${HEAD_SHA}"
           CHANGED_FILES="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"
           RUN_COMPAT_TESTS=false
           if [[ -z "${CHANGED_FILES}" ]]; then
@@ -203,7 +203,7 @@ jobs:
       - name: Run unit tests
         env:
           PROGRAMA_SKIP_ZIG_BUILD: ${{ matrix.skip_zig && '1' || '0' }}
-          PROGRAMA_UNIT_TEST_SCOPE: split-stateful
+          PROGRAMA_UNIT_TEST_SCOPE: serial
         run: |
           ./scripts/ci-run-unit-tests.sh
 

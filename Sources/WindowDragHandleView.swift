@@ -182,11 +182,23 @@ func windowDragHandleShouldTreatTopHitAsPassiveHost(_ view: NSView) -> Bool {
     return false
 }
 
-/// Re-entrancy guard for the sibling hit-test walk. When `sibling.hitTest()`
-/// triggers SwiftUI view-body evaluation, AppKit can call back into this
-/// function before the outer invocation finishes, causing a Swift
-/// exclusive-access violation (SIGABRT). Main-thread only, no lock needed.
-private var _windowDragHandleIsResolvingSiblingHits = false
+/// Re-entrancy guard for the sibling hit-test walk and the window-level
+/// top-hit resolution below. When `sibling.hitTest()` (or the top-hit
+/// `superview.hitTest()` call) triggers SwiftUI view-body evaluation, AppKit
+/// can call back into this function before the outer invocation finishes,
+/// causing a Swift exclusive-access violation (SIGABRT). Scoped per window so
+/// a nested window's capture check can still resolve while another window's
+/// walk is in progress. Main-thread only, no lock needed.
+private var _windowDragHandleResolvingSiblingHitScopes = Set<ObjectIdentifier>()
+
+/// Tracks scopes where the window-level top-hit resolution below re-entered
+/// this function (for example the drag handle is its own only subview, so
+/// asking the superview to hit-test the point calls straight back into the
+/// drag handle's own `hitTest`). When that happens the resulting top-hit is
+/// unreliable — it reflects the guard's bail-out, not a real competing view —
+/// so we must not use it to block capture. Scoped identically to
+/// `_windowDragHandleResolvingSiblingHitScopes`.
+private var _windowDragHandleTopHitReentrantScopes = Set<ObjectIdentifier>()
 
 /// Returns whether the titlebar drag handle should capture a hit at `point`.
 /// We only claim the hit when no sibling view already handles it, so interactive
@@ -259,15 +271,17 @@ func windowDragHandleShouldCaptureHit(
     // when sibling.hitTest() re-enters SwiftUI layout, which calls hitTest on
     // this drag handle again. Proceeding would trigger an exclusive-access
     // violation in the Swift runtime.
-    guard !_windowDragHandleIsResolvingSiblingHits else {
+    let resolutionScope = ObjectIdentifier((dragHandleWindow ?? superview) as AnyObject)
+    guard !_windowDragHandleResolvingSiblingHitScopes.contains(resolutionScope) else {
+        _windowDragHandleTopHitReentrantScopes.insert(resolutionScope)
         #if DEBUG
         dlog("titlebar.dragHandle.hitTest capture=false reason=reentrant point=\(windowDragHandleFormatPoint(point))")
         #endif
         return false
     }
 
-    _windowDragHandleIsResolvingSiblingHits = true
-    defer { _windowDragHandleIsResolvingSiblingHits = false }
+    _windowDragHandleResolvingSiblingHitScopes.insert(resolutionScope)
+    defer { _windowDragHandleResolvingSiblingHitScopes.remove(resolutionScope) }
 
     let siblingSnapshot = Array(superview.subviews.reversed())
 
@@ -297,6 +311,39 @@ func windowDragHandleShouldCaptureHit(
             #endif
             return false
         }
+    }
+
+    // Sibling-only checks above can't see a superview that overrides hitTest
+    // to claim the point for itself without even delegating to its subviews
+    // (for example a frontmost overlay container mounted above the drag
+    // handle). Ask the superview directly what it would resolve to for this
+    // point; if it's neither us nor a passive host wrapper, something else
+    // owns this point and we must not steal it.
+    //
+    // This can call back into this function (e.g. when the drag handle is
+    // the superview's only subview, `superview.hitTest` recurses straight
+    // into the drag handle's own hitTest). Discard any stale re-entrancy
+    // marker from the sibling walk above, then check freshly: if this
+    // specific call re-enters, the resulting top-hit reflects the guard's
+    // bail-out rather than a real competing view, so we must not use it to
+    // block capture.
+    _windowDragHandleTopHitReentrantScopes.remove(resolutionScope)
+    let pointInSuperview = dragHandleView.convert(point, to: superview)
+    let topHit = superview.hitTest(pointInSuperview)
+    let topHitResolutionReentered = _windowDragHandleTopHitReentrantScopes.remove(resolutionScope) != nil
+
+    if !topHitResolutionReentered,
+       let topHit,
+       topHit !== dragHandleView,
+       !topHit.isHidden,
+       topHit.alphaValue > 0,
+       !windowDragHandleShouldTreatTopHitAsPassiveHost(topHit) {
+        #if DEBUG
+        dlog(
+            "titlebar.dragHandle.hitTest capture=false reason=topHitBlocked point=\(windowDragHandleFormatPoint(point)) topHit=\(type(of: topHit))"
+        )
+        #endif
+        return false
     }
 
     #if DEBUG

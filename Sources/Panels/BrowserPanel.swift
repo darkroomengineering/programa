@@ -184,13 +184,26 @@ enum BrowserThemeSettings {
         return mode
     }
 
-    static func mode(defaults: UserDefaults = .standard) -> BrowserThemeMode {
-        let resolvedMode = mode(for: defaults.string(forKey: modeKey))
-        if defaults.string(forKey: modeKey) != nil {
-            return resolvedMode
+    /// - Parameter domainName: The CFPreferences domain backing `defaults` (the app's bundle
+    ///   identifier for `.standard`, or the suite name passed to `UserDefaults(suiteName:)`).
+    ///   Used to read only the value actually PERSISTED in that domain, ignoring anything
+    ///   supplied via `UserDefaults.register(defaults:)`. Foundation applies a registered
+    ///   default across every `UserDefaults` instance in the process — not just the one
+    ///   `register(defaults:)` was called on (e.g. `BrowserPanelView`'s `.onAppear` registers
+    ///   `modeKey: defaultMode.rawValue` on `.standard`, and that default then resolves via
+    ///   `string(forKey:)`/`object(forKey:)` on any other suite too). Without filtering it out
+    ///   here, that registered default makes `modeKey` look like it was already explicitly
+    ///   chosen and permanently skips the legacy-flag migration below — for real users, not
+    ///   just isolated test suites.
+    static func mode(defaults: UserDefaults = .standard, domainName: String? = nil) -> BrowserThemeMode {
+        let resolvedDomainName = domainName ?? Bundle.main.bundleIdentifier
+        if let resolvedDomainName,
+           let persistedModeRaw = defaults.persistentDomain(forName: resolvedDomainName)?[modeKey] as? String {
+            return mode(for: persistedModeRaw)
         }
 
-        // Migrate the legacy bool toggle only when the new mode key is unset.
+        // Migrate the legacy bool toggle only when the new mode key hasn't actually been
+        // persisted yet (a registered-but-never-set default doesn't count — see above).
         if defaults.object(forKey: legacyForcedDarkModeEnabledKey) != nil {
             let migratedMode: BrowserThemeMode = defaults.bool(forKey: legacyForcedDarkModeEnabledKey) ? .dark : .system
             defaults.set(migratedMode.rawValue, forKey: modeKey)
@@ -1943,14 +1956,21 @@ final class BrowserPanel: Panel, ObservableObject {
             return
         }
 
-        guard !restoredForwardHistoryStack.isEmpty else { return }
+        // Live current not found in either restored stack: a new live navigation moved past
+        // both, so restoredHistoryCurrentURL is stale. Push the stale current onto the back
+        // stack and adopt the live current, mirroring the nativeBack fallback that
+        // sessionNavigationHistorySnapshot's read path already applies for this case (:1875).
 #if DEBUG
         dlog(
-            "browser.history.restore.forward.clear panel=\(id.uuidString.prefix(5)) " +
+            "browser.history.restore.desync.realign panel=\(id.uuidString.prefix(5)) " +
             "current=\(liveCurrentString)"
         )
 #endif
+        if let restoredHistoryCurrentURL {
+            restoredBackHistoryStack.append(restoredHistoryCurrentURL)
+        }
         restoredForwardHistoryStack.removeAll(keepingCapacity: false)
+        restoredHistoryCurrentURL = liveCurrent
         refreshNavigationAvailability()
     }
 
@@ -2293,6 +2313,9 @@ final class BrowserPanel: Panel, ObservableObject {
         configuration: WKWebViewConfiguration,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
+        // Share the opener's process pool so popups (e.g. OAuth flows) participate in the
+        // same renderer/process group as the opener rather than defaulting to a fresh one.
+        configuration.processPool = webView.configuration.processPool
         let controller = BrowserPopupWindowController(
             configuration: configuration,
             windowFeatures: windowFeatures,
@@ -3287,10 +3310,15 @@ extension BrowserPanel {
 
         prepareDeveloperToolsForRevealIfNeeded(inspector)
 
-        let showSelector = NSSelectorFromString("show")
-        guard inspector.responds(to: showSelector) else { return false }
-        inspector.programaCallVoid(selector: showSelector)
-        let visibleAfterShow = inspector.programaCallBool(selector: isVisibleSelector) ?? false
+        // prepareDeveloperToolsForRevealIfNeeded may already attach (and thus show) the
+        // inspector; re-check before calling show again to avoid double-showing it.
+        var visibleAfterShow = inspector.programaCallBool(selector: isVisibleSelector) ?? false
+        if !visibleAfterShow {
+            let showSelector = NSSelectorFromString("show")
+            guard inspector.responds(to: showSelector) else { return false }
+            inspector.programaCallVoid(selector: showSelector)
+            visibleAfterShow = inspector.programaCallBool(selector: isVisibleSelector) ?? false
+        }
         if visibleAfterShow {
             developerToolsLastKnownVisibleAt = Date()
         }
@@ -3355,13 +3383,18 @@ extension BrowserPanel {
 
         guard let pendingTargetVisible else { return }
         guard pendingTargetVisible != isDeveloperToolsVisible() else { return }
-        _ = performDeveloperToolsVisibilityTransition(to: pendingTargetVisible, source: "\(source).queued")
+        _ = performDeveloperToolsVisibilityTransition(
+            to: pendingTargetVisible,
+            source: "\(source).queued",
+            debounceSettle: true
+        )
     }
 
     @discardableResult
     private func enqueueDeveloperToolsVisibilityTransition(
         to targetVisible: Bool,
-        source: String
+        source: String,
+        debounceSettle: Bool = false
     ) -> Bool {
         if isDeveloperToolsTransitionInFlight {
             pendingDeveloperToolsTransitionTargetVisible = targetVisible
@@ -3380,13 +3413,14 @@ extension BrowserPanel {
             return true
         }
 
-        return performDeveloperToolsVisibilityTransition(to: targetVisible, source: source)
+        return performDeveloperToolsVisibilityTransition(to: targetVisible, source: source, debounceSettle: debounceSettle)
     }
 
     @discardableResult
     private func performDeveloperToolsVisibilityTransition(
         to targetVisible: Bool,
-        source: String
+        source: String,
+        debounceSettle: Bool = false
     ) -> Bool {
         guard let inspector = webView.programaInspectorObject() else { return false }
 
@@ -3412,8 +3446,12 @@ extension BrowserPanel {
             developerToolsDetachedOpenGraceDeadline = nil
         }
 
+        // Use the POST-transition visibility (not the stale pre-transition `visible`) to decide
+        // whether a settle timer is needed — a transition that already reached its target
+        // synchronously must not be left looking "in flight".
+        let visibleAfterTransition = inspector.programaCallBool(selector: isVisibleSelector) ?? false
+
         if targetVisible {
-            let visibleAfterTransition = inspector.programaCallBool(selector: isVisibleSelector) ?? false
             if visibleAfterTransition {
                 syncDeveloperToolsPresentationPreferenceFromUI()
                 cancelDeveloperToolsRestoreRetry()
@@ -3427,7 +3465,12 @@ extension BrowserPanel {
             forceDeveloperToolsRefreshOnNextAttach = false
         }
 
-        if visible != targetVisible {
+        if visibleAfterTransition != targetVisible {
+            scheduleDeveloperToolsTransitionSettle(source: source)
+        } else if debounceSettle {
+            // Even though this transition already reached its target synchronously, keep it
+            // briefly "in flight" so a rapid follow-up toggle coalesces into the final intent
+            // instead of issuing an extra, unnecessary inspector call.
             scheduleDeveloperToolsTransitionSettle(source: source)
         } else {
             developerToolsTransitionTargetVisible = nil
@@ -3445,7 +3488,7 @@ extension BrowserPanel {
         )
 #endif
         let targetVisible = !effectiveDeveloperToolsVisibilityIntent()
-        let handled = enqueueDeveloperToolsVisibilityTransition(to: targetVisible, source: "toggle")
+        let handled = enqueueDeveloperToolsVisibilityTransition(to: targetVisible, source: "toggle", debounceSettle: true)
 #if DEBUG
         dlog(
             "browser.devtools toggle.end panel=\(id.uuidString.prefix(5)) targetVisible=\(targetVisible ? 1 : 0) " +

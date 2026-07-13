@@ -32,7 +32,7 @@ fi
        && -z "${ZSH_EXECUTION_STRING:-}" \
        && "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" \
        && -n "${PROGRAMA_SHELL_INTEGRATION_DIR:-}" \
-       && -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/cmux-zsh-integration.zsh" \
+       && -r "${PROGRAMA_SHELL_INTEGRATION_DIR}/programa-zsh-integration.zsh" \
        && "${TERM:-}" == "xterm-256color" \
        && -z "${PROGRAMA_ZSH_RESTORE_TERM:-}" ]]; then
         # Keep startup TERM-compatible prompt/theme selection during shell init,
@@ -60,7 +60,7 @@ fi
 
         # Load cmux integration (unless disabled)
         if [[ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" && -n "${PROGRAMA_SHELL_INTEGRATION_DIR:-}" ]]; then
-            builtin typeset _cmux_integ="$PROGRAMA_SHELL_INTEGRATION_DIR/cmux-zsh-integration.zsh"
+            builtin typeset _cmux_integ="$PROGRAMA_SHELL_INTEGRATION_DIR/programa-zsh-integration.zsh"
             [[ -r "$_cmux_integ" ]] && builtin source -- "$_cmux_integ"
         fi
     fi

@@ -33,8 +33,9 @@ log_call() {
 
 case "${TEST_SCENARIO:?}" in
   split-stateful)
-    log_call "$0 -skip-testing:${STATEFUL_TEST_CLASS} -parallel-testing-enabled YES"
-    log_call "$0 -only-testing:${STATEFUL_TEST_CLASS} -skip-testing:${STATEFUL_TEST_SKIP} -parallel-testing-enabled NO"
+    # Log the arguments the runner actually passed; the runner is expected to
+    # invoke xcodebuild once per pass (parallel, then stateful).
+    log_call "$0 $*"
     echo "Test Suite 'All tests' passed"
     exit 0
     ;;

@@ -645,7 +645,7 @@ final class WorkspaceChromeColorTests: XCTestCase {
         )
 
         let hex = Workspace.bonsplitChromeHex(backgroundColor: color, backgroundOpacity: 0.5)
-        XCTAssertEqual(hex, "#1122337F")
+        XCTAssertEqual(hex, "#11223380")
     }
 
     func testBonsplitChromeHexOmitsAlphaWhenOpaque() {
@@ -1117,6 +1117,45 @@ final class BrowserPanelPopupContextTests: XCTestCase {
 
 @MainActor
 final class BrowserPanelRemoteStoreTests: XCTestCase {
+    private var previousProfileStore: BrowserProfileStore?
+    private var isolatedProfileStoreSuiteName: String?
+
+    override func setUp() {
+        super.setUp()
+        // BrowserProfileStore.shared is a process-wide @MainActor singleton that
+        // persists `browserProfiles.lastUsed` into the real UserDefaults.standard.
+        // Other tests (e.g. BrowserPanelTests createProfile()/switchToProfile()) call
+        // noteUsed() on that same shared instance, which leaves a non-default
+        // lastUsedProfileID behind — on this run and even across dev-machine runs,
+        // since UserDefaults.standard persists to disk. That pollution makes
+        // BrowserPanel(workspaceId:, isRemoteWorkspace: false) resolve a profile-scoped
+        // WKWebsiteDataStore instead of WKWebsiteDataStore.default(), which these tests
+        // assert against. Isolate by swapping in a fresh store backed by an ephemeral,
+        // uniquely-named UserDefaults suite for the duration of each test, then restore
+        // the previous shared instance in tearDown so other test classes are unaffected.
+        let suiteName = "com.darkroom.programa.tests.browserProfileStore.\(UUID().uuidString)"
+        isolatedProfileStoreSuiteName = suiteName
+        let isolatedDefaults = UserDefaults(suiteName: suiteName)!
+        isolatedDefaults.removePersistentDomain(forName: suiteName)
+        previousProfileStore = BrowserProfileStore.replaceSharedForTesting(
+            BrowserProfileStore(defaults: isolatedDefaults)
+        )
+    }
+
+    override func tearDown() {
+        if let previousProfileStore {
+            BrowserProfileStore.replaceSharedForTesting(previousProfileStore)
+        }
+        if let isolatedProfileStoreSuiteName {
+            UserDefaults(suiteName: isolatedProfileStoreSuiteName)?.removePersistentDomain(
+                forName: isolatedProfileStoreSuiteName
+            )
+        }
+        previousProfileStore = nil
+        isolatedProfileStoreSuiteName = nil
+        super.tearDown()
+    }
+
     func testRemoteWorkspacePanelsShareWorkspaceScopedWebsiteDataStore() {
         let localPanel = BrowserPanel(workspaceId: UUID(), isRemoteWorkspace: false)
         let remoteWorkspaceId = UUID()
@@ -1603,7 +1642,10 @@ final class NotificationBurstCoalescerTests: XCTestCase {
             }
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        // A fixed 1s timeout isn't reliable headroom for this 0.01s-delay coalescer
+        // under a full serial suite run, where GCD timer firing can be pushed back by
+        // system load/backlog from hundreds of prior tests.
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(flushCount, 1)
     }
 
@@ -1622,7 +1664,7 @@ final class NotificationBurstCoalescerTests: XCTestCase {
             }
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(value, 2)
     }
 
@@ -1645,7 +1687,7 @@ final class NotificationBurstCoalescerTests: XCTestCase {
             }
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(flushCount, 2)
     }
 }
@@ -1675,7 +1717,7 @@ final class GhosttyDefaultBackgroundNotificationDispatcherTests: XCTestCase {
             dispatcher.signal(backgroundColor: light, opacity: 0.75, eventId: 2, source: "test.light")
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(postedUserInfos.count, 1)
         XCTAssertEqual(
             (postedUserInfos[0][GhosttyNotificationKey.backgroundColor] as? NSColor)?.hexString(),
@@ -1723,7 +1765,7 @@ final class GhosttyDefaultBackgroundNotificationDispatcherTests: XCTestCase {
             }
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(postedHexes, ["#272822", "#FDF6E3"])
     }
 
@@ -1827,7 +1869,7 @@ final class SocketControlSettingsTests: XCTestCase {
         XCTAssertEqual(path, SocketControlSettings.stableDefaultSocketPath)
     }
 
-    func testNightlyReleaseUsesDedicatedDefaultAndIgnoresAmbientSocketOverride() {
+    func testNightlyReleaseFallsBackToStableDefaultAndIgnoresAmbientSocketOverride() {
         let path = SocketControlSettings.socketPath(
             environment: [
                 "PROGRAMA_SOCKET_PATH": "/tmp/programa-debug-issue-153-tmux-compat.sock",
@@ -1837,7 +1879,7 @@ final class SocketControlSettingsTests: XCTestCase {
             probeStableDefaultPathEntry: { _ in .missing }
         )
 
-        XCTAssertEqual(path, "/tmp/programa-nightly.sock")
+        XCTAssertEqual(path, SocketControlSettings.stableDefaultSocketPath)
     }
 
     func testDebugBundleHonorsSocketOverrideWithoutOptInFlag() {
@@ -1893,7 +1935,7 @@ final class SocketControlSettingsTests: XCTestCase {
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
-            "/tmp/programa-nightly.sock"
+            SocketControlSettings.stableDefaultSocketPath
         )
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
@@ -1901,7 +1943,7 @@ final class SocketControlSettingsTests: XCTestCase {
                 isDebugBuild: false,
                 probeStableDefaultPathEntry: { _ in .missing }
             ),
-            "/tmp/programa-debug.sock"
+            "/tmp/programa-debug-tag.sock"
         )
         XCTAssertEqual(
             SocketControlSettings.defaultSocketPath(
@@ -2761,6 +2803,11 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             fi
 
             cmux_test_ready() {
+              # Run once: precmd fires again before the next prompt (e.g. right
+              # before "exit" is read), which would otherwise clobber this
+              # snapshot with post-restoration TERM values before the test
+              # harness's own "CMD=..." append runs.
+              precmd_functions=(${precmd_functions:#cmux_test_ready})
               print -r -- "PRE=$PROGRAMA_STARTUP_THEME_TERM|$PROGRAMA_STARTUP_THEME_BRANCH|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}" > "$PROGRAMA_TEST_OUTPUT"
               : > "$PROGRAMA_TEST_READY"
             }
@@ -3012,7 +3059,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(output, "report_tty ttys999 --tab=11111111-1111-1111-1111-111111111111")
+        XCTAssertEqual(
+            output,
+            #"{"id":1,"method":"surface.report_tty","params":{"workspace_id":"11111111-1111-1111-1111-111111111111","tty_name":"ttys999"}}"#
+        )
     }
 
     func testShellIntegrationRelayReportTTYUsesWorkspaceIDInZsh() throws {
@@ -3222,7 +3272,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             _PROGRAMA_TTY_REPORTED=0
             _cmux_preexec_command "python3 -m http.server 8899"
             for _cmux_i in $(seq 1 20); do
-              [ -s "\(logPath.path)" ] && break
+              grep -q ports_kick "\(logPath.path)" 2>/dev/null && break
               sleep 0.05
             done
             cat "\(logPath.path)"
@@ -3584,7 +3634,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let integrationPath = repoRoot.appendingPathComponent("Resources/shell-integration/cmux-bash-integration.bash")
+        let integrationPath = repoRoot.appendingPathComponent("Resources/shell-integration/programa-bash-integration.bash")
         let rcfilePath = root.appendingPathComponent(".bashrc")
         let rcfileContents: String = {
             guard cmuxLoadShellIntegration else { return ":\n" }

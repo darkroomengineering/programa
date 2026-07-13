@@ -1566,24 +1566,12 @@ final class WorkspaceCreationPlacementTests: XCTestCase {
 
 @MainActor
 final class WorkspaceCreationConfigSanitizationTests: XCTestCase {
-    private final class UnsafeConfigSnapshotTabManager: TabManager {
-        private var injectedConfig: ProgramaSurfaceConfigTemplate?
+    /// `makeWorkspaceForCreation` is the real seam `addWorkspace()` calls to construct the new
+    /// workspace (TabManager.swift `addWorkspace()` -> `makeWorkspaceForCreation`); capturing its
+    /// `configTemplate` argument lets us inspect exactly what addWorkspace() hands to workspace
+    /// creation without needing to re-derive it from post-creation state.
+    private final class ConfigTemplateCapturingTabManager: TabManager {
         var capturedConfigTemplate: ProgramaSurfaceConfigTemplate?
-
-        func installInjectedConfig(fontSize: Float) {
-            var config = ProgramaSurfaceConfigTemplate()
-            config.fontSize = fontSize
-            config.workingDirectory = "/tmp/programa-workspace-snapshot"
-            config.command = "echo snapshot"
-            config.environmentVariables = ["PROGRAMA_INHERITED_ENV": "1"]
-            injectedConfig = config
-        }
-
-        override func inheritedTerminalConfigForNewWorkspace(
-            workspace: Workspace?
-        ) -> ProgramaSurfaceConfigTemplate? {
-            injectedConfig ?? super.inheritedTerminalConfigForNewWorkspace(workspace: workspace)
-        }
 
         override func makeWorkspaceForCreation(
             title: String,
@@ -1606,8 +1594,29 @@ final class WorkspaceCreationConfigSanitizationTests: XCTestCase {
     }
 
     func testAddWorkspacePassesSanitizedInheritedConfigTemplate() {
-        let manager = UnsafeConfigSnapshotTabManager()
-        manager.installInjectedConfig(fontSize: 19)
+        let manager = ConfigTemplateCapturingTabManager()
+
+        // TabManager's own init already calls addWorkspace() once, so `selectedWorkspace` here is
+        // the real source workspace the second addWorkspace() call below will inherit from — the
+        // same source addWorkspace() consults via
+        // `cachedInheritedTerminalFontPointsForNewWorkspace(workspace:)`
+        // (TabManager.swift, reads `Workspace.lastRememberedTerminalFontPointsForConfigInheritance()`).
+        guard let sourceWorkspace = manager.selectedWorkspace else {
+            XCTFail("Expected TabManager init to select an initial workspace")
+            return
+        }
+
+        // Simulate an inherited terminal font size on the real seam addWorkspace() reads.
+        sourceWorkspace.lastTerminalConfigInheritanceFontPoints = 19
+
+        // The source workspace already has a real, non-nil `currentDirectory` (defaults to the
+        // user's home directory) purely from ordinary initialization -- i.e. it is already
+        // "dirty" with cwd state a naive implementation could leak into the new workspace's
+        // config template. No command/env analog exists at the Workspace level; the seam under
+        // test never reads live TerminalPanel/surface state for new-workspace creation (see the
+        // comment on `cachedInheritedTerminalFontPointsForNewWorkspace`), so there is nothing to
+        // dirty there -- that absence is itself the sanitization guarantee.
+        XCTAssertFalse(sourceWorkspace.currentDirectory.isEmpty)
 
         _ = manager.addWorkspace()
 
@@ -2374,6 +2383,33 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
             "Suppressed reparent focus should not immediately flip the Ghostty focus bit"
         )
 
+        // newTerminalSplit's initial selection hand-off to rightPanel schedules its own
+        // deferred first-responder/active-state reconciliation for leftPanel (see
+        // scheduleAutomaticFirstResponderApply / resignOwnedFirstResponderIfNeeded in
+        // GhosttyTerminalView.swift, reason="setActive"). That work is queued on the main
+        // queue and normally drains almost immediately, well before this test's manual
+        // makeFirstResponder override below. Under a full serial suite run the main queue
+        // can carry a backlog of unpredictable, varying depth from hundreds of prior
+        // tests, so this can fire anywhere from immediately to well over half a second
+        // late — landing in between our override and clearSuppressReparentFocus() and
+        // silently resigning leftSurfaceView's first-responder status back to the window
+        // (confirmed via temporary diagnostic logging: firstResponder ends up the NSWindow
+        // itself, and `focus.surface.resign ... reason=setActive(false)` fires immediately
+        // beforehand). A fixed-duration drain isn't reliable headroom for this since the
+        // backlog depth varies, so retry the override until it demonstrably survives
+        // several consecutive RunLoop pumps in a row, instead of guessing a duration.
+        var stableStreak = 0
+        var attempts = 0
+        while stableStreak < 3 && attempts < 60 {
+            attempts += 1
+            XCTAssertTrue(window.makeFirstResponder(leftSurfaceView))
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            stableStreak = leftPanel.hostedView.isSurfaceViewFirstResponder() ? stableStreak + 1 : 0
+        }
+        XCTAssertTrue(
+            leftPanel.hostedView.isSurfaceViewFirstResponder(),
+            "Expected leftSurfaceView to hold first responder stably before exercising clearSuppressReparentFocus"
+        )
         leftPanel.hostedView.clearSuppressReparentFocus()
         let focusRecovered = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in
@@ -2723,11 +2759,14 @@ final class WorkspaceBrowserProfileSelectionTests: XCTestCase {
 @MainActor
 final class WorkspacePanelGitBranchTests: XCTestCase {
     private func drainMainQueue() {
+        // A fixed 1s wait isn't reliable headroom for this main-queue turn under a full
+        // serial suite run, where the queue can carry a real backlog from hundreds of
+        // prior tests' pending async work.
         let expectation = expectation(description: "drain main queue")
         DispatchQueue.main.async {
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
     }
 
     func testBrowserSplitWithFocusFalsePreservesOriginalFocusedPanel() {
@@ -3215,37 +3254,94 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         )
     }
 
+    // Renamed from testSidebarPullRequestsTrackFocusedPanelOnly. That name asserted a
+    // focused-only filter that never existed in production: `sidebarPullRequestsInDisplayOrder()`
+    // has surfaced PRs for every panel in sidebar order since it was introduced (commit
+    // 2d454df5, "feat(sidebar): show linked pull request metadata"), mirroring the pre-existing
+    // multi-panel `sidebarGitBranchesInDisplayOrder()`. The perf-only precompute in f7388715
+    // ("Precompute panel ordering to reduce sidebar scroll lag") didn't change that. And the
+    // recent poll-candidate fix (commit d94d79ee, "fix: PR-probe filtering, poll candidates...")
+    // together with the green `TabManagerPullRequestProbeTests
+    // .testTrackedWorkspaceGitMetadataPollCandidatesIncludeMainAndMasterPanels` test explicitly
+    // proves background/non-main panels (master, feature, mainline splits) are polled for PR
+    // metadata -- which would be pointless if the sidebar only ever displayed the focused panel's
+    // PR. This test now documents the real contract: background panels with a valid,
+    // branch-matched PR are shown in sidebar order; PRs whose recorded branch no longer matches
+    // the panel's current git branch are filtered out.
     @MainActor
-    func testSidebarPullRequestsTrackFocusedPanelOnly() {
+    func testSidebarPullRequestsShowAllPanelsInSidebarOrderFilteringBranchMismatches() {
         let workspace = Workspace()
         guard let firstPanelId = workspace.focusedPanelId,
               let paneId = workspace.paneId(forPanelId: firstPanelId),
-              let secondPanel = workspace.newTerminalSurface(inPane: paneId, focus: false) else {
-            XCTFail("Expected focused panel and a second panel")
+              let secondPanel = workspace.newTerminalSurface(inPane: paneId, focus: false),
+              let thirdPanel = workspace.newTerminalSurface(inPane: paneId, focus: false),
+              let fourthPanel = workspace.newTerminalSurface(inPane: paneId, focus: false) else {
+            XCTFail("Expected focused panel and three background panels")
             return
         }
 
+        // newTerminalSurface(focus: false) inserts each new tab right after the pane's current
+        // tab (bonsplit's `newTabPosition: .current`), not appended at the end -- so pin down a
+        // deterministic left-to-right order explicitly instead of relying on insertion order.
+        XCTAssertTrue(workspace.reorderSurface(panelId: firstPanelId, toIndex: 0))
+        XCTAssertTrue(workspace.reorderSurface(panelId: secondPanel.id, toIndex: 1))
+        XCTAssertTrue(workspace.reorderSurface(panelId: thirdPanel.id, toIndex: 2))
+        XCTAssertTrue(workspace.reorderSurface(panelId: fourthPanel.id, toIndex: 3))
+        // reorderSurface() selects the reordered tab as a side effect; restore focus to the
+        // first panel so it's the focused panel for the rest of this test.
+        workspace.focusPanel(firstPanelId)
+
+        // Focused panel has no PR at all.
         workspace.updatePanelGitBranch(panelId: firstPanelId, branch: "main", isDirty: false)
+
+        // Background panel with a PR whose recorded branch matches its current git branch.
         workspace.updatePanelGitBranch(panelId: secondPanel.id, branch: "feature/sidebar-pr", isDirty: false)
         workspace.updatePanelPullRequest(
             panelId: secondPanel.id,
             number: 1629,
             label: "PR",
             url: URL(string: "https://github.com/manaflow-ai/cmux/pull/1629")!,
-            status: .open
+            status: .open,
+            branch: "feature/sidebar-pr"
         )
 
-        XCTAssertNil(workspace.pullRequest)
-        XCTAssertTrue(
-            workspace.sidebarPullRequestsInDisplayOrder().isEmpty,
-            "Expected background panel PRs to stay hidden while the focused panel has no PR"
+        // Background panel whose PR's recorded branch no longer matches the panel's current git
+        // branch (e.g. the panel checked out a different branch after the PR was probed) --
+        // this stale PR must be filtered out of the sidebar.
+        workspace.updatePanelGitBranch(panelId: thirdPanel.id, branch: "feature/mismatch", isDirty: false)
+        workspace.updatePanelPullRequest(
+            panelId: thirdPanel.id,
+            number: 999,
+            label: "PR",
+            url: URL(string: "https://github.com/manaflow-ai/cmux/pull/999")!,
+            status: .open,
+            branch: "totally-different-branch"
         )
 
-        workspace.focusPanel(secondPanel.id)
+        // A second background panel with a valid, branch-matched PR, to prove ordering follows
+        // sidebar order rather than focus or insertion order.
+        workspace.updatePanelGitBranch(panelId: fourthPanel.id, branch: "feature/second-pr", isDirty: false)
+        workspace.updatePanelPullRequest(
+            panelId: fourthPanel.id,
+            number: 1750,
+            label: "PR",
+            url: URL(string: "https://github.com/manaflow-ai/cmux/pull/1750")!,
+            status: .open,
+            branch: "feature/second-pr"
+        )
+
+        XCTAssertEqual(workspace.focusedPanelId, firstPanelId, "Focus should never have moved")
+        XCTAssertNil(workspace.pullRequest, "Focused panel never had a PR of its own")
 
         XCTAssertEqual(
+            workspace.sidebarOrderedPanelIds(),
+            [firstPanelId, secondPanel.id, thirdPanel.id, fourthPanel.id]
+        )
+        XCTAssertEqual(
             workspace.sidebarPullRequestsInDisplayOrder().map(\.number),
-            [1629]
+            [1629, 1750],
+            "Expected background panels' branch-matched PRs to show in sidebar order while the " +
+            "focused panel contributes nothing and the branch-mismatched PR is filtered out"
         )
     }
 

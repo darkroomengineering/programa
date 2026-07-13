@@ -254,7 +254,7 @@ struct GitMetadataProber {
         var best: GitHubPullRequestProbeItem?
         for pullRequest in pullRequests {
             guard pullRequestStatus(from: pullRequest.state) != nil,
-                  URL(string: pullRequest.url) != nil else {
+                  isWellFormedHTTPURL(pullRequest.url) else {
                 continue
             }
             guard let currentBest = best else {
@@ -266,6 +266,20 @@ struct GitMetadataProber {
             }
         }
         return best
+    }
+
+    /// `URL(string:)` alone is too permissive to catch malformed PR URLs: strings like
+    /// "not a url" parse successfully as a relative-path URL with no scheme/host, so a
+    /// plain `URL(string:) != nil` check does not reject them. Require an absolute
+    /// http(s) URL with a non-empty host.
+    private nonisolated static func isWellFormedHTTPURL(_ rawURL: String) -> Bool {
+        guard let url = URL(string: rawURL),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty else {
+            return false
+        }
+        return true
     }
 
     private nonisolated static func pullRequestChecksStatus(

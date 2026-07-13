@@ -76,15 +76,16 @@ run_unit_tests_with_retry() {
 run_suite() {
   local mode="${1:-serial}"
   local label="${2:-Unit tests}"
+  local exit_code=0
 
-  if run_unit_tests_with_retry "$mode"; then
-    return 0
+  # Capture the status directly; `$?` after a branchless `if` is always 0,
+  # which silently turned test failures into successes.
+  run_unit_tests_with_retry "$mode" || exit_code=$?
+
+  if [[ "$exit_code" -ne 0 ]]; then
+    echo "${label} failed with exit code $exit_code"
+    exit "$exit_code"
   fi
-
-  local exit_code=$?
-  # run_unit_tests_with_retry failures can carry non-zero statuses; keep that signal.
-  echo "${label} failed with exit code $exit_code"
-  exit "$exit_code"
 }
 
 if [[ "$TEST_SCOPE" == "split-stateful" ]]; then

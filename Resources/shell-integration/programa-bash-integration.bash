@@ -41,7 +41,9 @@ _cmux_relay_cli_path() {
         printf '%s\n' "${PROGRAMA_BUNDLED_CLI_PATH}"
         return 0
     fi
-    command -v cmux 2>/dev/null
+    # Rebranded CLI binary ships as "programa"; fall back to the pre-rebrand
+    # "cmux" name for older installs that only symlinked that binary.
+    command -v programa 2>/dev/null || command -v cmux 2>/dev/null
 }
 
 _cmux_socket_uses_remote_relay() {

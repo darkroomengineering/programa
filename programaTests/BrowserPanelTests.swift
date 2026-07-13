@@ -2081,12 +2081,14 @@ final class BrowserWindowPortalLifecycleTests: XCTestCase {
         window.makeKeyAndOrderFront(nil)
         window.displayIfNeeded()
         window.contentView?.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        // Give real headroom under a full serial suite run, where the main queue can
+        // carry a genuine backlog from other tests' pending async work.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         window.contentView?.layoutSubtreeIfNeeded()
     }
 
     private func advanceAnimations() {
-        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
     }
 
     private func dropZoneOverlay(in slot: WindowBrowserSlotView, excluding webView: WKWebView) -> NSView? {

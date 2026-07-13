@@ -172,14 +172,30 @@ struct ShortcutHintPillBackground: View {
     }
 }
 
-/// Applies NSGlassEffectView (macOS 26+) to a window, falling back to NSVisualEffectView
+/// Applies NSGlassEffectView (macOS 26+) to a window, falling back to NSVisualEffectView.
+/// The glass path requires both a macOS 26 SDK at build time and macOS 26 at runtime.
 enum WindowGlassEffect {
     private static var glassViewKey: UInt8 = 0
     private static var originalContentViewKey: UInt8 = 0
     private static var tintOverlayKey: UInt8 = 0
 
     static var isAvailable: Bool {
-        NSClassFromString("NSGlassEffectView") != nil
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            return true
+        }
+        #endif
+        return false
+    }
+
+    /// True when `view` is the native macOS 26 glass view.
+    static func isGlassEffectView(_ view: NSView) -> Bool {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            return view is NSGlassEffectView
+        }
+        #endif
+        return false
     }
 
     static func apply(to window: NSWindow, tintColor: NSColor? = nil) {
@@ -192,73 +208,72 @@ enum WindowGlassEffect {
             return
         }
 
-        let bounds = originalContentView.bounds
-
-        // Create the glass/blur view
-        let glassView: NSVisualEffectView
-        let usingGlassEffectView: Bool
-
-        // Try NSGlassEffectView first (macOS 26 Tahoe+)
-        if let glassClass = NSClassFromString("NSGlassEffectView") as? NSVisualEffectView.Type {
-            usingGlassEffectView = true
-            glassView = glassClass.init(frame: bounds)
-            glassView.wantsLayer = true
-            glassView.layer?.cornerRadius = 0
-
-            // Apply tint color via private API
-            if let color = tintColor {
-                let selector = NSSelectorFromString("setTintColor:")
-                if glassView.responds(to: selector) {
-                    glassView.perform(selector, with: color)
-                }
-            }
-        } else {
-            usingGlassEffectView = false
-            // Fallback to NSVisualEffectView
-            glassView = NSVisualEffectView(frame: bounds)
-            glassView.blendingMode = .behindWindow
-            // Favor a lighter fallback so behind-window glass reads more transparent.
-            glassView.material = .underWindowBackground
-            glassView.state = .active
-            glassView.wantsLayer = true
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            applyGlass(to: window, originalContentView: originalContentView, tintColor: tintColor)
+            return
         }
+        #endif
+        applyVisualEffectFallback(to: window, originalContentView: originalContentView, tintColor: tintColor)
+    }
 
+    #if compiler(>=6.2)
+    @available(macOS 26.0, *)
+    private static func applyGlass(to window: NSWindow, originalContentView: NSView, tintColor: NSColor?) {
+        let glassView = NSGlassEffectView(frame: originalContentView.bounds)
+        glassView.wantsLayer = true
+        glassView.cornerRadius = 0
+        glassView.tintColor = tintColor
         glassView.autoresizingMask = [.width, .height]
 
-        if usingGlassEffectView {
-            // NSGlassEffectView is a full replacement for the contentView.
-            objc_setAssociatedObject(window, &originalContentViewKey, originalContentView, .OBJC_ASSOCIATION_RETAIN)
-            window.contentView = glassView
+        // NSGlassEffectView is a full replacement for the contentView.
+        objc_setAssociatedObject(window, &originalContentViewKey, originalContentView, .OBJC_ASSOCIATION_RETAIN)
+        window.contentView = glassView
 
-            // Re-add the original SwiftUI hosting view on top of the glass, filling entire area.
-            originalContentView.translatesAutoresizingMaskIntoConstraints = false
-            originalContentView.wantsLayer = true
-            originalContentView.layer?.backgroundColor = NSColor.clear.cgColor
-            glassView.addSubview(originalContentView)
+        // Re-add the original SwiftUI hosting view on top of the glass, filling entire area.
+        // Kept as a manual subview (not NSGlassEffectView.contentView) so the window portal
+        // installation code can rely on the subview hierarchy.
+        originalContentView.translatesAutoresizingMaskIntoConstraints = false
+        originalContentView.wantsLayer = true
+        originalContentView.layer?.backgroundColor = NSColor.clear.cgColor
+        glassView.addSubview(originalContentView)
 
-            NSLayoutConstraint.activate([
-                originalContentView.topAnchor.constraint(equalTo: glassView.topAnchor),
-                originalContentView.bottomAnchor.constraint(equalTo: glassView.bottomAnchor),
-                originalContentView.leadingAnchor.constraint(equalTo: glassView.leadingAnchor),
-                originalContentView.trailingAnchor.constraint(equalTo: glassView.trailingAnchor)
-            ])
-        } else {
-            // For NSVisualEffectView fallback (macOS 13-15), do NOT replace window.contentView.
-            // Replacing contentView can break traffic light rendering with
-            // `.fullSizeContentView` + `titlebarAppearsTransparent`.
-            glassView.translatesAutoresizingMaskIntoConstraints = false
-            originalContentView.addSubview(glassView, positioned: .below, relativeTo: nil)
+        NSLayoutConstraint.activate([
+            originalContentView.topAnchor.constraint(equalTo: glassView.topAnchor),
+            originalContentView.bottomAnchor.constraint(equalTo: glassView.bottomAnchor),
+            originalContentView.leadingAnchor.constraint(equalTo: glassView.leadingAnchor),
+            originalContentView.trailingAnchor.constraint(equalTo: glassView.trailingAnchor)
+        ])
 
-            NSLayoutConstraint.activate([
-                glassView.topAnchor.constraint(equalTo: originalContentView.topAnchor),
-                glassView.bottomAnchor.constraint(equalTo: originalContentView.bottomAnchor),
-                glassView.leadingAnchor.constraint(equalTo: originalContentView.leadingAnchor),
-                glassView.trailingAnchor.constraint(equalTo: originalContentView.trailingAnchor)
-            ])
-        }
+        objc_setAssociatedObject(window, &glassViewKey, glassView, .OBJC_ASSOCIATION_RETAIN)
+    }
+    #endif
 
-        // Add tint overlay between glass and content (for fallback)
-        if let tintColor, !usingGlassEffectView {
+    private static func applyVisualEffectFallback(to window: NSWindow, originalContentView: NSView, tintColor: NSColor?) {
+        let bounds = originalContentView.bounds
+        let glassView = NSVisualEffectView(frame: bounds)
+        glassView.blendingMode = .behindWindow
+        // Favor a lighter fallback so behind-window glass reads more transparent.
+        glassView.material = .underWindowBackground
+        glassView.state = .active
+        glassView.wantsLayer = true
+        glassView.autoresizingMask = [.width, .height]
+
+        // For the NSVisualEffectView fallback, do NOT replace window.contentView.
+        // Replacing contentView can break traffic light rendering with
+        // `.fullSizeContentView` + `titlebarAppearsTransparent`.
+        glassView.translatesAutoresizingMaskIntoConstraints = false
+        originalContentView.addSubview(glassView, positioned: .below, relativeTo: nil)
+
+        NSLayoutConstraint.activate([
+            glassView.topAnchor.constraint(equalTo: originalContentView.topAnchor),
+            glassView.bottomAnchor.constraint(equalTo: originalContentView.bottomAnchor),
+            glassView.leadingAnchor.constraint(equalTo: originalContentView.leadingAnchor),
+            glassView.trailingAnchor.constraint(equalTo: originalContentView.trailingAnchor)
+        ])
+
+        // Add tint overlay between glass and content
+        if let tintColor {
             let tintOverlay = NSView(frame: bounds)
             tintOverlay.translatesAutoresizingMaskIntoConstraints = false
             tintOverlay.wantsLayer = true
@@ -273,7 +288,6 @@ enum WindowGlassEffect {
             objc_setAssociatedObject(window, &tintOverlayKey, tintOverlay, .OBJC_ASSOCIATION_RETAIN)
         }
 
-        // Store reference
         objc_setAssociatedObject(window, &glassViewKey, glassView, .OBJC_ASSOCIATION_RETAIN)
     }
 
@@ -284,17 +298,15 @@ enum WindowGlassEffect {
     }
 
     private static func updateTint(on glassView: NSView, color: NSColor?, window: NSWindow) {
-        // For NSGlassEffectView, use setTintColor:
-        if glassView.className == "NSGlassEffectView" {
-            let selector = NSSelectorFromString("setTintColor:")
-            if glassView.responds(to: selector) {
-                glassView.perform(selector, with: color)
-            }
-        } else {
-            // For NSVisualEffectView fallback, update the tint overlay
-            if let tintOverlay = objc_getAssociatedObject(window, &tintOverlayKey) as? NSView {
-                tintOverlay.layer?.backgroundColor = color?.cgColor
-            }
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), let glass = glassView as? NSGlassEffectView {
+            glass.tintColor = color
+            return
+        }
+        #endif
+        // For NSVisualEffectView fallback, update the tint overlay
+        if let tintOverlay = objc_getAssociatedObject(window, &tintOverlayKey) as? NSView {
+            tintOverlay.layer?.backgroundColor = color?.cgColor
         }
     }
 
@@ -303,7 +315,7 @@ enum WindowGlassEffect {
             return
         }
 
-        if glassView.className == "NSGlassEffectView" {
+        if isGlassEffectView(glassView) {
             if let originalContentView = objc_getAssociatedObject(window, &originalContentViewKey) as? NSView {
                 originalContentView.removeFromSuperview()
                 originalContentView.translatesAutoresizingMaskIntoConstraints = true

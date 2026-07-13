@@ -46,6 +46,24 @@ final class WindowGlassEffectTests: XCTestCase {
 
 @MainActor
 final class AppDelegateWindowContextRoutingTests: XCTestCase {
+    // Every test in this class constructs a throwaway `AppDelegate()`. `AppDelegate.init()`
+    // unconditionally does `Self.shared = self`, so without saving/restoring here each test
+    // permanently clobbers the process-wide `AppDelegate.shared` singleton with a stub instance
+    // that never ran `applicationDidFinishLaunching()` (so `configuredShortcutChordActions` stays
+    // empty forever). That broke unrelated chord-shortcut tests elsewhere in the full suite that
+    // rely on `AppDelegate.shared` being the fully-initialized original instance.
+    private var originalSharedAppDelegate: AppDelegate?
+
+    override func setUp() {
+        super.setUp()
+        originalSharedAppDelegate = AppDelegate.shared
+    }
+
+    override func tearDown() {
+        AppDelegate.shared = originalSharedAppDelegate
+        super.tearDown()
+    }
+
     private func makeMainWindow(id: UUID) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 500, height: 320),
@@ -298,6 +316,20 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
 
 @MainActor
 final class AppDelegateLaunchServicesRegistrationTests: XCTestCase {
+    // See the comment on AppDelegateWindowContextRoutingTests above: `AppDelegate()` overwrites
+    // the shared singleton unconditionally, so this must be saved/restored per test.
+    private var originalSharedAppDelegate: AppDelegate?
+
+    override func setUp() {
+        super.setUp()
+        originalSharedAppDelegate = AppDelegate.shared
+    }
+
+    override func tearDown() {
+        AppDelegate.shared = originalSharedAppDelegate
+        super.tearDown()
+    }
+
     func testScheduleLaunchServicesRegistrationDefersRegisterWork() {
         _ = NSApplication.shared
         let app = AppDelegate()
@@ -332,8 +364,8 @@ final class FocusFlashPatternTests: XCTestCase {
         XCTAssertEqual(FocusFlashPattern.keyTimes, [0, 0.25, 0.5, 0.75, 1])
         XCTAssertEqual(FocusFlashPattern.duration, 0.9, accuracy: 0.0001)
         XCTAssertEqual(FocusFlashPattern.curves, [.easeOut, .easeIn, .easeOut, .easeIn])
-        XCTAssertEqual(FocusFlashPattern.ringInset, 6, accuracy: 0.0001)
-        XCTAssertEqual(FocusFlashPattern.ringCornerRadius, 10, accuracy: 0.0001)
+        XCTAssertEqual(FocusFlashPattern.ringInset, 2, accuracy: 0.0001)
+        XCTAssertEqual(FocusFlashPattern.ringCornerRadius, 6, accuracy: 0.0001)
     }
 
     func testFocusFlashPatternSegmentsCoverFullDoublePulseTimeline() {

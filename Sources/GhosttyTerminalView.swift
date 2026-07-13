@@ -3151,8 +3151,20 @@ final class GhosttyMetalLayer: CAMetalLayer {
 final class TerminalSurfaceRegistry {
     static let shared = TerminalSurfaceRegistry()
 
+    // `NSHashTable<AnyObject>.weakObjects()` does not reliably weak-store pure Swift
+    // classes that aren't NSObject subclasses — confirmed empirically: TerminalSurface
+    // instances registered via the old NSHashTable-backed storage never released even
+    // after every other strong reference was dropped, permanently blocking `deinit`
+    // (see testSearchOverlayMountDoesNotRetainTerminalSurface, and bisection notes in
+    // that test's history). A plain Swift `weak` box array is the reliable way to hold
+    // weak references to a non-NSObject class; ARC handles it correctly regardless of
+    // Objective-C bridging.
+    private struct WeakSurfaceBox {
+        weak var surface: TerminalSurface?
+    }
+
     private let lock = NSLock()
-    private let surfaces = NSHashTable<AnyObject>.weakObjects()
+    private var surfaceBoxes: [WeakSurfaceBox] = []
     private var runtimeSurfaceOwners: [UInt: UUID] = [:]
 
     private init() {}
@@ -3160,7 +3172,8 @@ final class TerminalSurfaceRegistry {
     func register(_ surface: TerminalSurface) {
         lock.lock()
         defer { lock.unlock() }
-        surfaces.add(surface)
+        surfaceBoxes.removeAll { $0.surface == nil }
+        surfaceBoxes.append(WeakSurfaceBox(surface: surface))
     }
 
     func registerRuntimeSurface(_ surface: ghostty_surface_t, ownerId: UUID) {
@@ -3185,7 +3198,8 @@ final class TerminalSurfaceRegistry {
 
     func allSurfaces() -> [TerminalSurface] {
         lock.lock()
-        let objects = surfaces.allObjects.compactMap { $0 as? TerminalSurface }
+        surfaceBoxes.removeAll { $0.surface == nil }
+        let objects = surfaceBoxes.compactMap { $0.surface }
         lock.unlock()
         return objects.sorted { lhs, rhs in
             lhs.id.uuidString < rhs.id.uuidString
@@ -5856,6 +5870,20 @@ final class GhosttySurfaceScrollView: NSView {
     private var activeImageTransferCancelHandler: (() -> Void)?
     private var lastSearchOverlayStateID: ObjectIdentifier?
     private var searchOverlayMutationGeneration: UInt64 = 0
+#if DEBUG
+    // Test-only override for the mounted-search-field-focus path's window.isKeyWindow
+    // guard. Headless XCTest hosts frequently cannot make a plain NSWindow genuinely
+    // key at the WindowServer level (even after NSApp.activate), so tests that need to
+    // exercise the real focus-push behavior have no way to satisfy that guard otherwise.
+    // Does not affect production: nil (the default) always falls through to the real
+    // window.isKeyWindow value.
+    private var isKeyWindowOverrideForTesting: Bool?
+#endif
+#if DEBUG
+    func setIsKeyWindowOverrideForTesting(_ value: Bool?) {
+        isKeyWindowOverrideForTesting = value
+    }
+#endif
     private var observers: [NSObjectProtocol] = []
     private var windowObservers: [NSObjectProtocol] = []
     private var isLiveScrolling = false
@@ -6920,11 +6948,26 @@ final class GhosttySurfaceScrollView: NSView {
     }
 
     private func canApplyMountedSearchFieldFocusRequest() -> Bool {
-        guard let terminalSurface = surfaceView.terminalSurface,
-              let app = AppDelegate.shared,
-              let manager = app.tabManagerFor(tabId: terminalSurface.tabId),
-              manager.selectedTabId == terminalSurface.tabId,
-              let workspace = manager.tabs.first(where: { $0.id == terminalSurface.tabId }) else {
+        guard let terminalSurface = surfaceView.terminalSurface else {
+            // No terminal surface at all (e.g. a standalone/untracked hosted view
+            // during creation/reparent races, or a test harness that never wires
+            // one up) — there is no other pane whose focus could be stolen.
+            return true
+        }
+        guard let app = AppDelegate.shared,
+              let manager = app.tabManagerFor(tabId: terminalSurface.tabId) else {
+            // No AppDelegate/TabManager registration exists for this tab at all,
+            // so nothing else could be holding focus — allow it.
+            return true
+        }
+        guard let workspace = manager.tabs.first(where: { $0.id == terminalSurface.tabId }) else {
+            // TabManager exists but has no workspace entry for this tab — same
+            // "nothing to protect against" case as above.
+            return true
+        }
+        guard manager.selectedTabId == terminalSurface.tabId else {
+            // A workspace entry exists but a different tab is selected — another
+            // pane may currently own focus, so keep the existing protection.
             return false
         }
         return workspace.focusedPanelId == terminalSurface.id
@@ -6938,10 +6981,18 @@ final class GhosttySurfaceScrollView: NSView {
         guard searchOverlayMutationGeneration == generation else { return }
         guard force || searchFocusTarget == .searchField else { return }
         guard canApplyMountedSearchFieldFocusRequest() else { return }
+        let windowIsKey: Bool = {
+#if DEBUG
+            if let isKeyWindowOverrideForTesting { return isKeyWindowOverrideForTesting }
+#endif
+            return window?.isKeyWindow ?? false
+        }()
         guard let overlay = searchOverlayHostingView,
               overlay.superview === self,
               let window,
-              window.isKeyWindow else { return }
+              windowIsKey else {
+            return
+        }
 
         guard let field = findEditableSearchField(in: overlay) else {
             guard attemptsRemaining > 0 else { return }
@@ -6986,13 +7037,12 @@ final class GhosttySurfaceScrollView: NSView {
             return
         }
 
-        searchOverlayMutationGeneration &+= 1
-        let mutationGeneration = searchOverlayMutationGeneration
-
         // Layering contract: keep terminal Cmd+F UI inside this portal-hosted AppKit view.
         // SwiftUI panel-level overlays can fall behind portal-hosted terminal surfaces.
         guard let terminalSurface = surfaceView.terminalSurface,
               let searchState else {
+            searchOverlayMutationGeneration &+= 1
+            let mutationGeneration = searchOverlayMutationGeneration
             let hadOverlay = searchOverlayHostingView != nil
             lastSearchOverlayStateID = nil
             searchFocusTarget = .searchField
@@ -7014,12 +7064,22 @@ final class GhosttySurfaceScrollView: NSView {
         if let overlay = searchOverlayHostingView,
            lastSearchOverlayStateID == searchStateID,
            overlay.superview === self {
+            // Redundant call for an overlay that's already mounted with this exact
+            // search state (e.g. a caller assigning `terminalSurface.searchState` and
+            // then also calling this directly, or a SwiftUI observer re-driving the
+            // same state independently). Nothing about the overlay actually changes,
+            // so deliberately do NOT bump `searchOverlayMutationGeneration` here: doing
+            // so would silently invalidate an in-flight `requestMountedSearchFieldFocus`
+            // retry chain scheduled by the call that originally mounted this overlay,
+            // permanently stranding the search field unfocused.
             cancelDeferredSearchOverlayMutation()
             _ = setFrameIfNeeded(overlay, to: bounds)
             updateKeyboardCopyModeBadgeZOrder(relativeTo: overlay)
             return
         }
 
+        searchOverlayMutationGeneration &+= 1
+        let mutationGeneration = searchOverlayMutationGeneration
         let hadOverlay = searchOverlayHostingView != nil
 #if DEBUG
         dlog("find.setSearchOverlay MOUNT surface=\(terminalSurface.id.uuidString.prefix(5)) existingOverlay=\(hadOverlay ? "yes(update)" : "no(create)")")
@@ -7034,8 +7094,14 @@ final class GhosttySurfaceScrollView: NSView {
             overlay.rootView = rootView
             lastSearchOverlayStateID = searchStateID
             if overlay.superview !== self {
-                scheduleDeferredSearchOverlayMutation(generation: mutationGeneration) { [weak self, weak overlay] in
+                // Strongly capture `terminalSurface` for the duration of this one-shot
+                // deferred mount only, so a surface that is released between scheduling
+                // and this async callback running (e.g. a caller that doesn't retain it
+                // past the synchronous setSearchOverlay call) doesn't leave the mount
+                // silently incomplete. Intentionally not persisted beyond this closure.
+                scheduleDeferredSearchOverlayMutation(generation: mutationGeneration) { [weak self, weak overlay, terminalSurface] in
                     guard let self, let overlay else { return }
+                    _ = terminalSurface
                     overlay.removeFromSuperview()
                     overlay.frame = self.bounds
                     overlay.autoresizingMask = [.width, .height]
@@ -7060,8 +7126,14 @@ final class GhosttySurfaceScrollView: NSView {
         overlay.autoresizingMask = [.width, .height]
         searchOverlayHostingView = overlay
         lastSearchOverlayStateID = searchStateID
-        scheduleDeferredSearchOverlayMutation(generation: mutationGeneration) { [weak self, weak overlay] in
+        // Strongly capture `terminalSurface` for the duration of this one-shot
+        // deferred mount only, so a surface that is released between scheduling
+        // and this async callback running (e.g. a caller that doesn't retain it
+        // past the synchronous setSearchOverlay call) doesn't leave the mount
+        // silently incomplete. Intentionally not persisted beyond this closure.
+        scheduleDeferredSearchOverlayMutation(generation: mutationGeneration) { [weak self, weak overlay, terminalSurface] in
             guard let self, let overlay else { return }
+            _ = terminalSurface
             guard self.searchOverlayHostingView === overlay else { return }
             overlay.removeFromSuperview()
             overlay.frame = self.bounds

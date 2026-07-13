@@ -3213,8 +3213,7 @@ final class Workspace: Identifiable, ObservableObject {
             // by `surface` (the TerminalSurface) — ARC must not release it while
             // ghostty_surface_inherited_config or programaCurrentSurfaceFontSizePoints
             // is still reading through the pointer.
-            let surface = terminalPanel.surface
-            guard let sourceSurface = surface.surface else { continue }
+            guard let sourceSurface = terminalPanel.surface.liveSurfaceForGhosttyAccess(reason: "inheritedTerminalConfig") else { continue }
             var config = programaInheritedSurfaceConfig(
                 sourceSurface: sourceSurface,
                 context: GHOSTTY_SURFACE_CONTEXT_SPLIT
@@ -3228,7 +3227,7 @@ final class Workspace: Identifiable, ObservableObject {
                 terminalInheritanceFontPointsByPanelId[terminalPanel.id] = rootedFontPoints
             }
             // Prevent ARC from releasing panel/surface before the C calls above complete.
-            withExtendedLifetime((terminalPanel, surface)) {}
+            withExtendedLifetime((terminalPanel, terminalPanel.surface)) {}
             rememberTerminalConfigInheritanceSource(terminalPanel)
             if config.fontSize > 0 {
                 lastTerminalConfigInheritanceFontPoints = config.fontSize
@@ -3597,8 +3596,11 @@ final class Workspace: Identifiable, ObservableObject {
         setPreferredBrowserProfileID(browserPanel.profileID)
 
         // Keyboard/browser-open paths want "new tab at end" regardless of global new-tab placement.
+        // `reorderTab`'s toIndex is an insertion index into the pre-move array (0...count), so the
+        // "end" position is `count`, not `count - 1` (which is the last tab's *current* index and
+        // is treated as a same-position no-op once the moved tab's own removal is accounted for).
         if insertAtEnd {
-            let targetIndex = max(0, bonsplitController.tabs(inPane: paneId).count - 1)
+            let targetIndex = bonsplitController.tabs(inPane: paneId).count
             _ = bonsplitController.reorderTab(newTabId, toIndex: targetIndex)
         }
 
