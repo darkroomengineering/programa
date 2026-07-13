@@ -3456,6 +3456,34 @@ final class TerminalSurface: Identifiable, ObservableObject {
         return merged
     }
 
+    static func applyManagedFishStartupEnvironment(
+        integrationDir: String,
+        to environment: inout [String: String],
+        protectedKeys: inout Set<String>
+    ) {
+        let normalizedIntegrationDir = URL(fileURLWithPath: integrationDir, isDirectory: true)
+            .standardizedFileURL
+            .path
+        let integrationFile = URL(fileURLWithPath: normalizedIntegrationDir, isDirectory: true)
+            .appendingPathComponent("fish/config.fish")
+            .path
+
+        environment["PROGRAMA_FISH_INTEGRATION_FILE"] = integrationFile
+        environment["PROGRAMA_FISH_USER_CONFIG_ALREADY_LOADED"] = "1"
+        protectedKeys.insert("PROGRAMA_FISH_INTEGRATION_FILE")
+        protectedKeys.insert("PROGRAMA_FISH_USER_CONFIG_ALREADY_LOADED")
+    }
+
+    static func managedFishShellCommand(shell: String) -> String {
+        let initCommand = #"source "$PROGRAMA_FISH_INTEGRATION_FILE""#
+        return "\(shellSingleQuoted(shell)) -il --init-command \(shellSingleQuoted(initCommand))"
+    }
+
+    private static func shellSingleQuoted(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "'", with: "'\\''")
+        return "'\(escaped)'"
+    }
+
     func isAttached(to view: GhosttyNSView) -> Bool {
         attachedView === view && surface != nil
     }
@@ -3941,7 +3969,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
         let scaleFactors = scaleFactors(for: view)
 
-        let baseConfig = configTemplate ?? ProgramaSurfaceConfigTemplate()
+        var baseConfig = configTemplate ?? ProgramaSurfaceConfigTemplate()
         var surfaceConfig = ghostty_surface_config_new()
         surfaceConfig.font_size = baseConfig.fontSize
         surfaceConfig.wait_after_command = baseConfig.waitAfterCommand
@@ -4084,6 +4112,15 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 unset _programa_ghostty_bash _programa_bash_integration; \
                 if declare -F _programa_prompt_command >/dev/null 2>&1; then _programa_prompt_command; fi
                 """)
+            } else if shellName == "fish" {
+                Self.applyManagedFishStartupEnvironment(
+                    integrationDir: integrationDir,
+                    to: &env,
+                    protectedKeys: &protectedStartupEnvironmentKeys
+                )
+                if baseConfig.command?.isEmpty != false {
+                    baseConfig.command = Self.managedFishShellCommand(shell: shell)
+                }
             }
         }
         env = Self.mergedStartupEnvironment(
