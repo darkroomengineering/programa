@@ -1366,9 +1366,14 @@ final class UpdateTitlebarAccessoryController {
 
         pendingAttachRetries.removeValue(forKey: ObjectIdentifier(window))
 
-        // Don't remove accessories in minimal mode. TitlebarControlsAccessoryViewController
-        // hides itself and zeros its frame via its own UserDefaults observer. Keeping it
-        // attached avoids fragile remove/re-add cycles on mode toggle.
+        // Minimal mode has no titlebar chrome at all, so the accessory controller
+        // must be removed outright rather than left attached-but-hidden: a hidden
+        // accessory view controller still participates in titlebar layout/safe-area
+        // calculations on some window states.
+        guard WorkspacePresentationModeSettings.mode() != .minimal else {
+            removeAccessoryIfPresent(from: window)
+            return
+        }
 
         guard !attachedWindows.contains(window) else { return }
 

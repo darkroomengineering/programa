@@ -7023,13 +7023,12 @@ final class GhosttySurfaceScrollView: NSView {
             return
         }
 
-        searchOverlayMutationGeneration &+= 1
-        let mutationGeneration = searchOverlayMutationGeneration
-
         // Layering contract: keep terminal Cmd+F UI inside this portal-hosted AppKit view.
         // SwiftUI panel-level overlays can fall behind portal-hosted terminal surfaces.
         guard let terminalSurface = surfaceView.terminalSurface,
               let searchState else {
+            searchOverlayMutationGeneration &+= 1
+            let mutationGeneration = searchOverlayMutationGeneration
             let hadOverlay = searchOverlayHostingView != nil
             lastSearchOverlayStateID = nil
             searchFocusTarget = .searchField
@@ -7051,12 +7050,22 @@ final class GhosttySurfaceScrollView: NSView {
         if let overlay = searchOverlayHostingView,
            lastSearchOverlayStateID == searchStateID,
            overlay.superview === self {
+            // Redundant call for an overlay that's already mounted with this exact
+            // search state (e.g. a caller assigning `terminalSurface.searchState` and
+            // then also calling this directly, or a SwiftUI observer re-driving the
+            // same state independently). Nothing about the overlay actually changes,
+            // so deliberately do NOT bump `searchOverlayMutationGeneration` here: doing
+            // so would silently invalidate an in-flight `requestMountedSearchFieldFocus`
+            // retry chain scheduled by the call that originally mounted this overlay,
+            // permanently stranding the search field unfocused.
             cancelDeferredSearchOverlayMutation()
             _ = setFrameIfNeeded(overlay, to: bounds)
             updateKeyboardCopyModeBadgeZOrder(relativeTo: overlay)
             return
         }
 
+        searchOverlayMutationGeneration &+= 1
+        let mutationGeneration = searchOverlayMutationGeneration
         let hadOverlay = searchOverlayHostingView != nil
 #if DEBUG
         dlog("find.setSearchOverlay MOUNT surface=\(terminalSurface.id.uuidString.prefix(5)) existingOverlay=\(hadOverlay ? "yes(update)" : "no(create)")")
