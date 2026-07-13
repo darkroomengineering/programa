@@ -2383,6 +2383,33 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
             "Suppressed reparent focus should not immediately flip the Ghostty focus bit"
         )
 
+        // newTerminalSplit's initial selection hand-off to rightPanel schedules its own
+        // deferred first-responder/active-state reconciliation for leftPanel (see
+        // scheduleAutomaticFirstResponderApply / resignOwnedFirstResponderIfNeeded in
+        // GhosttyTerminalView.swift, reason="setActive"). That work is queued on the main
+        // queue and normally drains almost immediately, well before this test's manual
+        // makeFirstResponder override below. Under a full serial suite run the main queue
+        // can carry a backlog of unpredictable, varying depth from hundreds of prior
+        // tests, so this can fire anywhere from immediately to well over half a second
+        // late — landing in between our override and clearSuppressReparentFocus() and
+        // silently resigning leftSurfaceView's first-responder status back to the window
+        // (confirmed via temporary diagnostic logging: firstResponder ends up the NSWindow
+        // itself, and `focus.surface.resign ... reason=setActive(false)` fires immediately
+        // beforehand). A fixed-duration drain isn't reliable headroom for this since the
+        // backlog depth varies, so retry the override until it demonstrably survives
+        // several consecutive RunLoop pumps in a row, instead of guessing a duration.
+        var stableStreak = 0
+        var attempts = 0
+        while stableStreak < 3 && attempts < 60 {
+            attempts += 1
+            XCTAssertTrue(window.makeFirstResponder(leftSurfaceView))
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            stableStreak = leftPanel.hostedView.isSurfaceViewFirstResponder() ? stableStreak + 1 : 0
+        }
+        XCTAssertTrue(
+            leftPanel.hostedView.isSurfaceViewFirstResponder(),
+            "Expected leftSurfaceView to hold first responder stably before exercising clearSuppressReparentFocus"
+        )
         leftPanel.hostedView.clearSuppressReparentFocus()
         let focusRecovered = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in
@@ -2732,11 +2759,14 @@ final class WorkspaceBrowserProfileSelectionTests: XCTestCase {
 @MainActor
 final class WorkspacePanelGitBranchTests: XCTestCase {
     private func drainMainQueue() {
+        // A fixed 1s wait isn't reliable headroom for this main-queue turn under a full
+        // serial suite run, where the queue can carry a real backlog from hundreds of
+        // prior tests' pending async work.
         let expectation = expectation(description: "drain main queue")
         DispatchQueue.main.async {
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
     }
 
     func testBrowserSplitWithFocusFalsePreservesOriginalFocusedPanel() {

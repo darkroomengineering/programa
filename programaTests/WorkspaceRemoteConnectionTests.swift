@@ -98,7 +98,11 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
                 "-ilc",
                 "print -r -- \"$HISTFILE\"",
             ],
-            timeout: 5
+            // Real /bin/zsh subprocess spawn + shell startup, not a fixed in-test dispatch
+            // delay. Under a full serial suite run with heavy CPU contention from
+            // hundreds of prior tests (some spawning their own subprocesses), process
+            // scheduling and shell startup can legitimately take longer than 5s.
+            timeout: 20
         )
 
         XCTAssertFalse(result.timedOut, result.stderr)
@@ -136,7 +140,9 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
                 "-c",
                 WorkspaceRemoteSessionController.remoteRelayMetadataCleanupScript(relayPort: 64008),
             ],
-            timeout: 5
+            // See timeout comment in runRelayZshHistfile above: real subprocess spawn,
+            // not a fixed dispatch delay — needs headroom under full-suite CPU load.
+            timeout: 20
         )
 
         XCTAssertFalse(result.timedOut, result.stderr)
@@ -171,7 +177,9 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
                 "-c",
                 WorkspaceRemoteSessionController.remoteRelayMetadataCleanupScript(relayPort: 64009),
             ],
-            timeout: 5
+            // See timeout comment in runRelayZshHistfile above: real subprocess spawn,
+            // not a fixed dispatch delay — needs headroom under full-suite CPU load.
+            timeout: 20
         )
 
         XCTAssertFalse(result.timedOut, result.stderr)

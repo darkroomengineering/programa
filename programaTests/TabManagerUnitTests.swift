@@ -16,11 +16,14 @@ import UserNotifications
 let lastSurfaceCloseShortcutDefaultsKey = "closeWorkspaceOnLastSurfaceShortcut"
 
 func drainMainQueue() {
+    // A fixed 1s wait isn't reliable headroom for this main-queue turn under a full
+    // serial suite run, where the queue can carry a real backlog from hundreds of prior
+    // tests' pending async work.
     let expectation = XCTestExpectation(description: "drain main queue")
     DispatchQueue.main.async {
         expectation.fulfill()
     }
-    XCTWaiter().wait(for: [expectation], timeout: 1.0)
+    XCTWaiter().wait(for: [expectation], timeout: 5.0)
 }
 
 @discardableResult
@@ -2143,10 +2146,15 @@ final class TabManagerReopenClosedBrowserFocusTests: XCTestCase {
     }
 
     private func drainMainQueue() {
+        // A single DispatchQueue.main.async block is guaranteed by FIFO ordering to run
+        // after everything already enqueued on the main queue, but a fixed 1s wait isn't
+        // reliable headroom for that turn to actually arrive under a full serial suite
+        // run, where the main queue can carry a real backlog from hundreds of prior
+        // tests' pending async work.
         let expectation = expectation(description: "drain main queue")
         DispatchQueue.main.async {
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
     }
 }

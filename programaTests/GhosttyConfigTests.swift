@@ -1642,7 +1642,10 @@ final class NotificationBurstCoalescerTests: XCTestCase {
             }
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        // A fixed 1s timeout isn't reliable headroom for this 0.01s-delay coalescer
+        // under a full serial suite run, where GCD timer firing can be pushed back by
+        // system load/backlog from hundreds of prior tests.
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(flushCount, 1)
     }
 
@@ -1661,7 +1664,7 @@ final class NotificationBurstCoalescerTests: XCTestCase {
             }
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(value, 2)
     }
 
@@ -1684,7 +1687,7 @@ final class NotificationBurstCoalescerTests: XCTestCase {
             }
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(flushCount, 2)
     }
 }
@@ -1714,7 +1717,7 @@ final class GhosttyDefaultBackgroundNotificationDispatcherTests: XCTestCase {
             dispatcher.signal(backgroundColor: light, opacity: 0.75, eventId: 2, source: "test.light")
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(postedUserInfos.count, 1)
         XCTAssertEqual(
             (postedUserInfos[0][GhosttyNotificationKey.backgroundColor] as? NSColor)?.hexString(),
@@ -1762,7 +1765,7 @@ final class GhosttyDefaultBackgroundNotificationDispatcherTests: XCTestCase {
             }
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 5.0)
         XCTAssertEqual(postedHexes, ["#272822", "#FDF6E3"])
     }
 

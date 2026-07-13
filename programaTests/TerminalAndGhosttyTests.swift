@@ -1523,9 +1523,21 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         let pointInWindow = surfaceView.convert(NSPoint(x: 20, y: 20), to: nil)
         let event = makeMouseEvent(type: .leftMouseDown, location: pointInWindow, window: window)
         surfaceView.mouseDown(with: event)
-        let drained = expectation(description: "flash drained")
-        DispatchQueue.main.async { drained.fulfill() }
-        wait(for: [drained], timeout: 1.0)
+        // dismissNotificationOnDirectInteraction marks the notification read
+        // synchronously, but the flash itself is pushed via triggerFlash's
+        // DispatchQueue.main.async (see GhosttySurfaceScrollView.triggerFlash). A single
+        // `DispatchQueue.main.async` "drained" probe is guaranteed to run after that work
+        // by FIFO ordering on the main queue, but a fixed 1s wait isn't reliable headroom
+        // under a full serial suite run, where the main queue can carry a real backlog of
+        // async work queued by hundreds of prior tests — poll the actual flash count
+        // instead of a generic queue-drain probe.
+        let drained = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                GhosttySurfaceScrollView.flashCount(for: terminalPanel.id) >= 1
+            },
+            object: NSObject()
+        )
+        wait(for: [drained], timeout: 5.0)
 
         XCTAssertFalse(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: terminalPanel.id))
         XCTAssertEqual(GhosttySurfaceScrollView.flashCount(for: terminalPanel.id), 1)
@@ -1593,9 +1605,16 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
 
         let event = makeKeyEvent(characters: "", keyCode: 122, window: window)
         surfaceView.keyDown(with: event)
-        let drained = expectation(description: "flash drained")
-        DispatchQueue.main.async { drained.fulfill() }
-        wait(for: [drained], timeout: 1.0)
+        // See the matching comment in testTerminalMouseDownDismissesUnreadWhenSurfaceIsAlreadyFirstResponder:
+        // poll the real flash count instead of a generic "drained" queue probe, since a
+        // fixed 1s wait isn't reliable headroom under a full serial suite run.
+        let drained = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                GhosttySurfaceScrollView.flashCount(for: terminalPanel.id) >= 1
+            },
+            object: NSObject()
+        )
+        wait(for: [drained], timeout: 5.0)
 
         XCTAssertFalse(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: terminalPanel.id))
         XCTAssertEqual(GhosttySurfaceScrollView.flashCount(for: terminalPanel.id), 1)
@@ -1644,13 +1663,19 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         let event = makeKeyEvent(characters: "a", keyCode: 0, window: window)
         surfaceView.keyDown(with: event)
 
+        // requestBackgroundSurfaceStartIfNeeded recreates a real runtime Ghostty surface
+        // (spawns a shell subprocess and initializes a PTY), which is genuine async work
+        // rather than a single DispatchQueue.main.async hop. Under a full serial suite run
+        // with many concurrent/queued subprocess spawns from other tests, this can
+        // legitimately take longer than 1s — give it more headroom instead of asserting
+        // on a tight timeout.
         let recovered = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in
                 surface.surface != nil
             },
             object: NSObject()
         )
-        wait(for: [recovered], timeout: 1.0)
+        wait(for: [recovered], timeout: 5.0)
 
         XCTAssertNotNil(
             surface.surface,
@@ -1735,13 +1760,17 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
             "Responder loss after a missing-surface keyDown should clear desired Ghostty focus before recovery completes"
         )
 
+        // See the matching comment in testKeyDownRecoversReleasedSurfaceWhileHostedViewIsDetached:
+        // this recreates a real runtime Ghostty surface (subprocess spawn + PTY init),
+        // which can legitimately take longer than 1s under a full serial suite run's CPU
+        // contention.
         let recovered = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in
                 surface.surface != nil
             },
             object: NSObject()
         )
-        wait(for: [recovered], timeout: 1.0)
+        wait(for: [recovered], timeout: 5.0)
 
         XCTAssertNotNil(surface.surface, "Expected missing-surface recovery to still recreate the runtime surface")
         XCTAssertFalse(
@@ -2499,6 +2528,17 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
             return
         }
 
+        // requestMountedSearchFieldFocus's first makeFirstResponder attempt races the
+        // same deferred-mutation tick as the overlay mount observed above; if it doesn't
+        // land, production retries up to 4 more times, 30ms apart (see
+        // requestMountedSearchFieldFocus). Under a full serial suite run the main queue
+        // can carry enough backlog that the very first attempt misses and needs one of
+        // those retries — poll for the real outcome instead of asserting immediately,
+        // matching the "search overlay to mount" wait above.
+        waitUntil(timeout: 3.0, description: "search field to become first responder") {
+            self.firstResponderOwnsTextField(window.firstResponder, textField: searchField)
+        }
+
         XCTAssertTrue(
             firstResponderOwnsTextField(window.firstResponder, textField: searchField),
             "Deferred search overlay attach should still move focus into the find field"
@@ -2902,11 +2942,14 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
     }
 
     private func drainMainQueue() {
+        // A fixed 1s wait isn't reliable headroom for this main-queue turn under a full
+        // serial suite run, where the queue can carry a real backlog from hundreds of
+        // prior tests' pending async work.
         let expectation = XCTestExpectation(description: "drain main queue")
         DispatchQueue.main.async {
             expectation.fulfill()
         }
-        XCTWaiter().wait(for: [expectation], timeout: 1.0)
+        XCTWaiter().wait(for: [expectation], timeout: 5.0)
     }
 
     func testPortalHostInstallsAboveContentViewForVisibility() {
@@ -3355,7 +3398,18 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
         )
 
         TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronizeForAllWindows()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        // scheduleExternalGeometrySynchronizeForAllWindows debounces through two nested
+        // DispatchQueue.main.async hops (see Sources/TerminalWindowPortal.swift) rather
+        // than firing synchronously. A fixed 0.3s RunLoop spin isn't reliable headroom for
+        // those hops under a full serial suite run with heavy main-queue backlog from
+        // hundreds of prior tests — poll instead.
+        let staleClearedExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                TerminalWindowPortalRegistry.terminalViewAtWindowPoint(originalWindowPoint, in: window) == nil
+            },
+            object: NSObject()
+        )
+        wait(for: [staleClearedExpectation], timeout: 5.0)
 
         XCTAssertNil(
             TerminalWindowPortalRegistry.terminalViewAtWindowPoint(originalWindowPoint, in: window),
@@ -3730,7 +3784,17 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
         )
 
         TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: firstWindow)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        // Same debounced double-async-hop mechanism as
+        // testScheduledExternalGeometrySyncRefreshesAncestorLayoutShift above — poll
+        // instead of a fixed 0.3s spin, since that isn't reliable headroom under a full
+        // serial suite run's main-queue backlog.
+        let retiredClearedExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                TerminalWindowPortalRegistry.terminalViewAtWindowPoint(retiredFirstPoint, in: firstWindow) == nil
+            },
+            object: NSObject()
+        )
+        wait(for: [retiredClearedExpectation], timeout: 5.0)
 
         XCTAssertNil(
             TerminalWindowPortalRegistry.terminalViewAtWindowPoint(retiredFirstPoint, in: firstWindow),

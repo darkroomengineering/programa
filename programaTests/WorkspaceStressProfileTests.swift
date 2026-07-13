@@ -218,7 +218,9 @@ final class WorkspaceStressProfileTests: XCTestCase {
     }
 
     private func drainMainQueue() {
-        let deadline = Date(timeIntervalSinceNow: 1.0)
+        // A fixed 1s deadline isn't reliable headroom for this main-queue turn under a
+        // full serial suite run's backlog from hundreds of prior tests.
+        let deadline = Date(timeIntervalSinceNow: 5.0)
         var drained = false
         DispatchQueue.main.async {
             drained = true
