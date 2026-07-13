@@ -3151,8 +3151,20 @@ final class GhosttyMetalLayer: CAMetalLayer {
 final class TerminalSurfaceRegistry {
     static let shared = TerminalSurfaceRegistry()
 
+    // `NSHashTable<AnyObject>.weakObjects()` does not reliably weak-store pure Swift
+    // classes that aren't NSObject subclasses — confirmed empirically: TerminalSurface
+    // instances registered via the old NSHashTable-backed storage never released even
+    // after every other strong reference was dropped, permanently blocking `deinit`
+    // (see testSearchOverlayMountDoesNotRetainTerminalSurface, and bisection notes in
+    // that test's history). A plain Swift `weak` box array is the reliable way to hold
+    // weak references to a non-NSObject class; ARC handles it correctly regardless of
+    // Objective-C bridging.
+    private struct WeakSurfaceBox {
+        weak var surface: TerminalSurface?
+    }
+
     private let lock = NSLock()
-    private let surfaces = NSHashTable<AnyObject>.weakObjects()
+    private var surfaceBoxes: [WeakSurfaceBox] = []
     private var runtimeSurfaceOwners: [UInt: UUID] = [:]
 
     private init() {}
@@ -3160,7 +3172,8 @@ final class TerminalSurfaceRegistry {
     func register(_ surface: TerminalSurface) {
         lock.lock()
         defer { lock.unlock() }
-        surfaces.add(surface)
+        surfaceBoxes.removeAll { $0.surface == nil }
+        surfaceBoxes.append(WeakSurfaceBox(surface: surface))
     }
 
     func registerRuntimeSurface(_ surface: ghostty_surface_t, ownerId: UUID) {
@@ -3185,7 +3198,8 @@ final class TerminalSurfaceRegistry {
 
     func allSurfaces() -> [TerminalSurface] {
         lock.lock()
-        let objects = surfaces.allObjects.compactMap { $0 as? TerminalSurface }
+        surfaceBoxes.removeAll { $0.surface == nil }
+        let objects = surfaceBoxes.compactMap { $0.surface }
         lock.unlock()
         return objects.sorted { lhs, rhs in
             lhs.id.uuidString < rhs.id.uuidString

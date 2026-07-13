@@ -184,13 +184,26 @@ enum BrowserThemeSettings {
         return mode
     }
 
-    static func mode(defaults: UserDefaults = .standard) -> BrowserThemeMode {
-        let resolvedMode = mode(for: defaults.string(forKey: modeKey))
-        if defaults.string(forKey: modeKey) != nil {
-            return resolvedMode
+    /// - Parameter domainName: The CFPreferences domain backing `defaults` (the app's bundle
+    ///   identifier for `.standard`, or the suite name passed to `UserDefaults(suiteName:)`).
+    ///   Used to read only the value actually PERSISTED in that domain, ignoring anything
+    ///   supplied via `UserDefaults.register(defaults:)`. Foundation applies a registered
+    ///   default across every `UserDefaults` instance in the process — not just the one
+    ///   `register(defaults:)` was called on (e.g. `BrowserPanelView`'s `.onAppear` registers
+    ///   `modeKey: defaultMode.rawValue` on `.standard`, and that default then resolves via
+    ///   `string(forKey:)`/`object(forKey:)` on any other suite too). Without filtering it out
+    ///   here, that registered default makes `modeKey` look like it was already explicitly
+    ///   chosen and permanently skips the legacy-flag migration below — for real users, not
+    ///   just isolated test suites.
+    static func mode(defaults: UserDefaults = .standard, domainName: String? = nil) -> BrowserThemeMode {
+        let resolvedDomainName = domainName ?? Bundle.main.bundleIdentifier
+        if let resolvedDomainName,
+           let persistedModeRaw = defaults.persistentDomain(forName: resolvedDomainName)?[modeKey] as? String {
+            return mode(for: persistedModeRaw)
         }
 
-        // Migrate the legacy bool toggle only when the new mode key is unset.
+        // Migrate the legacy bool toggle only when the new mode key hasn't actually been
+        // persisted yet (a registered-but-never-set default doesn't count — see above).
         if defaults.object(forKey: legacyForcedDarkModeEnabledKey) != nil {
             let migratedMode: BrowserThemeMode = defaults.bool(forKey: legacyForcedDarkModeEnabledKey) ? .dark : .system
             defaults.set(migratedMode.rawValue, forKey: modeKey)
