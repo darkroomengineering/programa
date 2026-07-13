@@ -3374,6 +3374,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
                 pc.contains("_cmux_prompt_command"),
                 "Programa's own prompt hook is missing from PROMPT_COMMAND at prompt \(i): <\(pc)>" + debug
             )
+            XCTAssertFalse(
+                pc.contains("__programa_bash_bootstrap_marker__"),
+                "bootstrap marker leaked into PROMPT_COMMAND at prompt \(i): <\(pc)>" + debug
+            )
         }
 
         let ps1Values = (1...3).map { fields["PS1_\($0)"] ?? "" }
@@ -3393,6 +3397,36 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             ps1Values[2].contains("cwd=cd-target"),
             "prompt did not pick up the new cwd after cd; final PS1=<\(ps1Values[2])>" + debug
         )
+    }
+
+    func testBashBootstrapInstallsPromptCommandWithoutUserHook() throws {
+        // No-regression guard: with no user PROMPT_COMMAND hook (plain bash,
+        // no Starship or similar prompt framework), the bootstrap must still
+        // install Programa's own prompt hook -- and must not leak its
+        // internal marker into PROMPT_COMMAND.
+        let fields = try runBashBootstrapDriver(withUserPromptHook: false)
+        let debug = "\n\nstdout:\n\(fields["__stdout__"] ?? "")\nstderr:\n\(fields["__stderr__"] ?? "")"
+
+        for i in 1...3 {
+            let pc = fields["PC_\(i)"] ?? ""
+            // Assert the observable contract (hook installed, bootstrap
+            // marker removed, no phantom hook) rather than the exact
+            // integration-internal string, so this stays green if
+            // programa-bash-integration.bash ever tweaks its PROMPT_COMMAND
+            // merge.
+            XCTAssertTrue(
+                pc.contains("_cmux_prompt_command"),
+                "plain-bash bootstrap did not install Programa's prompt hook at prompt \(i): <\(pc)>" + debug
+            )
+            XCTAssertFalse(
+                pc.contains("__programa_bash_bootstrap_marker__"),
+                "bootstrap marker leaked into PROMPT_COMMAND at prompt \(i): <\(pc)>" + debug
+            )
+            XCTAssertFalse(
+                pc.contains("starship_precmd"),
+                "unexpected starship hook in plain-bash PROMPT_COMMAND at prompt \(i): <\(pc)>" + debug
+            )
+        }
     }
 
     /// Drives `Resources/shell-integration/programa-bash-bootstrap.bash`
