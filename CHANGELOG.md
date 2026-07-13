@@ -15,6 +15,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Whole-codebase restructuring pass (internal, no behavior change): the remote-daemon stack moved out of `Workspace.swift`, browser data-import out of `BrowserPanel.swift`, v2 browser automation out of `TerminalController.swift`, UI-test harnesses out of `AppDelegate.swift`, and `TabManager`/`GhosttyNSView`/`ContentView` split into per-concern files — the largest source files shrank by 3,000–5,000 lines each, cutting incremental build times. The copy-pasted v1 telemetry-handler skeleton, agent-wrapper commands (Go and Swift), and boilerplate settings accessors were each collapsed onto single shared implementations.
 
 ### Fixed
+- `programa.json`/`cmux.json` command configs now accept `//` and `/* */` comments and trailing commas, so a hand-edited config with a note like `// dev commands` no longer fails to load with a cryptic parse error.
 - Release signing now proceeds inside-out without `--deep`, so the bundled `programa` and `ghostty` tools no longer inherit the app's camera, microphone, automation, JIT, or library-validation entitlements; the signed artifact is gated before notarization.
 - Debug, Release, and Staging reload entrypoints now prepare GhosttyKit before building; Staging uses the canonical `Programa STAGING` name and `com.darkroom.programa.staging` identity.
 - CI now retries only genuine SwiftPM resolution failures and always propagates XCTest failures, including deterministic failures reported as “0 unexpected.”
