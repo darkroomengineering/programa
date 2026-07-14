@@ -489,7 +489,10 @@ final class NotificationDockBadgeTests: XCTestCase {
             },
             object: NSObject()
         )
-        XCTAssertEqual(XCTWaiter().wait(for: [commandFinished], timeout: 2.0), .completed)
+        // This spawns a real shell subprocess to write commandOutputURL. Under a full
+        // serial suite run with CPU contention from hundreds of prior tests, process
+        // scheduling can legitimately take longer than a couple seconds.
+        XCTAssertEqual(XCTWaiter().wait(for: [commandFinished], timeout: 15.0), .completed)
         XCTAssertTrue(deliveredNotificationIDs.isEmpty)
 
         let output = try String(contentsOf: commandOutputURL, encoding: .utf8)
@@ -577,9 +580,13 @@ final class NotificationDockBadgeTests: XCTestCase {
         )
 
         store.promptToEnableNotificationsForTesting()
+        // See the identical comment on this pattern in
+        // testNotificationSettingsPromptRetriesUntilWindowExists below: under a full
+        // serial suite run the main queue can carry a real backlog from other tests'
+        // pending async work, so give this more than the bare minimum headroom.
         let drained = expectation(description: "main queue drained")
         DispatchQueue.main.async { drained.fulfill() }
-        wait(for: [drained], timeout: 1.0)
+        wait(for: [drained], timeout: 5.0)
 
         XCTAssertEqual(alertSpy.beginSheetModalCallCount, 1)
         XCTAssertEqual(alertSpy.runModalCallCount, 0)

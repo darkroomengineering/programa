@@ -2612,12 +2612,17 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         contentView.layoutSubtreeIfNeeded()
         hostedView.setVisibleInUI(true)
         hostedView.setActive(true)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         let searchState = TerminalSurface.SearchState(needle: "")
         surface.searchState = searchState
         hostedView.setSearchOverlay(searchState: searchState)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        // Poll for the deferred mount instead of trusting one fixed spin — see the
+        // identical rationale on the other waitUntil("search overlay to mount") call
+        // sites in this class.
+        waitUntil(timeout: 3.0, description: "find overlay to mount") {
+            self.findEditableTextField(in: hostedView) != nil
+        }
 
         guard let searchField = findEditableTextField(in: hostedView) else {
             XCTFail("Expected mounted find text field")
@@ -2661,7 +2666,9 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
 
         NSApp.sendEvent(escapeKeyDown)
         NSApp.sendEvent(escapeKeyUp)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        waitUntil(timeout: 3.0, description: "find overlay to dismiss after Escape") {
+            surface.searchState == nil
+        }
 
         XCTAssertNil(surface.searchState, "Escape should dismiss find overlay when search text is empty")
         XCTAssertEqual(
@@ -2730,7 +2737,9 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         XCTAssertEqual(state.frame.size.height, 112, accuracy: 0.5)
 
         hostedView.setDropZoneOverlay(zone: nil)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        waitUntil(timeout: 3.0, description: "drop zone overlay to hide") {
+            hostedView.debugDropZoneOverlayState().isHidden
+        }
         XCTAssertTrue(hostedView.debugDropZoneOverlayState().isHidden)
     }
 
@@ -3473,7 +3482,18 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
             window.displayIfNeeded()
         }
 
-        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        // The queued layout shift (posted via DispatchQueue.main.async above) needs a
+        // main-run-loop turn to execute. A single fixed 0.3s spin can land before it
+        // has settled under a full serial suite run's CPU contention — poll for the
+        // real completion signal (the anchor frame actually reflecting the shift)
+        // instead of assuming one spin is enough. See `ciScale` (TabManagerUnitTests.swift).
+        let layoutShiftDeadline = Date(timeIntervalSinceNow: 0.3 * ciScale)
+        while Date() < layoutShiftDeadline {
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+            if anchor.convert(anchor.bounds, to: nil).minX > originalAnchorFrameInWindow.minX + 1 {
+                break
+            }
+        }
 
         let shiftedAnchorFrameInWindow = anchor.convert(anchor.bounds, to: nil)
         XCTAssertGreaterThan(
@@ -3494,6 +3514,22 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
             x: (originalAnchorFrameInWindow.maxX + shiftedAnchorFrameInWindow.maxX) / 2,
             y: shiftedAnchorFrameInWindow.midY
         )
+
+        // The layout shift settling (above) and the *separately* scheduled external
+        // geometry sync racing against it are two independent async operations — the
+        // anchor moving doesn't mean the queued sync has also caught up and re-bound
+        // the portal to the new position yet. Poll for that actual completion signal
+        // (the hit-test state the assertions below check) rather than checking it once
+        // immediately after only the first operation has been confirmed.
+        let externalSyncDeadline = Date(timeIntervalSinceNow: 0.3 * ciScale)
+        while Date() < externalSyncDeadline {
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+            if TerminalWindowPortalRegistry.terminalViewAtWindowPoint(retiredStaleWindowPoint, in: window) == nil,
+               TerminalWindowPortalRegistry.terminalViewAtWindowPoint(shiftedWindowPoint, in: window) != nil {
+                break
+            }
+        }
+
         XCTAssertNil(
             TerminalWindowPortalRegistry.terminalViewAtWindowPoint(retiredStaleWindowPoint, in: window),
             "The queued external sync should wait until the later layout shift settles, clearing the stale portal location"

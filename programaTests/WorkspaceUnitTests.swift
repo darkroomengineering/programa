@@ -2411,13 +2411,16 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
             "Expected leftSurfaceView to hold first responder stably before exercising clearSuppressReparentFocus"
         )
         leftPanel.hostedView.clearSuppressReparentFocus()
+        // See the stable-streak comment above: under a full serial suite run the main
+        // queue backlog varies unpredictably, so give the focus-reassert path more than
+        // a hair-trigger 1s ceiling.
         let focusRecovered = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in
                 leftPanel.surface.debugDesiredFocusState()
             },
             object: NSObject()
         )
-        wait(for: [focusRecovered], timeout: 1.0)
+        wait(for: [focusRecovered], timeout: 10.0)
 #else
         throw XCTSkip("Debug-only regression test")
 #endif

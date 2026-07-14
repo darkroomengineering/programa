@@ -4358,7 +4358,9 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         // apart, since the SwiftUI-hosted field may not be laid out yet on the first
         // attempt). A single fixed 0.05s spin can land before that loop finishes,
         // causing rare flakes. Poll instead of assuming one spin is enough.
-        let searchFieldDeadline = Date(timeIntervalSinceNow: 2.0)
+        // See `ciScale` (TabManagerUnitTests.swift): scale the poll deadline under CI,
+        // where this retry loop can legitimately need longer than a fast local machine.
+        let searchFieldDeadline = Date(timeIntervalSinceNow: 2.0 * ciScale)
         var searchField: NSTextField?
         while Date() < searchFieldDeadline {
             RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
@@ -4397,7 +4399,17 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         }
 
         window.sendEvent(keyDown)
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        // The focus-repair path triggered by sendEvent runs asynchronously (see the
+        // searchFieldDeadline poll above for the same class of flake). A single fixed
+        // 0.05s spin can land before it completes under a full serial suite run with
+        // CPU contention from hundreds of prior tests — poll instead.
+        let repairDeadline = Date(timeIntervalSinceNow: 2.0 * ciScale)
+        while Date() < repairDeadline {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+            if firstResponderOwnsTextField(window.firstResponder, textField: searchField) {
+                break
+            }
+        }
 
         XCTAssertTrue(
             firstResponderOwnsTextField(window.firstResponder, textField: searchField),
