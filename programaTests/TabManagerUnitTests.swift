@@ -526,7 +526,10 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
 
         XCTAssertNotEqual(manager.selectedTabId, backgroundWorkspace.id)
         XCTAssertTrue(
-            waitForCondition {
+            // Real git subprocess + GitMetadataProber round trip, not a fixed dispatch
+            // delay — needs the same headroom as testRemoteSplitSkipsInitialGitMetadataProbe
+            // below under a full serial suite run's CPU contention.
+            waitForCondition(timeout: 12.0) {
                 backgroundWorkspace.panelGitBranches[backgroundPanelId]?.branch == "main"
             }
         )
@@ -570,7 +573,9 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         manager.refreshTrackedWorkspaceGitMetadataForTesting()
 
         XCTAssertTrue(
-            waitForCondition {
+            // See timeout comment on testInheritedBackgroundWorkspaceFetchesGitBranchWithoutSelection
+            // above: real git subprocess + probe round trip needs headroom under CI load.
+            waitForCondition(timeout: 12.0) {
                 workspace.panelGitBranches[panelId]?.branch == "feature/sidebar-live-refresh"
             }
         )
@@ -613,7 +618,9 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         manager.refreshTrackedWorkspaceGitMetadataForTesting()
 
         XCTAssertTrue(
-            waitForCondition {
+            // See timeout comment on testInheritedBackgroundWorkspaceFetchesGitBranchWithoutSelection
+            // above: real git subprocess + probe round trip needs headroom under CI load.
+            waitForCondition(timeout: 12.0) {
                 workspace.panelGitBranches[panelId]?.branch == "main"
             }
         )
@@ -733,7 +740,9 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         manager.refreshTrackedWorkspaceGitMetadataForTesting()
 
         XCTAssertTrue(
-            waitForCondition {
+            // See timeout comment on testInheritedBackgroundWorkspaceFetchesGitBranchWithoutSelection
+            // above: real git subprocess + probe round trip needs headroom under CI load.
+            waitForCondition(timeout: 12.0) {
                 workspace.panelGitBranches[panelId]?.branch == "main"
                     && workspace.panelPullRequests[panelId] == nil
             }

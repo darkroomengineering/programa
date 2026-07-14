@@ -4397,7 +4397,17 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         }
 
         window.sendEvent(keyDown)
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        // The focus-repair path triggered by sendEvent runs asynchronously (see the
+        // searchFieldDeadline poll above for the same class of flake). A single fixed
+        // 0.05s spin can land before it completes under a full serial suite run with
+        // CPU contention from hundreds of prior tests — poll instead.
+        let repairDeadline = Date(timeIntervalSinceNow: 2.0)
+        while Date() < repairDeadline {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+            if firstResponderOwnsTextField(window.firstResponder, textField: searchField) {
+                break
+            }
+        }
 
         XCTAssertTrue(
             firstResponderOwnsTextField(window.firstResponder, textField: searchField),

@@ -2612,12 +2612,17 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         contentView.layoutSubtreeIfNeeded()
         hostedView.setVisibleInUI(true)
         hostedView.setActive(true)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         let searchState = TerminalSurface.SearchState(needle: "")
         surface.searchState = searchState
         hostedView.setSearchOverlay(searchState: searchState)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        // Poll for the deferred mount instead of trusting one fixed spin — see the
+        // identical rationale on the other waitUntil("search overlay to mount") call
+        // sites in this class.
+        waitUntil(timeout: 3.0, description: "find overlay to mount") {
+            self.findEditableTextField(in: hostedView) != nil
+        }
 
         guard let searchField = findEditableTextField(in: hostedView) else {
             XCTFail("Expected mounted find text field")
@@ -2661,7 +2666,9 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
 
         NSApp.sendEvent(escapeKeyDown)
         NSApp.sendEvent(escapeKeyUp)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        waitUntil(timeout: 3.0, description: "find overlay to dismiss after Escape") {
+            surface.searchState == nil
+        }
 
         XCTAssertNil(surface.searchState, "Escape should dismiss find overlay when search text is empty")
         XCTAssertEqual(
@@ -2730,7 +2737,9 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         XCTAssertEqual(state.frame.size.height, 112, accuracy: 0.5)
 
         hostedView.setDropZoneOverlay(zone: nil)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        waitUntil(timeout: 3.0, description: "drop zone overlay to hide") {
+            hostedView.debugDropZoneOverlayState().isHidden
+        }
         XCTAssertTrue(hostedView.debugDropZoneOverlayState().isHidden)
     }
 
