@@ -145,6 +145,7 @@
 		A5001652 /* ProgramaConfigExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001653 /* ProgramaConfigExecutor.swift */; };
 		NRPA00001 /* FileWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00002 /* FileWatcher.swift */; };
 		A5001654 /* ProgramaDirectoryTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001655 /* ProgramaDirectoryTrust.swift */; };
+		A5001660 /* JSONCParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001661 /* JSONCParser.swift */; };
 		A5001100 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A5001101 /* Assets.xcassets */; };
 		A5001230 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A5001231 /* Sparkle */; };
 		B9000002A1B2C3D4E5F60719 /* programa.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000001A1B2C3D4E5F60719 /* programa.swift */; };
@@ -425,6 +426,7 @@
 		A5001653 /* ProgramaConfigExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfigExecutor.swift; sourceTree = "<group>"; };
 		NRPA00002 /* FileWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileWatcher.swift; sourceTree = "<group>"; };
 		A5001655 /* ProgramaDirectoryTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaDirectoryTrust.swift; sourceTree = "<group>"; };
+		A5001661 /* JSONCParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONCParser.swift; sourceTree = "<group>"; };
 		A5001641 /* RemoteRelayZshBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteRelayZshBootstrap.swift; sourceTree = "<group>"; };
 		818DBCD4AB69EB72573E8138 /* SidebarResizeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarResizeUITests.swift; sourceTree = "<group>"; };
 		B8F266256A1A3D9A45BD840F /* SidebarHelpMenuUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarHelpMenuUITests.swift; sourceTree = "<group>"; };
@@ -751,6 +753,7 @@
 				A5001653 /* ProgramaConfigExecutor.swift */,
 				NRPA00002 /* FileWatcher.swift */,
 				A5001655 /* ProgramaDirectoryTrust.swift */,
+				A5001661 /* JSONCParser.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -1135,6 +1138,7 @@
 			A5001652 /* ProgramaConfigExecutor.swift in Sources */,
 				NRPA00001 /* FileWatcher.swift in Sources */,
 			A5001654 /* ProgramaDirectoryTrust.swift in Sources */,
+				A5001660 /* JSONCParser.swift in Sources */,
 		);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

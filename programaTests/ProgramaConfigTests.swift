@@ -510,6 +510,181 @@ final class ProgramaConfigDecodingTests: XCTestCase {
     }
 }
 
+// MARK: - JSONC (comments + trailing commas) config parsing
+//
+// Regression coverage for a real user pain point: a project's programa.json (ported from
+// ~/.config/cmux/cmux.json) failed to parse with "Unexpected character '/' at line 5 col 4"
+// because plain JSONDecoder rejects `//`/`/* */` comments and trailing commas. These tests
+// exercise the same JSONCParser.preprocess -> JSONDecoder pipeline ProgramaConfigStore uses
+// at runtime, not just the parser in isolation.
+final class ProgramaConfigJSONCDecodingTests: XCTestCase {
+
+    /// Mirrors what `ProgramaConfigStore.parseConfig(at:)` does at runtime: run the raw
+    /// file text through `JSONCParser.preprocess` before handing it to `JSONDecoder`.
+    private func decodeJSONC(_ jsonc: String) throws -> ProgramaConfigFile {
+        let data = jsonc.data(using: .utf8)!
+        let sanitized = try JSONCParser.preprocess(data: data)
+        return try JSONDecoder().decode(ProgramaConfigFile.self, from: sanitized)
+    }
+
+    func testDecodeWithLineComments() throws {
+        let jsonc = """
+        {
+          // top-level config for this project
+          "commands": [{
+            "name": "Run tests", // inline comment after a value
+            "command": "npm test"
+          }]
+        }
+        """
+        let config = try decodeJSONC(jsonc)
+        XCTAssertEqual(config.commands.count, 1)
+        XCTAssertEqual(config.commands[0].name, "Run tests")
+        XCTAssertEqual(config.commands[0].command, "npm test")
+    }
+
+    func testDecodeWithBlockComments() throws {
+        let jsonc = """
+        {
+          /* This project's dev commands.
+             Multi-line block comment. */
+          "commands": [{
+            "name": "Deploy" /* inline block comment */,
+            "command": "make deploy"
+          }]
+        }
+        """
+        let config = try decodeJSONC(jsonc)
+        XCTAssertEqual(config.commands[0].name, "Deploy")
+        XCTAssertEqual(config.commands[0].command, "make deploy")
+    }
+
+    func testDecodeWithTrailingCommaInArray() throws {
+        let jsonc = """
+        {
+          "commands": [
+            { "name": "Build", "command": "make build" },
+            { "name": "Test", "command": "make test" },
+          ]
+        }
+        """
+        let config = try decodeJSONC(jsonc)
+        XCTAssertEqual(config.commands.map(\.name), ["Build", "Test"])
+    }
+
+    func testDecodeWithTrailingCommaInObject() throws {
+        let jsonc = """
+        {
+          "commands": [{
+            "name": "Deploy",
+            "command": "make deploy",
+          }],
+        }
+        """
+        let config = try decodeJSONC(jsonc)
+        XCTAssertEqual(config.commands[0].name, "Deploy")
+        XCTAssertEqual(config.commands[0].command, "make deploy")
+    }
+
+    func testDecodeWithMixedCommentsAndTrailingCommas() throws {
+        // Same shape as the config that motivated this port: comments describing each
+        // command, plus trailing commas left over from copy-pasting entries.
+        let jsonc = """
+        {
+          "commands": [
+            {
+              // Runs the full test suite
+              "name": "Test",
+              "command": "npm test",
+            },
+            {
+              /* Starts the dev server on the default port */
+              "name": "Dev",
+              "workspace": {
+                "name": "Dev",
+                "cwd": "~/projects/app",
+              },
+            },
+          ],
+        }
+        """
+        let config = try decodeJSONC(jsonc)
+        XCTAssertEqual(config.commands.map(\.name), ["Test", "Dev"])
+        XCTAssertEqual(config.commands[0].command, "npm test")
+        XCTAssertEqual(config.commands[1].workspace?.cwd, "~/projects/app")
+    }
+
+    func testDecodeIgnoresCommentLikeSequencesInsideStrings() throws {
+        // A command string containing "//" or "/*" must not be treated as a comment.
+        let jsonc = """
+        {
+          "commands": [{
+            "name": "URL",
+            "command": "curl https://example.com/*.json"
+          }]
+        }
+        """
+        let config = try decodeJSONC(jsonc)
+        XCTAssertEqual(config.commands[0].command, "curl https://example.com/*.json")
+    }
+
+    func testDecodeIgnoresTrailingCommaLikeSequenceInsideStrings() throws {
+        let jsonc = """
+        {
+          "commands": [{
+            "name": "test",
+            "command": "echo 'a, b,'"
+          }]
+        }
+        """
+        let config = try decodeJSONC(jsonc)
+        XCTAssertEqual(config.commands[0].command, "echo 'a, b,'")
+    }
+
+    func testDecodeStripsUTF8BOM() throws {
+        let jsonc = "\u{feff}{ \"commands\": [{ \"name\": \"Build\", \"command\": \"make\" }] }"
+        let data = jsonc.data(using: .utf8)!
+        let sanitized = try JSONCParser.preprocess(data: data)
+        let config = try JSONDecoder().decode(ProgramaConfigFile.self, from: sanitized)
+        XCTAssertEqual(config.commands[0].name, "Build")
+    }
+
+    func testDecodePlainJSONWithoutCommentsStillWorks() throws {
+        // Strict JSON (no comments, no trailing commas) must keep working unmodified.
+        let jsonc = """
+        { "commands": [{ "name": "Build", "command": "make build" }] }
+        """
+        let config = try decodeJSONC(jsonc)
+        XCTAssertEqual(config.commands[0].name, "Build")
+    }
+
+    // MARK: Error cases
+
+    func testUnterminatedBlockCommentThrows() {
+        let jsonc = "{\n/* missing close\n\"commands\": []\n}"
+        let data = jsonc.data(using: .utf8)!
+        XCTAssertThrowsError(try JSONCParser.preprocess(data: data)) { error in
+            XCTAssertEqual((error as? LocalizedError)?.errorDescription, "unterminated block comment")
+        }
+    }
+
+    func testCommentOnlyContentStillFailsJSONDecodingAfterPreprocessing() {
+        // JSONCParser only strips comments/trailing commas; it does not make invalid JSON
+        // valid. A comments-only file has nothing left to decode as an object.
+        let jsonc = "// just a comment, no actual config\n"
+        XCTAssertThrowsError(try decodeJSONC(jsonc))
+    }
+
+    func testMalformedJSONAfterCommentStrippingStillThrows() {
+        let jsonc = """
+        {
+          // this command is missing its closing brace
+          "commands": [{ "name": "Broken", "command": "echo hi" }
+        """
+        XCTAssertThrowsError(try decodeJSONC(jsonc))
+    }
+}
+
 // MARK: - Command identity
 
 final class ProgramaCommandIdentityTests: XCTestCase {
