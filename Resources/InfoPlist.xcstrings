@@ -1,23 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "NSBluetoothAlwaysUsageDescription": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A program running within Programa would like to use Bluetooth to discover passkeys and security keys."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Programa内で実行中のプログラムが、パスキーとセキュリティキーを検出するためにBluetoothの使用を求めています。"
-          }
-        }
-      }
-    },
     "NSCameraUsageDescription": {
       "extractionState": "manual",
       "localizations": {

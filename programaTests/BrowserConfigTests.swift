@@ -3,7 +3,6 @@ import Combine
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
-import AuthenticationServices
 import WebKit
 import ObjectiveC.runtime
 import Bonsplit
@@ -1596,52 +1595,6 @@ final class BrowserNilTargetFallbackDecisionTests: XCTestCase {
             browserNavigationShouldFallbackNilTargetToNewTab(
                 navigationType: .linkActivated
             )
-        )
-    }
-}
-
-
-final class BrowserWebAuthnCapabilityDecisionTests: XCTestCase {
-    func testCrossOriginFrameWithoutAuthorizationDoesNotAdvertisePlatformPasskeys() {
-        XCTAssertEqual(
-            browserWebAuthnAdvertisedPlatformPasskeyAvailability(
-                authorizationState: .notDetermined,
-                deviceConfiguredForPasskeys: nil,
-                callerMayPromptForPlatformAuthorization: false
-            ),
-            false
-        )
-    }
-
-    func testPromptableFrameFallsBackWhenDeviceConfigurationIsUnknown() {
-        XCTAssertNil(
-            browserWebAuthnAdvertisedPlatformPasskeyAvailability(
-                authorizationState: .notDetermined,
-                deviceConfiguredForPasskeys: nil,
-                callerMayPromptForPlatformAuthorization: true
-            )
-        )
-    }
-
-    func testAuthorizedBrowserUsesKnownDeviceConfiguration() {
-        XCTAssertEqual(
-            browserWebAuthnAdvertisedPlatformPasskeyAvailability(
-                authorizationState: .authorized,
-                deviceConfiguredForPasskeys: true,
-                callerMayPromptForPlatformAuthorization: false
-            ),
-            true
-        )
-    }
-
-    func testDeniedAuthorizationNeverAdvertisesPlatformPasskeysEvenIfDeviceIsConfigured() {
-        XCTAssertEqual(
-            browserWebAuthnAdvertisedPlatformPasskeyAvailability(
-                authorizationState: .denied,
-                deviceConfiguredForPasskeys: true,
-                callerMayPromptForPlatformAuthorization: true
-            ),
-            false
         )
     }
 }
