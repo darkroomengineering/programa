@@ -3345,6 +3345,213 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
     }
 
+    func testBashBootstrapPreservesStarshipPromptCommandAcrossPrompts() throws {
+        // Regression test: Programa's local macOS bash bootstrap is injected
+        // as PROMPT_COMMAND and used to begin by unconditionally clobbering
+        // PROMPT_COMMAND. A user's startup files run
+        // `eval "$(starship init bash)"` before the first prompt, which
+        // appends starship_precmd to PROMPT_COMMAND; the bootstrap then
+        // discarded it after running once, freezing the prompt. This drives
+        // the real bootstrap file (Resources/shell-integration/
+        // programa-bash-bootstrap.bash) plus a faithful starship stub
+        // through bash and asserts starship_precmd survives across prompts,
+        // rather than relying on a PTY.
+        let fields = try runBashBootstrapDriver(withUserPromptHook: true)
+        let debug = "\n\nstdout:\n\(fields["__stdout__"] ?? "")\nstderr:\n\(fields["__stderr__"] ?? "")"
+
+        XCTAssertTrue(
+            (fields["PC_AFTER_RC"] ?? "").contains("starship_precmd"),
+            "test setup did not append starship_precmd to PROMPT_COMMAND" + debug
+        )
+
+        for i in 1...3 {
+            let pc = fields["PC_\(i)"] ?? ""
+            XCTAssertTrue(
+                pc.contains("starship_precmd"),
+                "starship_precmd was dropped from PROMPT_COMMAND at prompt \(i); the bootstrap took exclusive ownership instead of composing with the user's hook. PROMPT_COMMAND=<\(pc)>" + debug
+            )
+            XCTAssertTrue(
+                pc.contains("_cmux_prompt_command"),
+                "Programa's own prompt hook is missing from PROMPT_COMMAND at prompt \(i): <\(pc)>" + debug
+            )
+            XCTAssertFalse(
+                pc.contains("__programa_bash_bootstrap_marker__"),
+                "bootstrap marker leaked into PROMPT_COMMAND at prompt \(i): <\(pc)>" + debug
+            )
+        }
+
+        let ps1Values = (1...3).map { fields["PS1_\($0)"] ?? "" }
+        XCTAssertNotEqual(
+            ps1Values[0], ps1Values[1],
+            "starship prompt went static across prompts (it stopped re-rendering): \(ps1Values)" + debug
+        )
+        XCTAssertNotEqual(
+            ps1Values[1], ps1Values[2],
+            "starship prompt went static across prompts (it stopped re-rendering): \(ps1Values)" + debug
+        )
+        XCTAssertTrue(
+            ps1Values[2].contains("n=3"),
+            "starship_precmd did not run on every prompt; final PS1=<\(ps1Values[2])>" + debug
+        )
+        XCTAssertTrue(
+            ps1Values[2].contains("cwd=cd-target"),
+            "prompt did not pick up the new cwd after cd; final PS1=<\(ps1Values[2])>" + debug
+        )
+    }
+
+    func testBashBootstrapInstallsPromptCommandWithoutUserHook() throws {
+        // No-regression guard: with no user PROMPT_COMMAND hook (plain bash,
+        // no Starship or similar prompt framework), the bootstrap must still
+        // install Programa's own prompt hook -- and must not leak its
+        // internal marker into PROMPT_COMMAND.
+        let fields = try runBashBootstrapDriver(withUserPromptHook: false)
+        let debug = "\n\nstdout:\n\(fields["__stdout__"] ?? "")\nstderr:\n\(fields["__stderr__"] ?? "")"
+
+        for i in 1...3 {
+            let pc = fields["PC_\(i)"] ?? ""
+            // Assert the observable contract (hook installed, bootstrap
+            // marker removed, no phantom hook) rather than the exact
+            // integration-internal string, so this stays green if
+            // programa-bash-integration.bash ever tweaks its PROMPT_COMMAND
+            // merge.
+            XCTAssertTrue(
+                pc.contains("_cmux_prompt_command"),
+                "plain-bash bootstrap did not install Programa's prompt hook at prompt \(i): <\(pc)>" + debug
+            )
+            XCTAssertFalse(
+                pc.contains("__programa_bash_bootstrap_marker__"),
+                "bootstrap marker leaked into PROMPT_COMMAND at prompt \(i): <\(pc)>" + debug
+            )
+            XCTAssertFalse(
+                pc.contains("starship_precmd"),
+                "unexpected starship hook in plain-bash PROMPT_COMMAND at prompt \(i): <\(pc)>" + debug
+            )
+        }
+    }
+
+    /// Drives `Resources/shell-integration/programa-bash-bootstrap.bash`
+    /// through real bash, modeling bash's "evaluate PROMPT_COMMAND before
+    /// each prompt" loop directly (deterministic, no PTY needed). When
+    /// `withUserPromptHook` is true, simulates a user's startup files running
+    /// `eval "$(starship init bash)"` and appending `starship_precmd` to
+    /// PROMPT_COMMAND before the first prompt, exactly as the real Starship
+    /// binary's bash init does for non-bash-preexec shells.
+    private func runBashBootstrapDriver(withUserPromptHook: Bool) throws -> [String: String] {
+        let fileManager = FileManager.default
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let bootstrapSourcePath = repoRoot
+            .appendingPathComponent("Resources/shell-integration/programa-bash-bootstrap.bash")
+        let rawBootstrap = try String(contentsOf: bootstrapSourcePath, encoding: .utf8)
+        // Mirrors Sources/GhosttyTerminalView.swift's comment/blank-line
+        // stripping so the test exercises exactly what ships as
+        // $PROMPT_COMMAND.
+        let leanBootstrap = rawBootstrap
+            .components(separatedBy: "\n")
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !trimmed.isEmpty && !trimmed.hasPrefix("#")
+            }
+            .joined(separator: "\n")
+
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("cmux-bash-bootstrap-starship-\(UUID().uuidString)")
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        let bootstrapFile = root.appendingPathComponent("bootstrap.bash")
+        try leanBootstrap.write(to: bootstrapFile, atomically: true, encoding: .utf8)
+
+        let cdTarget = root.appendingPathComponent("cd-target")
+        try fileManager.createDirectory(at: cdTarget, withIntermediateDirectories: true)
+
+        let shellIntegrationDir = repoRoot.appendingPathComponent("Resources/shell-integration")
+
+        let driver = #"""
+        set +e
+        PROMPT_COMMAND="$(cat "$BOOTSTRAP_FILE")"
+
+        if [[ "${WITH_USER_HOOK:-1}" == "1" ]]; then
+            starship_precmd() {
+                STARSHIP_COUNTER=$((STARSHIP_COUNTER + 1))
+                PS1="cwd=${PWD##*/} n=${STARSHIP_COUNTER} "
+            }
+            if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then
+                PROMPT_COMMAND+=(starship_precmd)
+            else
+                PROMPT_COMMAND=${PROMPT_COMMAND:+$PROMPT_COMMAND$'\n'}"starship_precmd"
+            fi
+        fi
+
+        _emit() { printf '%s<%s>\n' "$1" "${2//$'\n'/<NL>}"; }
+        _emit PC_AFTER_RC "$PROMPT_COMMAND"
+
+        _render() {
+            if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then
+                local pc
+                for pc in "${PROMPT_COMMAND[@]}"; do eval "$pc"; done
+            else
+                eval "$PROMPT_COMMAND"
+            fi
+        }
+
+        STARSHIP_COUNTER=0
+        i=0
+        while (( i < 3 )); do
+            i=$((i + 1))
+            (( i == 3 )) && cd "$CD_TARGET"
+            _render
+            _emit "PS1_$i" "$PS1"
+            _emit "PC_$i" "$PROMPT_COMMAND"
+        done
+        """#
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["--noprofile", "--norc", "-c", driver]
+        process.environment = [
+            "HOME": root.path,
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            "BOOTSTRAP_FILE": bootstrapFile.path,
+            "CD_TARGET": cdTarget.path,
+            "WITH_USER_HOOK": withUserPromptHook ? "1" : "0",
+            "PROGRAMA_LOAD_GHOSTTY_BASH_INTEGRATION": "0",
+            "GHOSTTY_RESOURCES_DIR": "",
+            "PROGRAMA_SHELL_INTEGRATION": "1",
+            "PROGRAMA_SHELL_INTEGRATION_DIR": shellIntegrationDir.path,
+        ]
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        let deadline = Date().addingTimeInterval(5)
+        while process.isRunning && Date() < deadline {
+            _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+            XCTFail("Timed out waiting for bash bootstrap driver to exit")
+        }
+
+        let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let error = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        XCTAssertEqual(process.terminationStatus, 0, "stdout:\n\(output)\nstderr:\n\(error)")
+
+        var fields: [String: String] = ["__stdout__": output, "__stderr__": error]
+        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard let openIdx = line.firstIndex(of: "<"), line.hasSuffix(">") else { continue }
+            let key = String(line[line.startIndex..<openIdx])
+            let value = String(line[line.index(after: openIdx)..<line.index(before: line.endIndex)])
+            fields[key] = value
+        }
+        return fields
+    }
+
     private func runInteractiveZsh(cmuxLoadGhosttyIntegration: Bool) throws -> String {
         try runInteractiveZsh(
             cmuxLoadGhosttyIntegration: cmuxLoadGhosttyIntegration,

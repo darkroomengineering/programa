@@ -1229,6 +1229,81 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
         XCTAssertEqual(scpArgs.last, "lawrence@[2001:db8::1]:/tmp/programa-drop-123.png")
     }
 
+    func testRemoteSSHConnectionPolicyScpRemoteDestinationBracketsBareIPv6Literal() {
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("lawrence@2001:db8::1"),
+            "lawrence@[2001:db8::1]"
+        )
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("2001:db8::1"),
+            "[2001:db8::1]"
+        )
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("::1"),
+            "[::1]"
+        )
+    }
+
+    func testRemoteSSHConnectionPolicyScpRemoteDestinationPassesThroughNonBareIPv6Hosts() {
+        // Already-bracketed hosts are left alone.
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("lawrence@[2001:db8::1]"),
+            "lawrence@[2001:db8::1]"
+        )
+        // IPv4 literals have no ambiguous colon, so they pass through untouched.
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("lawrence@192.168.1.1"),
+            "lawrence@192.168.1.1"
+        )
+        // Plain hostnames and configured SSH aliases pass through untouched.
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("cmux-macmini"),
+            "cmux-macmini"
+        )
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("lawrence@example.com"),
+            "lawrence@example.com"
+        )
+    }
+
+    func testScpUploadArgumentsBracketsIPv6LiteralDestinationForDaemonBinaryUpload() {
+        let configuration = WorkspaceRemoteConfiguration(
+            destination: "2001:db8::1",
+            port: 2222,
+            identityFile: "/Users/test/.ssh/id_ed25519",
+            sshOptions: [
+                "ControlMaster=auto",
+                "ControlPersist=600",
+                "StrictHostKeyChecking=accept-new",
+            ],
+            localProxyPort: nil,
+            relayPort: nil,
+            relayID: nil,
+            relayToken: nil,
+            localSocketPath: nil,
+            terminalStartupCommand: "ssh [2001:db8::1]"
+        )
+
+        // This is the exact call `WorkspaceRemoteSessionController+DaemonInstall.swift`
+        // makes for both the programad-remote binary upload and dropped-file uploads
+        // (#4948 follow-up: the ssh-only fix in CLI+SSH.swift left these scp call
+        // sites choking on bracketless IPv6 hosts).
+        let arguments = WorkspaceRemoteSSHBatchCommandBuilder.scpUploadArguments(
+            configuration: configuration,
+            localPath: "/tmp/programad-remote",
+            remotePath: "/home/lawrence/.programa/remote/programad-remote"
+        )
+
+        XCTAssertEqual(
+            arguments.last,
+            "[2001:db8::1]:/home/lawrence/.programa/remote/programad-remote"
+        )
+        XCTAssertTrue(arguments.contains("-P"))
+        XCTAssertTrue(arguments.contains("2222"))
+        XCTAssertTrue(arguments.contains("-i"))
+        XCTAssertTrue(arguments.contains("/Users/test/.ssh/id_ed25519"))
+    }
+
     func testDetectsForegroundSSHSessionWithLowercaseAgentFlag() {
         let session = TerminalSSHSessionDetector.detectForTesting(
             ttyName: "/dev/ttys004",
@@ -1552,6 +1627,25 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         }
         let data = try? JSONSerialization.data(withJSONObject: payload, options: [])
         return String(data: data ?? Data("{}".utf8), encoding: .utf8) ?? "{}"
+    }
+
+    /// Polls `condition` until it returns true or `timeout` elapses. Same house pattern
+    /// as the `waitUntil` helpers in TerminalAndGhosttyTests.swift /
+    /// TerminalControllerSocketSecurityTests.swift: an `XCTNSPredicateExpectation`
+    /// driven by `XCTWaiter`, so a slow-but-eventual condition (e.g. a background
+    /// thread's file write finishing under CI scheduling contention) produces a clean,
+    /// bounded pass instead of a flaky immediate check.
+    @discardableResult
+    private func waitUntil(
+        timeout: TimeInterval = 5.0,
+        description: String,
+        _ condition: @escaping () -> Bool
+    ) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in condition() },
+            object: NSObject()
+        )
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
     @MainActor
@@ -2093,10 +2187,13 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
                 "cmux-macmini",
             ],
             environment: environment,
-            timeout: 5
+            // See `ciScale` (TabManagerUnitTests.swift): scale this subprocess/mock-socket
+            // round trip under CI, where it can legitimately take longer than on a fast
+            // local machine.
+            timeout: 5 * ciScale
         )
 
-        wait(for: [serverHandled], timeout: 5)
+        wait(for: [serverHandled], timeout: 5 * ciScale)
         XCTAssertFalse(result.timedOut, result.stderr)
         XCTAssertEqual(result.status, 0, result.stderr)
 
@@ -2186,12 +2283,32 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
             executablePath: "/bin/sh",
             arguments: ["-c", initialCommand],
             environment: startupEnvironment,
-            timeout: 5
+            timeout: 5 * ciScale
         )
 
-        wait(for: [foregroundAuthHandled], timeout: 5)
+        // The accept()-loop thread that fulfills `foregroundAuthHandled` (see
+        // startMockServer) only observes EOF and calls fulfill() once GCD schedules it —
+        // under a full serial suite run with heavy CPU contention that can legitimately
+        // take longer than the subprocess round-trip itself. Give it CI headroom rather
+        // than a hair-trigger local timeout. See `ciScale` (TabManagerUnitTests.swift).
+        wait(for: [foregroundAuthHandled], timeout: 15 * ciScale)
         XCTAssertFalse(startupResult.timedOut, startupResult.stderr)
         XCTAssertEqual(startupResult.status, 0, startupResult.stderr)
+
+        // Don't read fakeSSHLog the instant the socket expectation resolves: the log
+        // content is written by a *separate* process (the fake ssh script's nested
+        // LocalCommand hop) than the one whose exit this test already waited on above,
+        // so its write can still be in flight even once the RPC round-trip completed.
+        // Reading immediately previously turned a scheduling delay into an uncaught
+        // "file not found" error (XCTest reports this as an "unexpected" failure,
+        // distinct from — and more confusing than — a plain assertion failure) instead
+        // of a clear, bounded diagnostic. Poll for the real completion signal we
+        // actually depend on: the log file existing with its expected line count.
+        let logIsReady = waitUntil(timeout: 15 * ciScale, description: "fake ssh log to record at least 2 invocations") {
+            guard let contents = try? String(contentsOf: fakeSSHLog, encoding: .utf8) else { return false }
+            return contents.split(separator: "\n").count >= 2
+        }
+        XCTAssertTrue(logIsReady, "Expected fake ssh log at \(fakeSSHLog.path) to record at least 2 invocations in time")
 
         let logLines = try String(contentsOf: fakeSSHLog, encoding: .utf8)
             .split(separator: "\n")

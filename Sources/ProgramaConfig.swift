@@ -401,8 +401,17 @@ final class ProgramaConfigStore: ObservableObject {
               !data.isEmpty else {
             return nil
         }
+
+        let sanitized: Data
         do {
-            return try JSONDecoder().decode(ProgramaConfigFile.self, from: data)
+            sanitized = try JSONCParser.preprocess(data: data)
+        } catch {
+            NSLog("[ProgramaConfig] JSONC preprocessing error at %@: %@", path, String(describing: error))
+            return nil
+        }
+
+        do {
+            return try JSONDecoder().decode(ProgramaConfigFile.self, from: sanitized)
         } catch {
             NSLog("[ProgramaConfig] parse error at %@: %@", path, String(describing: error))
             return nil

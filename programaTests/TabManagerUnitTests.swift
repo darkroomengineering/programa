@@ -15,6 +15,12 @@ import UserNotifications
 
 let lastSurfaceCloseShortcutDefaultsKey = "closeWorkspaceOnLastSurfaceShortcut"
 
+// GitHub Actions always sets CI=true, and shared macos-26 runners can be under enough
+// scheduler/subprocess contention (see GitMetadataProber's git/gh probing) that fixed
+// local-machine timeouts flake even when generously sized. Scale wait budgets up under
+// CI only, so local runs stay fast.
+let ciScale: Double = ProcessInfo.processInfo.environment["CI"] != nil ? 4.0 : 1.0
+
 func drainMainQueue() {
     // A fixed 1s wait isn't reliable headroom for this main-queue turn under a full
     // serial suite run, where the queue can carry a real backlog from hundreds of prior
@@ -38,8 +44,10 @@ private func waitForCondition(
         return true
     }
 
+    // Scale the caller's timeout (default or explicit) under CI — see `ciScale`.
+    let scaledTimeout = timeout * ciScale
     let expectation = XCTestExpectation(description: "wait for condition")
-    let deadline = Date().addingTimeInterval(timeout)
+    let deadline = Date().addingTimeInterval(scaledTimeout)
 
     func poll() {
         if condition() {
@@ -56,7 +64,7 @@ private func waitForCondition(
         poll()
     }
 
-    let result = XCTWaiter().wait(for: [expectation], timeout: timeout + pollInterval + 0.1)
+    let result = XCTWaiter().wait(for: [expectation], timeout: scaledTimeout + pollInterval + 0.1)
     if result != .completed {
         XCTFail("Timed out waiting for condition", file: file, line: line)
         return false
@@ -304,6 +312,76 @@ final class TabManagerWorkspaceOwnershipTests: XCTestCase {
 
 @MainActor
 final class TabManagerPullRequestProbeTests: XCTestCase {
+    // GitMetadataProber shells out to the ambient `gh` CLI to resolve pull-request
+    // metadata for any TabManager-created workspace whose directory resolves to a real
+    // git repo on a non-main/master branch (see
+    // GitMetadataProber.workspacePullRequestSnapshot). On CI that directory can be this
+    // very checkout (a real repo, checked out to a non-main PR branch), so a
+    // `TabManager()`'s default workspace can trigger a real, unauthenticated `gh pr
+    // list`/`gh pr checks` call that blocks for up to its 5s timeout per repo remote —
+    // on the same per-instance serial probe queue these tests are themselves waiting
+    // on. Stub `gh` on PATH for the duration of each test so these fixtures never
+    // depend on a real `gh` binary or network access, mirroring the PATH-stub pattern
+    // already used for shell-integration tests (e.g. GhosttyConfigTests' fake
+    // `tmux`/`programa` binaries).
+    private var originalPATHForGHStub: String?
+    private var ghStubBinDirectory: URL?
+
+    override func setUp() {
+        super.setUp()
+        let fileManager = FileManager.default
+        let currentPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        originalPATHForGHStub = currentPath
+
+        let binDir = fileManager.temporaryDirectory.appendingPathComponent(
+            "cmux-gh-stub-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        do {
+            try fileManager.createDirectory(at: binDir, withIntermediateDirectories: true)
+            let ghStub = binDir.appendingPathComponent("gh", isDirectory: false)
+            // Deterministic, network-free stand-in for the two `gh` invocations
+            // GitMetadataProber makes (`pr list`, `pr checks`). Both fast-exit with an
+            // empty JSON array, which the prober decodes as "no pull request found" —
+            // exactly right for these branch/metadata-focused tests, none of which
+            // assert on actual PR data.
+            let script = """
+            #!/bin/sh
+            case "$1 $2" in
+              "pr list")
+                echo '[]'
+                exit 0
+                ;;
+              "pr checks")
+                echo '[]'
+                exit 0
+                ;;
+              *)
+                exit 1
+                ;;
+            esac
+            """
+            try script.write(to: ghStub, atomically: true, encoding: .utf8)
+            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ghStub.path)
+            ghStubBinDirectory = binDir
+            setenv("PATH", "\(binDir.path):\(currentPath)", 1)
+        } catch {
+            XCTFail("Failed to install gh stub: \(error)")
+        }
+    }
+
+    override func tearDown() {
+        if let originalPATHForGHStub {
+            setenv("PATH", originalPATHForGHStub, 1)
+        }
+        if let ghStubBinDirectory {
+            try? FileManager.default.removeItem(at: ghStubBinDirectory)
+        }
+        originalPATHForGHStub = nil
+        ghStubBinDirectory = nil
+        super.tearDown()
+    }
+
     func testGitHubRepositorySlugsPrioritizeUpstreamThenOriginAndDeduplicate() {
         let output = """
         origin https://github.com/austinwang/cmux.git (fetch)
@@ -526,7 +604,10 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
 
         XCTAssertNotEqual(manager.selectedTabId, backgroundWorkspace.id)
         XCTAssertTrue(
-            waitForCondition {
+            // Real git subprocess + GitMetadataProber round trip, not a fixed dispatch
+            // delay — needs the same headroom as testRemoteSplitSkipsInitialGitMetadataProbe
+            // below under a full serial suite run's CPU contention.
+            waitForCondition(timeout: 12.0) {
                 backgroundWorkspace.panelGitBranches[backgroundPanelId]?.branch == "main"
             }
         )
@@ -570,7 +651,9 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         manager.refreshTrackedWorkspaceGitMetadataForTesting()
 
         XCTAssertTrue(
-            waitForCondition {
+            // See timeout comment on testInheritedBackgroundWorkspaceFetchesGitBranchWithoutSelection
+            // above: real git subprocess + probe round trip needs headroom under CI load.
+            waitForCondition(timeout: 12.0) {
                 workspace.panelGitBranches[panelId]?.branch == "feature/sidebar-live-refresh"
             }
         )
@@ -613,7 +696,9 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         manager.refreshTrackedWorkspaceGitMetadataForTesting()
 
         XCTAssertTrue(
-            waitForCondition {
+            // See timeout comment on testInheritedBackgroundWorkspaceFetchesGitBranchWithoutSelection
+            // above: real git subprocess + probe round trip needs headroom under CI load.
+            waitForCondition(timeout: 12.0) {
                 workspace.panelGitBranches[panelId]?.branch == "main"
             }
         )
@@ -733,7 +818,9 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         manager.refreshTrackedWorkspaceGitMetadataForTesting()
 
         XCTAssertTrue(
-            waitForCondition {
+            // See timeout comment on testInheritedBackgroundWorkspaceFetchesGitBranchWithoutSelection
+            // above: real git subprocess + probe round trip needs headroom under CI load.
+            waitForCondition(timeout: 12.0) {
                 workspace.panelGitBranches[panelId]?.branch == "main"
                     && workspace.panelPullRequests[panelId] == nil
             }

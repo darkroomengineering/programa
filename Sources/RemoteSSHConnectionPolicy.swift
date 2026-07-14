@@ -86,4 +86,49 @@ enum RemoteSSHConnectionPolicy {
     static func shellSingleQuoted(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
+
+    /// Rewrites a destination for `scp`'s combined `host:path` argument syntax by
+    /// bracketing a bare IPv6 literal host (`user@2001:db8::1` -> `user@[2001:db8::1]`).
+    ///
+    /// `ssh` takes the destination as its own argument, so a bare IPv6 literal like
+    /// `2001:db8::1` is unambiguous there (see `CLI+SSH.swift`'s `normalizeSSHDestination`,
+    /// which instead *strips* brackets for that call). `scp` glues the destination and the
+    /// remote path together with a colon (`host:path`), so an un-bracketed IPv6 host's own
+    /// colons collide with that separator and scp misparses the path. Only bare/unbracketed
+    /// IPv6 hosts are rewritten — `user@host`, hostnames, IPv4 literals, and already-bracketed
+    /// hosts pass through unchanged (#4948 follow-up: the ssh-only fix in `CLI+SSH.swift`
+    /// didn't cover our scp call sites).
+    static func scpRemoteDestination(_ destination: String) -> String {
+        let trimmedDestination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedDestination.isEmpty else { return destination }
+
+        let parts = trimmedDestination.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false)
+        let userPart: String?
+        let hostPart: String
+        if parts.count == 2 {
+            userPart = String(parts[0])
+            hostPart = String(parts[1])
+        } else {
+            userPart = nil
+            hostPart = trimmedDestination
+        }
+
+        guard shouldBracketIPv6LiteralForSCP(hostPart) else {
+            return trimmedDestination
+        }
+
+        let bracketedHost = "[\(hostPart)]"
+        if let userPart {
+            return "\(userPart)@\(bracketedHost)"
+        }
+        return bracketedHost
+    }
+
+    private static func shouldBracketIPv6LiteralForSCP(_ host: String) -> Bool {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmedHost.isEmpty &&
+            trimmedHost.contains(":") &&
+            !trimmedHost.hasPrefix("[") &&
+            !trimmedHost.hasSuffix("]")
+    }
 }

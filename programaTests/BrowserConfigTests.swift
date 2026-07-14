@@ -2041,10 +2041,24 @@ final class BrowserDeveloperToolsVisibilityPersistenceTests: XCTestCase {
         return nil
     }
 
-    private func waitForDeveloperToolsTransitions() {
+    private func waitForDeveloperToolsTransitions(
+        timeout: TimeInterval = 2.0,
+        until condition: (() -> Bool)? = nil
+    ) {
         // Give real headroom under a full serial suite run, where the main queue can
-        // carry a genuine backlog from other tests' pending async work.
-        RunLoop.current.run(until: Date().addingTimeInterval(2.0))
+        // carry a genuine backlog from other tests' pending async work. When a
+        // completion condition is supplied, poll for it directly instead of trusting
+        // a fixed spin alone — a queued transition (e.g. toggleDeveloperTools' coalesced
+        // hide) can still be in flight when the spin ends under CI contention.
+        guard let condition else {
+            RunLoop.current.run(until: Date().addingTimeInterval(timeout))
+            return
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            if condition() { return }
+        }
     }
 
     private func findWindowBrowserSlotView(in root: NSView) -> WindowBrowserSlotView? {
@@ -2192,7 +2206,9 @@ final class BrowserDeveloperToolsVisibilityPersistenceTests: XCTestCase {
         XCTAssertEqual(inspector.showCount, 1)
         XCTAssertEqual(inspector.closeCount, 0)
 
-        waitForDeveloperToolsTransitions()
+        waitForDeveloperToolsTransitions(timeout: 10.0) {
+            inspector.closeCount == 1
+        }
 
         XCTAssertFalse(panel.isDeveloperToolsVisible())
         XCTAssertEqual(inspector.showCount, 1)
