@@ -1229,6 +1229,81 @@ final class WorkspaceRemoteConnectionTests: XCTestCase {
         XCTAssertEqual(scpArgs.last, "lawrence@[2001:db8::1]:/tmp/programa-drop-123.png")
     }
 
+    func testRemoteSSHConnectionPolicyScpRemoteDestinationBracketsBareIPv6Literal() {
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("lawrence@2001:db8::1"),
+            "lawrence@[2001:db8::1]"
+        )
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("2001:db8::1"),
+            "[2001:db8::1]"
+        )
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("::1"),
+            "[::1]"
+        )
+    }
+
+    func testRemoteSSHConnectionPolicyScpRemoteDestinationPassesThroughNonBareIPv6Hosts() {
+        // Already-bracketed hosts are left alone.
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("lawrence@[2001:db8::1]"),
+            "lawrence@[2001:db8::1]"
+        )
+        // IPv4 literals have no ambiguous colon, so they pass through untouched.
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("lawrence@192.168.1.1"),
+            "lawrence@192.168.1.1"
+        )
+        // Plain hostnames and configured SSH aliases pass through untouched.
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("cmux-macmini"),
+            "cmux-macmini"
+        )
+        XCTAssertEqual(
+            RemoteSSHConnectionPolicy.scpRemoteDestination("lawrence@example.com"),
+            "lawrence@example.com"
+        )
+    }
+
+    func testScpUploadArgumentsBracketsIPv6LiteralDestinationForDaemonBinaryUpload() {
+        let configuration = WorkspaceRemoteConfiguration(
+            destination: "2001:db8::1",
+            port: 2222,
+            identityFile: "/Users/test/.ssh/id_ed25519",
+            sshOptions: [
+                "ControlMaster=auto",
+                "ControlPersist=600",
+                "StrictHostKeyChecking=accept-new",
+            ],
+            localProxyPort: nil,
+            relayPort: nil,
+            relayID: nil,
+            relayToken: nil,
+            localSocketPath: nil,
+            terminalStartupCommand: "ssh [2001:db8::1]"
+        )
+
+        // This is the exact call `WorkspaceRemoteSessionController+DaemonInstall.swift`
+        // makes for both the programad-remote binary upload and dropped-file uploads
+        // (#4948 follow-up: the ssh-only fix in CLI+SSH.swift left these scp call
+        // sites choking on bracketless IPv6 hosts).
+        let arguments = WorkspaceRemoteSSHBatchCommandBuilder.scpUploadArguments(
+            configuration: configuration,
+            localPath: "/tmp/programad-remote",
+            remotePath: "/home/lawrence/.programa/remote/programad-remote"
+        )
+
+        XCTAssertEqual(
+            arguments.last,
+            "[2001:db8::1]:/home/lawrence/.programa/remote/programad-remote"
+        )
+        XCTAssertTrue(arguments.contains("-P"))
+        XCTAssertTrue(arguments.contains("2222"))
+        XCTAssertTrue(arguments.contains("-i"))
+        XCTAssertTrue(arguments.contains("/Users/test/.ssh/id_ed25519"))
+    }
+
     func testDetectsForegroundSSHSessionWithLowercaseAgentFlag() {
         let session = TerminalSSHSessionDetector.detectForTesting(
             ttyName: "/dev/ttys004",
