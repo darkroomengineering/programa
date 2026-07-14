@@ -2112,10 +2112,13 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
                 "cmux-macmini",
             ],
             environment: environment,
-            timeout: 5
+            // See `ciScale` (TabManagerUnitTests.swift): scale this subprocess/mock-socket
+            // round trip under CI, where it can legitimately take longer than on a fast
+            // local machine.
+            timeout: 5 * ciScale
         )
 
-        wait(for: [serverHandled], timeout: 5)
+        wait(for: [serverHandled], timeout: 5 * ciScale)
         XCTAssertFalse(result.timedOut, result.stderr)
         XCTAssertEqual(result.status, 0, result.stderr)
 
@@ -2205,15 +2208,15 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
             executablePath: "/bin/sh",
             arguments: ["-c", initialCommand],
             environment: startupEnvironment,
-            timeout: 5
+            timeout: 5 * ciScale
         )
 
         // The accept()-loop thread that fulfills `foregroundAuthHandled` (see
         // startMockServer) only observes EOF and calls fulfill() once GCD schedules it —
         // under a full serial suite run with heavy CPU contention that can legitimately
         // take longer than the subprocess round-trip itself. Give it CI headroom rather
-        // than a hair-trigger local timeout.
-        wait(for: [foregroundAuthHandled], timeout: 15)
+        // than a hair-trigger local timeout. See `ciScale` (TabManagerUnitTests.swift).
+        wait(for: [foregroundAuthHandled], timeout: 15 * ciScale)
         XCTAssertFalse(startupResult.timedOut, startupResult.stderr)
         XCTAssertEqual(startupResult.status, 0, startupResult.stderr)
 
@@ -2226,7 +2229,7 @@ final class CLINotifyProcessIntegrationTests: XCTestCase {
         // distinct from — and more confusing than — a plain assertion failure) instead
         // of a clear, bounded diagnostic. Poll for the real completion signal we
         // actually depend on: the log file existing with its expected line count.
-        let logIsReady = waitUntil(timeout: 15, description: "fake ssh log to record at least 2 invocations") {
+        let logIsReady = waitUntil(timeout: 15 * ciScale, description: "fake ssh log to record at least 2 invocations") {
             guard let contents = try? String(contentsOf: fakeSSHLog, encoding: .utf8) else { return false }
             return contents.split(separator: "\n").count >= 2
         }
