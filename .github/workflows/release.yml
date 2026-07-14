@@ -184,6 +184,7 @@ jobs:
           XCODE_DIR="$XCODE_APP/Contents/Developer"
           echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
           export DEVELOPER_DIR="$XCODE_DIR"
+          sudo xcode-select -s "$XCODE_DIR" || true
           xcodebuild -version
           xcrun --sdk macosx --show-sdk-path
 
