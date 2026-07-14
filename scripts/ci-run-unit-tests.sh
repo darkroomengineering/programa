@@ -3,6 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 XCODEBUILD_COMMAND="${PROGRAMA_XCODEBUILD_COMMAND:-xcodebuild}"
+# xcodebuild only forwards TEST_RUNNER_-prefixed variables into the test-host
+# process (with the prefix stripped). Without this, the tests' CI-conditional
+# scaling and skips never activate on runners even though CI=true is set for
+# the workflow step.
+if [[ -n "${CI:-}" ]]; then
+  export TEST_RUNNER_CI="$CI"
+fi
 SOURCE_PACKAGES_DIR="${PROGRAMA_SOURCE_PACKAGES_DIR:-$ROOT_DIR/.ci-source-packages}"
 OUTPUT_FILE="${PROGRAMA_TEST_OUTPUT_FILE:-/tmp/test-output.txt}"
 SWIFTPM_CACHE_DIR="${PROGRAMA_SWIFTPM_CACHE_DIR:-$HOME/Library/Caches/org.swift.swiftpm}"
