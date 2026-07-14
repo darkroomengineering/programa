@@ -603,14 +603,29 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         }
 
         XCTAssertNotEqual(manager.selectedTabId, backgroundWorkspace.id)
-        XCTAssertTrue(
-            // Real git subprocess + GitMetadataProber round trip, not a fixed dispatch
-            // delay — needs the same headroom as testRemoteSplitSkipsInitialGitMetadataProbe
-            // below under a full serial suite run's CPU contention.
-            waitForCondition(timeout: 12.0) {
-                backgroundWorkspace.panelGitBranches[backgroundPanelId]?.branch == "main"
-            }
-        )
+        // Real git subprocess + GitMetadataProber round trip, not a fixed dispatch
+        // delay — needs the same headroom as testRemoteSplitSkipsInitialGitMetadataProbe
+        // below under a full serial suite run's CPU contention.
+        let branchArrived = waitForCondition(timeout: 12.0) {
+            backgroundWorkspace.panelGitBranches[backgroundPanelId]?.branch == "main"
+        }
+        if !branchArrived {
+            // CI diagnostic: distinguish subprocess/env failure from async-apply failure.
+            let gitPath = GitMetadataProber.resolvedCommandPathForTesting(
+                executable: "git",
+                environment: ProcessInfo.processInfo.environment,
+                fallbackDirectories: ["/usr/bin", "/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"]
+            ) ?? "UNRESOLVED"
+            let inlineSnapshot = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: repoURL.path)
+            let probePanels = manager.activeWorkspaceGitProbePanelIdsForTesting(workspaceId: backgroundWorkspace.id)
+            XCTFail(
+                "branch never arrived. gitPath=\(gitPath) " +
+                "inlineSnapshot(branch=\(inlineSnapshot.branch ?? "nil"), dirty=\(inlineSnapshot.isDirty)) " +
+                "modelBranch=\(backgroundWorkspace.panelGitBranches[backgroundPanelId]?.branch ?? "nil") " +
+                "activeProbes=\(probePanels.count) " +
+                "bgWorkspaceDir=\(backgroundWorkspace.currentDirectory ?? "nil") repo=\(repoURL.path)"
+            )
+        }
         XCTAssertEqual(backgroundWorkspace.sidebarGitBranchesInDisplayOrder().map(\.branch), ["main"])
     }
 
