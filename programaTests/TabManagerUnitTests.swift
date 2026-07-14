@@ -618,11 +618,28 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
             ) ?? "UNRESOLVED"
             let inlineSnapshot = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: repoURL.path)
             let probePanels = manager.activeWorkspaceGitProbePanelIdsForTesting(workspaceId: backgroundWorkspace.id)
+            // Mirror the prober's exact invocation and surface status + stderr.
+            let mirror = Process()
+            mirror.executableURL = URL(fileURLWithPath: gitPath)
+            mirror.arguments = ["branch", "--show-current"]
+            mirror.currentDirectoryURL = repoURL
+            let mirrorOut = Pipe(); let mirrorErr = Pipe()
+            mirror.standardOutput = mirrorOut; mirror.standardError = mirrorErr
+            var mirrorSummary = "spawn-failed"
+            do {
+                try mirror.run(); mirror.waitUntilExit()
+                let out = String(data: mirrorOut.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                let err = String(data: mirrorErr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                mirrorSummary = "status=\(mirror.terminationStatus) stdout=\(out.trimmingCharacters(in: .whitespacesAndNewlines)) stderr=\(err.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))"
+            } catch {
+                mirrorSummary = "spawn error: \(error)"
+            }
             XCTFail(
                 "branch never arrived. gitPath=\(gitPath) " +
                 "inlineSnapshot(branch=\(inlineSnapshot.branch ?? "nil"), dirty=\(inlineSnapshot.isDirty)) " +
                 "modelBranch=\(backgroundWorkspace.panelGitBranches[backgroundPanelId]?.branch ?? "nil") " +
                 "activeProbes=\(probePanels.count) " +
+                "mirror[\(mirrorSummary)] " +
                 "bgWorkspaceDir=\(backgroundWorkspace.currentDirectory ?? "nil") repo=\(repoURL.path)"
             )
         }
