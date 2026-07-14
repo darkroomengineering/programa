@@ -1785,6 +1785,7 @@ extension TerminalController {
         return nil
     }
 
+#if DEBUG
     private func resolveTerminalSurface(from arg: String, tabManager: TabManager, waitUpTo timeout: TimeInterval = 0.6) -> ghostty_surface_t? {
         guard let terminalPanel = resolveTerminalPanel(from: arg, tabManager: tabManager) else { return nil }
         return waitForTerminalSurface(terminalPanel, waitUpTo: timeout)
@@ -1831,6 +1832,7 @@ extension TerminalController {
 
         return terminalPanel.surface.surface
     }
+#endif
 
     private func resolveSurfaceId(from arg: String, tab: Workspace) -> UUID? {
         if let uuid = UUID(uuidString: arg), tab.panels[uuid] != nil {
