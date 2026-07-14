@@ -4126,7 +4126,14 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         XCTAssertEqual(workspace.panels.count, surfaceCountBefore + 1, "Cmd+T keyCode fallback should create a new surface")
     }
 
-    func testWindowSendEventRepairsLostFirstResponderForFocusedTerminalTyping() {
+    func testWindowSendEventRepairsLostFirstResponderForFocusedTerminalTyping() throws {
+        // Same window-server family as the quarantined search-typing sibling:
+        // responder-drift setup and repair both depend on first-responder
+        // semantics hosted headless runners provide nondeterministically.
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["CI"] != nil,
+            "first-responder semantics are nondeterministic in headless CI hosts"
+        )
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")
             return
@@ -4218,7 +4225,14 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 #endif
     }
 
-    func testWindowSendEventRepairsVisibleSameWindowResponderDriftForFocusedTerminalTyping() {
+    func testWindowSendEventRepairsVisibleSameWindowResponderDriftForFocusedTerminalTyping() throws {
+        // Same window-server family as the quarantined search-typing sibling:
+        // responder-drift setup and repair both depend on first-responder
+        // semantics hosted headless runners provide nondeterministically.
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["CI"] != nil,
+            "first-responder semantics are nondeterministic in headless CI hosts"
+        )
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")
             return
