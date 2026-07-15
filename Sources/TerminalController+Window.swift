@@ -40,7 +40,7 @@ extension TerminalController {
 
     func v2WindowFocus(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid window_id", data: nil)
+            return v2InvalidParam("window_id")
         }
         let ok = v2MainSync { AppDelegate.shared?.focusMainWindow(windowId: windowId) ?? false }
         return ok
@@ -70,7 +70,7 @@ extension TerminalController {
 
     func v2WindowClose(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid window_id", data: nil)
+            return v2InvalidParam("window_id")
         }
         let ok = v2MainSync { AppDelegate.shared?.closeMainWindow(windowId: windowId) ?? false }
         return ok

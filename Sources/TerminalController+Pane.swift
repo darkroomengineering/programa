@@ -91,7 +91,7 @@ extension TerminalController {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
         }
         guard let paneUUID = v2UUID(params, "pane_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid pane_id", data: nil)
+            return v2InvalidParam("pane_id")
         }
 
         var result: V2CallResult = .err(code: "not_found", message: "Pane not found", data: ["pane_id": paneUUID.uuidString])
@@ -175,7 +175,7 @@ extension TerminalController {
         }
         guard let directionStr = v2String(params, "direction"),
               let direction = parseSplitDirection(directionStr) else {
-            return .err(code: "invalid_params", message: "Missing or invalid direction (left|right|up|down)", data: nil)
+            return v2InvalidParam("direction (left|right|up|down)")
         }
 
         let panelType = v2PanelType(params, "type") ?? .terminal
@@ -430,10 +430,10 @@ extension TerminalController {
 
     func v2PaneSwap(params: [String: Any]) -> V2CallResult {
         guard let sourcePaneUUID = v2UUID(params, "pane_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid pane_id", data: nil)
+            return v2InvalidParam("pane_id")
         }
         guard let targetPaneUUID = v2UUID(params, "target_pane_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid target_pane_id", data: nil)
+            return v2InvalidParam("target_pane_id")
         }
         if sourcePaneUUID == targetPaneUUID {
             return .err(code: "invalid_params", message: "pane_id and target_pane_id must be different", data: nil)
@@ -606,7 +606,7 @@ extension TerminalController {
 
     func v2PaneJoin(params: [String: Any]) -> V2CallResult {
         guard let targetPaneUUID = v2UUID(params, "target_pane_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid target_pane_id", data: nil)
+            return v2InvalidParam("target_pane_id")
         }
 
         var surfaceId = v2UUID(params, "surface_id")

@@ -183,7 +183,7 @@ extension TerminalController {
 
     func v2DebugCommandPaletteVisible(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid window_id", data: nil)
+            return v2InvalidParam("window_id")
         }
         var visible = false
         DispatchQueue.main.sync {
@@ -198,7 +198,7 @@ extension TerminalController {
 
     func v2DebugCommandPaletteSelection(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid window_id", data: nil)
+            return v2InvalidParam("window_id")
         }
         var visible = false
         var selectedIndex = 0
@@ -216,7 +216,7 @@ extension TerminalController {
 
     func v2DebugCommandPaletteResults(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid window_id", data: nil)
+            return v2InvalidParam("window_id")
         }
         let requestedLimit = params["limit"] as? Int
         let limit = max(1, min(100, requestedLimit ?? 20))
@@ -306,7 +306,7 @@ extension TerminalController {
 
     func v2DebugCommandPaletteRenameInputSelection(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid window_id", data: nil)
+            return v2InvalidParam("window_id")
         }
 
         var result: V2CallResult = .ok([
@@ -415,7 +415,7 @@ extension TerminalController {
 
     func v2DebugSidebarVisible(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid window_id", data: nil)
+            return v2InvalidParam("window_id")
         }
         var visibility: Bool?
         DispatchQueue.main.sync {

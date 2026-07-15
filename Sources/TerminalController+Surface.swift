@@ -108,7 +108,7 @@ extension TerminalController {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
 
         var result: V2CallResult = .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
@@ -145,7 +145,7 @@ extension TerminalController {
         }
         guard let directionStr = v2String(params, "direction"),
               let direction = parseSplitDirection(directionStr) else {
-            return .err(code: "invalid_params", message: "Missing or invalid direction (left|right|up|down)", data: nil)
+            return v2InvalidParam("direction (left|right|up|down)")
         }
 
         var result: V2CallResult = .err(code: "internal_error", message: "Failed to create split", data: nil)
@@ -285,11 +285,11 @@ extension TerminalController {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
         guard let directionStr = v2String(params, "direction"),
               let direction = parseSplitDirection(directionStr) else {
-            return .err(code: "invalid_params", message: "Missing or invalid direction (left|right|up|down)", data: nil)
+            return v2InvalidParam("direction (left|right|up|down)")
         }
 
         let orientation: SplitOrientation = direction.isHorizontal ? .horizontal : .vertical
@@ -330,7 +330,7 @@ extension TerminalController {
 
     func v2SurfaceMove(params: [String: Any]) -> V2CallResult {
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
 
         let requestedPaneUUID = v2UUID(params, "pane_id")
@@ -479,7 +479,7 @@ extension TerminalController {
 
     func v2SurfaceReorder(params: [String: Any]) -> V2CallResult {
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
 
         let index = v2Int(params, "index")

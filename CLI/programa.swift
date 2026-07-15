@@ -1162,6 +1162,11 @@ struct CommandDescriptor {
     let connectionPolicy: CLICommandConnectionPolicy
     let helpPolicy: CLICommandHelpPolicy
     let argumentContract: CLICommandArgumentContract
+    /// Full, verbatim `programa <command> --help` text (the `Usage: ...`
+    /// block), or `nil` if this command has no detailed usage text (falls
+    /// back to `helpLines` only, or to one of the per-family
+    /// `*SubcommandUsage` helpers checked before the table lookup).
+    let detailedUsage: String?
     /// Executes the command. `nil` for commands implemented directly by
     /// `run()` before generic socket dispatch.
     let execute: ((CommandContext) throws -> Void)?
@@ -1172,6 +1177,7 @@ struct CommandDescriptor {
         connectionPolicy: CLICommandConnectionPolicy = .socket,
         helpPolicy: CLICommandHelpPolicy = .programa,
         argumentContract: CLICommandArgumentContract = .registered,
+        detailedUsage: String? = nil,
         execute: ((CommandContext) throws -> Void)?
     ) {
         self.names = names
@@ -1179,6 +1185,7 @@ struct CommandDescriptor {
         self.connectionPolicy = connectionPolicy
         self.helpPolicy = helpPolicy
         self.argumentContract = argumentContract
+        self.detailedUsage = detailedUsage
         self.execute = execute
     }
 }
@@ -1514,12 +1521,47 @@ struct ProgramaCLI {
         var descriptors: [CommandDescriptor] = [
             // MARK: - Pre-connection specials (dispatched earlier in run();
             // documented here only so usage() has one source for help text).
-            CommandDescriptor(names: ["welcome"], helpLines: ["welcome"], connectionPolicy: .local, execute: nil),
-            CommandDescriptor(names: ["shortcuts"], helpLines: ["shortcuts"], connectionPolicy: .local, execute: nil),
+            CommandDescriptor(
+                names: ["welcome"],
+                helpLines: ["welcome"],
+                connectionPolicy: .local,
+                detailedUsage: """
+                Usage: programa welcome
+
+                Show a welcome screen with the programa logo and useful shortcuts.
+                Auto-runs once on first launch.
+                """,
+                execute: nil
+            ),
+            CommandDescriptor(
+                names: ["shortcuts"],
+                helpLines: ["shortcuts"],
+                connectionPolicy: .local,
+                detailedUsage: """
+                Usage: programa shortcuts
+
+                Open the Settings window to Keyboard Shortcuts.
+                """,
+                execute: nil
+            ),
             CommandDescriptor(
                 names: ["feedback"],
                 helpLines: ["feedback [--email <email> --body <text> [--image <path> ...]]  (opens GitHub issues; direct submission disabled)"],
                 connectionPolicy: .local,
+                detailedUsage: """
+                Usage: programa feedback
+                       programa feedback --email <email> --body <text> [--image <path> ...]
+
+                Without args, opens the GitHub issues page (https://github.com/darkroomengineering/programa/issues) in your browser.
+
+                Direct feedback submission is disabled; --email/--body/--image are accepted but the app will
+                return an error telling you to report the issue on GitHub instead.
+
+                Flags:
+                  --email <email>   Contact email for follow-up (submission disabled)
+                  --body <text>     Feedback body (submission disabled)
+                  --image <path>    Attach an image file, repeat for multiple images (submission disabled)
+                """,
                 execute: nil
             ),
             CommandDescriptor(names: ["themes"], helpLines: ["themes [list|set|clear]"], connectionPolicy: .local, execute: nil),
@@ -1527,12 +1569,27 @@ struct ProgramaCLI {
             CommandDescriptor(names: ["omo"], helpLines: ["omo [opencode-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
             CommandDescriptor(names: ["omx"], helpLines: ["omx [omx-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
             CommandDescriptor(names: ["omc"], helpLines: ["omc [omc-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
-            CommandDescriptor(names: ["codex"], helpLines: ["codex <install-hooks|uninstall-hooks>"], connectionPolicy: .local, execute: nil),
+            CommandDescriptor(
+                names: ["codex"],
+                helpLines: ["codex <install-hooks|uninstall-hooks>"],
+                connectionPolicy: .local,
+                detailedUsage: """
+                Usage: programa codex <install-hooks|uninstall-hooks>
+
+                Install or remove Programa's Codex notification hooks.
+                """,
+                execute: nil
+            ),
 
             CommandDescriptor(
                 names: ["ping"],
                 helpLines: ["ping"],
                 argumentContract: .noArguments,
+                detailedUsage: """
+                Usage: programa ping
+
+                Check connectivity to the programa socket server.
+                """,
                 execute: { ctx in
                     _ = try ctx.client.sendV2(method: "system.ping")
                     print("PONG")
@@ -1544,6 +1601,11 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["capabilities"],
                 helpLines: ["capabilities"],
+                detailedUsage: """
+                Usage: programa capabilities
+
+                Print server capabilities as JSON.
+                """,
                 execute: { ctx in
                     let response = try ctx.client.sendV2(method: "system.capabilities")
                     print(self.jsonString(self.formatIDs(response, mode: ctx.idFormat)))
@@ -1553,6 +1615,12 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["rpc"],
                 helpLines: ["rpc <method> [json-params]"],
+                detailedUsage: """
+                Usage: programa rpc <method> [json-params]
+
+                Call a raw v2 method with an optional JSON object for params.
+                Example: programa rpc surface.report_tty '{"workspace_id":"...","surface_id":"...","tty_name":"ttys001"}'
+                """,
                 execute: { ctx in
                     guard let method = ctx.commandArgs.first?.trimmingCharacters(in: .whitespacesAndNewlines),
                           !method.isEmpty else {
@@ -1568,6 +1636,16 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["identify"],
                 helpLines: ["identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]"],
+                detailedUsage: """
+                Usage: programa identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]
+
+                Print server identity and caller context details.
+
+                Flags:
+                  --workspace <id|ref|index>   Caller workspace context (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref|index>     Caller surface context (default: $PROGRAMA_SURFACE_ID)
+                  --no-caller                  Omit caller context from the request
+                """,
                 execute: { ctx in
                     var params: [String: Any] = [:]
                     let includeCaller = !self.hasFlag(ctx.commandArgs, name: "--no-caller")
@@ -1608,6 +1686,11 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["list-windows"],
                 helpLines: ["list-windows"],
+                detailedUsage: """
+                Usage: programa list-windows
+
+                List open windows.
+                """,
                 execute: { ctx in
                     let listed = try ctx.client.sendV2(method: "window.list")
                     let windows = listed["windows"] as? [[String: Any]] ?? []
@@ -1642,6 +1725,11 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["current-window"],
                 helpLines: ["current-window"],
+                detailedUsage: """
+                Usage: programa current-window
+
+                Print the currently selected window ID.
+                """,
                 execute: { ctx in
                     let response = try ctx.client.sendV2(method: "window.current")
                     let windowId = (response["window_id"] as? String) ?? ""
@@ -1656,6 +1744,14 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["new-window"],
                 helpLines: ["new-window"],
+                detailedUsage: """
+                Usage: programa new-window
+
+                Create a new window.
+
+                Example:
+                  programa new-window
+                """,
                 execute: { ctx in
                     let response = try ctx.client.sendV2(method: "window.create")
                     print("OK \((response["window_id"] as? String) ?? "")")
@@ -1665,6 +1761,18 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["focus-window"],
                 helpLines: ["focus-window --window <id>"],
+                detailedUsage: """
+                Usage: programa focus-window --window <id|ref|index>
+
+                Focus (bring to front) the specified window.
+
+                Flags:
+                  --window <id|ref|index>   Window to focus (required)
+
+                Example:
+                  programa focus-window --window 0
+                  programa focus-window --window window:1
+                """,
                 execute: { ctx in
                     guard let target = self.optionValue(ctx.commandArgs, name: "--window") else {
                         throw CLIError(message: "focus-window requires --window")
@@ -1686,6 +1794,18 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["close-window"],
                 helpLines: ["close-window --window <id>"],
+                detailedUsage: """
+                Usage: programa close-window --window <id|ref|index>
+
+                Close the specified window.
+
+                Flags:
+                  --window <id|ref|index>   Window to close (required)
+
+                Example:
+                  programa close-window --window 0
+                  programa close-window --window window:1
+                """,
                 execute: { ctx in
                     guard let target = self.optionValue(ctx.commandArgs, name: "--window") else {
                         throw CLIError(message: "close-window requires --window")
@@ -1705,6 +1825,18 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["move-workspace-to-window"],
                 helpLines: ["move-workspace-to-window --workspace <id|ref> --window <id|ref>"],
+                detailedUsage: """
+                Usage: programa move-workspace-to-window --workspace <id|ref|index> --window <id|ref|index>
+
+                Move a workspace to a different window.
+
+                Flags:
+                  --workspace <id|ref|index>   Workspace to move (required)
+                  --window <id|ref|index>      Target window (required)
+
+                Example:
+                  programa move-workspace-to-window --workspace workspace:2 --window window:1
+                """,
                 execute: { ctx in
                     guard let workspaceRaw = self.optionValue(ctx.commandArgs, name: "--workspace") else {
                         throw CLIError(message: "move-workspace-to-window requires --workspace")
@@ -1725,6 +1857,26 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["reorder-workspace"],
                 helpLines: ["reorder-workspace --workspace <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>) [--window <id|ref|index>]"],
+                detailedUsage: """
+                Usage: programa reorder-workspace [--workspace <id|ref|index> | <id|ref|index>] [flags]
+
+                Reorder a workspace within its window.
+
+                Flags:
+                  --workspace <id|ref|index>   Workspace to reorder (required unless passed positionally)
+                  --index <n>                  Place at this index
+                  --before <id|ref|index>      Place before this workspace
+                  --before-workspace <id|ref|index>
+                                             Alias for --before
+                  --after <id|ref|index>       Place after this workspace
+                  --after-workspace <id|ref|index>
+                                             Alias for --after
+                  --window <id|ref|index>      Window context
+
+                Example:
+                  programa reorder-workspace --workspace workspace:2 --index 0
+                  programa reorder-workspace --workspace workspace:3 --after workspace:1
+                """,
                 execute: { ctx in
                     try self.runReorderWorkspace(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
                 }
@@ -1733,6 +1885,42 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["workspace-action"],
                 helpLines: ["workspace-action --action <name> [--workspace <id|ref|index>] [--title <text>] [--color <name|#hex>] [--description <text>]"],
+                detailedUsage: """
+                Usage: programa workspace-action --action <name> [flags]
+
+                Perform workspace context-menu actions from CLI/socket.
+
+                Actions:
+                  pin | unpin
+                  rename | clear-name
+                  set-description | clear-description
+                  move-up | move-down | move-top
+                  close-others | close-above | close-below
+                  mark-read | mark-unread
+                  set-color | clear-color
+
+                Flags:
+                  --action <name>              Action name (required if not positional)
+                  --workspace <id|ref|index>   Target workspace (default: current/$PROGRAMA_WORKSPACE_ID)
+                  --title <text>               Title for rename
+                  --color <name|#hex>          Color for set-color (name or #RRGGBB hex)
+                  --description <text>         Description for set-description
+
+                Named colors:
+                  Red, Crimson, Orange, Amber, Olive, Green, Teal, Aqua,
+                  Blue, Navy, Indigo, Purple, Magenta, Rose, Brown, Charcoal
+
+                Example:
+                  programa workspace-action --workspace workspace:2 --action pin
+                  programa workspace-action --action rename --title "infra"
+                  programa workspace-action close-others
+                  programa workspace-action --action set-color --color blue
+                  programa workspace-action --action set-color --color "#C0392B"
+                  programa workspace-action set-color Amber
+                  programa workspace-action --action set-description --description "Ship checklist"
+                  programa workspace-action --action set-description $'Ship checklist\n- verify build\n- post notes'
+                  programa workspace-action clear-color
+                """,
                 execute: { ctx in
                     try self.runWorkspaceAction(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, windowOverride: ctx.windowId)
                 }
@@ -1741,6 +1929,14 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["list-workspaces"],
                 helpLines: ["list-workspaces"],
+                detailedUsage: """
+                Usage: programa list-workspaces
+
+                List workspaces in the current window.
+
+                Example:
+                  programa list-workspaces
+                """,
                 execute: { ctx in
                     let payload = try ctx.client.sendV2(method: "workspace.list")
                     if ctx.jsonOutput {
@@ -1775,6 +1971,24 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["new-workspace"],
                 helpLines: ["new-workspace [--name <title>] [--description <text>] [--cwd <path>] [--command <text>]"],
+                detailedUsage: """
+                Usage: programa new-workspace [--name <title>] [--description <text>] [--cwd <path>] [--command <text>]
+
+                Create a new workspace in the current window.
+
+                Flags:
+                  --name <title>     Set a custom name for the new workspace
+                  --description <text> Set a custom description for the new workspace
+                  --cwd <path>       Set the working directory for the new workspace
+                  --command <text>   Send text+Enter to the new workspace after creation
+
+                Example:
+                  programa new-workspace
+                  programa new-workspace --name "Build Server"
+                  programa new-workspace --name "Launch" --description "Ship checklist"
+                  programa new-workspace --cwd ~/projects/myapp
+                  programa new-workspace --cwd . --command "npm test"
+                """,
                 execute: { ctx in
                     let (commandOpt, rem0) = self.parseOption(ctx.commandArgs, name: "--command")
                     let (cwdOpt, rem1) = self.parseOption(rem0, name: "--cwd")
@@ -1812,6 +2026,20 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["new-split"],
                 helpLines: ["new-split <left|right|up|down> [--workspace <id|ref>] [--surface <id|ref>] [--panel <id|ref>]"],
+                detailedUsage: """
+                Usage: programa new-split <left|right|up|down> [flags]
+
+                Split the current pane in the given direction.
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>     Surface to split from (default: $PROGRAMA_SURFACE_ID)
+                  --panel <id|ref>       Alias for --surface
+
+                Example:
+                  programa new-split right
+                  programa new-split down --workspace workspace:1
+                """,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
@@ -1834,6 +2062,18 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["list-panes"],
                 helpLines: ["list-panes [--workspace <id|ref>]"],
+                detailedUsage: """
+                Usage: programa list-panes [--workspace <id|ref>]
+
+                List panes in a workspace.
+
+                Flags:
+                  --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa list-panes
+                  programa list-panes --workspace workspace:2
+                """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     var params: [String: Any] = [:]
@@ -1863,6 +2103,19 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["list-pane-surfaces"],
                 helpLines: ["list-pane-surfaces [--workspace <id|ref>] [--pane <id|ref>]"],
+                detailedUsage: """
+                Usage: programa list-pane-surfaces [--workspace <id|ref>] [--pane <id|ref>]
+
+                List surfaces in a pane.
+
+                Flags:
+                  --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+                  --pane <id|ref>        Restrict to a specific pane (default: focused pane)
+
+                Example:
+                  programa list-pane-surfaces
+                  programa list-pane-surfaces --workspace workspace:2 --pane pane:1
+                """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     let paneRaw = self.optionValue(ctx.commandArgs, name: "--pane")
@@ -1899,6 +2152,20 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["focus-pane"],
                 helpLines: ["focus-pane --pane <id|ref> [--workspace <id|ref>]"],
+                detailedUsage: """
+                Usage: programa focus-pane [--pane <id|ref> | <id|ref>] [flags]
+
+                Focus the specified pane.
+
+                Flags:
+                  --pane <id|ref>          Pane to focus (required unless passed positionally)
+                  --workspace <id|ref>     Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa focus-pane --pane pane:2
+                  programa focus-pane pane:1
+                  programa focus-pane --pane pane:1 --workspace workspace:2
+                """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     guard let paneRaw = self.optionValue(ctx.commandArgs, name: "--pane") ?? ctx.commandArgs.first else {
@@ -1917,6 +2184,21 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["new-pane"],
                 helpLines: ["new-pane [--type <terminal|browser>] [--direction <left|right|up|down>] [--workspace <id|ref>] [--url <url>]"],
+                detailedUsage: """
+                Usage: programa new-pane [flags]
+
+                Create a new pane in the workspace.
+
+                Flags:
+                  --type <terminal|browser>           Pane type (default: terminal)
+                  --direction <left|right|up|down>    Split direction (default: right)
+                  --workspace <id|ref>                Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --url <url>                         URL for browser panes
+
+                Example:
+                  programa new-pane
+                  programa new-pane --type browser --direction down --url https://example.com
+                """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     let type = self.optionValue(ctx.commandArgs, name: "--type")
@@ -1935,6 +2217,21 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["new-surface"],
                 helpLines: ["new-surface [--type <terminal|browser>] [--pane <id|ref>] [--workspace <id|ref>] [--url <url>]"],
+                detailedUsage: """
+                Usage: programa new-surface [flags]
+
+                Create a new surface (tab) in a pane.
+
+                Flags:
+                  --type <terminal|browser>   Surface type (default: terminal)
+                  --pane <id|ref>             Target pane
+                  --workspace <id|ref>        Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --url <url>                 URL for browser surfaces
+
+                Example:
+                  programa new-surface
+                  programa new-surface --type browser --pane pane:1 --url https://example.com
+                """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     let type = self.optionValue(ctx.commandArgs, name: "--type")
@@ -1955,6 +2252,20 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["close-surface"],
                 helpLines: ["close-surface [--surface <id|ref>] [--workspace <id|ref>]"],
+                detailedUsage: """
+                Usage: programa close-surface [flags]
+
+                Close a surface. Defaults to the focused surface if none specified.
+
+                Flags:
+                  --surface <id|ref>     Surface to close (default: $PROGRAMA_SURFACE_ID)
+                  --panel <id|ref>       Alias for --surface
+                  --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa close-surface
+                  programa close-surface --surface surface:3
+                """,
                 execute: { ctx in
                     let csWsFlag = self.optionValue(ctx.commandArgs, name: "--workspace")
                     let workspaceArg = csWsFlag ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
@@ -1980,6 +2291,29 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["move-surface"],
                 helpLines: ["move-surface --surface <id|ref|index> [--pane <id|ref|index>] [--workspace <id|ref|index>] [--window <id|ref|index>] [--before <id|ref|index>] [--after <id|ref|index>] [--index <n>] [--focus <true|false>]"],
+                detailedUsage: """
+                Usage: programa move-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
+
+                Move a surface to a different pane, workspace, or window.
+
+                Flags:
+                  --surface <id|ref|index>   Surface to move (required unless passed positionally)
+                  --pane <id|ref|index>      Target pane
+                  --workspace <id|ref|index> Target workspace
+                  --window <id|ref|index>    Target window
+                  --before <id|ref|index>    Place before this surface
+                  --before-surface <id|ref|index>
+                                           Alias for --before
+                  --after <id|ref|index>     Place after this surface
+                  --after-surface <id|ref|index>
+                                           Alias for --after
+                  --index <n>                Place at this index
+                  --focus <true|false>       Focus the surface after moving
+
+                Example:
+                  programa move-surface --surface surface:1 --workspace workspace:2
+                  programa move-surface surface:1 --pane pane:2 --index 0
+                """,
                 execute: { ctx in
                     try self.runMoveSurface(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
                 }
@@ -1988,6 +2322,26 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["reorder-surface"],
                 helpLines: ["reorder-surface --surface <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>)"],
+                detailedUsage: """
+                Usage: programa reorder-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
+
+                Reorder a surface within its pane.
+
+                Flags:
+                  --surface <id|ref|index>   Surface to reorder (required unless passed positionally)
+                  --workspace <id|ref|index> Workspace context
+                  --before <id|ref|index>    Place before this surface
+                  --before-surface <id|ref|index>
+                                           Alias for --before
+                  --after <id|ref|index>     Place after this surface
+                  --after-surface <id|ref|index>
+                                           Alias for --after
+                  --index <n>                Place at this index
+
+                Example:
+                  programa reorder-surface --surface surface:1 --index 0
+                  programa reorder-surface --surface surface:3 --after surface:1
+                """,
                 execute: { ctx in
                     try self.runReorderSurface(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
                 }
@@ -1996,6 +2350,32 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["tab-action"],
                 helpLines: ["tab-action --action <name> [--tab <id|ref|index>] [--surface <id|ref|index>] [--workspace <id|ref|index>] [--title <text>] [--url <url>]"],
+                detailedUsage: """
+                Usage: programa tab-action --action <name> [flags]
+
+                Perform horizontal tab context-menu actions from CLI/socket.
+
+                Actions:
+                  rename | clear-name
+                  close-left | close-right | close-others
+                  new-terminal-right | new-browser-right
+                  reload | duplicate
+                  pin | unpin
+                  mark-unread
+
+                Flags:
+                  --action <name>              Action name (required if not positional)
+                  --tab <id|ref|index>         Target tab (accepts tab:<n> or surface:<n>; default: $PROGRAMA_TAB_ID, then $PROGRAMA_SURFACE_ID, then focused tab)
+                  --surface <id|ref|index>     Alias for --tab (backward compatibility)
+                  --workspace <id|ref|index>   Workspace context (default: current/$PROGRAMA_WORKSPACE_ID)
+                  --title <text>               Title for rename (or pass trailing title text)
+                  --url <url>                  Optional URL for new-browser-right
+
+                Example:
+                  programa tab-action --tab tab:3 --action pin
+                  programa tab-action --action close-right
+                  programa tab-action --tab tab:2 --action rename --title "build logs"
+                """,
                 execute: { ctx in
                     try self.runTabAction(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, windowOverride: ctx.windowId)
                 }
@@ -2004,6 +2384,28 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["rename-tab"],
                 helpLines: ["rename-tab [--workspace <id|ref>] [--tab <id|ref>] [--surface <id|ref>] <title>"],
+                detailedUsage: """
+                Usage: programa rename-tab [--workspace <id|ref>] [--tab <id|ref>] [--surface <id|ref>] [--] <title>
+
+                Compatibility alias for tab-action rename.
+
+                Resolution order for target tab:
+                1) --tab
+                2) --surface
+                3) $PROGRAMA_TAB_ID / $PROGRAMA_SURFACE_ID
+                4) currently focused tab (optionally within --workspace)
+
+                Flags:
+                  --workspace <id|ref>   Workspace context (default: current/$PROGRAMA_WORKSPACE_ID)
+                  --tab <id|ref>         Tab target (supports tab:<n> or surface:<n>)
+                  --surface <id|ref>     Alias for --tab
+                  --title <text>         Explicit title (or use trailing positional title)
+
+                Examples:
+                  programa rename-tab "build logs"
+                  programa rename-tab --tab tab:3 "staging server"
+                  programa rename-tab --workspace workspace:2 --surface surface:5 --title "agent run"
+                """,
                 execute: { ctx in
                     try self.runRenameTab(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, windowOverride: ctx.windowId)
                 }
@@ -2012,6 +2414,19 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["drag-surface-to-split"],
                 helpLines: ["drag-surface-to-split --surface <id|ref> <left|right|up|down>"],
+                detailedUsage: """
+                Usage: programa drag-surface-to-split --surface <id|ref> <left|right|up|down>
+
+                Drag a surface into a new split in the given direction.
+
+                Flags:
+                  --surface <id|ref>   Surface to drag (required)
+                  --panel <id|ref>     Alias for --surface
+
+                Example:
+                  programa drag-surface-to-split --surface surface:1 right
+                  programa drag-surface-to-split --panel surface:2 down
+                """,
                 execute: { ctx in
                     let (surfaceArg, rem0) = self.parseOption(ctx.commandArgs, name: "--surface")
                     let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
@@ -2035,6 +2450,11 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["refresh-surfaces"],
                 helpLines: ["refresh-surfaces"],
+                detailedUsage: """
+                Usage: programa refresh-surfaces
+
+                Refresh surface snapshots for the focused workspace.
+                """,
                 execute: { ctx in
                     // v1 always targeted the currently-selected workspace; no workspace_id here either.
                     let refreshPayload = try ctx.client.sendV2(method: "surface.refresh", params: [:])
@@ -2045,6 +2465,15 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["reload-config"],
                 helpLines: ["reload-config"],
+                detailedUsage: """
+                Usage: programa reload-config
+
+                Run the same configuration reload as the Reload Configuration shortcut.
+                This reloads Ghostty config, re-reads ~/.config/programa/settings.json, and refreshes terminals.
+
+                Example:
+                  programa reload-config
+                """,
                 execute: { ctx in
                     if let unexpected = ctx.commandArgs.first {
                         throw CLIError(message: "reload-config does not accept arguments. Unexpected argument '\(unexpected)'")
@@ -2057,6 +2486,18 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["surface-health"],
                 helpLines: ["surface-health [--workspace <id|ref>]"],
+                detailedUsage: """
+                Usage: programa surface-health [--workspace <id|ref>]
+
+                List health details for surfaces in a workspace.
+
+                Flags:
+                  --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa surface-health
+                  programa surface-health --workspace workspace:2
+                """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     var params: [String: Any] = [:]
@@ -2090,6 +2531,12 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["debug-terminals"],
                 helpLines: [],
+                detailedUsage: """
+                Usage: programa debug-terminals
+
+                Print live Ghostty terminal runtime metadata across all windows and workspaces.
+                Intended for debugging stray or detached terminal views.
+                """,
                 execute: { ctx in
                     let unexpected = ctx.commandArgs.filter { $0 != "--" }
                     if let extra = unexpected.first {
@@ -2107,6 +2554,20 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["trigger-flash"],
                 helpLines: ["trigger-flash [--workspace <id|ref>] [--surface <id|ref>]"],
+                detailedUsage: """
+                Usage: programa trigger-flash [--workspace <id|ref>] [--surface <id|ref>] [--panel <id|ref>]
+
+                Trigger the unread flash indicator for a surface.
+
+                Flags:
+                  --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+                  --panel <id|ref>       Alias for --surface
+
+                Example:
+                  programa trigger-flash
+                  programa trigger-flash --workspace workspace:2 --surface surface:3
+                """,
                 execute: { ctx in
                     let tfWsFlag = self.optionValue(ctx.commandArgs, name: "--workspace")
                     let explicitWorkspaceArg = tfWsFlag
@@ -2148,6 +2609,18 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["list-panels"],
                 helpLines: ["list-panels [--workspace <id|ref>]"],
+                detailedUsage: """
+                Usage: programa list-panels [--workspace <id|ref>]
+
+                List surfaces (panels) in a workspace.
+
+                Flags:
+                  --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa list-panels
+                  programa list-panels --workspace workspace:2
+                """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     var params: [String: Any] = [:]
@@ -2180,6 +2653,19 @@ struct ProgramaCLI {
                 names: ["focus-panel"],
                 helpLines: ["focus-panel --panel <id|ref> [--workspace <id|ref>]"],
                 argumentContract: .focusPanel,
+                detailedUsage: """
+                Usage: programa focus-panel --panel <id|ref> [--workspace <id|ref>]
+
+                Focus a specific panel (surface).
+
+                Flags:
+                  --panel <id|ref>       Panel/surface to focus (required)
+                  --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa focus-panel --panel surface:2
+                  programa focus-panel --panel surface:5 --workspace workspace:2
+                """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     guard let panelRaw = self.optionValue(ctx.commandArgs, name: "--panel") else {
@@ -2198,6 +2684,17 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["close-workspace"],
                 helpLines: ["close-workspace --workspace <id|ref>"],
+                detailedUsage: """
+                Usage: programa close-workspace --workspace <id|ref|index>
+
+                Close the specified workspace.
+
+                Flags:
+                  --workspace <id|ref|index>   Workspace to close (required)
+
+                Example:
+                  programa close-workspace --workspace workspace:2
+                """,
                 execute: { ctx in
                     guard let workspaceRaw = self.optionValue(ctx.commandArgs, name: "--workspace") else {
                         throw CLIError(message: "close-workspace requires --workspace")
@@ -2216,6 +2713,18 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["select-workspace"],
                 helpLines: ["select-workspace --workspace <id|ref>"],
+                detailedUsage: """
+                Usage: programa select-workspace --workspace <id|ref|index>
+
+                Select (switch to) the specified workspace.
+
+                Flags:
+                  --workspace <id|ref|index>   Workspace to select (required)
+
+                Example:
+                  programa select-workspace --workspace workspace:2
+                  programa select-workspace --workspace 0
+                """,
                 execute: { ctx in
                     guard let workspaceRaw = self.optionValue(ctx.commandArgs, name: "--workspace") else {
                         throw CLIError(message: "select-workspace requires --workspace")
@@ -2234,6 +2743,19 @@ struct ProgramaCLI {
                     "rename-workspace [--workspace <id|ref>] <title>",
                     "rename-window [--workspace <id|ref>] <title>",
                 ],
+                detailedUsage: """
+                Usage: programa rename-workspace [--workspace <id|ref|index>] [--] <title>
+
+                Rename a workspace. Defaults to the current workspace.
+                tmux-compatible alias: rename-window
+
+                Flags:
+                  --workspace <id|ref|index>   Workspace to rename (default: current/$PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa rename-workspace "backend logs"
+                  programa rename-window --workspace workspace:2 "agent run"
+                """,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
@@ -2252,6 +2774,11 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["current-workspace"],
                 helpLines: ["current-workspace"],
+                detailedUsage: """
+                Usage: programa current-workspace
+
+                Print the currently selected workspace ID.
+                """,
                 execute: { ctx in
                     let response = try ctx.client.sendV2(method: "workspace.current")
                     if ctx.jsonOutput {
@@ -2269,6 +2796,21 @@ struct ProgramaCLI {
                 names: ["read-screen"],
                 helpLines: ["read-screen [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]"],
                 argumentContract: .readScreen,
+                detailedUsage: """
+                Usage: programa read-screen [flags]
+
+                Read terminal text from a surface as plain text.
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+                  --scrollback           Include scrollback (not just visible viewport)
+                  --lines <n>            Limit to the last n lines (implies --scrollback)
+
+                Example:
+                  programa read-screen
+                  programa read-screen --surface surface:2 --scrollback --lines 200
+                """,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
@@ -2311,6 +2853,19 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["send"],
                 helpLines: ["send [--workspace <id|ref>] [--surface <id|ref>] <text>"],
+                detailedUsage: """
+                Usage: programa send [flags] [--] <text>
+
+                Send text to a terminal surface. Escape sequences: \\n and \\r send Enter, \\t sends Tab.
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+
+                Example:
+                  programa send "echo hello"
+                  programa send --surface surface:2 "ls -la\\n"
+                """,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
@@ -2332,6 +2887,19 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["send-key"],
                 helpLines: ["send-key [--workspace <id|ref>] [--surface <id|ref>] <key>"],
+                detailedUsage: """
+                Usage: programa send-key [flags] [--] <key>
+
+                Send a key event to a terminal surface.
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+
+                Example:
+                  programa send-key enter
+                  programa send-key --surface surface:2 ctrl+c
+                """,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
@@ -2352,6 +2920,18 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["send-panel"],
                 helpLines: ["send-panel --panel <id|ref> [--workspace <id|ref>] <text>"],
+                detailedUsage: """
+                Usage: programa send-panel --panel <id|ref> [flags] [--] <text>
+
+                Send text to a specific panel (surface). Escape sequences: \\n and \\r send Enter, \\t sends Tab.
+
+                Flags:
+                  --panel <id|ref>       Target panel (required)
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa send-panel --panel surface:2 "echo hello\\n"
+                """,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
@@ -2375,6 +2955,19 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["send-key-panel"],
                 helpLines: ["send-key-panel --panel <id|ref> [--workspace <id|ref>] <key>"],
+                detailedUsage: """
+                Usage: programa send-key-panel --panel <id|ref> [flags] [--] <key>
+
+                Send a key event to a specific panel (surface).
+
+                Flags:
+                  --panel <id|ref>       Target panel (required)
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa send-key-panel --panel surface:2 enter
+                  programa send-key-panel --panel surface:2 ctrl+c
+                """,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
@@ -2398,6 +2991,22 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["notify"],
                 helpLines: ["notify --title <text> [--subtitle <text>] [--body <text>] [--workspace <id|ref>] [--surface <id|ref>]"],
+                detailedUsage: """
+                Usage: programa notify [flags]
+
+                Send a notification to a workspace/surface.
+
+                Flags:
+                  --title <text>         Notification title (default: "Notification")
+                  --subtitle <text>      Notification subtitle
+                  --body <text>          Notification body
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+
+                Example:
+                  programa notify --title "Build done" --body "All tests passed"
+                  programa notify --title "Error" --subtitle "test.swift" --body "Line 42: syntax error"
+                """,
                 execute: { ctx in
                     let title = self.optionValue(ctx.commandArgs, name: "--title") ?? "Notification"
                     let subtitle = self.optionValue(ctx.commandArgs, name: "--subtitle") ?? ""
@@ -2446,6 +3055,11 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["list-notifications"],
                 helpLines: ["list-notifications"],
+                detailedUsage: """
+                Usage: programa list-notifications
+
+                List queued notifications.
+                """,
                 execute: { ctx in
                     let listed = try ctx.client.sendV2(method: "notification.list")
                     let notifications = listed["notifications"] as? [[String: Any]] ?? []
@@ -2484,6 +3098,11 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["clear-notifications"],
                 helpLines: ["clear-notifications"],
+                detailedUsage: """
+                Usage: programa clear-notifications
+
+                Clear all queued notifications.
+                """,
                 execute: { ctx in
                     if let wsFlag = self.optionValue(ctx.commandArgs, name: "--workspace") {
                         let wsId = try self.resolveWorkspaceId(wsFlag, client: ctx.client)
@@ -2502,6 +3121,22 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["set-status"],
                 helpLines: [],
+                detailedUsage: """
+                Usage: programa set-status <key> <value> [flags]
+
+                Set a sidebar status entry for a workspace. Status entries appear as
+                pills in the sidebar tab row. Use a unique key so different tools
+                (e.g. "claude_code", "build") can manage their own entries.
+
+                Flags:
+                  --icon <name>          Icon name (e.g. "sparkle", "hammer")
+                  --color <#hex>         Pill color (e.g. "#ff9500")
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa set-status build "compiling" --icon hammer --color "#ff9500"
+                  programa set-status deploy "v1.2.3" --workspace workspace:2
+                """,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs, stopAtDashDash: false)
                     guard parsed.positional.count >= 2 else {
@@ -2538,6 +3173,17 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["clear-status"],
                 helpLines: [],
+                detailedUsage: """
+                Usage: programa clear-status <key> [flags]
+
+                Remove a sidebar status entry by key.
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa clear-status build
+                """,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     guard let key = parsed.positional.first, parsed.positional.count == 1 else {
@@ -2552,6 +3198,18 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["list-status"],
                 helpLines: [],
+                detailedUsage: """
+                Usage: programa list-status [flags]
+
+                List all sidebar status entries for a workspace.
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa list-status
+                  programa list-status --workspace workspace:2
+                """,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
@@ -2569,6 +3227,19 @@ struct ProgramaCLI {
                 names: ["set-progress"],
                 helpLines: [],
                 argumentContract: .setProgress,
+                detailedUsage: """
+                Usage: programa set-progress <0.0-1.0> [flags]
+
+                Set a progress bar in the sidebar for a workspace.
+
+                Flags:
+                  --label <text>         Label shown next to the progress bar
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa set-progress 0.5 --label "Building..."
+                  programa set-progress 1.0 --label "Done"
+                """,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     guard let first = parsed.positional.first else {
@@ -2588,6 +3259,17 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["clear-progress"],
                 helpLines: [],
+                detailedUsage: """
+                Usage: programa clear-progress [flags]
+
+                Clear the sidebar progress bar for a workspace.
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa clear-progress
+                """,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
@@ -2599,6 +3281,21 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["log"],
                 helpLines: [],
+                detailedUsage: """
+                Usage: programa log [flags] [--] <message>
+
+                Append a log entry to the sidebar for a workspace.
+
+                Flags:
+                  --level <level>        Log level: info, progress, success, warning, error (default: info)
+                  --source <name>        Source label (e.g. "build", "test")
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa log "Build started"
+                  programa log --level error --source build "Compilation failed"
+                  programa log --level success -- "All 42 tests passed"
+                """,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     guard !parsed.positional.isEmpty else {
@@ -2622,6 +3319,17 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["clear-log"],
                 helpLines: [],
+                detailedUsage: """
+                Usage: programa clear-log [flags]
+
+                Clear all sidebar log entries for a workspace.
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa clear-log
+                """,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
@@ -2634,6 +3342,19 @@ struct ProgramaCLI {
                 names: ["list-log"],
                 helpLines: [],
                 argumentContract: .listLog,
+                detailedUsage: """
+                Usage: programa list-log [flags]
+
+                List sidebar log entries for a workspace.
+
+                Flags:
+                  --limit <n>            Show only the last N entries
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa list-log
+                  programa list-log --limit 5
+                """,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     var params: [String: Any] = [:]
@@ -2660,6 +3381,19 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["sidebar-state"],
                 helpLines: [],
+                detailedUsage: """
+                Usage: programa sidebar-state [flags]
+
+                Dump all sidebar metadata for a workspace (cwd, git branch, ports,
+                status entries, progress, log entries).
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+
+                Example:
+                  programa sidebar-state
+                  programa sidebar-state --workspace workspace:2
+                """,
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
@@ -2675,6 +3409,15 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["set-app-focus"],
                 helpLines: ["set-app-focus <active|inactive|clear>"],
+                detailedUsage: """
+                Usage: programa set-app-focus <active|inactive|clear>
+
+                Override app focus state for notification routing tests.
+
+                Example:
+                  programa set-app-focus inactive
+                  programa set-app-focus clear
+                """,
                 execute: { ctx in
                     guard let value = ctx.commandArgs.first else { throw CLIError(message: "set-app-focus requires a value") }
                     let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -2694,6 +3437,11 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["simulate-app-active"],
                 helpLines: ["simulate-app-active"],
+                detailedUsage: """
+                Usage: programa simulate-app-active
+
+                Trigger the app-active handler used by notification focus tests.
+                """,
                 execute: { ctx in
                     _ = try ctx.client.sendV2(method: "app.simulate_active")
                     print("OK")
@@ -2855,6 +3603,11 @@ struct ProgramaCLI {
                 names: ["help"],
                 helpLines: ["help"],
                 connectionPolicy: .local,
+                detailedUsage: """
+                Usage: programa help
+
+                Show top-level CLI usage and command list.
+                """,
                 execute: { ctx in
                     print(self.usage())
                 }
@@ -4044,802 +4797,7 @@ struct ProgramaCLI {
         if let text = markdownSubcommandUsage(command) { return text }
         if let text = themesSubcommandUsage(command) { return text }
         if let text = agentWrapperSubcommandUsage(command) { return text }
-        switch command {
-        case "ping":
-            return """
-            Usage: programa ping
-
-            Check connectivity to the programa socket server.
-            """
-        case "capabilities":
-            return """
-            Usage: programa capabilities
-
-            Print server capabilities as JSON.
-            """
-        case "rpc":
-            return """
-            Usage: programa rpc <method> [json-params]
-
-            Call a raw v2 method with an optional JSON object for params.
-            Example: programa rpc surface.report_tty '{"workspace_id":"...","surface_id":"...","tty_name":"ttys001"}'
-            """
-        case "help":
-            return """
-            Usage: programa help
-
-            Show top-level CLI usage and command list.
-            """
-        case "codex":
-            return """
-            Usage: programa codex <install-hooks|uninstall-hooks>
-
-            Install or remove Programa's Codex notification hooks.
-            """
-        case "welcome":
-            return """
-            Usage: programa welcome
-
-            Show a welcome screen with the programa logo and useful shortcuts.
-            Auto-runs once on first launch.
-            """
-        case "shortcuts":
-            return """
-            Usage: programa shortcuts
-
-            Open the Settings window to Keyboard Shortcuts.
-            """
-        case "feedback":
-            return """
-            Usage: programa feedback
-                   programa feedback --email <email> --body <text> [--image <path> ...]
-
-            Without args, opens the GitHub issues page (https://github.com/darkroomengineering/programa/issues) in your browser.
-
-            Direct feedback submission is disabled; --email/--body/--image are accepted but the app will
-            return an error telling you to report the issue on GitHub instead.
-
-            Flags:
-              --email <email>   Contact email for follow-up (submission disabled)
-              --body <text>     Feedback body (submission disabled)
-              --image <path>    Attach an image file, repeat for multiple images (submission disabled)
-            """
-        case "identify":
-            return """
-            Usage: programa identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]
-
-            Print server identity and caller context details.
-
-            Flags:
-              --workspace <id|ref|index>   Caller workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref|index>     Caller surface context (default: $PROGRAMA_SURFACE_ID)
-              --no-caller                  Omit caller context from the request
-            """
-        case "list-windows":
-            return """
-            Usage: programa list-windows
-
-            List open windows.
-            """
-        case "current-window":
-            return """
-            Usage: programa current-window
-
-            Print the currently selected window ID.
-            """
-        case "new-window":
-            return """
-            Usage: programa new-window
-
-            Create a new window.
-
-            Example:
-              programa new-window
-            """
-        case "focus-window":
-            return """
-            Usage: programa focus-window --window <id|ref|index>
-
-            Focus (bring to front) the specified window.
-
-            Flags:
-              --window <id|ref|index>   Window to focus (required)
-
-            Example:
-              programa focus-window --window 0
-              programa focus-window --window window:1
-            """
-        case "close-window":
-            return """
-            Usage: programa close-window --window <id|ref|index>
-
-            Close the specified window.
-
-            Flags:
-              --window <id|ref|index>   Window to close (required)
-
-            Example:
-              programa close-window --window 0
-              programa close-window --window window:1
-            """
-        case "move-workspace-to-window":
-            return """
-            Usage: programa move-workspace-to-window --workspace <id|ref|index> --window <id|ref|index>
-
-            Move a workspace to a different window.
-
-            Flags:
-              --workspace <id|ref|index>   Workspace to move (required)
-              --window <id|ref|index>      Target window (required)
-
-            Example:
-              programa move-workspace-to-window --workspace workspace:2 --window window:1
-            """
-        case "move-surface":
-            return """
-            Usage: programa move-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
-
-            Move a surface to a different pane, workspace, or window.
-
-            Flags:
-              --surface <id|ref|index>   Surface to move (required unless passed positionally)
-              --pane <id|ref|index>      Target pane
-              --workspace <id|ref|index> Target workspace
-              --window <id|ref|index>    Target window
-              --before <id|ref|index>    Place before this surface
-              --before-surface <id|ref|index>
-                                       Alias for --before
-              --after <id|ref|index>     Place after this surface
-              --after-surface <id|ref|index>
-                                       Alias for --after
-              --index <n>                Place at this index
-              --focus <true|false>       Focus the surface after moving
-
-            Example:
-              programa move-surface --surface surface:1 --workspace workspace:2
-              programa move-surface surface:1 --pane pane:2 --index 0
-            """
-        case "reorder-surface":
-            return """
-            Usage: programa reorder-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
-
-            Reorder a surface within its pane.
-
-            Flags:
-              --surface <id|ref|index>   Surface to reorder (required unless passed positionally)
-              --workspace <id|ref|index> Workspace context
-              --before <id|ref|index>    Place before this surface
-              --before-surface <id|ref|index>
-                                       Alias for --before
-              --after <id|ref|index>     Place after this surface
-              --after-surface <id|ref|index>
-                                       Alias for --after
-              --index <n>                Place at this index
-
-            Example:
-              programa reorder-surface --surface surface:1 --index 0
-              programa reorder-surface --surface surface:3 --after surface:1
-            """
-        case "reorder-workspace":
-            return """
-            Usage: programa reorder-workspace [--workspace <id|ref|index> | <id|ref|index>] [flags]
-
-            Reorder a workspace within its window.
-
-            Flags:
-              --workspace <id|ref|index>   Workspace to reorder (required unless passed positionally)
-              --index <n>                  Place at this index
-              --before <id|ref|index>      Place before this workspace
-              --before-workspace <id|ref|index>
-                                         Alias for --before
-              --after <id|ref|index>       Place after this workspace
-              --after-workspace <id|ref|index>
-                                         Alias for --after
-              --window <id|ref|index>      Window context
-
-            Example:
-              programa reorder-workspace --workspace workspace:2 --index 0
-              programa reorder-workspace --workspace workspace:3 --after workspace:1
-            """
-        case "workspace-action":
-            return """
-            Usage: programa workspace-action --action <name> [flags]
-
-            Perform workspace context-menu actions from CLI/socket.
-
-            Actions:
-              pin | unpin
-              rename | clear-name
-              set-description | clear-description
-              move-up | move-down | move-top
-              close-others | close-above | close-below
-              mark-read | mark-unread
-              set-color | clear-color
-
-            Flags:
-              --action <name>              Action name (required if not positional)
-              --workspace <id|ref|index>   Target workspace (default: current/$PROGRAMA_WORKSPACE_ID)
-              --title <text>               Title for rename
-              --color <name|#hex>          Color for set-color (name or #RRGGBB hex)
-              --description <text>         Description for set-description
-
-            Named colors:
-              Red, Crimson, Orange, Amber, Olive, Green, Teal, Aqua,
-              Blue, Navy, Indigo, Purple, Magenta, Rose, Brown, Charcoal
-
-            Example:
-              programa workspace-action --workspace workspace:2 --action pin
-              programa workspace-action --action rename --title "infra"
-              programa workspace-action close-others
-              programa workspace-action --action set-color --color blue
-              programa workspace-action --action set-color --color "#C0392B"
-              programa workspace-action set-color Amber
-              programa workspace-action --action set-description --description "Ship checklist"
-              programa workspace-action --action set-description $'Ship checklist\n- verify build\n- post notes'
-              programa workspace-action clear-color
-            """
-        case "tab-action":
-            return """
-            Usage: programa tab-action --action <name> [flags]
-
-            Perform horizontal tab context-menu actions from CLI/socket.
-
-            Actions:
-              rename | clear-name
-              close-left | close-right | close-others
-              new-terminal-right | new-browser-right
-              reload | duplicate
-              pin | unpin
-              mark-unread
-
-            Flags:
-              --action <name>              Action name (required if not positional)
-              --tab <id|ref|index>         Target tab (accepts tab:<n> or surface:<n>; default: $PROGRAMA_TAB_ID, then $PROGRAMA_SURFACE_ID, then focused tab)
-              --surface <id|ref|index>     Alias for --tab (backward compatibility)
-              --workspace <id|ref|index>   Workspace context (default: current/$PROGRAMA_WORKSPACE_ID)
-              --title <text>               Title for rename (or pass trailing title text)
-              --url <url>                  Optional URL for new-browser-right
-
-            Example:
-              programa tab-action --tab tab:3 --action pin
-              programa tab-action --action close-right
-              programa tab-action --tab tab:2 --action rename --title "build logs"
-            """
-        case "rename-tab":
-            return """
-            Usage: programa rename-tab [--workspace <id|ref>] [--tab <id|ref>] [--surface <id|ref>] [--] <title>
-
-            Compatibility alias for tab-action rename.
-
-            Resolution order for target tab:
-            1) --tab
-            2) --surface
-            3) $PROGRAMA_TAB_ID / $PROGRAMA_SURFACE_ID
-            4) currently focused tab (optionally within --workspace)
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: current/$PROGRAMA_WORKSPACE_ID)
-              --tab <id|ref>         Tab target (supports tab:<n> or surface:<n>)
-              --surface <id|ref>     Alias for --tab
-              --title <text>         Explicit title (or use trailing positional title)
-
-            Examples:
-              programa rename-tab "build logs"
-              programa rename-tab --tab tab:3 "staging server"
-              programa rename-tab --workspace workspace:2 --surface surface:5 --title "agent run"
-            """
-        case "new-workspace":
-            return """
-            Usage: programa new-workspace [--name <title>] [--description <text>] [--cwd <path>] [--command <text>]
-
-            Create a new workspace in the current window.
-
-            Flags:
-              --name <title>     Set a custom name for the new workspace
-              --description <text> Set a custom description for the new workspace
-              --cwd <path>       Set the working directory for the new workspace
-              --command <text>   Send text+Enter to the new workspace after creation
-
-            Example:
-              programa new-workspace
-              programa new-workspace --name "Build Server"
-              programa new-workspace --name "Launch" --description "Ship checklist"
-              programa new-workspace --cwd ~/projects/myapp
-              programa new-workspace --cwd . --command "npm test"
-            """
-        case "list-workspaces":
-            return """
-            Usage: programa list-workspaces
-
-            List workspaces in the current window.
-
-            Example:
-              programa list-workspaces
-            """
-        case "new-split":
-            return """
-            Usage: programa new-split <left|right|up|down> [flags]
-
-            Split the current pane in the given direction.
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Surface to split from (default: $PROGRAMA_SURFACE_ID)
-              --panel <id|ref>       Alias for --surface
-
-            Example:
-              programa new-split right
-              programa new-split down --workspace workspace:1
-            """
-        case "list-panes":
-            return """
-            Usage: programa list-panes [--workspace <id|ref>]
-
-            List panes in a workspace.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa list-panes
-              programa list-panes --workspace workspace:2
-            """
-        case "list-pane-surfaces":
-            return """
-            Usage: programa list-pane-surfaces [--workspace <id|ref>] [--pane <id|ref>]
-
-            List surfaces in a pane.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --pane <id|ref>        Restrict to a specific pane (default: focused pane)
-
-            Example:
-              programa list-pane-surfaces
-              programa list-pane-surfaces --workspace workspace:2 --pane pane:1
-            """
-        case "focus-pane":
-            return """
-            Usage: programa focus-pane [--pane <id|ref> | <id|ref>] [flags]
-
-            Focus the specified pane.
-
-            Flags:
-              --pane <id|ref>          Pane to focus (required unless passed positionally)
-              --workspace <id|ref>     Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa focus-pane --pane pane:2
-              programa focus-pane pane:1
-              programa focus-pane --pane pane:1 --workspace workspace:2
-            """
-        case "new-pane":
-            return """
-            Usage: programa new-pane [flags]
-
-            Create a new pane in the workspace.
-
-            Flags:
-              --type <terminal|browser>           Pane type (default: terminal)
-              --direction <left|right|up|down>    Split direction (default: right)
-              --workspace <id|ref>                Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --url <url>                         URL for browser panes
-
-            Example:
-              programa new-pane
-              programa new-pane --type browser --direction down --url https://example.com
-            """
-        case "new-surface":
-            return """
-            Usage: programa new-surface [flags]
-
-            Create a new surface (tab) in a pane.
-
-            Flags:
-              --type <terminal|browser>   Surface type (default: terminal)
-              --pane <id|ref>             Target pane
-              --workspace <id|ref>        Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --url <url>                 URL for browser surfaces
-
-            Example:
-              programa new-surface
-              programa new-surface --type browser --pane pane:1 --url https://example.com
-            """
-        case "close-surface":
-            return """
-            Usage: programa close-surface [flags]
-
-            Close a surface. Defaults to the focused surface if none specified.
-
-            Flags:
-              --surface <id|ref>     Surface to close (default: $PROGRAMA_SURFACE_ID)
-              --panel <id|ref>       Alias for --surface
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa close-surface
-              programa close-surface --surface surface:3
-            """
-        case "drag-surface-to-split":
-            return """
-            Usage: programa drag-surface-to-split --surface <id|ref> <left|right|up|down>
-
-            Drag a surface into a new split in the given direction.
-
-            Flags:
-              --surface <id|ref>   Surface to drag (required)
-              --panel <id|ref>     Alias for --surface
-
-            Example:
-              programa drag-surface-to-split --surface surface:1 right
-              programa drag-surface-to-split --panel surface:2 down
-            """
-        case "refresh-surfaces":
-            return """
-            Usage: programa refresh-surfaces
-
-            Refresh surface snapshots for the focused workspace.
-            """
-        case "reload-config":
-            return """
-            Usage: programa reload-config
-
-            Run the same configuration reload as the Reload Configuration shortcut.
-            This reloads Ghostty config, re-reads ~/.config/programa/settings.json, and refreshes terminals.
-
-            Example:
-              programa reload-config
-            """
-        case "surface-health":
-            return """
-            Usage: programa surface-health [--workspace <id|ref>]
-
-            List health details for surfaces in a workspace.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa surface-health
-              programa surface-health --workspace workspace:2
-            """
-        case "debug-terminals":
-            return """
-            Usage: programa debug-terminals
-
-            Print live Ghostty terminal runtime metadata across all windows and workspaces.
-            Intended for debugging stray or detached terminal views.
-            """
-        case "trigger-flash":
-            return """
-            Usage: programa trigger-flash [--workspace <id|ref>] [--surface <id|ref>] [--panel <id|ref>]
-
-            Trigger the unread flash indicator for a surface.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
-              --panel <id|ref>       Alias for --surface
-
-            Example:
-              programa trigger-flash
-              programa trigger-flash --workspace workspace:2 --surface surface:3
-            """
-        case "list-panels":
-            return """
-            Usage: programa list-panels [--workspace <id|ref>]
-
-            List surfaces (panels) in a workspace.
-
-            Flags:
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa list-panels
-              programa list-panels --workspace workspace:2
-            """
-        case "focus-panel":
-            return """
-            Usage: programa focus-panel --panel <id|ref> [--workspace <id|ref>]
-
-            Focus a specific panel (surface).
-
-            Flags:
-              --panel <id|ref>       Panel/surface to focus (required)
-              --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa focus-panel --panel surface:2
-              programa focus-panel --panel surface:5 --workspace workspace:2
-            """
-        case "close-workspace":
-            return """
-            Usage: programa close-workspace --workspace <id|ref|index>
-
-            Close the specified workspace.
-
-            Flags:
-              --workspace <id|ref|index>   Workspace to close (required)
-
-            Example:
-              programa close-workspace --workspace workspace:2
-            """
-        case "select-workspace":
-            return """
-            Usage: programa select-workspace --workspace <id|ref|index>
-
-            Select (switch to) the specified workspace.
-
-            Flags:
-              --workspace <id|ref|index>   Workspace to select (required)
-
-            Example:
-              programa select-workspace --workspace workspace:2
-              programa select-workspace --workspace 0
-            """
-        case "rename-workspace", "rename-window":
-            return """
-            Usage: programa rename-workspace [--workspace <id|ref|index>] [--] <title>
-
-            Rename a workspace. Defaults to the current workspace.
-            tmux-compatible alias: rename-window
-
-            Flags:
-              --workspace <id|ref|index>   Workspace to rename (default: current/$PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa rename-workspace "backend logs"
-              programa rename-window --workspace workspace:2 "agent run"
-            """
-        case "current-workspace":
-            return """
-            Usage: programa current-workspace
-
-            Print the currently selected workspace ID.
-            """
-        case "read-screen":
-            return """
-            Usage: programa read-screen [flags]
-
-            Read terminal text from a surface as plain text.
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
-              --scrollback           Include scrollback (not just visible viewport)
-              --lines <n>            Limit to the last n lines (implies --scrollback)
-
-            Example:
-              programa read-screen
-              programa read-screen --surface surface:2 --scrollback --lines 200
-            """
-        case "send":
-            return """
-            Usage: programa send [flags] [--] <text>
-
-            Send text to a terminal surface. Escape sequences: \\n and \\r send Enter, \\t sends Tab.
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
-
-            Example:
-              programa send "echo hello"
-              programa send --surface surface:2 "ls -la\\n"
-            """
-        case "send-key":
-            return """
-            Usage: programa send-key [flags] [--] <key>
-
-            Send a key event to a terminal surface.
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
-
-            Example:
-              programa send-key enter
-              programa send-key --surface surface:2 ctrl+c
-            """
-        case "send-panel":
-            return """
-            Usage: programa send-panel --panel <id|ref> [flags] [--] <text>
-
-            Send text to a specific panel (surface). Escape sequences: \\n and \\r send Enter, \\t sends Tab.
-
-            Flags:
-              --panel <id|ref>       Target panel (required)
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa send-panel --panel surface:2 "echo hello\\n"
-            """
-        case "send-key-panel":
-            return """
-            Usage: programa send-key-panel --panel <id|ref> [flags] [--] <key>
-
-            Send a key event to a specific panel (surface).
-
-            Flags:
-              --panel <id|ref>       Target panel (required)
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa send-key-panel --panel surface:2 enter
-              programa send-key-panel --panel surface:2 ctrl+c
-            """
-        case "notify":
-            return """
-            Usage: programa notify [flags]
-
-            Send a notification to a workspace/surface.
-
-            Flags:
-              --title <text>         Notification title (default: "Notification")
-              --subtitle <text>      Notification subtitle
-              --body <text>          Notification body
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
-
-            Example:
-              programa notify --title "Build done" --body "All tests passed"
-              programa notify --title "Error" --subtitle "test.swift" --body "Line 42: syntax error"
-            """
-        case "list-notifications":
-            return """
-            Usage: programa list-notifications
-
-            List queued notifications.
-            """
-        case "clear-notifications":
-            return """
-            Usage: programa clear-notifications
-
-            Clear all queued notifications.
-            """
-        case "set-status":
-            return """
-            Usage: programa set-status <key> <value> [flags]
-
-            Set a sidebar status entry for a workspace. Status entries appear as
-            pills in the sidebar tab row. Use a unique key so different tools
-            (e.g. "claude_code", "build") can manage their own entries.
-
-            Flags:
-              --icon <name>          Icon name (e.g. "sparkle", "hammer")
-              --color <#hex>         Pill color (e.g. "#ff9500")
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa set-status build "compiling" --icon hammer --color "#ff9500"
-              programa set-status deploy "v1.2.3" --workspace workspace:2
-            """
-        case "clear-status":
-            return """
-            Usage: programa clear-status <key> [flags]
-
-            Remove a sidebar status entry by key.
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa clear-status build
-            """
-        case "list-status":
-            return """
-            Usage: programa list-status [flags]
-
-            List all sidebar status entries for a workspace.
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa list-status
-              programa list-status --workspace workspace:2
-            """
-        case "set-progress":
-            return """
-            Usage: programa set-progress <0.0-1.0> [flags]
-
-            Set a progress bar in the sidebar for a workspace.
-
-            Flags:
-              --label <text>         Label shown next to the progress bar
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa set-progress 0.5 --label "Building..."
-              programa set-progress 1.0 --label "Done"
-            """
-        case "clear-progress":
-            return """
-            Usage: programa clear-progress [flags]
-
-            Clear the sidebar progress bar for a workspace.
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa clear-progress
-            """
-        case "log":
-            return """
-            Usage: programa log [flags] [--] <message>
-
-            Append a log entry to the sidebar for a workspace.
-
-            Flags:
-              --level <level>        Log level: info, progress, success, warning, error (default: info)
-              --source <name>        Source label (e.g. "build", "test")
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa log "Build started"
-              programa log --level error --source build "Compilation failed"
-              programa log --level success -- "All 42 tests passed"
-            """
-        case "clear-log":
-            return """
-            Usage: programa clear-log [flags]
-
-            Clear all sidebar log entries for a workspace.
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa clear-log
-            """
-        case "list-log":
-            return """
-            Usage: programa list-log [flags]
-
-            List sidebar log entries for a workspace.
-
-            Flags:
-              --limit <n>            Show only the last N entries
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa list-log
-              programa list-log --limit 5
-            """
-        case "sidebar-state":
-            return """
-            Usage: programa sidebar-state [flags]
-
-            Dump all sidebar metadata for a workspace (cwd, git branch, ports,
-            status entries, progress, log entries).
-
-            Flags:
-              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-
-            Example:
-              programa sidebar-state
-              programa sidebar-state --workspace workspace:2
-            """
-        case "set-app-focus":
-            return """
-            Usage: programa set-app-focus <active|inactive|clear>
-
-            Override app focus state for notification routing tests.
-
-            Example:
-              programa set-app-focus inactive
-              programa set-app-focus clear
-            """
-        case "simulate-app-active":
-            return """
-            Usage: programa simulate-app-active
-
-            Trigger the app-active handler used by notification focus tests.
-            """
-        default:
-            return nil
-        }
+        return commandDescriptor(named: command)?.detailedUsage
     }
 
     /// Dispatch help for a subcommand. Returns true if help was printed.

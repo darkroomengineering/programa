@@ -95,7 +95,7 @@ extension TerminalController {
     func v2SystemTree(params: [String: Any]) -> V2CallResult {
         let workspaceFilter = v2UUID(params, "workspace_id")
         if params["workspace_id"] != nil && workspaceFilter == nil {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         let includeAllWindows = v2Bool(params, "all_windows") ?? false
 
