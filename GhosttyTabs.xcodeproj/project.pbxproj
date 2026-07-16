@@ -14,6 +14,36 @@
 		NRPA00009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00010 /* SettingsView.swift */; };
 			A5FF0007 /* SettingDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0017 /* SettingDefinition.swift */; };
 			A5001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001012 /* ContentView.swift */; };
+			NRSP0084A1B2C3D4E5F60719 /* WorkspaceSidebarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0083A1B2C3D4E5F60719 /* WorkspaceSidebarModels.swift */; };
+			NRSP0082A1B2C3D4E5F60719 /* WorkspaceRemoteModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0081A1B2C3D4E5F60719 /* WorkspaceRemoteModels.swift */; };
+			NRSP0080A1B2C3D4E5F60719 /* WorkspaceMountPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0079A1B2C3D4E5F60719 /* WorkspaceMountPresentation.swift */; };
+			NRSP0078A1B2C3D4E5F60719 /* Workspace+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0077A1B2C3D4E5F60719 /* Workspace+Theme.swift */; };
+			NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */; };
+			NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */; };
+			NRSP0072A1B2C3D4E5F60719 /* Workspace+Remote.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0071A1B2C3D4E5F60719 /* Workspace+Remote.swift */; };
+			NRSP0070A1B2C3D4E5F60719 /* Workspace+FocusGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0069A1B2C3D4E5F60719 /* Workspace+FocusGeometry.swift */; };
+			NRSP0068A1B2C3D4E5F60719 /* WindowTerminalHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0067A1B2C3D4E5F60719 /* WindowTerminalHostView.swift */; };
+			NRSP0066A1B2C3D4E5F60719 /* WindowOverlayControllers.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0065A1B2C3D4E5F60719 /* WindowOverlayControllers.swift */; };
+			NRSP0064A1B2C3D4E5F60719 /* WindowChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0063A1B2C3D4E5F60719 /* WindowChrome.swift */; };
+			NRSP0062A1B2C3D4E5F60719 /* WindowBrowserSlotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0061A1B2C3D4E5F60719 /* WindowBrowserSlotView.swift */; };
+			NRSP0060A1B2C3D4E5F60719 /* VerticalTabsSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0059A1B2C3D4E5F60719 /* VerticalTabsSidebar.swift */; };
+			NRSP0058A1B2C3D4E5F60719 /* V2CommandCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */; };
+			NRSP0056A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */; };
+			NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */; };
+			NRSP0052A1B2C3D4E5F60719 /* TerminalCopyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */; };
+			NRSP0050A1B2C3D4E5F60719 /* SidebarShortcutHints.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */; };
+			NRSP0048A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0047A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift */; };
+			NRSP0046A1B2C3D4E5F60719 /* ProgramaSurfaceConfigTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0045A1B2C3D4E5F60719 /* ProgramaSurfaceConfigTemplate.swift */; };
+			NRSP0020A1B2C3D4E5F60719 /* InternalTabDrag.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0019A1B2C3D4E5F60719 /* InternalTabDrag.swift */; };
+			NRSP0018A1B2C3D4E5F60719 /* GhosttyTerminalSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0017A1B2C3D4E5F60719 /* GhosttyTerminalSupport.swift */; };
+			NRSP0016A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0015A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift */; };
+			NRSP0014A1B2C3D4E5F60719 /* GhosttyNSView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0013A1B2C3D4E5F60719 /* GhosttyNSView.swift */; };
+			NRSP0012A1B2C3D4E5F60719 /* GhosttyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0011A1B2C3D4E5F60719 /* GhosttyApp.swift */; };
+			NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */; };
+			NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */; };
+			NRSP0006A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0005A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift */; };
+			NRSP0004A1B2C3D4E5F60719 /* BrowserWindowHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0003A1B2C3D4E5F60719 /* BrowserWindowHostView.swift */; };
+			NRSP0002A1B2C3D4E5F60719 /* BrowserPaneDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0001A1B2C3D4E5F60719 /* BrowserPaneDrop.swift */; };
 			A5FF0005 /* ContentView+CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0015 /* ContentView+CommandPalette.swift */; };
 			NRCV00000000000000000005 /* TabItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000006 /* TabItemView.swift */; };
 			NRCV00000000000000000003 /* FileDropOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000004 /* FileDropOverlayView.swift */; };
@@ -65,6 +95,18 @@
 		A5001400 /* Panel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001410 /* Panel.swift */; };
 		A5001401 /* TerminalPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001411 /* TerminalPanel.swift */; };
 		A5001402 /* BrowserPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001412 /* BrowserPanel.swift */; };
+		NRSP0044A1B2C3D4E5F60719 /* OmnibarTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0043A1B2C3D4E5F60719 /* OmnibarTextField.swift */; };
+		NRSP0042A1B2C3D4E5F60719 /* OmnibarSuggestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0041A1B2C3D4E5F60719 /* OmnibarSuggestionsView.swift */; };
+		NRSP0040A1B2C3D4E5F60719 /* Omnibar.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0039A1B2C3D4E5F60719 /* Omnibar.swift */; };
+		NRSP0038A1B2C3D4E5F60719 /* BrowserToolbarViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0037A1B2C3D4E5F60719 /* BrowserToolbarViews.swift */; };
+		NRSP0036A1B2C3D4E5F60719 /* BrowserSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0035A1B2C3D4E5F60719 /* BrowserSettings.swift */; };
+		NRSP0034A1B2C3D4E5F60719 /* BrowserPanelSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0033A1B2C3D4E5F60719 /* BrowserPanelSupport.swift */; };
+		NRSP0032A1B2C3D4E5F60719 /* BrowserPanel+WorkspaceLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0031A1B2C3D4E5F60719 /* BrowserPanel+WorkspaceLifecycle.swift */; };
+		NRSP0030A1B2C3D4E5F60719 /* BrowserPanel+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0029A1B2C3D4E5F60719 /* BrowserPanel+Theme.swift */; };
+		NRSP0028A1B2C3D4E5F60719 /* BrowserPanel+Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0027A1B2C3D4E5F60719 /* BrowserPanel+Navigation.swift */; };
+		NRSP0026A1B2C3D4E5F60719 /* BrowserPanel+Focus.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0025A1B2C3D4E5F60719 /* BrowserPanel+Focus.swift */; };
+		NRSP0024A1B2C3D4E5F60719 /* BrowserPanel+DeveloperTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0023A1B2C3D4E5F60719 /* BrowserPanel+DeveloperTools.swift */; };
+		NRSP0022A1B2C3D4E5F60719 /* BrowserPanel+Automation.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0021A1B2C3D4E5F60719 /* BrowserPanel+Automation.swift */; };
 		NRBR0001 /* InspectorDock.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0002 /* InspectorDock.swift */; };
 		NRBR0003 /* BrowserWebDialogPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0004 /* BrowserWebDialogPresenter.swift */; };
 		NRBR0005 /* BrowserProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRBR0006 /* BrowserProfileStore.swift */; };
@@ -296,6 +338,36 @@
 		NRPA00010 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 			A5FF0017 /* SettingDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingDefinition.swift; sourceTree = "<group>"; };
 			A5001012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+			NRSP0083A1B2C3D4E5F60719 /* WorkspaceSidebarModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSidebarModels.swift; sourceTree = "<group>"; };
+			NRSP0081A1B2C3D4E5F60719 /* WorkspaceRemoteModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRemoteModels.swift; sourceTree = "<group>"; };
+			NRSP0079A1B2C3D4E5F60719 /* WorkspaceMountPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceMountPresentation.swift; sourceTree = "<group>"; };
+			NRSP0077A1B2C3D4E5F60719 /* Workspace+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Theme.swift"; sourceTree = "<group>"; };
+			NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Surfaces.swift"; sourceTree = "<group>"; };
+			NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+SidebarTelemetry.swift"; sourceTree = "<group>"; };
+			NRSP0071A1B2C3D4E5F60719 /* Workspace+Remote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Remote.swift"; sourceTree = "<group>"; };
+			NRSP0069A1B2C3D4E5F60719 /* Workspace+FocusGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+FocusGeometry.swift"; sourceTree = "<group>"; };
+			NRSP0067A1B2C3D4E5F60719 /* WindowTerminalHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTerminalHostView.swift; sourceTree = "<group>"; };
+			NRSP0065A1B2C3D4E5F60719 /* WindowOverlayControllers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowOverlayControllers.swift; sourceTree = "<group>"; };
+			NRSP0063A1B2C3D4E5F60719 /* WindowChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowChrome.swift; sourceTree = "<group>"; };
+			NRSP0061A1B2C3D4E5F60719 /* WindowBrowserSlotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowBrowserSlotView.swift; sourceTree = "<group>"; };
+			NRSP0059A1B2C3D4E5F60719 /* VerticalTabsSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalTabsSidebar.swift; sourceTree = "<group>"; };
+			NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2CommandCatalog.swift; sourceTree = "<group>"; };
+			NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalWindowPortalRegistry.swift; sourceTree = "<group>"; };
+			NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSurface.swift; sourceTree = "<group>"; };
+			NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalCopyMode.swift; sourceTree = "<group>"; };
+			NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarShortcutHints.swift; sourceTree = "<group>"; };
+			NRSP0047A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarRemoteErrorCopy.swift; sourceTree = "<group>"; };
+			NRSP0045A1B2C3D4E5F60719 /* ProgramaSurfaceConfigTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaSurfaceConfigTemplate.swift; sourceTree = "<group>"; };
+			NRSP0019A1B2C3D4E5F60719 /* InternalTabDrag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InternalTabDrag.swift; sourceTree = "<group>"; };
+			NRSP0017A1B2C3D4E5F60719 /* GhosttyTerminalSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTerminalSupport.swift; sourceTree = "<group>"; };
+			NRSP0015A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceScrollView.swift; sourceTree = "<group>"; };
+			NRSP0013A1B2C3D4E5F60719 /* GhosttyNSView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyNSView.swift; sourceTree = "<group>"; };
+			NRSP0011A1B2C3D4E5F60719 /* GhosttyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyApp.swift; sourceTree = "<group>"; };
+			NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+SidebarResizer.swift"; sourceTree = "<group>"; };
+			NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSupport.swift; sourceTree = "<group>"; };
+			NRSP0005A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosedBrowserPanelRestoreSnapshot.swift; sourceTree = "<group>"; };
+			NRSP0003A1B2C3D4E5F60719 /* BrowserWindowHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserWindowHostView.swift; sourceTree = "<group>"; };
+			NRSP0001A1B2C3D4E5F60719 /* BrowserPaneDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserPaneDrop.swift; sourceTree = "<group>"; };
 			A5FF0015 /* ContentView+CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+CommandPalette.swift"; sourceTree = "<group>"; };
 		NRCV00000000000000000006 /* TabItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabItemView.swift; sourceTree = "<group>"; };
 		NRCV00000000000000000004 /* FileDropOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropOverlayView.swift; sourceTree = "<group>"; };
@@ -348,6 +420,18 @@
 		A5001410 /* Panel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/Panel.swift; sourceTree = "<group>"; };
 		A5001411 /* TerminalPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/TerminalPanel.swift; sourceTree = "<group>"; };
 		A5001412 /* BrowserPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserPanel.swift; sourceTree = "<group>"; };
+		NRSP0043A1B2C3D4E5F60719 /* OmnibarTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/OmnibarTextField.swift; sourceTree = "<group>"; };
+		NRSP0041A1B2C3D4E5F60719 /* OmnibarSuggestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/OmnibarSuggestionsView.swift; sourceTree = "<group>"; };
+		NRSP0039A1B2C3D4E5F60719 /* Omnibar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/Omnibar.swift; sourceTree = "<group>"; };
+		NRSP0037A1B2C3D4E5F60719 /* BrowserToolbarViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserToolbarViews.swift; sourceTree = "<group>"; };
+		NRSP0035A1B2C3D4E5F60719 /* BrowserSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserSettings.swift; sourceTree = "<group>"; };
+		NRSP0033A1B2C3D4E5F60719 /* BrowserPanelSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserPanelSupport.swift; sourceTree = "<group>"; };
+		NRSP0031A1B2C3D4E5F60719 /* BrowserPanel+WorkspaceLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Panels/BrowserPanel+WorkspaceLifecycle.swift"; sourceTree = "<group>"; };
+		NRSP0029A1B2C3D4E5F60719 /* BrowserPanel+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Panels/BrowserPanel+Theme.swift"; sourceTree = "<group>"; };
+		NRSP0027A1B2C3D4E5F60719 /* BrowserPanel+Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Panels/BrowserPanel+Navigation.swift"; sourceTree = "<group>"; };
+		NRSP0025A1B2C3D4E5F60719 /* BrowserPanel+Focus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Panels/BrowserPanel+Focus.swift"; sourceTree = "<group>"; };
+		NRSP0023A1B2C3D4E5F60719 /* BrowserPanel+DeveloperTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Panels/BrowserPanel+DeveloperTools.swift"; sourceTree = "<group>"; };
+		NRSP0021A1B2C3D4E5F60719 /* BrowserPanel+Automation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Panels/BrowserPanel+Automation.swift"; sourceTree = "<group>"; };
 		NRBR0002 /* InspectorDock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/InspectorDock.swift; sourceTree = "<group>"; };
 		NRBR0004 /* BrowserWebDialogPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserWebDialogPresenter.swift; sourceTree = "<group>"; };
 		NRBR0006 /* BrowserProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserProfileStore.swift; sourceTree = "<group>"; };
@@ -625,6 +709,36 @@
 					NRPA00010 /* SettingsView.swift */,
 					A5FF0017 /* SettingDefinition.swift */,
 					A5001012 /* ContentView.swift */,
+					NRSP0083A1B2C3D4E5F60719 /* WorkspaceSidebarModels.swift */,
+					NRSP0081A1B2C3D4E5F60719 /* WorkspaceRemoteModels.swift */,
+					NRSP0079A1B2C3D4E5F60719 /* WorkspaceMountPresentation.swift */,
+					NRSP0077A1B2C3D4E5F60719 /* Workspace+Theme.swift */,
+					NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */,
+					NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */,
+					NRSP0071A1B2C3D4E5F60719 /* Workspace+Remote.swift */,
+					NRSP0069A1B2C3D4E5F60719 /* Workspace+FocusGeometry.swift */,
+					NRSP0067A1B2C3D4E5F60719 /* WindowTerminalHostView.swift */,
+					NRSP0065A1B2C3D4E5F60719 /* WindowOverlayControllers.swift */,
+					NRSP0063A1B2C3D4E5F60719 /* WindowChrome.swift */,
+					NRSP0061A1B2C3D4E5F60719 /* WindowBrowserSlotView.swift */,
+					NRSP0059A1B2C3D4E5F60719 /* VerticalTabsSidebar.swift */,
+					NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */,
+					NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */,
+					NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */,
+					NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */,
+					NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */,
+					NRSP0047A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift */,
+					NRSP0045A1B2C3D4E5F60719 /* ProgramaSurfaceConfigTemplate.swift */,
+					NRSP0019A1B2C3D4E5F60719 /* InternalTabDrag.swift */,
+					NRSP0017A1B2C3D4E5F60719 /* GhosttyTerminalSupport.swift */,
+					NRSP0015A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift */,
+					NRSP0013A1B2C3D4E5F60719 /* GhosttyNSView.swift */,
+					NRSP0011A1B2C3D4E5F60719 /* GhosttyApp.swift */,
+					NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */,
+					NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */,
+					NRSP0005A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift */,
+					NRSP0003A1B2C3D4E5F60719 /* BrowserWindowHostView.swift */,
+					NRSP0001A1B2C3D4E5F60719 /* BrowserPaneDrop.swift */,
 					A5FF0015 /* ContentView+CommandPalette.swift */,
 					NRCV00000000000000000006 /* TabItemView.swift */,
 					NRCV00000000000000000004 /* FileDropOverlayView.swift */,
@@ -714,6 +828,18 @@
 				A5001410 /* Panel.swift */,
 				A5001411 /* TerminalPanel.swift */,
 				A5001412 /* BrowserPanel.swift */,
+				NRSP0043A1B2C3D4E5F60719 /* OmnibarTextField.swift */,
+				NRSP0041A1B2C3D4E5F60719 /* OmnibarSuggestionsView.swift */,
+				NRSP0039A1B2C3D4E5F60719 /* Omnibar.swift */,
+				NRSP0037A1B2C3D4E5F60719 /* BrowserToolbarViews.swift */,
+				NRSP0035A1B2C3D4E5F60719 /* BrowserSettings.swift */,
+				NRSP0033A1B2C3D4E5F60719 /* BrowserPanelSupport.swift */,
+				NRSP0031A1B2C3D4E5F60719 /* BrowserPanel+WorkspaceLifecycle.swift */,
+				NRSP0029A1B2C3D4E5F60719 /* BrowserPanel+Theme.swift */,
+				NRSP0027A1B2C3D4E5F60719 /* BrowserPanel+Navigation.swift */,
+				NRSP0025A1B2C3D4E5F60719 /* BrowserPanel+Focus.swift */,
+				NRSP0023A1B2C3D4E5F60719 /* BrowserPanel+DeveloperTools.swift */,
+				NRSP0021A1B2C3D4E5F60719 /* BrowserPanel+Automation.swift */,
 				NRBR0002 /* InspectorDock.swift */,
 				NRBR0004 /* BrowserWebDialogPresenter.swift */,
 				NRBR0006 /* BrowserProfileStore.swift */,
@@ -1011,6 +1137,36 @@
 					NRPA00009 /* SettingsView.swift in Sources */,
 					A5FF0007 /* SettingDefinition.swift in Sources */,
 					A5001002 /* ContentView.swift in Sources */,
+					NRSP0084A1B2C3D4E5F60719 /* WorkspaceSidebarModels.swift in Sources */,
+					NRSP0082A1B2C3D4E5F60719 /* WorkspaceRemoteModels.swift in Sources */,
+					NRSP0080A1B2C3D4E5F60719 /* WorkspaceMountPresentation.swift in Sources */,
+					NRSP0078A1B2C3D4E5F60719 /* Workspace+Theme.swift in Sources */,
+					NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */,
+					NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */,
+					NRSP0072A1B2C3D4E5F60719 /* Workspace+Remote.swift in Sources */,
+					NRSP0070A1B2C3D4E5F60719 /* Workspace+FocusGeometry.swift in Sources */,
+					NRSP0068A1B2C3D4E5F60719 /* WindowTerminalHostView.swift in Sources */,
+					NRSP0066A1B2C3D4E5F60719 /* WindowOverlayControllers.swift in Sources */,
+					NRSP0064A1B2C3D4E5F60719 /* WindowChrome.swift in Sources */,
+					NRSP0062A1B2C3D4E5F60719 /* WindowBrowserSlotView.swift in Sources */,
+					NRSP0060A1B2C3D4E5F60719 /* VerticalTabsSidebar.swift in Sources */,
+					NRSP0058A1B2C3D4E5F60719 /* V2CommandCatalog.swift in Sources */,
+					NRSP0056A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift in Sources */,
+					NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */,
+					NRSP0052A1B2C3D4E5F60719 /* TerminalCopyMode.swift in Sources */,
+					NRSP0050A1B2C3D4E5F60719 /* SidebarShortcutHints.swift in Sources */,
+					NRSP0048A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift in Sources */,
+					NRSP0046A1B2C3D4E5F60719 /* ProgramaSurfaceConfigTemplate.swift in Sources */,
+					NRSP0020A1B2C3D4E5F60719 /* InternalTabDrag.swift in Sources */,
+					NRSP0018A1B2C3D4E5F60719 /* GhosttyTerminalSupport.swift in Sources */,
+					NRSP0016A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift in Sources */,
+					NRSP0014A1B2C3D4E5F60719 /* GhosttyNSView.swift in Sources */,
+					NRSP0012A1B2C3D4E5F60719 /* GhosttyApp.swift in Sources */,
+					NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */,
+					NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */,
+					NRSP0006A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift in Sources */,
+					NRSP0004A1B2C3D4E5F60719 /* BrowserWindowHostView.swift in Sources */,
+					NRSP0002A1B2C3D4E5F60719 /* BrowserPaneDrop.swift in Sources */,
 					A5FF0005 /* ContentView+CommandPalette.swift in Sources */,
 					NRCV00000000000000000005 /* TabItemView.swift in Sources */,
 					NRCV00000000000000000003 /* FileDropOverlayView.swift in Sources */,
@@ -1099,6 +1255,18 @@
 				A5001400 /* Panel.swift in Sources */,
 				A5001401 /* TerminalPanel.swift in Sources */,
 				A5001402 /* BrowserPanel.swift in Sources */,
+				NRSP0044A1B2C3D4E5F60719 /* OmnibarTextField.swift in Sources */,
+				NRSP0042A1B2C3D4E5F60719 /* OmnibarSuggestionsView.swift in Sources */,
+				NRSP0040A1B2C3D4E5F60719 /* Omnibar.swift in Sources */,
+				NRSP0038A1B2C3D4E5F60719 /* BrowserToolbarViews.swift in Sources */,
+				NRSP0036A1B2C3D4E5F60719 /* BrowserSettings.swift in Sources */,
+				NRSP0034A1B2C3D4E5F60719 /* BrowserPanelSupport.swift in Sources */,
+				NRSP0032A1B2C3D4E5F60719 /* BrowserPanel+WorkspaceLifecycle.swift in Sources */,
+				NRSP0030A1B2C3D4E5F60719 /* BrowserPanel+Theme.swift in Sources */,
+				NRSP0028A1B2C3D4E5F60719 /* BrowserPanel+Navigation.swift in Sources */,
+				NRSP0026A1B2C3D4E5F60719 /* BrowserPanel+Focus.swift in Sources */,
+				NRSP0024A1B2C3D4E5F60719 /* BrowserPanel+DeveloperTools.swift in Sources */,
+				NRSP0022A1B2C3D4E5F60719 /* BrowserPanel+Automation.swift in Sources */,
 				NRBR0001 /* InspectorDock.swift in Sources */,
 				NRBR0003 /* BrowserWebDialogPresenter.swift in Sources */,
 				NRBR0005 /* BrowserProfileStore.swift in Sources */,

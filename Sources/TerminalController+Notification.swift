@@ -50,7 +50,7 @@ extension TerminalController {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
 
         let title = (params["title"] as? String) ?? "Notification"
@@ -84,10 +84,10 @@ extension TerminalController {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
         }
         guard let wsId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
 
         let title = (params["title"] as? String) ?? "Notification"

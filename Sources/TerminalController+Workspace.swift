@@ -118,7 +118,7 @@ extension TerminalController {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
         }
         guard let wsId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
 
         var success = false
@@ -181,7 +181,7 @@ extension TerminalController {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
         }
         guard let wsId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
 
         var found = false
@@ -230,10 +230,10 @@ extension TerminalController {
 
     func v2WorkspaceMoveToWindow(params: [String: Any]) -> V2CallResult {
         guard let wsId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let windowId = v2UUID(params, "window_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid window_id", data: nil)
+            return v2InvalidParam("window_id")
         }
         let focus = v2FocusAllowed(requested: v2Bool(params, "focus") ?? false)
 
@@ -271,7 +271,7 @@ extension TerminalController {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
         }
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
 
         let index = v2Int(params, "index")
@@ -316,11 +316,11 @@ extension TerminalController {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
         }
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let titleRaw = v2String(params, "title"),
               !titleRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .err(code: "invalid_params", message: "Missing or invalid title", data: nil)
+            return v2InvalidParam("title")
         }
 
         let title = titleRaw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -485,7 +485,7 @@ extension TerminalController {
     func v2WorkspaceRemoteConfigure(params: [String: Any]) -> V2CallResult {
         let requestedWorkspaceId = v2UUID(params, "workspace_id")
         if v2HasNonNullParam(params, "workspace_id"), requestedWorkspaceId == nil {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         let fallbackTabManager = v2ResolveTabManager(params: params)
         let workspaceId = requestedWorkspaceId ?? fallbackTabManager?.selectedTabId
@@ -598,7 +598,7 @@ extension TerminalController {
     func v2WorkspaceRemoteDisconnect(params: [String: Any]) -> V2CallResult {
         let requestedWorkspaceId = v2UUID(params, "workspace_id")
         if v2HasNonNullParam(params, "workspace_id"), requestedWorkspaceId == nil {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         let fallbackTabManager = v2ResolveTabManager(params: params)
         let workspaceId = requestedWorkspaceId ?? fallbackTabManager?.selectedTabId
@@ -636,7 +636,7 @@ extension TerminalController {
     func v2WorkspaceRemoteReconnect(params: [String: Any]) -> V2CallResult {
         let requestedWorkspaceId = v2UUID(params, "workspace_id")
         if v2HasNonNullParam(params, "workspace_id"), requestedWorkspaceId == nil {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         let fallbackTabManager = v2ResolveTabManager(params: params)
         let workspaceId = requestedWorkspaceId ?? fallbackTabManager?.selectedTabId
@@ -681,7 +681,7 @@ extension TerminalController {
     func v2WorkspaceRemoteForegroundAuthReady(params: [String: Any]) -> V2CallResult {
         let requestedWorkspaceId = v2UUID(params, "workspace_id")
         if v2HasNonNullParam(params, "workspace_id"), requestedWorkspaceId == nil {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         let fallbackTabManager = v2ResolveTabManager(params: params)
         let workspaceId = requestedWorkspaceId ?? fallbackTabManager?.selectedTabId
@@ -720,7 +720,7 @@ extension TerminalController {
     func v2WorkspaceRemoteStatus(params: [String: Any]) -> V2CallResult {
         let requestedWorkspaceId = v2UUID(params, "workspace_id")
         if v2HasNonNullParam(params, "workspace_id"), requestedWorkspaceId == nil {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         let fallbackTabManager = v2ResolveTabManager(params: params)
         let workspaceId = requestedWorkspaceId ?? fallbackTabManager?.selectedTabId
@@ -754,15 +754,15 @@ extension TerminalController {
 
     func v2WorkspaceRemoteTerminalSessionEnd(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
         guard let relayPort = v2StrictInt(params, "relay_port"),
               relayPort > 0,
               relayPort <= 65535 else {
-            return .err(code: "invalid_params", message: "Missing or invalid relay_port", data: nil)
+            return v2InvalidParam("relay_port")
         }
 
         var result: V2CallResult = .err(code: "not_found", message: "Workspace not found", data: [
@@ -875,7 +875,7 @@ extension TerminalController {
             case "rename":
                 guard let titleRaw = v2String(params, "title"),
                       !titleRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    result = .err(code: "invalid_params", message: "Missing or invalid title", data: nil)
+                    result = v2InvalidParam("title")
                     return
                 }
                 let title = titleRaw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -889,7 +889,7 @@ extension TerminalController {
             case "set_description":
                 guard let descriptionRaw = v2String(params, "description"),
                       !descriptionRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    result = .err(code: "invalid_params", message: "Missing or invalid description", data: nil)
+                    result = v2InvalidParam("description")
                     return
                 }
                 tabManager.setCustomDescription(tabId: workspace.id, description: descriptionRaw)
@@ -958,7 +958,7 @@ extension TerminalController {
             case "set_color":
                 guard let colorRaw = v2String(params, "color"),
                       !colorRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    result = .err(code: "invalid_params", message: "Missing or invalid color", data: nil)
+                    result = v2InvalidParam("color")
                     return
                 }
                 let colorInput = colorRaw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1104,7 +1104,7 @@ extension TerminalController {
             case "rename":
                 guard let titleRaw = v2String(params, "title"),
                       !titleRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    result = .err(code: "invalid_params", message: "Missing or invalid title", data: nil)
+                    result = v2InvalidParam("title")
                     return
                 }
                 let title = titleRaw.trimmingCharacters(in: .whitespacesAndNewlines)

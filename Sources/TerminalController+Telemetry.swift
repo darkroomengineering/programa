@@ -48,11 +48,11 @@ extension TerminalController {
     }
     func v2SurfaceReportTTY(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         let requestedSurfaceId = v2UUID(params, "surface_id")
         if v2HasNonNullParam(params, "surface_id"), requestedSurfaceId == nil {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
         guard let ttyName = v2RawString(params, "tty_name")?.trimmingCharacters(in: .whitespacesAndNewlines),
               !ttyName.isEmpty else {
@@ -96,11 +96,11 @@ extension TerminalController {
 
     func v2SurfacePortsKick(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         let requestedSurfaceId = v2UUID(params, "surface_id")
         if v2HasNonNullParam(params, "surface_id"), requestedSurfaceId == nil {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
         let reason: WorkspaceRemoteSessionController.PortScanKickReason
         if let rawReason = v2RawString(params, "reason") {
@@ -164,10 +164,10 @@ extension TerminalController {
 
     func v2SurfaceReportPwd(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
         guard let path = v2RawString(params, "path")?.trimmingCharacters(in: .whitespacesAndNewlines),
               !path.isEmpty else {
@@ -189,10 +189,10 @@ extension TerminalController {
 
     func v2SurfaceReportShellState(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
         guard let rawState = v2RawString(params, "state"),
               let state = Self.parseReportedShellActivityState(rawState) else {
@@ -235,10 +235,10 @@ extension TerminalController {
 
     func v2SurfaceReportGitBranch(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
         guard let branch = v2RawString(params, "branch")?.trimmingCharacters(in: .whitespacesAndNewlines),
               !branch.isEmpty else {
@@ -262,10 +262,10 @@ extension TerminalController {
 
     func v2SurfaceClearGitBranch(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
@@ -282,19 +282,19 @@ extension TerminalController {
 
     func v2SurfaceReportPullRequest(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
         guard let number = v2Int(params, "number"), number > 0 else {
-            return .err(code: "invalid_params", message: "Missing or invalid number", data: nil)
+            return v2InvalidParam("number")
         }
         guard let rawURL = v2RawString(params, "url")?.trimmingCharacters(in: .whitespacesAndNewlines),
               let url = URL(string: rawURL),
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
-            return .err(code: "invalid_params", message: "Missing or invalid url", data: nil)
+            return v2InvalidParam("url")
         }
         let statusRaw = (v2String(params, "state") ?? "open").lowercased()
         guard let status = SidebarPullRequestStatus(rawValue: statusRaw) else {
@@ -355,10 +355,10 @@ extension TerminalController {
 
     func v2SurfaceClearPullRequest(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { _, tab, sid in
@@ -375,13 +375,13 @@ extension TerminalController {
 
     func v2SurfaceReportPorts(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let surfaceId = v2UUID(params, "surface_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
         guard let rawPorts = v2IntArray(params, "ports"), !rawPorts.isEmpty else {
-            return .err(code: "invalid_params", message: "Missing or invalid ports", data: nil)
+            return v2InvalidParam("ports")
         }
         guard rawPorts.allSatisfy({ $0 > 0 && $0 <= 65535 }) else {
             return .err(code: "invalid_params", message: "Invalid port — must be 1-65535", data: nil)
@@ -403,11 +403,11 @@ extension TerminalController {
 
     func v2SurfaceClearPorts(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         let requestedSurfaceId = v2UUID(params, "surface_id")
         if v2HasNonNullParam(params, "surface_id"), requestedSurfaceId == nil {
-            return .err(code: "invalid_params", message: "Missing or invalid surface_id", data: nil)
+            return v2InvalidParam("surface_id")
         }
 
         if let surfaceId = requestedSurfaceId {
@@ -477,7 +477,7 @@ extension TerminalController {
 
     func v2WorkspaceSetStatus(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let key = v2String(params, "key") else {
             return .err(code: "invalid_params", message: "Missing key", data: nil)
@@ -560,7 +560,7 @@ extension TerminalController {
 
     func v2WorkspaceClearStatus(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let key = v2String(params, "key") else {
             return .err(code: "invalid_params", message: "Missing key", data: nil)
@@ -611,7 +611,7 @@ extension TerminalController {
 
     func v2WorkspaceLog(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let message = v2RawString(params, "message"), !message.isEmpty else {
             return .err(code: "invalid_params", message: "Missing message", data: nil)
@@ -646,7 +646,7 @@ extension TerminalController {
 
     func v2WorkspaceClearLog(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
 
         v2ScheduleTelemetryMutation(workspaceId: workspaceId) { _, tab in
@@ -695,7 +695,7 @@ extension TerminalController {
 
     func v2WorkspaceSetProgress(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let rawValue = v2Double(params, "value"), rawValue.isFinite else {
             return .err(code: "invalid_params", message: "Invalid progress value — must be 0.0 to 1.0", data: nil)
@@ -717,7 +717,7 @@ extension TerminalController {
 
     func v2WorkspaceClearProgress(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
 
         v2ScheduleTelemetryMutation(workspaceId: workspaceId) { _, tab in
@@ -809,7 +809,7 @@ extension TerminalController {
 
     func v2WorkspaceClearAgentPID(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let key = v2String(params, "key") else {
             return .err(code: "invalid_params", message: "Missing key", data: nil)
@@ -833,13 +833,13 @@ extension TerminalController {
     /// `workspace.set_status`, which also accepts an optional `pid`).
     func v2WorkspaceSetAgentPID(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let key = v2String(params, "key") else {
             return .err(code: "invalid_params", message: "Missing key", data: nil)
         }
         guard let rawPid = v2Int(params, "pid"), rawPid > 0 else {
-            return .err(code: "invalid_params", message: "Missing or invalid pid — must be a positive integer", data: nil)
+            return v2InvalidParam("pid — must be a positive integer")
         }
         let pid = pid_t(rawPid)
 
@@ -862,7 +862,7 @@ extension TerminalController {
     /// key/value entries.
     func v2WorkspaceReportMetaBlock(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
-            return .err(code: "invalid_params", message: "Missing or invalid workspace_id", data: nil)
+            return v2InvalidParam("workspace_id")
         }
         guard let key = v2String(params, "key") else {
             return .err(code: "invalid_params", message: "Missing key", data: nil)
