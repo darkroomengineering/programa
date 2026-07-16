@@ -126,6 +126,11 @@ jobs:
             exit 1
           fi
           echo "Selected: $XCODE_APP"
+          # Select globally, not just via DEVELOPER_DIR: with two Xcodes on the
+          # runner image, /usr/bin/git shims spawned inside xcodebuild test
+          # processes resolve against the system-selected Xcode and exit 72
+          # (dual Xcode3Core clash) when it differs from DEVELOPER_DIR.
+          sudo xcode-select -s "$XCODE_DIR"
           echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
           export DEVELOPER_DIR="$XCODE_DIR"
           XCODE_VERSION_OUTPUT="$(xcodebuild -version)"

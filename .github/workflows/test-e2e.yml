@@ -59,6 +59,7 @@ jobs:
               exit 1
             fi
           fi
+          sudo xcode-select -s "$XCODE_DIR"
           echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
           export DEVELOPER_DIR="$XCODE_DIR"
           xcodebuild -version
