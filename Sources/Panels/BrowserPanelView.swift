@@ -677,7 +677,7 @@ struct BrowserPanelView: View {
         }) {
             HStack(spacing: 4) {
                 Image(systemName: "square.and.arrow.down.on.square")
-                    .font(.system(size: 10, weight: .medium))
+                    .symbolRasterSize(10, weight: .medium)
                 Text(String(localized: "browser.import.hint.toolbar", defaultValue: "Import"))
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
@@ -713,7 +713,7 @@ struct BrowserPanelView: View {
         return HStack(spacing: 4) {
             if showSecureBadge {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 10))
+                    .symbolRasterSize(10)
                     .foregroundColor(.secondary)
             }
 
