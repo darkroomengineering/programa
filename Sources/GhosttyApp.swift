@@ -213,8 +213,15 @@ class GhosttyApp {
     }()
     private let backgroundLogURL = GhosttyApp.resolveBackgroundLogURL()
     private let backgroundLogStartUptime = ProcessInfo.processInfo.systemUptime
+    // Guards only the cheap `backgroundLogSequence` increment below; the actual file
+    // write is offloaded to `backgroundLogWriter`'s serial queue (ported from upstream
+    // cmux cb2129a5a1) so callers never block on FileHandle open/seek/write/close.
     private let backgroundLogLock = NSLock()
     private var backgroundLogSequence: UInt64 = 0
+    // Non-lazy: `handleAction`/`logBackground` run on Ghostty callback threads, and
+    // `lazy var` initialization is not thread-safe.
+    private let backgroundLogWriter: BackgroundLogWriter
+    private let titleUpdateDispatcher = GhosttyTitleUpdateDispatcher()
     private var appObservers: [NSObjectProtocol] = []
     private var bellAudioSound: NSSound?
     private var backgroundEventCounter: UInt64 = 0
@@ -230,6 +237,7 @@ class GhosttyApp {
         })
 
     private init() {
+        backgroundLogWriter = BackgroundLogWriter(url: backgroundLogURL)
         initializeGhostty()
     }
 
@@ -1690,17 +1698,17 @@ class GhosttyApp {
                 .flatMap { String(cString: $0) } ?? ""
             if let tabId = surfaceView.tabId,
                let surfaceId = surfaceView.terminalSurface?.id {
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(
-                        name: .ghosttyDidSetTitle,
-                        object: surfaceView,
-                        userInfo: [
-                            GhosttyNotificationKey.tabId: tabId,
-                            GhosttyNotificationKey.surfaceId: surfaceId,
-                            GhosttyNotificationKey.title: title,
-                        ]
-                    )
-                }
+                // Coalesced (ported from upstream cmux c30733e5e6): shells/agent CLIs
+                // that rewrite the title on every render would otherwise flood the
+                // main actor with one NotificationCenter post per keystroke. The
+                // dispatcher guarantees the last title set within the window is
+                // always delivered.
+                titleUpdateDispatcher.setTitle(
+                    surfaceView: surfaceView,
+                    tabId: tabId,
+                    surfaceId: surfaceId,
+                    title: title
+                )
             }
             return true
         case GHOSTTY_ACTION_PWD:
@@ -1975,20 +1983,11 @@ class GhosttyApp {
         let frame120 = Int((CACurrentMediaTime() * 120.0).rounded(.down))
         let threadLabel = Thread.isMainThread ? "main" : "background"
         backgroundLogLock.lock()
-        defer { backgroundLogLock.unlock() }
         backgroundLogSequence &+= 1
         let sequence = backgroundLogSequence
+        backgroundLogLock.unlock()
         let line =
             "\(timestamp) seq=\(sequence) t+\(String(format: "%.3f", uptimeMs))ms thread=\(threadLabel) frame60=\(frame60) frame120=\(frame120) cmux bg: \(message)\n"
-        if let data = line.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: backgroundLogURL.path) == false {
-                _ = FileManager.default.createFile(atPath: backgroundLogURL.path, contents: nil)
-            }
-            if let handle = try? FileHandle(forWritingTo: backgroundLogURL) {
-                defer { try? handle.close() }
-                _ = try? handle.seekToEnd()
-                try? handle.write(contentsOf: data)
-            }
-        }
+        backgroundLogWriter.append(line)
     }
 }
