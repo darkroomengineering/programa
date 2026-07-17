@@ -65,9 +65,12 @@ public final class DebugEventLog: @unchecked Sendable {
             let line = entry + "\n"
             if let data = line.data(using: .utf8) {
                 if let handle = FileHandle(forWritingAtPath: Self.logPath) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    handle.closeFile()
+                    // Throwing APIs instead of the deprecated seekToEndOfFile/write/closeFile
+                    // trio, which raise ObjC exceptions (uncatchable from Swift) if the file
+                    // disappears out from under us. Ported from upstream bonsplit cffd9a6.
+                    _ = try? handle.seekToEnd()
+                    try? handle.write(contentsOf: data)
+                    try? handle.close()
                 } else {
                     FileManager.default.createFile(atPath: Self.logPath, contents: data)
                 }
