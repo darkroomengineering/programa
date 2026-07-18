@@ -315,7 +315,7 @@ func tmuxDisplayMessage(rc *rpcContext, args []string) error {
 		if matchingPane == nil {
 			for _, p := range panes {
 				pn, _ := p.(map[string]any)
-				if focused, _ := pn["focused"].(bool); focused {
+				if focused, _ := boolFromAnyGo(pn["focused"]); focused {
 					matchingPane = pn
 					break
 				}

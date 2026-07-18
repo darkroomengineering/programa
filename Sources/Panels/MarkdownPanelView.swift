@@ -82,8 +82,8 @@ struct MarkdownPanelView: View {
     private var filePathHeader: some View {
         HStack(spacing: 6) {
             Image(systemName: "doc.richtext")
+                .symbolRasterSize(12)
                 .foregroundColor(.secondary)
-                .font(.system(size: 12))
             Text(panel.filePath)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.secondary)
@@ -96,7 +96,7 @@ struct MarkdownPanelView: View {
     private var fileUnavailableView: some View {
         VStack(spacing: 12) {
             Image(systemName: "doc.questionmark")
-                .font(.system(size: 40))
+                .symbolRasterSize(40)
                 .foregroundColor(.secondary)
             Text(String(localized: "markdown.fileUnavailable.title", defaultValue: "File unavailable"))
                 .font(.headline)

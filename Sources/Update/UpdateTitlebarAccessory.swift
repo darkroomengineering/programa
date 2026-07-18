@@ -1081,7 +1081,7 @@ private struct NotificationsPopoverView: View {
             if notificationStore.notifications.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "bell.slash")
-                        .font(.system(size: 28))
+                        .symbolRasterSize(28)
                         .foregroundColor(.secondary)
                     Text(String(localized: "notifications.empty.title", defaultValue: "No notifications yet"))
                         .font(.headline)

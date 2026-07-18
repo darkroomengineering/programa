@@ -100,12 +100,12 @@ fileprivate struct UpdateReleaseNotesLink: View {
         Link(destination: notes.url) {
             HStack {
                 Image(systemName: "doc.text")
-                    .font(.system(size: 11))
+                    .symbolRasterSize(11)
                 Text(notes.label)
                     .font(.system(size: 11, weight: .medium))
                 Spacer()
                 Image(systemName: "arrow.up.right")
-                    .font(.system(size: 10))
+                    .symbolRasterSize(10)
             }
             .foregroundColor(.primary)
             .padding(12)
@@ -454,8 +454,8 @@ fileprivate struct UpdateErrorView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
+                        .symbolRasterSize(13)
                         .foregroundColor(.orange)
-                        .font(.system(size: 13))
                     Text(title)
                         .font(.system(size: 13, weight: .semibold))
                 }

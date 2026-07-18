@@ -90,7 +90,7 @@ struct NotificationsPage: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "bell.slash")
-                .font(.system(size: 32))
+                .symbolRasterSize(32)
                 .foregroundColor(.secondary)
             Text(String(localized: "notifications.empty.title", defaultValue: "No notifications yet"))
                 .font(.headline)

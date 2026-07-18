@@ -814,7 +814,7 @@ struct SettingsView: View {
                             previewNotificationSound()
                         } label: {
                             Image(systemName: "play.fill")
-                                .font(.system(size: 9))
+                                .symbolRasterSize(9)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -1822,7 +1822,7 @@ private struct ThemeWindowThumbnail: View {
                 VStack(spacing: 0) {
                     HStack {
                         Image(systemName: "applelogo")
-                            .font(.system(size: max(height * 0.08, 6)))
+                            .symbolRasterSize(max(height * 0.08, 6))
                             .foregroundColor(isDark ? .white : .black)
                             .opacity(0.8)
                         Spacer()

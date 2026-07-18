@@ -742,7 +742,7 @@ private struct DebugWindowControlsView: View {
                             Text(localizedDebugLabel("Preview"))
                             Spacer()
                             Image(systemName: selectedDevToolsIconOption.rawValue)
-                                .font(.system(size: 12, weight: .medium))
+                                .symbolRasterSize(12, weight: .medium)
                                 .foregroundStyle(selectedDevToolsColorOption.color)
                         }
 

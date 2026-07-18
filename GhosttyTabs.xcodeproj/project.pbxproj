@@ -39,6 +39,9 @@
 			NRSP0016A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0015A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift */; };
 			NRSP0014A1B2C3D4E5F60719 /* GhosttyNSView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0013A1B2C3D4E5F60719 /* GhosttyNSView.swift */; };
 			NRSP0012A1B2C3D4E5F60719 /* GhosttyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0011A1B2C3D4E5F60719 /* GhosttyApp.swift */; };
+			B10A1CE2 /* BackgroundLogWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10A1CE1 /* BackgroundLogWriter.swift */; };
+			B10A1CE6 /* RenderableSystemSymbol.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10A1CE5 /* RenderableSystemSymbol.swift */; };
+			B10A1CE4 /* GhosttyTitleUpdateDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10A1CE3 /* GhosttyTitleUpdateDispatcher.swift */; };
 			NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */; };
 			NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */; };
 			NRSP0006A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0005A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift */; };
@@ -363,6 +366,9 @@
 			NRSP0015A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceScrollView.swift; sourceTree = "<group>"; };
 			NRSP0013A1B2C3D4E5F60719 /* GhosttyNSView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyNSView.swift; sourceTree = "<group>"; };
 			NRSP0011A1B2C3D4E5F60719 /* GhosttyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyApp.swift; sourceTree = "<group>"; };
+			B10A1CE1 /* BackgroundLogWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundLogWriter.swift; sourceTree = "<group>"; };
+			B10A1CE5 /* RenderableSystemSymbol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderableSystemSymbol.swift; sourceTree = "<group>"; };
+			B10A1CE3 /* GhosttyTitleUpdateDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTitleUpdateDispatcher.swift; sourceTree = "<group>"; };
 			NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+SidebarResizer.swift"; sourceTree = "<group>"; };
 			NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSupport.swift; sourceTree = "<group>"; };
 			NRSP0005A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosedBrowserPanelRestoreSnapshot.swift; sourceTree = "<group>"; };
@@ -709,6 +715,7 @@
 					NRPA00010 /* SettingsView.swift */,
 					A5FF0017 /* SettingDefinition.swift */,
 					A5001012 /* ContentView.swift */,
+					B10A1CE5 /* RenderableSystemSymbol.swift */,
 					NRSP0083A1B2C3D4E5F60719 /* WorkspaceSidebarModels.swift */,
 					NRSP0081A1B2C3D4E5F60719 /* WorkspaceRemoteModels.swift */,
 					NRSP0079A1B2C3D4E5F60719 /* WorkspaceMountPresentation.swift */,
@@ -734,6 +741,8 @@
 					NRSP0015A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift */,
 					NRSP0013A1B2C3D4E5F60719 /* GhosttyNSView.swift */,
 					NRSP0011A1B2C3D4E5F60719 /* GhosttyApp.swift */,
+					B10A1CE1 /* BackgroundLogWriter.swift */,
+					B10A1CE3 /* GhosttyTitleUpdateDispatcher.swift */,
 					NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */,
 					NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */,
 					NRSP0005A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift */,
@@ -1137,6 +1146,7 @@
 					NRPA00009 /* SettingsView.swift in Sources */,
 					A5FF0007 /* SettingDefinition.swift in Sources */,
 					A5001002 /* ContentView.swift in Sources */,
+					B10A1CE6 /* RenderableSystemSymbol.swift in Sources */,
 					NRSP0084A1B2C3D4E5F60719 /* WorkspaceSidebarModels.swift in Sources */,
 					NRSP0082A1B2C3D4E5F60719 /* WorkspaceRemoteModels.swift in Sources */,
 					NRSP0080A1B2C3D4E5F60719 /* WorkspaceMountPresentation.swift in Sources */,
@@ -1162,6 +1172,8 @@
 					NRSP0016A1B2C3D4E5F60719 /* GhosttySurfaceScrollView.swift in Sources */,
 					NRSP0014A1B2C3D4E5F60719 /* GhosttyNSView.swift in Sources */,
 					NRSP0012A1B2C3D4E5F60719 /* GhosttyApp.swift in Sources */,
+					B10A1CE2 /* BackgroundLogWriter.swift in Sources */,
+					B10A1CE4 /* GhosttyTitleUpdateDispatcher.swift in Sources */,
 					NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */,
 					NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */,
 					NRSP0006A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift in Sources */,

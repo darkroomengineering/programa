@@ -82,7 +82,7 @@ private struct SidebarHelpMenuButton: View {
         } label: {
             Image(systemName: "questionmark.circle")
                 .symbolRenderingMode(.monochrome)
-                .font(.system(size: iconSize, weight: .medium))
+                .symbolRasterSize(iconSize, weight: .medium)
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                 .frame(width: buttonSize, height: buttonSize, alignment: .center)
         }

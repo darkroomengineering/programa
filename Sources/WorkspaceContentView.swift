@@ -790,7 +790,7 @@ struct EmptyPanelView: View {
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "terminal.fill")
-                .font(.system(size: 48))
+                .symbolRasterSize(48)
                 .foregroundStyle(.tertiary)
 
             Text(String(localized: "workspace.emptyPanel.title", defaultValue: "Empty Panel"))
