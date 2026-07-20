@@ -81,6 +81,7 @@ Roadmap tracking: #141 (Phase 1 P0s #131-#134, Phase 2 upstream port round #135,
 - [ ] "Waiting for input" notification should include custom terminal title if set
 - [ ] Close button for current/active tab should always be visible (not just on hover)
 - [ ] Add browser icon to the left of the plus button in the tab bar
+- [ ] Welcome screen: match logo art and colors to the programa brand (#142)
 
 ## Analytics
 - [x] Add PostHog tracking (set `PostHogAnalytics.apiKey` in `Sources/PostHogAnalytics.swift`)
