@@ -5846,7 +5846,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reopen Closed Browser Panel"
+            "value": "Reopen Closed Panel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閉じたパネルを再度開く"
           }
         }
       }

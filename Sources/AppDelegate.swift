@@ -1496,6 +1496,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     func applicationWillTerminate(_ notification: Notification) {
         isTerminatingApp = true
         _ = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+        // Finalize any terminal closes still sitting in their undo grace period so a staged close
+        // doesn't quietly leak instead of tearing down cleanly on quit.
+        for context in mainWindowContexts.values {
+            context.tabManager.closedTerminalUndoStore.expireAll()
+        }
         stopSessionAutosaveTimer()
         TerminalController.shared.stop()
         VSCodeServeWebController.shared.stop()

@@ -136,10 +136,15 @@ extension TabManager {
         )
     }
 
-    /// Reopen the most recently closed browser panel (Cmd+Shift+T).
-    /// No-op when no browser panel restore snapshot is available.
+    /// Unified Cmd+Shift+T reopen: restores the most recently closed terminal (within its 5s undo
+    /// window) if there is one, otherwise falls back to the browser-panel restore snapshot stack.
+    /// No-op when neither has anything to restore.
     @discardableResult
     func reopenMostRecentlyClosedBrowserPanel() -> Bool {
+        if closedTerminalUndoStore.restoreMostRecent() {
+            return true
+        }
+
         while let snapshot = recentlyClosedBrowsers.pop() {
             guard let targetWorkspace =
                 workspace(withId: snapshot.workspaceId)

@@ -6,6 +6,9 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ## [Unreleased]
 
+### Added
+- Closing a terminal is now undoable for 5 seconds: Cmd+Shift+T brings it back with its process still running — whether you closed it or an agent did. The confirmation dialog still appears when a command is actively running.
+
 ### Changed
 - CLI target arguments no longer accept bare indexes: anywhere a command takes a window, workspace, pane, or surface, pass a UUID or short ref (workspace:2, surface:4). Indexes shift when things open or close, so agents holding one could hit the wrong target; the error now names the accepted formats. Positional options like reorder --index and browser tab ordinals are unchanged.
 - New installs now start with the minimal workspace layout (theme already follows the system). Anyone who previously toggled the mode keeps their stored setting.

@@ -596,6 +596,17 @@ final class Workspace: Identifiable, ObservableObject {
     var pendingDetachedSurfaces: [TabID: DetachedSurfaceTransfer] = [:]
     var activeDetachCloseTransactions: Int = 0
     var isDetachingCloseTransaction: Bool { activeDetachCloseTransactions > 0 }
+
+    /// Tabs whose confirm-close flow (`splitTabBar(_:shouldCloseTab:inPane:)`) decided to stage
+    /// the close for undo instead of tearing it down. Keyed by the tab's pre-close index within
+    /// its pane so a restore can reinsert at the same spot. Presence in this dict is what makes
+    /// `didCloseTab` take the same "keep the panel alive" branch used for drag-detach, without
+    /// reusing `detachingTabIds`/`activeDetachCloseTransactions` (those gate unrelated drag-in-
+    /// flight invariants elsewhere and are only ever touched by `detachSurface` itself).
+    var pendingUndoStageOriginalIndex: [TabID: Int] = [:]
+    /// Fires from `didCloseTab` when a close marked via `pendingUndoStageOriginalIndex` completes.
+    /// Wired by `TabManager` to route the still-alive detached panel into `closedTerminalUndoStore`.
+    var onTerminalCloseStagedForUndo: ((DetachedSurfaceTransfer, PaneID, Int) -> Void)?
     var pendingRemoteSurfaceTTYName: String?
     var pendingRemoteSurfaceTTYSurfaceId: UUID?
     var pendingRemoteSurfacePortKickReason: WorkspaceRemoteSessionController.PortScanKickReason?
@@ -1151,6 +1162,29 @@ final class Workspace: Identifiable, ObservableObject {
         return bonsplitController.allPaneIds.first { paneId in
             bonsplitController.tabs(inPane: paneId).contains(where: { $0.id == tabId })
         }
+    }
+
+    /// Called from the confirm-close flow in `splitTabBar(_:shouldCloseTab:inPane:)` right before
+    /// letting bonsplit proceed with removing `tabId` from `paneId`. When eligible, `didCloseTab`
+    /// will detect the pending entry and route the still-alive panel to
+    /// `onTerminalCloseStagedForUndo` instead of tearing it down via `panel.close()`.
+    ///
+    /// Conservatively declines (returns false, caller falls back to a normal close) when: no undo
+    /// callback is wired (e.g. a workspace without an owning `TabManager`), the panel isn't a
+    /// terminal, or this is the workspace's only remaining panel -- staging that case would leave
+    /// `didCloseTab`'s `panels.isEmpty` branch skipping its normal replacement-terminal creation,
+    /// which is only safe for real drag-detaches (where the caller expects a transient empty
+    /// workspace), not for an ordinary single-tab close.
+    @discardableResult
+    func markTerminalCloseForUndoStagingIfEligible(tabId: TabID, panelId: UUID, paneId: PaneID) -> Bool {
+        guard onTerminalCloseStagedForUndo != nil else { return false }
+        guard panels.count > 1 else { return false }
+        guard terminalPanel(for: panelId) != nil else { return false }
+        guard let index = bonsplitController.tabs(inPane: paneId).firstIndex(where: { $0.id == tabId }) else {
+            return false
+        }
+        pendingUndoStageOriginalIndex[tabId] = index
+        return true
     }
 
     func indexInPane(forPanelId panelId: UUID) -> Int? {
