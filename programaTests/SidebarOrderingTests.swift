@@ -546,6 +546,69 @@ final class SidebarBranchOrderingTests: XCTestCase {
 }
 
 
+final class SidebarDragFailsafePolicyTests: XCTestCase {
+    func testShouldRequestClearWhenDragActiveAndMouseButtonUp() {
+        XCTAssertTrue(
+            SidebarDragFailsafePolicy.shouldRequestClear(isDragActive: true, isLeftMouseButtonDown: false)
+        )
+    }
+
+    func testShouldNotRequestClearWhenDragActiveButMouseButtonStillDown() {
+        XCTAssertFalse(
+            SidebarDragFailsafePolicy.shouldRequestClear(isDragActive: true, isLeftMouseButtonDown: true)
+        )
+    }
+
+    func testShouldNotRequestClearWhenDragNotActive() {
+        XCTAssertFalse(
+            SidebarDragFailsafePolicy.shouldRequestClear(isDragActive: false, isLeftMouseButtonDown: false)
+        )
+        XCTAssertFalse(
+            SidebarDragFailsafePolicy.shouldRequestClear(isDragActive: false, isLeftMouseButtonDown: true)
+        )
+    }
+
+    func testShouldRequestClearWhenMonitoringStartsMirrorsMouseButtonUpCase() {
+        XCTAssertTrue(
+            SidebarDragFailsafePolicy.shouldRequestClearWhenMonitoringStarts(isLeftMouseButtonDown: false)
+        )
+        XCTAssertFalse(
+            SidebarDragFailsafePolicy.shouldRequestClearWhenMonitoringStarts(isLeftMouseButtonDown: true)
+        )
+    }
+
+    func testShouldRequestClearForLeftMouseUpEvent() {
+        XCTAssertTrue(
+            SidebarDragFailsafePolicy.shouldRequestClear(forMouseEventType: .leftMouseUp)
+        )
+    }
+
+    func testShouldRequestClearForLeftMouseDownEvent() {
+        // The mouseDown catch-all: a fresh mouseDown proves the prior drag
+        // session already ended, even though AppKit may have swallowed the
+        // terminating mouseUp during drag-session teardown.
+        XCTAssertTrue(
+            SidebarDragFailsafePolicy.shouldRequestClear(forMouseEventType: .leftMouseDown)
+        )
+    }
+
+    func testShouldNotRequestClearForUnrelatedEventTypes() {
+        XCTAssertFalse(
+            SidebarDragFailsafePolicy.shouldRequestClear(forMouseEventType: .rightMouseDown)
+        )
+        XCTAssertFalse(
+            SidebarDragFailsafePolicy.shouldRequestClear(forMouseEventType: .mouseMoved)
+        )
+        XCTAssertFalse(
+            SidebarDragFailsafePolicy.shouldRequestClear(forMouseEventType: .leftMouseDragged)
+        )
+        XCTAssertFalse(
+            SidebarDragFailsafePolicy.shouldRequestClear(forMouseEventType: .keyDown)
+        )
+    }
+}
+
+
 final class SidebarDropPlannerTests: XCTestCase {
     func testNoIndicatorForNoOpEdges() {
         let first = UUID()

@@ -254,6 +254,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
         }
     }
     @Published private(set) var keyboardCopyModeActive: Bool = false
+    /// One-shot readiness flag for the underlying Ghostty surface. Flips false -> true exactly
+    /// once, the moment `createSurface(for:)` successfully creates the runtime surface. Drives
+    /// the terminal loading spinner in `TerminalPanelView`. Never read on keystroke-hot paths.
+    @Published private(set) var isSurfaceReady: Bool = false
     private var searchNeedleCancellable: AnyCancellable?
     var currentKeyStateIndicatorText: String? { surfaceView.currentKeyStateIndicatorText }
 
@@ -1173,6 +1177,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 "workspaceId": tabId
             ]
         )
+        isSurfaceReady = true
 
 #if DEBUG
         let runtimeFontText = programaCurrentSurfaceFontSizePoints(createdSurface).map {

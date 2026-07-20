@@ -169,7 +169,11 @@ enum SidebarDragFailsafePolicy {
     }
 
     static func shouldRequestClear(forMouseEventType eventType: NSEvent.EventType) -> Bool {
-        eventType == .leftMouseUp
+        // A fresh mouseDown while a drag is still tracked proves the prior
+        // drag session already ended (AppKit can swallow the terminating
+        // mouseUp during drag-session teardown), so mouseDown is treated as
+        // an equally valid clear signal alongside mouseUp.
+        eventType == .leftMouseUp || eventType == .leftMouseDown
     }
 }
 
@@ -181,6 +185,8 @@ final class SidebarDragFailsafeMonitor: ObservableObject {
     private var keyDownMonitor: Any?
     private var localMouseMonitor: Any?
     private var globalMouseMonitor: Any?
+    private var localMouseDownMonitor: Any?
+    private var globalMouseDownMonitor: Any?
     private var onRequestClear: ((String) -> Void)?
 
     func start(onRequestClear: @escaping (String) -> Void) {
@@ -228,6 +234,26 @@ final class SidebarDragFailsafeMonitor: ObservableObject {
                 }
             }
         }
+        // Defensive catch-all: a terminating mouseUp can be swallowed during
+        // AppKit drag-session teardown, so neither mouseUp monitor above
+        // fires. A fresh mouseDown while a drag is still tracked proves the
+        // prior drag session already ended.
+        if localMouseDownMonitor == nil {
+            localMouseDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+                if SidebarDragFailsafePolicy.shouldRequestClear(forMouseEventType: event.type) {
+                    self?.requestClearSoon(reason: "mouse_down_failsafe")
+                }
+                return event
+            }
+        }
+        if globalMouseDownMonitor == nil {
+            globalMouseDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+                guard SidebarDragFailsafePolicy.shouldRequestClear(forMouseEventType: event.type) else { return }
+                Task { @MainActor [weak self] in
+                    self?.requestClearSoon(reason: "mouse_down_failsafe")
+                }
+            }
+        }
     }
 
     func stop() {
@@ -248,6 +274,14 @@ final class SidebarDragFailsafeMonitor: ObservableObject {
         if let globalMouseMonitor {
             NSEvent.removeMonitor(globalMouseMonitor)
             self.globalMouseMonitor = nil
+        }
+        if let localMouseDownMonitor {
+            NSEvent.removeMonitor(localMouseDownMonitor)
+            self.localMouseDownMonitor = nil
+        }
+        if let globalMouseDownMonitor {
+            NSEvent.removeMonitor(globalMouseDownMonitor)
+            self.globalMouseDownMonitor = nil
         }
         onRequestClear = nil
     }

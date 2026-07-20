@@ -10,8 +10,6 @@ struct MarkdownPanelView: View {
     let portalPriority: Int
     let onRequestPanelFocus: () -> Void
 
-    @State private var focusFlashOpacity: Double = 0.0
-    @State private var focusFlashAnimationGeneration: Int = 0
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -25,11 +23,18 @@ struct MarkdownPanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(backgroundColor)
         .overlay {
-            RoundedRectangle(cornerRadius: FocusFlashPattern.ringCornerRadius)
-                .stroke(programaAccentColor().opacity(focusFlashOpacity), lineWidth: 3)
-                .shadow(color: programaAccentColor().opacity(focusFlashOpacity * 0.35), radius: 10)
-                .padding(FocusFlashPattern.ringInset)
-                .allowsHitTesting(false)
+            // Single-transaction keyframe sequence (PhaseAnimator, macOS 14+): see
+            // BrowserPanelView's identical overlay for why this replaced a chained
+            // asyncAfter+withAnimation sequence (SwiftUI could coalesce/interrupt it).
+            PhaseAnimator(FocusFlashPattern.values.indices, trigger: panel.focusFlashToken) { phaseIndex in
+                RoundedRectangle(cornerRadius: FocusFlashPattern.ringCornerRadius)
+                    .stroke(programaAccentColor().opacity(FocusFlashPattern.values[phaseIndex]), lineWidth: 3)
+                    .shadow(color: programaAccentColor().opacity(FocusFlashPattern.values[phaseIndex] * 0.35), radius: 10)
+                    .padding(FocusFlashPattern.ringInset)
+                    .allowsHitTesting(false)
+            } animation: { phaseIndex in
+                FocusFlashPattern.phaseAnimation(at: phaseIndex)
+            }
         }
         .overlay {
             if isVisibleInUI {
@@ -48,9 +53,6 @@ struct MarkdownPanelView: View {
                     onClose: { panel.hideFind() }
                 )
             }
-        }
-        .onChange(of: panel.focusFlashToken) {
-            triggerFocusFlashAnimation()
         }
     }
 
@@ -121,32 +123,6 @@ struct MarkdownPanelView: View {
 
     private var backgroundColor: Color {
         markdownPresentation.backgroundColor
-    }
-
-    // MARK: - Focus Flash
-
-    private func triggerFocusFlashAnimation() {
-        focusFlashAnimationGeneration &+= 1
-        let generation = focusFlashAnimationGeneration
-        focusFlashOpacity = FocusFlashPattern.values.first ?? 0
-
-        for segment in FocusFlashPattern.segments {
-            DispatchQueue.main.asyncAfter(deadline: .now() + segment.delay) {
-                guard focusFlashAnimationGeneration == generation else { return }
-                withAnimation(focusFlashAnimation(for: segment.curve, duration: segment.duration)) {
-                    focusFlashOpacity = segment.targetOpacity
-                }
-            }
-        }
-    }
-
-    private func focusFlashAnimation(for curve: FocusFlashCurve, duration: TimeInterval) -> Animation {
-        switch curve {
-        case .easeIn:
-            return .easeIn(duration: duration)
-        case .easeOut:
-            return .easeOut(duration: duration)
-        }
     }
 }
 

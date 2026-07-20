@@ -60,11 +60,11 @@ Roadmap tracking: #141 (Phase 1 P0s #131-#134, Phase 2 upstream port round #135,
 
 ## Bugs
 - [ ] **P0** Terminal title updates are suppressed when workspace is not focused (e.g. Claude Code loading indicator doesn't update in sidebar until you switch to that tab) (#131)
-- [ ] Sidebar tab reorder can get stuck in dragging state (dimmed tab + blue drop indicator line visible) after drag ends
-- [ ] Drag-and-drop files/images into terminal shows URL instead of file path (Ghostty supports dropping files as paths)
-- [ ] After opening a browser tab, up/down arrow keys (and possibly other keyboard shortcuts) stop working in the terminal
+- [x] Sidebar tab reorder can get stuck in dragging state (dimmed tab + blue drop indicator line visible) after drag ends (defensive mouseDown catch-all added; existing failsafes covered Escape/mouseUp/deactivate)
+- [x] Drag-and-drop files/images into terminal shows URL instead of file path (already fixed: TerminalImageTransferPlanner inserts shell-escaped paths; covered by TerminalAndGhosttyTests)
+- [x] After opening a browser tab, up/down arrow keys (and possibly other keyboard shortcuts) stop working in the terminal (not reproducible as of 2026-07-20: verified via socket AND the real app event path after browser open + refocus; the keyboard-routing repair machinery in AppDelegate/WindowSwizzles appears to cover it. If it recurs, watch focus.keyRepair events in the debug log to discriminate focus-model desync vs stale first responder)
 - [ ] Notification marked unread doesn't get pushed to the top of the list
-- [ ] Browser cmd+shift+H ring flashes only once (should flash twice like other shortcuts)
+- [x] Browser cmd+shift+H ring flashes only once (should flash twice like other shortcuts) (fixed: browser/markdown focus flash now a single PhaseAnimator transaction instead of 4 chained asyncAfter calls SwiftUI could coalesce)
 
 ## Refactoring
 - [x] **P0** Remove all index-based APIs in favor of short ID refs (surface:N, pane:N, workspace:N, window:N) (#132)
@@ -72,15 +72,15 @@ Roadmap tracking: #141 (Phase 1 P0s #131-#134, Phase 2 upstream port round #135,
 - [x] **P0** Remove `close-workspace` with no args — require explicit workspace short ID or UUID, with clear error message if missing (#134)
 
 ## UI/UX Improvements
-- [ ] Show loading indicator in terminal while it's loading
-- [ ] Add question mark icon to learn shortcuts
+- [x] Show loading indicator in terminal while it's loading (added: TerminalSurface.isSurfaceReady one-shot flag drives a ProgressView overlay in TerminalPanelView)
+- [x] Add question mark icon to learn shortcuts (added: questionmark.circle button in the titlebar accessory opens Settings > Keyboard Shortcuts)
 - [ ] Notification popover: each button item should show outline outside when focused/hovered
 - [ ] Notification popover: add right-click context menu to mark as read/unread
-- [ ] Right-click tab should allow renaming that workspace
-- [ ] Cmd+click should open links in Programa (browser panel) instead of external browser
+- [x] Right-click tab should allow renaming that workspace (already implemented: TabItemView contextMenu → Rename Workspace…)
+- [x] Cmd+click should open links in Programa (browser panel) instead of external browser (already the default: BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowser = true)
 - [ ] "Waiting for input" notification should include custom terminal title if set
-- [ ] Close button for current/active tab should always be visible (not just on hover)
-- [ ] Add browser icon to the left of the plus button in the tab bar
+- [x] Close button for current/active tab should always be visible (not just on hover)
+- [x] Add browser icon to the left of the plus button in the tab bar
 - [ ] Welcome screen: match logo art and colors to the programa brand (#142)
 
 ## Analytics

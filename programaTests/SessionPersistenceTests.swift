@@ -1237,30 +1237,6 @@ final class SocketListenerAcceptPolicyTests: XCTestCase {
     }
 }
 
-final class SidebarDragFailsafePolicyTests: XCTestCase {
-    func testRequestsClearWhenMonitorStartsAfterMouseRelease() {
-        XCTAssertTrue(
-            SidebarDragFailsafePolicy.shouldRequestClearWhenMonitoringStarts(
-                isLeftMouseButtonDown: false
-            )
-        )
-        XCTAssertFalse(
-            SidebarDragFailsafePolicy.shouldRequestClearWhenMonitoringStarts(
-                isLeftMouseButtonDown: true
-            )
-        )
-    }
-
-    func testRequestsClearForLeftMouseUpEventsOnly() {
-        XCTAssertTrue(
-            SidebarDragFailsafePolicy.shouldRequestClear(
-                forMouseEventType: .leftMouseUp
-            )
-        )
-        XCTAssertFalse(
-            SidebarDragFailsafePolicy.shouldRequestClear(
-                forMouseEventType: .leftMouseDragged
-            )
-        )
-    }
-}
+// SidebarDragFailsafePolicy tests moved to SidebarOrderingTests.swift
+// (SidebarDragFailsafePolicyTests), where the rest of the sidebar drag
+// coverage lives.
