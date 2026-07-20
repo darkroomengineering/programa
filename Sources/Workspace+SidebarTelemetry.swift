@@ -219,6 +219,7 @@ extension Workspace {
             panelTitles[panelId] = trimmed
             didMutate = true
         }
+        panelsWithLiveTitle.insert(panelId)
 
         // Update bonsplit tab title only when this panel's title changed.
         if didMutate,
@@ -251,10 +252,13 @@ extension Workspace {
 
     /// Re-derive the workspace title from the focused panel's last known
     /// title. Called on pane-focus changes so the sidebar follows the active
-    /// pane without waiting for it to emit a new OSC title.
+    /// pane without waiting for it to emit a new OSC title. Only titles that
+    /// arrived through a real update qualify; creation-time displayTitle
+    /// seeds must not overwrite the workspace's default title.
     func refreshWorkspaceTitleFromFocusedPanel() {
         guard customTitle == nil,
               let panelId = focusedPanelId,
+              panelsWithLiveTitle.contains(panelId),
               let stored = panelTitles[panelId] else { return }
         if title != stored { title = stored }
         if processTitle != stored { processTitle = stored }
@@ -263,6 +267,7 @@ extension Workspace {
     func pruneSurfaceMetadata(validSurfaceIds: Set<UUID>) {
         panelDirectories = panelDirectories.filter { validSurfaceIds.contains($0.key) }
         panelTitles = panelTitles.filter { validSurfaceIds.contains($0.key) }
+        panelsWithLiveTitle = panelsWithLiveTitle.filter { validSurfaceIds.contains($0) }
         panelCustomTitles = panelCustomTitles.filter { validSurfaceIds.contains($0.key) }
         pinnedPanelIds = pinnedPanelIds.filter { validSurfaceIds.contains($0) }
         manualUnreadPanelIds = manualUnreadPanelIds.filter { validSurfaceIds.contains($0) }
