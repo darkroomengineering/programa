@@ -528,6 +528,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                     guard confirmed else { return }
 
                     self.forceCloseTabIds.insert(tabId)
+                    self.markTerminalCloseForUndoStagingIfEligible(tabId: tabId, panelId: panelId, paneId: pane)
                     self.bonsplitController.closeTab(tabId)
                 }
             }
@@ -537,6 +538,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
 
         clearStagedClosedBrowserRestoreSnapshot(for: tab.id)
         recordPostCloseSelection()
+        markTerminalCloseForUndoStagingIfEligible(tabId: tab.id, panelId: panelId, paneId: pane)
         return true
     }
 
@@ -544,7 +546,9 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         forceCloseTabIds.remove(tabId)
         let selectTabId = postCloseSelectTabId.removeValue(forKey: tabId)
         let closedBrowserRestoreSnapshot = pendingClosedBrowserRestoreSnapshots.removeValue(forKey: tabId)
-        let isDetaching = detachingTabIds.remove(tabId) != nil || isDetachingCloseTransaction
+        let undoStageOriginalIndex = pendingUndoStageOriginalIndex.removeValue(forKey: tabId)
+        let isUndoStaging = undoStageOriginalIndex != nil
+        let isDetaching = detachingTabIds.remove(tabId) != nil || isDetachingCloseTransaction || isUndoStaging
 
         // Clean up our panel
         guard let panelId = panelIdFromSurfaceId(tabId) else {
@@ -589,6 +593,10 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                     : nil,
                 remoteCleanupConfiguration: transferredRemoteCleanupConfiguration
             )
+            if isUndoStaging, let originalIndex = undoStageOriginalIndex,
+               let staged = pendingDetachedSurfaces.removeValue(forKey: tabId) {
+                onTerminalCloseStagedForUndo?(staged, pane, originalIndex)
+            }
         } else {
             if let closedBrowserRestoreSnapshot {
                 onClosedBrowserPanel?(closedBrowserRestoreSnapshot)

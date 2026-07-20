@@ -273,8 +273,16 @@ extension TerminalController {
                 return
             }
 
-            // Socket API must be non-interactive: bypass close-confirmation gating.
-            _ = ws.closePanel(surfaceId, force: true)
+            // Socket API must be non-interactive: bypass close-confirmation gating. Terminal
+            // panels get a 5s undo window (Cmd+Shift+T) same as any other terminal close, so an
+            // agent closing a pane doesn't destroy it outright.
+            if ws.terminalPanel(for: surfaceId) != nil {
+                if !tabManager.stageTerminalPanelCloseForUndo(in: ws, panelId: surfaceId) {
+                    _ = ws.closePanel(surfaceId, force: true)
+                }
+            } else {
+                _ = ws.closePanel(surfaceId, force: true)
+            }
             result = .ok(["workspace_id": ws.id.uuidString, "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id), "surface_id": surfaceId.uuidString, "surface_ref": v2Ref(kind: .surface, uuid: surfaceId), "window_id": v2OrNull(v2ResolveWindowId(tabManager: tabManager)?.uuidString), "window_ref": v2Ref(kind: .window, uuid: v2ResolveWindowId(tabManager: tabManager))])
         }
         return result

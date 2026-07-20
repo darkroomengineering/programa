@@ -618,6 +618,12 @@ class TabManager: ObservableObject {
     var pendingPanelTitleUpdates: [PanelTitleUpdateKey: String] = [:]
     private let panelTitleUpdateCoalescer = NotificationBurstCoalescer(delay: 1.0 / 30.0)
     var recentlyClosedBrowsers = RecentlyClosedBrowserStack(capacity: 20)
+    /// Issue #140: closing a terminal stages it here for a 5s undo window (Cmd+Shift+T) instead
+    /// of tearing it down immediately. Owned by TabManager -- the single reachable instance from
+    /// every reopen call site (AppDelegate shortcut dispatch, ProgramaApp menu command,
+    /// ContentView) and every terminal-close call site (Workspace's confirm-close delegate,
+    /// `closeRuntimeSurfaceWithConfirmation`, the v2 socket close handler).
+    let closedTerminalUndoStore = ClosedTerminalUndoStore()
     private let initialWorkspaceGitProbeQueue = DispatchQueue(
         label: "com.cmux.initial-workspace-git-probe",
         qos: .utility
@@ -723,14 +729,125 @@ class TabManager: ObservableObject {
         selectedWorkspaceGitMetadataPollTimer?.cancel()
     }
 
+    /// Wires both the browser-restore stack and the terminal close-undo callback for `workspace`.
+    /// Kept as one pair of functions (rather than a second wire/unwire call site to remember) so
+    /// every workspace-lifecycle call site that manages one automatically manages the other.
     func wireClosedBrowserTracking(for workspace: Workspace) {
         workspace.onClosedBrowserPanel = { [weak self] snapshot in
             self?.recentlyClosedBrowsers.push(snapshot)
+        }
+        workspace.onTerminalCloseStagedForUndo = { [weak self, weak workspace] transfer, paneId, index in
+            guard let self, let workspace else { return }
+            self.stageDetachedTerminalTransferForUndo(
+                transfer,
+                originalWorkspaceId: workspace.id,
+                originalPaneId: paneId,
+                originalIndex: index
+            )
         }
     }
 
     func unwireClosedBrowserTracking(for workspace: Workspace) {
         workspace.onClosedBrowserPanel = nil
+        workspace.onTerminalCloseStagedForUndo = nil
+    }
+
+    /// Detaches the live terminal panel at `panelId` (same process-alive primitive used for
+    /// cross-pane/window tab drag) and stages it for undo instead of closing it immediately. Used
+    /// by call sites that are NOT already inside a `bonsplitController.closeTab` call (socket
+    /// closes, runtime-close-with-confirmation) -- the interactive tab-close-button/Cmd+W path is
+    /// staged separately from inside `Workspace.splitTabBar(_:shouldCloseTab:inPane:)` because
+    /// that delegate is already invoked from within a `closeTab` call, and re-entering it via
+    /// `detachSurface` (which calls `closeTab` itself) would be unsafe reentrancy.
+    ///
+    /// Returns false when staging isn't possible (non-terminal panel, a drag-detach already in
+    /// flight for this workspace, or `detachSurface` itself declines) -- callers should fall back
+    /// to a normal close in that case.
+    @discardableResult
+    func stageTerminalPanelCloseForUndo(in workspace: Workspace, panelId: UUID) -> Bool {
+        guard workspace.terminalPanel(for: panelId) != nil else { return false }
+        guard !workspace.isDetachingCloseTransaction else { return false }
+        let originalPaneId = workspace.paneId(forPanelId: panelId)
+        let originalIndex = workspace.indexInPane(forPanelId: panelId)
+        guard let transfer = workspace.detachSurface(panelId: panelId) else { return false }
+
+        stageDetachedTerminalTransferForUndo(
+            transfer,
+            originalWorkspaceId: workspace.id,
+            originalPaneId: originalPaneId,
+            originalIndex: originalIndex
+        )
+        return true
+    }
+
+    private func stageDetachedTerminalTransferForUndo(
+        _ transfer: Workspace.DetachedSurfaceTransfer,
+        originalWorkspaceId: UUID,
+        originalPaneId: PaneID?,
+        originalIndex: Int?
+    ) {
+        closedTerminalUndoStore.stage(
+            restore: { [weak self] in
+                self?.restoreDetachedTerminalTransfer(
+                    transfer,
+                    originalWorkspaceId: originalWorkspaceId,
+                    originalPaneId: originalPaneId,
+                    originalIndex: originalIndex
+                )
+            },
+            finalize: {
+                // Mirrors Workspace+Bonsplit.swift's `didCloseTab` non-detaching teardown: release
+                // the SSH control master this transfer was keeping alive (if any), then close the
+                // retained panel for real.
+                if let cleanupConfiguration = transfer.remoteCleanupConfiguration {
+                    Workspace.requestSSHControlMasterCleanupIfNeeded(configuration: cleanupConfiguration)
+                }
+                transfer.panel.close()
+            }
+        )
+    }
+
+    /// Reattaches a previously detached terminal transfer for undo restore. Falls back to the
+    /// currently selected workspace's focused pane when the original workspace/pane no longer
+    /// exists; drops (closes) the panel if neither is available. Conservative by design -- an
+    /// undo restore should never crash or silently do nothing with a live process.
+    private func restoreDetachedTerminalTransfer(
+        _ transfer: Workspace.DetachedSurfaceTransfer,
+        originalWorkspaceId: UUID,
+        originalPaneId: PaneID?,
+        originalIndex: Int?
+    ) {
+        func giveUp() {
+            if let cleanupConfiguration = transfer.remoteCleanupConfiguration {
+                Workspace.requestSSHControlMasterCleanupIfNeeded(configuration: cleanupConfiguration)
+            }
+            transfer.panel.close()
+        }
+
+        guard let targetWorkspace = workspace(withId: originalWorkspaceId) ?? selectedWorkspace ?? tabs.first else {
+            giveUp()
+            return
+        }
+
+        let targetPane: PaneID?
+        if let originalPaneId, targetWorkspace.bonsplitController.allPaneIds.contains(originalPaneId) {
+            targetPane = originalPaneId
+        } else {
+            targetPane = targetWorkspace.bonsplitController.focusedPaneId ?? targetWorkspace.bonsplitController.allPaneIds.first
+        }
+
+        guard let targetPane else {
+            giveUp()
+            return
+        }
+
+        if selectedTabId != targetWorkspace.id {
+            selectedTabId = targetWorkspace.id
+        }
+
+        let tabCount = targetWorkspace.bonsplitController.tabs(inPane: targetPane).count
+        let clampedIndex = originalIndex.map { min(max($0, 0), tabCount) }
+        targetWorkspace.attachDetachedSurface(transfer, inPane: targetPane, atIndex: clampedIndex, focus: true)
     }
 
     /// Canonical workspace lookup by ID. All workspace-by-ID scans across TabManager and its
@@ -2167,7 +2284,9 @@ class TabManager: ObservableObject {
             ) else { return }
         }
 
-        _ = tab.closePanel(surfaceId, force: true)
+        if !stageTerminalPanelCloseForUndo(in: tab, panelId: surfaceId) {
+            _ = tab.closePanel(surfaceId, force: true)
+        }
         AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id, surfaceId: surfaceId)
     }
 
