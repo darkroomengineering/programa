@@ -66,6 +66,11 @@ def _wait_for_palette_input_caret_at_end(
     _wait_until(_matches, timeout_s=timeout_s, message=message)
 
 
+def _results_contain_command(client: cmux, window_id: str, command_id: str, limit: int = 20) -> bool:
+    rows = _palette_results(client, window_id, limit=limit).get("results") or []
+    return any(str((row or {}).get("command_id") or "") == command_id for row in rows)
+
+
 def _set_palette_visible(client: cmux, window_id: str, visible: bool) -> None:
     if _palette_visible(client, window_id) == visible:
         return
@@ -184,6 +189,45 @@ def main() -> int:
         _wait_until(
             lambda: not _palette_visible(client, window_id),
             message="second cmd+p did not close the command palette",
+        )
+
+        # New palette commands (issue #136 closeout): sendFeedback and
+        # reloadConfiguration must be searchable in commands mode. This only
+        # asserts presence in results — it does not invoke either command.
+        client.simulate_shortcut("cmd+shift+p")
+        _wait_until(
+            lambda: _palette_visible(client, window_id)
+            and str(_palette_results(client, window_id).get("mode") or "") == "commands",
+            message="cmd+shift+p did not reopen commands mode for feedback query",
+        )
+        client.simulate_type("feedback")
+        _wait_until(
+            lambda: _results_contain_command(client, window_id, "palette.sendFeedback"),
+            message="commands mode search for 'feedback' did not surface palette.sendFeedback",
+        )
+
+        client.simulate_shortcut("cmd+shift+p")
+        _wait_until(
+            lambda: not _palette_visible(client, window_id),
+            message="cmd+shift+p did not close the command palette after feedback query",
+        )
+
+        client.simulate_shortcut("cmd+shift+p")
+        _wait_until(
+            lambda: _palette_visible(client, window_id)
+            and str(_palette_results(client, window_id).get("mode") or "") == "commands",
+            message="cmd+shift+p did not reopen commands mode for reload config query",
+        )
+        client.simulate_type("reload config")
+        _wait_until(
+            lambda: _results_contain_command(client, window_id, "palette.reloadConfiguration"),
+            message="commands mode search for 'reload config' did not surface palette.reloadConfiguration",
+        )
+
+        client.simulate_shortcut("cmd+shift+p")
+        _wait_until(
+            lambda: not _palette_visible(client, window_id),
+            message="cmd+shift+p did not close the command palette after reload config query",
         )
 
     print("PASS: command palette cmd+p/cmd+shift+p open correct modes and toggle on repeat")
