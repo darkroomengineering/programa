@@ -49,6 +49,12 @@ def _run_cli(cli: str, args: List[str], env_overrides: Optional[Dict[str, str]] 
     """Run CLI command and return stdout."""
     cmd = [cli, "--socket", SOCKET_PATH] + args
     env = os.environ.copy()
+    # Hermetic: when this suite runs inside a Programa terminal, shell
+    # integration exports instance-scoped ids that point at that OTHER app
+    # instance (e.g. PROGRAMA_SURFACE_ID wins over the workspace target and
+    # breaks `send`). Strip them all; tests opt back in via env_overrides.
+    for var in ("PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID", "PROGRAMA_PANEL_ID", "PROGRAMA_TAB_ID"):
+        env.pop(var, None)
     if env_overrides:
         env.update(env_overrides)
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
@@ -225,6 +231,30 @@ def test_non_json_output_uses_refs(c: cmux, cli: str) -> None:
     print("  PASS: non-JSON output uses refs")
 
 
+def test_close_workspace_requires_explicit_target(c: cmux, cli: str) -> None:
+    """close-workspace with no --workspace must fail non-zero with an error
+    naming the accepted formats, and must not close anything (P0 #134)."""
+    before = len(c.list_workspaces())
+
+    cmd = [cli, "--socket", SOCKET_PATH, "close-workspace"]
+    env = os.environ.copy()
+    # An inherited PROGRAMA_WORKSPACE_ID must not turn the bare invocation
+    # into a valid close either; the target has to be explicit.
+    env.pop("PROGRAMA_WORKSPACE_ID", None)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
+    merged = f"{proc.stdout}\n{proc.stderr}"
+
+    _must(proc.returncode != 0, "close-workspace with no args must exit non-zero")
+    _must("--workspace" in merged, f"error must name the missing option, got: {merged.strip()}")
+    _must(
+        "workspace:" in merged and "UUID" in merged,
+        f"error must name the accepted formats (UUID / workspace:N), got: {merged.strip()}",
+    )
+    _must(len(c.list_workspaces()) == before, "no workspace may be closed by a bare invocation")
+
+    print("  PASS: close-workspace requires an explicit workspace id/ref")
+
+
 def main() -> int:
     cli = _find_cli_binary()
     print(f"Using CLI: {cli}")
@@ -239,6 +269,7 @@ def main() -> int:
         test_v2_migrated_commands_output_refs(c, cli)
         test_surface_health_workspace_relative(c, cli)
         test_non_json_output_uses_refs(c, cli)
+        test_close_workspace_requires_explicit_target(c, cli)
     finally:
         c.close()
 
