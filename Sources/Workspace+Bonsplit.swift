@@ -232,6 +232,9 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         if let terminalPanel = panel as? TerminalPanel {
             rememberTerminalConfigInheritanceSource(terminalPanel)
         }
+        // Unconditional: focus routes like Workspace.focusPanel move bonsplit focus
+        // before this runs, so previousFocusedPanelId already equals panelId here.
+        refreshWorkspaceTitleFromFocusedPanel()
         let isManuallyUnread = manualUnreadPanelIds.contains(panelId)
         let markedAt = manualUnreadMarkedAt[panelId]
         if Self.shouldClearManualUnread(

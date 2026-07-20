@@ -2579,16 +2579,6 @@ class TabManager: ObservableObject {
         }
     }
 
-    func focusedSurfaceTitleDidChange(tabId: UUID) {
-        guard let tab = workspace(withId: tabId),
-              let focusedPanelId = tab.focusedPanelId,
-              let title = tab.panelTitles[focusedPanelId] else { return }
-        tab.applyProcessTitle(title)
-        if selectedTabId == tabId {
-            updateWindowTitle(for: tab)
-        }
-    }
-
     private func updateWindowTitleForSelectedTab() {
         guard let selectedTabId,
               let tab = workspace(withId: selectedTabId) else {
