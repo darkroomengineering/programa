@@ -897,6 +897,7 @@ class TabManager: ObservableObject {
         title: String? = nil,
         workingDirectory overrideWorkingDirectory: String? = nil,
         initialTerminalCommand: String? = nil,
+        initialTerminalInput: String? = nil,
         initialTerminalEnvironment: [String: String] = [:],
         select: Bool = true,
         eagerLoadTerminal: Bool = false,
@@ -928,9 +929,18 @@ class TabManager: ObservableObject {
             let nextTabCount = snapshot.tabs.count + 1
             let explicitWorkingDirectory = normalizedWorkingDirectory(overrideWorkingDirectory)
             let workingDirectory = explicitWorkingDirectory ?? snapshot.preferredWorkingDirectory
-            let inheritedConfig = workspaceCreationConfigTemplate(
+            var inheritedConfig = workspaceCreationConfigTemplate(
                 inheritedTerminalFontPoints: snapshot.inheritedTerminalFontPoints
             )
+            if let initialTerminalInput, !initialTerminalInput.isEmpty {
+                // Typed into the started shell (TTY input buffering makes it run
+                // once the interactive shell is ready), unlike
+                // initialTerminalCommand which replaces the shell process and
+                // bypasses the user's interactive PATH.
+                var config = inheritedConfig ?? ProgramaSurfaceConfigTemplate()
+                config.initialInput = initialTerminalInput
+                inheritedConfig = config
+            }
             // Resolve placement against the pre-creation snapshot before Workspace init
             // boots terminal state. The ssh/new-workspace path can otherwise crash while
             // reading @Published placement state from existing workspaces mid-creation.

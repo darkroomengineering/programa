@@ -49,6 +49,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Completed the rename to **Programa** across the whole app and CLI. The command-line tool is now `programa`, and configuration lives in `~/.config/programa/` (`programa.json`, `settings.json`). Existing `~/.config/cmux` files, project-root `cmux.json`, and saved preferences are migrated automatically, so upgrading keeps your setup.
 
 ### Added
+- Instant agent on a keystroke: Cmd+Shift+C opens a new workspace in your current project directory with Claude Code already launching. The shortcut is editable in Settings and settings.json, and the command is also in the command palette as "New Claude Code Workspace".
 - New app icon.
 - Setting to disable terminal scrollback persistence.
 - Cmd+F find support in Markdown panels.

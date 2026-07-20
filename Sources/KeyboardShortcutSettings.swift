@@ -24,6 +24,7 @@ enum KeyboardShortcutSettings {
         // Titlebar / primary UI
         case toggleSidebar
         case newTab
+        case newClaudeWorkspace
         case openFolder
         case goToWorkspace
         case commandPalette
@@ -90,6 +91,7 @@ enum KeyboardShortcutSettings {
             case .quit: return String(localized: "menu.quitPrograma", defaultValue: "Quit Programa")
             case .toggleSidebar: return String(localized: "shortcut.toggleSidebar.label", defaultValue: "Toggle Sidebar")
             case .newTab: return String(localized: "shortcut.newWorkspace.label", defaultValue: "New Workspace")
+            case .newClaudeWorkspace: return String(localized: "menu.file.newClaudeWorkspace", defaultValue: "New Claude Code Workspace")
             case .openFolder: return String(localized: "shortcut.openFolder.label", defaultValue: "Open Folder")
             case .goToWorkspace: return String(localized: "menu.file.goToWorkspace", defaultValue: "Go to Workspace…")
             case .commandPalette: return String(localized: "menu.file.commandPalette", defaultValue: "Command Palette…")
@@ -160,6 +162,8 @@ enum KeyboardShortcutSettings {
                 return StoredShortcut(key: "b", command: true, shift: false, option: false, control: false)
             case .newTab:
                 return StoredShortcut(key: "n", command: true, shift: false, option: false, control: false)
+            case .newClaudeWorkspace:
+                return StoredShortcut(key: "c", command: true, shift: true, option: false, control: false)
             case .openFolder:
                 return StoredShortcut(key: "o", command: true, shift: false, option: false, control: false)
             case .goToWorkspace:
