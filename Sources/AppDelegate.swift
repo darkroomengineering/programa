@@ -4722,6 +4722,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return workspace.id
     }
 
+    /// Opens a new workspace and runs `programa codex install-integration` in it,
+    /// mirroring openClaudeIntegrationInstaller: no working-directory override, since
+    /// the installer targets the user's global Codex settings, not a project.
+    @discardableResult
+    func openCodexIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
+        discardOrphanedMainWindowContexts()
+        guard let context = preferredMainWindowContextForWorkspaceCreation(event: event, debugSource: debugSource) else {
+            openNewMainWindow(nil)
+            return nil
+        }
+        guard let window = resolvedWindow(for: context) else {
+            discardOrphanedMainWindowContext(context)
+            openNewMainWindow(nil)
+            return nil
+        }
+        setActiveMainWindow(window)
+
+        let workspace = context.tabManager.addWorkspace(
+            initialTerminalInput: "programa codex install-integration\n",
+            select: true
+        )
+        return workspace.id
+    }
+
     private func preferredMainWindowContextForWorkspaceCreation(
         event: NSEvent? = nil,
         debugSource: String = "unspecified"

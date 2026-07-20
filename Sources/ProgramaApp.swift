@@ -526,6 +526,15 @@ struct programaApp: App {
                 ) {
                     AppDelegate.shared?.openClaudeIntegrationInstaller(debugSource: "menu.installClaudeIntegration")
                 }
+
+                Button(
+                    String(
+                        localized: "menu.file.installCodexIntegration",
+                        defaultValue: "Install Codex Integration…"
+                    )
+                ) {
+                    AppDelegate.shared?.openCodexIntegrationInstaller(debugSource: "menu.installCodexIntegration")
+                }
             }
 
             // Close tab/workspace

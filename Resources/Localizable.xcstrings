@@ -5857,6 +5857,23 @@
         }
       }
     },
+    "menu.file.installCodexIntegration": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install Codex Integration…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex 連携をインストール…"
+          }
+        }
+      }
+    },
     "menu.file.reopenClosedBrowserPanel": {
       "extractionState": "manual",
       "localizations": {

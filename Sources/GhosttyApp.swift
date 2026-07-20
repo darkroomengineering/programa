@@ -1451,12 +1451,13 @@ class GhosttyApp {
                           let tabId = tabManager.selectedTabId else {
                         return false
                     }
-                    // Suppress OSC notifications for workspaces with active Claude hook sessions.
-                    // The hook system manages notifications with proper lifecycle tracking;
-                    // raw OSC notifications would duplicate or outlive the structured hooks.
+                    // Suppress OSC notifications for workspaces with active hook-managed agent
+                    // sessions (Claude Code, Codex, etc.). The hook system manages notifications
+                    // with proper lifecycle tracking; raw OSC notifications would duplicate or
+                    // outlive the structured hooks.
                     let owningManager = AppDelegate.shared?.tabManagerFor(tabId: tabId) ?? tabManager
                     if let workspace = owningManager.tabs.first(where: { $0.id == tabId }),
-                       workspace.agentPIDs["claude_code"] != nil {
+                       workspace.hasHookManagedAgent {
                         return true
                     }
                     let tabTitle = owningManager.titleForTab(tabId) ?? "Terminal"
@@ -1731,10 +1732,11 @@ class GhosttyApp {
             let actionBody = action.action.desktop_notification.body
                 .flatMap { String(cString: $0) } ?? ""
             performOnMain {
-                // Suppress OSC notifications for workspaces with active Claude hook sessions.
+                // Suppress OSC notifications for workspaces with active hook-managed agent
+                // sessions (Claude Code, Codex, etc.).
                 let owningManager = AppDelegate.shared?.tabManagerFor(tabId: tabId) ?? AppDelegate.shared?.tabManager
                 if let workspace = owningManager?.tabs.first(where: { $0.id == tabId }),
-                   workspace.agentPIDs["claude_code"] != nil {
+                   workspace.hasHookManagedAgent {
                     return
                 }
                 let tabTitle = owningManager?.titleForTab(tabId) ?? "Terminal"

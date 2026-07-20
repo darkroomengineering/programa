@@ -1452,10 +1452,10 @@ struct ProgramaCLI {
         // Codex hooks management (no socket needed)
         if command == "codex" {
             let sub = commandArgs.first?.lowercased() ?? "help"
-            if sub == "install-hooks" {
+            if sub == "install-hooks" || sub == "install-integration" {
                 try runCodexInstallHooks()
                 return
-            } else if sub == "uninstall-hooks" {
+            } else if sub == "uninstall-hooks" || sub == "uninstall-integration" {
                 try runCodexUninstallHooks()
                 return
             }
@@ -1585,12 +1585,14 @@ struct ProgramaCLI {
             CommandDescriptor(names: ["omc"], helpLines: ["omc [omc-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
             CommandDescriptor(
                 names: ["codex"],
-                helpLines: ["codex <install-hooks|uninstall-hooks>"],
+                helpLines: ["codex <install-integration|uninstall-integration>"],
                 connectionPolicy: .local,
                 detailedUsage: """
-                Usage: programa codex <install-hooks|uninstall-hooks>
+                Usage: programa codex <install-integration|uninstall-integration>
+                       programa codex <install-hooks|uninstall-hooks>  (legacy aliases, still supported)
 
-                Install or remove Programa's Codex notification hooks.
+                Install or remove Programa's Codex notification hooks in
+                ~/.codex/hooks.json (or $CODEX_HOME/hooks.json).
                 """,
                 execute: nil
             ),
@@ -5271,7 +5273,7 @@ struct ProgramaCLI {
             guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else { return }
             let parsed = try parse(values: ["workspace", "surface"], maxPositionals: 1)
             if let subcommand = parsed.positional.first?.lowercased(),
-               !["session-start", "prompt-submit", "stop", "help", "--help", "-h"].contains(subcommand) {
+               !["session-start", "prompt-submit", "stop", "notification", "notify", "session-end", "help", "--help", "-h"].contains(subcommand) {
                 throw CLIError(message: "codex-hook: unknown event \(subcommand)")
             }
 
@@ -5354,8 +5356,8 @@ struct ProgramaCLI {
             return
         case "codex":
             let parsed = try parse(booleans: ["yes", "y"], minPositionals: 1, maxPositionals: 1)
-            guard ["install-hooks", "uninstall-hooks"].contains(parsed.positional[0].lowercased()) else {
-                throw CLIError(message: "codex: expected install-hooks or uninstall-hooks")
+            guard ["install-hooks", "uninstall-hooks", "install-integration", "uninstall-integration"].contains(parsed.positional[0].lowercased()) else {
+                throw CLIError(message: "codex: expected install-integration or uninstall-integration")
             }
         case "claude":
             let parsed = try parse(booleans: ["yes", "y"], minPositionals: 1, maxPositionals: 1)

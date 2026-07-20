@@ -152,6 +152,13 @@ final class Workspace: Identifiable, ObservableObject {
     var agentPIDs: [String: pid_t] = [:]
     var restoredTerminalScrollbackByPanelId: [UUID: String] = [:]
 
+    /// True when any hook-managed agent (Claude Code, Codex, etc.) is registered for this
+    /// workspace. Used to suppress raw OSC desktop notifications in favor of the structured
+    /// hook-driven notification lifecycle.
+    var hasHookManagedAgent: Bool {
+        !agentPIDs.isEmpty
+    }
+
     func sidebarObservationSignal<Value: Equatable>(
         _ publisher: Published<Value>.Publisher
     ) -> AnyPublisher<Void, Never> {

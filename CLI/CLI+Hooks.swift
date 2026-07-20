@@ -1259,6 +1259,20 @@ extension ProgramaCLI {
                     "command": codexHookCommand("stop"),
                     "timeout": 10
                 ] as [String: Any]]
+            ] as [String: Any]],
+            "Notification": [[
+                "hooks": [[
+                    "type": "command",
+                    "command": codexHookCommand("notification"),
+                    "timeout": 10
+                ] as [String: Any]]
+            ] as [String: Any]],
+            "SessionEnd": [[
+                "hooks": [[
+                    "type": "command",
+                    "command": codexHookCommand("session-end"),
+                    "timeout": 1
+                ] as [String: Any]]
             ] as [String: Any]]
         ] as [String: Any]
     ]
@@ -2000,12 +2014,169 @@ extension ProgramaCLI {
                 throw error
             }
 
+        case "notification", "notify":
+            var summary = summarizeCodexHookNotification(parsedInput: parsedInput)
+
+            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
+            let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
+                preferred: mappedSession?.workspaceId,
+                fallback: workspaceArg,
+                client: client
+            )
+            if let mappedSession,
+               let savedBody = mappedSession.lastBody, !savedBody.isEmpty,
+               summary.body.contains("needs your attention") || summary.body.contains("needs your input") {
+                summary = (subtitle: mappedSession.lastSubtitle ?? summary.subtitle, body: savedBody)
+            }
+
+            let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+                preferred: mappedSession?.surfaceId,
+                fallback: surfaceArg,
+                workspaceId: workspaceId,
+                client: client
+            )
+            let agentPIDKey = codexAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
+            let codexPid = mappedSession?.pid ?? inferredCodexAgentPID()
+
+            let title = "Codex"
+            let subtitle = sanitizeNotificationField(summary.subtitle)
+            let body = sanitizeNotificationField(summary.body)
+
+            if let sessionId = parsedInput.sessionId {
+                try? sessionStore.upsert(
+                    sessionId: sessionId,
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    cwd: parsedInput.cwd,
+                    pid: codexPid,
+                    lastSubtitle: summary.subtitle,
+                    lastBody: summary.body
+                )
+            }
+            if let codexPid {
+                _ = try? client.sendV2(method: "workspace.set_agent_pid", params: [
+                    "workspace_id": workspaceId,
+                    "key": agentPIDKey,
+                    "pid": codexPid,
+                ])
+            }
+
+            _ = try? client.sendV2(method: "notification.create_for_target", params: [
+                "workspace_id": workspaceId,
+                "surface_id": surfaceId,
+                "title": title,
+                "subtitle": subtitle,
+                "body": body,
+            ])
+            _ = try? setCodexStatus(
+                client: client,
+                workspaceId: workspaceId,
+                value: "Needs input",
+                icon: "bell.fill",
+                color: "#4C8DFF"
+            )
+            print("{}")
+
+        case "session-end":
+            do {
+                // Final cleanup when Codex process exits (e.g. Ctrl+C or kill), covering
+                // the case where Stop never fires. If Stop already consumed the session,
+                // consumedSession is nil here and we skip to avoid wiping the completion
+                // notification that Stop just delivered.
+                let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
+                let fallbackWorkspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
+                    preferred: mappedSession?.workspaceId,
+                    fallback: workspaceArg,
+                    client: client
+                )
+                let fallbackSurfaceId: String? = {
+                    guard let fallbackWorkspaceId else { return nil }
+                    return try? resolvePreferredSurfaceIdForClaudeHook(
+                        preferred: mappedSession?.surfaceId,
+                        fallback: surfaceArg,
+                        workspaceId: fallbackWorkspaceId,
+                        client: client
+                    )
+                }()
+                let consumedSession = try? sessionStore.consume(
+                    sessionId: parsedInput.sessionId,
+                    workspaceId: fallbackWorkspaceId,
+                    surfaceId: fallbackSurfaceId
+                )
+                if let consumedSession {
+                    let workspaceId = consumedSession.workspaceId
+                    let agentPIDKey = codexAgentPIDKey(sessionId: parsedInput.sessionId ?? consumedSession.sessionId)
+                    _ = try? clearCodexStatus(client: client, workspaceId: workspaceId)
+                    _ = try? client.sendV2(method: "workspace.clear_agent_pid", params: ["workspace_id": workspaceId, "key": agentPIDKey])
+                    _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
+                }
+                print("{}")
+            } catch {
+                if shouldIgnoreClaudeHookTeardownError(error) {
+                    print("{}")
+                    return
+                }
+                throw error
+            }
+
         case "help", "--help", "-h":
-            print("programa codex-hook <session-start|prompt-submit|stop> [--workspace <id>] [--surface <id>]")
+            print("programa codex-hook <session-start|prompt-submit|stop|notification|session-end> [--workspace <id>] [--surface <id>]")
 
         default:
             throw CLIError(message: "Unknown codex-hook subcommand: \(subcommand)")
         }
+    }
+
+    private func summarizeCodexHookNotification(parsedInput: ClaudeHookParsedInput) -> (subtitle: String, body: String) {
+        guard let object = parsedInput.object else {
+            if let fallback = parsedInput.rawFallback, !fallback.isEmpty {
+                return classifyCodexNotification(signal: fallback, message: fallback)
+            }
+            return ("Waiting", "Codex is waiting for your input")
+        }
+
+        let nested = (object["notification"] as? [String: Any]) ?? (object["data"] as? [String: Any]) ?? [:]
+        let signalParts = [
+            firstString(in: object, keys: ["event", "event_name", "hook_event_name", "type", "kind"]),
+            firstString(in: object, keys: ["notification_type", "matcher", "reason"]),
+            firstString(in: nested, keys: ["type", "kind", "reason"])
+        ]
+        let messageCandidates = [
+            firstString(in: object, keys: ["message", "body", "text", "prompt", "error", "description"]),
+            firstString(in: nested, keys: ["message", "body", "text", "prompt", "error", "description"])
+        ]
+        let message = messageCandidates.compactMap { $0 }.first ?? "Codex needs your input"
+        let normalizedMessage = normalizedSingleLine(message)
+        let signal = signalParts.compactMap { $0 }.joined(separator: " ")
+        var classified = classifyCodexNotification(signal: signal, message: normalizedMessage)
+
+        classified.body = truncate(classified.body, maxLength: 180)
+        return classified
+    }
+
+    private func classifyCodexNotification(signal: String, message: String) -> (subtitle: String, body: String) {
+        let lower = "\(signal) \(message)".lowercased()
+        if lower.contains("permission") || lower.contains("approve") || lower.contains("approval") || lower.contains("permission_prompt") {
+            let body = message.isEmpty ? "Approval needed" : message
+            return ("Permission", body)
+        }
+        if lower.contains("error") || lower.contains("failed") || lower.contains("exception") {
+            let body = message.isEmpty ? "Codex reported an error" : message
+            return ("Error", body)
+        }
+        if lower.contains("complet") || lower.contains("finish") || lower.contains("done") || lower.contains("success") {
+            let body = message.isEmpty ? "Task completed" : message
+            return ("Completed", body)
+        }
+        if lower.contains("idle") || lower.contains("wait") || lower.contains("input") || lower.contains("idle_prompt") {
+            let body = message.isEmpty ? "Waiting for input" : message
+            return ("Waiting", body)
+        }
+        // Use the message directly if it's meaningful (not a generic placeholder).
+        if !message.isEmpty, message != "Codex needs your input" {
+            return ("Attention", message)
+        }
+        return ("Attention", "Codex needs your attention")
     }
 
     private func setCodexStatus(
@@ -2022,6 +2193,10 @@ extension ProgramaCLI {
             "icon": icon,
             "color": color,
         ])
+    }
+
+    private func clearCodexStatus(client: SocketClient, workspaceId: String) throws {
+        _ = try client.sendV2(method: "workspace.clear_status", params: ["workspace_id": workspaceId, "key": "codex"])
     }
 
     private func codexAgentPIDKey(sessionId: String?) -> String {
@@ -2125,7 +2300,7 @@ extension ProgramaCLI {
             """
         case "codex-hook":
             return """
-            Usage: programa codex-hook <session-start|prompt-submit|stop> [flags]
+            Usage: programa codex-hook <session-start|prompt-submit|stop|notification|session-end> [flags]
 
             Hook for Codex CLI integration. Reads JSON from stdin.
             Gracefully no-ops when not running inside programa.
@@ -2134,6 +2309,8 @@ extension ProgramaCLI {
               session-start   Register a Codex session
               prompt-submit   Set Running status on user prompt
               stop            Send completion notification, set Idle
+              notification    Send an attention-classified notification, set Needs input
+              session-end     Final cleanup when the Codex process exits (Ctrl+C/kill)
 
             Flags:
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
