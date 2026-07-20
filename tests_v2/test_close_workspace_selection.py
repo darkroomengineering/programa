@@ -66,7 +66,12 @@ def test_close_middle_selects_next(client: cmux) -> TestResult:
     try:
         _ensure_workspaces(client, 3)
 
-        client.select_workspace(1)
+        initial = client.list_workspaces()
+        target = _by_index(initial, 1)
+        if target is None:
+            result.failure("Expected a workspace at index 1")
+            return result
+        client.select_workspace(target[1])
         time.sleep(0.15)
 
         before = client.list_workspaces()
@@ -114,7 +119,11 @@ def test_close_last_selects_previous(client: cmux) -> TestResult:
             return result
 
         last_index = len(before) - 1
-        client.select_workspace(last_index)
+        target = _by_index(before, last_index)
+        if target is None:
+            result.failure(f"Expected a workspace at index {last_index}")
+            return result
+        client.select_workspace(target[1])
         time.sleep(0.15)
 
         before = client.list_workspaces()

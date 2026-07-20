@@ -7,6 +7,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Changed
+- CLI target arguments no longer accept bare indexes: anywhere a command takes a window, workspace, pane, or surface, pass a UUID or short ref (workspace:2, surface:4). Indexes shift when things open or close, so agents holding one could hit the wrong target; the error now names the accepted formats. Positional options like reorder --index and browser tab ordinals are unchanged.
 - New installs now start with the minimal workspace layout (theme already follows the system). Anyone who previously toggled the mode keeps their stored setting.
 - CI and release policy checks now exercise executable helpers and built artifacts instead of asserting source-file text; release binaries are also checked for the expected architecture before signing.
 - Debug and settings UI copy is fully localized in English and Japanese, and obsolete cmux branding and unassigned dark app-icon variants have been removed.

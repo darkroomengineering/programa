@@ -76,7 +76,8 @@ def test_close_middle_keeps_index(client: cmux) -> TestResult:
         _ensure_surfaces(client, 3)
 
         # Focus index 1.
-        client.focus_surface(1)
+        initial = client.list_surfaces()
+        client.focus_surface(initial[1][1])
         if not _wait_focused_index(client, 1, timeout=4.0):
             result.failure("Failed to focus surface index 1")
             return result
@@ -123,7 +124,7 @@ def test_close_last_selects_previous(client: cmux) -> TestResult:
         last_index = len(before) - 1
         expected_prev_id = before[last_index - 1][1]
 
-        client.focus_surface(last_index)
+        client.focus_surface(before[last_index][1])
         if not _wait_focused_index(client, last_index, timeout=4.0):
             result.failure(f"Failed to focus surface index {last_index}")
             return result

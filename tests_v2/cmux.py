@@ -284,11 +284,7 @@ class cmux:
             return str(wsid)
 
         if isinstance(workspace, int):
-            items = (self._call("workspace.list") or {}).get("workspaces") or []
-            for row in items:
-                if int(row.get("index", -1)) == workspace:
-                    return str(row.get("id"))
-            raise cmuxError(f"Workspace index not found: {workspace}")
+            raise cmuxError(f"bare index {workspace!r} is no longer accepted; pass a UUID or ref like workspace:2")
 
         s = str(workspace).strip()
         if not s:
@@ -310,14 +306,7 @@ class cmux:
             return None if sid in (None, "", {}) else str(sid)
 
         if isinstance(surface, int):
-            params: Dict[str, Any] = {}
-            if workspace_id:
-                params["workspace_id"] = workspace_id
-            items = (self._call("surface.list", params) or {}).get("surfaces") or []
-            for row in items:
-                if int(row.get("index", -1)) == surface:
-                    return str(row.get("id"))
-            raise cmuxError(f"Surface index not found: {surface}")
+            raise cmuxError(f"bare index {surface!r} is no longer accepted; pass a UUID or ref like surface:2")
 
         s = str(surface).strip()
         if not s:
@@ -338,14 +327,7 @@ class cmux:
             return None if pid in (None, "", {}) else str(pid)
 
         if isinstance(pane, int):
-            params: Dict[str, Any] = {}
-            if workspace_id:
-                params["workspace_id"] = workspace_id
-            items = (self._call("pane.list", params) or {}).get("panes") or []
-            for row in items:
-                if int(row.get("index", -1)) == pane:
-                    return str(row.get("id"))
-            raise cmuxError(f"Pane index not found: {pane}")
+            raise cmuxError(f"bare index {pane!r} is no longer accepted; pass a UUID or ref like pane:2")
 
         s = str(pane).strip()
         if not s:

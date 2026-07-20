@@ -302,7 +302,9 @@ def run_tests():
             try:
                 client.new_workspace()
                 time.sleep(0.6)
-                client.focus_surface(0)
+                surfaces = client.list_surfaces()
+                if surfaces:
+                    client.focus_surface(surfaces[0][1])
                 time.sleep(0.2)
             except Exception as e:
                 # Continue; individual tests will report a clearer failure.
