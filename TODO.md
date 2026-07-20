@@ -1,5 +1,7 @@
 # TODO
 
+Roadmap tracking: #141 (Phase 1 P0s #131-#134, Phase 2 upstream port round #135, Phase 3 differentiators #136-#140).
+
 ## Issue 151: Remote SSH (Living Execution)
 - [x] `programa ssh` creates remote workspace metadata and does not require `--name`
 - [x] Remote daemon bootstrap/upload/start path with `programad-remote serve --stdio`
@@ -37,27 +39,27 @@
 - [x] Expand end-user skill docs with deep-linkable programa-browser references/templates plus a new core `skills/programa/` topology skill.
 
 ## Command Palette
-- [ ] Add cmd+shift+p palette with all commands
+- [ ] Add cmd+shift+p palette with all commands (#136)
 
 ## Feature Requests
-- [ ] Warm pool of Claude Code instances mapped to a keyboard shortcut
+- [ ] Warm pool of Claude Code instances mapped to a keyboard shortcut (#137)
 
 ## Claude Code Integration
-- [ ] Add "Install Claude Code integration" menu item in menubar
+- [ ] Add "Install Claude Code integration" menu item in menubar (#138)
   - Opens a new terminal
   - Shows user the diff to their config file (claude.json, opencode config, codex config, etc.)
   - Prompts user to type 'y' to confirm
   - Implement as part of `programa` CLI, menubar just triggers the CLI command
 
 ## Additional Integrations
-- [ ] Codex integration
-- [ ] OpenCode integration
+- [ ] Codex integration (#139)
+- [ ] OpenCode integration (#139)
 
 ## Browser
 - [ ] Per-WKWebView proxy observability/inspection once remote proxy path is shipped (URL, method, headers, body, status, timing)
 
 ## Bugs
-- [ ] **P0** Terminal title updates are suppressed when workspace is not focused (e.g. Claude Code loading indicator doesn't update in sidebar until you switch to that tab)
+- [ ] **P0** Terminal title updates are suppressed when workspace is not focused (e.g. Claude Code loading indicator doesn't update in sidebar until you switch to that tab) (#131)
 - [ ] Sidebar tab reorder can get stuck in dragging state (dimmed tab + blue drop indicator line visible) after drag ends
 - [ ] Drag-and-drop files/images into terminal shows URL instead of file path (Ghostty supports dropping files as paths)
 - [ ] After opening a browser tab, up/down arrow keys (and possibly other keyboard shortcuts) stop working in the terminal
@@ -65,9 +67,9 @@
 - [ ] Browser cmd+shift+H ring flashes only once (should flash twice like other shortcuts)
 
 ## Refactoring
-- [ ] **P0** Remove all index-based APIs in favor of short ID refs (surface:N, pane:N, workspace:N, window:N)
-- [ ] **P0** CLI commands should be workspace-relative using PROGRAMA_WORKSPACE_ID env var (not focused workspace) so agents in background workspaces don't affect the user's active workspace. Affected: send, send-key, send-panel, send-key-panel, new-split, new-pane, new-surface, close-surface, list-panes, list-pane-surfaces, list-panels, focus-pane, focus-panel, surface-health
-- [ ] **P0** Remove `close-workspace` with no args — require explicit workspace short ID or UUID, with clear error message if missing
+- [ ] **P0** Remove all index-based APIs in favor of short ID refs (surface:N, pane:N, workspace:N, window:N) (#132)
+- [ ] **P0** CLI commands should be workspace-relative using PROGRAMA_WORKSPACE_ID env var (not focused workspace) so agents in background workspaces don't affect the user's active workspace. Affected: send, send-key, send-panel, send-key-panel, new-split, new-pane, new-surface, close-surface, list-panes, list-pane-surfaces, list-panels, focus-pane, focus-panel, surface-health (#133)
+- [ ] **P0** Remove `close-workspace` with no args — require explicit workspace short ID or UUID, with clear error message if missing (#134)
 
 ## UI/UX Improvements
 - [ ] Show loading indicator in terminal while it's loading
@@ -79,6 +81,7 @@
 - [ ] "Waiting for input" notification should include custom terminal title if set
 - [ ] Close button for current/active tab should always be visible (not just on hover)
 - [ ] Add browser icon to the left of the plus button in the tab bar
+- [ ] Welcome screen: match logo art and colors to the programa brand (#142)
 
 ## Analytics
 - [x] Add PostHog tracking (set `PostHogAnalytics.apiKey` in `Sources/PostHogAnalytics.swift`)
