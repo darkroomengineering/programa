@@ -535,6 +535,15 @@ struct programaApp: App {
                 ) {
                     AppDelegate.shared?.openCodexIntegrationInstaller(debugSource: "menu.installCodexIntegration")
                 }
+
+                Button(
+                    String(
+                        localized: "menu.file.installOpenCodeIntegration",
+                        defaultValue: "Install OpenCode Integration…"
+                    )
+                ) {
+                    AppDelegate.shared?.openOpenCodeIntegrationInstaller(debugSource: "menu.installOpenCodeIntegration")
+                }
             }
 
             // Close tab/workspace
