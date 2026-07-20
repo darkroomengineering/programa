@@ -49,6 +49,7 @@ extension Workspace {
     func panelNeedsConfirmClose(panelId: UUID, fallbackNeedsConfirmClose: Bool) -> Bool {
         Self.resolveCloseConfirmation(
             shellActivityState: panelShellActivityStates[panelId],
+            hasKnownTTY: surfaceTTYNames[panelId] != nil,
             fallbackNeedsConfirmClose: fallbackNeedsConfirmClose
         )
     }
