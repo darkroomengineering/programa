@@ -7,6 +7,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- Codex integration now matches Claude Code: "Needs input" notifications, guaranteed cleanup when a session dies without a clean stop, an "Install Codex Integration…" menu item, and `programa codex install-integration` naming (the old install-hooks name still works). Also fixed duplicate desktop notifications for Codex sessions — suppression of raw terminal notifications now applies to any hook-managed agent, not just Claude Code.
 - File menu: "Install Claude Code Integration…" opens a terminal running `programa claude install-integration`, which shows the exact diff it wants to make to your Claude settings and asks before writing. It durably registers Programa's lifecycle hooks so the integration works from any terminal, not just inside Programa; hooks silently no-op elsewhere. Fully reversible with `programa claude uninstall-integration`; your own hooks are never touched.
 - Closing a terminal is now undoable for 5 seconds: Cmd+Shift+T brings it back with its process still running — whether you closed it or an agent did. The confirmation dialog still appears when a command is actively running.
 
