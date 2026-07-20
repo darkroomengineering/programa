@@ -4697,6 +4697,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return workspace.id
     }
 
+    /// Opens a new workspace and runs `programa claude install-integration` in it,
+    /// mirroring createClaudeWorkspace's window-context resolution but without a
+    /// working-directory override — the installer targets the user's global Claude
+    /// Code settings, not a project. Menu-only entry point (#138).
+    @discardableResult
+    func openClaudeIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
+        discardOrphanedMainWindowContexts()
+        guard let context = preferredMainWindowContextForWorkspaceCreation(event: event, debugSource: debugSource) else {
+            openNewMainWindow(nil)
+            return nil
+        }
+        guard let window = resolvedWindow(for: context) else {
+            discardOrphanedMainWindowContext(context)
+            openNewMainWindow(nil)
+            return nil
+        }
+        setActiveMainWindow(window)
+
+        let workspace = context.tabManager.addWorkspace(
+            initialTerminalInput: "programa claude install-integration\n",
+            select: true
+        )
+        return workspace.id
+    }
+
     private func preferredMainWindowContextForWorkspaceCreation(
         event: NSEvent? = nil,
         debugSource: String = "unspecified"

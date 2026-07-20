@@ -1461,6 +1461,20 @@ struct ProgramaCLI {
             }
         }
 
+        // Claude Code integration management (no socket needed)
+        if command == "claude" {
+            let sub = commandArgs.first?.lowercased() ?? "help"
+            if sub == "install-integration" {
+                try runClaudeInstallIntegration()
+                return
+            } else if sub == "uninstall-integration" {
+                try runClaudeUninstallIntegration()
+                return
+            }
+            print("Usage: programa claude <install-integration|uninstall-integration>")
+            throw CLIError(message: "Unknown claude subcommand: \(sub)")
+        }
+
         // Codex hook handler: gracefully no-op when not inside programa
         // (before socket connection, so it doesn't fail when no socket exists)
         if command == "codex-hook" {
@@ -1577,6 +1591,20 @@ struct ProgramaCLI {
                 Usage: programa codex <install-hooks|uninstall-hooks>
 
                 Install or remove Programa's Codex notification hooks.
+                """,
+                execute: nil
+            ),
+            CommandDescriptor(
+                names: ["claude"],
+                helpLines: ["claude <install-integration|uninstall-integration>"],
+                connectionPolicy: .local,
+                detailedUsage: """
+                Usage: programa claude <install-integration|uninstall-integration>
+
+                Install or remove Programa's persistent Claude Code hooks in
+                ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json).
+                Unlike the runtime wrapper, this makes the integration work from
+                any terminal, not just programa's.
                 """,
                 execute: nil
             ),
@@ -5325,9 +5353,14 @@ struct ProgramaCLI {
         case "shortcuts", "feedback", "themes", "claude-teams", "omo", "omx", "omc":
             return
         case "codex":
-            let parsed = try parse(minPositionals: 1, maxPositionals: 1)
+            let parsed = try parse(booleans: ["yes", "y"], minPositionals: 1, maxPositionals: 1)
             guard ["install-hooks", "uninstall-hooks"].contains(parsed.positional[0].lowercased()) else {
                 throw CLIError(message: "codex: expected install-hooks or uninstall-hooks")
+            }
+        case "claude":
+            let parsed = try parse(booleans: ["yes", "y"], minPositionals: 1, maxPositionals: 1)
+            guard ["install-integration", "uninstall-integration"].contains(parsed.positional[0].lowercased()) else {
+                throw CLIError(message: "claude: expected install-integration or uninstall-integration")
             }
         case "remote-daemon-status":
             let parsed = try parse(values: ["os", "arch"])

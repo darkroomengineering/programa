@@ -5840,6 +5840,23 @@
         }
       }
     },
+    "menu.file.installClaudeIntegration": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install Claude Code Integration…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code 連携をインストール…"
+          }
+        }
+      }
+    },
     "menu.file.reopenClosedBrowserPanel": {
       "extractionState": "manual",
       "localizations": {

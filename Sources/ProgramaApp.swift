@@ -517,6 +517,15 @@ struct programaApp: App {
                     AppDelegate.shared?.showOpenFolderInInlineVSCodePanel()
                 }
                 .disabled(!TerminalDirectoryOpenTarget.vscodeInline.isAvailable())
+
+                Button(
+                    String(
+                        localized: "menu.file.installClaudeIntegration",
+                        defaultValue: "Install Claude Code Integration…"
+                    )
+                ) {
+                    AppDelegate.shared?.openClaudeIntegrationInstaller(debugSource: "menu.installClaudeIntegration")
+                }
             }
 
             // Close tab/workspace
