@@ -388,7 +388,8 @@ def _close_and_verify(client: cmux, change: StateChange, close_idx: int,
     """Shared logic: close a surface, verify count, verify responsiveness, capture after."""
     change.before, change.before_state = capture(client, before_label)
     try:
-        client.close_surface(close_idx)
+        surfaces = client.list_surfaces()
+        client.close_surface(surfaces[close_idx][1])
         time.sleep(CLOSE_WAIT)
         if not wait_surface_count(client, expected):
             change.error = f"Expected {expected} surface(s), got {surface_count(client)}"
@@ -463,7 +464,8 @@ def test_c8_3way_close_middle(client: cmux) -> StateChange:
     )
     client.new_split("right")
     time.sleep(SPLIT_WAIT)
-    client.focus_surface(1)
+    surfaces = client.list_surfaces()
+    client.focus_surface(surfaces[1][1])
     time.sleep(SHORT_WAIT)
     client.new_split("right")
     time.sleep(SPLIT_WAIT)
@@ -479,13 +481,14 @@ def test_c9_grid_close_topleft(client: cmux) -> StateChange:
     )
     client.new_split("right")
     time.sleep(SPLIT_WAIT)
-    client.focus_surface(0)
+    surfaces = client.list_surfaces()
+    client.focus_surface(surfaces[0][1])
     time.sleep(SHORT_WAIT)
     client.new_split("down")
     time.sleep(SPLIT_WAIT)
     surfaces = client.list_surfaces()
     if len(surfaces) >= 3:
-        client.focus_surface(2)
+        client.focus_surface(surfaces[2][1])
         time.sleep(SHORT_WAIT)
         client.new_split("down")
         time.sleep(SPLIT_WAIT)
@@ -501,13 +504,14 @@ def test_c10_grid_close_bottomright(client: cmux) -> StateChange:
     )
     client.new_split("right")
     time.sleep(SPLIT_WAIT)
-    client.focus_surface(0)
+    surfaces = client.list_surfaces()
+    client.focus_surface(surfaces[0][1])
     time.sleep(SHORT_WAIT)
     client.new_split("down")
     time.sleep(SPLIT_WAIT)
     surfaces = client.list_surfaces()
     if len(surfaces) >= 3:
-        client.focus_surface(2)
+        client.focus_surface(surfaces[2][1])
         time.sleep(SHORT_WAIT)
         client.new_split("down")
         time.sleep(SPLIT_WAIT)
@@ -524,7 +528,8 @@ def test_d11_nested_close_bottomright(client: cmux) -> StateChange:
     )
     client.new_split("right")
     time.sleep(SPLIT_WAIT)
-    client.focus_surface(1)
+    surfaces = client.list_surfaces()
+    client.focus_surface(surfaces[1][1])
     time.sleep(SHORT_WAIT)
     client.new_split("down")
     time.sleep(SPLIT_WAIT)
@@ -540,7 +545,8 @@ def test_d12_nested_close_top(client: cmux) -> StateChange:
     )
     client.new_split("down")
     time.sleep(SPLIT_WAIT)
-    client.focus_surface(1)
+    surfaces = client.list_surfaces()
+    client.focus_surface(surfaces[1][1])
     time.sleep(SHORT_WAIT)
     client.new_split("right")
     time.sleep(SPLIT_WAIT)
@@ -556,11 +562,13 @@ def test_d13_4pane_close_second(client: cmux) -> StateChange:
     )
     client.new_split("right")
     time.sleep(SPLIT_WAIT)
-    client.focus_surface(1)
+    surfaces = client.list_surfaces()
+    client.focus_surface(surfaces[1][1])
     time.sleep(SHORT_WAIT)
     client.new_split("right")
     time.sleep(SPLIT_WAIT)
-    client.focus_surface(2)
+    surfaces = client.list_surfaces()
+    client.focus_surface(surfaces[2][1])
     time.sleep(SHORT_WAIT)
     client.new_split("right")
     time.sleep(SPLIT_WAIT)
@@ -590,7 +598,8 @@ def test_e14_browser_close_terminal(client: cmux) -> StateChange:
     change.before, change.before_state = capture(client, "e14_before")
     try:
         # Find and close the first terminal (index 0)
-        client.close_surface(0)
+        surfaces = client.list_surfaces()
+        client.close_surface(surfaces[0][1])
         time.sleep(CLOSE_WAIT)
         change.passed = wait_surface_count(client, before_count - 1)
         if not change.passed:
@@ -629,7 +638,8 @@ def test_e15_browser_close_browser(client: cmux) -> StateChange:
         return change
     change.before, change.before_state = capture(client, "e15_before")
     try:
-        client.close_surface(before_count - 1)
+        surfaces = client.list_surfaces()
+        client.close_surface(surfaces[before_count - 1][1])
         # Browser close leaves behind an auto-created terminal that may need
         # extra time for its shell to initialize, so wait longer.
         time.sleep(2.0)
@@ -680,7 +690,8 @@ def test_g17_rapid_down_close_top(client: cmux) -> StateChange:
             client.new_split("down")
             time.sleep(SPLIT_WAIT)
             # Close the first (top) surface — wait for it to complete
-            client.close_surface(0)
+            surfaces = client.list_surfaces()
+            client.close_surface(surfaces[0][1])
             if not wait_surface_count(client, 1, timeout=5.0):
                 change.error = f"Cycle {i+1}: expected 1 surface, got {surface_count(client)}"
                 change.passed = False
@@ -710,7 +721,8 @@ def test_g18_rapid_right_close_left(client: cmux) -> StateChange:
         for i in range(5):
             client.new_split("right")
             time.sleep(0.8)
-            client.close_surface(0)
+            surfaces = client.list_surfaces()
+            client.close_surface(surfaces[0][1])
             time.sleep(1.0)
             if not wait_surface_count(client, 1, timeout=5.0):
                 change.error = f"Cycle {i+1}: expected 1 surface, got {surface_count(client)}"
@@ -742,11 +754,12 @@ def test_g19_alternating_close_reverse(client: cmux) -> StateChange:
     change.before, change.before_state = capture(client, "g19_before")
     try:
         for i in range(4, 0, -1):
-            n = surface_count(client)
+            surfaces = client.list_surfaces()
+            n = len(surfaces)
             if n <= 1:
                 break
             expected = n - 1
-            client.close_surface(n - 1)
+            client.close_surface(surfaces[n - 1][1])
             if not wait_surface_count(client, expected, timeout=5.0):
                 change.error = f"Close {i}: expected {expected} surfaces, got {surface_count(client)}"
                 change.passed = False
@@ -797,7 +810,9 @@ def test_h20_workspace_switch_back(client: cmux) -> StateChange:
         if original_ws:
             client.select_workspace(original_ws)
         else:
-            client.select_workspace(0)
+            fallback_workspaces = client.list_workspaces()
+            if fallback_workspaces:
+                client.select_workspace(fallback_workspaces[0][1])
         time.sleep(SHORT_WAIT)
 
         after_count = surface_count(client)
@@ -934,7 +949,8 @@ def test_i24_browser_drag_split_right_focus_bounce(client: cmux) -> StateChange:
         time.sleep(0.4)
 
         # Focus bounce
-        client.focus_surface(0)
+        surfaces = client.list_surfaces()
+        client.focus_surface(surfaces[0][1])
         time.sleep(SHORT_WAIT)
         client.focus_surface(browser_id)
         time.sleep(SHORT_WAIT)
@@ -981,10 +997,11 @@ def test_i25_browser_drag_split_right_then_switch_panes(client: cmux) -> StateCh
             change.passed = False
             change.error = f"Expected 2 panes after drag split, got {pane_count(client)}"
         else:
-            # Switch panes by index (stable order from list_panes).
-            client.focus_pane(0)
+            # Switch panes by ref (stable order from list_panes).
+            panes = client.list_panes()
+            client.focus_pane(panes[0][1])
             time.sleep(SHORT_WAIT)
-            client.focus_pane(1)
+            client.focus_pane(panes[1][1])
             time.sleep(SHORT_WAIT)
 
             blank_err = verify_all_responsive(client, "i25_after_drag")

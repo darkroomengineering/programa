@@ -71,7 +71,7 @@ def ensure_focused_terminal(client: cmux) -> None:
             health = client.surface_health()
             term = next((h for h in health if h.get("type") == "terminal"), None)
         if term is not None:
-            client.focus_surface(term["index"])
+            client.focus_surface(term["id"])
             time.sleep(0.2)
             wait_for_terminal_in_window(client, term["index"], timeout=5.0)
     except Exception:
@@ -170,17 +170,20 @@ def test_initial_terminal_responsive(client: cmux) -> TestResult:
         # Prefer targeting a specific terminal surface by index so this test
         # doesn't depend on "focused terminal" state.
         term_idx = None
+        term_id = None
         try:
             health = client.surface_health()
             term = next((h for h in health if h.get("type") == "terminal"), None)
             if term is not None:
                 term_idx = term.get("index")
-                client.focus_surface(term_idx)
+                term_id = term.get("id")
+                client.focus_surface(term_id)
                 wait_for_terminal_in_window(client, term_idx, timeout=5.0)
         except Exception:
             term_idx = None
+            term_id = None
 
-        if verify_terminal_responsive(client, marker, surface_idx=term_idx):
+        if verify_terminal_responsive(client, marker, surface_idx=term_id):
             result.success("Initial terminal is responsive")
             clear_marker(marker)
         else:
@@ -213,18 +216,18 @@ def test_split_right_responsive(client: cmux) -> TestResult:
             return result
 
         # Test first surface
-        client.focus_surface(0)
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("First terminal not responsive after split")
             clear_marker(marker0)
             clear_marker(marker1)
             return result
 
         # Test second surface
-        client.focus_surface(1)
+        client.focus_surface(surfaces[1][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker1, surface_idx=1):
+        if not verify_terminal_responsive(client, marker1, surface_idx=surfaces[1][1]):
             result.failure("Second terminal not responsive after split")
             clear_marker(marker0)
             clear_marker(marker1)
@@ -266,18 +269,18 @@ def test_split_down_responsive(client: cmux) -> TestResult:
             return result
 
         # Test first surface
-        client.focus_surface(0)
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("First terminal not responsive after vertical split")
             clear_marker(marker0)
             clear_marker(marker1)
             return result
 
         # Test second surface
-        client.focus_surface(1)
+        client.focus_surface(surfaces[1][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker1, surface_idx=1):
+        if not verify_terminal_responsive(client, marker1, surface_idx=surfaces[1][1]):
             result.failure("Second terminal not responsive after vertical split")
             clear_marker(marker0)
             clear_marker(marker1)
@@ -313,7 +316,8 @@ def test_multiple_splits_responsive(client: cmux) -> TestResult:
         time.sleep(0.8)
 
         # Focus first pane and split down
-        client.focus_surface(0)
+        surfaces = client.list_surfaces()
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.3)
         client.new_split("down")
         time.sleep(0.8)
@@ -322,7 +326,7 @@ def test_multiple_splits_responsive(client: cmux) -> TestResult:
         surfaces = client.list_surfaces()
         # Find the right pane (should be index 2 after the first split down)
         if len(surfaces) >= 3:
-            client.focus_surface(2)
+            client.focus_surface(surfaces[2][1])
             time.sleep(0.3)
             client.new_split("down")
             time.sleep(0.8)
@@ -339,9 +343,9 @@ def test_multiple_splits_responsive(client: cmux) -> TestResult:
 
         # Test each surface
         for i in range(min(len(surfaces), len(markers))):
-            client.focus_surface(i)
+            client.focus_surface(surfaces[i][1])
             time.sleep(0.3)
-            if not verify_terminal_responsive(client, markers[i], surface_idx=i):
+            if not verify_terminal_responsive(client, markers[i], surface_idx=surfaces[i][1]):
                 result.failure(f"Terminal {i} not responsive after multiple splits")
                 for m in markers:
                     clear_marker(m)
@@ -375,15 +379,17 @@ def test_focus_switching(client: cmux) -> TestResult:
         # Create two splits
         client.new_split("right")
         time.sleep(0.8)
-        client.focus_surface(0)
+        surfaces = client.list_surfaces()
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.3)
         client.new_split("down")
         time.sleep(0.8)
+        surfaces = client.list_surfaces()
 
         # Rapidly switch focus between panes and verify each is responsive
         for cycle in range(2):
             for i in range(3):
-                client.focus_surface(i)
+                client.focus_surface(surfaces[i][1])
                 time.sleep(0.15)
 
         # Allow terminals to stabilize after rapid switching
@@ -391,12 +397,12 @@ def test_focus_switching(client: cmux) -> TestResult:
 
         # After rapid switching, verify all are still responsive
         for i in range(3):
-            client.focus_surface(i)
+            client.focus_surface(surfaces[i][1])
             time.sleep(0.5)  # Give more time for focus to settle
-            if not verify_terminal_responsive(client, markers[i], surface_idx=i):
+            if not verify_terminal_responsive(client, markers[i], surface_idx=surfaces[i][1]):
                 # Retry once if it fails (timing-related issues)
                 time.sleep(0.5)
-                if not verify_terminal_responsive(client, markers[i], surface_idx=i):
+                if not verify_terminal_responsive(client, markers[i], surface_idx=surfaces[i][1]):
                     result.failure(f"Terminal {i} not responsive after focus switching")
                     for m in markers:
                         clear_marker(m)
@@ -428,6 +434,7 @@ def test_split_ratio_50_50(client: cmux) -> TestResult:
         # Create a horizontal split
         client.new_split("right")
         time.sleep(2.0)  # Wait for animation and layout to complete
+        surfaces = client.list_surfaces()
 
         # Retry logic for getting column counts
         for attempt in range(3):
@@ -436,7 +443,7 @@ def test_split_ratio_50_50(client: cmux) -> TestResult:
             clear_marker(cols_file_1)
 
             # Get columns from first terminal
-            client.focus_surface(0)
+            client.focus_surface(surfaces[0][1])
             time.sleep(0.5)
             client.send_key("ctrl-c")
             time.sleep(0.3)
@@ -445,7 +452,7 @@ def test_split_ratio_50_50(client: cmux) -> TestResult:
             time.sleep(1.5)
 
             # Get columns from second terminal
-            client.focus_surface(1)
+            client.focus_surface(surfaces[1][1])
             time.sleep(0.5)
             client.send_key("ctrl-c")
             time.sleep(0.3)
@@ -581,8 +588,10 @@ def test_pane_commands(client: cmux) -> TestResult:
         try:
             client.focus_pane(pane_id)
         except Exception:
-            # Fallback to index-based focus if the pane UUID changed unexpectedly.
-            client.focus_pane(0)
+            # Fallback: refresh the pane list and retry with the first pane's id.
+            fresh_panes = client.list_panes()
+            if fresh_panes:
+                client.focus_pane(fresh_panes[0][1])
 
         time.sleep(0.3)
         if not verify_terminal_responsive(client, marker):
@@ -612,11 +621,12 @@ def test_close_horizontal_split(client: cmux) -> TestResult:
         time.sleep(0.5)
         # Wait for the initial surface view to attach so send/send_key are reliable.
         wait_for_terminal_in_window(client, 0, timeout=5.0)
-        client.focus_surface(0)
+        surfaces = client.list_surfaces()
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.2)
 
         # Verify initial terminal works
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("Initial terminal not responsive")
             clear_marker(marker0)
             clear_marker(marker1)
@@ -635,24 +645,24 @@ def test_close_horizontal_split(client: cmux) -> TestResult:
             return result
 
         # Verify both terminals work before close
-        client.focus_surface(0)
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("First terminal not responsive before close")
             clear_marker(marker0)
             clear_marker(marker1)
             return result
 
-        client.focus_surface(1)
+        client.focus_surface(surfaces[1][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker1, surface_idx=1):
+        if not verify_terminal_responsive(client, marker1, surface_idx=surfaces[1][1]):
             result.failure("Second terminal not responsive before close")
             clear_marker(marker0)
             clear_marker(marker1)
             return result
 
         # Close the second (right) surface
-        client.close_surface(1)
+        client.close_surface(surfaces[1][1])
         time.sleep(1.5)
 
         # Verify we now have 1 surface (with retry for timing)
@@ -670,9 +680,9 @@ def test_close_horizontal_split(client: cmux) -> TestResult:
 
         # Verify remaining terminal is responsive
         clear_marker(marker0)
-        client.focus_surface(0)
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.2)
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("Remaining terminal not responsive after close")
             clear_marker(marker0)
             clear_marker(marker1)
@@ -701,11 +711,12 @@ def test_close_vertical_split(client: cmux) -> TestResult:
         client.new_workspace()
         time.sleep(0.5)
         wait_for_terminal_in_window(client, 0, timeout=5.0)
-        client.focus_surface(0)
+        surfaces = client.list_surfaces()
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.2)
 
         # Verify initial terminal works
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("Initial terminal not responsive")
             clear_marker(marker0)
             clear_marker(marker1)
@@ -724,24 +735,24 @@ def test_close_vertical_split(client: cmux) -> TestResult:
             return result
 
         # Verify both terminals work before close
-        client.focus_surface(0)
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("First terminal not responsive before close")
             clear_marker(marker0)
             clear_marker(marker1)
             return result
 
-        client.focus_surface(1)
+        client.focus_surface(surfaces[1][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker1, surface_idx=1):
+        if not verify_terminal_responsive(client, marker1, surface_idx=surfaces[1][1]):
             result.failure("Second terminal not responsive before close")
             clear_marker(marker0)
             clear_marker(marker1)
             return result
 
         # Close the second (bottom) surface
-        client.close_surface(1)
+        client.close_surface(surfaces[1][1])
         time.sleep(1.5)
 
         # Verify we now have 1 surface (with retry for timing)
@@ -759,9 +770,9 @@ def test_close_vertical_split(client: cmux) -> TestResult:
 
         # Verify remaining terminal is responsive
         clear_marker(marker0)
-        client.focus_surface(0)
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.2)
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("Remaining terminal not responsive after close")
             clear_marker(marker0)
             clear_marker(marker1)
@@ -794,11 +805,12 @@ def test_close_first_pane_vertical_split(client: cmux) -> TestResult:
         client.new_workspace()
         time.sleep(0.5)
         wait_for_terminal_in_window(client, 0, timeout=5.0)
-        client.focus_surface(0)
+        surfaces = client.list_surfaces()
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.2)
 
         # Verify initial terminal works
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("Initial terminal not responsive")
             clear_marker(marker0)
             clear_marker(marker1)
@@ -817,24 +829,24 @@ def test_close_first_pane_vertical_split(client: cmux) -> TestResult:
             return result
 
         # Verify both terminals work before close
-        client.focus_surface(0)
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("First (top) terminal not responsive before close")
             clear_marker(marker0)
             clear_marker(marker1)
             return result
 
-        client.focus_surface(1)
+        client.focus_surface(surfaces[1][1])
         time.sleep(0.3)
-        if not verify_terminal_responsive(client, marker1, surface_idx=1):
+        if not verify_terminal_responsive(client, marker1, surface_idx=surfaces[1][1]):
             result.failure("Second (bottom) terminal not responsive before close")
             clear_marker(marker0)
             clear_marker(marker1)
             return result
 
         # Close the FIRST (top) surface - this is the bug case
-        client.close_surface(0)
+        client.close_surface(surfaces[0][1])
         time.sleep(1.5)
 
         # Verify we now have 1 surface (with retry for timing)
@@ -853,9 +865,9 @@ def test_close_first_pane_vertical_split(client: cmux) -> TestResult:
         # Verify remaining terminal is responsive (this is the critical check)
         clear_marker(marker0)
         clear_marker(marker1)
-        client.focus_surface(0)
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.2)
-        if not verify_terminal_responsive(client, marker0, surface_idx=0):
+        if not verify_terminal_responsive(client, marker0, surface_idx=surfaces[0][1]):
             result.failure("Remaining terminal not responsive after closing first pane!")
             clear_marker(marker0)
             return result
@@ -888,11 +900,14 @@ def test_close_nested_splits(client: cmux) -> TestResult:
         # Create 2x2 grid
         client.new_split("right")
         time.sleep(0.8)
-        client.focus_surface(0)
+        surfaces = client.list_surfaces()
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.3)
         client.new_split("down")
         time.sleep(0.8)
-        client.focus_surface(2)
+        surfaces = client.list_surfaces()
+        if len(surfaces) >= 3:
+            client.focus_surface(surfaces[2][1])
         time.sleep(0.3)
         client.new_split("down")
         time.sleep(0.8)
@@ -907,7 +922,7 @@ def test_close_nested_splits(client: cmux) -> TestResult:
 
         # Close one at a time and verify remaining terminals
         # Close surface 3 (bottom-right)
-        client.close_surface(3)
+        client.close_surface(surfaces[3][1])
         time.sleep(1.0)
 
         surfaces = client.list_surfaces()
@@ -919,16 +934,16 @@ def test_close_nested_splits(client: cmux) -> TestResult:
 
         # Verify remaining 3 terminals work
         for i in range(3):
-            client.focus_surface(i)
+            client.focus_surface(surfaces[i][1])
             time.sleep(0.3)
-            if not verify_terminal_responsive(client, markers[i], surface_idx=i):
+            if not verify_terminal_responsive(client, markers[i], surface_idx=surfaces[i][1]):
                 result.failure(f"Terminal {i} not responsive after first close")
                 for m in markers:
                     clear_marker(m)
                 return result
 
         # Close another
-        client.close_surface(0)
+        client.close_surface(surfaces[0][1])
         time.sleep(1.0)
 
         surfaces = client.list_surfaces()
@@ -940,10 +955,10 @@ def test_close_nested_splits(client: cmux) -> TestResult:
 
         # Verify remaining 2 terminals work
         for i in range(2):
-            client.focus_surface(i)
+            client.focus_surface(surfaces[i][1])
             time.sleep(0.3)
             clear_marker(markers[i])
-            if not verify_terminal_responsive(client, markers[i], surface_idx=i):
+            if not verify_terminal_responsive(client, markers[i], surface_idx=surfaces[i][1]):
                 result.failure(f"Terminal {i} not responsive after second close")
                 for m in markers:
                     clear_marker(m)
@@ -975,11 +990,12 @@ def test_rapid_split_close_vertical(client: cmux) -> TestResult:
         client.new_workspace()
         time.sleep(0.5)
         wait_for_terminal_in_window(client, 0, timeout=5.0)
-        client.focus_surface(0)
+        surfaces = client.list_surfaces()
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.2)
 
         # Verify initial terminal works
-        if not verify_terminal_responsive(client, marker, surface_idx=0):
+        if not verify_terminal_responsive(client, marker, surface_idx=surfaces[0][1]):
             result.failure("Initial terminal not responsive")
             clear_marker(marker)
             return result
@@ -993,13 +1009,15 @@ def test_rapid_split_close_vertical(client: cmux) -> TestResult:
             time.sleep(0.4)  # Brief delay for split
 
             # Immediately close the bottom (new) pane
-            client.close_surface(1)
+            surfaces = client.list_surfaces()
+            client.close_surface(surfaces[1][1])
             time.sleep(0.4)  # Brief delay for close
 
             # Check if remaining terminal is responsive
-            client.focus_surface(0)
+            surfaces = client.list_surfaces()
+            client.focus_surface(surfaces[0][1])
             time.sleep(0.2)
-            if not verify_terminal_responsive(client, marker, surface_idx=0, retries=2):
+            if not verify_terminal_responsive(client, marker, surface_idx=surfaces[0][1], retries=2):
                 result.failure(f"Terminal blank after cycle {cycle + 1}")
                 clear_marker(marker)
                 return result
@@ -1028,11 +1046,12 @@ def test_rapid_split_close_first_pane(client: cmux) -> TestResult:
         client.new_workspace()
         time.sleep(0.5)
         wait_for_terminal_in_window(client, 0, timeout=5.0)
-        client.focus_surface(0)
+        surfaces = client.list_surfaces()
+        client.focus_surface(surfaces[0][1])
         time.sleep(0.2)
 
         # Verify initial terminal works
-        if not verify_terminal_responsive(client, marker, surface_idx=0):
+        if not verify_terminal_responsive(client, marker, surface_idx=surfaces[0][1]):
             result.failure("Initial terminal not responsive")
             clear_marker(marker)
             return result
@@ -1046,13 +1065,15 @@ def test_rapid_split_close_first_pane(client: cmux) -> TestResult:
             time.sleep(0.4)  # Brief delay for split
 
             # Close the FIRST (top/original) pane - this is the bug case
-            client.close_surface(0)
+            surfaces = client.list_surfaces()
+            client.close_surface(surfaces[0][1])
             time.sleep(0.4)  # Brief delay for close
 
             # Check if remaining terminal is responsive
-            client.focus_surface(0)
+            surfaces = client.list_surfaces()
+            client.focus_surface(surfaces[0][1])
             time.sleep(0.2)
-            if not verify_terminal_responsive(client, marker, surface_idx=0, retries=2):
+            if not verify_terminal_responsive(client, marker, surface_idx=surfaces[0][1], retries=2):
                 result.failure(f"Terminal blank after closing first pane, cycle {cycle + 1}")
                 clear_marker(marker)
                 return result

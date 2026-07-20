@@ -1635,15 +1635,15 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["identify"],
-                helpLines: ["identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]"],
+                helpLines: ["identify [--workspace <id|ref>] [--surface <id|ref>] [--no-caller]"],
                 detailedUsage: """
-                Usage: programa identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--no-caller]
+                Usage: programa identify [--workspace <id|ref>] [--surface <id|ref>] [--no-caller]
 
                 Print server identity and caller context details.
 
                 Flags:
-                  --workspace <id|ref|index>   Caller workspace context (default: $PROGRAMA_WORKSPACE_ID)
-                  --surface <id|ref|index>     Caller surface context (default: $PROGRAMA_SURFACE_ID)
+                  --workspace <id|ref>   Caller workspace context (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>     Caller surface context (default: $PROGRAMA_SURFACE_ID)
                   --no-caller                  Omit caller context from the request
                 """,
                 execute: { ctx in
@@ -1762,15 +1762,15 @@ struct ProgramaCLI {
                 names: ["focus-window"],
                 helpLines: ["focus-window --window <id>"],
                 detailedUsage: """
-                Usage: programa focus-window --window <id|ref|index>
+                Usage: programa focus-window --window <id|ref>
 
                 Focus (bring to front) the specified window.
 
                 Flags:
-                  --window <id|ref|index>   Window to focus (required)
+                  --window <id|ref>   Window to focus (required)
 
                 Example:
-                  programa focus-window --window 0
+                  programa focus-window --window <window-uuid>
                   programa focus-window --window window:1
                 """,
                 execute: { ctx in
@@ -1795,12 +1795,12 @@ struct ProgramaCLI {
                 names: ["close-window"],
                 helpLines: ["close-window --window <id>"],
                 detailedUsage: """
-                Usage: programa close-window --window <id|ref|index>
+                Usage: programa close-window --window <id|ref>
 
                 Close the specified window.
 
                 Flags:
-                  --window <id|ref|index>   Window to close (required)
+                  --window <id|ref>   Window to close (required)
 
                 Example:
                   programa close-window --window 0
@@ -1826,13 +1826,13 @@ struct ProgramaCLI {
                 names: ["move-workspace-to-window"],
                 helpLines: ["move-workspace-to-window --workspace <id|ref> --window <id|ref>"],
                 detailedUsage: """
-                Usage: programa move-workspace-to-window --workspace <id|ref|index> --window <id|ref|index>
+                Usage: programa move-workspace-to-window --workspace <id|ref> --window <id|ref>
 
                 Move a workspace to a different window.
 
                 Flags:
-                  --workspace <id|ref|index>   Workspace to move (required)
-                  --window <id|ref|index>      Target window (required)
+                  --workspace <id|ref>   Workspace to move (required)
+                  --window <id|ref>      Target window (required)
 
                 Example:
                   programa move-workspace-to-window --workspace workspace:2 --window window:1
@@ -1856,22 +1856,22 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["reorder-workspace"],
-                helpLines: ["reorder-workspace --workspace <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>) [--window <id|ref|index>]"],
+                helpLines: ["reorder-workspace --workspace <id|ref> (--index <n> | --before <id|ref> | --after <id|ref>) [--window <id|ref>]"],
                 detailedUsage: """
-                Usage: programa reorder-workspace [--workspace <id|ref|index> | <id|ref|index>] [flags]
+                Usage: programa reorder-workspace [--workspace <id|ref> | <id|ref>] [flags]
 
                 Reorder a workspace within its window.
 
                 Flags:
-                  --workspace <id|ref|index>   Workspace to reorder (required unless passed positionally)
+                  --workspace <id|ref>   Workspace to reorder (required unless passed positionally)
                   --index <n>                  Place at this index
-                  --before <id|ref|index>      Place before this workspace
-                  --before-workspace <id|ref|index>
+                  --before <id|ref>      Place before this workspace
+                  --before-workspace <id|ref>
                                              Alias for --before
-                  --after <id|ref|index>       Place after this workspace
-                  --after-workspace <id|ref|index>
+                  --after <id|ref>       Place after this workspace
+                  --after-workspace <id|ref>
                                              Alias for --after
-                  --window <id|ref|index>      Window context
+                  --window <id|ref>      Window context
 
                 Example:
                   programa reorder-workspace --workspace workspace:2 --index 0
@@ -1884,7 +1884,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["workspace-action"],
-                helpLines: ["workspace-action --action <name> [--workspace <id|ref|index>] [--title <text>] [--color <name|#hex>] [--description <text>]"],
+                helpLines: ["workspace-action --action <name> [--workspace <id|ref>] [--title <text>] [--color <name|#hex>] [--description <text>]"],
                 detailedUsage: """
                 Usage: programa workspace-action --action <name> [flags]
 
@@ -1901,7 +1901,7 @@ struct ProgramaCLI {
 
                 Flags:
                   --action <name>              Action name (required if not positional)
-                  --workspace <id|ref|index>   Target workspace (default: current/$PROGRAMA_WORKSPACE_ID)
+                  --workspace <id|ref>   Target workspace (default: current/$PROGRAMA_WORKSPACE_ID)
                   --title <text>               Title for rename
                   --color <name|#hex>          Color for set-color (name or #RRGGBB hex)
                   --description <text>         Description for set-description
@@ -2290,22 +2290,22 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["move-surface"],
-                helpLines: ["move-surface --surface <id|ref|index> [--pane <id|ref|index>] [--workspace <id|ref|index>] [--window <id|ref|index>] [--before <id|ref|index>] [--after <id|ref|index>] [--index <n>] [--focus <true|false>]"],
+                helpLines: ["move-surface --surface <id|ref> [--pane <id|ref>] [--workspace <id|ref>] [--window <id|ref>] [--before <id|ref>] [--after <id|ref>] [--index <n>] [--focus <true|false>]"],
                 detailedUsage: """
-                Usage: programa move-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
+                Usage: programa move-surface [--surface <id|ref> | <id|ref>] [flags]
 
                 Move a surface to a different pane, workspace, or window.
 
                 Flags:
-                  --surface <id|ref|index>   Surface to move (required unless passed positionally)
-                  --pane <id|ref|index>      Target pane
-                  --workspace <id|ref|index> Target workspace
-                  --window <id|ref|index>    Target window
-                  --before <id|ref|index>    Place before this surface
-                  --before-surface <id|ref|index>
+                  --surface <id|ref>   Surface to move (required unless passed positionally)
+                  --pane <id|ref>      Target pane
+                  --workspace <id|ref> Target workspace
+                  --window <id|ref>    Target window
+                  --before <id|ref>    Place before this surface
+                  --before-surface <id|ref>
                                            Alias for --before
-                  --after <id|ref|index>     Place after this surface
-                  --after-surface <id|ref|index>
+                  --after <id|ref>     Place after this surface
+                  --after-surface <id|ref>
                                            Alias for --after
                   --index <n>                Place at this index
                   --focus <true|false>       Focus the surface after moving
@@ -2321,20 +2321,20 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["reorder-surface"],
-                helpLines: ["reorder-surface --surface <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>)"],
+                helpLines: ["reorder-surface --surface <id|ref> (--index <n> | --before <id|ref> | --after <id|ref>)"],
                 detailedUsage: """
-                Usage: programa reorder-surface [--surface <id|ref|index> | <id|ref|index>] [flags]
+                Usage: programa reorder-surface [--surface <id|ref> | <id|ref>] [flags]
 
                 Reorder a surface within its pane.
 
                 Flags:
-                  --surface <id|ref|index>   Surface to reorder (required unless passed positionally)
-                  --workspace <id|ref|index> Workspace context
-                  --before <id|ref|index>    Place before this surface
-                  --before-surface <id|ref|index>
+                  --surface <id|ref>   Surface to reorder (required unless passed positionally)
+                  --workspace <id|ref> Workspace context
+                  --before <id|ref>    Place before this surface
+                  --before-surface <id|ref>
                                            Alias for --before
-                  --after <id|ref|index>     Place after this surface
-                  --after-surface <id|ref|index>
+                  --after <id|ref>     Place after this surface
+                  --after-surface <id|ref>
                                            Alias for --after
                   --index <n>                Place at this index
 
@@ -2349,7 +2349,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["tab-action"],
-                helpLines: ["tab-action --action <name> [--tab <id|ref|index>] [--surface <id|ref|index>] [--workspace <id|ref|index>] [--title <text>] [--url <url>]"],
+                helpLines: ["tab-action --action <name> [--tab <id|ref>] [--surface <id|ref>] [--workspace <id|ref>] [--title <text>] [--url <url>]"],
                 detailedUsage: """
                 Usage: programa tab-action --action <name> [flags]
 
@@ -2365,9 +2365,9 @@ struct ProgramaCLI {
 
                 Flags:
                   --action <name>              Action name (required if not positional)
-                  --tab <id|ref|index>         Target tab (accepts tab:<n> or surface:<n>; default: $PROGRAMA_TAB_ID, then $PROGRAMA_SURFACE_ID, then focused tab)
-                  --surface <id|ref|index>     Alias for --tab (backward compatibility)
-                  --workspace <id|ref|index>   Workspace context (default: current/$PROGRAMA_WORKSPACE_ID)
+                  --tab <id|ref>         Target tab (accepts tab:<n> or surface:<n>; default: $PROGRAMA_TAB_ID, then $PROGRAMA_SURFACE_ID, then focused tab)
+                  --surface <id|ref>     Alias for --tab (backward compatibility)
+                  --workspace <id|ref>   Workspace context (default: current/$PROGRAMA_WORKSPACE_ID)
                   --title <text>               Title for rename (or pass trailing title text)
                   --url <url>                  Optional URL for new-browser-right
 
@@ -2432,7 +2432,7 @@ struct ProgramaCLI {
                     let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
                     let surface = surfaceArg ?? panelArg
                     guard let surface else {
-                        throw CLIError(message: "drag-surface-to-split requires --surface <id|index>")
+                        throw CLIError(message: "drag-surface-to-split requires --surface <id|ref>")
                     }
                     guard let direction = rem1.first else {
                         throw CLIError(message: "drag-surface-to-split requires a direction")
@@ -2685,12 +2685,12 @@ struct ProgramaCLI {
                 names: ["close-workspace"],
                 helpLines: ["close-workspace --workspace <id|ref>"],
                 detailedUsage: """
-                Usage: programa close-workspace --workspace <id|ref|index>
+                Usage: programa close-workspace --workspace <id|ref>
 
                 Close the specified workspace.
 
                 Flags:
-                  --workspace <id|ref|index>   Workspace to close (required)
+                  --workspace <id|ref>   Workspace to close (required)
 
                 Example:
                   programa close-workspace --workspace workspace:2
@@ -2716,12 +2716,12 @@ struct ProgramaCLI {
                 names: ["select-workspace"],
                 helpLines: ["select-workspace --workspace <id|ref>"],
                 detailedUsage: """
-                Usage: programa select-workspace --workspace <id|ref|index>
+                Usage: programa select-workspace --workspace <id|ref>
 
                 Select (switch to) the specified workspace.
 
                 Flags:
-                  --workspace <id|ref|index>   Workspace to select (required)
+                  --workspace <id|ref>   Workspace to select (required)
 
                 Example:
                   programa select-workspace --workspace workspace:2
@@ -2746,13 +2746,13 @@ struct ProgramaCLI {
                     "rename-window [--workspace <id|ref>] <title>",
                 ],
                 detailedUsage: """
-                Usage: programa rename-workspace [--workspace <id|ref|index>] [--] <title>
+                Usage: programa rename-workspace [--workspace <id|ref>] [--] <title>
 
                 Rename a workspace. Defaults to the current workspace.
                 tmux-compatible alias: rename-window
 
                 Flags:
-                  --workspace <id|ref|index>   Workspace to rename (default: current/$PROGRAMA_WORKSPACE_ID)
+                  --workspace <id|ref>   Workspace to rename (default: current/$PROGRAMA_WORKSPACE_ID)
 
                 Example:
                   programa rename-workspace "backend logs"
@@ -3496,7 +3496,7 @@ struct ProgramaCLI {
             CommandDescriptor(
                 names: ["browser"],
                 helpLines: [
-                    "browser [--surface <id|ref|index> | <surface>] <subcommand> ...",
+                    "browser [--surface <id|ref> | <surface>] <subcommand> ...",
                     "browser open [url]                   (create browser split in caller's workspace; if surface supplied, behaves like navigate)",
                     "browser open-split [url]",
                     "browser goto|navigate <url> [--snapshot-after]",
@@ -3528,7 +3528,7 @@ struct ProgramaCLI {
                     "browser addinitscript <script>",
                     "browser addscript <script>",
                     "browser addstyle <css>",
-                    "browser identify [--surface <id|ref|index>]",
+                    "browser identify [--surface <id|ref>]",
                 ],
                 execute: { ctx in
                     try self.runBrowserCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
@@ -3982,9 +3982,10 @@ struct ProgramaCLI {
     }
 
     /// Generic handle normalizer shared by window/workspace/pane/surface lookups.
-    /// Resolves a raw CLI argument (UUID, handle ref, or list index) to a canonical
+    /// Resolves a raw CLI argument (UUID or handle ref) to a canonical
     /// handle ref/id, optionally scoped to a parent handle and falling back to a
-    /// caller-supplied "current"/"focused" resolver when `raw` is nil.
+    /// caller-supplied "current"/"focused" resolver when `raw` is nil. Bare indexes
+    /// are rejected with a clear error.
     private func normalizeHandle(
         _ raw: String?,
         client: SocketClient,
@@ -4001,20 +4002,11 @@ struct ProgramaCLI {
         if isUUID(trimmed) || isHandleRef(trimmed) {
             return trimmed
         }
-        guard let wantedIndex = Int(trimmed) else {
-            throw CLIError(message: "Invalid \(kind) handle: \(trimmed) (expected UUID, ref like \(kind):1, or index)")
+        if Int(trimmed) != nil {
+            let listCommand = kind == "surface" ? "list-pane-surfaces" : "list-\(kind)s"
+            throw CLIError(message: "\(kind): bare indexes are no longer accepted; use a UUID or short ref like \(kind):2 (see \(listCommand))")
         }
-
-        var params: [String: Any] = [:]
-        if let filterParam {
-            params[filterParam.key] = filterParam.value
-        }
-        let listed = try client.sendV2(method: "\(kind).list", params: params)
-        let items = listed["\(kind)s"] as? [[String: Any]] ?? []
-        for item in items where intFromAny(item["index"]) == wantedIndex {
-            return (item["ref"] as? String) ?? (item["id"] as? String)
-        }
-        throw CLIError(message: "\(kind.capitalized) index not found")
+        throw CLIError(message: "Invalid \(kind) handle: \(trimmed) (expected UUID or ref like \(kind):1)")
     }
 
     func normalizeWindowHandle(_ raw: String?, client: SocketClient, allowCurrent: Bool = false) throws -> String? {
@@ -4353,7 +4345,7 @@ struct ProgramaCLI {
     ) throws {
         let surfaceRaw = optionValue(commandArgs, name: "--surface") ?? commandArgs.first
         guard let surfaceRaw else {
-            throw CLIError(message: "move-surface requires --surface <id|ref|index>")
+            throw CLIError(message: "move-surface requires --surface <id|ref>")
         }
 
         let workspaceRaw = optionValue(commandArgs, name: "--workspace")
@@ -4403,7 +4395,7 @@ struct ProgramaCLI {
     ) throws {
         let surfaceRaw = optionValue(commandArgs, name: "--surface") ?? commandArgs.first
         guard let surfaceRaw else {
-            throw CLIError(message: "reorder-surface requires --surface <id|ref|index>")
+            throw CLIError(message: "reorder-surface requires --surface <id|ref>")
         }
 
         let workspaceRaw = optionValue(commandArgs, name: "--workspace")
@@ -4439,7 +4431,7 @@ struct ProgramaCLI {
     ) throws {
         let workspaceRaw = optionValue(commandArgs, name: "--workspace") ?? commandArgs.first
         guard let workspaceRaw else {
-            throw CLIError(message: "reorder-workspace requires --workspace <id|ref|index>")
+            throw CLIError(message: "reorder-workspace requires --workspace <id|ref>")
         }
 
         let windowRaw = optionValue(commandArgs, name: "--window")
@@ -4745,13 +4737,8 @@ struct ProgramaCLI {
             throw CLIError(message: "Workspace ref not found: \(raw)")
         }
 
-        if let raw, let index = Int(raw) {
-            let listed = try client.sendV2(method: "workspace.list")
-            let items = listed["workspaces"] as? [[String: Any]] ?? []
-            for item in items where intFromAny(item["index"]) == index {
-                if let id = item["id"] as? String { return id }
-            }
-            throw CLIError(message: "Workspace index not found")
+        if let raw, Int(raw) != nil {
+            throw CLIError(message: "workspace: bare indexes are no longer accepted; use a UUID or short ref like workspace:2 (see list-workspaces)")
         }
 
         let current = try client.sendV2(method: "workspace.current")
@@ -4772,15 +4759,12 @@ struct ProgramaCLI {
             throw CLIError(message: "Surface ref not found: \(raw)")
         }
 
+        if let raw, Int(raw) != nil {
+            throw CLIError(message: "surface: bare indexes are no longer accepted; use a UUID or short ref like surface:2 (see list-pane-surfaces)")
+        }
+
         let listed = try client.sendV2(method: "surface.list", params: ["workspace_id": workspaceId])
         let items = listed["surfaces"] as? [[String: Any]] ?? []
-
-        if let raw, let index = Int(raw) {
-            for item in items where intFromAny(item["index"]) == index {
-                if let id = item["id"] as? String { return id }
-            }
-            throw CLIError(message: "Surface index not found")
-        }
 
         if let focused = items.first(where: { ($0["focused"] as? Bool) == true }) {
             if let id = focused["id"] as? String { return id }
@@ -5099,7 +5083,7 @@ struct ProgramaCLI {
         case "move-surface":
             let parsed = try parse(values: ["surface", "pane", "workspace", "window", "before", "before-surface", "after", "after-surface", "index", "focus"], maxPositionals: 1)
             guard parsed.options["surface"] != nil || parsed.positional.count == 1 else {
-                throw CLIError(message: "move-surface requires --surface <id|ref|index>")
+                throw CLIError(message: "move-surface requires --surface <id|ref>")
             }
             guard !(parsed.options["surface"] != nil && !parsed.positional.isEmpty) else {
                 throw CLIError(message: "move-surface: provide the surface once")
@@ -5118,7 +5102,7 @@ struct ProgramaCLI {
         case "reorder-surface":
             let parsed = try parse(values: ["surface", "workspace", "index", "before", "before-surface", "after", "after-surface"], maxPositionals: 1)
             guard parsed.options["surface"] != nil || parsed.positional.count == 1 else {
-                throw CLIError(message: "reorder-surface requires --surface <id|ref|index>")
+                throw CLIError(message: "reorder-surface requires --surface <id|ref>")
             }
             guard !(parsed.options["surface"] != nil && !parsed.positional.isEmpty) else {
                 throw CLIError(message: "reorder-surface: provide the surface once")
@@ -6045,7 +6029,7 @@ struct ProgramaCLI {
           programa [global-options] <command> [options]
 
         Handle Inputs:
-          Use UUIDs, short refs (window:1/workspace:2/pane:3/surface:4), or indexes where commands accept window, workspace, pane, or surface inputs.
+          Use UUIDs or short refs (window:1/workspace:2/pane:3/surface:4) where commands accept window, workspace, pane, or surface inputs.
           `tab-action` also accepts `tab:<n>` in addition to `surface:<n>`.
           Output defaults to refs; pass --id-format uuids or --id-format both to include UUIDs.
 
