@@ -6,6 +6,9 @@ import Bonsplit
 /// View for rendering a terminal panel
 struct TerminalPanelView: View {
     @ObservedObject var panel: TerminalPanel
+    // Observed separately from `panel` so SwiftUI re-renders when the underlying
+    // TerminalSurface's `@Published isSurfaceReady` flips, driving the loading overlay below.
+    @ObservedObject private var surface: TerminalSurface
     let paneId: PaneID
     let isFocused: Bool
     let isVisibleInUI: Bool
@@ -15,6 +18,32 @@ struct TerminalPanelView: View {
     let hasUnreadNotification: Bool
     let onFocus: () -> Void
     let onTriggerFlash: () -> Void
+
+    @MainActor
+    init(
+        panel: TerminalPanel,
+        paneId: PaneID,
+        isFocused: Bool,
+        isVisibleInUI: Bool,
+        portalPriority: Int,
+        isSplit: Bool,
+        appearance: PanelAppearance,
+        hasUnreadNotification: Bool,
+        onFocus: @escaping () -> Void,
+        onTriggerFlash: @escaping () -> Void
+    ) {
+        self.panel = panel
+        self._surface = ObservedObject(wrappedValue: panel.surface)
+        self.paneId = paneId
+        self.isFocused = isFocused
+        self.isVisibleInUI = isVisibleInUI
+        self.portalPriority = portalPriority
+        self.isSplit = isSplit
+        self.appearance = appearance
+        self.hasUnreadNotification = hasUnreadNotification
+        self.onFocus = onFocus
+        self.onTriggerFlash = onTriggerFlash
+    }
 
     var body: some View {
         // Layering contract: terminal find UI is mounted in GhosttySurfaceScrollView (AppKit portal layer)
@@ -38,6 +67,15 @@ struct TerminalPanelView: View {
         // This prevents transient teardown/recreate that can momentarily detach the hosted terminal view.
         .id(panel.id)
         .background(Color.clear)
+        .overlay {
+            // Purely visual: never intercepts events, and the one-shot `isSurfaceReady` flag
+            // is not read from any keystroke-hot path (forceRefresh/hitTest).
+            if !surface.isSurfaceReady {
+                ProgressView()
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }
 

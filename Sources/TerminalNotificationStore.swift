@@ -409,6 +409,17 @@ final class TerminalNotificationStore: ObservableObject {
         center.removeDeliveredNotificationsOffMain(withIdentifiers: [id.uuidString])
     }
 
+    /// Marks a single notification unread and bumps it to the top of the list (mirrors the
+    /// bump `addNotification` performs on arrival), so a manually-unread notification is easy
+    /// to find again instead of staying buried at its original position.
+    func markUnread(id: UUID) {
+        var updated = notifications
+        guard let index = updated.firstIndex(where: { $0.id == id }) else { return }
+        guard updated[index].isRead else { return }
+        updated[index].isRead = false
+        notifications = Self.bumpingChangedToFront(updated, changedIds: [id])
+    }
+
     func markRead(forTabId tabId: UUID) {
         var updated = notifications
         var idsToClear: [String] = []
@@ -444,16 +455,39 @@ final class TerminalNotificationStore: ObservableObject {
 
     func markUnread(forTabId tabId: UUID) {
         var updated = notifications
-        var didChange = false
+        var changedIds: Set<UUID> = []
         for index in updated.indices {
             if updated[index].tabId == tabId, updated[index].isRead {
                 updated[index].isRead = false
-                didChange = true
+                changedIds.insert(updated[index].id)
             }
         }
-        if didChange {
-            notifications = updated
+        if !changedIds.isEmpty {
+            notifications = Self.bumpingChangedToFront(updated, changedIds: changedIds)
         }
+    }
+
+    /// Partitions `notifications` so entries whose id is in `changedIds` move to the front
+    /// (preserving their relative order), followed by the rest (also preserving relative
+    /// order). Used by both `markUnread(forTabId:)` and `markUnread(id:)` so a
+    /// just-marked-unread notification is bumped to the top the same way a freshly arriving
+    /// notification is via `addNotification`'s `insert(at: 0)`.
+    private static func bumpingChangedToFront(
+        _ notifications: [TerminalNotification],
+        changedIds: Set<UUID>
+    ) -> [TerminalNotification] {
+        var bumped: [TerminalNotification] = []
+        var rest: [TerminalNotification] = []
+        bumped.reserveCapacity(changedIds.count)
+        rest.reserveCapacity(notifications.count)
+        for notification in notifications {
+            if changedIds.contains(notification.id) {
+                bumped.append(notification)
+            } else {
+                rest.append(notification)
+            }
+        }
+        return bumped + rest
     }
 
     func setFocusedReadIndicator(forTabId tabId: UUID, surfaceId: UUID?) {

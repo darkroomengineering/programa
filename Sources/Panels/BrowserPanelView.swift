@@ -152,8 +152,6 @@ struct BrowserPanelView: View {
     @State private var omnibarSelectionRange: NSRange = NSRange(location: NSNotFound, length: 0)
     @State private var omnibarHasMarkedText: Bool = false
     @State private var suppressNextFocusLostRevert: Bool = false
-    @State private var focusFlashOpacity: Double = 0.0
-    @State private var focusFlashAnimationGeneration: Int = 0
     @State private var omnibarPillFrame: CGRect = .zero
     @State private var addressBarHeight: CGFloat = 0
     @State private var isBrowserImportHintPopoverPresented = false
@@ -306,11 +304,19 @@ struct BrowserPanelView: View {
             }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: FocusFlashPattern.ringCornerRadius)
-                .stroke(programaAccentColor().opacity(focusFlashOpacity), lineWidth: 3)
-                .shadow(color: programaAccentColor().opacity(focusFlashOpacity * 0.35), radius: 10)
-                .padding(FocusFlashPattern.ringInset)
-                .allowsHitTesting(false)
+            // Single-transaction keyframe sequence (PhaseAnimator, macOS 14+): the whole
+            // [0,1,0,1,0] double-flash plays as one atomic animator run per `focusFlashToken`
+            // change, so unrelated state churn (isLoading/pageTitle) can't coalesce/interrupt
+            // it into a single flash the way four chained asyncAfter+withAnimation steps could.
+            PhaseAnimator(FocusFlashPattern.values.indices, trigger: panel.focusFlashToken) { phaseIndex in
+                RoundedRectangle(cornerRadius: FocusFlashPattern.ringCornerRadius)
+                    .stroke(programaAccentColor().opacity(FocusFlashPattern.values[phaseIndex]), lineWidth: 3)
+                    .shadow(color: programaAccentColor().opacity(FocusFlashPattern.values[phaseIndex] * 0.35), radius: 10)
+                    .padding(FocusFlashPattern.ringInset)
+                    .allowsHitTesting(false)
+            } animation: { phaseIndex in
+                FocusFlashPattern.phaseAnimation(at: phaseIndex)
+            }
         }
         .overlay(alignment: .topLeading) {
             if addressBarFocused, !omnibarState.suggestions.isEmpty, omnibarPillFrame.width > 0 {
@@ -413,9 +419,6 @@ struct BrowserPanelView: View {
 #if DEBUG
             logBrowserFocusState(event: "view.onAppear")
 #endif
-        }
-        .onChange(of: panel.focusFlashToken) {
-            triggerFocusFlashAnimation()
         }
         .onChange(of: panel.currentURL) {
             let addressWasEmpty = omnibarState.buffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -859,30 +862,6 @@ struct BrowserPanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .layoutPriority(1)
         .zIndex(0)
-    }
-
-    private func triggerFocusFlashAnimation() {
-        focusFlashAnimationGeneration &+= 1
-        let generation = focusFlashAnimationGeneration
-        focusFlashOpacity = FocusFlashPattern.values.first ?? 0
-
-        for segment in FocusFlashPattern.segments {
-            DispatchQueue.main.asyncAfter(deadline: .now() + segment.delay) {
-                guard focusFlashAnimationGeneration == generation else { return }
-                withAnimation(focusFlashAnimation(for: segment.curve, duration: segment.duration)) {
-                    focusFlashOpacity = segment.targetOpacity
-                }
-            }
-        }
-    }
-
-    private func focusFlashAnimation(for curve: FocusFlashCurve, duration: TimeInterval) -> Animation {
-        switch curve {
-        case .easeIn:
-            return .easeIn(duration: duration)
-        case .easeOut:
-            return .easeOut(duration: duration)
-        }
     }
 
     private func refreshBrowserChromeStyle() {

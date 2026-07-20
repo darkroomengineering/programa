@@ -765,6 +765,58 @@ final class NotificationDockBadgeTests: XCTestCase {
         store.clearLatestNotification(forTabId: tab)
         XCTAssertEqual(store.latestNotification(forTabId: tab)?.id, previousNotification.id)
     }
+
+    func testMarkUnreadForTabBumpsThatTabsNotificationsToTop() {
+        let tabA = UUID()
+        let tabB = UUID()
+        let tabC = UUID()
+        let first = TerminalNotification(
+            id: UUID(), tabId: tabA, surfaceId: nil, title: "First", subtitle: "", body: "",
+            createdAt: Date(), isRead: true
+        )
+        let second = TerminalNotification(
+            id: UUID(), tabId: tabB, surfaceId: nil, title: "Second", subtitle: "", body: "",
+            createdAt: Date(), isRead: true
+        )
+        let third = TerminalNotification(
+            id: UUID(), tabId: tabC, surfaceId: nil, title: "Third", subtitle: "", body: "",
+            createdAt: Date(), isRead: true
+        )
+
+        let store = TerminalNotificationStore.shared
+        store.replaceNotificationsForTesting([first, second, third])
+
+        // tabB's notification is not first in the list; marking it unread should bump it to
+        // the top of the list while preserving the relative order of the rest.
+        store.markUnread(forTabId: tabB)
+
+        XCTAssertEqual(store.notifications.map(\.id), [second.id, first.id, third.id])
+        XCTAssertFalse(store.notifications.first { $0.id == second.id }?.isRead ?? true)
+    }
+
+    func testMarkUnreadByIdBumpsSingleNotificationToTop() {
+        let tab = UUID()
+        let first = TerminalNotification(
+            id: UUID(), tabId: tab, surfaceId: nil, title: "First", subtitle: "", body: "",
+            createdAt: Date(), isRead: true
+        )
+        let second = TerminalNotification(
+            id: UUID(), tabId: tab, surfaceId: nil, title: "Second", subtitle: "", body: "",
+            createdAt: Date(), isRead: true
+        )
+        let third = TerminalNotification(
+            id: UUID(), tabId: tab, surfaceId: nil, title: "Third", subtitle: "", body: "",
+            createdAt: Date(), isRead: true
+        )
+
+        let store = TerminalNotificationStore.shared
+        store.replaceNotificationsForTesting([first, second, third])
+
+        store.markUnread(id: third.id)
+
+        XCTAssertEqual(store.notifications.map(\.id), [third.id, first.id, second.id])
+        XCTAssertFalse(store.notifications.first?.isRead ?? true)
+    }
 }
 
 
@@ -1160,5 +1212,80 @@ final class MultiWindowNotificationFocusTests: XCTestCase {
             "A notification for the focused tab of its own window must be suppressed; focus state must be judged by the owning window's tab manager, not the primary window's"
         )
         XCTAssertEqual(deliveredCount, 0)
+    }
+}
+
+@MainActor
+final class TerminalControllerNotificationTitleTests: XCTestCase {
+    func testNotificationCreateForTargetIncludesCustomPanelTitle() {
+        let manager = TabManager()
+        let store = TerminalNotificationStore.shared
+        let originalTabManager = TerminalController.shared.tabManager
+
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
+        TerminalController.shared.tabManager = manager
+
+        defer {
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            TerminalController.shared.tabManager = originalTabManager
+        }
+
+        guard let workspace = manager.selectedWorkspace,
+              let panelId = workspace.focusedPanelId else {
+            XCTFail("Expected selected workspace with a focused panel")
+            return
+        }
+
+        workspace.setPanelCustomTitle(panelId: panelId, title: "My Custom Title")
+
+        let result = TerminalController.shared.v2NotificationCreateForTarget(params: [
+            "workspace_id": workspace.id.uuidString,
+            "surface_id": panelId.uuidString,
+            "title": "Waiting for input"
+        ])
+
+        guard case .ok = result else {
+            XCTFail("Expected v2NotificationCreateForTarget to succeed, got \(result)")
+            return
+        }
+
+        XCTAssertEqual(store.notifications.first?.title, "Waiting for input — My Custom Title")
+    }
+
+    func testNotificationCreateForTargetFallsBackToPlainTitleWithoutCustomPanelTitle() {
+        let manager = TabManager()
+        let store = TerminalNotificationStore.shared
+        let originalTabManager = TerminalController.shared.tabManager
+
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
+        TerminalController.shared.tabManager = manager
+
+        defer {
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            TerminalController.shared.tabManager = originalTabManager
+        }
+
+        guard let workspace = manager.selectedWorkspace,
+              let panelId = workspace.focusedPanelId else {
+            XCTFail("Expected selected workspace with a focused panel")
+            return
+        }
+
+        let result = TerminalController.shared.v2NotificationCreateForTarget(params: [
+            "workspace_id": workspace.id.uuidString,
+            "surface_id": panelId.uuidString,
+            "title": "Waiting for input"
+        ])
+
+        guard case .ok = result else {
+            XCTFail("Expected v2NotificationCreateForTarget to succeed, got \(result)")
+            return
+        }
+
+        XCTAssertEqual(store.notifications.first?.title, "Waiting for input")
     }
 }

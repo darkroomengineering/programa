@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AppKit
+import SwiftUI
 
 /// Type of panel content
 public enum PanelType: String, Codable, Sendable {
@@ -265,6 +266,22 @@ enum FocusFlashPattern {
         case .easeOut:
             let inverse = 1 - progress
             return 1 - (inverse * inverse)
+        }
+    }
+
+    /// SwiftUI `Animation` to use when a `PhaseAnimator` transitions *into* `values[index]`
+    /// from `values[index - 1]`. Drives the single-transaction double-flash used by
+    /// `BrowserPanelView`/`MarkdownPanelView` so the whole [0,1,0,1,0] sequence plays as one
+    /// atomic animator run per `focusFlashToken` change, instead of four chained
+    /// `asyncAfter` + `withAnimation` steps that SwiftUI can coalesce/interrupt.
+    static func phaseAnimation(at index: Int) -> Animation? {
+        guard index > 0, index - 1 < segments.count else { return nil }
+        let segment = segments[index - 1]
+        switch segment.curve {
+        case .easeIn:
+            return .easeIn(duration: segment.duration)
+        case .easeOut:
+            return .easeOut(duration: segment.duration)
         }
     }
 }

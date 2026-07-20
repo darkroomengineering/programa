@@ -256,6 +256,15 @@ struct TitlebarControlsView: View {
     let onToggleSidebar: () -> Void
     let onToggleNotifications: () -> Void
     let onNewTab: () -> Void
+    // Defaulted (rather than required) so the pre-existing fullscreen titlebar-controls call
+    // site in ContentView.swift (out of this change's file territory) keeps compiling unchanged
+    // while still getting the same working "open Keyboard Shortcuts settings" behavior.
+    let onOpenShortcutsHelp: () -> Void = {
+        _ = AppDelegate.shared?.openPreferencesWindow(
+            debugSource: "shortcutsHelpButton",
+            navigationTarget: .keyboardShortcuts
+        )
+    }
     let visibilityMode: TitlebarControlsVisibilityMode
     @AppStorage("titlebarControlsStyle") private var styleRawValue = TitlebarControlsStyle.classic.rawValue
     @AppStorage(ShortcutHintDebugSettings.titlebarHintXKey) private var titlebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultTitlebarHintX
@@ -407,6 +416,18 @@ struct TitlebarControlsView: View {
             .accessibilityIdentifier("titlebarControl.newTab")
             .accessibilityLabel(String(localized: "titlebar.newWorkspace.accessibilityLabel", defaultValue: "New Workspace"))
             .safeHelp(KeyboardShortcutSettings.Action.newTab.tooltip(String(localized: "titlebar.newWorkspace.tooltip", defaultValue: "New workspace")))
+
+            TitlebarControlButton(config: config, action: {
+                #if DEBUG
+                dlog("titlebar.shortcutsHelp")
+                #endif
+                onOpenShortcutsHelp()
+            }) {
+                iconLabel(systemName: "questionmark.circle", config: config)
+            }
+            .accessibilityIdentifier("titlebarControl.shortcutsHelp")
+            .accessibilityLabel(String(localized: "shortcuts.help.tooltip", defaultValue: "Keyboard Shortcuts"))
+            .safeHelp(String(localized: "shortcuts.help.tooltip", defaultValue: "Keyboard Shortcuts"))
         }
 
         let paddedContent = content.padding(config.groupPadding)
@@ -551,7 +572,9 @@ struct HiddenTitlebarSidebarControlsView: View {
     @ObservedObject var notificationStore: TerminalNotificationStore
     @StateObject private var viewModel = TitlebarControlsViewModel()
 
-    private let hostWidth: CGFloat = 124
+    // Widened from 124 to fit the fourth (shortcuts help) button across all
+    // TitlebarControlsStyle configs (roomy needs ~154pt for 4 buttons + spacing).
+    private let hostWidth: CGFloat = 170
     private let hostHeight: CGFloat = 28
 
     var body: some View {
@@ -1098,7 +1121,9 @@ private struct NotificationsPopoverView: View {
                                 notification: notification,
                                 tabTitle: tabTitle(for: notification.tabId),
                                 onOpen: { open(notification) },
-                                onClear: { notificationStore.remove(id: notification.id) }
+                                onClear: { notificationStore.remove(id: notification.id) },
+                                onMarkRead: { notificationStore.markRead(id: notification.id) },
+                                onMarkUnread: { notificationStore.markUnread(id: notification.id) }
                             )
                         }
                     }
@@ -1149,6 +1174,13 @@ private struct NotificationPopoverRow: View {
     let tabTitle: String?
     let onOpen: () -> Void
     let onClear: () -> Void
+    let onMarkRead: () -> Void
+    let onMarkUnread: () -> Void
+
+    @State private var isRowHovering = false
+    @FocusState private var isRowFocused: Bool
+    @State private var isClearHovering = false
+    @FocusState private var isClearFocused: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -1195,21 +1227,47 @@ private struct NotificationPopoverRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .focusable()
+            .focused($isRowFocused)
+            .onHover { hovering in isRowHovering = hovering }
             .accessibilityIdentifier("NotificationPopoverRow.\(notification.id.uuidString)")
             // XCUITest's `.click()` is not always reliable for SwiftUI `Button`s hosted in an `NSPopover`.
             // Provide an explicit accessibility action so AXPress always routes to `onOpen`.
             .accessibilityAction { onOpen() }
+            .contextMenu {
+                if notification.isRead {
+                    Button(String(localized: "notificationsPopover.markUnread", defaultValue: "Mark as Unread")) {
+                        onMarkUnread()
+                    }
+                } else {
+                    Button(String(localized: "notificationsPopover.markRead", defaultValue: "Mark as Read")) {
+                        onMarkRead()
+                    }
+                }
+            }
 
             Button(action: onClear) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundColor(.secondary)
+                    .padding(4)
+                    .background(
+                        Circle()
+                            .strokeBorder(programaAccentColor(), lineWidth: (isClearHovering || isClearFocused) ? 1.5 : 0)
+                    )
             }
             .buttonStyle(.plain)
+            .focusable()
+            .focused($isClearFocused)
+            .onHover { hovering in isClearHovering = hovering }
         }
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(Color(nsColor: .controlBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(programaAccentColor(), lineWidth: (isRowHovering || isRowFocused) ? 1.5 : 0)
+                )
         )
     }
 }

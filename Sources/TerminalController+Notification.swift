@@ -8,6 +8,18 @@ import WebKit
 extension TerminalController {
     // MARK: - V2 Notification Methods
 
+    /// Appends the panel's custom title (if set) to a hook-supplied notification title, e.g.
+    /// "Waiting for input" -> "Waiting for input — my custom title". Falls back to the plain
+    /// title when there's no surface to resolve or no custom title is set.
+    static func v2ResolveNotificationTitle(title: String, workspace: Workspace, surfaceId: UUID?) -> String {
+        guard let surfaceId,
+              let custom = workspace.panelCustomTitles[surfaceId]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !custom.isEmpty else {
+            return title
+        }
+        return "\(title) — \(custom)"
+    }
+
     func v2NotificationCreate(params: [String: Any]) -> V2CallResult {
         guard let tabManager = v2ResolveTabManager(params: params) else {
             return .err(code: "unavailable", message: "TabManager not available", data: nil)
@@ -33,10 +45,11 @@ extension TerminalController {
                 return
             }
             let surfaceId = explicitSurfaceId ?? ws.focusedPanelId
+            let resolvedTitle = TerminalController.v2ResolveNotificationTitle(title: title, workspace: ws, surfaceId: surfaceId)
             TerminalNotificationStore.shared.addNotification(
                 tabId: ws.id,
                 surfaceId: surfaceId,
-                title: title,
+                title: resolvedTitle,
                 subtitle: subtitle,
                 body: body
             )
@@ -67,10 +80,11 @@ extension TerminalController {
                 result = .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
                 return
             }
+            let resolvedTitle = TerminalController.v2ResolveNotificationTitle(title: title, workspace: ws, surfaceId: surfaceId)
             TerminalNotificationStore.shared.addNotification(
                 tabId: ws.id,
                 surfaceId: surfaceId,
-                title: title,
+                title: resolvedTitle,
                 subtitle: subtitle,
                 body: body
             )
@@ -104,10 +118,11 @@ extension TerminalController {
                 result = .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
                 return
             }
+            let resolvedTitle = TerminalController.v2ResolveNotificationTitle(title: title, workspace: ws, surfaceId: surfaceId)
             TerminalNotificationStore.shared.addNotification(
                 tabId: ws.id,
                 surfaceId: surfaceId,
-                title: title,
+                title: resolvedTitle,
                 subtitle: subtitle,
                 body: body
             )
