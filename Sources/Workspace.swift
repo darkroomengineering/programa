@@ -84,6 +84,10 @@ final class Workspace: Identifiable, ObservableObject {
     /// Published directory for each panel
     @Published var panelDirectories: [UUID: String] = [:]
     @Published var panelTitles: [UUID: String] = [:]
+    /// Panels whose `panelTitles` entry came from a real title update (OSC or
+    /// session restore), as opposed to the displayTitle placeholder seeded at
+    /// panel creation. Only these titles may be promoted to the workspace title.
+    var panelsWithLiveTitle: Set<UUID> = []
     @Published var panelCustomTitles: [UUID: String] = [:]
     @Published var pinnedPanelIds: Set<UUID> = []
     @Published var manualUnreadPanelIds: Set<UUID> = []

@@ -471,6 +471,7 @@ extension Workspace {
     private func applySessionPanelMetadata(_ snapshot: SessionPanelSnapshot, toPanelId panelId: UUID) {
         if let title = snapshot.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             panelTitles[panelId] = title
+            panelsWithLiveTitle.insert(panelId)
         }
 
         setPanelCustomTitle(panelId: panelId, title: snapshot.customTitle)
