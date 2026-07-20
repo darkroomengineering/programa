@@ -3596,6 +3596,22 @@ struct ContentView: View {
         )
         contributions.append(
             CommandPaletteCommandContribution(
+                commandId: "palette.sendFeedback",
+                title: constant(String(localized: "command.sendFeedback.title", defaultValue: "Send Feedback…")),
+                subtitle: constant(String(localized: "command.sendFeedback.subtitle", defaultValue: "Compose feedback to the programa team")),
+                keywords: ["feedback", "report", "bug"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.reloadConfiguration",
+                title: constant(String(localized: "command.reloadConfiguration.title", defaultValue: "Reload Configuration")),
+                subtitle: constant(String(localized: "command.reloadConfiguration.subtitle", defaultValue: "Re-read settings.json and programa.json")),
+                keywords: ["reload", "config", "settings", "refresh"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
                 commandId: "palette.installCLI",
                 title: constant(String(localized: "command.installCLI.title", defaultValue: "Shell Command: Install 'programa' in PATH")),
                 subtitle: constant(String(localized: "command.installCLI.subtitle", defaultValue: "CLI")),
@@ -4351,6 +4367,12 @@ struct ContentView: View {
         }
         registry.register(commandId: "palette.newWindow") {
             AppDelegate.shared?.openNewMainWindow(nil)
+        }
+        registry.register(commandId: "palette.sendFeedback") {
+            presentFeedbackComposer()
+        }
+        registry.register(commandId: "palette.reloadConfiguration") {
+            GhosttyApp.shared.reloadConfiguration(source: "palette.reloadConfiguration")
         }
         registry.register(commandId: "palette.installCLI") {
             AppDelegate.shared?.installProgramaCLIInPath(nil)

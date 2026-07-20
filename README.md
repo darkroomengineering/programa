@@ -149,6 +149,7 @@ For more info on how to configure Programa, head over to our docs.
 | Shortcut | Action |
 |----------|--------|
 | ⌘ N | New workspace |
+| ⌘ P | Go to workspace |
 | ⌘ 1–8 | Jump to workspace 1–8 |
 | ⌘ 9 | Jump to last workspace |
 | ⌃ ⌘ ] | Next workspace |
@@ -224,6 +225,7 @@ Browser developer-tool shortcuts follow Safari defaults and are customizable in 
 | Shortcut | Action |
 |----------|--------|
 | ⌘ ⇧ N | New window |
+| ⌘ ⇧ P | Command palette |
 | ⌘ , | Settings |
 | ⌘ ⇧ , | Reload configuration |
 | ⌘ Q | Quit |

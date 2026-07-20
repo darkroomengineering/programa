@@ -2729,6 +2729,40 @@
         }
       }
     },
+    "command.reloadConfiguration.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-read settings.json and programa.json"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "settings.json と programa.json を再読み込みします"
+          }
+        }
+      }
+    },
+    "command.reloadConfiguration.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload Configuration"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定を再読み込み"
+          }
+        }
+      }
+    },
     "command.renameTab.title": {
       "extractionState": "manual",
       "localizations": {
@@ -2791,6 +2825,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Restart CLI Listener"
+          }
+        }
+      }
+    },
+    "command.sendFeedback.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compose feedback to the programa team"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "programa チームにフィードバックを送る"
+          }
+        }
+      }
+    },
+    "command.sendFeedback.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send Feedback…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィードバックを送信…"
           }
         }
       }
