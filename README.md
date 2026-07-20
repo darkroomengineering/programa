@@ -149,6 +149,7 @@ For more info on how to configure Programa, head over to our docs.
 | Shortcut | Action |
 |----------|--------|
 | ⌘ N | New workspace |
+| ⌘ ⇧ C | New Claude Code workspace |
 | ⌘ P | Go to workspace |
 | ⌘ 1–8 | Jump to workspace 1–8 |
 | ⌘ 9 | Jump to last workspace |

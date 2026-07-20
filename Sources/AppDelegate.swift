@@ -4663,6 +4663,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return workspace.id
     }
 
+    /// Instantly creates a new workspace in the focused workspace's working directory
+    /// and launches Claude Code in it immediately, selecting the new workspace right
+    /// away so the user sees Claude boot in place (no pool, no hidden workspace). Refs #137.
+    @discardableResult
+    func createClaudeWorkspace(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
+        discardOrphanedMainWindowContexts()
+        guard let context = preferredMainWindowContextForWorkspaceCreation(event: event, debugSource: debugSource) else {
+            openNewMainWindow(nil)
+            return nil
+        }
+        guard let window = resolvedWindow(for: context) else {
+            discardOrphanedMainWindowContext(context)
+            openNewMainWindow(nil)
+            return nil
+        }
+        setActiveMainWindow(window)
+
+        let trimmedCwd = context.tabManager.selectedWorkspace?.currentDirectory
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let cwd = (trimmedCwd?.isEmpty ?? true) ? nil : trimmedCwd
+
+        let workspace = context.tabManager.addWorkspace(
+            workingDirectory: cwd,
+            initialTerminalInput: "claude\n",
+            select: true
+        )
+        return workspace.id
+    }
+
     private func preferredMainWindowContextForWorkspaceCreation(
         event: NSEvent? = nil,
         debugSource: String = "unspecified"
@@ -6575,6 +6604,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 #endif
                 openNewMainWindow(nil)
             }
+            return true
+        }
+
+        // New Claude Code Workspace: Cmd+Shift+C
+        // Instantly creates a new workspace in the current workspace's working
+        // directory and boots Claude Code into it (no pool, no hidden workspace). Refs #137.
+        if matchConfiguredShortcut(event: event, action: .newClaudeWorkspace) {
+#if DEBUG
+            dlog("shortcut.action name=newClaudeWorkspace \(debugShortcutRouteSnapshot(event: event))")
+#endif
+            createClaudeWorkspace(event: event, debugSource: "shortcut.cmdShiftC")
             return true
         }
 

@@ -2476,6 +2476,40 @@
         }
       }
     },
+    "command.newClaudeWorkspace.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open a new workspace running Claude Code in the current project"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のプロジェクトで Claude Code を起動する新しいワークスペースを開く"
+          }
+        }
+      }
+    },
+    "command.newClaudeWorkspace.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Claude Code Workspace"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規 Claude Code ワークスペース"
+          }
+        }
+      }
+    },
     "command.newTerminalTab.subtitle": {
       "extractionState": "manual",
       "localizations": {
@@ -5697,6 +5731,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Go to Workspace…"
+          }
+        }
+      }
+    },
+    "menu.file.newClaudeWorkspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Claude Code Workspace"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規 Claude Code ワークスペース"
           }
         }
       }

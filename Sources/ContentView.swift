@@ -3588,6 +3588,14 @@ struct ContentView: View {
         )
         contributions.append(
             CommandPaletteCommandContribution(
+                commandId: "palette.newClaudeWorkspace",
+                title: constant(String(localized: "command.newClaudeWorkspace.title", defaultValue: "New Claude Code Workspace")),
+                subtitle: constant(String(localized: "command.newClaudeWorkspace.subtitle", defaultValue: "Open a new workspace running Claude Code in the current project")),
+                keywords: ["claude", "agent", "ai", "new"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
                 commandId: "palette.newWindow",
                 title: constant(String(localized: "command.newWindow.title", defaultValue: "New Window")),
                 subtitle: constant(String(localized: "command.newWindow.subtitle", defaultValue: "Window")),
@@ -4345,6 +4353,12 @@ struct ContentView: View {
     private func registerCommandPaletteHandlers(_ registry: inout CommandPaletteHandlerRegistry) {
         registry.register(commandId: "palette.newWorkspace") {
             tabManager.addWorkspace()
+        }
+        registry.register(commandId: "palette.newClaudeWorkspace") {
+            let trimmedCwd = tabManager.selectedWorkspace?.currentDirectory
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let workingDirectory = (trimmedCwd?.isEmpty ?? true) ? nil : trimmedCwd
+            tabManager.addWorkspace(workingDirectory: workingDirectory, initialTerminalCommand: "claude")
         }
         registry.register(commandId: "palette.openFolder") {
             // Defer so the command palette dismisses before the modal sheet appears.
