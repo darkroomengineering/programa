@@ -614,6 +614,7 @@ final class SessionPersistenceTests: XCTestCase {
         let savedFrame = SessionRectSnapshot(x: 1_200, y: 100, width: 600, height: 400)
         let savedDisplay = SessionDisplaySnapshot(
             displayID: 2,
+            stableID: nil,
             frame: SessionRectSnapshot(x: 1_000, y: 0, width: 1_000, height: 800),
             visibleFrame: SessionRectSnapshot(x: 1_000, y: 0, width: 1_000, height: 800)
         )
@@ -621,11 +622,13 @@ final class SessionPersistenceTests: XCTestCase {
         // Display 1 and 2 swapped horizontal positions between snapshot and restore.
         let display1 = AppDelegate.SessionDisplayGeometry(
             displayID: 1,
+            stableID: nil,
             frame: CGRect(x: 1_000, y: 0, width: 1_000, height: 800),
             visibleFrame: CGRect(x: 1_000, y: 0, width: 1_000, height: 800)
         )
         let display2 = AppDelegate.SessionDisplayGeometry(
             displayID: 2,
+            stableID: nil,
             frame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
             visibleFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800)
         )
@@ -647,10 +650,84 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(restored.minY, 100, accuracy: 0.001)
     }
 
+    func testStableDisplayIdentityWinsWhenDisplayIDIsReassigned() {
+        let savedFrame = SessionRectSnapshot(x: 1_200, y: 100, width: 600, height: 400)
+        // Simulates a monitor unplug/replug: the OS reassigned displayID 999 to
+        // what used to be displayA's screen, so the snapshot's displayID now
+        // spuriously matches displayA. The snapshot's stableID still correctly
+        // identifies the original monitor (displayB).
+        let savedDisplay = SessionDisplaySnapshot(
+            displayID: 999,
+            stableID: "stable-B",
+            frame: SessionRectSnapshot(x: 1_000, y: 0, width: 1_000, height: 800),
+            visibleFrame: SessionRectSnapshot(x: 1_000, y: 0, width: 1_000, height: 800)
+        )
+
+        let displayA = AppDelegate.SessionDisplayGeometry(
+            displayID: 999,
+            stableID: "stable-A",
+            frame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800)
+        )
+        let displayB = AppDelegate.SessionDisplayGeometry(
+            displayID: 555,
+            stableID: "stable-B",
+            frame: CGRect(x: 1_000, y: 0, width: 1_000, height: 800),
+            visibleFrame: CGRect(x: 1_000, y: 0, width: 1_000, height: 800)
+        )
+
+        let restored = AppDelegate.resolvedWindowFrame(
+            from: savedFrame,
+            display: savedDisplay,
+            availableDisplays: [displayA, displayB],
+            fallbackDisplay: displayA
+        )
+
+        XCTAssertNotNil(restored)
+        guard let restored else { return }
+        XCTAssertTrue(displayB.visibleFrame.intersects(restored))
+        XCTAssertFalse(displayA.visibleFrame.intersects(restored))
+        XCTAssertEqual(restored.width, 600, accuracy: 0.001)
+        XCTAssertEqual(restored.height, 400, accuracy: 0.001)
+        XCTAssertEqual(restored.minX, 1_200, accuracy: 0.001)
+        XCTAssertEqual(restored.minY, 100, accuracy: 0.001)
+    }
+
+    func testDisplayIDFallbackWhenNoStableID() {
+        let savedFrame = SessionRectSnapshot(x: 1_303, y: -90, width: 1_280, height: 1_410)
+        let savedDisplay = SessionDisplaySnapshot(
+            displayID: 2,
+            stableID: nil,
+            frame: SessionRectSnapshot(x: 0, y: 0, width: 2_560, height: 1_440),
+            visibleFrame: SessionRectSnapshot(x: 0, y: 0, width: 2_560, height: 1_410)
+        )
+        let display = AppDelegate.SessionDisplayGeometry(
+            displayID: 2,
+            stableID: "stable-2",
+            frame: CGRect(x: 0, y: 0, width: 2_560, height: 1_440),
+            visibleFrame: CGRect(x: 0, y: 0, width: 2_560, height: 1_410)
+        )
+
+        let restored = AppDelegate.resolvedWindowFrame(
+            from: savedFrame,
+            display: savedDisplay,
+            availableDisplays: [display],
+            fallbackDisplay: display
+        )
+
+        XCTAssertNotNil(restored)
+        guard let restored else { return }
+        XCTAssertEqual(restored.minX, 1_303, accuracy: 0.001)
+        XCTAssertEqual(restored.minY, -90, accuracy: 0.001)
+        XCTAssertEqual(restored.width, 1_280, accuracy: 0.001)
+        XCTAssertEqual(restored.height, 1_410, accuracy: 0.001)
+    }
+
     func testResolvedWindowFrameKeepsIntersectingFrameWithoutDisplayMetadata() {
         let savedFrame = SessionRectSnapshot(x: 120, y: 80, width: 500, height: 350)
         let display = AppDelegate.SessionDisplayGeometry(
             displayID: 1,
+            stableID: nil,
             frame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
             visibleFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800)
         )
@@ -674,11 +751,13 @@ final class SessionPersistenceTests: XCTestCase {
         let fallbackFrame = SessionRectSnapshot(x: 180, y: 140, width: 900, height: 640)
         let fallbackDisplay = SessionDisplaySnapshot(
             displayID: 1,
+            stableID: nil,
             frame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000),
             visibleFrame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000)
         )
         let display = AppDelegate.SessionDisplayGeometry(
             displayID: 1,
+            stableID: nil,
             frame: CGRect(x: 0, y: 0, width: 1_600, height: 1_000),
             visibleFrame: CGRect(x: 0, y: 0, width: 1_600, height: 1_000)
         )
@@ -704,6 +783,7 @@ final class SessionPersistenceTests: XCTestCase {
             frame: SessionRectSnapshot(x: 220, y: 160, width: 980, height: 700),
             display: SessionDisplaySnapshot(
                 displayID: 1,
+                stableID: nil,
                 frame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000),
                 visibleFrame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000)
             ),
@@ -713,11 +793,13 @@ final class SessionPersistenceTests: XCTestCase {
         let fallbackFrame = SessionRectSnapshot(x: 40, y: 30, width: 700, height: 500)
         let fallbackDisplay = SessionDisplaySnapshot(
             displayID: 1,
+            stableID: nil,
             frame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000),
             visibleFrame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000)
         )
         let display = AppDelegate.SessionDisplayGeometry(
             displayID: 1,
+            stableID: nil,
             frame: CGRect(x: 0, y: 0, width: 1_600, height: 1_000),
             visibleFrame: CGRect(x: 0, y: 0, width: 1_600, height: 1_000)
         )
@@ -745,6 +827,7 @@ final class SessionPersistenceTests: XCTestCase {
                 frame: SessionRectSnapshot(x: 220, y: 160, width: 980, height: 700),
                 display: SessionDisplaySnapshot(
                     displayID: 1,
+                    stableID: nil,
                     frame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000),
                     visibleFrame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000)
                 )
@@ -766,6 +849,7 @@ final class SessionPersistenceTests: XCTestCase {
                 frame: SessionRectSnapshot(x: 180, y: 140, width: 900, height: 640),
                 display: SessionDisplaySnapshot(
                     displayID: 1,
+                    stableID: nil,
                     frame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000),
                     visibleFrame: SessionRectSnapshot(x: 0, y: 0, width: 1_600, height: 1_000)
                 )
@@ -791,6 +875,7 @@ final class SessionPersistenceTests: XCTestCase {
         let savedFrame = SessionRectSnapshot(x: 4_000, y: 4_000, width: 900, height: 700)
         let display = AppDelegate.SessionDisplayGeometry(
             displayID: 1,
+            stableID: nil,
             frame: CGRect(x: 0, y: 0, width: 1_000, height: 800),
             visibleFrame: CGRect(x: 0, y: 0, width: 1_000, height: 800)
         )
@@ -815,11 +900,13 @@ final class SessionPersistenceTests: XCTestCase {
         let savedFrame = SessionRectSnapshot(x: 1_303, y: -90, width: 1_280, height: 1_410)
         let savedDisplay = SessionDisplaySnapshot(
             displayID: 2,
+            stableID: nil,
             frame: SessionRectSnapshot(x: 0, y: 0, width: 2_560, height: 1_440),
             visibleFrame: SessionRectSnapshot(x: 0, y: 0, width: 2_560, height: 1_410)
         )
         let display = AppDelegate.SessionDisplayGeometry(
             displayID: 2,
+            stableID: nil,
             frame: CGRect(x: 0, y: 0, width: 2_560, height: 1_440),
             visibleFrame: CGRect(x: 0, y: 0, width: 2_560, height: 1_410)
         )
@@ -843,11 +930,13 @@ final class SessionPersistenceTests: XCTestCase {
         let savedFrame = SessionRectSnapshot(x: 1_100, y: -20, width: 1_280, height: 1_000)
         let savedDisplay = SessionDisplaySnapshot(
             displayID: 2,
+            stableID: nil,
             frame: SessionRectSnapshot(x: 0, y: 0, width: 2_560, height: 1_440),
             visibleFrame: SessionRectSnapshot(x: 0, y: 0, width: 2_560, height: 1_410)
         )
         let adjustedDisplay = AppDelegate.SessionDisplayGeometry(
             displayID: 2,
+            stableID: nil,
             frame: CGRect(x: 0, y: 0, width: 2_560, height: 1_440),
             visibleFrame: CGRect(x: 0, y: 40, width: 2_560, height: 1_360)
         )
@@ -871,11 +960,13 @@ final class SessionPersistenceTests: XCTestCase {
         let savedFrame = SessionRectSnapshot(x: 1_303, y: -90, width: 1_280, height: 1_410)
         let savedDisplay = SessionDisplaySnapshot(
             displayID: 2,
+            stableID: nil,
             frame: SessionRectSnapshot(x: 0, y: 0, width: 2_560, height: 1_440),
             visibleFrame: SessionRectSnapshot(x: 0, y: 0, width: 2_560, height: 1_410)
         )
         let resizedDisplay = AppDelegate.SessionDisplayGeometry(
             displayID: 2,
+            stableID: nil,
             frame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080),
             visibleFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_050)
         )
@@ -963,6 +1054,7 @@ final class SessionPersistenceTests: XCTestCase {
             frame: SessionRectSnapshot(x: 10, y: 20, width: 900, height: 700),
             display: SessionDisplaySnapshot(
                 displayID: 42,
+                stableID: nil,
                 frame: SessionRectSnapshot(x: 0, y: 0, width: 1920, height: 1200),
                 visibleFrame: SessionRectSnapshot(x: 0, y: 25, width: 1920, height: 1175)
             ),
