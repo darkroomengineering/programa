@@ -2260,6 +2260,471 @@ extension ProgramaCLI {
         return URL(fileURLWithPath: output).lastPathComponent.lowercased()
     }
 
+    // MARK: - OpenCode hooks
+
+    private func parseOpenCodeHookInput(hookArgs: [String]) -> ClaudeHookParsedInput {
+        let rawInput = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let base = parseClaudeHookInput(rawInput: rawInput)
+        let cwdArg = optionValue(hookArgs, name: "--cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sessionArg = optionValue(hookArgs, name: "--session")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ClaudeHookParsedInput(
+            object: base.object,
+            rawFallback: base.rawFallback,
+            sessionId: (sessionArg?.isEmpty == false ? sessionArg : nil) ?? base.sessionId,
+            cwd: (cwdArg?.isEmpty == false ? cwdArg : nil) ?? base.cwd,
+            transcriptPath: base.transcriptPath
+        )
+    }
+
+    /// OpenCode plugin hook handler. Gracefully no-ops when not running inside programa.
+    ///
+    /// Unlike claude-hook/codex-hook, OpenCode has no shell-hook config to gate
+    /// invocation on $PROGRAMA_SURFACE_ID — the local plugin (embedded as
+    /// `openCodePluginJS` below) calls `programa opencode-hook <event> --cwd ... --session ...`
+    /// directly via Bun's `$`, so this function carries its own guard, mirroring
+    /// codex-hook's belt-and-suspenders pattern (also gated earlier in `run()` and
+    /// `validateRegisteredArguments` before any socket connection is attempted).
+    ///
+    /// The plugin passes `--cwd`/`--session` as CLI args rather than stdin JSON;
+    /// stdin is still read and tolerated (ignored if empty/absent) for parity with
+    /// the other hook handlers and in case a richer payload is added later.
+    ///
+    /// session.idle and permission.asked can fire close together on OpenCode's event
+    /// bus; the status/notification writes below are idempotent (same as
+    /// claude-hook/codex-hook), so repeated firing is harmless.
+    func runOpenCodeHook(
+        commandArgs: [String],
+        client: SocketClient
+    ) throws {
+        let env = ProcessInfo.processInfo.environment
+
+        guard env["PROGRAMA_SURFACE_ID"] != nil else {
+            print("{}")
+            return
+        }
+
+        let subcommand = commandArgs.first?.lowercased() ?? "help"
+        let hookArgs = Array(commandArgs.dropFirst())
+        let hookWsFlag = optionValue(hookArgs, name: "--workspace")
+        let workspaceArg = hookWsFlag ?? env["PROGRAMA_WORKSPACE_ID"]
+        let surfaceArg = optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? env["PROGRAMA_SURFACE_ID"] : nil)
+        let parsedInput = parseOpenCodeHookInput(hookArgs: hookArgs)
+        let sessionStore = ClaudeHookSessionStore(
+            processEnv: env.merging(
+                ["PROGRAMA_CLAUDE_HOOK_STATE_PATH": "~/.programa/opencode-hook-sessions.json"],
+                uniquingKeysWith: { _, new in new }
+            )
+        )
+
+        switch subcommand {
+        case "session-start":
+            let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
+                preferred: nil,
+                fallback: workspaceArg,
+                client: client
+            )
+            let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+                preferred: nil,
+                fallback: surfaceArg,
+                workspaceId: workspaceId,
+                client: client
+            )
+            let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId)
+            let opencodePid = inferredCodexAgentPID()
+            if let sessionId = parsedInput.sessionId {
+                try? sessionStore.upsert(
+                    sessionId: sessionId,
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    cwd: parsedInput.cwd,
+                    pid: opencodePid
+                )
+            }
+            if let opencodePid {
+                _ = try? client.sendV2(method: "workspace.set_agent_pid", params: [
+                    "workspace_id": workspaceId,
+                    "key": agentPIDKey,
+                    "pid": opencodePid,
+                ])
+            }
+            print("{}")
+
+        case "prompt-submit":
+            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
+            let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
+                preferred: mappedSession?.workspaceId,
+                fallback: workspaceArg,
+                client: client
+            )
+            let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
+            let opencodePid = mappedSession?.pid ?? inferredCodexAgentPID()
+            if let sessionId = parsedInput.sessionId, let mappedSession {
+                try? sessionStore.upsert(
+                    sessionId: sessionId,
+                    workspaceId: workspaceId,
+                    surfaceId: mappedSession.surfaceId,
+                    cwd: parsedInput.cwd ?? mappedSession.cwd,
+                    pid: opencodePid
+                )
+            }
+            if let opencodePid {
+                _ = try? client.sendV2(method: "workspace.set_agent_pid", params: [
+                    "workspace_id": workspaceId,
+                    "key": agentPIDKey,
+                    "pid": opencodePid,
+                ])
+            }
+            _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
+            try setOpenCodeStatus(
+                client: client,
+                workspaceId: workspaceId,
+                value: "Running",
+                icon: "bolt.fill",
+                color: "#4C8DFF"
+            )
+            print("{}")
+
+        case "stop":
+            do {
+                let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
+                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
+                    preferred: mappedSession?.workspaceId,
+                    fallback: workspaceArg,
+                    client: client
+                )
+                let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+                    preferred: mappedSession?.surfaceId,
+                    fallback: surfaceArg,
+                    workspaceId: workspaceId,
+                    client: client
+                )
+                let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
+                let cwd = parsedInput.cwd ?? mappedSession?.cwd
+                let opencodePid = mappedSession?.pid ?? inferredCodexAgentPID()
+                let projectName: String? = {
+                    guard let cwd, !cwd.isEmpty else { return nil }
+                    return URL(fileURLWithPath: NSString(string: cwd).expandingTildeInPath).lastPathComponent
+                }()
+                // OpenCode's session.idle event carries no transcript/message payload
+                // (unlike Claude/Codex Stop hooks), so the completion body stays generic
+                // unless a future stdin JSON payload supplies one.
+                let lastMessage = parsedInput.object.flatMap {
+                    firstString(in: $0, keys: ["message", "last_assistant_message", "lastAssistantMessage", "body", "text"])
+                }
+
+                if let sessionId = parsedInput.sessionId {
+                    try? sessionStore.upsert(
+                        sessionId: sessionId,
+                        workspaceId: workspaceId,
+                        surfaceId: surfaceId,
+                        cwd: cwd,
+                        pid: opencodePid,
+                        lastSubtitle: "Completed",
+                        lastBody: lastMessage.map { truncate($0, maxLength: 200) }
+                    )
+                }
+                if let opencodePid {
+                    _ = try? client.sendV2(method: "workspace.set_agent_pid", params: [
+                        "workspace_id": workspaceId,
+                        "key": agentPIDKey,
+                        "pid": opencodePid,
+                    ])
+                }
+
+                var subtitle = "Completed"
+                if let projectName, !projectName.isEmpty {
+                    subtitle = "Completed in \(projectName)"
+                }
+                let body = sanitizeNotificationField(
+                    lastMessage.map { truncate(normalizedSingleLine($0), maxLength: 200) }
+                        ?? "OpenCode session completed"
+                )
+                _ = try? client.sendV2(method: "notification.create_for_target", params: [
+                    "workspace_id": workspaceId,
+                    "surface_id": surfaceId,
+                    "title": "OpenCode",
+                    "subtitle": sanitizeNotificationField(subtitle),
+                    "body": body,
+                ])
+
+                try? setOpenCodeStatus(
+                    client: client,
+                    workspaceId: workspaceId,
+                    value: "Idle",
+                    icon: "pause.circle.fill",
+                    color: "#8E8E93"
+                )
+                print("{}")
+            } catch {
+                if shouldIgnoreClaudeHookTeardownError(error) {
+                    print("{}")
+                    return
+                }
+                throw error
+            }
+
+        case "notification", "notify":
+            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
+            let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
+                preferred: mappedSession?.workspaceId,
+                fallback: workspaceArg,
+                client: client
+            )
+            let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+                preferred: mappedSession?.surfaceId,
+                fallback: surfaceArg,
+                workspaceId: workspaceId,
+                client: client
+            )
+            let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
+            let opencodePid = mappedSession?.pid ?? inferredCodexAgentPID()
+
+            // permission.asked carries no message payload from the plugin either;
+            // tolerate a stdin-supplied one for future-proofing, else use a generic message.
+            let messageFromInput = parsedInput.object.flatMap {
+                firstString(in: $0, keys: ["message", "body", "text", "reason", "description"])
+            }
+            let subtitle = "Attention"
+            let body = messageFromInput.map { normalizedSingleLine($0) } ?? "OpenCode needs your attention"
+
+            if let sessionId = parsedInput.sessionId {
+                try? sessionStore.upsert(
+                    sessionId: sessionId,
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    cwd: parsedInput.cwd,
+                    pid: opencodePid,
+                    lastSubtitle: subtitle,
+                    lastBody: body
+                )
+            }
+            if let opencodePid {
+                _ = try? client.sendV2(method: "workspace.set_agent_pid", params: [
+                    "workspace_id": workspaceId,
+                    "key": agentPIDKey,
+                    "pid": opencodePid,
+                ])
+            }
+
+            _ = try? client.sendV2(method: "notification.create_for_target", params: [
+                "workspace_id": workspaceId,
+                "surface_id": surfaceId,
+                "title": "OpenCode",
+                "subtitle": sanitizeNotificationField(subtitle),
+                "body": sanitizeNotificationField(body),
+            ])
+            _ = try? setOpenCodeStatus(
+                client: client,
+                workspaceId: workspaceId,
+                value: "Needs input",
+                icon: "bell.fill",
+                color: "#4C8DFF"
+            )
+            print("{}")
+
+        case "session-end":
+            do {
+                let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
+                let fallbackWorkspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
+                    preferred: mappedSession?.workspaceId,
+                    fallback: workspaceArg,
+                    client: client
+                )
+                let fallbackSurfaceId: String? = {
+                    guard let fallbackWorkspaceId else { return nil }
+                    return try? resolvePreferredSurfaceIdForClaudeHook(
+                        preferred: mappedSession?.surfaceId,
+                        fallback: surfaceArg,
+                        workspaceId: fallbackWorkspaceId,
+                        client: client
+                    )
+                }()
+                let consumedSession = try? sessionStore.consume(
+                    sessionId: parsedInput.sessionId,
+                    workspaceId: fallbackWorkspaceId,
+                    surfaceId: fallbackSurfaceId
+                )
+                if let consumedSession {
+                    let workspaceId = consumedSession.workspaceId
+                    let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId ?? consumedSession.sessionId)
+                    _ = try? clearOpenCodeStatus(client: client, workspaceId: workspaceId)
+                    _ = try? client.sendV2(method: "workspace.clear_agent_pid", params: ["workspace_id": workspaceId, "key": agentPIDKey])
+                    _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
+                }
+                print("{}")
+            } catch {
+                if shouldIgnoreClaudeHookTeardownError(error) {
+                    print("{}")
+                    return
+                }
+                throw error
+            }
+
+        case "help", "--help", "-h":
+            print("programa opencode-hook <session-start|prompt-submit|stop|notification|session-end> [--cwd <path>] [--session <id>] [--workspace <id>] [--surface <id>]")
+
+        default:
+            throw CLIError(message: "Unknown opencode-hook subcommand: \(subcommand)")
+        }
+    }
+
+    private func setOpenCodeStatus(
+        client: SocketClient,
+        workspaceId: String,
+        value: String,
+        icon: String,
+        color: String
+    ) throws {
+        _ = try client.sendV2(method: "workspace.set_status", params: [
+            "workspace_id": workspaceId,
+            "key": "opencode",
+            "value": value,
+            "icon": icon,
+            "color": color,
+        ])
+    }
+
+    private func clearOpenCodeStatus(client: SocketClient, workspaceId: String) throws {
+        _ = try client.sendV2(method: "workspace.clear_status", params: ["workspace_id": workspaceId, "key": "opencode"])
+    }
+
+    private func opencodeAgentPIDKey(sessionId: String?) -> String {
+        guard let sessionId = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !sessionId.isEmpty else {
+            return "opencode"
+        }
+        return "opencode.\(sessionId)"
+    }
+
+    /// The local OpenCode plugin programa installs into
+    /// ~/.config/opencode/plugins/programa.js (or $OPENCODE_CONFIG_DIR/plugins/programa.js).
+    ///
+    /// OpenCode has no shell-hook config (unlike Claude Code/Codex): local plugin
+    /// files under plugins/ auto-load with no opencode.json edit and no npm install.
+    /// The exported function runs once at process boot (`{ directory, worktree, $ }`,
+    /// Bun's `$`) and returns the lifecycle hooks object. `.quiet().nothrow()` on
+    /// every `$` call is load-bearing — Bun's `$` throws on non-zero exit by default,
+    /// and a programa CLI hiccup must never crash the user's opencode session.
+    private static let openCodePluginJS: String = {
+        """
+        // Programa integration for OpenCode. Managed by `programa opencode install-integration`.
+        export const ProgramaPlugin = async ({ directory, worktree, $ }) => {
+          const hook = (event, extra = []) =>
+            $`programa opencode-hook ${event} --cwd ${directory} ${extra}`.quiet().nothrow()
+          await hook("session-start")
+          return {
+            "chat.message": async (input) => {
+              await hook("prompt-submit", ["--session", input?.sessionID ?? ""])
+            },
+            event: async ({ event }) => {
+              if (event?.type === "session.idle") await hook("stop", ["--session", event.properties?.sessionID ?? ""])
+              if (event?.type === "permission.asked") await hook("notification", ["--session", event.properties?.sessionID ?? ""])
+            },
+            dispose: async () => { await hook("session-end") },
+          }
+        }
+        """ + "\n"
+    }()
+
+    /// Identifier used to detect programa-owned plugin files during uninstall.
+    private static let openCodePluginMarker = "Managed by `programa opencode install-integration`"
+
+    /// Resolves the target plugins directory, respecting OpenCode's own
+    /// OPENCODE_CONFIG_DIR override.
+    private static func openCodePluginsDir() -> String {
+        if let override = ProcessInfo.processInfo.environment["OPENCODE_CONFIG_DIR"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            let expanded = NSString(string: override).expandingTildeInPath
+            return (expanded as NSString).appendingPathComponent("plugins")
+        }
+        return NSString(string: "~/.config/opencode/plugins").expandingTildeInPath
+    }
+
+    func runOpenCodeInstallIntegration() throws {
+        let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
+            || ProcessInfo.processInfo.arguments.contains("-y")
+        let pluginsDir = Self.openCodePluginsDir()
+        let pluginPath = (pluginsDir as NSString).appendingPathComponent("programa.js")
+        let fm = FileManager.default
+
+        try fm.createDirectory(atPath: pluginsDir, withIntermediateDirectories: true, attributes: nil)
+
+        let existingContent: String? = fm.fileExists(atPath: pluginPath)
+            ? (try? String(contentsOfFile: pluginPath, encoding: .utf8))
+            : nil
+        let newContent = Self.openCodePluginJS
+
+        if existingContent == newContent {
+            print("programa OpenCode integration is already installed. Nothing to change.")
+            return
+        }
+
+        print("  \(pluginPath):")
+        if let existingContent {
+            printSimpleDiff(old: existingContent, new: newContent)
+        } else {
+            print("    (new file)")
+            let lines = newContent.components(separatedBy: "\n")
+            for (i, line) in lines.enumerated() where !(i == lines.count - 1 && line.isEmpty) {
+                let lineLabel = String(format: "%3d", i + 1)
+                print("    \u{001B}[32m\(lineLabel) +\(line)\u{001B}[0m")
+            }
+        }
+        print("")
+
+        if !skipConfirm {
+            print("Apply these changes? [Y/n] ", terminator: "")
+            if let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+               !response.isEmpty && response != "y" && response != "yes" {
+                print("Aborted.")
+                return
+            }
+        }
+
+        try newContent.write(toFile: pluginPath, atomically: true, encoding: .utf8)
+
+        print("")
+        print("Installed. OpenCode picks up local plugins automatically — no opencode.json edit or npm install needed.")
+        print("To remove: programa opencode uninstall-integration")
+    }
+
+    func runOpenCodeUninstallIntegration() throws {
+        let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
+            || ProcessInfo.processInfo.arguments.contains("-y")
+        let pluginsDir = Self.openCodePluginsDir()
+        let pluginPath = (pluginsDir as NSString).appendingPathComponent("programa.js")
+        let fm = FileManager.default
+
+        guard fm.fileExists(atPath: pluginPath),
+              let content = try? String(contentsOfFile: pluginPath, encoding: .utf8) else {
+            print("No OpenCode integration found at \(pluginPath)")
+            return
+        }
+
+        guard content.contains(Self.openCodePluginMarker) else {
+            throw CLIError(
+                message: "\(pluginPath) does not look like a programa-managed plugin (missing the marker comment). Refusing to delete it — remove it manually if this is intentional."
+            )
+        }
+
+        print("  \(pluginPath):")
+        printSimpleDiff(old: content, new: "")
+        print("")
+
+        if !skipConfirm {
+            print("Apply these changes? [Y/n] ", terminator: "")
+            if let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+               !response.isEmpty && response != "y" && response != "yes" {
+                print("Aborted.")
+                return
+            }
+        }
+
+        try fm.removeItem(atPath: pluginPath)
+        print("Removed programa OpenCode integration.")
+    }
+
     /// Subcommand help text for Hooks commands, split out of the
     /// central `subcommandUsage` switch (programa.swift) so each domain's
     /// help text lives next to its command descriptors. Refs #101.
@@ -2316,6 +2781,37 @@ extension ProgramaCLI {
               --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
               --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
             """
+        case "opencode":
+            return """
+            Usage: programa opencode <install-integration|uninstall-integration>
+
+            Manage Programa's OpenCode plugin integration.
+
+            Subcommands:
+              install-integration     Install programa's plugin into ~/.config/opencode/plugins/programa.js
+              uninstall-integration   Remove programa's plugin (refuses if you've customized the file)
+            """
+        case "opencode-hook":
+            return """
+            Usage: programa opencode-hook <session-start|prompt-submit|stop|notification|session-end> [flags]
+
+            Hook for the OpenCode plugin integration. Reads --cwd/--session flags passed
+            by the plugin (stdin JSON is tolerated but not required). Gracefully no-ops
+            when not running inside programa.
+
+            Subcommands:
+              session-start   Register an OpenCode session (plugin boot)
+              prompt-submit   Set Running status on user prompt (chat.message)
+              stop            Send completion notification, set Idle (session.idle)
+              notification    Send an attention notification, set Needs input (permission.asked)
+              session-end     Final cleanup when the OpenCode plugin disposes
+
+            Flags:
+              --cwd <path>           Working directory reported by the plugin
+              --session <id>         OpenCode session id, when available
+              --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+              --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+            """
         default:
             return nil
         }
@@ -2338,6 +2834,13 @@ extension ProgramaCLI {
                 helpLines: [],
                 execute: { ctx in
                     try self.runCodexHook(commandArgs: ctx.commandArgs, client: ctx.client)
+                }
+            ),
+            CommandDescriptor(
+                names: ["opencode-hook"],
+                helpLines: [],
+                execute: { ctx in
+                    try self.runOpenCodeHook(commandArgs: ctx.commandArgs, client: ctx.client)
                 }
             ),
         ]

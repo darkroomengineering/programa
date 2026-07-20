@@ -1475,9 +1475,32 @@ struct ProgramaCLI {
             throw CLIError(message: "Unknown claude subcommand: \(sub)")
         }
 
+        // OpenCode plugin integration management (no socket needed)
+        if command == "opencode" {
+            let sub = commandArgs.first?.lowercased() ?? "help"
+            if sub == "install-integration" {
+                try runOpenCodeInstallIntegration()
+                return
+            } else if sub == "uninstall-integration" {
+                try runOpenCodeUninstallIntegration()
+                return
+            }
+            print("Usage: programa opencode <install-integration|uninstall-integration>")
+            throw CLIError(message: "Unknown opencode subcommand: \(sub)")
+        }
+
         // Codex hook handler: gracefully no-op when not inside programa
         // (before socket connection, so it doesn't fail when no socket exists)
         if command == "codex-hook" {
+            guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else {
+                print("{}")
+                return
+            }
+        }
+
+        // OpenCode hook handler: gracefully no-op when not inside programa
+        // (before socket connection, so it doesn't fail when no socket exists)
+        if command == "opencode-hook" {
             guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else {
                 print("{}")
                 return
@@ -1607,6 +1630,20 @@ struct ProgramaCLI {
                 ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json).
                 Unlike the runtime wrapper, this makes the integration work from
                 any terminal, not just programa's.
+                """,
+                execute: nil
+            ),
+            CommandDescriptor(
+                names: ["opencode"],
+                helpLines: ["opencode <install-integration|uninstall-integration>"],
+                connectionPolicy: .local,
+                detailedUsage: """
+                Usage: programa opencode <install-integration|uninstall-integration>
+
+                Install or remove Programa's OpenCode plugin in
+                ~/.config/opencode/plugins/programa.js (or $OPENCODE_CONFIG_DIR/plugins/programa.js).
+                OpenCode auto-loads local plugin files, so no opencode.json edit or
+                npm install is needed.
                 """,
                 execute: nil
             ),
@@ -5277,6 +5314,14 @@ struct ProgramaCLI {
                 throw CLIError(message: "codex-hook: unknown event \(subcommand)")
             }
 
+        case "opencode-hook":
+            guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else { return }
+            let parsed = try parse(values: ["workspace", "surface", "cwd", "session"], maxPositionals: 1)
+            if let subcommand = parsed.positional.first?.lowercased(),
+               !["session-start", "prompt-submit", "stop", "notification", "notify", "session-end", "help", "--help", "-h"].contains(subcommand) {
+                throw CLIError(message: "opencode-hook: unknown event \(subcommand)")
+            }
+
         case "capture-pane":
             let parsed = try parse(values: ["workspace", "surface", "lines"], booleans: ["scrollback"])
             if let lines = parsed.options["lines"], (Int(lines) ?? 0) <= 0 {
@@ -5363,6 +5408,11 @@ struct ProgramaCLI {
             let parsed = try parse(booleans: ["yes", "y"], minPositionals: 1, maxPositionals: 1)
             guard ["install-integration", "uninstall-integration"].contains(parsed.positional[0].lowercased()) else {
                 throw CLIError(message: "claude: expected install-integration or uninstall-integration")
+            }
+        case "opencode":
+            let parsed = try parse(booleans: ["yes", "y"], minPositionals: 1, maxPositionals: 1)
+            guard ["install-integration", "uninstall-integration"].contains(parsed.positional[0].lowercased()) else {
+                throw CLIError(message: "opencode: expected install-integration or uninstall-integration")
             }
         case "remote-daemon-status":
             let parsed = try parse(values: ["os", "arch"])

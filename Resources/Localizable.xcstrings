@@ -5874,6 +5874,23 @@
         }
       }
     },
+    "menu.file.installOpenCodeIntegration": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install OpenCode Integration…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenCode 連携をインストール…"
+          }
+        }
+      }
+    },
     "menu.file.reopenClosedBrowserPanel": {
       "extractionState": "manual",
       "localizations": {
