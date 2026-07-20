@@ -1465,6 +1465,222 @@ extension ProgramaCLI {
         print("Removed programa Codex hooks.")
     }
 
+    // MARK: - Claude Code integration (persistent hooks)
+
+    /// The persistent hook command installed into ~/.claude/settings.json (or
+    /// $CLAUDE_CONFIG_DIR/settings.json). Unlike the runtime wrapper injected by
+    /// Resources/bin/claude (which always runs inside a programa terminal and can
+    /// assume programa is reachable), this command runs from *any* terminal, so it
+    /// defensively checks both that it's inside a programa surface and that the
+    /// programa CLI is on PATH before calling out. Mirrors the codex guard shape.
+    private static func claudeHookCommand(_ event: String) -> String {
+        "[ -n \"$PROGRAMA_SURFACE_ID\" ] && command -v programa >/dev/null 2>&1 && programa claude-hook \(event) || echo '{}'"
+    }
+
+    /// Identifier used to detect programa-owned hooks during install/uninstall.
+    private static let claudeHookCommandMarker = "programa claude-hook"
+
+    private struct ClaudeHookEventSpec {
+        let name: String
+        let event: String
+        let timeout: Int
+        let isAsync: Bool
+    }
+
+    /// The six lifecycle events the runtime wrapper's HOOKS_JSON injects
+    /// (Resources/bin/claude:207), reproduced here for the persistent file.
+    private static let claudeHookEventSpecs: [ClaudeHookEventSpec] = [
+        ClaudeHookEventSpec(name: "SessionStart", event: "session-start", timeout: 10, isAsync: false),
+        ClaudeHookEventSpec(name: "Stop", event: "stop", timeout: 10, isAsync: false),
+        ClaudeHookEventSpec(name: "SessionEnd", event: "session-end", timeout: 1, isAsync: false),
+        ClaudeHookEventSpec(name: "Notification", event: "notification", timeout: 10, isAsync: false),
+        ClaudeHookEventSpec(name: "UserPromptSubmit", event: "prompt-submit", timeout: 10, isAsync: false),
+        ClaudeHookEventSpec(name: "PreToolUse", event: "pre-tool-use", timeout: 5, isAsync: true)
+    ]
+
+    /// Builds the programa-owned hook groups, keyed by Claude Code lifecycle event
+    /// name, in Claude Code's settings.json hooks schema (matcher + hooks array).
+    private static var claudeHooksPayload: [String: Any] {
+        var hooks: [String: Any] = [:]
+        for spec in claudeHookEventSpecs {
+            var hookEntry: [String: Any] = [
+                "type": "command",
+                "command": claudeHookCommand(spec.event),
+                "timeout": spec.timeout
+            ]
+            if spec.isAsync {
+                hookEntry["async"] = true
+            }
+            hooks[spec.name] = [[
+                "matcher": "",
+                "hooks": [hookEntry]
+            ] as [String: Any]]
+        }
+        return hooks
+    }
+
+    /// Resolves the target settings.json, respecting Claude Code's own
+    /// CLAUDE_CONFIG_DIR override.
+    private static func claudeSettingsPath() -> String {
+        if let override = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            let expanded = NSString(string: override).expandingTildeInPath
+            return (expanded as NSString).appendingPathComponent("settings.json")
+        }
+        return NSString(string: "~/.claude/settings.json").expandingTildeInPath
+    }
+
+    func runClaudeInstallIntegration() throws {
+        let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
+            || ProcessInfo.processInfo.arguments.contains("-y")
+        let settingsPath = Self.claudeSettingsPath()
+        let settingsDir = (settingsPath as NSString).deletingLastPathComponent
+        let fm = FileManager.default
+
+        try fm.createDirectory(atPath: settingsDir, withIntermediateDirectories: true, attributes: nil)
+
+        let existingSettingsContent: String?
+        if fm.fileExists(atPath: settingsPath) {
+            guard let content = try? String(contentsOfFile: settingsPath, encoding: .utf8) else {
+                throw CLIError(message: "Could not read \(settingsPath). Check file permissions.")
+            }
+            existingSettingsContent = content
+        } else {
+            existingSettingsContent = nil
+        }
+
+        // Missing file = empty JSON object. Existing-but-unparsable = stop; never overwrite.
+        var existing: [String: Any] = [:]
+        if let existingSettingsContent {
+            let trimmed = existingSettingsContent.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                guard let data = existingSettingsContent.data(using: .utf8),
+                      let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    throw CLIError(
+                        message: "\(settingsPath) is not valid JSON. Fix or remove the file manually, then re-run this command."
+                    )
+                }
+                existing = parsed
+            }
+        }
+
+        var hooks = existing["hooks"] as? [String: Any] ?? [:]
+        let programaHooks = Self.claudeHooksPayload
+        for (eventName, programaGroups) in programaHooks {
+            guard let programaGroupArray = programaGroups as? [[String: Any]] else { continue }
+            var eventGroups = hooks[eventName] as? [[String: Any]] ?? []
+            eventGroups.removeAll { group in
+                guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
+                return groupHooks.allSatisfy { hook in
+                    (hook["command"] as? String)?.contains(Self.claudeHookCommandMarker) == true
+                }
+            }
+            eventGroups.append(contentsOf: programaGroupArray)
+            hooks[eventName] = eventGroups
+        }
+        existing["hooks"] = hooks
+
+        let newJsonData = try JSONSerialization.data(withJSONObject: existing, options: [.prettyPrinted, .sortedKeys])
+        let newContent = String(data: newJsonData, encoding: .utf8) ?? ""
+
+        if existingSettingsContent == newContent {
+            print("programa Claude Code integration is already installed. Nothing to change.")
+            return
+        }
+
+        print("  \(settingsPath):")
+        if let existingSettingsContent, !existingSettingsContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            printSimpleDiff(old: existingSettingsContent, new: newContent)
+        } else {
+            print("    (new file)")
+            let lines = newContent.components(separatedBy: "\n")
+            for (i, line) in lines.enumerated() {
+                let lineLabel = String(format: "%3d", i + 1)
+                print("    \u{001B}[32m\(lineLabel) +\(line)\u{001B}[0m")
+            }
+        }
+        print("")
+
+        if !skipConfirm {
+            print("Apply these changes? [Y/n] ", terminator: "")
+            if let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+               !response.isEmpty && response != "y" && response != "yes" {
+                print("Aborted.")
+                return
+            }
+        }
+
+        try newJsonData.write(to: URL(fileURLWithPath: settingsPath), options: .atomic)
+
+        print("")
+        print("Installed. The Claude Code integration now works from any terminal, not just programa's.")
+        print("To remove: programa claude uninstall-integration")
+    }
+
+    func runClaudeUninstallIntegration() throws {
+        let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
+            || ProcessInfo.processInfo.arguments.contains("-y")
+        let settingsPath = Self.claudeSettingsPath()
+        let fm = FileManager.default
+
+        guard fm.fileExists(atPath: settingsPath),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
+              var parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("No programa hooks found.")
+            return
+        }
+
+        guard var hooks = parsed["hooks"] as? [String: Any] else {
+            print("No programa hooks found.")
+            return
+        }
+
+        var removedCount = 0
+        for eventName in hooks.keys {
+            guard var eventGroups = hooks[eventName] as? [[String: Any]] else { continue }
+            let before = eventGroups.count
+            eventGroups.removeAll { group in
+                guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
+                return groupHooks.allSatisfy { hook in
+                    (hook["command"] as? String)?.contains(Self.claudeHookCommandMarker) == true
+                }
+            }
+            removedCount += before - eventGroups.count
+            if eventGroups.isEmpty {
+                hooks.removeValue(forKey: eventName)
+            } else {
+                hooks[eventName] = eventGroups
+            }
+        }
+
+        if removedCount == 0 {
+            print("No programa hooks found.")
+            return
+        }
+
+        parsed["hooks"] = hooks
+        let newJsonData = try JSONSerialization.data(withJSONObject: parsed, options: [.prettyPrinted, .sortedKeys])
+        let newContent = String(data: newJsonData, encoding: .utf8) ?? ""
+        let oldContent = String(data: data, encoding: .utf8) ?? ""
+
+        print("  \(settingsPath):")
+        printSimpleDiff(old: oldContent, new: newContent)
+        print("")
+
+        if !skipConfirm {
+            print("Apply these changes? [Y/n] ", terminator: "")
+            if let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+               !response.isEmpty && response != "y" && response != "yes" {
+                print("Aborted.")
+                return
+            }
+        }
+
+        try newJsonData.write(to: URL(fileURLWithPath: settingsPath), options: .atomic)
+        print("Removed programa Claude Code integration.")
+    }
+
     /// Print a unified-diff-style view with context lines and line numbers.
     private func printSimpleDiff(old: String, new: String, contextLines: Int = 2) {
         let red = "\u{001B}[31m"
