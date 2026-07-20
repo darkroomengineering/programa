@@ -256,6 +256,7 @@ final class Workspace: Identifiable, ObservableObject {
 
     nonisolated static func resolveCloseConfirmation(
         shellActivityState: PanelShellActivityState?,
+        hasKnownTTY: Bool,
         fallbackNeedsConfirmClose: Bool
     ) -> Bool {
         switch shellActivityState ?? .unknown {
@@ -264,6 +265,13 @@ final class Workspace: Identifiable, ObservableObject {
         case .commandRunning:
             return true
         case .unknown:
+            // Before shell integration reports anything AND before a TTY is
+            // known for this panel, there is no attached shell whose work
+            // could be lost — never prompt. The ghostty needs-confirm
+            // fallback can spuriously return true in the pre-attach window
+            // (ported from upstream cmux 2e03978ae1, adapted to our
+            // shell-integration telemetry signals).
+            guard hasKnownTTY else { return false }
             return fallbackNeedsConfirmClose
         }
     }

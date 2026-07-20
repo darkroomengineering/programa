@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Bonsplit
+import CoreGraphics
 import CoreServices
 import UserNotifications
 import WebKit
@@ -59,6 +60,16 @@ private extension NSScreen {
         let key = NSDeviceDescriptionKey("NSScreenNumber")
         guard let value = deviceDescription[key] as? NSNumber else { return nil }
         return value.uint32Value
+    }
+
+    /// Stable per-monitor identity that survives displayID reassignment across
+    /// unplug/replug and sleep/wake (CGDirectDisplayID is not guaranteed stable).
+    var programaStableDisplayID: String? {
+        guard let displayID = programaDisplayID,
+              let cfuuid = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue() else {
+            return nil
+        }
+        return CFUUIDCreateString(nil, cfuuid) as String?
     }
 }
 
@@ -800,6 +811,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     struct SessionDisplayGeometry {
         let displayID: UInt32?
+        let stableID: String?
         let frame: CGRect
         let visibleFrame: CGRect
     }
@@ -1617,6 +1629,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let available = NSScreen.screens.map { screen in
             SessionDisplayGeometry(
                 displayID: screen.programaDisplayID,
+                stableID: screen.programaStableDisplayID,
                 frame: screen.frame,
                 visibleFrame: screen.visibleFrame
             )
@@ -1624,6 +1637,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let fallback = (NSScreen.main ?? NSScreen.screens.first).map { screen in
             SessionDisplayGeometry(
                 displayID: screen.programaDisplayID,
+                stableID: screen.programaStableDisplayID,
                 frame: screen.frame,
                 visibleFrame: screen.visibleFrame
             )
@@ -1915,11 +1929,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         in displays: [SessionDisplayGeometry]
     ) -> SessionDisplayGeometry? {
         guard let snapshot else { return nil }
+        if let stableID = snapshot.stableID, !stableID.isEmpty {
+            let matches = displays.filter { $0.stableID == stableID }
+            if matches.count == 1 { return matches[0] }
+            if matches.count > 1 { return displayMatchingSnapshotGeometry(for: snapshot, in: matches) }
+        }
         if let displayID = snapshot.displayID,
            let exact = displays.first(where: { $0.displayID == displayID }) {
             return exact
         }
+        return displayMatchingSnapshotGeometry(for: snapshot, in: displays)
+    }
 
+    private nonisolated static func displayMatchingSnapshotGeometry(
+        for snapshot: SessionDisplaySnapshot,
+        in displays: [SessionDisplayGeometry]
+    ) -> SessionDisplayGeometry? {
         guard let referenceRect = (snapshot.visibleFrame ?? snapshot.frame)?.cgRect else {
             return nil
         }
@@ -2034,10 +2059,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         targetDisplay: SessionDisplayGeometry
     ) -> Bool {
         guard let displaySnapshot else { return false }
-        guard let snapshotDisplayID = displaySnapshot.displayID,
-              let targetDisplayID = targetDisplay.displayID,
-              snapshotDisplayID == targetDisplayID else {
-            return false
+        if let stableID = displaySnapshot.stableID, !stableID.isEmpty {
+            guard targetDisplay.stableID == stableID else { return false }
+        } else {
+            guard let snapshotDisplayID = displaySnapshot.displayID,
+                  let targetDisplayID = targetDisplay.displayID,
+                  snapshotDisplayID == targetDisplayID else {
+                return false
+            }
         }
 
         let visibleMatches = displaySnapshot.visibleFrame.map {
@@ -2075,6 +2104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         return SessionDisplaySnapshot(
             displayID: screen.programaDisplayID,
+            stableID: screen.programaStableDisplayID,
             frame: SessionRectSnapshot(screen.frame),
             visibleFrame: SessionRectSnapshot(screen.visibleFrame)
         )

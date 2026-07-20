@@ -42,6 +42,7 @@
 			B10A1CE2 /* BackgroundLogWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10A1CE1 /* BackgroundLogWriter.swift */; };
 			B10A1CE6 /* RenderableSystemSymbol.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10A1CE5 /* RenderableSystemSymbol.swift */; };
 			B10A1CE4 /* GhosttyTitleUpdateDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10A1CE3 /* GhosttyTitleUpdateDispatcher.swift */; };
+			7C135SB00000000000000002 /* GhosttyTerminalScrollBoost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C135SB00000000000000001 /* GhosttyTerminalScrollBoost.swift */; };
 			NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */; };
 			NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */; };
 			NRSP0006A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0005A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift */; };
@@ -258,6 +259,8 @@
 					8C4BBF2DEF6DF93F395A9EE7 /* TerminalControllerSocketSecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */; };
 					C1A2B3C4D5E6F70800000004 /* TerminalControllerShellStateDedupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */; };
 					2BB56A710BB1FC50367E5BCF /* TabManagerSessionSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */; };
+					7C135SB00000000000000004 /* GhosttyScrollPreciseBoostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C135SB00000000000000003 /* GhosttyScrollPreciseBoostTests.swift */; };
+					7C10SE2A0000000000000002 /* WorkspaceCloseConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */; };
 					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */; };
 					C1A2B3C4D5E6F70800000006 /* ServeWebPortStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000005 /* ServeWebPortStoreTests.swift */; };
 		/* End PBXBuildFile section */
@@ -369,6 +372,7 @@
 			B10A1CE1 /* BackgroundLogWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundLogWriter.swift; sourceTree = "<group>"; };
 			B10A1CE5 /* RenderableSystemSymbol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderableSystemSymbol.swift; sourceTree = "<group>"; };
 			B10A1CE3 /* GhosttyTitleUpdateDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTitleUpdateDispatcher.swift; sourceTree = "<group>"; };
+			7C135SB00000000000000001 /* GhosttyTerminalScrollBoost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTerminalScrollBoost.swift; sourceTree = "<group>"; };
 			NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+SidebarResizer.swift"; sourceTree = "<group>"; };
 			NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSupport.swift; sourceTree = "<group>"; };
 			NRSP0005A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosedBrowserPanelRestoreSnapshot.swift; sourceTree = "<group>"; };
@@ -584,6 +588,8 @@
 				491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalControllerSocketSecurityTests.swift; sourceTree = "<group>"; };
 				C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalControllerShellStateDedupTests.swift; sourceTree = "<group>"; };
 				10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManagerSessionSnapshotTests.swift; sourceTree = "<group>"; };
+				7C135SB00000000000000003 /* GhosttyScrollPreciseBoostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyScrollPreciseBoostTests.swift; sourceTree = "<group>"; };
+				7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCloseConfirmationTests.swift; sourceTree = "<group>"; };
 				C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfigTests.swift; sourceTree = "<group>"; };
 				C1A2B3C4D5E6F70800000005 /* ServeWebPortStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServeWebPortStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -743,6 +749,7 @@
 					NRSP0011A1B2C3D4E5F60719 /* GhosttyApp.swift */,
 					B10A1CE1 /* BackgroundLogWriter.swift */,
 					B10A1CE3 /* GhosttyTitleUpdateDispatcher.swift */,
+					7C135SB00000000000000001 /* GhosttyTerminalScrollBoost.swift */,
 					NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */,
 					NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */,
 					NRSP0005A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift */,
@@ -991,6 +998,8 @@
 					491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */,
 					C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */,
 					10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */,
+					7C135SB00000000000000003 /* GhosttyScrollPreciseBoostTests.swift */,
+					7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */,
 					C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */,
 					C1A2B3C4D5E6F70800000005 /* ServeWebPortStoreTests.swift */,
 				);
@@ -1174,6 +1183,7 @@
 					NRSP0012A1B2C3D4E5F60719 /* GhosttyApp.swift in Sources */,
 					B10A1CE2 /* BackgroundLogWriter.swift in Sources */,
 					B10A1CE4 /* GhosttyTitleUpdateDispatcher.swift in Sources */,
+					7C135SB00000000000000002 /* GhosttyTerminalScrollBoost.swift in Sources */,
 					NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */,
 					NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */,
 					NRSP0006A1B2C3D4E5F60719 /* ClosedBrowserPanelRestoreSnapshot.swift in Sources */,
@@ -1388,6 +1398,8 @@
 					8C4BBF2DEF6DF93F395A9EE7 /* TerminalControllerSocketSecurityTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000004 /* TerminalControllerShellStateDedupTests.swift in Sources */,
 					2BB56A710BB1FC50367E5BCF /* TabManagerSessionSnapshotTests.swift in Sources */,
+					7C135SB00000000000000004 /* GhosttyScrollPreciseBoostTests.swift in Sources */,
+					7C10SE2A0000000000000002 /* WorkspaceCloseConfirmationTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000006 /* ServeWebPortStoreTests.swift in Sources */,
 				);

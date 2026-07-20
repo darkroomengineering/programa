@@ -934,7 +934,10 @@ extension GhosttyNSView {
         var x = event.scrollingDeltaX
         var y = event.scrollingDeltaY
         let precision = event.hasPreciseScrollingDeltas
-        if precision {
+        // Boost only gesture-driven precise deltas; high-res mouse wheels
+        // report precise deltas with no phase and must not be doubled
+        // (ported from upstream cmux da4e4bc460).
+        if GhosttyTerminalScrollBoost(event: event).shouldDoublePreciseScrollDelta {
             x *= 2
             y *= 2
         }
