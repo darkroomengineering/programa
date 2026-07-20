@@ -2697,7 +2697,9 @@ struct ProgramaCLI {
                 """,
                 execute: { ctx in
                     guard let workspaceRaw = self.optionValue(ctx.commandArgs, name: "--workspace") else {
-                        throw CLIError(message: "close-workspace requires --workspace")
+                        throw CLIError(
+                            message: "close-workspace: --workspace <id|ref> is required (UUID or short ref like workspace:2). Refusing to target the current workspace implicitly."
+                        )
                     }
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceRaw, client: ctx.client)
@@ -5155,7 +5157,11 @@ struct ProgramaCLI {
 
         case "close-workspace", "select-workspace":
             let parsed = try parse(values: ["workspace"])
-            try require(["workspace"], in: parsed.options)
+            if parsed.options["workspace"] == nil {
+                throw CLIError(
+                    message: "\(command): --workspace <id|ref> is required (UUID or short ref like workspace:2). Refusing to target the current workspace implicitly."
+                )
+            }
 
         case "rename-workspace", "rename-window":
             _ = try parse(values: ["workspace"], minPositionals: 1, maxPositionals: nil)
