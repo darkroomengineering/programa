@@ -2112,7 +2112,7 @@ struct ProgramaCLI {
                     let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
                     let (sfArg, rem2) = self.parseOption(rem1, name: "--surface")
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceRaw = sfArg ?? panelArg ?? (wsArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    let surfaceRaw = sfArg ?? panelArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
                     guard let direction = rem2.first else {
                         throw CLIError(message: "new-split requires a direction")
                     }
@@ -2336,7 +2336,7 @@ struct ProgramaCLI {
                 execute: { ctx in
                     let csWsFlag = self.optionValue(ctx.commandArgs, name: "--workspace")
                     let workspaceArg = csWsFlag ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceRaw = self.optionValue(ctx.commandArgs, name: "--surface") ?? self.optionValue(ctx.commandArgs, name: "--panel") ?? (csWsFlag == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    let surfaceRaw = self.optionValue(ctx.commandArgs, name: "--surface") ?? self.optionValue(ctx.commandArgs, name: "--panel") ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
@@ -3088,7 +3088,7 @@ struct ProgramaCLI {
                         : (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
                     let workspaceArg = explicitWorkspaceArg ?? callerWorkspaceArg
                     let explicitSurfaceArg = self.optionValue(ctx.commandArgs, name: "--surface")
-                    let callerSurfaceArg = explicitSurfaceArg == nil && preferTTYFallback == false && ctx.windowId == nil
+                    let callerSurfaceArg = explicitSurfaceArg == nil && workspaceArg == nil && preferTTYFallback == false && ctx.windowId == nil
                         ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"]
                         : nil
                     let surfaceArg = explicitSurfaceArg ?? callerSurfaceArg
