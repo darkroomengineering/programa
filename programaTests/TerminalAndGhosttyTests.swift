@@ -2528,6 +2528,17 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         let searchState = TerminalSurface.SearchState(needle: "")
         surface.searchState = searchState
         hostedView.setSearchOverlay(searchState: searchState)
+        // setSearchOverlay schedules its mount work synchronously via a plain
+        // DispatchQueue.main.async(execute:) DispatchWorkItem (see
+        // scheduleDeferredSearchOverlayMutation) — drive that queued turn explicitly
+        // instead of relying solely on XCTNSPredicateExpectation's implicit run-loop
+        // pumping to observe it, which timed out completely on the CI runner image
+        // (#169) rather than merely landing late. drainMainQueue() forces the
+        // already-scheduled mount closure to run through the same production path;
+        // it does not mount the overlay itself. Keep the poll below as a real
+        // assertion of the outcome (and headroom for the retry chain
+        // requestMountedSearchFieldFocus needs), not a substitute for it.
+        drainMainQueue()
         // A fixed 50ms RunLoop spin isn't reliable headroom for the deferred mount
         // closure under a full serial suite run, where the main queue can carry a real
         // backlog from other tests' pending async work — poll instead.
@@ -3686,6 +3697,22 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
         shiftedContainer.frame.size.width -= 72
         contentView.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
+        // Drive the anchor resync through an explicit, synchronous call in addition to
+        // the production scheduling path below, instead of relying solely on the
+        // deferred DispatchQueue.main.async hop inside scheduleExternalGeometrySynchronize
+        // to land within a single drainMainQueue() turn. On the CI runner image that
+        // hop can land one main-queue turn later than on a dev machine (observed: the
+        // first drainMainQueue() below saw no frame change at all, and the resize only
+        // showed up after a second one) — the same class of never-shown-window deferred-
+        // drain regression tracked in #169 and fixed the same way in
+        // testExternalSplitResizeDoesNotForceHostedWebViewPresentationRefresh.
+        // synchronizeForAnchor exercises the exact same production sync path
+        // (WindowTerminalPortal.synchronizeHostedViewForAnchor) synchronously; it does
+        // not manufacture the frame delta below — that still only reflects the anchor's
+        // frame, which genuinely changed above. The scheduling call is kept afterward so
+        // this test still exercises (and the two drainMainQueue() calls still verify) that
+        // the deferred path does not additionally re-apply or double-apply a shift.
+        TerminalWindowPortalRegistry.synchronizeForAnchor(anchor)
         TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: window)
 
         drainMainQueue()

@@ -2055,18 +2055,14 @@ final class WindowBrowserSlotViewTests: XCTestCase {
 
 @MainActor
 final class BrowserWindowPortalLifecycleTests: XCTestCase {
-    // Quarantined on CI as a suite: the 2026-07-21 runner image changed layout
-    // behavior for never-shown windows (no layout pass from setPosition, overlay
-    // visibility not applied), which this whole suite depends on. Individual
-    // tests kept failing one at a time; skip once here instead. Runs on every
-    // local invocation. See #169.
-    override func setUpWithError() throws {
-        try XCTSkipIf(
-            ProcessInfo.processInfo.environment["CI"] != nil,
-            "Skipped on CI runners: offscreen-window layout behavior changed on the 2026-07-21 image (#169)"
-        )
-        try super.setUpWithError()
-    }
+    // Un-quarantined (#169): the class-level CI skip added when the 2026-07-21 runner
+    // image changed layout behavior for never-shown windows is no longer needed now
+    // that testExternalSplitResizeDoesNotForceHostedWebViewPresentationRefresh — the
+    // only test in this suite that was root-caused — drives its resync through an
+    // explicit, synchronous call instead of relying on the deferred notification
+    // observer (see that test). If other tests in this suite start failing on CI with
+    // the same deferred-drain signature, they need the same explicit-drive treatment
+    // rather than re-adding this blanket skip.
 
     private final class TrackingPortalWebView: WKWebView {
         private(set) var displayIfNeededCount = 0
