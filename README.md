@@ -60,6 +60,10 @@ Programa is a primitive, not a solution: a terminal, a browser, notifications, w
 
 ⌘⇧P opens the command palette, which lists every action. Full reference: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md) — everything is editable in `Settings → Keyboard Shortcuts`.
 
+## Agent skill
+
+Agents running inside programa (Claude Code, Codex, OpenCode) can drive the app itself — split panes, read a sibling pane's output, spawn and coordinate a helper agent — without stealing your focus. `programa claude/codex/opencode install-integration` installs [`SKILL.md`](SKILL.md) alongside the existing hooks; see [docs/agent-skill.md](docs/agent-skill.md) for the full walkthrough.
+
 ## Community
 
 [Discord](https://discord.gg/xsgFEVrWCZ) · [Issues](https://github.com/darkroomengineering/programa/issues) · [Discussions](https://github.com/darkroomengineering/programa/discussions) · [@darkroomengineering](https://x.com/darkroomengineering)
