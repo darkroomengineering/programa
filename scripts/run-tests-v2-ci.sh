@@ -21,6 +21,15 @@ if [ -z "$APP" ] || [ ! -d "$APP" ]; then
   exit 1
 fi
 
+# Tests locate the programa CLI via CMUXTERM_CLI; the fallback search paths are
+# VM-shaped and never match on a CI runner. The CLI ships inside the app bundle.
+CMUXTERM_CLI="$APP/Contents/Resources/bin/programa"
+if [ ! -x "$CMUXTERM_CLI" ]; then
+  echo "ERROR: CLI binary not found or not executable at $CMUXTERM_CLI" >&2
+  exit 1
+fi
+export CMUXTERM_CLI
+
 if [ ! -f "$SUBSET_FILE" ]; then
   echo "ERROR: Subset file not found: $SUBSET_FILE" >&2
   exit 1
