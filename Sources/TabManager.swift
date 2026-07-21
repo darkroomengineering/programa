@@ -761,12 +761,20 @@ class TabManager: ObservableObject {
     /// `detachSurface` (which calls `closeTab` itself) would be unsafe reentrancy.
     ///
     /// Returns false when staging isn't possible (non-terminal panel, a drag-detach already in
-    /// flight for this workspace, or `detachSurface` itself declines) -- callers should fall back
-    /// to a normal close in that case.
+    /// flight for this workspace, this is the workspace's only remaining panel, or `detachSurface`
+    /// itself declines) -- callers should fall back to a normal close in that case.
     @discardableResult
     func stageTerminalPanelCloseForUndo(in workspace: Workspace, panelId: UUID) -> Bool {
         guard workspace.terminalPanel(for: panelId) != nil else { return false }
         guard !workspace.isDetachingCloseTransaction else { return false }
+        // Mirrors `Workspace.markTerminalCloseForUndoStagingIfEligible`'s guard: staging routes
+        // through `detachSurface`, which marks the close as a detach. `didCloseTab`'s
+        // `panels.isEmpty` branch skips replacement-terminal creation for detaches (correct for
+        // real drag-detaches, which intentionally leave a transient empty workspace) but closing
+        // a workspace's only remaining panel is an ordinary close and must still get a
+        // replacement surface. Decline staging here so the caller falls back to a normal
+        // `closePanel`, which isn't marked as detaching.
+        guard workspace.panels.count > 1 else { return false }
         let originalPaneId = workspace.paneId(forPanelId: panelId)
         let originalIndex = workspace.indexInPane(forPanelId: panelId)
         guard let transfer = workspace.detachSurface(panelId: panelId) else { return false }
