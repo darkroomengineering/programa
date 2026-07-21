@@ -438,7 +438,11 @@ final class SocketClient {
         }
     }
 
-    func send(command: String) throws -> String {
+    /// - Parameter minimumReceiveTimeout: overrides the default response-wait timeout when
+    ///   larger than it, for commands that legitimately hold the connection open longer than
+    ///   `CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC`'s default (e.g. `surface.wait` with a caller-chosen
+    ///   `--timeout`). Ignored (falls back to the default) when `nil` or smaller.
+    func send(command: String, minimumReceiveTimeout: TimeInterval? = nil) throws -> String {
         if relayEndpoint != nil, socketFD < 0 {
             try connect()
         }
@@ -459,10 +463,16 @@ final class SocketClient {
 
         var data = Data()
         var sawNewline = false
+        let initialReceiveTimeout: TimeInterval = {
+            guard let minimumReceiveTimeout, minimumReceiveTimeout > Self.responseTimeoutSeconds else {
+                return Self.responseTimeoutSeconds
+            }
+            return minimumReceiveTimeout
+        }()
 
         while true {
             try configureReceiveTimeout(
-                sawNewline ? Self.multilineResponseIdleTimeoutSeconds : Self.responseTimeoutSeconds
+                sawNewline ? Self.multilineResponseIdleTimeoutSeconds : initialReceiveTimeout
             )
 
             var buffer = [UInt8](repeating: 0, count: 8192)
@@ -941,7 +951,7 @@ final class SocketClient {
         return nil
     }
 
-    func sendV2(method: String, params: [String: Any] = [:]) throws -> [String: Any] {
+    func sendV2(method: String, params: [String: Any] = [:], minimumReceiveTimeout: TimeInterval? = nil) throws -> [String: Any] {
         let request: [String: Any] = [
             "id": UUID().uuidString,
             "method": method,
@@ -956,7 +966,7 @@ final class SocketClient {
             throw CLIError(message: "Failed to encode v2 request")
         }
 
-        let raw = try send(command: requestLine)
+        let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout)
 
         // The server may return plain-text errors (e.g., "ERROR: Access denied ...")
         // before the JSON protocol starts. Surface these directly instead of letting
@@ -1123,6 +1133,7 @@ enum CLICommandArgumentContract {
     case noArguments
     case focusPanel
     case readScreen
+    case waitSurface
     case setProgress
     case listLog
 }
@@ -2915,6 +2926,98 @@ struct ProgramaCLI {
                         print(self.jsonString(payload))
                     } else {
                         print((payload["text"] as? String) ?? "")
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["wait-surface"],
+                helpLines: ["wait-surface [--workspace <id|ref>] [--surface <id|ref>] (--pattern <regex> | --exit) [--timeout <seconds>] [--lines <n>]"],
+                argumentContract: .waitSurface,
+                detailedUsage: """
+                Usage: programa wait-surface [flags]
+
+                Block until a surface hits a condition, in one server-owned request -- no
+                polling loop needed. Answers as soon as the condition is met (or is already
+                true when the call arrives) or the timeout elapses.
+
+                Flags:
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+                  --pattern <regex>      Wait until output (screen + scrollback) matches this regex
+                  --exit                 Wait until the surface's child process exits
+                  --timeout <seconds>    Give up after this long (default: 30)
+                  --lines <n>            Cap how much scrollback --pattern rereads per check (default: 2000)
+
+                Exactly one of --pattern / --exit is required. A marker already present when the
+                call arrives (or a process that has already exited) resolves immediately --
+                `waited: false` in JSON output distinguishes that from an actual wait.
+
+                Example:
+                  programa wait-surface --pattern 'BUILD (SUCCEEDED|FAILED)' --timeout 120
+                  programa wait-surface --surface surface:2 --exit --timeout 10
+                """,
+                execute: { ctx in
+                    let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
+                    let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
+                    let (patternArg, rem2) = self.parseOption(rem1, name: "--pattern")
+                    let (timeoutArg, rem3) = self.parseOption(rem2, name: "--timeout")
+                    let (linesArg, rem4) = self.parseOption(rem3, name: "--lines")
+                    let exitFlag = rem4.contains("--exit")
+                    let trailing = rem4.filter { $0 != "--exit" }
+                    if !trailing.isEmpty {
+                        throw CLIError(message: "wait-surface: unexpected arguments: \(trailing.joined(separator: " "))")
+                    }
+                    guard (patternArg != nil) != exitFlag else {
+                        throw CLIError(message: "wait-surface requires exactly one of --pattern <regex> or --exit")
+                    }
+
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+
+                    var params: [String: Any] = [:]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+
+                    if let patternArg {
+                        params["pattern"] = patternArg
+                    } else {
+                        params["exit"] = true
+                    }
+
+                    var timeoutSeconds = 30.0
+                    if let timeoutArg {
+                        guard let parsed = Double(timeoutArg), parsed.isFinite, parsed > 0 else {
+                            throw CLIError(message: "wait-surface: --timeout must be a positive number of seconds")
+                        }
+                        timeoutSeconds = parsed
+                        params["timeout_ms"] = Int((parsed * 1000).rounded())
+                    }
+                    if let linesArg {
+                        guard let lineCount = Int(linesArg), lineCount > 0 else {
+                            throw CLIError(message: "wait-surface: --lines must be greater than 0")
+                        }
+                        params["lines"] = lineCount
+                    }
+
+                    // The server may legitimately hold this connection open for the full
+                    // --timeout; give the client-side socket read at least that long (plus a
+                    // buffer for the response round trip) rather than the default 15s.
+                    let payload = try ctx.client.sendV2(
+                        method: "surface.wait",
+                        params: params,
+                        minimumReceiveTimeout: timeoutSeconds + 5.0
+                    )
+                    if ctx.jsonOutput {
+                        print(self.jsonString(payload))
+                    } else if let match = payload["match"] as? String {
+                        print(match)
+                    } else if exitFlag {
+                        print("exited")
+                    } else {
+                        print("ok")
                     }
                 }
             ),
@@ -5425,7 +5528,7 @@ struct ProgramaCLI {
 
         // Commands with richer bespoke contracts are validated by their
         // dedicated cases in `validateArguments`.
-        case "ping", "focus-panel", "read-screen", "set-progress", "list-log":
+        case "ping", "focus-panel", "read-screen", "wait-surface", "set-progress", "list-log":
             return
 
         default:
@@ -5475,6 +5578,31 @@ struct ProgramaCLI {
             if let lines = parsed.options["lines"] {
                 guard let count = Int(lines), count > 0 else {
                     throw CLIError(message: "read-screen: --lines must be greater than 0")
+                }
+            }
+
+        case .waitSurface:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["workspace", "surface", "pattern", "timeout", "lines"],
+                booleanFlags: ["exit"],
+                allowEquals: false
+            )
+            guard parsed.positional.isEmpty else {
+                throw CLIError(message: "wait-surface: unexpected arguments: \(parsed.positional.joined(separator: " "))")
+            }
+            guard (parsed.options["pattern"] != nil) != (parsed.options["exit"] != nil) else {
+                throw CLIError(message: "wait-surface requires exactly one of --pattern <regex> or --exit")
+            }
+            if let timeout = parsed.options["timeout"] {
+                guard let seconds = Double(timeout), seconds.isFinite, seconds > 0 else {
+                    throw CLIError(message: "wait-surface: --timeout must be a positive number of seconds")
+                }
+            }
+            if let lines = parsed.options["lines"] {
+                guard let count = Int(lines), count > 0 else {
+                    throw CLIError(message: "wait-surface: --lines must be greater than 0")
                 }
             }
 
