@@ -1,0 +1,19 @@
+# Curated stable subset of tests_v2 run as a required PR-gating CI job
+# (scripts/run-tests-v2-ci.sh). Keep this list to fast, low-flake, pure-socket
+# tests. The full suite still runs manually on the VM via
+# scripts/run-tests-v2.sh.
+#
+# Do NOT add: test_ctrl_interactive.py, test_tab_dragging.py,
+# test_visual_screenshots.py, test_notifications.py.
+test_cli_id_format_defaults.py
+test_windows_api.py
+test_cli_identify_ref_resolution.py
+test_workspace_create_initial_env.py
+test_trigger_flash.py
+test_cli_new_workspace_command_queue.py
+test_cli_new_workspace_background_metadata.py
+test_surface_list_custom_titles.py
+test_read_screen_capture_pane_parity.py
+test_cli_browser_console_errors_text.py
+test_jsonrpc_strict_param_validation.py
+test_workspace_relative.py
