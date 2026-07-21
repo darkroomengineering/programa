@@ -62,7 +62,12 @@ def _test_pattern_resolves_after_delay(client: cmux, workspace_id: str, surface_
     """A command that sleeps 2s before printing its marker should still resolve the wait --
     proves surface.wait is actually watching, not just checking once and giving up."""
     marker = _new_marker("DELAYED")
-    client.send_surface(surface_id, f"sleep 2; echo {marker}\n")
+    # Split the marker with an empty shell string so the *typed command echo* (visible in the
+    # terminal immediately) never matches the pattern -- only the delayed echo output does.
+    # Without this the wait resolves instantly against the echoed command line (waited=False),
+    # which is exactly what CI showed on the first live run.
+    typed = f"{marker[:14]}''{marker[14:]}"
+    client.send_surface(surface_id, f"sleep 2; echo {typed}\n")
 
     started = time.time()
     result = _surface_wait(client, workspace_id, surface_id, pattern=marker, timeout_ms=8_000)
@@ -142,7 +147,9 @@ def _test_exit_condition(client: cmux, workspace_id: str) -> None:
     surface_id = client.new_surface(panel_type="terminal")
     _wait_for_surface_command_roundtrip(client, workspace_id, surface_id)
 
-    client.send_surface(surface_id, "exit\n")
+    # Delay the exit so the wait call is reliably registered before the shell dies; a bare
+    # `exit` can finish before surface.wait arrives, flipping waited to False on a slow runner.
+    client.send_surface(surface_id, "sleep 1; exit\n")
     result = _surface_wait(client, workspace_id, surface_id, exit_condition=True, timeout_ms=6_000)
     _must(result.get("condition") == "exit", f"expected condition=exit, got {result}")
     _must(result.get("waited") is True, f"expected waited=True, got {result}")
