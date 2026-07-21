@@ -212,6 +212,12 @@ jobs:
         run: |
           ./scripts/ci-run-unit-tests.sh
 
+      - name: Collect ghostty crash reports on failure
+        if: failure()
+        run: |
+          mkdir -p /tmp/programa-unit-xcresults
+          cp -R "$HOME/.local/state/ghostty/crash" /tmp/programa-unit-xcresults/ghostty-crash 2>/dev/null || true
+
       - name: Upload unit-test result bundles on failure
         if: failure()
         uses: actions/upload-artifact@v4
