@@ -101,7 +101,7 @@ def _test_pattern_already_present_resolves_immediately(client: cmux, workspace_i
     _must(elapsed < 1.0, f"an already-satisfied wait should return promptly, took {elapsed:.2f}s")
 
 
-def _test_concurrent_marker_is_not_missed(client: cmux, workspace_id: str, surface_id: str) -> None:
+def _test_concurrent_marker_is_not_missed(client: cmux, socket_path: str, workspace_id: str, surface_id: str) -> None:
     """The literal 'a parallel state change can't be missed' case from #166: fire the marker
     from a background thread with only a small jitter while the main thread issues
     surface.wait essentially concurrently, so the two race in wall-clock time. Whichever
@@ -110,9 +110,13 @@ def _test_concurrent_marker_is_not_missed(client: cmux, workspace_id: str, surfa
     errors: list[Exception] = []
 
     def _fire() -> None:
+        # The main thread's connection is parked inside the blocking surface.wait call, so
+        # the background echo MUST use its own connection -- sharing one interleaves the two
+        # request/response pairs on the same socket ("Mismatched response id" on CI).
         try:
             time.sleep(0.05)
-            client.send_surface(surface_id, f"echo {marker}\n")
+            with cmux(socket_path) as bg_client:
+                bg_client.send_surface(surface_id, f"echo {marker}\n")
         except Exception as exc:  # pragma: no cover - surfaced via errors list
             errors.append(exc)
 
@@ -169,7 +173,7 @@ def _run_once(socket_path: str) -> int:
 
             _test_pattern_resolves_after_delay(client, workspace_id, surface_id)
             _test_pattern_already_present_resolves_immediately(client, workspace_id, surface_id)
-            _test_concurrent_marker_is_not_missed(client, workspace_id, surface_id)
+            _test_concurrent_marker_is_not_missed(client, socket_path, workspace_id, surface_id)
             _test_pattern_timeout(client, workspace_id, surface_id)
             _test_exit_condition(client, workspace_id)
 
