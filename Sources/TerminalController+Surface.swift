@@ -901,7 +901,11 @@ extension TerminalController {
                 result = .err(code: "not_found", message: "No focused surface", data: nil)
                 return
             }
-            guard let terminalPanel = ws.terminalPanel(for: surfaceId) else {
+            guard let panel = ws.panels[surfaceId] else {
+                result = .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
+                return
+            }
+            guard let terminalPanel = panel as? TerminalPanel else {
                 result = .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
                 return
             }
@@ -961,7 +965,11 @@ extension TerminalController {
                 result = .err(code: "not_found", message: "No focused surface", data: nil)
                 return
             }
-            guard let terminalPanel = ws.terminalPanel(for: surfaceId) else {
+            guard let panel = ws.panels[surfaceId] else {
+                result = .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
+                return
+            }
+            guard let terminalPanel = panel as? TerminalPanel else {
                 result = .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
                 return
             }
@@ -1003,7 +1011,11 @@ extension TerminalController {
                 result = .err(code: "not_found", message: "No focused surface", data: nil)
                 return
             }
-            guard let terminalPanel = ws.terminalPanel(for: surfaceId) else {
+            guard let panel = ws.panels[surfaceId] else {
+                result = .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
+                return
+            }
+            guard let terminalPanel = panel as? TerminalPanel else {
                 result = .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
                 return
             }
@@ -1063,7 +1075,11 @@ extension TerminalController {
                 result = .err(code: "not_found", message: "No focused surface", data: nil)
                 return
             }
-            guard let terminalPanel = ws.terminalPanel(for: surfaceId) else {
+            guard let panel = ws.panels[surfaceId] else {
+                result = .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
+                return
+            }
+            guard let terminalPanel = panel as? TerminalPanel else {
                 result = .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
                 return
             }

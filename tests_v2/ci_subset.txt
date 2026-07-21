@@ -17,3 +17,4 @@ test_read_screen_capture_pane_parity.py
 test_cli_browser_console_errors_text.py
 test_jsonrpc_strict_param_validation.py
 test_workspace_relative.py
+test_surface_send_unknown_id.py

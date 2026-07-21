@@ -2890,7 +2890,7 @@ struct ProgramaCLI {
                     }
 
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceArg = sfArg ?? (wsArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
 
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
@@ -2939,7 +2939,7 @@ struct ProgramaCLI {
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceArg = sfArg ?? (wsArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
                     let rawText = rem1.dropFirst(rem1.first == "--" ? 1 : 0).joined(separator: " ")
                     guard !rawText.isEmpty else { throw CLIError(message: "send requires text") }
                     let text = self.unescapeSendText(rawText)
@@ -2973,7 +2973,7 @@ struct ProgramaCLI {
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceArg = sfArg ?? (wsArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
                     let keyArgs = rem1.first == "--" ? Array(rem1.dropFirst()) : rem1
                     guard let key = keyArgs.first else { throw CLIError(message: "send-key requires a key") }
                     var params: [String: Any] = ["key": key]
