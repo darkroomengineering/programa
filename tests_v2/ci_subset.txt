@@ -6,7 +6,8 @@
 # Do NOT add: test_ctrl_interactive.py, test_tab_dragging.py,
 # test_visual_screenshots.py, test_notifications.py.
 test_cli_id_format_defaults.py
-test_windows_api.py
+# test_windows_api.py — excluded on CI: moved surfaces report in_window=false on
+# GitHub runners even with a virtual display; needs runner-side investigation (#169).
 test_cli_identify_ref_resolution.py
 test_workspace_create_initial_env.py
 test_trigger_flash.py
