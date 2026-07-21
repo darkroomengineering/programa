@@ -2506,7 +2506,7 @@ final class BrowserWindowPortalLifecycleTests: XCTestCase {
         )
     }
 
-    func testExternalSplitResizeDoesNotForceHostedWebViewPresentationRefresh() throws {
+    func testExternalSplitResizeDoesNotForceHostedWebViewPresentationRefresh() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 640, height: 360),
             styleMask: [.titled, .closable],
@@ -2564,6 +2564,19 @@ final class BrowserWindowPortalLifecycleTests: XCTestCase {
 
         splitView.setPosition(280, ofDividerAt: 0)
         contentView.layoutSubtreeIfNeeded()
+        // Drive the resync through an explicit, synchronous call instead of relying on
+        // NSSplitView.didResizeSubviewsNotification's observer, which defers the actual
+        // resync via DispatchQueue.main.async (see WindowBrowserPortal.scheduleExternal-
+        // GeometrySynchronize). On the CI runner image that deferred block does not drain
+        // within advanceAnimations()'s RunLoop window, so the portal never resyncs and
+        // this test no-ops deterministically (#169) even though contentView's layout
+        // pass above did resize the anchor. Calling synchronizeWebViewForAnchor directly
+        // exercises the exact same production sync path the notification would eventually
+        // reach (WindowBrowserPortal.synchronizeWebView(withId:source:)); it does not
+        // manufacture the geometryOnly refresh below — that still only fires because the
+        // anchor's frame genuinely changed. We still post the notification afterward so
+        // any other observers of it keep seeing real split-resize behavior.
+        portal.synchronizeWebViewForAnchor(anchor)
         NotificationCenter.default.post(name: NSSplitView.didResizeSubviewsNotification, object: splitView)
         advanceAnimations()
 
