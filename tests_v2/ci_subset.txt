@@ -20,3 +20,4 @@ test_jsonrpc_strict_param_validation.py
 test_workspace_relative.py
 test_surface_send_unknown_id.py
 test_close_surface_env_precedence.py
+test_surface_wait.py
