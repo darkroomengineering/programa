@@ -5279,6 +5279,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             onJumpToLatestUnread: { [weak self] in
                 self?.jumpToLatestUnread()
             },
+            getBlockedAgentCount: { [weak self] in
+                self?.blockedAgentCount() ?? 0
+            },
+            onJumpToBlockedAgent: { [weak self] in
+                _ = self?.jumpToFirstBlockedAgent()
+            },
             onCheckForUpdates: { [weak self] in
                 self?.checkForUpdates(nil)
             },
@@ -5801,6 +5807,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     func isNotificationsPopoverShown() -> Bool {
         titlebarAccessoryController.isNotificationsPopoverShown()
+    }
+
+    // MARK: - Agent status badges (issue #164, v1 hook tier)
+    //
+    // "Blocked" surfaces are surfaced in the menu bar as "N agents blocked" alongside the
+    // unread count. State is fed exclusively by installed lifecycle hooks
+    // (Workspace.panelAgentStates, set via surface.report_agent_state) — there is no
+    // heuristic/screen-rule fallback in this tier.
+
+    /// Every currently-blocked surface across all windows, as (workspaceId, surfaceId)
+    /// pairs. Falls back to the active `tabManager`'s tabs when no window context is
+    /// registered yet (mirrors `openNotificationFallback`'s early-boot fallback).
+    func blockedAgentSurfaces() -> [(tabId: UUID, surfaceId: UUID)] {
+        var seenWorkspaceIds: Set<UUID> = []
+        var results: [(tabId: UUID, surfaceId: UUID)] = []
+
+        func collect(from workspaces: [Workspace]) {
+            for workspace in workspaces {
+                guard seenWorkspaceIds.insert(workspace.id).inserted else { continue }
+                for (panelId, state) in workspace.panelAgentStates where state == .blocked {
+                    results.append((tabId: workspace.id, surfaceId: panelId))
+                }
+            }
+        }
+
+        for context in mainWindowContexts.values {
+            collect(from: context.tabManager.tabs)
+        }
+        if let tabManager {
+            collect(from: tabManager.tabs)
+        }
+        return results
+    }
+
+    func blockedAgentCount() -> Int {
+        blockedAgentSurfaces().count
+    }
+
+    /// Focuses the first blocked surface found, reusing the same cross-window focus path
+    /// as notification jump-to (`openNotification`).
+    @discardableResult
+    func jumpToFirstBlockedAgent() -> Bool {
+        guard let target = blockedAgentSurfaces().first else { return false }
+        return openNotification(tabId: target.tabId, surfaceId: target.surfaceId, notificationId: nil)
     }
 
     func jumpToLatestUnread() {

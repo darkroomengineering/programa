@@ -192,6 +192,51 @@ struct TabItemView: View, Equatable {
         return usesInvertedActiveForeground ? Color.white.opacity(0.25) : programaAccentColor()
     }
 
+    // MARK: - Agent status badge (issue #164, v1 hook tier)
+    //
+    // Worst-of aggregate across every surface in this workspace (a single blocked surface
+    // makes the whole tab read as blocked). Fed exclusively by installed lifecycle hooks
+    // (Claude Code / Codex / OpenCode) via `Workspace.panelAgentStates` — no in-body
+    // subscription needed: `tab` is read directly (same pattern as `tab.progress` /
+    // `tab.isPinned` above), and `panelAgentStates` is already wired into
+    // `sidebarObservationPublisher` (Workspace.swift), so `.onReceive` below already
+    // triggers the re-render this relies on. No change to TabItemView's Equatable
+    // conformance or precomputed `let` parameters is needed or should be made — see
+    // CLAUDE.md typing-latency-sensitive paths.
+    private var agentActivityState: AgentActivityState? {
+        tab.aggregateAgentState
+    }
+
+    private var agentStateBadgeSystemImage: String? {
+        switch agentActivityState {
+        case .blocked: return "exclamationmark.circle.fill"
+        case .working: return "bolt.fill"
+        case .idle: return "moon.fill"
+        case nil: return nil
+        }
+    }
+
+    private var agentStateBadgeColor: Color {
+        switch agentActivityState {
+        case .blocked: return .red
+        case .working: return programaAccentColor()
+        case .idle, nil: return activeSecondaryColor(0.6)
+        }
+    }
+
+    private var agentStateBadgeAccessibilityLabel: String {
+        switch agentActivityState {
+        case .blocked:
+            return String(localized: "sidebar.agentState.blocked", defaultValue: "Agent blocked, needs your input")
+        case .working:
+            return String(localized: "sidebar.agentState.working", defaultValue: "Agent working")
+        case .idle:
+            return String(localized: "sidebar.agentState.idle", defaultValue: "Agent idle")
+        case nil:
+            return ""
+        }
+    }
+
     private var activeProgressTrackColor: Color {
         usesInvertedActiveForeground ? Color.white.opacity(0.15) : Color.secondary.opacity(0.2)
     }
@@ -371,6 +416,14 @@ struct TabItemView: View, Equatable {
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundColor(activeSecondaryColor(0.8))
                         .safeHelp(protectedWorkspaceTooltip)
+                }
+
+                if let agentStateBadgeSystemImage {
+                    Image(systemName: agentStateBadgeSystemImage)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(agentStateBadgeColor)
+                        .safeHelp(agentStateBadgeAccessibilityLabel)
+                        .accessibilityLabel(Text(agentStateBadgeAccessibilityLabel))
                 }
 
                 Text(tab.title)
