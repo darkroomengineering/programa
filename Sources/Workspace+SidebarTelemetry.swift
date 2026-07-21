@@ -157,6 +157,28 @@ extension Workspace {
         }
     }
 
+    /// Reports a lifecycle-hook-driven agent activity state for a surface (issue #164, v1
+    /// hook tier). Hooks are the sole source of truth here — no heuristic/screen-rule
+    /// fallback runs in this tier.
+    func updatePanelAgentState(panelId: UUID, state: AgentActivityState) {
+        guard panelAgentStates[panelId] != state else { return }
+        panelAgentStates[panelId] = state
+#if DEBUG
+        dlog(
+            "surface.agentState workspace=\(id.uuidString.prefix(5)) " +
+            "panel=\(panelId.uuidString.prefix(5)) state=\(state.rawValue)"
+        )
+#endif
+    }
+
+    func clearPanelAgentState(panelId: UUID) {
+        guard panelAgentStates[panelId] != nil else { return }
+        panelAgentStates.removeValue(forKey: panelId)
+#if DEBUG
+        dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
+#endif
+    }
+
     func resetSidebarContext(reason: String = "unspecified") {
         statusEntries.removeAll()
         agentPIDs.removeAll()
@@ -167,6 +189,7 @@ extension Workspace {
         panelGitBranches.removeAll()
         pullRequest = nil
         panelPullRequests.removeAll()
+        panelAgentStates.removeAll()
         surfaceListeningPorts.removeAll()
         listeningPorts.removeAll()
         metadataBlocks.removeAll()
@@ -279,6 +302,7 @@ extension Workspace {
         remoteDetectedSurfaceIds = remoteDetectedSurfaceIds.filter { validSurfaceIds.contains($0) }
         panelShellActivityStates = panelShellActivityStates.filter { validSurfaceIds.contains($0.key) }
         panelPullRequests = panelPullRequests.filter { validSurfaceIds.contains($0.key) }
+        panelAgentStates = panelAgentStates.filter { validSurfaceIds.contains($0.key) }
         syncRemotePortScanTTYs()
         recomputeListeningPorts()
     }
