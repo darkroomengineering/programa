@@ -138,15 +138,17 @@ programa notify --title "Helper agent done" --body "Tests pass, ready for review
 
 ## Waiting on a server, a test run, or another agent
 
-There's no blocking "wait until this surface goes idle" primitive yet — poll for now:
+`wait-surface` blocks server-side until a surface's output matches a regex or its process exits, so you don't have to poll:
 
 ```bash
-until programa read-screen --surface "$handle" --lines 1 | grep -q '\$ *$'; do
-  sleep 2
-done
+# Block until the build in a sibling pane finishes, up to 2 minutes
+programa wait-surface --surface "$handle" --pattern 'BUILD (SUCCEEDED|FAILED)' --timeout 120
+
+# Block until the process in a surface exits
+programa wait-surface --surface "$handle" --exit --timeout 600
 ```
 
-Match on whatever the process actually prints ("PASS", "Server started", a prompt returning), not a fixed sleep duration.
+Exactly one of `--pattern <regex>` or `--exit` is required. Match on whatever the process actually prints ("PASS", "Server started", a prompt returning), not a fixed sleep duration. The wait is answered by the app the moment the condition is met — there is no missed-event window even if the output appears while the call is being issued.
 
 For two cooperating processes, `wait-for` (tmux-compatible) gives you a named rendezvous instead of scraping a log — one side signals, the other blocks until it does:
 
@@ -160,7 +162,7 @@ programa wait-for build-complete --timeout 120
 
 This is a filesystem-based signal, not a verdict on *why* the other side signaled — pair it with a `read-screen` check if you need to confirm success vs. failure.
 
-A first-class "block until a surface's process changes state" primitive is planned but not shipped. Don't call `surface.wait` or `programa wait` today — they don't exist yet. Poll or use `wait-for` until that lands.
+A "block until the agent in this surface goes idle / blocked" wait (on agent state, not raw output) is planned but not shipped yet — use `--pattern`/`--exit` or `wait-for` until that lands.
 
 ## Reference
 
