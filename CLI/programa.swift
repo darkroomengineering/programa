@@ -5761,33 +5761,45 @@ struct ProgramaCLI {
 
         let isDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
 
-        let c1 = trueColor(0, 212, 255)
-        let c2 = trueColor(24, 181, 250)
-        let c3 = trueColor(48, 150, 245)
-        let c4 = trueColor(72, 119, 241)
-        let c5 = trueColor(96, 88, 239)
-        let c6 = trueColor(110, 73, 238)
-        let c7 = trueColor(124, 58, 237)
-
+        // Row colors, light → dark red (develop gradient), plus the accent cursor cell.
+        let r1: String, r2: String, r3: String, r4: String, cursor: String
+        // Wordmark letter ramp (8 letters).
+        let w: [String]
         let tagline: String
         let subdued: String
 
         if isDark {
-            tagline = trueColor(130, 130, 140)
+            r1 = trueColor(255, 107, 82)   // #FF6B52
+            r2 = trueColor(240, 64, 42)    // #F0402A
+            r3 = trueColor(220, 46, 30)    // #DC2E1E
+            r4 = trueColor(194, 31, 22)    // #C21F16
+            cursor = trueColor(255, 138, 102) // #FF8A66
+            w = [trueColor(255, 107, 82), trueColor(248, 90, 62), trueColor(240, 74, 46),
+                 trueColor(230, 60, 36), trueColor(220, 46, 30), trueColor(210, 38, 26),
+                 trueColor(194, 31, 22), trueColor(194, 31, 22)]
+            tagline = trueColor(140, 130, 136)
             subdued = "\u{001B}[2m"
         } else {
+            r1 = trueColor(232, 68, 46)    // #E8442E
+            r2 = trueColor(212, 47, 31)    // #D42F1F
+            r3 = trueColor(194, 31, 22)    // #C21F16
+            r4 = trueColor(162, 24, 17)    // #A21811
+            cursor = trueColor(232, 68, 46) // #E8442E
+            w = [trueColor(232, 68, 46), trueColor(222, 56, 38), trueColor(212, 47, 31),
+                 trueColor(202, 39, 26), trueColor(194, 31, 22), trueColor(178, 27, 19),
+                 trueColor(162, 24, 17), trueColor(162, 24, 17)]
             tagline = trueColor(90, 90, 98)
             subdued = trueColor(100, 100, 108)
         }
 
+        let wordmark = "\(w[0])p\(w[1])r\(w[2])o\(w[3])g\(w[4])r\(w[5])a\(w[6])m\(w[7])a\(reset)"
+
+        // Shade-ramp cells are doubled so they stay square in 1:2 terminal cells.
         let logo = """
-        \(c1)  ::\(reset)
-        \(c2)    ::::\(reset)              \(c1)p\(c2)r\(c3)o\(c4)g\(c5)r\(c6)a\(c7)m\(c7)a\(reset)
-        \(c3)      ::::::\(reset)
-        \(c4)        ::::::\(reset)        \(tagline)the open source terminal\(reset)
-        \(c5)      ::::::\(reset)          \(tagline)built for coding agents\(reset)
-        \(c6)    ::::\(reset)
-        \(c7)  ::\(reset)
+        \(r1)\u{2596}\u{2596} \u{2591}\u{2591} \u{2592}\u{2592} \u{2593}\u{2593}\(reset)        \(wordmark)
+        \(r2)\u{2591}\u{2591} \u{2592}\u{2592} \u{2593}\u{2593} \u{2588}\u{2588}\(reset)
+        \(r3)\u{2592}\u{2592} \u{2593}\u{2593} \u{2588}\u{2588} \u{2588}\u{2588}\(reset)        \(tagline)the open source terminal\(reset)
+        \(r4)\u{2593}\u{2593} \u{2588}\u{2588} \u{2588}\u{2588} \(cursor)\u{2588}\u{2588}\(reset)        \(tagline)built for coding agents\(reset)
         """
 
         let shortcuts = """

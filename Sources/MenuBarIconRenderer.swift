@@ -607,7 +607,8 @@ enum MenuBarIconRenderer {
         image.lockFocus()
         defer { image.unlockFocus() }
 
-        let glyphRect = NSRect(x: 1.2, y: 1.5, width: 11.6, height: 15.0)
+        // Template art is 16px drawn on integer pixels; keep the rect integral.
+        let glyphRect = NSRect(x: 1, y: 1, width: 16, height: 16)
         drawGlyph(in: glyphRect)
 
         if let text = badgeText {
@@ -619,32 +620,11 @@ enum MenuBarIconRenderer {
     }
 
     private static func drawGlyph(in rect: NSRect) {
-        // Match the canonical cmux center-mark path from Icon Center Image Artwork.svg.
-        let srcMinX: CGFloat = 384.0
-        let srcMinY: CGFloat = 255.0
-        let srcWidth: CGFloat = 369.0
-        let srcHeight: CGFloat = 513.0
-
-        func map(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
-            let nx = (x - srcMinX) / srcWidth
-            let ny = (y - srcMinY) / srcHeight
-            return NSPoint(
-                x: rect.minX + nx * rect.width,
-                y: rect.minY + (1.0 - ny) * rect.height
-            )
-        }
-
-        let path = NSBezierPath()
-        path.move(to: map(384.0, 255.0))
-        path.line(to: map(753.0, 511.5))
-        path.line(to: map(384.0, 768.0))
-        path.line(to: map(384.0, 654.0))
-        path.line(to: map(582.692, 511.5))
-        path.line(to: map(384.0, 369.0))
-        path.close()
-
-        NSColor.black.setFill()
-        path.fill()
+        // Dedicated 16px template cut (pure black + alpha); the dither
+        // characters in the app icon break below ~24px, so never scale
+        // other assets down here.
+        guard let template = NSImage(named: "MenuBarIconTemplate") else { return }
+        template.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
     }
 
     private static func drawBadge(text: String, in rect: NSRect, config: MenuBarBadgeRenderConfig) {
