@@ -12,6 +12,8 @@ on:
       - "CLI/**"
       - "daemon/**"
       - "programaTests/**"
+      - "tests/**"
+      - "tests_v2/**"
       - "vendor/**"
       - "scripts/**"
       - "GhosttyTabs.xcodeproj/**"
