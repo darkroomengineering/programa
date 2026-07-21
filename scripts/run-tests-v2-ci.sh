@@ -1,35 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This runner is intended for the UTM macOS VM (ssh cmux-vm).
-# It is intentionally guarded so we don't accidentally kill the host user's programa instances.
-if [ "$(id -un)" != "cmux" ]; then
-  echo "ERROR: This script is intended to be run on the cmux-vm (user: cmux)." >&2
-  echo "Run via: ssh cmux-vm 'cd /Users/cmux/GhosttyTabs && ./scripts/run-tests-v2.sh'" >&2
-  exit 2
-fi
+# CI runner for a curated stable subset of tests_v2 (see tests_v2/ci_subset.txt).
+#
+# Unlike scripts/run-tests-v2.sh (which is guarded to only run on the cmux-vm
+# and runs the entire tests_v2 suite), this script is intended to run as a
+# required PR-gating job on GitHub-hosted macOS runners. It expects the
+# `programa` scheme to already be built (see the `tests-v2-subset` job in
+# .github/workflows/ci.yml) and locates the built app in DerivedData rather
+# than building it itself.
 
 cd "$(dirname "$0")/.."
 
-DERIVED_DATA_PATH="$HOME/Library/Developer/Xcode/DerivedData/programa-tests-v2"
-APP="$DERIVED_DATA_PATH/Build/Products/Debug/Programa DEV.app"
-RUN_TAG="tests-v2"
+RUN_TAG="ci-v2"
+SUBSET_FILE="tests_v2/ci_subset.txt"
 
-echo "== build =="
-# Work around stale explicit-module cache artifacts (notably Sentry headers) that can
-# intermittently break incremental VM builds with "file ... has been modified since the
-# module file ... was built".
-rm -rf "$DERIVED_DATA_PATH/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules" || true
-xcodebuild \
-  -project GhosttyTabs.xcodeproj \
-  -scheme programa \
-  -configuration Debug \
-  -destination "platform=macOS" \
-  -derivedDataPath "$DERIVED_DATA_PATH" \
-  build >/dev/null
+APP="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/Debug/Programa DEV.app" -print -quit 2>/dev/null || true)"
+if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+  echo "ERROR: Programa DEV.app not found in DerivedData" >&2
+  exit 1
+fi
 
-if [ ! -d "$APP" ]; then
-  echo "ERROR: Programa DEV.app not found at expected path: $APP" >&2
+if [ ! -f "$SUBSET_FILE" ]; then
+  echo "ERROR: Subset file not found: $SUBSET_FILE" >&2
   exit 1
 fi
 
@@ -51,7 +44,8 @@ launch_and_wait() {
   # Force socket mode for deterministic automation runs, independent of prior user settings.
   defaults write com.darkroom.programa.debug socketControlMode -string full >/dev/null 2>&1 || true
 
-  # Launch directly with UI test mode enabled so startup follows deterministic test codepaths.
+  # Launch the app binary directly (not `open`, which can silently flake on CI runners) with
+  # UI test mode enabled so startup follows deterministic test codepaths.
   PROGRAMA_TAG="$RUN_TAG" PROGRAMA_UI_TEST_MODE=1 "$APP/Contents/MacOS/Programa DEV" >/dev/null 2>&1 &
 
   SOCK=""
@@ -69,10 +63,6 @@ launch_and_wait() {
   fi
   export PROGRAMA_SOCKET_PATH="$SOCK"
   export PROGRAMA_SOCKET="$SOCK"
-
-  # Ensure LaunchServices has a visible/main window attached for rendering checks.
-  PROGRAMA_TAG="$RUN_TAG" open "$APP" >/dev/null 2>&1 || true
-  sleep 0.5
 
   echo "== wait ready =="
   python3 - <<'PY'
@@ -102,7 +92,6 @@ while time.time() < deadline:
     try:
         _ = client.current_workspace()
         # Many focus-sensitive tests require the main window to be key.
-        # `open "$APP"` does not reliably activate the app when launched from SSH.
         try:
             client.activate_app()
         except Exception:
@@ -220,13 +209,19 @@ run_test_with_retry() {
   return 1
 }
 
-echo "== tests (v2) =="
+echo "== tests (v2 CI subset) =="
 fail=0
-for f in tests_v2/test_*.py; do
-  base=$(basename "$f")
-  if [ "$base" = "test_ctrl_interactive.py" ]; then
-    echo "SKIP $f"
-    continue
+while IFS= read -r base; do
+  [ -z "$base" ] && continue
+  case "$base" in
+    \#*) continue ;;
+  esac
+
+  f="tests_v2/$base"
+  if [ ! -f "$f" ]; then
+    echo "ERROR: Listed test file not found: $f" >&2
+    fail=1
+    break
   fi
 
   echo "== launch ($base) =="
@@ -236,7 +231,7 @@ for f in tests_v2/test_*.py; do
     fail=1
     break
   fi
-done
+done < "$SUBSET_FILE"
 
 echo "== cleanup =="
 cleanup
