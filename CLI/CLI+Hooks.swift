@@ -327,6 +327,7 @@ extension ProgramaCLI {
                     icon: "pause.circle.fill",
                     color: "#8E8E93"
                 )
+                reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .idle)
                 print("OK")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -343,6 +344,12 @@ extension ProgramaCLI {
                 fallback: workspaceArg,
                 client: client
             )
+            let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+                preferred: mappedSession?.surfaceId,
+                fallback: surfaceArg,
+                workspaceId: workspaceId,
+                client: client
+            )
             _ = try client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
             try setClaudeStatus(
                 client: client,
@@ -351,6 +358,7 @@ extension ProgramaCLI {
                 icon: "bolt.fill",
                 color: "#4C8DFF"
             )
+            reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .working)
             print("OK")
 
         case "notification", "notify":
@@ -404,6 +412,12 @@ extension ProgramaCLI {
                 icon: "bell.fill",
                 color: "#4C8DFF"
             )
+            reportAgentState(
+                client: client,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                state: agentStateForClassifiedNotificationSubtitle(summary.subtitle)
+            )
             print("OK")
 
         case "session-end":
@@ -436,6 +450,9 @@ extension ProgramaCLI {
                 _ = try? clearClaudeStatus(client: client, workspaceId: workspaceId)
                 _ = try? client.sendV2(method: "workspace.clear_agent_pid", params: ["workspace_id": workspaceId, "key": "claude_code"])
                 _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
+                if !consumedSession.surfaceId.isEmpty {
+                    clearAgentState(client: client, workspaceId: workspaceId, surfaceId: consumedSession.surfaceId)
+                }
             }
             print("OK")
 
@@ -474,6 +491,13 @@ extension ProgramaCLI {
                 return
             }
 
+            let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+                preferred: mappedSession?.surfaceId,
+                fallback: surfaceArg,
+                workspaceId: workspaceId,
+                client: client
+            )
+
             _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
 
             let statusValue: String
@@ -492,6 +516,7 @@ extension ProgramaCLI {
                 color: "#4C8DFF",
                 pid: claudePid
             )
+            reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .working)
             print("OK")
 
         case "help", "--help", "-h":
@@ -529,6 +554,60 @@ extension ProgramaCLI {
 
     private func clearClaudeStatus(client: SocketClient, workspaceId: String) throws {
         _ = try client.sendV2(method: "workspace.clear_status", params: ["workspace_id": workspaceId, "key": "claude_code"])
+    }
+
+    // MARK: - Agent activity state (issue #164, v1 hook tier)
+    //
+    // Reports the working/blocked/idle state surfaced as tab/sidebar/menu-bar badges.
+    // Hooks are the sole source of truth for this tier — there is no screen-rule fallback,
+    // so every call site below maps a concrete, unambiguous hook signal to a state.
+    // Strict-blocked rule: only an explicit permission/approval/question signal maps to
+    // "blocked"; anything ambiguous (errors, generic "needs attention", unclassified
+    // messages) maps to "idle" rather than risk a false blocked badge.
+    //
+    // `CLIAgentActivityState` mirrors `AgentActivityState` (Sources/AgentActivityState.swift)
+    // by raw value only — the `programa-cli` target is a separate build target from the app
+    // (GhosttyTabs) and cannot import its types, so both sides agree on the wire format
+    // ("working" | "blocked" | "idle") rather than sharing a Swift type.
+    private enum CLIAgentActivityState: String {
+        case working
+        case blocked
+        case idle
+    }
+
+    /// Maps a hook notification's classified subtitle (see classifyClaudeNotification /
+    /// classifyCodexNotification) to an agent activity state. Only "Permission" (approval
+    /// prompt) and "Waiting" (AskUserQuestion / idle-prompt) are genuine blocking signals.
+    private func agentStateForClassifiedNotificationSubtitle(_ subtitle: String) -> CLIAgentActivityState {
+        switch subtitle {
+        case "Permission", "Waiting":
+            return .blocked
+        default:
+            return .idle
+        }
+    }
+
+    /// Reports a surface's agent activity state via the socket. Best-effort: benign if the
+    /// surface/workspace can't be resolved (e.g. TabManager already torn down).
+    private func reportAgentState(
+        client: SocketClient,
+        workspaceId: String,
+        surfaceId: String,
+        state: CLIAgentActivityState
+    ) {
+        _ = try? client.sendV2(method: "surface.report_agent_state", params: [
+            "workspace_id": workspaceId,
+            "surface_id": surfaceId,
+            "state": state.rawValue,
+        ])
+    }
+
+    /// Clears a surface's reported agent activity state (hook session-end / process exit).
+    private func clearAgentState(client: SocketClient, workspaceId: String, surfaceId: String) {
+        _ = try? client.sendV2(method: "surface.clear_agent_state", params: [
+            "workspace_id": workspaceId,
+            "surface_id": surfaceId,
+        ])
     }
 
     private func resolvePreferredWorkspaceIdForClaudeHook(
@@ -2254,6 +2333,13 @@ extension ProgramaCLI {
                 icon: "bolt.fill",
                 color: "#4C8DFF"
             )
+            let promptSubmitSurfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+                preferred: mappedSession?.surfaceId,
+                fallback: surfaceArg,
+                workspaceId: workspaceId,
+                client: client
+            )
+            reportAgentState(client: client, workspaceId: workspaceId, surfaceId: promptSubmitSurfaceId, state: .working)
             print("{}")
 
         case "stop":
@@ -2325,6 +2411,7 @@ extension ProgramaCLI {
                     icon: "pause.circle.fill",
                     color: "#8E8E93"
                 )
+                reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .idle)
                 print("{}")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -2395,6 +2482,12 @@ extension ProgramaCLI {
                 icon: "bell.fill",
                 color: "#4C8DFF"
             )
+            reportAgentState(
+                client: client,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                state: agentStateForClassifiedNotificationSubtitle(summary.subtitle)
+            )
             print("{}")
 
         case "session-end":
@@ -2429,6 +2522,9 @@ extension ProgramaCLI {
                     _ = try? clearCodexStatus(client: client, workspaceId: workspaceId)
                     _ = try? client.sendV2(method: "workspace.clear_agent_pid", params: ["workspace_id": workspaceId, "key": agentPIDKey])
                     _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
+                    if !consumedSession.surfaceId.isEmpty {
+                        clearAgentState(client: client, workspaceId: workspaceId, surfaceId: consumedSession.surfaceId)
+                    }
                 }
                 print("{}")
             } catch {
@@ -2702,6 +2798,13 @@ extension ProgramaCLI {
                 icon: "bolt.fill",
                 color: "#4C8DFF"
             )
+            let promptSubmitSurfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+                preferred: mappedSession?.surfaceId,
+                fallback: surfaceArg,
+                workspaceId: workspaceId,
+                client: client
+            )
+            reportAgentState(client: client, workspaceId: workspaceId, surfaceId: promptSubmitSurfaceId, state: .working)
             print("{}")
 
         case "stop":
@@ -2774,6 +2877,7 @@ extension ProgramaCLI {
                     icon: "pause.circle.fill",
                     color: "#8E8E93"
                 )
+                reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .idle)
                 print("{}")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -2840,6 +2944,10 @@ extension ProgramaCLI {
                 icon: "bell.fill",
                 color: "#4C8DFF"
             )
+            // OpenCode's notification hook is only ever invoked for permission.asked (see
+            // openCodePluginJS below) — unlike Claude/Codex, there's no ambiguous "Attention"
+            // catch-all to classify, so this is unconditionally a blocking approval prompt.
+            reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .blocked)
             print("{}")
 
         case "session-end":
@@ -2870,6 +2978,9 @@ extension ProgramaCLI {
                     _ = try? clearOpenCodeStatus(client: client, workspaceId: workspaceId)
                     _ = try? client.sendV2(method: "workspace.clear_agent_pid", params: ["workspace_id": workspaceId, "key": agentPIDKey])
                     _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
+                    if !consumedSession.surfaceId.isEmpty {
+                        clearAgentState(client: client, workspaceId: workspaceId, surfaceId: consumedSession.surfaceId)
+                    }
                 }
                 print("{}")
             } catch {

@@ -1829,6 +1829,28 @@ class TabManager: ObservableObject {
         return tab.updatePanelShellActivityState(panelId: surfaceId, state: state)
     }
 
+    /// Reports a lifecycle-hook-driven agent activity state (working/blocked/idle) for a
+    /// surface (issue #164, v1 hook tier). See AgentActivityState.swift.
+    ///
+    /// - Returns: `true` if the workspace/panel exist and the state was applied.
+    @discardableResult
+    func updateSurfaceAgentState(
+        tabId: UUID,
+        surfaceId: UUID,
+        state: AgentActivityState
+    ) -> Bool {
+        guard let tab = workspace(withId: tabId), tab.panels[surfaceId] != nil else { return false }
+        tab.updatePanelAgentState(panelId: surfaceId, state: state)
+        return true
+    }
+
+    /// Clears a previously reported agent activity state for a surface (e.g. on hook
+    /// session-end). No-ops if the workspace/panel don't exist.
+    func clearSurfaceAgentState(tabId: UUID, surfaceId: UUID) {
+        guard let tab = workspace(withId: tabId) else { return }
+        tab.clearPanelAgentState(panelId: surfaceId)
+    }
+
     private func normalizeDirectory(_ directory: String) -> String {
         let trimmed = directory.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return directory }

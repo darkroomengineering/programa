@@ -16,6 +16,13 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
     private let onShowNotifications: () -> Void
     private let onOpenNotification: (TerminalNotification) -> Void
     private let onJumpToLatestUnread: () -> Void
+    /// Issue #164, v1 hook tier: how many surfaces are currently blocked (waiting on a
+    /// permission/approval/question) across all windows, and how to jump to one of them.
+    /// Both are plain closures (not a Combine publisher) — recomputed on every `refreshUI()`,
+    /// same cadence as the unread count, which is refreshed on notification-store changes and
+    /// on menu open (`menuWillOpen`).
+    private let getBlockedAgentCount: () -> Int
+    private let onJumpToBlockedAgent: () -> Void
     private let onCheckForUpdates: () -> Void
     private let onOpenPreferences: () -> Void
     private let onQuitApp: () -> Void
@@ -23,6 +30,7 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
     private let buildHintTitle: String?
 
     private let stateHintItem = NSMenuItem(title: String(localized: "statusMenu.noUnread", defaultValue: "No unread notifications"), action: nil, keyEquivalent: "")
+    private let blockedAgentsItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let buildHintItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let notificationListSeparator = NSMenuItem.separator()
     private let notificationSectionSeparator = NSMenuItem.separator()
@@ -42,6 +50,8 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
         onShowNotifications: @escaping () -> Void,
         onOpenNotification: @escaping (TerminalNotification) -> Void,
         onJumpToLatestUnread: @escaping () -> Void,
+        getBlockedAgentCount: @escaping () -> Int = { 0 },
+        onJumpToBlockedAgent: @escaping () -> Void = {},
         onCheckForUpdates: @escaping () -> Void,
         onOpenPreferences: @escaping () -> Void,
         onQuitApp: @escaping () -> Void
@@ -50,6 +60,8 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
         self.onShowNotifications = onShowNotifications
         self.onOpenNotification = onOpenNotification
         self.onJumpToLatestUnread = onJumpToLatestUnread
+        self.getBlockedAgentCount = getBlockedAgentCount
+        self.onJumpToBlockedAgent = onJumpToBlockedAgent
         self.onCheckForUpdates = onCheckForUpdates
         self.onOpenPreferences = onOpenPreferences
         self.onQuitApp = onQuitApp
@@ -81,6 +93,12 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
 
         stateHintItem.isEnabled = false
         menu.addItem(stateHintItem)
+
+        blockedAgentsItem.target = self
+        blockedAgentsItem.action = #selector(jumpToBlockedAgentAction)
+        blockedAgentsItem.isHidden = true
+        menu.addItem(blockedAgentsItem)
+
         if let buildHintTitle {
             buildHintItem.title = buildHintTitle
             buildHintItem.isEnabled = false
@@ -155,6 +173,16 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
 
         stateHintItem.title = snapshot.stateHintTitle
 
+        let blockedAgentCount = getBlockedAgentCount()
+        blockedAgentsItem.isHidden = blockedAgentCount <= 0
+        if blockedAgentCount > 0 {
+            blockedAgentsItem.title = BlockedAgentsMenuFormatter.title(blockedAgentCount: blockedAgentCount)
+            blockedAgentsItem.toolTip = String(
+                localized: "statusMenu.blockedAgents.tooltip",
+                defaultValue: "Click to jump to a blocked agent"
+            )
+        }
+
         applyShortcut(KeyboardShortcutSettings.shortcut(for: .showNotifications), to: showNotificationsItem)
         applyShortcut(KeyboardShortcutSettings.shortcut(for: .jumpToUnread), to: jumpToUnreadItem)
 
@@ -225,6 +253,10 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
 
     @objc private func jumpToUnreadAction() {
         onJumpToLatestUnread()
+    }
+
+    @objc private func jumpToBlockedAgentAction() {
+        onJumpToBlockedAgent()
     }
 
     @objc private func markAllReadAction() {
@@ -300,6 +332,24 @@ enum NotificationMenuSnapshotBuilder {
             return String(localized: "statusMenu.unreadCount.one", defaultValue: "1 unread notification")
         default:
             return String(localized: "statusMenu.unreadCount.other", defaultValue: "\(unreadCount) unread notifications")
+        }
+    }
+}
+
+/// Formats the "N agents blocked" menu item (issue #164, v1 hook tier), shown alongside
+/// the unread-notification count when at least one surface is waiting on a
+/// permission/approval/question. Hidden entirely at zero — a persistent "0 blocked" line
+/// would just be more chrome for the same "no blocked agents" fact `stateHintItem` already
+/// signals via the unread-count row.
+enum BlockedAgentsMenuFormatter {
+    static func title(blockedAgentCount: Int) -> String {
+        switch blockedAgentCount {
+        case ..<1:
+            return ""
+        case 1:
+            return String(localized: "statusMenu.blockedAgents.one", defaultValue: "1 agent blocked")
+        default:
+            return String(localized: "statusMenu.blockedAgents.other", defaultValue: "\(blockedAgentCount) agents blocked")
         }
     }
 }

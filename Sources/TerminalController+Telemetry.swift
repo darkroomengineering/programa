@@ -280,6 +280,54 @@ extension TerminalController {
         ])
     }
 
+    /// Reports a lifecycle-hook-driven agent activity state for a surface (issue #164, v1
+    /// hook tier). Called exclusively by the shipped Claude Code/Codex/OpenCode hook
+    /// wrappers (CLI+Hooks.swift) — there is no heuristic/screen-rule fallback in this tier.
+    func v2SurfaceReportAgentState(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return v2InvalidParam("workspace_id")
+        }
+        guard let surfaceId = v2UUID(params, "surface_id") else {
+            return v2InvalidParam("surface_id")
+        }
+        guard let rawState = v2RawString(params, "state"),
+              let state = AgentActivityState(rawValue: rawState.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) else {
+            return .err(code: "invalid_params", message: "Invalid state — use: working, blocked, idle", data: nil)
+        }
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+            tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "state": state.rawValue,
+        ])
+    }
+
+    func v2SurfaceClearAgentState(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2UUID(params, "workspace_id") else {
+            return v2InvalidParam("workspace_id")
+        }
+        guard let surfaceId = v2UUID(params, "surface_id") else {
+            return v2InvalidParam("surface_id")
+        }
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+            tabManager.clearSurfaceAgentState(tabId: workspaceId, surfaceId: sid)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+        ])
+    }
+
     func v2SurfaceReportPullRequest(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2UUID(params, "workspace_id") else {
             return v2InvalidParam("workspace_id")

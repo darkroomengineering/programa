@@ -106,6 +106,9 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var panelGitBranches: [UUID: SidebarGitBranchState] = [:]
     @Published var pullRequest: SidebarPullRequestState?
     @Published var panelPullRequests: [UUID: SidebarPullRequestState] = [:]
+    /// Per-surface agent activity state (working/blocked/idle), reported exclusively by
+    /// installed lifecycle hooks (issue #164, v1 hook tier). See AgentActivityState.swift.
+    @Published var panelAgentStates: [UUID: AgentActivityState] = [:]
     @Published var surfaceListeningPorts: [UUID: [Int]] = [:]
     var agentListeningPorts: [Int] = []
     @Published var remoteConfiguration: WorkspaceRemoteConfiguration?
@@ -198,6 +201,7 @@ final class Workspace: Identifiable, ObservableObject {
             sidebarObservationSignal($panelGitBranches),
             sidebarObservationSignal($pullRequest),
             sidebarObservationSignal($panelPullRequests),
+            sidebarObservationSignal($panelAgentStates),
             sidebarObservationSignal($remoteConfiguration),
             sidebarObservationSignal($remoteConnectionState),
             sidebarObservationSignal($remoteConnectionDetail),

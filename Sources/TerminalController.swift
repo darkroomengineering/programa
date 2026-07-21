@@ -1674,6 +1674,10 @@ class TerminalController {
             return v2Result(id: id, self.v2SurfaceReportPorts(params: params))
         case "surface.clear_ports":
             return v2Result(id: id, self.v2SurfaceClearPorts(params: params))
+        case "surface.report_agent_state":
+            return v2Result(id: id, self.v2SurfaceReportAgentState(params: params))
+        case "surface.clear_agent_state":
+            return v2Result(id: id, self.v2SurfaceClearAgentState(params: params))
 
         // Panes
         case "pane.list":
