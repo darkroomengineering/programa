@@ -1553,6 +1553,13 @@ class GhosttyApp {
             // Keep host-close async to avoid re-entrant close/deinit while Ghostty is still
             // dispatching this action callback.
             DispatchQueue.main.async {
+                // #166: fire any `surface.wait exit=true` watchers before (or even if) the panel
+                // close below happens -- always on main, same as `addWaiter`/removeWaiter, so
+                // ordering against a concurrently-arriving `surface.wait` call is well-defined
+                // (see SurfaceExitWaitRegistry's doc comment).
+                if let callbackSurfaceId {
+                    SurfaceExitWaitRegistry.shared.fire(surfaceId: callbackSurfaceId)
+                }
                 guard let app = AppDelegate.shared else { return }
                 if let callbackTabId,
                    let callbackSurfaceId,

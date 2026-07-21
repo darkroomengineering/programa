@@ -1891,6 +1891,8 @@ class TerminalController {
 
         case "surface.read_text":
             return v2Result(id: id, self.v2SurfaceReadText(params: params))
+        case "surface.wait":
+            return v2Result(id: id, self.v2SurfaceWait(params: params))
 
 #if DEBUG
         // Debug / test-only

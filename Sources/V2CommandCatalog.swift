@@ -79,6 +79,7 @@ enum V2CommandCatalog {
         "surface.report_tty",
         "surface.ports_kick",
         "surface.read_text",
+        "surface.wait",
         "surface.clear_history",
         "surface.trigger_flash",
         "surface.report_pwd",
