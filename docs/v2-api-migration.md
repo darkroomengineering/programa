@@ -62,6 +62,7 @@ Surfaces / Splits:
 - refresh_surfaces -> `surface.refresh`
 - surface_health -> `surface.health`
 - trigger_flash -> `surface.trigger_flash` (new in v2)
+- (no v1 equivalent) -> `surface.wait` (new in v2, see "surface.wait" below)
 
 Surface Telemetry (report_*/ports/git/pr — off-main parse, main.async mutate; see "Socket
 command threading policy" in the root `CLAUDE.md`):
@@ -142,6 +143,67 @@ Debug / Test-only:
 - flash_count/reset -> `debug.flash.*`
 - panel_snapshot/panel_snapshot_reset -> `debug.panel_snapshot.*`
 - screenshot -> `debug.window.screenshot`
+
+## `surface.wait` (#166)
+
+Server-owned, event-driven wait on a single surface: block the connection (with a timeout)
+until a condition is met, instead of the caller polling `surface.read_text` in a loop. One
+request, one response — no subscription/unsubscribe pair to manage. CLI: `programa
+wait-surface`.
+
+Request params (exactly one of `pattern` / `exit` is required):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `workspace_id` / `surface_id` | string (id or ref) | no | Same resolution as other `surface.*` methods; defaults to the current workspace's focused surface. |
+| `pattern` | string | one of `pattern`/`exit` | Regex (ICU/`NSRegularExpression` syntax) matched against the surface's current text (screen + scrollback) on every check. |
+| `exit` | bool | one of `pattern`/`exit` | Wait for the surface's child process to exit. |
+| `timeout_ms` | int | no | Default `30000`. Also accepts `timeout` (same units) for convenience. |
+| `lines` | int | no | Caps how many trailing lines of scrollback `pattern` rereads per check (default `2000`); does not apply to `exit`. |
+
+Response (`ok: true`):
+
+```json
+{
+  "id": "1",
+  "ok": true,
+  "result": {
+    "workspace_id": "...", "workspace_ref": "workspace:1",
+    "surface_id": "...", "surface_ref": "surface:2",
+    "window_id": "...", "window_ref": "window:1",
+    "condition": "pattern",
+    "waited": true,
+    "match": "BUILD SUCCEEDED"
+  }
+}
+```
+
+- `waited: false` means the condition was already true the instant the call arrived (a marker
+  already present in scrollback, or the surface had already exited) — the caller never actually
+  blocked.
+- `match` is only present for `pattern` waits and is the substring the regex matched.
+- Timeout: `{"ok": false, "error": {"code": "timeout", "message": "...", "data": {"timeout_ms": N}}}`.
+- If the target surface doesn't exist (or, for `pattern`, is closed while the wait is in
+  flight), the response is `not_found`, not a timeout — callers shouldn't have to wait out the
+  full timeout to learn the surface is gone.
+
+Backpressure / disconnect: `surface.wait` holds its socket connection's dedicated thread for up
+to `timeout_ms` (each connection is handled on its own thread — see `TerminalController.
+handleClient` — so this never blocks other connections or the main thread). If the client
+disconnects mid-wait, the in-flight `write()` of the eventual response simply fails and is
+ignored; for the `exit` condition the registered watcher in `SurfaceExitWaitRegistry` still fires
+and is still cleaned up (the callback is a fire-and-forget semaphore signal with nothing left to
+notify). There is no server-side cap on concurrent waits; each is an independent blocked thread.
+
+No-missed-events guarantee: the "is the condition already true?" check and "install the watcher"
+step happen inside the same synchronous main-thread hop (`v2MainSync`), so a pattern marker
+printed the instant the call arrives, or a child-exit racing the call, is always observed — see
+the doc comments on `SurfaceExitWaitRegistry` and `TerminalController.v2SurfaceWait` in
+`Sources/TerminalController+SurfaceWait.swift`. The `pattern` condition itself is polled
+internally (Ghostty doesn't expose a push-based "surface content changed" callback the way it
+does for child-exit) at a fixed ~100ms interval on the connection's own thread; `exit` is fully
+event-driven with no polling, driven off the same `GHOSTTY_ACTION_SHOW_CHILD_EXITED` action that
+already closes the panel on process exit.
 
 ## Tests
 
