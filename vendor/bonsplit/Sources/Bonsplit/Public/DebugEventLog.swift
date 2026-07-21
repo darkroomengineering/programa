@@ -24,19 +24,32 @@ public final class DebugEventLog: @unchecked Sendable {
         return sanitized.isEmpty ? "debug" : sanitized
     }
 
-    private static func resolveLogPath() -> String {
-        let env = ProcessInfo.processInfo.environment
-
+    static func resolveLogPath(env: [String: String] = ProcessInfo.processInfo.environment) -> String {
+        if let explicit = env["PROGRAMA_DEBUG_LOG"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !explicit.isEmpty {
+            return explicit
+        }
         if let explicit = env["CMUX_DEBUG_LOG"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !explicit.isEmpty {
             return explicit
         }
 
+        if let tag = env["PROGRAMA_TAG"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !tag.isEmpty {
+            return "/tmp/programa-debug-\(sanitizePathToken(tag)).log"
+        }
         if let tag = env["CMUX_TAG"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !tag.isEmpty {
             return "/tmp/cmux-debug-\(sanitizePathToken(tag)).log"
         }
 
+        if let socketPath = env["PROGRAMA_SOCKET_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !socketPath.isEmpty {
+            let socketBase = URL(fileURLWithPath: socketPath).deletingPathExtension().lastPathComponent
+            if socketBase.hasPrefix("programa-debug-") {
+                return "/tmp/\(socketBase).log"
+            }
+        }
         if let socketPath = env["CMUX_SOCKET_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !socketPath.isEmpty {
             let socketBase = URL(fileURLWithPath: socketPath).deletingPathExtension().lastPathComponent
@@ -46,11 +59,10 @@ public final class DebugEventLog: @unchecked Sendable {
         }
 
         if let bundleId = Bundle.main.bundleIdentifier,
-           bundleId != "com.cmuxterm.app.debug" {
-            return "/tmp/cmux-debug-\(sanitizePathToken(bundleId)).log"
+           bundleId != "com.cmuxterm.app.debug", bundleId != "com.darkroom.programa.debug" {
+            return "/tmp/programa-debug-\(sanitizePathToken(bundleId)).log"
         }
-
-        return "/tmp/cmux-debug.log"
+        return "/tmp/programa-debug.log"
     }
 
     public func log(_ msg: String) {

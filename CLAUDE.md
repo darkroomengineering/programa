@@ -131,6 +131,7 @@ tail -f "$(cat /tmp/programa-last-debug-log-path 2>/dev/null || echo /tmp/progra
 - Mouse/UI events logged inline in views (ContentView, BrowserPanelView, etc.)
 - Focus events: `focus.panel`, `focus.bonsplit`, `focus.firstResponder`, `focus.moveFocus`
 - Bonsplit events: `tab.select`, `tab.close`, `tab.dragStart`, `tab.drop`, `pane.focus`, `pane.drop`, `divider.dragStart`
+- `GhosttyApp.logBackground` background events log to a separate companion file with `-bg` inserted before `.log`, e.g. `/tmp/programa-debug-<tag>-bg.log` (override with `PROGRAMA_DEBUG_BG_LOG`)
 
 ## Regression test commit policy
 
