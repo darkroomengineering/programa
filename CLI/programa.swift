@@ -1626,7 +1626,8 @@ struct ProgramaCLI {
                        programa codex <install-hooks|uninstall-hooks>  (legacy aliases, still supported)
 
                 Install or remove Programa's Codex notification hooks in
-                ~/.codex/hooks.json (or $CODEX_HOME/hooks.json).
+                ~/.codex/hooks.json (or $CODEX_HOME/hooks.json), and the
+                `programa` agent skill (SKILL.md) into ~/.agents/skills/programa/.
                 """,
                 execute: nil
             ),
@@ -1638,7 +1639,9 @@ struct ProgramaCLI {
                 Usage: programa claude <install-integration|uninstall-integration>
 
                 Install or remove Programa's persistent Claude Code hooks in
-                ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json).
+                ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json),
+                and the `programa` agent skill (SKILL.md) into
+                ~/.claude/skills/programa/.
                 Unlike the runtime wrapper, this makes the integration work from
                 any terminal, not just programa's.
                 """,
@@ -1652,7 +1655,9 @@ struct ProgramaCLI {
                 Usage: programa opencode <install-integration|uninstall-integration>
 
                 Install or remove Programa's OpenCode plugin in
-                ~/.config/opencode/plugins/programa.js (or $OPENCODE_CONFIG_DIR/plugins/programa.js).
+                ~/.config/opencode/plugins/programa.js (or $OPENCODE_CONFIG_DIR/plugins/programa.js),
+                and the `programa` agent skill (SKILL.md) into
+                ~/.config/opencode/skills/programa/ (or $OPENCODE_CONFIG_DIR/skills/programa/).
                 OpenCode auto-loads local plugin files, so no opencode.json edit or
                 npm install is needed.
                 """,
