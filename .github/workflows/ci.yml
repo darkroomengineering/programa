@@ -312,6 +312,15 @@ jobs:
           PROGRAMA_SKIP_ZIG_BUILD: "1"
         run: ./scripts/ci-run-unit-tests.sh
 
+      - name: Upload unit-test result bundles on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-xcresults-${{ github.run_attempt }}
+          path: /tmp/programa-unit-xcresults/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Run bundled Ghostty theme picker helper regression
         run: |
           set -euo pipefail

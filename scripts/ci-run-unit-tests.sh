@@ -18,8 +18,16 @@ TEST_SCOPE="${PROGRAMA_UNIT_TEST_SCOPE:-serial}"
 STATEFUL_TEST_CLASS="programaTests/AppDelegateShortcutRoutingTests"
 STATEFUL_TEST_SKIP="${STATEFUL_TEST_CLASS}/testCmdWClosesWindowWhenClosingLastSurfaceInLastWorkspace"
 
+RESULT_BUNDLE_ROOT="${PROGRAMA_RESULT_BUNDLE_ROOT:-/tmp/programa-unit-xcresults}"
+RESULT_BUNDLE_SEQ=0
+
 run_unit_tests() {
   local mode="${1:-serial}"
+  # Pin the result bundle to a known location so CI can upload it on failure;
+  # xcodebuild refuses to overwrite an existing bundle, so each invocation
+  # (mode x retry attempt) gets its own sequence-numbered path.
+  RESULT_BUNDLE_SEQ=$((RESULT_BUNDLE_SEQ + 1))
+  mkdir -p "$RESULT_BUNDLE_ROOT"
   local -a xcode_args=(
     "$XCODEBUILD_COMMAND"
     -project "$ROOT_DIR/GhosttyTabs.xcodeproj"
@@ -28,6 +36,7 @@ run_unit_tests() {
     -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR"
     -disableAutomaticPackageResolution
     -destination "platform=macOS"
+    -resultBundlePath "$RESULT_BUNDLE_ROOT/${mode}-${RESULT_BUNDLE_SEQ}.xcresult"
   )
 
   case "$mode" in

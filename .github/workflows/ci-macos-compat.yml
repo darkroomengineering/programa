@@ -212,6 +212,15 @@ jobs:
         run: |
           ./scripts/ci-run-unit-tests.sh
 
+      - name: Upload unit-test result bundles on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-xcresults-${{ matrix.os }}-${{ github.run_attempt }}
+          path: /tmp/programa-unit-xcresults/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Create virtual display
         if: matrix.smoke
         run: |
