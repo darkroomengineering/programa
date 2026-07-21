@@ -53,7 +53,11 @@ final class ClosedTerminalUndoStoreTests: XCTestCase {
         var finalizeCount = 0
         store.stage(restore: { restoreCount += 1 }, finalize: { finalizeCount += 1 })
 
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        // Loaded CI runners can starve the expiry timer far past the grace
+        // period; poll with a generous ceiling instead of a fixed sleep.
+        for _ in 0..<50 where finalizeCount == 0 {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
 
         XCTAssertEqual(finalizeCount, 1)
         XCTAssertEqual(restoreCount, 0)

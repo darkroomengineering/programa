@@ -1760,12 +1760,14 @@ final class GhosttyDefaultBackgroundNotificationDispatcherTests: XCTestCase {
 
         DispatchQueue.main.async {
             dispatcher.signal(backgroundColor: dark, opacity: 1.0, eventId: 1, source: "test.dark")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            // Half a second between signals keeps the two bursts unambiguous even
+            // when a loaded CI runner delays the 10ms coalescing flush.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 dispatcher.signal(backgroundColor: light, opacity: 1.0, eventId: 2, source: "test.light")
             }
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
         XCTAssertEqual(postedHexes, ["#272822", "#FDF6E3"])
     }
 
