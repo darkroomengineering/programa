@@ -166,7 +166,7 @@ for _ in range(3):
         surfaces = client.list_surfaces()
         if not surfaces:
             raise RuntimeError("new workspace has no surfaces")
-        client.focus_surface(0)
+        client.focus_surface(surfaces[0][1])
         break
     except Exception as e:
         bootstrap_last = e
