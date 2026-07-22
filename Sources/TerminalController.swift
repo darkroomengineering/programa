@@ -116,6 +116,9 @@ class TerminalController {
     private static let focusIntentV2Methods: Set<String> = [
         "window.focus",
         "workspace.select",
+        "review.open",
+        "worktree.create",
+        "worktree.open",
         "workspace.next",
         "workspace.previous",
         "workspace.last",
@@ -824,6 +827,11 @@ class TerminalController {
     func start(tabManager: TabManager, socketPath: String, accessMode: SocketControlMode) {
         self.tabManager = tabManager
         self.accessMode = accessMode
+
+        // Screen-manifest agent detection (docs/plans/screen-manifest-detection.md): lazily
+        // starts its own background sampling thread, independent of the socket listener below --
+        // this is simply a convenient, always-reached app-bootstrap point to kick it off once.
+        AgentScreenDetectionEngine.shared.startIfNeeded()
 
         let existing = withListenerState {
             (isRunning: isRunning, socketPath: self.socketPath, acceptLoopAlive: acceptLoopAlive)
@@ -1608,6 +1616,24 @@ class TerminalController {
         case "workspace.reset_sidebar":
             return v2Result(id: id, self.v2WorkspaceResetSidebar(params: params))
 
+        // Worktrees
+        case "worktree.create":
+            return v2Result(id: id, self.v2WorktreeCreate(params: params))
+        case "worktree.open":
+            return v2Result(id: id, self.v2WorktreeOpen(params: params))
+        case "worktree.remove":
+            return v2Result(id: id, self.v2WorktreeRemove(params: params))
+        case "worktree.list":
+            return v2Result(id: id, self.v2WorktreeList(params: params))
+
+        // Layouts
+        case "layout.save":
+            return v2Result(id: id, self.v2LayoutSave(params: params))
+        case "layout.apply":
+            return v2Result(id: id, self.v2LayoutApply(params: params))
+        case "layout.list":
+            return v2Result(id: id, self.v2LayoutList(params: params))
+
         // Settings
         case "settings.open":
             return v2Result(id: id, self.v2SettingsOpen(params: params))
@@ -1893,6 +1919,20 @@ class TerminalController {
         // Markdown
         case "markdown.open":
             return v2Result(id: id, self.v2MarkdownOpen(params: params))
+
+        // Review (agent diff review panel)
+        case "review.open":
+            return v2Result(id: id, self.v2ReviewOpen(params: params))
+        case "review.refresh":
+            return v2Result(id: id, self.v2ReviewRefresh(params: params))
+        case "review.comment.add":
+            return v2Result(id: id, self.v2ReviewCommentAdd(params: params))
+        case "review.comment.remove":
+            return v2Result(id: id, self.v2ReviewCommentRemove(params: params))
+        case "review.comment.list":
+            return v2Result(id: id, self.v2ReviewCommentList(params: params))
+        case "review.send_comments":
+            return v2Result(id: id, self.v2ReviewSendComments(params: params))
 
         case "surface.read_text":
             return v2Result(id: id, self.v2SurfaceReadText(params: params))

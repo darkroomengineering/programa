@@ -294,9 +294,23 @@ extension TerminalController {
               let state = AgentActivityState(rawValue: rawState.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) else {
             return .err(code: "invalid_params", message: "Invalid state — use: working, blocked, idle", data: nil)
         }
+        // Callers (the shipped hook wrappers) never pass this -- it defaults to `.hooks`, which
+        // is what makes hook reports authoritative over the screen-manifest engine's `.inferred`
+        // writes (see Workspace.updatePanelAgentState). Accepting it explicitly here (rather than
+        // hardcoding `.hooks`) keeps the wire symmetric with the `source` sibling field this
+        // response now echoes.
+        let source: AgentStateSource
+        if let rawSource = v2RawString(params, "source") {
+            guard let parsedSource = AgentStateSource(rawValue: rawSource.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) else {
+                return .err(code: "invalid_params", message: "Invalid source — use: hooks, inferred", data: nil)
+            }
+            source = parsedSource
+        } else {
+            source = .hooks
+        }
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
-            tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state)
+            tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source)
         }
 
         return .ok([
@@ -305,6 +319,7 @@ extension TerminalController {
             "surface_id": surfaceId.uuidString,
             "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
             "state": state.rawValue,
+            "source": source.rawValue,
         ])
     }
 

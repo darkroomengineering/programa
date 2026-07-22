@@ -157,22 +157,42 @@ extension Workspace {
         }
     }
 
-    /// Reports a lifecycle-hook-driven agent activity state for a surface (issue #164, v1
-    /// hook tier). Hooks are the sole source of truth here — no heuristic/screen-rule
-    /// fallback runs in this tier.
-    func updatePanelAgentState(panelId: UUID, state: AgentActivityState) {
-        guard panelAgentStates[panelId] != state else { return }
+    /// Reports an agent activity state for a surface (issue #164 hook tier; screen-manifest
+    /// `.inferred` tier added by docs/plans/screen-manifest-detection.md). This is the single
+    /// funnel every report path goes through — `TabManager.updateSurfaceAgentState` (called by
+    /// both `TerminalController+Telemetry.swift`'s hook-driven `v2SurfaceReportAgentState` and
+    /// `AgentScreenDetectionEngine`'s screen-manifest sampler) is the only caller.
+    ///
+    /// Hooks-always-win precedence (source defaults to `.hooks` so every pre-existing call site
+    /// compiles and behaves unchanged):
+    /// - `source == .hooks` always writes — state and source both update unconditionally, even
+    ///   if the state value itself is unchanged, so a surface's source can flip from `.inferred`
+    ///   back to `.hooks` the instant a hook speaks.
+    /// - `source == .inferred` only writes if the surface's currently recorded source is `nil`
+    ///   (never reported) or already `.inferred`. If it's `.hooks`, the write is silently
+    ///   dropped — belt-and-suspenders: the screen-manifest engine's Phase A should already skip
+    ///   sampling a hooks-owned surface, but this is the authoritative guard regardless.
+    func updatePanelAgentState(panelId: UUID, state: AgentActivityState, source: AgentStateSource = .hooks) {
+        let currentState = panelAgentStates[panelId]
+        let currentSource = panelAgentStateSources[panelId]
+
+        if source == .inferred, let currentSource, currentSource == .hooks {
+            return
+        }
+
+        guard currentState != state || currentSource != source else { return }
         panelAgentStates[panelId] = state
+        panelAgentStateSources[panelId] = source
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
         // AgentStateWaitRegistry's doc comment in TerminalController+SurfaceWait.swift for why
         // this is the single safe place to fire from.
-        AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: state)
-        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: state)
+        AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: state, source: source)
+        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: state, source: source)
 #if DEBUG
         dlog(
             "surface.agentState workspace=\(id.uuidString.prefix(5)) " +
-            "panel=\(panelId.uuidString.prefix(5)) state=\(state.rawValue)"
+            "panel=\(panelId.uuidString.prefix(5)) state=\(state.rawValue) source=\(source.rawValue)"
         )
 #endif
     }
@@ -180,8 +200,9 @@ extension Workspace {
     func clearPanelAgentState(panelId: UUID) {
         guard panelAgentStates[panelId] != nil else { return }
         panelAgentStates.removeValue(forKey: panelId)
-        AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil)
-        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: nil)
+        panelAgentStateSources.removeValue(forKey: panelId)
+        AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
+        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: nil, source: nil)
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
 #endif
@@ -203,9 +224,10 @@ extension Workspace {
         // instead of observing the transition to "no state".
         let clearedAgentSurfaceIds = Array(panelAgentStates.keys)
         panelAgentStates.removeAll()
+        panelAgentStateSources.removeAll()
         for surfaceId in clearedAgentSurfaceIds {
-            AgentStateWaitRegistry.shared.notify(surfaceId: surfaceId, newState: nil)
-            SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: surfaceId, state: nil)
+            AgentStateWaitRegistry.shared.notify(surfaceId: surfaceId, newState: nil, source: nil)
+            SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: surfaceId, state: nil, source: nil)
         }
         surfaceListeningPorts.removeAll()
         listeningPorts.removeAll()
@@ -320,6 +342,7 @@ extension Workspace {
         panelShellActivityStates = panelShellActivityStates.filter { validSurfaceIds.contains($0.key) }
         panelPullRequests = panelPullRequests.filter { validSurfaceIds.contains($0.key) }
         panelAgentStates = panelAgentStates.filter { validSurfaceIds.contains($0.key) }
+        panelAgentStateSources = panelAgentStateSources.filter { validSurfaceIds.contains($0.key) }
         syncRemotePortScanTTYs()
         recomputeListeningPorts()
     }

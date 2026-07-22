@@ -37,6 +37,22 @@ enum AgentActivityState: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// Which tier reported a surface's current `AgentActivityState` (screen-manifest detection,
+/// v2 — see docs/plans/screen-manifest-detection.md). Additive sibling to `agent_state`
+/// wherever it appears on the wire (`surface.list`/`surface.wait`/`subscribe`) — `agent_state`
+/// itself never changes shape, per docs/v2-api-migration.md's "never repurpose an existing
+/// field" discipline and the exact-string-equality tests that already assert on it.
+///
+/// Hooks always win: `Workspace.updatePanelAgentState` (Workspace+SidebarTelemetry.swift)
+/// silently drops an `.inferred` write when the surface's currently recorded source is
+/// `.hooks` — a hook-managed surface's state is authoritative the instant a hook speaks, and
+/// the screen-manifest engine should not even be sampling it (see
+/// AgentScreenDetectionEngine.swift's Phase A demotion).
+enum AgentStateSource: String, Codable, CaseIterable, Sendable {
+    case hooks
+    case inferred
+}
+
 extension Workspace {
     /// Worst-of aggregate agent state across every surface in this workspace, or `nil` if
     /// no surface has a hook-managed agent state at all (no badge should render).

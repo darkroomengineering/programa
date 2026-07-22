@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "agent": "claude-code",
+  "display_name": "Claude Code",
+  "recognize": {
+    "process_names": ["claude"],
+    "screen_patterns": ["Claude Code v\\d", "esc to interrupt", "Do you want to"]
+  },
+  "states": [
+    {
+      "bucket": "blocked",
+      "priority": 100,
+      "anchor_last_n_lines": 12,
+      "patterns": [
+        "Do you want to .*\\?",
+        "❯\\s*1\\.\\s*Yes",
+        "\\(y/n\\)"
+      ],
+      "confidence": "verified",
+      "source_notes": "Permission/approval prompt box. Given directly in the feature spec; re-verify wording each Claude Code minor version."
+    },
+    {
+      "bucket": "working",
+      "priority": 50,
+      "anchor_last_n_lines": 6,
+      "patterns": [
+        "✻ Thinking…",
+        "esc to interrupt",
+        "⏺ "
+      ],
+      "confidence": "verified",
+      "source_notes": "Claude Code rotates whimsical verbs (Thinking/Pondering/Crunching/Cerebrating...) before the ellipsis -- pattern intentionally matches the fixed '✻ ' + ellipsis shape and the 'esc to interrupt' suffix rather than enumerating every verb, so new verbs don't require a manifest update. '⏺ ' prefixes tool-call result lines."
+    },
+    {
+      "bucket": "done",
+      "priority": 10,
+      "anchor_last_n_lines": 4,
+      "patterns": [
+        "✗ Auto-update failed"
+      ],
+      "confidence": "needs_verification",
+      "source_notes": "Auto-update-failed banner sometimes shown near the idle prompt box; only useful as a done/idle-adjacent signal, not a reliable done marker on its own. Verify against a current build."
+    },
+    {
+      "bucket": "idle",
+      "priority": 0,
+      "anchor_last_n_lines": 4,
+      "patterns": [
+        "\\n❯\\s*$"
+      ],
+      "confidence": "verified",
+      "source_notes": "Bottom input prompt caret. Verify no leading/trailing box-drawing characters get included by the text accessor at narrow terminal widths."
+    }
+  ]
+}

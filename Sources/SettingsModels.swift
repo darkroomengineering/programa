@@ -152,6 +152,21 @@ enum ClaudeCodeIntegrationSettings {
     }
 }
 
+/// Screen-manifest agent detection (docs/plans/screen-manifest-detection.md): pattern-matches
+/// the terminal buffer against per-agent manifests to infer `working`/`blocked`/`idle` for
+/// agents with no installed lifecycle hooks (Gemini CLI, Copilot CLI, etc.). Defaults on;
+/// hooks-managed surfaces (Claude Code, Codex, OpenCode with hooks installed) are never affected
+/// -- hooks always win (see `Workspace.updatePanelAgentState`).
+enum AgentScreenDetectionSettings {
+    static let enabledKey = "agentScreenDetectionEnabled"
+    static let defaultEnabled = true
+    private static let flag = UserDefaultsFlag(key: enabledKey, defaultValue: defaultEnabled)
+
+    static func enabled(defaults: UserDefaults = .standard) -> Bool {
+        flag.isEnabled(defaults: defaults)
+    }
+}
+
 enum WelcomeSettings {
     static let shownKey = "programaWelcomeShown"
 }

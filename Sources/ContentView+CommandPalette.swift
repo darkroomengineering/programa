@@ -543,6 +543,8 @@ extension ContentView {
             return String(localized: "commandPalette.kind.browser", defaultValue: "Browser")
         case .markdown:
             return String(localized: "commandPalette.kind.markdown", defaultValue: "Markdown")
+        case .review:
+            return String(localized: "commandPalette.kind.review", defaultValue: "Review")
         }
     }
     func commandPaletteSurfaceKeywords(for panelType: PanelType) -> [String] {
@@ -553,6 +555,8 @@ extension ContentView {
             return ["browser", "web", "page"]
         case .markdown:
             return ["markdown", "note", "preview"]
+        case .review:
+            return ["review", "diff", "comments"]
         }
     }
     func resolveCommandPaletteTerminalOpenTargets(

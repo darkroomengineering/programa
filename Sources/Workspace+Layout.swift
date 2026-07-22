@@ -9,6 +9,7 @@ import CryptoKit
 import Darwin
 import Network
 import CoreText
+import WebKit
 
 @MainActor
 private final class PendingTerminalInputState {
@@ -17,6 +18,100 @@ private final class PendingTerminalInputState {
 }
 
 extension Workspace {
+
+    /// Applies a named layout from `store` (named-layout configs, see
+    /// docs/plans/worktree-and-layouts.md) into this workspace. Shared by `layout.apply` and
+    /// `worktree.create --layout` -- both just need "apply this saved layout with this
+    /// baseCwd" once the target workspace already exists. Returns false if no such layout
+    /// exists (caller surfaces this as `layout_not_found`).
+    @discardableResult
+    func applyNamedLayout(name: String, baseCwd: String, store: ProgramaLayoutStore) -> Bool {
+        guard let saved = store.load(name: name) else { return false }
+        applyCustomLayout(saved.layout, baseCwd: baseCwd)
+        return true
+    }
+
+    /// Captures this workspace's live pane/split tree back into a `ProgramaLayoutNode`, the
+    /// reverse direction of `applyCustomLayout`. Used by `layout.save`. v1 cuts (documented,
+    /// not oversights -- see docs/plans/worktree-and-layouts.md): `command`/`env`/`focus` are
+    /// never captured (no live signal for "what's currently running" in a panel, only its
+    /// cwd/URL); panes with zero capturable surfaces (e.g. markdown-only, not yet supported by
+    /// `ProgramaSurfaceType`) are dropped, which can collapse a split down to its remaining
+    /// child or return nil entirely if nothing was capturable.
+    func captureCustomLayout() -> ProgramaLayoutNode? {
+        captureLayoutNode(from: bonsplitController.treeSnapshot(), baseCwd: currentDirectory)
+    }
+
+    private func captureLayoutNode(from node: ExternalTreeNode, baseCwd: String) -> ProgramaLayoutNode? {
+        switch node {
+        case .pane(let paneNode):
+            let surfaces = captureSurfaceDefinitions(fromPaneTabs: paneNode.tabs, baseCwd: baseCwd)
+            guard !surfaces.isEmpty else { return nil }
+            return .pane(ProgramaPaneDefinition(surfaces: surfaces))
+
+        case .split(let splitNode):
+            let first = captureLayoutNode(from: splitNode.first, baseCwd: baseCwd)
+            let second = captureLayoutNode(from: splitNode.second, baseCwd: baseCwd)
+            switch (first, second) {
+            case (.some(let first), .some(let second)):
+                guard let direction = ProgramaSplitDirection(rawValue: splitNode.orientation) else { return second }
+                return .split(ProgramaSplitDefinition(direction: direction, split: splitNode.dividerPosition, children: [first, second]))
+            case (.some(let only), nil), (nil, .some(let only)):
+                return only
+            case (nil, nil):
+                return nil
+            }
+        }
+    }
+
+    private func captureSurfaceDefinitions(fromPaneTabs tabs: [ExternalTab], baseCwd: String) -> [ProgramaSurfaceDefinition] {
+        tabs.compactMap { tab -> ProgramaSurfaceDefinition? in
+            guard let tabUUID = UUID(uuidString: tab.id),
+                  let panelId = panelIdFromSurfaceId(TabID(uuid: tabUUID)) else {
+                return nil
+            }
+            let customTitle = panelCustomTitles[panelId]
+
+            if terminalPanel(for: panelId) != nil {
+                let absoluteCwd = panelDirectories[panelId] ?? baseCwd
+                return ProgramaSurfaceDefinition(
+                    type: .terminal,
+                    name: customTitle,
+                    command: nil,
+                    cwd: Self.relativizedCwd(absoluteCwd, baseCwd: baseCwd),
+                    env: nil,
+                    url: nil,
+                    focus: nil
+                )
+            }
+
+            if let browserPanel = browserPanel(for: panelId) {
+                return ProgramaSurfaceDefinition(
+                    type: .browser,
+                    name: customTitle,
+                    command: nil,
+                    cwd: nil,
+                    env: nil,
+                    url: browserPanel.webView.url?.absoluteString,
+                    focus: nil
+                )
+            }
+
+            // Markdown panels have no `ProgramaSurfaceType` counterpart yet (v1 cut).
+            return nil
+        }
+    }
+
+    /// Stores `cwd` relative to `baseCwd` where possible (matching
+    /// `ProgramaConfigStore.resolveCwd`'s existing relative-path convention), which is what
+    /// makes `worktree create --layout`'s worktree-relative resolution work "for free" on
+    /// apply. Returns nil (meaning "same as baseCwd") when they're identical.
+    private static func relativizedCwd(_ absoluteCwd: String, baseCwd: String) -> String? {
+        guard absoluteCwd != baseCwd else { return nil }
+        let normalizedBase = baseCwd.hasSuffix("/") ? baseCwd : baseCwd + "/"
+        guard absoluteCwd.hasPrefix(normalizedBase) else { return absoluteCwd }
+        return String(absoluteCwd.dropFirst(normalizedBase.count))
+    }
 
     func applyCustomLayout(_ layout: ProgramaLayoutNode, baseCwd: String) {
         guard let rootPaneId = bonsplitController.allPaneIds.first else { return }

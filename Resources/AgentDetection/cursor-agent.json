@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "agent": "cursor-agent",
+  "display_name": "Cursor Agent",
+  "recognize": {
+    "process_names": ["cursor-agent"],
+    "screen_patterns": ["Cursor Agent"]
+  },
+  "states": [
+    {
+      "bucket": "blocked",
+      "priority": 100,
+      "anchor_last_n_lines": 12,
+      "patterns": [
+        "Allow\\?",
+        "\\(y/n\\)",
+        "Do you want to"
+      ],
+      "confidence": "low",
+      "source_notes": "Best-effort guess; Cursor Agent's approval-prompt wording is unverified against a live session."
+    },
+    {
+      "bucket": "working",
+      "priority": 50,
+      "anchor_last_n_lines": 6,
+      "patterns": [
+        "esc to interrupt",
+        "Generating"
+      ],
+      "confidence": "low",
+      "source_notes": "Unverified in-progress indicator guess."
+    },
+    {
+      "bucket": "idle",
+      "priority": 0,
+      "anchor_last_n_lines": 4,
+      "patterns": [
+        "\\n>\\s*$"
+      ],
+      "confidence": "low",
+      "source_notes": "Generic bottom-prompt guess; unverified."
+    }
+  ]
+}

@@ -242,6 +242,19 @@ struct SessionMarkdownPanelSnapshot: Codable, Sendable {
     var filePath: String
 }
 
+/// Session-restore snapshot for a review panel. Deliberately does NOT persist `files`/
+/// `comments`: restoring a review panel re-runs `git diff` fresh (always-correct, simpler than
+/// persisting stale diff content), at the cost of comments-in-flight not surviving an app
+/// restart -- a known, accepted v1 limitation. See docs/plans/diff-review-panel.md §6 step 8.
+/// `sourceSurfaceId` is the OLD (pre-restore) panel id of the reviewed terminal; it is remapped
+/// to the newly-restored panel id in a post-restore fixup pass (`Workspace+Persistence.swift`,
+/// since the source terminal may live in a pane restored after this one).
+struct SessionReviewPanelSnapshot: Codable, Sendable {
+    var sourceSurfaceId: UUID
+    var mode: String
+    var baseBranch: String
+}
+
 struct SessionPanelSnapshot: Codable, Sendable {
     var id: UUID
     var type: PanelType
@@ -256,6 +269,7 @@ struct SessionPanelSnapshot: Codable, Sendable {
     var terminal: SessionTerminalPanelSnapshot?
     var browser: SessionBrowserPanelSnapshot?
     var markdown: SessionMarkdownPanelSnapshot?
+    var review: SessionReviewPanelSnapshot?
 }
 
 enum SessionSplitOrientation: String, Codable, Sendable {

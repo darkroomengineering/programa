@@ -138,7 +138,7 @@ final class AgentStateWaitRegistry: @unchecked Sendable {
     private struct Entry {
         let token: UUID
         let condition: AgentStateWaitCondition
-        let callback: (AgentActivityState?) -> Void
+        let callback: (AgentActivityState?, AgentStateSource?) -> Void
     }
 
     private let lock = NSLock()
@@ -152,7 +152,7 @@ final class AgentStateWaitRegistry: @unchecked Sendable {
     func addWaiter(
         surfaceId: UUID,
         condition: AgentStateWaitCondition,
-        callback: @escaping (AgentActivityState?) -> Void
+        callback: @escaping (AgentActivityState?, AgentStateSource?) -> Void
     ) -> UUID {
         let token = UUID()
         lock.lock()
@@ -172,8 +172,10 @@ final class AgentStateWaitRegistry: @unchecked Sendable {
 
     /// Called from the single main-thread mutation point whenever `surfaceId`'s agent state
     /// changes (including transitioning to `nil` on clear/reset). Fires every waiter whose
-    /// condition `newState` satisfies and leaves the rest registered.
-    func notify(surfaceId: UUID, newState: AgentActivityState?) {
+    /// condition `newState` satisfies and leaves the rest registered. `source` is the additive
+    /// screen-manifest-detection sibling (docs/plans/screen-manifest-detection.md) -- `nil` iff
+    /// `newState` is `nil`.
+    func notify(surfaceId: UUID, newState: AgentActivityState?, source: AgentStateSource?) {
         lock.lock()
         let current = waiters[surfaceId] ?? []
         var fired: [Entry] = []
@@ -192,7 +194,7 @@ final class AgentStateWaitRegistry: @unchecked Sendable {
         }
         lock.unlock()
         for entry in fired {
-            entry.callback(newState)
+            entry.callback(newState, source)
         }
     }
 }
@@ -282,6 +284,9 @@ extension TerminalController {
         // it signals `agentStateSemaphore` -- safe to read after `semaphore.wait` returns
         // `.success` without an extra lock, same reasoning as the exit branch's signal-only use.
         var resolvedAgentState: AgentActivityState?
+        // Additive sibling to `resolvedAgentState` (screen-manifest detection v2) -- `nil` iff
+        // `resolvedAgentState` is `nil`.
+        var resolvedAgentStateSource: AgentStateSource?
 
         // Single main-thread hop: resolve the target, and atomically (a) check whether the
         // condition is *already* true right now, and (b) if not, install the watcher (exit
@@ -333,12 +338,14 @@ extension TerminalController {
                 if agentStateCondition.isSatisfied(by: currentState) {
                     alreadySatisfied = true
                     resolvedAgentState = currentState
+                    resolvedAgentStateSource = ws.panelAgentStateSources[surfaceId]
                 } else {
                     agentStateWaiterToken = AgentStateWaitRegistry.shared.addWaiter(
                         surfaceId: surfaceId,
                         condition: agentStateCondition
-                    ) { newState in
+                    ) { newState, newSource in
                         resolvedAgentState = newState
+                        resolvedAgentStateSource = newSource
                         agentStateSemaphore.signal()
                     }
                 }
@@ -363,7 +370,12 @@ extension TerminalController {
             return .err(code: "internal_error", message: "Failed to resolve surface", data: nil)
         }
 
-        func result(waited: Bool, matched: String? = nil, agentState: AgentActivityState?? = nil) -> V2CallResult {
+        func result(
+            waited: Bool,
+            matched: String? = nil,
+            agentState: AgentActivityState?? = nil,
+            agentStateSource: AgentStateSource?? = nil
+        ) -> V2CallResult {
             let condition: String
             if waitForExit {
                 condition = "exit"
@@ -388,12 +400,15 @@ extension TerminalController {
             if let agentState {
                 payload["state"] = self.v2OrNull(agentState?.rawValue)
             }
+            if let agentStateSource {
+                payload["source"] = self.v2OrNull(agentStateSource?.rawValue)
+            }
             return .ok(payload)
         }
 
         if alreadySatisfied {
             if agentStateCondition != nil {
-                return result(waited: false, agentState: resolvedAgentState)
+                return result(waited: false, agentState: resolvedAgentState, agentStateSource: resolvedAgentStateSource)
             }
             return result(waited: false, matched: matchedText)
         }
@@ -414,7 +429,7 @@ extension TerminalController {
                 return .err(code: "internal_error", message: "Failed to register agent_state watcher", data: nil)
             }
             if agentStateSemaphore.wait(timeout: .now() + timeout) == .success {
-                return result(waited: true, agentState: resolvedAgentState)
+                return result(waited: true, agentState: resolvedAgentState, agentStateSource: resolvedAgentStateSource)
             }
             AgentStateWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: agentStateWaiterToken)
             return .err(

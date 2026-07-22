@@ -15,6 +15,7 @@ struct ContentView: View {
     @EnvironmentObject var sidebarState: SidebarState
     @EnvironmentObject var sidebarSelectionState: SidebarSelectionState
     @EnvironmentObject var programaConfigStore: ProgramaConfigStore
+    @ObservedObject private var programaLayoutStore = ProgramaLayoutStore.shared
     @State var sidebarWidth: CGFloat = 200
     @State var hoveredResizerHandles: Set<SidebarResizerHandle> = []
     @State var isResizerDragging = false
@@ -4329,6 +4330,14 @@ struct ContentView: View {
                 when: { $0.bool(CommandPaletteContextKeys.workspaceHasSplits) }
             )
         )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.openReviewPanel",
+                title: constant(String(localized: "command.openReviewPanel.title", defaultValue: "Open Review Panel")),
+                subtitle: constant(String(localized: "command.openReviewPanel.subtitle", defaultValue: "Diff of the focused terminal's repo")),
+                keywords: ["review", "diff", "agent", "changes", "git"]
+            )
+        )
 
         let programaConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "programa.json"))
         for command in programaConfigStore.loadedCommands {
@@ -4347,12 +4356,29 @@ struct ContentView: View {
             )
         }
 
+        let layoutSubtitle = constant(String(localized: "command.applyLayout.subtitle", defaultValue: "Layout"))
+        for savedLayout in programaLayoutStore.savedLayouts {
+            contributions.append(
+                CommandPaletteCommandContribution(
+                    commandId: "palette.applyLayout." + savedLayout.name,
+                    title: constant(String(localized: "command.applyLayout.title", defaultValue: "Apply layout: \(savedLayout.name)")),
+                    subtitle: layoutSubtitle,
+                    keywords: ["layout", "apply", savedLayout.name]
+                )
+            )
+        }
+
         return contributions
     }
 
     private func registerCommandPaletteHandlers(_ registry: inout CommandPaletteHandlerRegistry) {
         registry.register(commandId: "palette.newWorkspace") {
             tabManager.addWorkspace()
+        }
+        registry.register(commandId: "palette.openReviewPanel") {
+            guard let workspace = tabManager.selectedWorkspace,
+                  let focusedPanelId = workspace.focusedPanelId else { return }
+            _ = workspace.newReviewSplit(from: focusedPanelId, orientation: .horizontal, focus: true)
         }
         registry.register(commandId: "palette.newClaudeWorkspace") {
             let trimmedCwd = tabManager.selectedWorkspace?.currentDirectory
@@ -4726,6 +4752,15 @@ struct ContentView: View {
                     configSourcePath: sourcePath,
                     globalConfigPath: globalPath
                 )
+            }
+        }
+
+        for savedLayout in programaLayoutStore.savedLayouts {
+            let layoutName = savedLayout.name
+            registry.register(commandId: "palette.applyLayout." + layoutName) {
+                guard let saved = programaLayoutStore.load(name: layoutName) else { return }
+                let workspace = tabManager.addWorkspace()
+                workspace.applyCustomLayout(saved.layout, baseCwd: workspace.currentDirectory)
             }
         }
     }

@@ -19,6 +19,8 @@ struct SettingsView: View {
     private var claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
     @AppStorage(ClaudeCodeIntegrationSettings.customClaudePathKey)
     private var customClaudePath = ""
+    @AppStorage(AgentScreenDetectionSettings.enabledKey)
+    private var agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
     @AppStorage(PreferredEditorSettings.key) private var preferredEditorCommand = ""
     @AppStorage("cmuxPortBase") private var programaPortBase = 9100
     @AppStorage("cmuxPortRange") private var programaPortRange = 10
@@ -1257,6 +1259,24 @@ struct SettingsView: View {
 
         SettingsCard {
             SettingsCardRow(
+                String(localized: "settings.automation.agentScreenDetection", defaultValue: "Screen-Based Agent Detection"),
+                subtitle: agentScreenDetectionEnabled
+                    ? String(localized: "settings.automation.agentScreenDetection.subtitleOn", defaultValue: "Infers working/blocked/idle status for agent CLIs without an installed integration by reading the terminal screen.")
+                    : String(localized: "settings.automation.agentScreenDetection.subtitleOff", defaultValue: "Agent status is only shown for CLIs with an installed integration.")
+            ) {
+                Toggle("", isOn: $agentScreenDetectionEnabled)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .accessibilityIdentifier("SettingsAgentScreenDetectionToggle")
+            }
+
+            SettingsCardDivider()
+
+            SettingsCardNote(String(localized: "settings.automation.agentScreenDetection.note", defaultValue: "Applies to agents such as Gemini CLI and GitHub Copilot CLI that have no installed hooks. A hooks-managed session (Claude Code, Codex, OpenCode) always takes priority over this."))
+        }
+
+        SettingsCard {
+            SettingsCardRow(
                 String(localized: "settings.automation.claudeCode.customPath", defaultValue: "Claude Binary Path"),
                 subtitle: String(localized: "settings.automation.claudeCode.customPath.subtitle", defaultValue: "Custom path to the claude binary. Leave empty to use PATH.")
             ) {
@@ -1670,6 +1690,7 @@ struct SettingsView: View {
         socketControlMode = SocketControlSettings.defaultMode.rawValue
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
         customClaudePath = ""
+        agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
         preferredEditorCommand = ""
         browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
         browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled

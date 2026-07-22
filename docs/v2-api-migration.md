@@ -52,6 +52,17 @@ Workspaces:
 - current_workspace -> `workspace.current`
 - close_workspace -> `workspace.close`
 
+Worktrees (new in v2, no v1 predecessor -- see "worktree.* / layout.*" below):
+- (no v1 equivalent) -> `worktree.create`
+- (no v1 equivalent) -> `worktree.open`
+- (no v1 equivalent) -> `worktree.remove`
+- (no v1 equivalent) -> `worktree.list`
+
+Layouts (new in v2, no v1 predecessor -- see "worktree.* / layout.*" below):
+- (no v1 equivalent) -> `layout.save`
+- (no v1 equivalent) -> `layout.apply`
+- (no v1 equivalent) -> `layout.list`
+
 Surfaces / Splits:
 - list_surfaces -> `surface.list`
 - focus_surface / focus_surface_by_panel -> `surface.focus`
@@ -65,6 +76,7 @@ Surfaces / Splits:
 - (no v1 equivalent) -> `surface.wait` (new in v2, see "surface.wait" below)
 - (no v1 equivalent) -> `agent.prompt` (new in v2, see "agent.prompt" below)
 - (no v1 equivalent) -> `subscribe`/`unsubscribe` (new in v2, see "Socket Event Subscriptions" below)
+- (no v1 equivalent) -> `review.open` / `review.refresh` / `review.comment.add` / `review.comment.remove` / `review.comment.list` / `review.send_comments` (new in v2, see "Review Panel" below)
 
 Surface Telemetry (report_*/ports/git/pr — off-main parse, main.async mutate; see "Socket
 command threading policy" in the root `CLAUDE.md`):
@@ -187,6 +199,13 @@ Response (`ok: true`):
 - `match` is only present for `pattern` waits and is the substring the regex matched.
 - `state` is only present for `agent_state` waits and is the observed value (`"idle"`,
   `"working"`, `"blocked"`, or `null` for "no state reported") at resolution.
+- `source` is only present for `agent_state` waits and is the additive sibling
+  (docs/plans/screen-manifest-detection.md) telling you *who* reported `state`: `"hooks"` (a
+  lifecycle hook — Claude Code/Codex/OpenCode) or `"inferred"` (the screen-manifest detection
+  engine pattern-matching the terminal buffer for agents with no installed hooks). `null` iff
+  `state` is `null`. Hooks always win: a surface's source only ever reads `"inferred"` if no
+  hook has ever reported for it. Manifest schema/authoring guidance for the `"inferred"` tier:
+  `docs/agent-detection-manifests.md`.
 - Timeout: `{"ok": false, "error": {"code": "timeout", "message": "...", "data": {"timeout_ms": N}}}`.
 - If the target surface doesn't exist (or, for `pattern`/`agent_state`, is closed while the wait
   is in flight), the response is `not_found`, not a timeout — callers shouldn't have to wait out
@@ -290,6 +309,63 @@ hooks were never installed for this surface.
 If the surface was already `working` when the prompt was sent (e.g. a second prompt queued while
 one is running), step 2 is skipped entirely and the call goes straight to step 3.
 
+## Review Panel (`review.*`, docs/plans/diff-review-panel.md)
+
+Agent diff review panel: a panel beside a terminal surface showing its worktree diff
+(uncommitted changes, or vs a branch merge-base), with line comments that get sent back into
+the terminal's input as `path:start-end — text`. CLI: `programa review open|refresh|comment|send`.
+
+### `review.open`
+
+Opens a review panel split beside a terminal surface. Mirrors `markdown.open`'s param/response
+shape, plus a `focus` param (default `false` — this command never activates the app or moves
+focus unless the caller explicitly opts in).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `surface_id` | string (id or ref) | no | Source terminal surface to review + split from. Defaults to the focused surface. Its `panelDirectories` entry supplies the git working directory. |
+| `workspace_id` / `window_id` | string | no | Same resolution as other `surface.*`/`markdown.*` methods. |
+| `mode` | string | no | `"uncommitted"` (default) — diff vs `HEAD`, includes uncommitted changes. `"branch"` — diff vs merge-base with `base_branch` (falls back to local `main`, then `master`, if the requested base doesn't resolve). |
+| `base_branch` | string | no | Only used when `mode: "branch"`. Default `"origin/main"`. |
+| `direction` | string | no | Split direction, default `"right"`. |
+| `focus` | bool | no | Default `false`. Only when `true` does this command activate the app/window and move pane focus to the new panel. |
+
+Response (`ok: true`): `window_id/_ref, workspace_id/_ref, pane_id/_ref, surface_id/_ref` (the new
+review panel), plus `source_surface_id/_ref` (the terminal being reviewed), `mode`,
+`base_branch`, `file_count`, and `diffable_file_count`.
+
+Errors: `not_found` (no focused surface / source surface not found), `invalid_params` (bad
+`mode`/`direction`), `unavailable` (resolved directory isn't inside a git worktree).
+
+### `review.refresh`
+
+Re-runs the diff for an existing review panel. `surface_id` (the review panel's own id) or
+workspace-focused-review-panel fallback. Response: `{"file_count": N, "diffable_file_count": M,
+"generated_at": <unix ts>}`. Never activates the app or moves focus.
+
+### `review.comment.add` / `review.comment.remove` / `review.comment.list`
+
+Pure in-memory comment metadata on a review panel, addressed by `surface_id` (the review panel).
+`add` takes `file_path` (repo-relative), `start_line`/`end_line` (1-based, new-file line
+numbers), `text` -> `{"comment_id": "..."}`. `remove` takes `comment_id` -> `{"ok": true}`.
+`list` -> `{"comments": [{"id", "file_path", "start_line", "end_line", "text", "created_at",
+"is_stale"}]}` — `is_stale` is `true` when a refresh could no longer find that file/line range
+(the comment is never dropped, only flagged).
+
+### `review.send_comments`
+
+Serializes every pending comment (`path:start-end — text`, one per line, file-then-line order)
+and sends it into the *source* terminal surface via the same path `surface.send_text` uses (with
+Enter submitted after, like `agent.prompt`), then clears the sent comments.
+
+| Field | Type | Required |
+|---|---|---|
+| `surface_id` | review panel id/ref | yes (or workspace-focused fallback) |
+| `preamble` | string | no — override the default "Code review comments" preamble |
+
+Response (`ok: true`): `{"sent_count": N, "target_surface_id"/"_ref": "..."}`. Sending zero
+pending comments is a no-op (`sent_count: 0`), not an error.
+
 ## Socket Event Subscriptions (#167)
 
 `subscribe` upgrades the calling connection to receive pushed events — agent state changes
@@ -326,7 +402,7 @@ Pushed events are **not** wrapped in the usual `{"id", "ok", "result"}` v2 envel
 request they're a response to) — each is its own single-line JSON object with an `"event"` key:
 
 ```json
-{"event": "agent_state", "workspace_id": "...", "surface_id": "...", "state": "working", "ts": 1737590400.123}
+{"event": "agent_state", "workspace_id": "...", "surface_id": "...", "state": "working", "source": "hooks", "ts": 1737590400.123}
 {"event": "output", "workspace_id": "...", "surface_id": "...", "text": "new terminal output...", "ts": 1737590400.223}
 {"event": "workspace_lifecycle", "kind": "renamed", "workspace_id": "...", "title": "new title", "ts": 1737590400.323}
 {"event": "dropped", "count": 7}
@@ -334,6 +410,9 @@ request they're a response to) — each is its own single-line JSON object with 
 
 - `agent_state.state` is `null` for a transition to "no state" (clear/reset) — same value shape
   as `surface.wait`'s `agent_state` result.
+- `agent_state.source` is the same additive `"hooks" | "inferred" | null` sibling documented
+  under `surface.wait`'s `agent_state` condition above (screen-manifest detection,
+  docs/plans/screen-manifest-detection.md) — `null` iff `state` is `null`.
 - `output.text` is the *newly appended* tail since the last tick for that surface, capped at
   4000 characters — never the full buffer, and never per-byte (see Backpressure below).
 - `workspace_lifecycle.kind` is `created`, `closed`, or `renamed`. `renamed` fires only from the
@@ -365,6 +444,80 @@ it from the broadcaster — no further events are enqueued for it. A connection'
 (`TerminalController.handleClient`) also unconditionally tears down any attached subscription
 before closing the socket, covering client-initiated close and app shutdown alike. There is no
 server-side cap on concurrent subscriptions.
+
+## `worktree.*` / `layout.*` (docs/plans/worktree-and-layouts.md)
+
+Native git worktree workflow + named layout configs. Both new in v2 (no v1 predecessor). All
+seven methods parse/validate params off-main; the actual git/filesystem I/O runs inside
+`GitWorktreeManager`/`ProgramaLayoutStore` (blocking by construction, same pattern as
+`GitMetadataProber`); `v2MainSync` is used only around the final `tabManager.addWorkspace` /
+`closeWorkspace` mutation, matching `workspace.create`'s existing shape. None of the seven steal
+focus by default — `worktree.create` and `worktree.open` accept an opt-in `focus: bool` (default
+`false`), gated through the existing `v2FocusAllowed()`/`focusIntentV2Methods` mechanism.
+
+### `worktree.create`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `repo` | string | yes | Any directory inside the repo; resolved via `git rev-parse --show-toplevel`. |
+| `branch` | string | yes | Checked out if it already exists locally; otherwise created from `base`. |
+| `base` | string | no | Ref to branch a new `branch` from. Default `HEAD`. Ignored if `branch` already exists. |
+| `path` | string | no | Default `<worktrees.directory>/<repo-name>/<branch-slug>` (`worktrees.directory` setting, default `~/.programa/worktrees`). |
+| `layout` | string | no | Name of a saved layout (`layout.save`) to apply into the new workspace, baseCwd = the worktree root. |
+| `focus` | bool | no | Default `false`. |
+
+Result: `{"worktree": {"path", "branch", "repo"}, "workspace_id", "workspace_ref", "window_id", "window_ref"}`.
+
+Errors: `not_a_git_repo`, `branch_checked_out` (pre-detected via `git worktree list --porcelain`,
+not git's error text), `worktree_path_exists`, `layout_not_found`, `git_command_failed`.
+
+### `worktree.open`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `repo` | string | yes | Same resolution as `worktree.create`. |
+| `path` | string | one of path/branch | Absolute or relative worktree path. |
+| `branch` | string | one of path/branch | Matched against `git worktree list`. |
+| `focus` | bool | no | Default `false`. |
+
+Idempotent: if the worktree is already open as a workspace, returns that `workspace_id` instead
+of creating a duplicate. Result shape matches `worktree.create`. Errors: `invalid_params`,
+`worktree_not_found`.
+
+### `worktree.remove`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `repo` | string | yes | |
+| `path` / `branch` | string | one required | |
+| `force` | bool | no | Only overrides git's dirty-worktree refusal; never passed for any other reason. Never deletes the branch. |
+
+Result: `{"removed": true, "closed_workspace_id"?}`. Closes the associated workspace if it was
+open. Errors: `invalid_params`, `worktree_not_found`, `worktree_dirty`, `git_command_failed`.
+
+### `worktree.list`
+
+`{repo?}` -> `{"repo", "worktrees": [{"path", "branch", "head", "is_open", "workspace_id"?, "workspace_ref"?}]}`.
+Errors: `not_a_git_repo`.
+
+### `layout.save`
+
+`{name, force?}` -> `{"name", "path"}`. Captures the current workspace via
+`Workspace.captureCustomLayout()` (pane/split tree, cwds, browser URLs — not
+command/env/focus, which have no live "what's running" signal). Errors: `already_exists`
+(unless `force`), `invalid_name`, `no_active_workspace`.
+
+### `layout.apply`
+
+`{name, workspace_id?, cwd?}` -> `{"workspace_id", "workspace_ref", "window_id"?, "window_ref"?}`.
+If `workspace_id` is omitted, creates a new (never-focused) workspace first with `cwd` (or its
+own default cwd), then applies the layout into it — the same `Workspace.applyCustomLayout`
+engine `programa.json` layouts already use, so relative `cwd`s in the saved layout resolve
+against the new workspace's root. Errors: `not_found`.
+
+### `layout.list`
+
+`{}` -> `{"layouts": [{"name", "saved_at"}]}`.
 
 ## Tests
 

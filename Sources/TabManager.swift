@@ -1846,10 +1846,11 @@ class TabManager: ObservableObject {
     func updateSurfaceAgentState(
         tabId: UUID,
         surfaceId: UUID,
-        state: AgentActivityState
+        state: AgentActivityState,
+        source: AgentStateSource = .hooks
     ) -> Bool {
         guard let tab = workspace(withId: tabId), tab.panels[surfaceId] != nil else { return false }
-        tab.updatePanelAgentState(panelId: surfaceId, state: state)
+        tab.updatePanelAgentState(panelId: surfaceId, state: state, source: source)
         return true
     }
 

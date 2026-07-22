@@ -2066,6 +2066,98 @@ struct ProgramaCLI {
             ),
 
             CommandDescriptor(
+                names: ["worktree"],
+                helpLines: ["worktree <create|open|remove|list> ..."],
+                detailedUsage: """
+                Usage: programa worktree <subcommand> [flags]
+
+                Native git worktree workflow: create/open a worktree as its own workspace,
+                grouped next to its parent repo's workspace in the sidebar.
+
+                Subcommands:
+                  create <branch> [--base <ref>] [--path <dir>] [--repo <dir>] [--layout <name>] [--focus]
+                      Create (or check out) a worktree for <branch> and open it as a workspace.
+                      If <branch> already exists locally, it is checked out; otherwise it is
+                      created from --base (default HEAD). Default --path is
+                      <worktrees.directory>/<repo-name>/<branch-slug>. --layout applies a saved
+                      layout (see 'programa layout') into the new workspace. --focus opts in to
+                      focusing the new workspace (default: does not steal focus).
+
+                  open <path-or-branch> [--repo <dir>] [--focus]
+                      Open an existing worktree (by path or branch name) as a workspace.
+                      Idempotent: returns the existing workspace if already open.
+
+                  remove <path-or-branch> [--repo <dir>] [--force]
+                      Remove a worktree (never deletes the branch). Closes its workspace if
+                      open. Requires --force if the worktree has uncommitted changes.
+
+                  list [--repo <dir>] [--json]
+                      List worktrees for the resolved repo, noting which are open as workspaces.
+
+                Flags:
+                  --repo <dir>       Repo to operate on. Default: resolved from the current
+                                     directory via 'git rev-parse --show-toplevel'.
+                  --base <ref>       Base ref for a new branch (create only). Default: HEAD.
+                  --path <dir>       Worktree directory (create only). Default: computed from
+                                     the worktrees.directory setting.
+                  --layout <name>    Apply a saved layout (see 'programa layout') after creating
+                                     the workspace (create only).
+                  --focus            Focus the workspace after create/open (default: off).
+                  --force            Allow removing a worktree with uncommitted changes.
+
+                Example:
+                  programa worktree create feature-x
+                  programa worktree create feature-x --base main --layout fullstack-dev
+                  programa worktree list --repo ~/code/programa
+                  programa worktree remove feature-x
+                """,
+                execute: { ctx in
+                    try self.runWorktreeCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["layout"],
+                helpLines: ["layout <save|apply|list> ..."],
+                detailedUsage: """
+                Usage: programa layout <subcommand> [flags]
+
+                Named layout configs: save the current workspace's pane/split layout under a
+                name, and re-apply it later (from the CLI or the command palette).
+
+                Subcommands:
+                  save <name> [--force]
+                      Capture the current workspace's pane/split layout, cwds, and browser URLs
+                      into ~/.config/programa/layouts/<name>.json. Does NOT capture what
+                      command is currently running in each pane -- only geometry, cwd, and
+                      browser URL are saved.
+
+                  apply <name> [--workspace <id|ref>] [--cwd <dir>]
+                      Apply a saved layout. If --workspace is omitted, creates a new (unfocused)
+                      workspace first, with cwd = --cwd (or the current directory), then applies
+                      the layout into it -- relative cwds in the saved layout resolve against
+                      that new workspace's root.
+
+                  list [--json]
+                      List saved layout names.
+
+                Flags:
+                  --force            Overwrite an existing layout with the same name (save only).
+                  --workspace <id|ref>
+                                     Target an existing workspace (apply only).
+                  --cwd <dir>        Base directory for a newly created workspace (apply only).
+
+                Example:
+                  programa layout save fullstack-dev
+                  programa layout apply fullstack-dev
+                  programa layout list
+                """,
+                execute: { ctx in
+                    try self.runLayoutCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
+            CommandDescriptor(
                 names: ["list-workspaces"],
                 helpLines: ["list-workspaces"],
                 detailedUsage: """
@@ -3889,6 +3981,14 @@ struct ProgramaCLI {
                 }
             ),
 
+            CommandDescriptor(
+                names: ["review"],
+                helpLines: ["review open|refresh|comment|send  (agent diff review panel: worktree/branch diff, line comments)"],
+                execute: { ctx in
+                    try self.runReviewCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
             CommandDescriptor(names: [], helpLines: [""], execute: nil),
 
             CommandDescriptor(
@@ -4948,6 +5048,321 @@ struct ProgramaCLI {
         printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: summaryParts.joined(separator: " "))
     }
 
+    // MARK: - Worktree commands (docs/plans/worktree-and-layouts.md)
+
+    private func runWorktreeCommand(
+        commandArgs: [String],
+        client: SocketClient,
+        jsonOutput: Bool,
+        idFormat: CLIIDFormat
+    ) throws {
+        var positional = commandArgs
+        guard let subcommandRaw = positional.first else {
+            throw CLIError(message: "worktree requires a subcommand: create, open, remove, list")
+        }
+        positional.removeFirst()
+
+        switch subcommandRaw.lowercased() {
+        case "create":
+            try runWorktreeCreate(args: positional, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
+        case "open":
+            try runWorktreeOpen(args: positional, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
+        case "remove":
+            try runWorktreeRemove(args: positional, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
+        case "list":
+            try runWorktreeList(args: positional, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
+        default:
+            throw CLIError(message: "worktree: unknown subcommand '\(subcommandRaw)' (expected create, open, remove, list)")
+        }
+    }
+
+    private func runWorktreeCreate(
+        args: [String],
+        client: SocketClient,
+        jsonOutput: Bool,
+        idFormat: CLIIDFormat
+    ) throws {
+        let (repoOpt, rem0) = parseOption(args, name: "--repo")
+        let (baseOpt, rem1) = parseOption(rem0, name: "--base")
+        let (pathOpt, rem2) = parseOption(rem1, name: "--path")
+        let (layoutOpt, rem3) = parseOption(rem2, name: "--layout")
+        let focus = hasFlag(rem3, name: "--focus")
+        var positional = rem3.filter { $0 != "--focus" }
+
+        guard let branch = positional.first, !branch.hasPrefix("--") else {
+            throw CLIError(message: "worktree create requires <branch>")
+        }
+        positional.removeFirst()
+        if let unknown = positional.first(where: { $0.hasPrefix("--") }) {
+            throw CLIError(message: "worktree create: unknown flag '\(unknown)'")
+        }
+
+        let repo = try resolveWorktreeRepoRoot(explicit: repoOpt)
+
+        var params: [String: Any] = ["repo": repo, "branch": branch]
+        if let baseOpt { params["base"] = baseOpt }
+        if let pathOpt { params["path"] = pathOpt }
+        if let layoutOpt { params["layout"] = layoutOpt }
+        if focus { params["focus"] = true }
+
+        let payload = try client.sendV2(method: "worktree.create", params: params)
+        printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: worktreeSummary(payload, idFormat: idFormat))
+    }
+
+    private func runWorktreeOpen(
+        args: [String],
+        client: SocketClient,
+        jsonOutput: Bool,
+        idFormat: CLIIDFormat
+    ) throws {
+        let (repoOpt, rem0) = parseOption(args, name: "--repo")
+        let focus = hasFlag(rem0, name: "--focus")
+        var positional = rem0.filter { $0 != "--focus" }
+
+        guard let target = positional.first, !target.hasPrefix("--") else {
+            throw CLIError(message: "worktree open requires <path-or-branch>")
+        }
+        positional.removeFirst()
+        if let unknown = positional.first(where: { $0.hasPrefix("--") }) {
+            throw CLIError(message: "worktree open: unknown flag '\(unknown)'")
+        }
+
+        let repo = try resolveWorktreeRepoRoot(explicit: repoOpt)
+
+        var params: [String: Any] = ["repo": repo]
+        if target.hasPrefix("/") || target.hasPrefix("~") || target.hasPrefix(".") {
+            params["path"] = target
+        } else {
+            params["branch"] = target
+        }
+        if focus { params["focus"] = true }
+
+        let payload = try client.sendV2(method: "worktree.open", params: params)
+        printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: worktreeSummary(payload, idFormat: idFormat))
+    }
+
+    private func runWorktreeRemove(
+        args: [String],
+        client: SocketClient,
+        jsonOutput: Bool,
+        idFormat: CLIIDFormat
+    ) throws {
+        let (repoOpt, rem0) = parseOption(args, name: "--repo")
+        let force = hasFlag(rem0, name: "--force")
+        var positional = rem0.filter { $0 != "--force" }
+
+        guard let target = positional.first, !target.hasPrefix("--") else {
+            throw CLIError(message: "worktree remove requires <path-or-branch>")
+        }
+        positional.removeFirst()
+        if let unknown = positional.first(where: { $0.hasPrefix("--") }) {
+            throw CLIError(message: "worktree remove: unknown flag '\(unknown)'")
+        }
+
+        let repo = try resolveWorktreeRepoRoot(explicit: repoOpt)
+
+        var params: [String: Any] = ["repo": repo]
+        if target.hasPrefix("/") || target.hasPrefix("~") || target.hasPrefix(".") {
+            params["path"] = target
+        } else {
+            params["branch"] = target
+        }
+        if force { params["force"] = true }
+
+        let payload = try client.sendV2(method: "worktree.remove", params: params)
+        var summaryParts = ["OK", "removed=\(payload["removed"] ?? false)"]
+        if let closed = payload["closed_workspace_id"] {
+            summaryParts.append("closed_workspace=\(closed)")
+        }
+        printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: summaryParts.joined(separator: " "))
+    }
+
+    private func runWorktreeList(
+        args: [String],
+        client: SocketClient,
+        jsonOutput: Bool,
+        idFormat: CLIIDFormat
+    ) throws {
+        let (repoOpt, rem0) = parseOption(args, name: "--repo")
+        if let unknown = rem0.first(where: { $0.hasPrefix("--") && $0 != "--json" }) {
+            throw CLIError(message: "worktree list: unknown flag '\(unknown)'")
+        }
+
+        let repo = try resolveWorktreeRepoRoot(explicit: repoOpt)
+        let payload = try client.sendV2(method: "worktree.list", params: ["repo": repo])
+
+        if jsonOutput {
+            print(jsonString(formatIDs(payload, mode: idFormat)))
+            return
+        }
+
+        let worktrees = payload["worktrees"] as? [[String: Any]] ?? []
+        guard !worktrees.isEmpty else {
+            print("No worktrees for \(repo)")
+            return
+        }
+        for entry in worktrees {
+            let path = entry["path"] as? String ?? "?"
+            let branch = entry["branch"] as? String ?? "(detached)"
+            let isOpen = (entry["is_open"] as? Bool) ?? false
+            let openTag = isOpen ? " [open]" : ""
+            print("\(path)  (branch \(branch))\(openTag)")
+        }
+    }
+
+    private func worktreeSummary(_ payload: [String: Any], idFormat: CLIIDFormat) -> String {
+        let worktree = payload["worktree"] as? [String: Any] ?? [:]
+        let path = worktree["path"] as? String ?? "?"
+        let branch = worktree["branch"] as? String ?? "?"
+        let workspaceHandle = formatHandle(payload, kind: "workspace", idFormat: idFormat) ?? "unknown"
+        return "OK worktree workspace=\(workspaceHandle) path=\(path) branch=\(branch)"
+    }
+
+    /// Resolves the repo to operate on: `explicit` (an arbitrary directory inside the repo,
+    /// not necessarily its toplevel) if given, else the CLI process's own current directory --
+    /// this is a shell-invoked CLI, so its cwd is the natural "caller's directory" default,
+    /// distinct from any currently-selected workspace's cwd (plan risk #2).
+    private func resolveWorktreeRepoRoot(explicit: String?) throws -> String {
+        let directory = ((explicit ?? FileManager.default.currentDirectoryPath) as NSString).expandingTildeInPath
+        guard let root = gitTopLevelDirectory(at: directory) else {
+            throw CLIError(message: "not_a_git_repo: '\(directory)' is not inside a git repository")
+        }
+        return root
+    }
+
+    private func gitTopLevelDirectory(at directory: String) -> String? {
+        let process = Process()
+        let stdout = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git", "-C", directory, "rev-parse", "--show-toplevel"]
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8) else { return nil }
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    // MARK: - Layout commands (docs/plans/worktree-and-layouts.md)
+
+    private func runLayoutCommand(
+        commandArgs: [String],
+        client: SocketClient,
+        jsonOutput: Bool,
+        idFormat: CLIIDFormat
+    ) throws {
+        var positional = commandArgs
+        guard let subcommandRaw = positional.first else {
+            throw CLIError(message: "layout requires a subcommand: save, apply, list")
+        }
+        positional.removeFirst()
+
+        switch subcommandRaw.lowercased() {
+        case "save":
+            try runLayoutSave(args: positional, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
+        case "apply":
+            try runLayoutApply(args: positional, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
+        case "list":
+            try runLayoutList(args: positional, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
+        default:
+            throw CLIError(message: "layout: unknown subcommand '\(subcommandRaw)' (expected save, apply, list)")
+        }
+    }
+
+    private func runLayoutSave(
+        args: [String],
+        client: SocketClient,
+        jsonOutput: Bool,
+        idFormat: CLIIDFormat
+    ) throws {
+        let force = hasFlag(args, name: "--force")
+        var positional = args.filter { $0 != "--force" }
+
+        guard let name = positional.first, !name.hasPrefix("--") else {
+            throw CLIError(message: "layout save requires <name>")
+        }
+        positional.removeFirst()
+        if let unknown = positional.first(where: { $0.hasPrefix("--") }) {
+            throw CLIError(message: "layout save: unknown flag '\(unknown)'")
+        }
+
+        var params: [String: Any] = ["name": name]
+        if force { params["force"] = true }
+
+        let payload = try client.sendV2(method: "layout.save", params: params)
+        let path = payload["path"] as? String ?? "?"
+        printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK layout=\(name) path=\(path)")
+    }
+
+    private func runLayoutApply(
+        args: [String],
+        client: SocketClient,
+        jsonOutput: Bool,
+        idFormat: CLIIDFormat
+    ) throws {
+        let (workspaceOpt, rem0) = parseOption(args, name: "--workspace")
+        let (cwdOpt, rem1) = parseOption(rem0, name: "--cwd")
+        var positional = rem1
+
+        guard let name = positional.first, !name.hasPrefix("--") else {
+            throw CLIError(message: "layout apply requires <name>")
+        }
+        positional.removeFirst()
+        if let unknown = positional.first(where: { $0.hasPrefix("--") }) {
+            throw CLIError(message: "layout apply: unknown flag '\(unknown)'")
+        }
+
+        var params: [String: Any] = ["name": name]
+        if let workspaceOpt {
+            guard let workspaceId = try normalizeWorkspaceHandle(workspaceOpt, client: client) else {
+                throw CLIError(message: "layout apply: could not resolve --workspace '\(workspaceOpt)'")
+            }
+            params["workspace_id"] = workspaceId
+        }
+        if let cwdOpt { params["cwd"] = cwdOpt }
+
+        let payload = try client.sendV2(method: "layout.apply", params: params)
+        let workspaceHandle = formatHandle(payload, kind: "workspace", idFormat: idFormat) ?? "unknown"
+        printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK layout=\(name) workspace=\(workspaceHandle)")
+    }
+
+    private func runLayoutList(
+        args: [String],
+        client: SocketClient,
+        jsonOutput: Bool,
+        idFormat: CLIIDFormat
+    ) throws {
+        if let unknown = args.first(where: { $0.hasPrefix("--") && $0 != "--json" }) {
+            throw CLIError(message: "layout list: unknown flag '\(unknown)'")
+        }
+
+        let payload = try client.sendV2(method: "layout.list", params: [:])
+        if jsonOutput {
+            print(jsonString(formatIDs(payload, mode: idFormat)))
+            return
+        }
+
+        let layouts = payload["layouts"] as? [[String: Any]] ?? []
+        guard !layouts.isEmpty else {
+            print("No saved layouts")
+            return
+        }
+        for entry in layouts {
+            let name = entry["name"] as? String ?? "?"
+            let savedAt = entry["saved_at"] as? String ?? ""
+            print(savedAt.isEmpty ? name : "\(name)  (saved \(savedAt))")
+        }
+    }
+
     private func runTabAction(
         commandArgs: [String],
         client: SocketClient,
@@ -5179,6 +5594,7 @@ struct ProgramaCLI {
         if let text = hooksSubcommandUsage(command) { return text }
         if let text = browserSubcommandUsage(command) { return text }
         if let text = markdownSubcommandUsage(command) { return text }
+        if let text = reviewSubcommandUsage(command) { return text }
         if let text = themesSubcommandUsage(command) { return text }
         if let text = agentWrapperSubcommandUsage(command) { return text }
         return commandDescriptor(named: command)?.detailedUsage
@@ -5613,6 +6029,26 @@ struct ProgramaCLI {
             let parsed = try parse(minPositionals: 1, maxPositionals: 2)
             if parsed.positional.count == 2, parsed.positional[0].lowercased() != "open" {
                 throw CLIError(message: "markdown: unexpected subcommand \(parsed.positional[0])")
+            }
+
+        case "review":
+            let parsed = try parse(
+                values: ["workspace", "window", "surface", "direction", "mode", "base-branch", "preamble"],
+                minPositionals: 1,
+                maxPositionals: nil,
+                allowEquals: true
+            )
+            let subcommand = parsed.positional[0].lowercased()
+            guard ["open", "refresh", "comment", "send"].contains(subcommand) else {
+                throw CLIError(message: "review: unknown subcommand \(parsed.positional[0])")
+            }
+            if subcommand == "comment" {
+                guard parsed.positional.count >= 2 else {
+                    throw CLIError(message: "review comment: missing subcommand (add|remove|list)")
+                }
+                guard ["add", "remove", "list"].contains(parsed.positional[1].lowercased()) else {
+                    throw CLIError(message: "review comment: unknown subcommand \(parsed.positional[1])")
+                }
             }
 
         case "ssh":

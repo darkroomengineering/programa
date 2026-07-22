@@ -21,6 +21,16 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var currentDirectory: String
     private(set) var preferredBrowserProfileID: UUID?
 
+    /// Set at creation time by `worktree.create`/`worktree.open` when this workspace is a git
+    /// worktree opened alongside its parent repo's workspace. Sidebar grouping is order + a
+    /// small fork-glyph badge (no tree/collapse in v1) -- see docs/plans/worktree-and-layouts.md
+    /// decision #4. In-memory only for v1: not wired into Workspace+Persistence.swift's
+    /// session-restore serialization, so the grouping badge does not survive an app relaunch.
+    @Published var worktreeParentWorkspaceId: UUID?
+    /// The git branch checked out in this workspace's worktree, if it was created/opened via
+    /// `worktree.create`/`worktree.open`. Used for the sidebar badge tooltip.
+    @Published var worktreeBranch: String?
+
     /// Ordinal for PROGRAMA_PORT range assignment (monotonically increasing per app session)
     var portOrdinal: Int = 0
 
@@ -109,6 +119,11 @@ final class Workspace: Identifiable, ObservableObject {
     /// Per-surface agent activity state (working/blocked/idle), reported exclusively by
     /// installed lifecycle hooks (issue #164, v1 hook tier). See AgentActivityState.swift.
     @Published var panelAgentStates: [UUID: AgentActivityState] = [:]
+    /// Which tier (`.hooks` vs `.inferred`) reported each surface's current `panelAgentStates`
+    /// entry (screen-manifest detection v2). Always kept in lockstep with `panelAgentStates` by
+    /// `updatePanelAgentState`/`clearPanelAgentState` — never mutated directly. See
+    /// `AgentStateSource`'s doc comment (AgentActivityState.swift) for the hooks-always-win rule.
+    @Published var panelAgentStateSources: [UUID: AgentStateSource] = [:]
     @Published var surfaceListeningPorts: [UUID: [Int]] = [:]
     var agentListeningPorts: [Int] = []
     @Published var remoteConfiguration: WorkspaceRemoteConfiguration?
@@ -154,6 +169,11 @@ final class Workspace: Identifiable, ObservableObject {
     /// Used for stale-session detection: if the PID is dead, the status entry is cleared.
     var agentPIDs: [String: pid_t] = [:]
     var restoredTerminalScrollbackByPanelId: [UUID: String] = [:]
+    /// Review panels created during session restore, keyed by their new panel id, mapping to
+    /// the OLD (pre-restore) panel id of the terminal surface they review. Consumed and
+    /// cleared by `restoreSessionSnapshot`'s post-restore fixup pass once every pane has been
+    /// restored and `oldToNewPanelIds` is complete -- see `Workspace+Persistence.swift`.
+    var pendingReviewPanelSourceFixups: [UUID: UUID] = [:]
 
     /// True when any hook-managed agent (Claude Code, Codex, etc.) is registered for this
     /// workspace. Used to suppress raw OSC desktop notifications in favor of the structured
@@ -202,6 +222,7 @@ final class Workspace: Identifiable, ObservableObject {
             sidebarObservationSignal($pullRequest),
             sidebarObservationSignal($panelPullRequests),
             sidebarObservationSignal($panelAgentStates),
+            sidebarObservationSignal($panelAgentStateSources),
             sidebarObservationSignal($remoteConfiguration),
             sidebarObservationSignal($remoteConnectionState),
             sidebarObservationSignal($remoteConnectionDetail),
@@ -257,6 +278,7 @@ final class Workspace: Identifiable, ObservableObject {
         static let terminal = "terminal"
         static let browser = "browser"
         static let markdown = "markdown"
+        static let review = "review"
     }
 
     enum PanelShellActivityState: String {
@@ -749,6 +771,39 @@ final class Workspace: Identifiable, ObservableObject {
         panelSubscriptions[markdownPanel.id] = subscription
     }
 
+    /// Auto-refresh trigger for a review panel: subscribes to `$panelAgentStates` filtered to
+    /// the *reviewed* (source) terminal surface's id, and refreshes the diff on a
+    /// `.working -> .idle` (or "state clears") edge -- deliberately not on every state change,
+    /// to avoid thrashing `git diff` on a fast-moving CLI session. See
+    /// docs/plans/diff-review-panel.md §3 "Refresh triggers".
+    func installReviewPanelSubscription(_ reviewPanel: ReviewPanel) {
+        var previousState: AgentActivityState? = panelAgentStates[reviewPanel.sourceSurfaceId]
+        let subscription = $panelAgentStates
+            .map { [sourceSurfaceId = reviewPanel.sourceSurfaceId] states in states[sourceSurfaceId] }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak reviewPanel] newState in
+                defer { previousState = newState }
+                guard let reviewPanel else { return }
+                if previousState == .working, newState == .idle || newState == nil {
+                    reviewPanel.refresh()
+                }
+            }
+        panelSubscriptions[reviewPanel.id] = subscription
+    }
+
+    func sendReviewComments(sourceSurfaceId: UUID, text: String) {
+        guard let terminalPanel = terminalPanel(for: sourceSurfaceId) else { return }
+        let textToSend = text + "\r"
+        if let surface = terminalPanel.surface.surface {
+            TerminalController.shared.sendSocketText(textToSend, surface: surface)
+            terminalPanel.surface.forceRefresh(reason: "reviewPanel.sendComments")
+        } else {
+            terminalPanel.sendText(textToSend)
+            terminalPanel.surface.requestBackgroundSurfaceStartIfNeeded()
+        }
+    }
+
     func browserRemoteWorkspaceStatusSnapshot() -> BrowserRemoteWorkspaceStatus? {
         guard let target = remoteDisplayTarget else { return nil }
         return BrowserRemoteWorkspaceStatus(
@@ -786,6 +841,10 @@ final class Workspace: Identifiable, ObservableObject {
         panels[panelId] as? MarkdownPanel
     }
 
+    func reviewPanel(for panelId: UUID) -> ReviewPanel? {
+        panels[panelId] as? ReviewPanel
+    }
+
     func surfaceKind(for panel: any Panel) -> String {
         switch panel.panelType {
         case .terminal:
@@ -794,6 +853,8 @@ final class Workspace: Identifiable, ObservableObject {
             return SurfaceKind.browser
         case .markdown:
             return SurfaceKind.markdown
+        case .review:
+            return SurfaceKind.review
         }
     }
 

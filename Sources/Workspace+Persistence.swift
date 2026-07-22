@@ -114,6 +114,7 @@ extension Workspace {
             )
         }
 
+        applyPendingReviewPanelSourceFixups(oldToNewPanelIds: oldToNewPanelIds)
         pruneSurfaceMetadata(validSurfaceIds: Set(panels.keys))
         applySessionDividerPositions(snapshotNode: snapshot.layout, liveNode: bonsplitController.treeSnapshot())
 
@@ -151,6 +152,29 @@ extension Workspace {
         } else {
             scheduleFocusReconcile()
         }
+    }
+
+    /// Remaps each restored review panel's `sourceSurfaceId` from its pre-restore (old) value to
+    /// the newly-created panel id, once every pane in the layout has been restored and
+    /// `oldToNewPanelIds` is complete. Installs the auto-refresh subscription only after the
+    /// remap, since it captures `sourceSurfaceId` at install time. A review panel whose source
+    /// terminal no longer exists after restore (e.g. it failed to recreate) keeps its stale old
+    /// id -- the panel simply shows its "not a git repository"/empty state rather than crashing.
+    private func applyPendingReviewPanelSourceFixups(oldToNewPanelIds: [UUID: UUID]) {
+        guard !pendingReviewPanelSourceFixups.isEmpty else { return }
+        for (reviewPanelId, oldSourceSurfaceId) in pendingReviewPanelSourceFixups {
+            guard let reviewPanel = panels[reviewPanelId] as? ReviewPanel else { continue }
+            if let newSourceSurfaceId = oldToNewPanelIds[oldSourceSurfaceId] {
+                reviewPanel.sourceSurfaceId = newSourceSurfaceId
+            }
+            reviewPanel.sendToSourceSurface = { [weak self, weak reviewPanel] text in
+                guard let self, let reviewPanel else { return }
+                self.sendReviewComments(sourceSurfaceId: reviewPanel.sourceSurfaceId, text: text)
+            }
+            installReviewPanelSubscription(reviewPanel)
+            reviewPanel.refresh()
+        }
+        pendingReviewPanelSourceFixups.removeAll()
     }
 
     private func sessionLayoutSnapshot(from node: ExternalTreeNode) -> SessionWorkspaceLayoutSnapshot {
@@ -233,6 +257,7 @@ extension Workspace {
         let terminalSnapshot: SessionTerminalPanelSnapshot?
         let browserSnapshot: SessionBrowserPanelSnapshot?
         let markdownSnapshot: SessionMarkdownPanelSnapshot?
+        let reviewSnapshot: SessionReviewPanelSnapshot?
         switch panel.panelType {
         case .terminal:
             guard let terminalPanel = panel as? TerminalPanel else { return nil }
@@ -256,6 +281,7 @@ extension Workspace {
             )
             browserSnapshot = nil
             markdownSnapshot = nil
+            reviewSnapshot = nil
         case .browser:
             guard let browserPanel = panel as? BrowserPanel else { return nil }
             terminalSnapshot = nil
@@ -270,11 +296,23 @@ extension Workspace {
                 forwardHistoryURLStrings: historySnapshot.forwardHistoryURLStrings
             )
             markdownSnapshot = nil
+            reviewSnapshot = nil
         case .markdown:
             guard let markdownPanel = panel as? MarkdownPanel else { return nil }
             terminalSnapshot = nil
             browserSnapshot = nil
             markdownSnapshot = SessionMarkdownPanelSnapshot(filePath: markdownPanel.filePath)
+            reviewSnapshot = nil
+        case .review:
+            guard let reviewPanel = panel as? ReviewPanel else { return nil }
+            terminalSnapshot = nil
+            browserSnapshot = nil
+            markdownSnapshot = nil
+            reviewSnapshot = SessionReviewPanelSnapshot(
+                sourceSurfaceId: reviewPanel.sourceSurfaceId,
+                mode: reviewPanel.mode.rawValue,
+                baseBranch: reviewPanel.baseBranch
+            )
         }
 
         return SessionPanelSnapshot(
@@ -290,7 +328,8 @@ extension Workspace {
             ttyName: ttyName,
             terminal: terminalSnapshot,
             browser: browserSnapshot,
-            markdown: markdownSnapshot
+            markdown: markdownSnapshot,
+            review: reviewSnapshot
         )
     }
 
@@ -465,6 +504,45 @@ extension Workspace {
             }
             applySessionPanelMetadata(snapshot, toPanelId: markdownPanel.id)
             return markdownPanel.id
+        case .review:
+            // Re-runs `git diff` fresh rather than persisting stale content (see
+            // `SessionReviewPanelSnapshot`'s doc comment). `sourceSurfaceId` here is still the
+            // OLD panel id -- remapped in `restoreSessionSnapshot`'s post-restore fixup pass,
+            // since the source terminal may be restored in a pane visited after this one.
+            guard let reviewSnapshot = snapshot.review,
+                  let mode = ReviewDiffMode(rawValue: reviewSnapshot.mode) else {
+                return nil
+            }
+            let directory = snapshot.directory ?? currentDirectory
+            let reviewPanel = ReviewPanel(
+                workspaceId: id,
+                sourceSurfaceId: reviewSnapshot.sourceSurfaceId,
+                directory: directory,
+                mode: mode,
+                baseBranch: reviewSnapshot.baseBranch
+            )
+            panels[reviewPanel.id] = reviewPanel
+            panelTitles[reviewPanel.id] = reviewPanel.displayTitle
+            panelDirectories[reviewPanel.id] = directory
+
+            guard let newTabId = bonsplitController.createTab(
+                title: reviewPanel.displayTitle,
+                icon: reviewPanel.displayIcon,
+                kind: SurfaceKind.review,
+                isDirty: reviewPanel.isDirty,
+                isLoading: false,
+                isPinned: false,
+                inPane: paneId
+            ) else {
+                panels.removeValue(forKey: reviewPanel.id)
+                panelTitles.removeValue(forKey: reviewPanel.id)
+                panelDirectories.removeValue(forKey: reviewPanel.id)
+                return nil
+            }
+            surfaceIdToPanelId[newTabId] = reviewPanel.id
+            pendingReviewPanelSourceFixups[reviewPanel.id] = reviewSnapshot.sourceSurfaceId
+            applySessionPanelMetadata(snapshot, toPanelId: reviewPanel.id)
+            return reviewPanel.id
         }
     }
 
