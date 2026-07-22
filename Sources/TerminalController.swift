@@ -1385,11 +1385,12 @@ class TerminalController {
     private func handleClient(_ socket: Int32, peerPid: pid_t? = nil) {
         // Owns this connection's writes (both ordinary v2 responses and any #167 subscription
         // event pushes) and its subscription lifecycle. `teardown()` (which tears down any
-        // attached subscription) must run before the fd is closed -- declared after the `close`
-        // defer so it runs first (defers unwind LIFO).
+        // attached subscription) must run before the fd is closed -- defers unwind LIFO, so the
+        // `close(socket)` defer is declared FIRST (runs last) and `connection.teardown()` is
+        // declared SECOND (runs first).
         let connection = SocketConnection(socket: socket)
-        defer { connection.teardown() }
         defer { close(socket) }
+        defer { connection.teardown() }
 
         // In cmuxOnly mode, verify the connecting process is a descendant of cmux.
         // In allowAll mode (env-var only), skip the ancestry check.
