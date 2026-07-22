@@ -1107,12 +1107,6 @@ class TerminalController {
         }
     }
 
-    private func writeSocketResponse(_ response: String, to socket: Int32) {
-        let payload = response + "\n"
-        payload.withCString { ptr in
-            _ = write(socket, ptr, strlen(ptr))
-        }
-    }
 
     private func passwordAuthRequiredResponse(for command: String) -> String {
         let message = "Authentication required. Send auth <password> first."
@@ -1389,6 +1383,12 @@ class TerminalController {
     }
 
     private func handleClient(_ socket: Int32, peerPid: pid_t? = nil) {
+        // Owns this connection's writes (both ordinary v2 responses and any #167 subscription
+        // event pushes) and its subscription lifecycle. `teardown()` (which tears down any
+        // attached subscription) must run before the fd is closed -- declared after the `close`
+        // defer so it runs first (defers unwind LIFO).
+        let connection = SocketConnection(socket: socket)
+        defer { connection.teardown() }
         defer { close(socket) }
 
         // In cmuxOnly mode, verify the connecting process is a descendant of cmux.
@@ -1438,17 +1438,17 @@ class TerminalController {
                 guard !trimmed.isEmpty else { continue }
 
                 if let authResponse = authResponseIfNeeded(for: trimmed, authenticated: &authenticated) {
-                    writeSocketResponse(authResponse, to: socket)
+                    connection.writeLine(authResponse)
                     continue
                 }
 
-                let response = processCommand(trimmed)
-                writeSocketResponse(response, to: socket)
+                let response = processCommand(trimmed, connection: connection)
+                connection.writeLine(response)
             }
         }
     }
 
-    private func processCommand(_ command: String) -> String {
+    private func processCommand(_ command: String, connection: SocketConnection) -> String {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "ERROR: Empty command" }
 
@@ -1463,12 +1463,12 @@ class TerminalController {
             )
         }
 
-        return processV2Command(trimmed)
+        return processV2Command(trimmed, connection: connection)
     }
 
     // MARK: - V2 JSON Socket Protocol
 
-    private func processV2Command(_ jsonLine: String) -> String {
+    private func processV2Command(_ jsonLine: String, connection: SocketConnection) -> String {
         // v1 access-mode gating applies to v2 as well. We can't know which v2 method maps
         // to which v1 command without parsing, so parse first and then apply allow-list.
 
@@ -1897,6 +1897,14 @@ class TerminalController {
             return v2Result(id: id, self.v2SurfaceReadText(params: params))
         case "surface.wait":
             return v2Result(id: id, self.v2SurfaceWait(params: params))
+        case "agent.prompt":
+            return v2Result(id: id, self.v2AgentPrompt(params: params))
+
+        // Socket event subscriptions (#167)
+        case "subscribe":
+            return v2Result(id: id, self.v2Subscribe(params: params, connection: connection))
+        case "unsubscribe":
+            return v2Result(id: id, self.v2Unsubscribe(params: params, connection: connection))
 
 #if DEBUG
         // Debug / test-only

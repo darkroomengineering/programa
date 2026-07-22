@@ -77,6 +77,116 @@ final class SurfaceExitWaitRegistry: @unchecked Sendable {
     }
 }
 
+/// The `agent_state` condition accepted by `surface.wait` and (internally) by `agent.prompt`
+/// (#166 task 3). Values line up with `AgentActivityState` (AgentActivityState.swift) plus
+/// `any_change`, which has no state-value equivalent.
+enum AgentStateWaitCondition: String {
+    case idle
+    case working
+    case blocked
+    case anyChange = "any_change"
+
+    /// Whether `state` (the surface's *current* reported agent state, `nil` meaning "no hook
+    /// has ever reported one") already satisfies this condition -- used both for the
+    /// already-satisfied check at registration time and for filtering registry notifications.
+    ///
+    /// No-state rule (documented in docs/v2-api-migration.md): a surface with no agent state
+    /// at all is treated as idle-equivalent for an `idle` wait -- most bare terminals never
+    /// report anything, and a caller waiting for "idle" almost always means "not currently
+    /// busy", which is true of a surface with no agent hook installed. `working`/`blocked`
+    /// require an actual explicit report; no-state never satisfies those (there is nothing to
+    /// observe). `any_change` never counts as "already satisfied" -- by definition it resolves
+    /// on the *next* transition after registration, not the state at registration time.
+    func isSatisfied(by state: AgentActivityState?) -> Bool {
+        switch self {
+        case .idle: return state == .idle || state == nil
+        case .working: return state == .working
+        case .blocked: return state == .blocked
+        case .anyChange: return false
+        }
+    }
+}
+
+/// Registry of pending `agent_state`-condition waiters for `surface.wait` (#166 task 2) and for
+/// `agent.prompt`'s internal working/idle watch (#166 task 3), keyed by surface id.
+///
+/// Event-driven from the single main-thread mutation point for `Workspace.panelAgentStates`:
+/// `Workspace.updatePanelAgentState`/`clearPanelAgentState` in Workspace+SidebarTelemetry.swift,
+/// which are only ever called from `TabManager.updateSurfaceAgentState`/`clearSurfaceAgentState`,
+/// which are only ever called from `TerminalController+Telemetry.swift`'s
+/// `v2SurfaceReportAgentState`/`v2SurfaceClearAgentState` inside `v2ScheduleSurfaceTelemetryMutation`
+/// (always `DispatchQueue.main.async`). `Workspace.resetSidebarContext()` also clears
+/// `panelAgentStates` directly and notifies this registry for the same reason.
+///
+/// Unlike `SurfaceExitWaitRegistry` (a one-shot terminal event), agent state can transition many
+/// times and different waiters on the same surface can be watching for different conditions, so
+/// `notify` only fires (and removes) the entries whose condition the new state actually
+/// satisfies -- everything else stays registered for a later transition.
+final class AgentStateWaitRegistry: @unchecked Sendable {
+    static let shared = AgentStateWaitRegistry()
+
+    private struct Entry {
+        let token: UUID
+        let condition: AgentStateWaitCondition
+        let callback: (AgentActivityState?) -> Void
+    }
+
+    private let lock = NSLock()
+    private var waiters: [UUID: [Entry]] = [:]
+
+    /// Registers `callback` to run when `surfaceId`'s agent state next satisfies `condition`.
+    /// Must be called on the main thread in the same hop that checked whether the condition is
+    /// already true (see `TerminalController.v2SurfaceWait` / `v2AgentPrompt`), for the same
+    /// no-missed-events reasoning as `SurfaceExitWaitRegistry`.
+    @discardableResult
+    func addWaiter(
+        surfaceId: UUID,
+        condition: AgentStateWaitCondition,
+        callback: @escaping (AgentActivityState?) -> Void
+    ) -> UUID {
+        let token = UUID()
+        lock.lock()
+        waiters[surfaceId, default: []].append(Entry(token: token, condition: condition, callback: callback))
+        lock.unlock()
+        return token
+    }
+
+    func removeWaiter(surfaceId: UUID, token: UUID) {
+        lock.lock()
+        waiters[surfaceId]?.removeAll { $0.token == token }
+        if waiters[surfaceId]?.isEmpty == true {
+            waiters.removeValue(forKey: surfaceId)
+        }
+        lock.unlock()
+    }
+
+    /// Called from the single main-thread mutation point whenever `surfaceId`'s agent state
+    /// changes (including transitioning to `nil` on clear/reset). Fires every waiter whose
+    /// condition `newState` satisfies and leaves the rest registered.
+    func notify(surfaceId: UUID, newState: AgentActivityState?) {
+        lock.lock()
+        let current = waiters[surfaceId] ?? []
+        var fired: [Entry] = []
+        var remaining: [Entry] = []
+        for entry in current {
+            if entry.condition.isSatisfied(by: newState) {
+                fired.append(entry)
+            } else {
+                remaining.append(entry)
+            }
+        }
+        if remaining.isEmpty {
+            waiters.removeValue(forKey: surfaceId)
+        } else {
+            waiters[surfaceId] = remaining
+        }
+        lock.unlock()
+        for entry in fired {
+            entry.callback(newState)
+        }
+    }
+}
+
 extension TerminalController {
     /// Poll interval used while waiting on a `pattern` condition. Ghostty does not expose a
     /// push-based "surface content changed" callback to the app layer (unlike child-exit, which
@@ -88,8 +198,10 @@ extension TerminalController {
     private static let surfaceWaitPollInterval: TimeInterval = 0.1
 
     /// `surface.wait`: block (with timeout) until a surface hits a condition -- new output
-    /// matching a regex `pattern`, or the surface's child process exiting (`exit: true`).
-    /// Exactly one of `pattern` / `exit` must be provided.
+    /// matching a regex `pattern`, the surface's child process exiting (`exit: true`), or its
+    /// reported agent activity state satisfying `agent_state` (#166 task 2: `idle`, `working`,
+    /// `blocked`, or `any_change`). Exactly one of `pattern` / `exit` / `agent_state` must be
+    /// provided.
     func v2SurfaceWait(params: [String: Any]) -> V2CallResult {
         let timeoutMs = max(1, v2Int(params, "timeout_ms") ?? v2Int(params, "timeout") ?? 30_000)
         let timeout = Double(timeoutMs) / 1000.0
@@ -97,13 +209,27 @@ extension TerminalController {
 
         let patternRaw = v2String(params, "pattern")
         let waitForExit = v2Bool(params, "exit") ?? false
+        let agentStateRaw = v2String(params, "agent_state")
 
-        guard (patternRaw != nil) != waitForExit else {
+        let conditionsProvided = [patternRaw != nil, waitForExit, agentStateRaw != nil].filter { $0 }.count
+        guard conditionsProvided == 1 else {
             return .err(
                 code: "invalid_params",
-                message: "Provide exactly one of 'pattern' (regex string) or 'exit' (true)",
+                message: "Provide exactly one of 'pattern' (regex string), 'exit' (true), or 'agent_state' (idle|working|blocked|any_change)",
                 data: nil
             )
+        }
+
+        var agentStateCondition: AgentStateWaitCondition?
+        if let agentStateRaw {
+            guard let condition = AgentStateWaitCondition(rawValue: agentStateRaw) else {
+                return .err(
+                    code: "invalid_params",
+                    message: "Invalid agent_state -- use: idle, working, blocked, any_change",
+                    data: nil
+                )
+            }
+            agentStateCondition = condition
         }
 
         let regex: NSRegularExpression?
@@ -126,11 +252,12 @@ extension TerminalController {
             return .err(code: "invalid_params", message: "lines must be greater than 0", data: nil)
         }
 
-        // Declared up front (not inside the v2MainSync closure below) so the exit branch can
-        // register the *real* completion callback in the very same main-thread hop that checks
-        // whether the surface has already exited -- no separate "install the watcher" step that
-        // could race a concurrent child-exit.
+        // Declared up front (not inside the v2MainSync closure below) so the exit/agent_state
+        // branches can register the *real* completion callback in the very same main-thread hop
+        // that checks whether the surface has already exited / already satisfies the condition --
+        // no separate "install the watcher" step that could race a concurrent state change.
         let exitSemaphore = DispatchSemaphore(value: 0)
+        let agentStateSemaphore = DispatchSemaphore(value: 0)
 
         var setupError: V2CallResult?
         var workspaceId: UUID?
@@ -139,14 +266,20 @@ extension TerminalController {
         var alreadySatisfied = false
         var matchedText: String?
         var exitWaiterToken: UUID?
+        var agentStateWaiterToken: UUID?
+        // Written once, either synchronously inside the v2MainSync hop below (already-satisfied
+        // case) or from `AgentStateWaitRegistry`'s callback (later, from the main thread) before
+        // it signals `agentStateSemaphore` -- safe to read after `semaphore.wait` returns
+        // `.success` without an extra lock, same reasoning as the exit branch's signal-only use.
+        var resolvedAgentState: AgentActivityState?
 
         // Single main-thread hop: resolve the target, and atomically (a) check whether the
         // condition is *already* true right now, and (b) if not, install the watcher (exit
-        // registry entry with the real signal callback, or nothing extra for pattern -- the
-        // poll loop below re-reads fresh state on every tick so there is no separate "install"
-        // step to race against there). This is what guarantees a marker printed between
-        // call-arrival and "watcher install" -- or a child-exit racing the call -- is never
-        // missed.
+        // registry entry / agent-state registry entry with the real signal callback, or nothing
+        // extra for pattern -- the poll loop below re-reads fresh state on every tick so there is
+        // no separate "install" step to race against there). This is what guarantees a marker
+        // printed between call-arrival and "watcher install" -- or a child-exit or agent-state
+        // change racing the call -- is never missed.
         v2MainSync {
             guard let tabManager = self.v2ResolveTabManager(params: params) else {
                 setupError = .err(code: "unavailable", message: "TabManager not available", data: nil)
@@ -169,7 +302,7 @@ extension TerminalController {
             guard let panel = ws.panels[surfaceId] else {
                 // Surface is already gone. For `exit` that means the condition is already
                 // satisfied (this is exactly the "a parallel state change can't be missed" case
-                // for exit waits). For `pattern` there is nothing left to read.
+                // for exit waits). For `pattern`/`agent_state` there is nothing left to read.
                 if waitForExit {
                     alreadySatisfied = true
                 } else {
@@ -181,6 +314,23 @@ extension TerminalController {
             if waitForExit {
                 exitWaiterToken = SurfaceExitWaitRegistry.shared.addWaiter(surfaceId: surfaceId) {
                     exitSemaphore.signal()
+                }
+                return
+            }
+
+            if let agentStateCondition {
+                let currentState = ws.panelAgentStates[surfaceId]
+                if agentStateCondition.isSatisfied(by: currentState) {
+                    alreadySatisfied = true
+                    resolvedAgentState = currentState
+                } else {
+                    agentStateWaiterToken = AgentStateWaitRegistry.shared.addWaiter(
+                        surfaceId: surfaceId,
+                        condition: agentStateCondition
+                    ) { newState in
+                        resolvedAgentState = newState
+                        agentStateSemaphore.signal()
+                    }
                 }
                 return
             }
@@ -203,7 +353,15 @@ extension TerminalController {
             return .err(code: "internal_error", message: "Failed to resolve surface", data: nil)
         }
 
-        func result(waited: Bool, matched: String? = nil) -> V2CallResult {
+        func result(waited: Bool, matched: String? = nil, agentState: AgentActivityState?? = nil) -> V2CallResult {
+            let condition: String
+            if waitForExit {
+                condition = "exit"
+            } else if agentStateCondition != nil {
+                condition = "agent_state"
+            } else {
+                condition = "pattern"
+            }
             var payload: [String: Any] = [
                 "workspace_id": workspaceId.uuidString,
                 "workspace_ref": self.v2Ref(kind: .workspace, uuid: workspaceId),
@@ -211,16 +369,22 @@ extension TerminalController {
                 "surface_ref": self.v2Ref(kind: .surface, uuid: surfaceIdOut),
                 "window_id": self.v2OrNull(windowId?.uuidString),
                 "window_ref": self.v2Ref(kind: .window, uuid: windowId),
-                "condition": waitForExit ? "exit" : "pattern",
+                "condition": condition,
                 "waited": waited
             ]
             if let matched {
                 payload["match"] = matched
             }
+            if let agentState {
+                payload["state"] = self.v2OrNull(agentState?.rawValue)
+            }
             return .ok(payload)
         }
 
         if alreadySatisfied {
+            if agentStateCondition != nil {
+                return result(waited: false, agentState: resolvedAgentState)
+            }
             return result(waited: false, matched: matchedText)
         }
 
@@ -233,6 +397,21 @@ extension TerminalController {
             }
             SurfaceExitWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: exitWaiterToken)
             return .err(code: "timeout", message: "Surface did not exit before timeout", data: ["timeout_ms": timeoutMs])
+        }
+
+        if let agentStateCondition {
+            guard let agentStateWaiterToken else {
+                return .err(code: "internal_error", message: "Failed to register agent_state watcher", data: nil)
+            }
+            if agentStateSemaphore.wait(timeout: .now() + timeout) == .success {
+                return result(waited: true, agentState: resolvedAgentState)
+            }
+            AgentStateWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: agentStateWaiterToken)
+            return .err(
+                code: "timeout",
+                message: "Surface's agent_state did not reach '\(agentStateCondition.rawValue)' before timeout",
+                data: ["timeout_ms": timeoutMs]
+            )
         }
 
         // Pattern condition: poll on this connection's own thread (not main, not a shared
@@ -276,7 +455,11 @@ extension TerminalController {
     /// Reads the surface's current text (screen + scrollback) for pattern matching. Always
     /// includes scrollback so a marker that has already scrolled off-screen by the time we poll
     /// is still found. `lineLimit` bounds the read cost for very long-lived waits.
-    private func v2SurfaceWaitReadText(terminalPanel: TerminalPanel, lineLimit: Int?) -> String? {
+    ///
+    /// Not `private`: also used by `TerminalController+Subscriptions.swift`'s output-event
+    /// polling (#167), which reads the same point-in-time text for a different purpose (diffing
+    /// against last-seen length rather than regex matching).
+    func v2SurfaceWaitReadText(terminalPanel: TerminalPanel, lineLimit: Int?) -> String? {
         let response = readTerminalTextBase64(
             terminalPanel: terminalPanel,
             includeScrollback: true,

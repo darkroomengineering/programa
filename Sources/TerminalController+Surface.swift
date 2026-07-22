@@ -1232,7 +1232,12 @@ extension TerminalController {
         }
     }
 
-    private func sendSocketText(_ text: String, surface: ghostty_surface_t) {
+    // Not `private`: also called directly by `TerminalController+AgentPrompt.swift`'s
+    // `v2AgentPrompt` (#166 task 3), which needs to send text and register its "did the agent
+    // start working" watcher inside the same main-thread hop -- reusing `v2SurfaceSendText`
+    // (a separate v2MainSync call) would reopen the exact race window surface.wait's atomic
+    // check+register pattern exists to close.
+    func sendSocketText(_ text: String, surface: ghostty_surface_t) {
         let chunks = Self.socketTextChunks(text)
 #if DEBUG
         let startedAt = ProcessInfo.processInfo.systemUptime

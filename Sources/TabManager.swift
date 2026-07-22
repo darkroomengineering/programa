@@ -1441,7 +1441,11 @@ class TabManager: ObservableObject {
     // Keep addTab as convenience alias
     @discardableResult
     func addTab(select: Bool = true, eagerLoadTerminal: Bool = false) -> Workspace {
-        addWorkspace(select: select, eagerLoadTerminal: eagerLoadTerminal)
+        let workspace = addWorkspace(select: select, eagerLoadTerminal: eagerLoadTerminal)
+        // #167 workspace_lifecycle "created" event -- single funnel point for both UI-driven
+        // (new tab button, keyboard shortcut) and socket-driven (workspace.create) creation.
+        SocketEventBroadcaster.shared.publishWorkspaceLifecycle(kind: "created", workspaceId: workspace.id, title: workspace.title)
+        return workspace
     }
 
     func terminalPanelForWorkspaceConfigInheritanceSource() -> TerminalPanel? {
@@ -1712,6 +1716,11 @@ class TabManager: ObservableObject {
         if selectedTabId == tabId {
             updateWindowTitle(for: tabs[index])
         }
+        // #167 workspace_lifecycle "renamed" event. Deliberately scoped to this explicit-rename
+        // entry point (used by both the tab-bar rename UI and workspace.rename), NOT to every
+        // automatic shell-title update -- those happen continuously as the user runs commands
+        // and would flood subscribers with noise unrelated to an actual rename.
+        SocketEventBroadcaster.shared.publishWorkspaceLifecycle(kind: "renamed", workspaceId: tabId, title: tabs[index].title)
     }
 
     func clearCustomTitle(tabId: UUID) {
@@ -1872,6 +1881,9 @@ class TabManager: ObservableObject {
         clearWorkspaceGitProbes(workspaceId: workspace.id)
         sidebarSelectedWorkspaceIds.remove(workspace.id)
 
+        let closedWorkspaceId = workspace.id
+        let closedWorkspaceTitle = workspace.title
+
         AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: workspace.id)
         workspace.teardownAllPanels()
         workspace.teardownRemoteConnection()
@@ -1889,6 +1901,10 @@ class TabManager: ObservableObject {
                 selectedTabId = tabs[newIndex].id
             }
         }
+
+        // #167 workspace_lifecycle "closed" event -- single funnel point for both UI-driven and
+        // socket-driven (workspace.close) closure.
+        SocketEventBroadcaster.shared.publishWorkspaceLifecycle(kind: "closed", workspaceId: closedWorkspaceId, title: closedWorkspaceTitle)
     }
 
     /// Detach a workspace from this window without closing its panels.
