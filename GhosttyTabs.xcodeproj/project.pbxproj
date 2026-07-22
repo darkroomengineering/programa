@@ -36,6 +36,7 @@
 			NRSP0058A1B2C3D4E5F60719 /* V2CommandCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */; };
 			NRSP0056A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */; };
 			NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */; };
+			WALS000001 /* SessionOutputTapSpike.swift in Sources */ = {isa = PBXBuildFile; fileRef = WALS000002 /* SessionOutputTapSpike.swift */; };
 			NRSP0052A1B2C3D4E5F60719 /* TerminalCopyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */; };
 			NRSP0050A1B2C3D4E5F60719 /* SidebarShortcutHints.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */; };
 			NRSP0048A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0047A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift */; };
@@ -390,6 +391,7 @@
 			NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2CommandCatalog.swift; sourceTree = "<group>"; };
 			NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalWindowPortalRegistry.swift; sourceTree = "<group>"; };
 			NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSurface.swift; sourceTree = "<group>"; };
+			WALS000002 /* SessionOutputTapSpike.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionOutputTapSpike.swift; sourceTree = "<group>"; };
 			NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalCopyMode.swift; sourceTree = "<group>"; };
 			NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarShortcutHints.swift; sourceTree = "<group>"; };
 			NRSP0047A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarRemoteErrorCopy.swift; sourceTree = "<group>"; };
@@ -791,6 +793,7 @@
 					NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */,
 					NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */,
 					NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */,
+					WALS000002 /* SessionOutputTapSpike.swift */,
 					NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */,
 					NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */,
 					NRSP0047A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift */,
@@ -1249,6 +1252,7 @@
 					NRSP0058A1B2C3D4E5F60719 /* V2CommandCatalog.swift in Sources */,
 					NRSP0056A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift in Sources */,
 					NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */,
+					WALS000001 /* SessionOutputTapSpike.swift in Sources */,
 					NRSP0052A1B2C3D4E5F60719 /* TerminalCopyMode.swift in Sources */,
 					NRSP0050A1B2C3D4E5F60719 /* SidebarShortcutHints.swift in Sources */,
 					NRSP0048A1B2C3D4E5F60719 /* SidebarRemoteErrorCopy.swift in Sources */,
