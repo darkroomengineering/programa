@@ -116,6 +116,7 @@ class TerminalController {
     private static let focusIntentV2Methods: Set<String> = [
         "window.focus",
         "workspace.select",
+        "review.open",
         "worktree.create",
         "worktree.open",
         "workspace.next",
@@ -1918,6 +1919,20 @@ class TerminalController {
         // Markdown
         case "markdown.open":
             return v2Result(id: id, self.v2MarkdownOpen(params: params))
+
+        // Review (agent diff review panel)
+        case "review.open":
+            return v2Result(id: id, self.v2ReviewOpen(params: params))
+        case "review.refresh":
+            return v2Result(id: id, self.v2ReviewRefresh(params: params))
+        case "review.comment.add":
+            return v2Result(id: id, self.v2ReviewCommentAdd(params: params))
+        case "review.comment.remove":
+            return v2Result(id: id, self.v2ReviewCommentRemove(params: params))
+        case "review.comment.list":
+            return v2Result(id: id, self.v2ReviewCommentList(params: params))
+        case "review.send_comments":
+            return v2Result(id: id, self.v2ReviewSendComments(params: params))
 
         case "surface.read_text":
             return v2Result(id: id, self.v2SurfaceReadText(params: params))

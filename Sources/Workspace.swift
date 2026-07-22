@@ -169,6 +169,11 @@ final class Workspace: Identifiable, ObservableObject {
     /// Used for stale-session detection: if the PID is dead, the status entry is cleared.
     var agentPIDs: [String: pid_t] = [:]
     var restoredTerminalScrollbackByPanelId: [UUID: String] = [:]
+    /// Review panels created during session restore, keyed by their new panel id, mapping to
+    /// the OLD (pre-restore) panel id of the terminal surface they review. Consumed and
+    /// cleared by `restoreSessionSnapshot`'s post-restore fixup pass once every pane has been
+    /// restored and `oldToNewPanelIds` is complete -- see `Workspace+Persistence.swift`.
+    var pendingReviewPanelSourceFixups: [UUID: UUID] = [:]
 
     /// True when any hook-managed agent (Claude Code, Codex, etc.) is registered for this
     /// workspace. Used to suppress raw OSC desktop notifications in favor of the structured
@@ -273,6 +278,7 @@ final class Workspace: Identifiable, ObservableObject {
         static let terminal = "terminal"
         static let browser = "browser"
         static let markdown = "markdown"
+        static let review = "review"
     }
 
     enum PanelShellActivityState: String {
@@ -765,6 +771,39 @@ final class Workspace: Identifiable, ObservableObject {
         panelSubscriptions[markdownPanel.id] = subscription
     }
 
+    /// Auto-refresh trigger for a review panel: subscribes to `$panelAgentStates` filtered to
+    /// the *reviewed* (source) terminal surface's id, and refreshes the diff on a
+    /// `.working -> .idle` (or "state clears") edge -- deliberately not on every state change,
+    /// to avoid thrashing `git diff` on a fast-moving CLI session. See
+    /// docs/plans/diff-review-panel.md §3 "Refresh triggers".
+    func installReviewPanelSubscription(_ reviewPanel: ReviewPanel) {
+        var previousState: AgentActivityState? = panelAgentStates[reviewPanel.sourceSurfaceId]
+        let subscription = $panelAgentStates
+            .map { [sourceSurfaceId = reviewPanel.sourceSurfaceId] states in states[sourceSurfaceId] }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak reviewPanel] newState in
+                defer { previousState = newState }
+                guard let reviewPanel else { return }
+                if previousState == .working, newState == .idle || newState == nil {
+                    reviewPanel.refresh()
+                }
+            }
+        panelSubscriptions[reviewPanel.id] = subscription
+    }
+
+    func sendReviewComments(sourceSurfaceId: UUID, text: String) {
+        guard let terminalPanel = terminalPanel(for: sourceSurfaceId) else { return }
+        let textToSend = text + "\r"
+        if let surface = terminalPanel.surface.surface {
+            TerminalController.shared.sendSocketText(textToSend, surface: surface)
+            terminalPanel.surface.forceRefresh(reason: "reviewPanel.sendComments")
+        } else {
+            terminalPanel.sendText(textToSend)
+            terminalPanel.surface.requestBackgroundSurfaceStartIfNeeded()
+        }
+    }
+
     func browserRemoteWorkspaceStatusSnapshot() -> BrowserRemoteWorkspaceStatus? {
         guard let target = remoteDisplayTarget else { return nil }
         return BrowserRemoteWorkspaceStatus(
@@ -802,6 +841,10 @@ final class Workspace: Identifiable, ObservableObject {
         panels[panelId] as? MarkdownPanel
     }
 
+    func reviewPanel(for panelId: UUID) -> ReviewPanel? {
+        panels[panelId] as? ReviewPanel
+    }
+
     func surfaceKind(for panel: any Panel) -> String {
         switch panel.panelType {
         case .terminal:
@@ -810,6 +853,8 @@ final class Workspace: Identifiable, ObservableObject {
             return SurfaceKind.browser
         case .markdown:
             return SurfaceKind.markdown
+        case .review:
+            return SurfaceKind.review
         }
     }
 

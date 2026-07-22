@@ -78,6 +78,7 @@ enum KeyboardShortcutSettings {
         case toggleBrowserDeveloperTools
         case showBrowserJavaScriptConsole
         case toggleReactGrab
+        case openReview
 
         var id: String { rawValue }
 
@@ -139,6 +140,7 @@ enum KeyboardShortcutSettings {
             case .toggleBrowserDeveloperTools: return String(localized: "shortcut.toggleBrowserDevTools.label", defaultValue: "Toggle Browser Developer Tools")
             case .showBrowserJavaScriptConsole: return String(localized: "shortcut.showBrowserJSConsole.label", defaultValue: "Show Browser JavaScript Console")
             case .toggleReactGrab: return String(localized: "shortcut.toggleReactGrab.label", defaultValue: "Toggle React Grab")
+            case .openReview: return String(localized: "shortcut.openReview.label", defaultValue: "Open Review Panel")
             }
         }
 
@@ -260,6 +262,12 @@ enum KeyboardShortcutSettings {
                 return StoredShortcut(key: "c", command: true, shift: false, option: true, control: false)
             case .toggleReactGrab:
                 return StoredShortcut(key: "g", command: true, shift: true, option: false, control: false)
+            case .openReview:
+                // Shipped without a default binding: Cmd+Shift+R (the plan's suggested default)
+                // is already taken by `.renameWorkspace` (see docs/keyboard-shortcuts.md), and no
+                // other unclaimed combo was confirmed free across the whole app. Still fully
+                // editable in Settings -> Keyboard Shortcuts and ~/.config/programa/settings.json.
+                return StoredShortcut(key: "", command: false, shift: false, option: false, control: false)
             }
         }
 

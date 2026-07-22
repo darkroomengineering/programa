@@ -3981,6 +3981,14 @@ struct ProgramaCLI {
                 }
             ),
 
+            CommandDescriptor(
+                names: ["review"],
+                helpLines: ["review open|refresh|comment|send  (agent diff review panel: worktree/branch diff, line comments)"],
+                execute: { ctx in
+                    try self.runReviewCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
             CommandDescriptor(names: [], helpLines: [""], execute: nil),
 
             CommandDescriptor(
@@ -5586,6 +5594,7 @@ struct ProgramaCLI {
         if let text = hooksSubcommandUsage(command) { return text }
         if let text = browserSubcommandUsage(command) { return text }
         if let text = markdownSubcommandUsage(command) { return text }
+        if let text = reviewSubcommandUsage(command) { return text }
         if let text = themesSubcommandUsage(command) { return text }
         if let text = agentWrapperSubcommandUsage(command) { return text }
         return commandDescriptor(named: command)?.detailedUsage
@@ -6020,6 +6029,26 @@ struct ProgramaCLI {
             let parsed = try parse(minPositionals: 1, maxPositionals: 2)
             if parsed.positional.count == 2, parsed.positional[0].lowercased() != "open" {
                 throw CLIError(message: "markdown: unexpected subcommand \(parsed.positional[0])")
+            }
+
+        case "review":
+            let parsed = try parse(
+                values: ["workspace", "window", "surface", "direction", "mode", "base-branch", "preamble"],
+                minPositionals: 1,
+                maxPositionals: nil,
+                allowEquals: true
+            )
+            let subcommand = parsed.positional[0].lowercased()
+            guard ["open", "refresh", "comment", "send"].contains(subcommand) else {
+                throw CLIError(message: "review: unknown subcommand \(parsed.positional[0])")
+            }
+            if subcommand == "comment" {
+                guard parsed.positional.count >= 2 else {
+                    throw CLIError(message: "review comment: missing subcommand (add|remove|list)")
+                }
+                guard ["add", "remove", "list"].contains(parsed.positional[1].lowercased()) else {
+                    throw CLIError(message: "review comment: unknown subcommand \(parsed.positional[1])")
+                }
             }
 
         case "ssh":

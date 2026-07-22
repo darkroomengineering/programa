@@ -76,6 +76,7 @@ Surfaces / Splits:
 - (no v1 equivalent) -> `surface.wait` (new in v2, see "surface.wait" below)
 - (no v1 equivalent) -> `agent.prompt` (new in v2, see "agent.prompt" below)
 - (no v1 equivalent) -> `subscribe`/`unsubscribe` (new in v2, see "Socket Event Subscriptions" below)
+- (no v1 equivalent) -> `review.open` / `review.refresh` / `review.comment.add` / `review.comment.remove` / `review.comment.list` / `review.send_comments` (new in v2, see "Review Panel" below)
 
 Surface Telemetry (report_*/ports/git/pr — off-main parse, main.async mutate; see "Socket
 command threading policy" in the root `CLAUDE.md`):
@@ -307,6 +308,63 @@ hooks were never installed for this surface.
 
 If the surface was already `working` when the prompt was sent (e.g. a second prompt queued while
 one is running), step 2 is skipped entirely and the call goes straight to step 3.
+
+## Review Panel (`review.*`, docs/plans/diff-review-panel.md)
+
+Agent diff review panel: a panel beside a terminal surface showing its worktree diff
+(uncommitted changes, or vs a branch merge-base), with line comments that get sent back into
+the terminal's input as `path:start-end — text`. CLI: `programa review open|refresh|comment|send`.
+
+### `review.open`
+
+Opens a review panel split beside a terminal surface. Mirrors `markdown.open`'s param/response
+shape, plus a `focus` param (default `false` — this command never activates the app or moves
+focus unless the caller explicitly opts in).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `surface_id` | string (id or ref) | no | Source terminal surface to review + split from. Defaults to the focused surface. Its `panelDirectories` entry supplies the git working directory. |
+| `workspace_id` / `window_id` | string | no | Same resolution as other `surface.*`/`markdown.*` methods. |
+| `mode` | string | no | `"uncommitted"` (default) — diff vs `HEAD`, includes uncommitted changes. `"branch"` — diff vs merge-base with `base_branch` (falls back to local `main`, then `master`, if the requested base doesn't resolve). |
+| `base_branch` | string | no | Only used when `mode: "branch"`. Default `"origin/main"`. |
+| `direction` | string | no | Split direction, default `"right"`. |
+| `focus` | bool | no | Default `false`. Only when `true` does this command activate the app/window and move pane focus to the new panel. |
+
+Response (`ok: true`): `window_id/_ref, workspace_id/_ref, pane_id/_ref, surface_id/_ref` (the new
+review panel), plus `source_surface_id/_ref` (the terminal being reviewed), `mode`,
+`base_branch`, `file_count`, and `diffable_file_count`.
+
+Errors: `not_found` (no focused surface / source surface not found), `invalid_params` (bad
+`mode`/`direction`), `unavailable` (resolved directory isn't inside a git worktree).
+
+### `review.refresh`
+
+Re-runs the diff for an existing review panel. `surface_id` (the review panel's own id) or
+workspace-focused-review-panel fallback. Response: `{"file_count": N, "diffable_file_count": M,
+"generated_at": <unix ts>}`. Never activates the app or moves focus.
+
+### `review.comment.add` / `review.comment.remove` / `review.comment.list`
+
+Pure in-memory comment metadata on a review panel, addressed by `surface_id` (the review panel).
+`add` takes `file_path` (repo-relative), `start_line`/`end_line` (1-based, new-file line
+numbers), `text` -> `{"comment_id": "..."}`. `remove` takes `comment_id` -> `{"ok": true}`.
+`list` -> `{"comments": [{"id", "file_path", "start_line", "end_line", "text", "created_at",
+"is_stale"}]}` — `is_stale` is `true` when a refresh could no longer find that file/line range
+(the comment is never dropped, only flagged).
+
+### `review.send_comments`
+
+Serializes every pending comment (`path:start-end — text`, one per line, file-then-line order)
+and sends it into the *source* terminal surface via the same path `surface.send_text` uses (with
+Enter submitted after, like `agent.prompt`), then clears the sent comments.
+
+| Field | Type | Required |
+|---|---|---|
+| `surface_id` | review panel id/ref | yes (or workspace-focused fallback) |
+| `preamble` | string | no — override the default "Code review comments" preamble |
+
+Response (`ok: true`): `{"sent_count": N, "target_surface_id"/"_ref": "..."}`. Sending zero
+pending comments is a no-op (`sent_count: 0`), not an error.
 
 ## Socket Event Subscriptions (#167)
 

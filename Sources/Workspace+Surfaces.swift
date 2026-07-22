@@ -620,6 +620,82 @@ extension Workspace {
         return markdownPanel
     }
 
+    func newReviewSplit(
+        from panelId: UUID,
+        orientation: SplitOrientation,
+        insertFirst: Bool = false,
+        mode: ReviewDiffMode = .uncommitted,
+        baseBranch: String = "origin/main",
+        focus: Bool = false
+    ) -> ReviewPanel? {
+        guard let sourceTabId = surfaceIdFromPanelId(panelId) else { return nil }
+        var sourcePaneId: PaneID?
+        for paneId in bonsplitController.allPaneIds {
+            let tabs = bonsplitController.tabs(inPane: paneId)
+            if tabs.contains(where: { $0.id == sourceTabId }) {
+                sourcePaneId = paneId
+                break
+            }
+        }
+
+        guard let paneId = sourcePaneId else { return nil }
+
+        let directory = panelDirectories[panelId] ?? currentDirectory
+        let reviewPanel = ReviewPanel(
+            workspaceId: id,
+            sourceSurfaceId: panelId,
+            directory: directory,
+            mode: mode,
+            baseBranch: baseBranch
+        )
+        reviewPanel.sendToSourceSurface = { [weak self, weak reviewPanel] text in
+            guard let self, let reviewPanel else { return }
+            self.sendReviewComments(sourceSurfaceId: reviewPanel.sourceSurfaceId, text: text)
+        }
+        panels[reviewPanel.id] = reviewPanel
+        panelTitles[reviewPanel.id] = reviewPanel.displayTitle
+        panelDirectories[reviewPanel.id] = directory
+
+        let newTab = Bonsplit.Tab(
+            title: reviewPanel.displayTitle,
+            icon: reviewPanel.displayIcon,
+            kind: SurfaceKind.review,
+            isDirty: reviewPanel.isDirty,
+            isLoading: false,
+            isPinned: false
+        )
+        surfaceIdToPanelId[newTab.id] = reviewPanel.id
+        let previousFocusedPanelId = focusedPanelId
+
+        isProgrammaticSplit = true
+        defer { isProgrammaticSplit = false }
+        guard bonsplitController.splitPane(paneId, orientation: orientation, withTab: newTab, insertFirst: insertFirst) != nil else {
+            surfaceIdToPanelId.removeValue(forKey: newTab.id)
+            panels.removeValue(forKey: reviewPanel.id)
+            panelTitles.removeValue(forKey: reviewPanel.id)
+            panelDirectories.removeValue(forKey: reviewPanel.id)
+            return nil
+        }
+
+        let previousHostedView = focusedTerminalPanel?.hostedView
+        if focus {
+            previousHostedView?.suppressReparentFocus()
+            focusPanel(reviewPanel.id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                previousHostedView?.clearSuppressReparentFocus()
+            }
+        } else {
+            preserveFocusAfterNonFocusSplit(
+                preferredPanelId: previousFocusedPanelId,
+                splitPanelId: reviewPanel.id,
+                previousHostedView: previousHostedView
+            )
+        }
+
+        installReviewPanelSubscription(reviewPanel)
+        return reviewPanel
+    }
+
     @discardableResult
     func newMarkdownSurface(
         inPane paneId: PaneID,

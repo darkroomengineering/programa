@@ -2422,6 +2422,40 @@
         }
       }
     },
+    "command.openReviewPanel.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Review Panel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レビューパネルを開く"
+          }
+        }
+      }
+    },
+    "command.openReviewPanel.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diff of the focused terminal's repo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォーカス中ターミナルのリポジトリの差分"
+          }
+        }
+      }
+    },
     "command.installCLI.subtitle": {
       "extractionState": "manual",
       "localizations": {

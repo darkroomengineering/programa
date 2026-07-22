@@ -142,6 +142,14 @@
 		A5001420 /* MarkdownPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001418 /* MarkdownPanel.swift */; };
 		A5001421 /* MarkdownPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001419 /* MarkdownPanelView.swift */; };
 		MDRD00000000000000000001 /* MarkdownDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MDRD00000000000000000002 /* MarkdownDocumentView.swift */; };
+		RVPN00000000000000000002 /* ReviewComment.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000001 /* ReviewComment.swift */; };
+		RVPN00000000000000000004 /* ReviewCommentSerializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000003 /* ReviewCommentSerializer.swift */; };
+		RVPN00000000000000000006 /* ReviewDiffParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000005 /* ReviewDiffParser.swift */; };
+		RVPN00000000000000000008 /* ReviewDiffProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000007 /* ReviewDiffProber.swift */; };
+		RVPN0000000000000000000A /* ReviewPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000009 /* ReviewPanel.swift */; };
+		RVPN0000000000000000000C /* ReviewPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN0000000000000000000B /* ReviewPanelView.swift */; };
+		RVPN0000000000000000000E /* TerminalController+Review.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN0000000000000000000D /* TerminalController+Review.swift */; };
+		RVPN00000000000000000010 /* CLI+Review.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN0000000000000000000F /* CLI+Review.swift */; };
 		A5001290 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A5001291 /* MarkdownUI */; };
 		A5001405 /* PanelContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001415 /* PanelContentView.swift */; };
 		A5001406 /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001416 /* Workspace.swift */; };
@@ -488,6 +496,14 @@
 		A5007421 /* BrowserPopupWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserPopupWindowController.swift; sourceTree = "<group>"; };
 		A5001415 /* PanelContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/PanelContentView.swift; sourceTree = "<group>"; };
 		A5001418 /* MarkdownPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanel.swift; sourceTree = "<group>"; };
+		RVPN00000000000000000001 /* ReviewComment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewComment.swift; sourceTree = "<group>"; };
+		RVPN00000000000000000003 /* ReviewCommentSerializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewCommentSerializer.swift; sourceTree = "<group>"; };
+		RVPN00000000000000000005 /* ReviewDiffParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDiffParser.swift; sourceTree = "<group>"; };
+		RVPN00000000000000000007 /* ReviewDiffProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDiffProber.swift; sourceTree = "<group>"; };
+		RVPN00000000000000000009 /* ReviewPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ReviewPanel.swift; sourceTree = "<group>"; };
+		RVPN0000000000000000000B /* ReviewPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ReviewPanelView.swift; sourceTree = "<group>"; };
+		RVPN0000000000000000000D /* TerminalController+Review.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Review.swift"; sourceTree = "<group>"; };
+		RVPN0000000000000000000F /* CLI+Review.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Review.swift"; sourceTree = "<group>"; };
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
 		MDRD00000000000000000002 /* MarkdownDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownDocumentView.swift; sourceTree = "<group>"; };
 		A5001416 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
@@ -941,6 +957,13 @@
 				NRPA00002 /* FileWatcher.swift */,
 				A5001655 /* ProgramaDirectoryTrust.swift */,
 				A5001661 /* JSONCParser.swift */,
+				RVPN00000000000000000001 /* ReviewComment.swift */,
+				RVPN00000000000000000003 /* ReviewCommentSerializer.swift */,
+				RVPN00000000000000000005 /* ReviewDiffParser.swift */,
+				RVPN00000000000000000007 /* ReviewDiffProber.swift */,
+				RVPN00000000000000000009 /* ReviewPanel.swift */,
+				RVPN0000000000000000000B /* ReviewPanelView.swift */,
+				RVPN0000000000000000000D /* TerminalController+Review.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -957,6 +980,7 @@
 				B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */,
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
 				B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */,
+				RVPN0000000000000000000F /* CLI+Review.swift */,
 			);
 			path = CLI;
 			sourceTree = "<group>";
@@ -1365,6 +1389,13 @@
 				A5001404 /* BrowserPanelView.swift in Sources */,
 				A5007420 /* BrowserPopupWindowController.swift in Sources */,
 				A5001420 /* MarkdownPanel.swift in Sources */,
+				RVPN00000000000000000002 /* ReviewComment.swift in Sources */,
+				RVPN00000000000000000004 /* ReviewCommentSerializer.swift in Sources */,
+				RVPN00000000000000000006 /* ReviewDiffParser.swift in Sources */,
+				RVPN00000000000000000008 /* ReviewDiffProber.swift in Sources */,
+				RVPN0000000000000000000A /* ReviewPanel.swift in Sources */,
+				RVPN0000000000000000000C /* ReviewPanelView.swift in Sources */,
+				RVPN0000000000000000000E /* TerminalController+Review.swift in Sources */,
 				A5001421 /* MarkdownPanelView.swift in Sources */,
 				MDRD00000000000000000001 /* MarkdownDocumentView.swift in Sources */,
 				A5001500 /* ProgramaWebView.swift in Sources */,
@@ -1476,6 +1507,7 @@
 				B9000002A1B2C3D4E5F60719 /* programa.swift in Sources */,
 				B9000027A1B2C3D4E5F60719 /* RemoteRelayZshBootstrap.swift in Sources */,
 				B9000031A1B2C3D4E5F60719 /* CLI+Markdown.swift in Sources */,
+				RVPN00000000000000000010 /* CLI+Review.swift in Sources */,
 				B9000033A1B2C3D4E5F60719 /* CLI+SSH.swift in Sources */,
 				B9000035A1B2C3D4E5F60719 /* CLI+Browser.swift in Sources */,
 				B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */,

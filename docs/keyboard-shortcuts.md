@@ -89,6 +89,17 @@ Browser developer-tool shortcuts follow Safari defaults.
 | ⌘ ⇧ , | Reload configuration |
 | ⌘ Q | Quit |
 
+## Review
+
+| Shortcut | Action |
+|----------|--------|
+| (unbound by default) | Open review panel — set a custom shortcut in Settings → Keyboard Shortcuts |
+
+The agent diff review panel (`programa review open`, or the command palette) shows the
+worktree diff for a terminal surface, with line comments you can send back into the agent's
+input. No default keyboard shortcut ships for v1 to avoid colliding with existing bindings
+(⌘⇧R is already Rename Workspace) — bind one yourself if you want a shortcut.
+
 ## Git worktrees & named layouts
 
 The native git worktree workflow (`programa worktree ...`) and named layout configs

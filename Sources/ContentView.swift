@@ -4330,6 +4330,14 @@ struct ContentView: View {
                 when: { $0.bool(CommandPaletteContextKeys.workspaceHasSplits) }
             )
         )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.openReviewPanel",
+                title: constant(String(localized: "command.openReviewPanel.title", defaultValue: "Open Review Panel")),
+                subtitle: constant(String(localized: "command.openReviewPanel.subtitle", defaultValue: "Diff of the focused terminal's repo")),
+                keywords: ["review", "diff", "agent", "changes", "git"]
+            )
+        )
 
         let programaConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "programa.json"))
         for command in programaConfigStore.loadedCommands {
@@ -4366,6 +4374,11 @@ struct ContentView: View {
     private func registerCommandPaletteHandlers(_ registry: inout CommandPaletteHandlerRegistry) {
         registry.register(commandId: "palette.newWorkspace") {
             tabManager.addWorkspace()
+        }
+        registry.register(commandId: "palette.openReviewPanel") {
+            guard let workspace = tabManager.selectedWorkspace,
+                  let focusedPanelId = workspace.focusedPanelId else { return }
+            _ = workspace.newReviewSplit(from: focusedPanelId, orientation: .horizontal, focus: true)
         }
         registry.register(commandId: "palette.newClaudeWorkspace") {
             let trimmedCwd = tabManager.selectedWorkspace?.currentDirectory
