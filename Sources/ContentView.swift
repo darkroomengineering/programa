@@ -15,6 +15,7 @@ struct ContentView: View {
     @EnvironmentObject var sidebarState: SidebarState
     @EnvironmentObject var sidebarSelectionState: SidebarSelectionState
     @EnvironmentObject var programaConfigStore: ProgramaConfigStore
+    @ObservedObject private var programaLayoutStore = ProgramaLayoutStore.shared
     @State var sidebarWidth: CGFloat = 200
     @State var hoveredResizerHandles: Set<SidebarResizerHandle> = []
     @State var isResizerDragging = false
@@ -4347,6 +4348,18 @@ struct ContentView: View {
             )
         }
 
+        let layoutSubtitle = constant(String(localized: "command.applyLayout.subtitle", defaultValue: "Layout"))
+        for savedLayout in programaLayoutStore.savedLayouts {
+            contributions.append(
+                CommandPaletteCommandContribution(
+                    commandId: "palette.applyLayout." + savedLayout.name,
+                    title: constant(String(localized: "command.applyLayout.title", defaultValue: "Apply layout: \(savedLayout.name)")),
+                    subtitle: layoutSubtitle,
+                    keywords: ["layout", "apply", savedLayout.name]
+                )
+            )
+        }
+
         return contributions
     }
 
@@ -4726,6 +4739,15 @@ struct ContentView: View {
                     configSourcePath: sourcePath,
                     globalConfigPath: globalPath
                 )
+            }
+        }
+
+        for savedLayout in programaLayoutStore.savedLayouts {
+            let layoutName = savedLayout.name
+            registry.register(commandId: "palette.applyLayout." + layoutName) {
+                guard let saved = programaLayoutStore.load(name: layoutName) else { return }
+                let workspace = tabManager.addWorkspace()
+                workspace.applyCustomLayout(saved.layout, baseCwd: workspace.currentDirectory)
             }
         }
     }

@@ -21,6 +21,16 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var currentDirectory: String
     private(set) var preferredBrowserProfileID: UUID?
 
+    /// Set at creation time by `worktree.create`/`worktree.open` when this workspace is a git
+    /// worktree opened alongside its parent repo's workspace. Sidebar grouping is order + a
+    /// small fork-glyph badge (no tree/collapse in v1) -- see docs/plans/worktree-and-layouts.md
+    /// decision #4. In-memory only for v1: not wired into Workspace+Persistence.swift's
+    /// session-restore serialization, so the grouping badge does not survive an app relaunch.
+    @Published var worktreeParentWorkspaceId: UUID?
+    /// The git branch checked out in this workspace's worktree, if it was created/opened via
+    /// `worktree.create`/`worktree.open`. Used for the sidebar badge tooltip.
+    @Published var worktreeBranch: String?
+
     /// Ordinal for PROGRAMA_PORT range assignment (monotonically increasing per app session)
     var portOrdinal: Int = 0
 

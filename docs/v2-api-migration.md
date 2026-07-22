@@ -52,6 +52,17 @@ Workspaces:
 - current_workspace -> `workspace.current`
 - close_workspace -> `workspace.close`
 
+Worktrees (new in v2, no v1 predecessor -- see "worktree.* / layout.*" below):
+- (no v1 equivalent) -> `worktree.create`
+- (no v1 equivalent) -> `worktree.open`
+- (no v1 equivalent) -> `worktree.remove`
+- (no v1 equivalent) -> `worktree.list`
+
+Layouts (new in v2, no v1 predecessor -- see "worktree.* / layout.*" below):
+- (no v1 equivalent) -> `layout.save`
+- (no v1 equivalent) -> `layout.apply`
+- (no v1 equivalent) -> `layout.list`
+
 Surfaces / Splits:
 - list_surfaces -> `surface.list`
 - focus_surface / focus_surface_by_panel -> `surface.focus`
@@ -365,6 +376,80 @@ it from the broadcaster — no further events are enqueued for it. A connection'
 (`TerminalController.handleClient`) also unconditionally tears down any attached subscription
 before closing the socket, covering client-initiated close and app shutdown alike. There is no
 server-side cap on concurrent subscriptions.
+
+## `worktree.*` / `layout.*` (docs/plans/worktree-and-layouts.md)
+
+Native git worktree workflow + named layout configs. Both new in v2 (no v1 predecessor). All
+seven methods parse/validate params off-main; the actual git/filesystem I/O runs inside
+`GitWorktreeManager`/`ProgramaLayoutStore` (blocking by construction, same pattern as
+`GitMetadataProber`); `v2MainSync` is used only around the final `tabManager.addWorkspace` /
+`closeWorkspace` mutation, matching `workspace.create`'s existing shape. None of the seven steal
+focus by default — `worktree.create` and `worktree.open` accept an opt-in `focus: bool` (default
+`false`), gated through the existing `v2FocusAllowed()`/`focusIntentV2Methods` mechanism.
+
+### `worktree.create`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `repo` | string | yes | Any directory inside the repo; resolved via `git rev-parse --show-toplevel`. |
+| `branch` | string | yes | Checked out if it already exists locally; otherwise created from `base`. |
+| `base` | string | no | Ref to branch a new `branch` from. Default `HEAD`. Ignored if `branch` already exists. |
+| `path` | string | no | Default `<worktrees.directory>/<repo-name>/<branch-slug>` (`worktrees.directory` setting, default `~/.programa/worktrees`). |
+| `layout` | string | no | Name of a saved layout (`layout.save`) to apply into the new workspace, baseCwd = the worktree root. |
+| `focus` | bool | no | Default `false`. |
+
+Result: `{"worktree": {"path", "branch", "repo"}, "workspace_id", "workspace_ref", "window_id", "window_ref"}`.
+
+Errors: `not_a_git_repo`, `branch_checked_out` (pre-detected via `git worktree list --porcelain`,
+not git's error text), `worktree_path_exists`, `layout_not_found`, `git_command_failed`.
+
+### `worktree.open`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `repo` | string | yes | Same resolution as `worktree.create`. |
+| `path` | string | one of path/branch | Absolute or relative worktree path. |
+| `branch` | string | one of path/branch | Matched against `git worktree list`. |
+| `focus` | bool | no | Default `false`. |
+
+Idempotent: if the worktree is already open as a workspace, returns that `workspace_id` instead
+of creating a duplicate. Result shape matches `worktree.create`. Errors: `invalid_params`,
+`worktree_not_found`.
+
+### `worktree.remove`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `repo` | string | yes | |
+| `path` / `branch` | string | one required | |
+| `force` | bool | no | Only overrides git's dirty-worktree refusal; never passed for any other reason. Never deletes the branch. |
+
+Result: `{"removed": true, "closed_workspace_id"?}`. Closes the associated workspace if it was
+open. Errors: `invalid_params`, `worktree_not_found`, `worktree_dirty`, `git_command_failed`.
+
+### `worktree.list`
+
+`{repo?}` -> `{"repo", "worktrees": [{"path", "branch", "head", "is_open", "workspace_id"?, "workspace_ref"?}]}`.
+Errors: `not_a_git_repo`.
+
+### `layout.save`
+
+`{name, force?}` -> `{"name", "path"}`. Captures the current workspace via
+`Workspace.captureCustomLayout()` (pane/split tree, cwds, browser URLs — not
+command/env/focus, which have no live "what's running" signal). Errors: `already_exists`
+(unless `force`), `invalid_name`, `no_active_workspace`.
+
+### `layout.apply`
+
+`{name, workspace_id?, cwd?}` -> `{"workspace_id", "workspace_ref", "window_id"?, "window_ref"?}`.
+If `workspace_id` is omitted, creates a new (never-focused) workspace first with `cwd` (or its
+own default cwd), then applies the layout into it — the same `Workspace.applyCustomLayout`
+engine `programa.json` layouts already use, so relative `cwd`s in the saved layout resolve
+against the new workspace's root. Errors: `not_found`.
+
+### `layout.list`
+
+`{}` -> `{"layouts": [{"name", "saved_at"}]}`.
 
 ## Tests
 

@@ -65,6 +65,8 @@
 		A5FF0072 /* TabManager+Browser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0062 /* TabManager+Browser.swift */; };
 		A5FF0071 /* TabManager+GitMetadataPolling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0061 /* TabManager+GitMetadataPolling.swift */; };
 		NRTM00000004 /* GitMetadataProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000003 /* GitMetadataProber.swift */; };
+		WTMG000001 /* GitWorktreeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000002 /* GitWorktreeManager.swift */; };
+		WTMG000005 /* ProgramaLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000006 /* ProgramaLayoutStore.swift */; };
 		NRTM00000002 /* TabManager+UITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000001 /* TabManager+UITestHarness.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
 			A5001005 /* GhosttyTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001015 /* GhosttyTerminalView.swift */; };
@@ -88,6 +90,8 @@
 		NRTC0012 /* TerminalController+Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0002 /* TerminalController+Telemetry.swift */; };
 		NRTC0013 /* TerminalController+Window.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0003 /* TerminalController+Window.swift */; };
 		NRTC0014 /* TerminalController+Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0004 /* TerminalController+Workspace.swift */; };
+		WTMG000003 /* TerminalController+Worktree.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000004 /* TerminalController+Worktree.swift */; };
+		WTMG000007 /* TerminalController+Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000008 /* TerminalController+Layout.swift */; };
 		NRTC0015 /* TerminalController+Surface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0005 /* TerminalController+Surface.swift */; };
 		NRTC0016 /* TerminalController+Pane.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0006 /* TerminalController+Pane.swift */; };
 		NRTC0017 /* TerminalController+Notification.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0007 /* TerminalController+Notification.swift */; };
@@ -402,6 +406,8 @@
 		A5FF0062 /* TabManager+Browser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+Browser.swift"; sourceTree = "<group>"; };
 		A5FF0061 /* TabManager+GitMetadataPolling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+GitMetadataPolling.swift"; sourceTree = "<group>"; };
 		NRTM00000003 /* GitMetadataProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitMetadataProber.swift; sourceTree = "<group>"; };
+		WTMG000002 /* GitWorktreeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitWorktreeManager.swift; sourceTree = "<group>"; };
+		WTMG000006 /* ProgramaLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaLayoutStore.swift; sourceTree = "<group>"; };
 		NRTM00000001 /* TabManager+UITestHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+UITestHarness.swift"; sourceTree = "<group>"; };
 			A5001014 /* GhosttyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfig.swift; sourceTree = "<group>"; };
 			A5001015 /* GhosttyTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTerminalView.swift; sourceTree = "<group>"; };
@@ -427,6 +433,8 @@
 		NRTC0002 /* TerminalController+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Telemetry.swift"; sourceTree = "<group>"; };
 		NRTC0003 /* TerminalController+Window.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Window.swift"; sourceTree = "<group>"; };
 		NRTC0004 /* TerminalController+Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Workspace.swift"; sourceTree = "<group>"; };
+		WTMG000004 /* TerminalController+Worktree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Worktree.swift"; sourceTree = "<group>"; };
+		WTMG000008 /* TerminalController+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Layout.swift"; sourceTree = "<group>"; };
 		NRTC0005 /* TerminalController+Surface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Surface.swift"; sourceTree = "<group>"; };
 		NRTC0006 /* TerminalController+Pane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Pane.swift"; sourceTree = "<group>"; };
 		NRTC0007 /* TerminalController+Notification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Notification.swift"; sourceTree = "<group>"; };
@@ -791,6 +799,8 @@
 					A5FF0061 /* TabManager+GitMetadataPolling.swift */,
 					NRTM00000001 /* TabManager+UITestHarness.swift */,
 					NRTM00000003 /* GitMetadataProber.swift */,
+					WTMG000002 /* GitWorktreeManager.swift */,
+					WTMG000006 /* ProgramaLayoutStore.swift */,
 					A5001511 /* UITestRecorder.swift */,
 					A5001416 /* Workspace.swift */,
 					NRWS00000000000000000027 /* Workspace+Persistence.swift */,
@@ -829,6 +839,8 @@
 				NRTC0002 /* TerminalController+Telemetry.swift */,
 				NRTC0003 /* TerminalController+Window.swift */,
 				NRTC0004 /* TerminalController+Workspace.swift */,
+				WTMG000004 /* TerminalController+Worktree.swift */,
+				WTMG000008 /* TerminalController+Layout.swift */,
 				NRTC0005 /* TerminalController+Surface.swift */,
 				NRTC0006 /* TerminalController+Pane.swift */,
 				NRTC0007 /* TerminalController+Notification.swift */,
@@ -1232,6 +1244,8 @@
 						A5FF0071 /* TabManager+GitMetadataPolling.swift in Sources */,
 						NRTM00000002 /* TabManager+UITestHarness.swift in Sources */,
 						NRTM00000004 /* GitMetadataProber.swift in Sources */,
+						WTMG000001 /* GitWorktreeManager.swift in Sources */,
+						WTMG000005 /* ProgramaLayoutStore.swift in Sources */,
 						A5001501 /* UITestRecorder.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
 						NRWS00000000000000000028 /* Workspace+Persistence.swift in Sources */,
@@ -1270,6 +1284,8 @@
 				NRTC0012 /* TerminalController+Telemetry.swift in Sources */,
 				NRTC0013 /* TerminalController+Window.swift in Sources */,
 				NRTC0014 /* TerminalController+Workspace.swift in Sources */,
+				WTMG000003 /* TerminalController+Worktree.swift in Sources */,
+				WTMG000007 /* TerminalController+Layout.swift in Sources */,
 				NRTC0015 /* TerminalController+Surface.swift in Sources */,
 				NRTC0016 /* TerminalController+Pane.swift in Sources */,
 				NRTC0017 /* TerminalController+Notification.swift in Sources */,

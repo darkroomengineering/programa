@@ -116,6 +116,8 @@ class TerminalController {
     private static let focusIntentV2Methods: Set<String> = [
         "window.focus",
         "workspace.select",
+        "worktree.create",
+        "worktree.open",
         "workspace.next",
         "workspace.previous",
         "workspace.last",
@@ -1607,6 +1609,24 @@ class TerminalController {
             return v2Result(id: id, self.v2WorkspaceListMetaBlocks(params: params))
         case "workspace.reset_sidebar":
             return v2Result(id: id, self.v2WorkspaceResetSidebar(params: params))
+
+        // Worktrees
+        case "worktree.create":
+            return v2Result(id: id, self.v2WorktreeCreate(params: params))
+        case "worktree.open":
+            return v2Result(id: id, self.v2WorktreeOpen(params: params))
+        case "worktree.remove":
+            return v2Result(id: id, self.v2WorktreeRemove(params: params))
+        case "worktree.list":
+            return v2Result(id: id, self.v2WorktreeList(params: params))
+
+        // Layouts
+        case "layout.save":
+            return v2Result(id: id, self.v2LayoutSave(params: params))
+        case "layout.apply":
+            return v2Result(id: id, self.v2LayoutApply(params: params))
+        case "layout.list":
+            return v2Result(id: id, self.v2LayoutList(params: params))
 
         // Settings
         case "settings.open":

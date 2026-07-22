@@ -231,6 +231,7 @@ struct VerticalTabsSidebar: View {
                                 let allRemoteContextMenuTargetsDisconnected = usesSelectedContextMenuTargets
                                     ? allSelectedRemoteContextMenuTargetsDisconnected
                                     : (tab.isRemoteWorkspace && tab.remoteConnectionState == .disconnected)
+                                let showsWorktreeBadge = tab.worktreeParentWorkspaceId != nil
                                 TabItemView(
                                     tabManager: tabManager,
                                     notificationStore: notificationStore,
@@ -266,7 +267,8 @@ struct VerticalTabsSidebar: View {
                                     remoteContextMenuWorkspaceIds: remoteContextMenuWorkspaceIds,
                                     allRemoteContextMenuTargetsConnecting: allRemoteContextMenuTargetsConnecting,
                                     allRemoteContextMenuTargetsDisconnected: allRemoteContextMenuTargetsDisconnected,
-                                    settings: tabItemSettings
+                                    settings: tabItemSettings,
+                                    showsWorktreeBadge: showsWorktreeBadge
                                 )
                                 .equatable()
                             }

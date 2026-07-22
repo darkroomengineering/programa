@@ -88,3 +88,9 @@ Browser developer-tool shortcuts follow Safari defaults.
 | ⌘ , | Settings |
 | ⌘ ⇧ , | Reload configuration |
 | ⌘ Q | Quit |
+
+## Git worktrees & named layouts
+
+The native git worktree workflow (`programa worktree ...`) and named layout configs
+(`programa layout ...`, "Apply layout: <name>" in the command palette) add no new keyboard
+shortcuts — CLI and command palette only, by design (not an oversight).

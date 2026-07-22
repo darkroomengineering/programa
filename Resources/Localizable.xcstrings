@@ -2344,6 +2344,40 @@
         }
       }
     },
+    "command.applyLayout.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply layout: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レイアウトを適用: %@"
+          }
+        }
+      }
+    },
+    "command.applyLayout.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layout"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レイアウト"
+          }
+        }
+      }
+    },
     "command.disableMinimalMode.title": {
       "extractionState": "manual",
       "localizations": {
@@ -9207,6 +9241,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pinned workspace. Closing requires confirmation."
+          }
+        }
+      }
+    },
+    "sidebar.worktreeBadge.tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Git worktree workspace"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Git worktree ワークスペース"
+          }
+        }
+      }
+    },
+    "sidebar.worktreeBadge.accessibilityLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Git worktree workspace"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Git worktree ワークスペース"
           }
         }
       }

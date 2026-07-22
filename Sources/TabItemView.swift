@@ -44,7 +44,8 @@ struct TabItemView: View, Equatable {
         lhs.remoteContextMenuWorkspaceIds == rhs.remoteContextMenuWorkspaceIds &&
         lhs.allRemoteContextMenuTargetsConnecting == rhs.allRemoteContextMenuTargetsConnecting &&
         lhs.allRemoteContextMenuTargetsDisconnected == rhs.allRemoteContextMenuTargetsDisconnected &&
-        lhs.settings == rhs.settings
+        lhs.settings == rhs.settings &&
+        lhs.showsWorktreeBadge == rhs.showsWorktreeBadge
     }
 
     // Use plain references instead of @EnvironmentObject to avoid subscribing
@@ -75,6 +76,11 @@ struct TabItemView: View, Equatable {
     let allRemoteContextMenuTargetsConnecting: Bool
     let allRemoteContextMenuTargetsDisconnected: Bool
     let settings: SidebarTabItemSettingsSnapshot
+    /// Set at creation time by `worktree.create`/`worktree.open` (`Workspace.worktreeParentWorkspaceId`).
+    /// Precomputed by the caller (VerticalTabsSidebar) and included in `==` -- see the
+    /// Equatable typing-latency contract at the top of this file. Do NOT read
+    /// `tab.worktreeParentWorkspaceId` directly in `body`.
+    let showsWorktreeBadge: Bool
     @State private var workspaceObservationGeneration: UInt64 = 0
     @State private var isHovering = false
     @State private var rowHeight: CGFloat = 1
@@ -364,6 +370,8 @@ struct TabItemView: View, Equatable {
         let closeButtonTooltip = tab.isPinned
             ? protectedWorkspaceTooltip
             : KeyboardShortcutSettings.Action.closeWorkspace.tooltip(closeWorkspaceTooltip)
+        let worktreeBadgeTooltip = String(localized: "sidebar.worktreeBadge.tooltip", defaultValue: "Git worktree workspace")
+        let worktreeBadgeAccessibilityLabel = String(localized: "sidebar.worktreeBadge.accessibilityLabel", defaultValue: "Git worktree workspace")
         let accessibilityHintText = String(localized: "sidebar.workspace.accessibilityHint", defaultValue: "Activate to focus this workspace. Drag to reorder, or use Move Up and Move Down actions.")
         let moveUpActionText = String(localized: "sidebar.workspace.moveUpAction", defaultValue: "Move Up")
         let moveDownActionText = String(localized: "sidebar.workspace.moveDownAction", defaultValue: "Move Down")
@@ -400,6 +408,14 @@ struct TabItemView: View, Equatable {
 
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
+                if showsWorktreeBadge {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(activeSecondaryColor(0.7))
+                        .safeHelp(worktreeBadgeTooltip)
+                        .accessibilityLabel(Text(worktreeBadgeAccessibilityLabel))
+                }
+
                 if unreadCount > 0 {
                     ZStack {
                         Circle()
@@ -658,6 +674,7 @@ struct TabItemView: View, Equatable {
         .animation(.easeInOut(duration: 0.2), value: tab.logEntries.count)
         .animation(.easeInOut(duration: 0.2), value: tab.progress != nil)
         .animation(.easeInOut(duration: 0.2), value: tab.metadataBlocks.count)
+        .padding(.leading, showsWorktreeBadge ? 6 : 0)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
