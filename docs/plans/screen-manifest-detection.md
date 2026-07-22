@@ -456,6 +456,25 @@ fallback one-shot path is needed instead).
 1. **Phase A trigger uncertainty (highest risk, blocks item 17's estimate)** — unverified
    whether existing shell-integration telemetry carries a foreground command name.
    Resolve first, before committing to Phase 2's schedule.
+
+   **Resolved during implementation: no usable signal exists.** Read the shell-integration
+   scripts (`Resources/shell-integration/programa-zsh-integration.zsh`'s `_cmux_preexec` /
+   `_cmux_report_shell_activity_state`) and their Swift-side handler
+   (`TerminalController+Telemetry.swift`'s `v2SurfaceReportShellState`): the zsh `preexec` hook
+   *does* have the foreground command locally (`$1`), and uses it for local heuristics (git-force
+   flags, nested-shell detection), but `_cmux_report_shell_activity_state` only ever puts a bare
+   `"prompt"` / `"running"` state on the wire — the command string itself is never sent. Changing
+   that would mean touching the shipped shell-integration scripts for three shells (zsh/bash/fish)
+   plus the wire schema, a materially bigger change than this plan scoped for v1.
+   Per this section's originally-documented fallback, `AgentScreenDetectionEngine` instead runs
+   Phase A recognition (`recognize.screen_patterns`) directly against the sampled screen text, on
+   its own ~3s cadence, for every open terminal surface not yet a candidate and not already
+   hooks-owned — folded into the same background thread as Phase B (one thread total, ticking
+   Phase A every 4th Phase B sample). This trades a small amount of continuous low-cost screen
+   reads (bounded 40-line tail, small candidate-shaped manifest set) for zero shell-integration
+   script changes. A future PR that threads the foreground-command string through
+   `report_shell_state` could switch Phase A back to the zero-poll design this plan originally
+   preferred, without changing the manifest schema or Phase B at all.
 2. **Pattern brittleness across CLI versions** — Claude Code/Codex/Gemini update
    spinner/prompt wording across releases; manifests will go stale. Mitigated by
    user-overridable manifests (§2.1) and `confidence`/`source_notes` fields, but this is

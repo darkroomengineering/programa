@@ -7105,6 +7105,74 @@
         }
       }
     },
+    "settings.automation.agentScreenDetection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screen-Based Agent Detection"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面ベースのエージェント検出"
+          }
+        }
+      }
+    },
+    "settings.automation.agentScreenDetection.note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to agents such as Gemini CLI and GitHub Copilot CLI that have no installed hooks. A hooks-managed session (Claude Code, Codex, OpenCode) always takes priority over this."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フックが未導入のエージェント（Gemini CLI、GitHub Copilot CLI など）に適用されます。フックで管理されているセッション（Claude Code、Codex、OpenCode）は常にこちらより優先されます。"
+          }
+        }
+      }
+    },
+    "settings.automation.agentScreenDetection.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent status is only shown for CLIs with an installed integration."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントの状態は、連携機能が導入済みの CLI でのみ表示されます。"
+          }
+        }
+      }
+    },
+    "settings.automation.agentScreenDetection.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Infers working/blocked/idle status for agent CLIs without an installed integration by reading the terminal screen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連携機能が未導入のエージェント CLI について、ターミナル画面を読み取って作業中/ブロック中/待機中の状態を推測します。"
+          }
+        }
+      }
+    },
     "settings.automation.claudeCode": {
       "extractionState": "manual",
       "localizations": {

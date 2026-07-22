@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "agent": "aider",
+  "display_name": "Aider",
+  "recognize": {
+    "process_names": ["aider"],
+    "screen_patterns": ["aider chat", "aider v\\d"]
+  },
+  "states": [
+    {
+      "bucket": "blocked",
+      "priority": 100,
+      "anchor_last_n_lines": 12,
+      "patterns": [
+        "Apply edit\\?",
+        "\\(y/n\\)",
+        "y/n/a/d/D/q"
+      ],
+      "confidence": "low",
+      "source_notes": "Aider's confirmation prompts (apply edit, run shell command) commonly use a single-letter y/n/a/d/q-style menu; exact wording unverified against a live session."
+    },
+    {
+      "bucket": "working",
+      "priority": 50,
+      "anchor_last_n_lines": 6,
+      "patterns": [
+        "Thinking",
+        "Tokens:"
+      ],
+      "confidence": "low",
+      "source_notes": "Unverified in-progress indicator guess -- Aider's simpler prompt style (vs TUI-heavy tools) may make this an easier follow-up pass."
+    },
+    {
+      "bucket": "idle",
+      "priority": 0,
+      "anchor_last_n_lines": 4,
+      "patterns": [
+        "\\n>\\s*$"
+      ],
+      "confidence": "low",
+      "source_notes": "Aider's default prompt is a bare '>' -- unverified exact spacing/formatting."
+    }
+  ]
+}

@@ -827,6 +827,11 @@ class TerminalController {
         self.tabManager = tabManager
         self.accessMode = accessMode
 
+        // Screen-manifest agent detection (docs/plans/screen-manifest-detection.md): lazily
+        // starts its own background sampling thread, independent of the socket listener below --
+        // this is simply a convenient, always-reached app-bootstrap point to kick it off once.
+        AgentScreenDetectionEngine.shared.startIfNeeded()
+
         let existing = withListenerState {
             (isRunning: isRunning, socketPath: self.socketPath, acceptLoopAlive: acceptLoopAlive)
         }

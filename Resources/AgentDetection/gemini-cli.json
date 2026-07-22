@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "agent": "gemini-cli",
+  "display_name": "Gemini CLI",
+  "recognize": {
+    "process_names": ["gemini"],
+    "screen_patterns": ["Gemini CLI", "Type your message", "esc to cancel"]
+  },
+  "states": [
+    {
+      "bucket": "blocked",
+      "priority": 100,
+      "anchor_last_n_lines": 12,
+      "patterns": [
+        "Apply this change\\?",
+        "Allow execution\\?",
+        "\\(y/n\\)"
+      ],
+      "confidence": "needs_verification",
+      "source_notes": "Gemini CLI's edit/execution approval prompt; verify current wording against a live session."
+    },
+    {
+      "bucket": "working",
+      "priority": 50,
+      "anchor_last_n_lines": 6,
+      "patterns": [
+        "esc to cancel",
+        "[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\\s"
+      ],
+      "confidence": "needs_verification",
+      "source_notes": "Braille-pattern spinner glyphs are a common Node/Ink CLI spinner set; verify Gemini CLI's actual spinner frames and in-progress wording against a live session."
+    },
+    {
+      "bucket": "idle",
+      "priority": 0,
+      "anchor_last_n_lines": 4,
+      "patterns": [
+        "Type your message"
+      ],
+      "confidence": "needs_verification",
+      "source_notes": "Idle input placeholder text; verify exact current wording."
+    }
+  ]
+}

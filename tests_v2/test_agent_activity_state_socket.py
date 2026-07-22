@@ -33,6 +33,16 @@ def _surface_agent_state(client: cmux, workspace_id: str, surface_id: str) -> ob
     raise cmuxError(f"surface {surface_id} not found in surface.list: {listed}")
 
 
+def _surface_agent_state_source(client: cmux, workspace_id: str, surface_id: str) -> object:
+    """Additive sibling field (screen-manifest detection, docs/plans/screen-manifest-detection.md)
+    -- must never affect the exact-string `agent_state` assertions above/below this file."""
+    listed = client._call("surface.list", {"workspace_id": workspace_id}) or {}
+    for surface in listed.get("surfaces") or []:
+        if str(surface.get("id")) == surface_id:
+            return surface.get("agent_state_source")
+    raise cmuxError(f"surface {surface_id} not found in surface.list: {listed}")
+
+
 def main() -> int:
     workspace_id = ""
 
@@ -53,9 +63,12 @@ def main() -> int:
                 {"workspace_id": workspace_id, "surface_id": surface_id, "state": "working"},
             ) or {}
             _must(reported.get("state") == "working", f"report should echo state=working: {reported}")
+            _must(reported.get("source") == "hooks", f"hook report should echo source=hooks: {reported}")
 
             state_after_working = _surface_agent_state(client, workspace_id, surface_id)
             _must(state_after_working == "working", f"surface.list should carry agent_state=working: {state_after_working!r}")
+            source_after_working = _surface_agent_state_source(client, workspace_id, surface_id)
+            _must(source_after_working == "hooks", f"surface.list should carry agent_state_source=hooks: {source_after_working!r}")
 
             client._call(
                 "surface.report_agent_state",

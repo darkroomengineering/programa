@@ -117,12 +117,12 @@ extension TerminalController {
             // Register the watcher in this SAME hop -- see file header step 1.
             if baselineState == .working {
                 alreadyWorkingAtSendTime = true
-                firstPhaseWaiterToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceId, condition: .idle) { state in
+                firstPhaseWaiterToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceId, condition: .idle) { state, _ in
                     resolvedState = state
                     idleSemaphore.signal()
                 }
             } else {
-                firstPhaseWaiterToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceId, condition: .working) { state in
+                firstPhaseWaiterToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceId, condition: .working) { state, _ in
                     resolvedState = state
                     workingSemaphore.signal()
                 }
@@ -203,7 +203,7 @@ extension TerminalController {
             if AgentStateWaitCondition.idle.isSatisfied(by: currentState) {
                 resolvedState = currentState
             } else {
-                idleWaiterToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceIdOut, condition: .idle) { state in
+                idleWaiterToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceIdOut, condition: .idle) { state, _ in
                     resolvedState = state
                     idleSemaphore.signal()
                 }

@@ -119,6 +119,11 @@ final class Workspace: Identifiable, ObservableObject {
     /// Per-surface agent activity state (working/blocked/idle), reported exclusively by
     /// installed lifecycle hooks (issue #164, v1 hook tier). See AgentActivityState.swift.
     @Published var panelAgentStates: [UUID: AgentActivityState] = [:]
+    /// Which tier (`.hooks` vs `.inferred`) reported each surface's current `panelAgentStates`
+    /// entry (screen-manifest detection v2). Always kept in lockstep with `panelAgentStates` by
+    /// `updatePanelAgentState`/`clearPanelAgentState` — never mutated directly. See
+    /// `AgentStateSource`'s doc comment (AgentActivityState.swift) for the hooks-always-win rule.
+    @Published var panelAgentStateSources: [UUID: AgentStateSource] = [:]
     @Published var surfaceListeningPorts: [UUID: [Int]] = [:]
     var agentListeningPorts: [Int] = []
     @Published var remoteConfiguration: WorkspaceRemoteConfiguration?
@@ -212,6 +217,7 @@ final class Workspace: Identifiable, ObservableObject {
             sidebarObservationSignal($pullRequest),
             sidebarObservationSignal($panelPullRequests),
             sidebarObservationSignal($panelAgentStates),
+            sidebarObservationSignal($panelAgentStateSources),
             sidebarObservationSignal($remoteConfiguration),
             sidebarObservationSignal($remoteConnectionState),
             sidebarObservationSignal($remoteConnectionDetail),

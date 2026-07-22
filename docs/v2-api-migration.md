@@ -198,6 +198,13 @@ Response (`ok: true`):
 - `match` is only present for `pattern` waits and is the substring the regex matched.
 - `state` is only present for `agent_state` waits and is the observed value (`"idle"`,
   `"working"`, `"blocked"`, or `null` for "no state reported") at resolution.
+- `source` is only present for `agent_state` waits and is the additive sibling
+  (docs/plans/screen-manifest-detection.md) telling you *who* reported `state`: `"hooks"` (a
+  lifecycle hook — Claude Code/Codex/OpenCode) or `"inferred"` (the screen-manifest detection
+  engine pattern-matching the terminal buffer for agents with no installed hooks). `null` iff
+  `state` is `null`. Hooks always win: a surface's source only ever reads `"inferred"` if no
+  hook has ever reported for it. Manifest schema/authoring guidance for the `"inferred"` tier:
+  `docs/agent-detection-manifests.md`.
 - Timeout: `{"ok": false, "error": {"code": "timeout", "message": "...", "data": {"timeout_ms": N}}}`.
 - If the target surface doesn't exist (or, for `pattern`/`agent_state`, is closed while the wait
   is in flight), the response is `not_found`, not a timeout — callers shouldn't have to wait out
@@ -337,7 +344,7 @@ Pushed events are **not** wrapped in the usual `{"id", "ok", "result"}` v2 envel
 request they're a response to) — each is its own single-line JSON object with an `"event"` key:
 
 ```json
-{"event": "agent_state", "workspace_id": "...", "surface_id": "...", "state": "working", "ts": 1737590400.123}
+{"event": "agent_state", "workspace_id": "...", "surface_id": "...", "state": "working", "source": "hooks", "ts": 1737590400.123}
 {"event": "output", "workspace_id": "...", "surface_id": "...", "text": "new terminal output...", "ts": 1737590400.223}
 {"event": "workspace_lifecycle", "kind": "renamed", "workspace_id": "...", "title": "new title", "ts": 1737590400.323}
 {"event": "dropped", "count": 7}
@@ -345,6 +352,9 @@ request they're a response to) — each is its own single-line JSON object with 
 
 - `agent_state.state` is `null` for a transition to "no state" (clear/reset) — same value shape
   as `surface.wait`'s `agent_state` result.
+- `agent_state.source` is the same additive `"hooks" | "inferred" | null` sibling documented
+  under `surface.wait`'s `agent_state` condition above (screen-manifest detection,
+  docs/plans/screen-manifest-detection.md) — `null` iff `state` is `null`.
 - `output.text` is the *newly appended* tail since the last tick for that surface, capped at
   4000 characters — never the full buffer, and never per-byte (see Backpressure below).
 - `workspace_lifecycle.kind` is `created`, `closed`, or `renamed`. `renamed` fires only from the

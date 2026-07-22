@@ -240,7 +240,7 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         return subscriptions.values.reduce(into: Set<UUID>()) { $0.formUnion($1.outputSurfaceIds) }
     }
 
-    func publishAgentState(workspaceId: UUID, surfaceId: UUID, state: AgentActivityState?) {
+    func publishAgentState(workspaceId: UUID, surfaceId: UUID, state: AgentActivityState?, source: AgentStateSource? = nil) {
         let subs = subscribers(for: .agentState)
         guard !subs.isEmpty else { return }
         let frame: [String: Any] = [
@@ -248,6 +248,7 @@ final class SocketEventBroadcaster: @unchecked Sendable {
             "workspace_id": workspaceId.uuidString,
             "surface_id": surfaceId.uuidString,
             "state": state.map { $0.rawValue } ?? NSNull(),
+            "source": source.map { $0.rawValue } ?? NSNull(),
             "ts": Date().timeIntervalSince1970
         ]
         for sub in subs { sub.enqueue(frame) }
