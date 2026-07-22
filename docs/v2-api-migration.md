@@ -63,6 +63,8 @@ Surfaces / Splits:
 - surface_health -> `surface.health`
 - trigger_flash -> `surface.trigger_flash` (new in v2)
 - (no v1 equivalent) -> `surface.wait` (new in v2, see "surface.wait" below)
+- (no v1 equivalent) -> `agent.prompt` (new in v2, see "agent.prompt" below)
+- (no v1 equivalent) -> `subscribe`/`unsubscribe` (new in v2, see "Socket Event Subscriptions" below)
 
 Surface Telemetry (report_*/ports/git/pr — off-main parse, main.async mutate; see "Socket
 command threading policy" in the root `CLAUDE.md`):
@@ -151,15 +153,16 @@ until a condition is met, instead of the caller polling `surface.read_text` in a
 request, one response — no subscription/unsubscribe pair to manage. CLI: `programa
 wait-surface`.
 
-Request params (exactly one of `pattern` / `exit` is required):
+Request params (exactly one of `pattern` / `exit` / `agent_state` is required):
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `workspace_id` / `surface_id` | string (id or ref) | no | Same resolution as other `surface.*` methods; defaults to the current workspace's focused surface. |
-| `pattern` | string | one of `pattern`/`exit` | Regex (ICU/`NSRegularExpression` syntax) matched against the surface's current text (screen + scrollback) on every check. |
-| `exit` | bool | one of `pattern`/`exit` | Wait for the surface's child process to exit. |
+| `pattern` | string | one of `pattern`/`exit`/`agent_state` | Regex (ICU/`NSRegularExpression` syntax) matched against the surface's current text (screen + scrollback) on every check. |
+| `exit` | bool | one of `pattern`/`exit`/`agent_state` | Wait for the surface's child process to exit. |
+| `agent_state` | string | one of `pattern`/`exit`/`agent_state` | Wait for the surface's #164 agent activity state to reach `idle`, `working`, `blocked`, or transition at all (`any_change`). |
 | `timeout_ms` | int | no | Default `30000`. Also accepts `timeout` (same units) for convenience. |
-| `lines` | int | no | Caps how many trailing lines of scrollback `pattern` rereads per check (default `2000`); does not apply to `exit`. |
+| `lines` | int | no | Caps how many trailing lines of scrollback `pattern` rereads per check (default `2000`); does not apply to `exit`/`agent_state`. |
 
 Response (`ok: true`):
 
@@ -179,31 +182,189 @@ Response (`ok: true`):
 ```
 
 - `waited: false` means the condition was already true the instant the call arrived (a marker
-  already present in scrollback, or the surface had already exited) — the caller never actually
-  blocked.
+  already present in scrollback, the surface had already exited, or its agent_state already
+  satisfied the requested condition) — the caller never actually blocked.
 - `match` is only present for `pattern` waits and is the substring the regex matched.
+- `state` is only present for `agent_state` waits and is the observed value (`"idle"`,
+  `"working"`, `"blocked"`, or `null` for "no state reported") at resolution.
 - Timeout: `{"ok": false, "error": {"code": "timeout", "message": "...", "data": {"timeout_ms": N}}}`.
-- If the target surface doesn't exist (or, for `pattern`, is closed while the wait is in
-  flight), the response is `not_found`, not a timeout — callers shouldn't have to wait out the
-  full timeout to learn the surface is gone.
+- If the target surface doesn't exist (or, for `pattern`/`agent_state`, is closed while the wait
+  is in flight), the response is `not_found`, not a timeout — callers shouldn't have to wait out
+  the full timeout to learn the surface is gone.
+
+### `agent_state` condition values and the no-state rule
+
+- `idle` — the surface's agent_state is `idle`, **or has never been reported at all**. Most
+  terminals never report anything (no agent hooks installed), and a caller waiting for "idle"
+  almost always means "not currently busy" — which is true of a bare terminal too. This is the
+  one asymmetry versus `working`/`blocked`, which both require an actual explicit report; there
+  is nothing to observe in the no-state case for those.
+- `working` — the surface's agent_state is `working`.
+- `blocked` — the surface's agent_state is `blocked` (a hook reported a permission/approval/
+  question prompt — see #164).
+- `any_change` — resolves on the *next* agent_state transition after the call arrives (including
+  a transition to "no state" on clear/reset). Never counts as already-satisfied at registration
+  time, even if the state happens to already differ from some caller-assumed baseline — there is
+  nothing to compare against until a transition is actually observed.
 
 Backpressure / disconnect: `surface.wait` holds its socket connection's dedicated thread for up
 to `timeout_ms` (each connection is handled on its own thread — see `TerminalController.
 handleClient` — so this never blocks other connections or the main thread). If the client
 disconnects mid-wait, the in-flight `write()` of the eventual response simply fails and is
-ignored; for the `exit` condition the registered watcher in `SurfaceExitWaitRegistry` still fires
-and is still cleaned up (the callback is a fire-and-forget semaphore signal with nothing left to
-notify). There is no server-side cap on concurrent waits; each is an independent blocked thread.
+ignored; for the `exit`/`agent_state` conditions the registered watcher (in
+`SurfaceExitWaitRegistry` / `AgentStateWaitRegistry`) still fires and is still cleaned up (the
+callback is a fire-and-forget semaphore signal with nothing left to notify). There is no
+server-side cap on concurrent waits; each is an independent blocked thread.
 
 No-missed-events guarantee: the "is the condition already true?" check and "install the watcher"
 step happen inside the same synchronous main-thread hop (`v2MainSync`), so a pattern marker
-printed the instant the call arrives, or a child-exit racing the call, is always observed — see
-the doc comments on `SurfaceExitWaitRegistry` and `TerminalController.v2SurfaceWait` in
+printed the instant the call arrives, a child-exit racing the call, or an agent_state change
+racing the call, is always observed — see the doc comments on `SurfaceExitWaitRegistry`,
+`AgentStateWaitRegistry`, and `TerminalController.v2SurfaceWait` in
 `Sources/TerminalController+SurfaceWait.swift`. The `pattern` condition itself is polled
 internally (Ghostty doesn't expose a push-based "surface content changed" callback the way it
-does for child-exit) at a fixed ~100ms interval on the connection's own thread; `exit` is fully
-event-driven with no polling, driven off the same `GHOSTTY_ACTION_SHOW_CHILD_EXITED` action that
-already closes the panel on process exit.
+does for child-exit) at a fixed ~100ms interval on the connection's own thread; `exit` and
+`agent_state` are fully event-driven with no polling — `exit` off the same
+`GHOSTTY_ACTION_SHOW_CHILD_EXITED` action that already closes the panel on process exit,
+`agent_state` off the single main-thread mutation point for `Workspace.panelAgentStates`
+(`Workspace.updatePanelAgentState`/`clearPanelAgentState`, always called from
+`TerminalController+Telemetry.swift`'s `v2SurfaceReportAgentState`/`v2SurfaceClearAgentState` via
+`DispatchQueue.main.async`).
+
+## `agent.prompt` (#166)
+
+Submit a prompt to an agent surface and wait for it to finish, in one request — built on
+`surface.send_text`'s injection path plus `surface.wait`'s `agent_state` condition. CLI: `programa
+prompt-agent`.
+
+Request params:
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `workspace_id` / `surface_id` | string (id or ref) | no | Same resolution as other `surface.*` methods; defaults to the current workspace's focused surface. |
+| `text` | string | yes | The prompt. Enter is always submitted after it (trailing whitespace/newlines in `text` are trimmed first, so this never sends a stray blank line) — callers don't pass their own line ending. |
+| `timeout_ms` | int | no | Overall budget for the agent to finish. Default `120000`. Also accepts `timeout`. |
+| `working_grace_ms` | int | no | How long to wait for the agent to report it started working before giving up on observing that transition. Default `3000`. |
+
+Response (`ok: true`):
+
+```json
+{
+  "id": "1",
+  "ok": true,
+  "result": {
+    "workspace_id": "...", "workspace_ref": "workspace:1",
+    "surface_id": "...", "surface_ref": "surface:2",
+    "window_id": "...", "window_ref": "window:1",
+    "working_observed": true,
+    "final_state": "idle"
+  }
+}
+```
+
+`warning` is present (success, not an error) when the surface never reported any `agent_state` at
+all — neither before the prompt was sent nor during the grace window — which usually means agent
+hooks were never installed for this surface.
+
+### Semantics (phased, event-driven — no polling)
+
+1. **Send + register, atomically.** The text is sent via the exact same path
+   `surface.send_text` uses, and — inside that *same* main-thread hop — the surface's
+   `agent_state` at that instant is captured and a watcher for the next `working` transition is
+   registered via `AgentStateWaitRegistry`. This closes the race where a hook reacts to the
+   injected text before a separately-registered watcher would exist (the same atomic
+   check+register pattern `surface.wait` uses).
+2. **Grace window (`working_grace_ms`).** Wait for the `working` transition.
+   - Observed → go to step 3.
+   - Not observed by the time the grace window elapses → there is nothing further useful to
+     wait for, so resolve immediately using whatever `agent_state` the surface already has
+     (`working_observed: false`). This is deliberately not a hard error: a prompt can finish
+     faster than the grace window, or a hook simply may not fire for a trivial prompt.
+3. **Wait for idle.** Having observed `working`, wait — for the *remaining* overall
+   `timeout_ms` budget — for `agent_state` to reach `idle` (the same no-state-is-idle rule as
+   `surface.wait` applies: a hook that clears its own state on session end also counts).
+   Resolves with `working_observed: true`.
+4. **Timeout.** If step 3's wait exceeds the remaining budget, the call fails with
+   `{"code": "timeout", ...}` — the agent started working but never finished in time.
+
+If the surface was already `working` when the prompt was sent (e.g. a second prompt queued while
+one is running), step 2 is skipped entirely and the call goes straight to step 3.
+
+## Socket Event Subscriptions (#167)
+
+`subscribe` upgrades the calling connection to receive pushed events — agent state changes
+(#164), coalesced surface output, and workspace lifecycle changes — instead of the caller
+polling `surface.list`/`workspace.list`. Written before implementation, per the issue's ask that
+backpressure/disconnect semantics be specified up front.
+
+**This is not the front door.** `surface.wait` (one-shot conditions) and `agent.prompt` (submit +
+wait) cover the common "wait for one thing" case in a single request/response round trip with no
+queue/backpressure/reconnect model to manage. `subscribe` is for consumers that need *many*
+events over time — dashboards, orchestrators, the menu bar of another machine — so a casual
+caller never has to touch subscription machinery. CLI: `programa watch-events` (also positioned
+as the advanced path, not the default way to wait for something).
+
+### `subscribe`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `classes` | array of string | yes | Any of `agent_state`, `output`, `workspace_lifecycle`. Non-empty. |
+| `surface_ids` | array of string (id or ref) | required iff `classes` includes `output` | `output` is opt-in per surface — broadcasting every surface's output to every subscriber by default would be prohibitively expensive. |
+
+Response (`ok: true`): `{"subscription_id": "...", "classes": [...], "surface_ids": [...],
+"max_queued_events": 256}`. A second `subscribe` on the same connection replaces the first
+subscription (a connection has at most one).
+
+### `unsubscribe`
+
+No params. Tears down any live subscription on the calling connection; `ok: true` even if there
+wasn't one, so a client doesn't need to track whether it subscribed.
+
+### Event frames
+
+Pushed events are **not** wrapped in the usual `{"id", "ok", "result"}` v2 envelope (there is no
+request they're a response to) — each is its own single-line JSON object with an `"event"` key:
+
+```json
+{"event": "agent_state", "workspace_id": "...", "surface_id": "...", "state": "working", "ts": 1737590400.123}
+{"event": "output", "workspace_id": "...", "surface_id": "...", "text": "new terminal output...", "ts": 1737590400.223}
+{"event": "workspace_lifecycle", "kind": "renamed", "workspace_id": "...", "title": "new title", "ts": 1737590400.323}
+{"event": "dropped", "count": 7}
+```
+
+- `agent_state.state` is `null` for a transition to "no state" (clear/reset) — same value shape
+  as `surface.wait`'s `agent_state` result.
+- `output.text` is the *newly appended* tail since the last tick for that surface, capped at
+  4000 characters — never the full buffer, and never per-byte (see Backpressure below).
+- `workspace_lifecycle.kind` is `created`, `closed`, or `renamed`. `renamed` fires only from the
+  explicit rename entry point (tab-bar rename, `workspace.rename`) — not from automatic
+  shell-title updates, which would otherwise flood subscribers on every `cd`.
+
+### Backpressure
+
+Each subscription owns a bounded, **drop-oldest** queue of **256 events**, drained on its own
+dedicated serial dispatch queue — never on the thread that mutated app state (agent-state
+mutation, output polling), so a slow or blocked client socket write never stalls a telemetry
+mutation or the main thread. When the queue is full and a new event arrives, the oldest queued
+event is evicted to make room (a client that's falling behind gets the *freshest* events, not a
+growing backlog). Every time this happens, a `{"event": "dropped", "count": N}` frame is spliced
+in ahead of the next real frame, so a client that sees one knows it may have missed events and
+should re-sync current state with `surface.list`/`workspace.list` (frames carry `surface_id`/
+`workspace_id` specifically so that re-sync is cheap and targeted).
+
+`output` events are coalesced on a shared ~100ms poll tick across all watched surfaces (see
+`TerminalController.v2StartOutputPollLoopIfNeeded`) — reusing the same point-in-time text read
+`surface.wait`'s `pattern` condition uses, since Ghostty doesn't expose a push-based
+"content changed" callback at the app layer. One thread total drives this regardless of
+subscriber/surface count, and it is a no-op tick whenever nothing is being watched.
+
+### Disconnect
+
+The first failed `write()` (client gone) tears the subscription down immediately and unregisters
+it from the broadcaster — no further events are enqueued for it. A connection's read loop
+(`TerminalController.handleClient`) also unconditionally tears down any attached subscription
+before closing the socket, covering client-initiated close and app shutdown alike. There is no
+server-side cap on concurrent subscriptions.
 
 ## Tests
 
