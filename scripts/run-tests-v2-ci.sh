@@ -6,7 +6,7 @@ set -euo pipefail
 # Unlike scripts/run-tests-v2.sh (which is guarded to only run on the cmux-vm
 # and runs the entire tests_v2 suite), this script is intended to run as a
 # required PR-gating job on GitHub-hosted macOS runners. It expects the
-# `programa` scheme to already be built (see the `tests-v2-subset` job in
+# `programa` scheme to already be built (see the `socket-integration-tests` job in
 # .github/workflows/ci.yml) and locates the built app in DerivedData rather
 # than building it itself.
 

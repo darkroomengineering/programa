@@ -168,7 +168,7 @@ jobs:
       - name: Validate remote daemon release assets
         run: ./tests/test_remote_daemon_release_assets.sh
 
-  tests:
+  unit-tests:
     needs: change-detection
     if: needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-26
@@ -350,7 +350,7 @@ jobs:
 
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_version_memory_guard.py
 
-  tests-v2-subset:
+  socket-integration-tests:
     needs: change-detection
     if: needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-15
@@ -488,7 +488,7 @@ jobs:
 
   tests-build-and-lag:
     needs:
-      - tests
+      - unit-tests
       - change-detection
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.change-detection.outputs.run_app_jobs == 'true'
     # Build the full cmux scheme and run the lag regression on GitHub-hosted runners.
@@ -671,7 +671,7 @@ jobs:
 
   ui-regressions:
     needs:
-      - tests
+      - unit-tests
       - change-detection
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-26
