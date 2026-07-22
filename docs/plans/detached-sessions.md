@@ -5,6 +5,72 @@ UX. Companion doc to `docs/remote-daemon-spec.md` (SSH remote path) — this pla
 counterpart and explicitly reuses/extends that spec's `session.*` naming and resize semantics
 rather than inventing a parallel scheme.
 
+## 0. Revision 2026-07-22 — escrow-dup supersedes broker custody for v1 (PoC validated)
+
+A divergent-design pass (`/adhd`) over this plan produced a materially cheaper v1 architecture,
+and its load-bearing kernel assumption has now been **validated by a passing PoC** on this
+machine (Darwin 25.5). This section supersedes §3's recommendation for v1; the broker (Option A)
+is demoted to a v2+ fallback.
+
+### The revised architecture: escrow the dup, don't move the custody
+
+Ghostty keeps `openpty()`ing and owning every PTY + child exactly as today — zero spawn-path
+changes, zero typing-latency risk, no Ghostty patch on the spawn side. At PTY creation the app
+`dup()`s the master fd and sends the dup ONCE via `SCM_RIGHTS` to programad, together with a
+fact file (child PID, session UUID, capability token). Consequences:
+
+- **App dies (quit or crash):** the kernel closes the app's master copy, but the escrowed dup
+  keeps the PTY pair alive — the child never receives SIGHUP and keeps running. The daemon
+  detects app death (kqueue `EVFILT_PROC` + heartbeat dead-man backstop) and drains the master
+  into an append-only WAL so the child never blocks on a full PTY buffer.
+- **Relaunch:** the app fetches the fd back via `SCM_RIGHTS` (token-gated at retrieval, not just
+  storage), replays the WAL tail through Ghostty's own VT parser (no second terminal-state
+  format), re-applies size + `SIGWINCH` to the child pgrp (tmux-style idempotent attach).
+- **The Ghostty seam shrinks:** §3/§6's riskiest assumption — a termio seam to accept an
+  external fd — is now needed only on the rare *revival* path, not on every spawn. §2.1's claim
+  that survival "requires moving PTY ownership out of the GUI process, full stop" is **wrong for
+  the keep-alive half**: fd escrow preserves the pair without moving spawn ownership.
+- **Daemon lifecycle hardening:** the app re-sends the dup on daemon reconnect (generational
+  re-escrow), so a programad restart/upgrade is not a durability SPOF.
+
+### PoC result (Phase 0, done)
+
+Two ~80-line C binaries (`scratchpad escrow-poc/escrow_a.c`, `escrow_b.c`; recreate from this
+description in <1h): A `openpty()`s + forks `/bin/sh` (setsid + `TIOCSCTTY`, faithful terminal
+spawn), sends the dup'd master to B over a UDS via `SCM_RIGHTS`, then `_exit(0)`s without
+cleanup (simulated crash). B waits for A's death, then verifies. Output:
+
+```
+[B] PASS: child 51265 still alive after sender exit
+[B] PASS: shell answered through escrowed fd after owner death
+POC_RESULT: PASS
+```
+
+Both checks held: no SIGHUP reached the child, and the shell stayed fully interactive through
+the escrowed fd (marker echo round-trip). The original Phase 0 spike (2-3 days probing
+`ghostty/src/termio` for a spawn-side seam) is **no longer the gating question**.
+
+### Revised layering
+
+| Layer | What | Depends on Ghostty changes? | Estimate |
+|---|---|---|---|
+| L1 — durable state | Append-only WAL of PTY output (debounced fsync), mmap'd VT frame mirror (double-buffered, atomic generation flip), per-session fact files, read-only-tail fallback UX | Tap point only (off-main termio read loop); measure-first spike | 3-5 eng-days |
+| L2 — escrow-dup | dup-at-birth → programad escrow, death detection + WAL drain, token-gated fd retrieval, revival-only reattach seam in the Ghostty fork | One accessor (expose master fd) + one revival entry point (wire termio onto existing fd + child pid) | 6-9 eng-days |
+| L3 — only if needed | Per-session keeper (lazy handoff at quit-time, launchd-owned, lease self-reap) if programad-as-fd-holder proves fragile; or full broker (old Option A) for remote/v3 | Broker-level | 8-12 eng-days |
+
+Revised remaining risk register (top 3):
+1. **Death-detection latency vs kernel PTY buffer** — if draining starts late, a mid-flight
+   build blocks on `write()`; strictly worse than today's clean SIGHUP. Mitigation: event-driven
+   EVFILT_PROC plus heartbeat bound; validate drain-start latency in L2's first test.
+2. **Torn mmap frame writes** (L1) — double-buffer + atomic generation counter; the reader must
+   only ever see a complete frame or the previous one.
+3. **Exposing the master fd from GhosttyKit** — needs a small read-only accessor in the fork
+   (preferred over fd-table + `ttyname` archaeology, which races on fd reuse).
+
+The remainder of this document is the original plan, kept for the option analysis (§3), codebase
+constraints (§2, with the §2.1 correction above), and the `session.*` API naming (§5), which all
+still apply.
+
 ## 1. Problem Statement
 
 Today, quitting or crashing Programa kills every terminal child process. `README.md` says it
