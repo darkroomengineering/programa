@@ -163,6 +163,12 @@ extension Workspace {
     func updatePanelAgentState(panelId: UUID, state: AgentActivityState) {
         guard panelAgentStates[panelId] != state else { return }
         panelAgentStates[panelId] = state
+        // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
+        // agent.prompt's internal working/idle watch (#166 task 3) -- see
+        // AgentStateWaitRegistry's doc comment in TerminalController+SurfaceWait.swift for why
+        // this is the single safe place to fire from.
+        AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: state)
+        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: state)
 #if DEBUG
         dlog(
             "surface.agentState workspace=\(id.uuidString.prefix(5)) " +
@@ -174,6 +180,8 @@ extension Workspace {
     func clearPanelAgentState(panelId: UUID) {
         guard panelAgentStates[panelId] != nil else { return }
         panelAgentStates.removeValue(forKey: panelId)
+        AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil)
+        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: nil)
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
 #endif
@@ -189,7 +197,16 @@ extension Workspace {
         panelGitBranches.removeAll()
         pullRequest = nil
         panelPullRequests.removeAll()
+        // Clears bypass updatePanelAgentState/clearPanelAgentState's per-surface notify, so fan
+        // it out here too -- otherwise a surface.wait `agent_state` (or a subscribed client)
+        // watching a surface whose state got wiped by a sidebar reset would hang until timeout
+        // instead of observing the transition to "no state".
+        let clearedAgentSurfaceIds = Array(panelAgentStates.keys)
         panelAgentStates.removeAll()
+        for surfaceId in clearedAgentSurfaceIds {
+            AgentStateWaitRegistry.shared.notify(surfaceId: surfaceId, newState: nil)
+            SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: surfaceId, state: nil)
+        }
         surfaceListeningPorts.removeAll()
         listeningPorts.removeAll()
         metadataBlocks.removeAll()

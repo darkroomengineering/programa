@@ -93,6 +93,8 @@
 		NRTC0017 /* TerminalController+Notification.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0007 /* TerminalController+Notification.swift */; };
 		NRTC0018 /* TerminalController+Debug.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0008 /* TerminalController+Debug.swift */; };
 		NRTC0019 /* TerminalController+SurfaceWait.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0009 /* TerminalController+SurfaceWait.swift */; };
+		NRTC0020 /* TerminalController+Subscriptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0010 /* TerminalController+Subscriptions.swift */; };
+		NRTC0023 /* TerminalController+AgentPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0022 /* TerminalController+AgentPrompt.swift */; };
 		A5001500 /* ProgramaWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001510 /* ProgramaWebView.swift */; };
 		A5001501 /* UITestRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001511 /* UITestRecorder.swift */; };
 		A5001226 /* SocketControlSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001225 /* SocketControlSettings.swift */; };
@@ -430,6 +432,8 @@
 		NRTC0007 /* TerminalController+Notification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Notification.swift"; sourceTree = "<group>"; };
 		NRTC0008 /* TerminalController+Debug.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Debug.swift"; sourceTree = "<group>"; };
 		NRTC0009 /* TerminalController+SurfaceWait.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SurfaceWait.swift"; sourceTree = "<group>"; };
+		NRTC0010 /* TerminalController+Subscriptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Subscriptions.swift"; sourceTree = "<group>"; };
+		NRTC0022 /* TerminalController+AgentPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+AgentPrompt.swift"; sourceTree = "<group>"; };
 		A5001620 /* AppleScriptSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleScriptSupport.swift; sourceTree = "<group>"; };
 		D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconDockTilePlugin.swift; sourceTree = "<group>"; };
 		A5001510 /* ProgramaWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ProgramaWebView.swift; sourceTree = "<group>"; };
@@ -830,6 +834,8 @@
 				NRTC0007 /* TerminalController+Notification.swift */,
 				NRTC0008 /* TerminalController+Debug.swift */,
 				NRTC0009 /* TerminalController+SurfaceWait.swift */,
+				NRTC0010 /* TerminalController+Subscriptions.swift */,
+				NRTC0022 /* TerminalController+AgentPrompt.swift */,
 				A5001541 /* PortScanner.swift */,
 				A5001544 /* TerminalImageTransfer.swift */,
 				A5001545 /* TerminalSSHSessionDetector.swift */,
@@ -1269,6 +1275,8 @@
 				NRTC0017 /* TerminalController+Notification.swift in Sources */,
 				NRTC0018 /* TerminalController+Debug.swift in Sources */,
 				NRTC0019 /* TerminalController+SurfaceWait.swift in Sources */,
+				NRTC0020 /* TerminalController+Subscriptions.swift in Sources */,
+				NRTC0023 /* TerminalController+AgentPrompt.swift in Sources */,
 				A5001540 /* PortScanner.swift in Sources */,
 				A5001542 /* TerminalImageTransfer.swift in Sources */,
 				A5001543 /* TerminalSSHSessionDetector.swift in Sources */,

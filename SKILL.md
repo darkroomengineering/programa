@@ -150,6 +150,18 @@ programa wait-surface --surface "$handle" --exit --timeout 600
 
 Exactly one of `--pattern <regex>` or `--exit` is required. Match on whatever the process actually prints ("PASS", "Server started", a prompt returning), not a fixed sleep duration. The wait is answered by the app the moment the condition is met — there is no missed-event window even if the output appears while the call is being issued.
 
+`wait-surface` also has a third condition, `--agent-state <idle|working|blocked|any_change>`, for a sibling pane running another agent whose lifecycle hooks report status automatically (Claude Code/Codex/OpenCode installs wire this up for you, no extra setup) — block on what the agent is *doing*, not what it prints:
+
+```bash
+# Block until the agent in the helper pane goes idle (or has no state at all -- see below)
+programa wait-surface --surface "$handle" --agent-state idle --timeout 300
+
+# Block until it flags something it needs you for
+programa wait-surface --surface "$handle" --agent-state blocked --timeout 300
+```
+
+A surface that has never reported any state counts as idle for `--agent-state idle` (most panes have no agent hooks installed, and "idle" almost always means "not currently busy" — which is true of a bare terminal too). `blocked`/`working` require an actual report; there's nothing to observe otherwise.
+
 For two cooperating processes, `wait-for` (tmux-compatible) gives you a named rendezvous instead of scraping a log — one side signals, the other blocks until it does:
 
 ```bash
@@ -162,7 +174,15 @@ programa wait-for build-complete --timeout 120
 
 This is a filesystem-based signal, not a verdict on *why* the other side signaled — pair it with a `read-screen` check if you need to confirm success vs. failure.
 
-A "block until the agent in this surface goes idle / blocked" wait (on agent state, not raw output) is planned but not shipped yet — use `--pattern`/`--exit` or `wait-for` until that lands.
+## Prompting a helper agent and waiting for it, in one call
+
+`prompt-agent` combines "send a prompt" and "wait for it to finish" into a single request — for the common case of the coordinating loop in "Spawning a helper agent" above:
+
+```bash
+programa prompt-agent --surface "$handle" --timeout 300 "fix the failing test in foo_test.go"
+```
+
+It sends the text, waits (briefly) for the helper to report it started working, then waits for it to go idle again. If the helper never reports any activity at all, the JSON response carries a `warning` noting its hooks may not be installed, rather than hanging or failing outright — check that field if `prompt-agent` returns suspiciously fast.
 
 ## Reference
 
@@ -170,4 +190,5 @@ A "block until the agent in this surface goes idle / blocked" wait (on agent sta
 - `--json` and `--id-format <refs|uuids|both>` are global flags and go before the subcommand: `programa --json tree`, `programa --id-format both list-panes`.
 - Full command list: `programa help`.
 - Anything not wrapped by a dedicated subcommand is reachable directly: `programa rpc <method> [json-params]` calls any socket API method.
+- `watch-events` streams a live feed of agent-state/output/workspace events over one long-lived connection — it's for dashboards and orchestrators watching many surfaces at once, not for a normal agent loop; use `wait-surface`/`prompt-agent` for "wait for one thing" instead.
 - Longer walkthrough and the full socket API reference: `docs/agent-skill.md` and `docs/v2-api-migration.md` in the programa repo.

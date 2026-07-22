@@ -994,6 +994,61 @@ final class SocketClient {
 
         throw CLIError(message: "v2 request failed")
     }
+
+    /// Writes a v2 JSON-RPC request line without reading a response. Used by `watch-events`
+    /// (#167 `subscribe`), which reads the subscribe ack and every subsequently pushed event
+    /// frame one at a time via `readEventLine` -- `send`/`sendV2`'s "read until an idle gap"
+    /// model isn't a good fit for a connection that keeps receiving lines indefinitely.
+    func sendV2RequestOnly(method: String, params: [String: Any] = [:]) throws {
+        guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
+        let request: [String: Any] = [
+            "id": UUID().uuidString,
+            "method": method,
+            "params": params
+        ]
+        guard JSONSerialization.isValidJSONObject(request) else {
+            throw CLIError(message: "Failed to encode v2 request")
+        }
+        let requestData = try JSONSerialization.data(withJSONObject: request, options: [])
+        guard let requestLine = String(data: requestData, encoding: .utf8) else {
+            throw CLIError(message: "Failed to encode v2 request")
+        }
+        try writeAll(
+            Data((requestLine + "\n").utf8),
+            timeoutMessage: "Command timed out",
+            failureMessage: "Failed to write to socket"
+        )
+    }
+
+    /// Reads exactly one newline-terminated line, blocking up to `timeout`. Pairs with
+    /// `sendV2RequestOnly` for `watch-events`: unlike `send`, this never opportunistically
+    /// slurps multiple already-buffered lines into one read, so each pushed event frame (and
+    /// the initial subscribe ack) is read and handled one at a time.
+    func readEventLine(timeout: TimeInterval) throws -> String {
+        guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
+        var data = Data()
+        while true {
+            try configureReceiveTimeout(timeout)
+            var byte: UInt8 = 0
+            let count = Darwin.read(socketFD, &byte, 1)
+            if count < 0 {
+                if errno == EINTR { continue }
+                if errno == EAGAIN || errno == EWOULDBLOCK {
+                    throw CLIError(message: "Timed out waiting for the next event")
+                }
+                throw CLIError(message: "Socket read error")
+            }
+            if count == 0 {
+                throw CLIError(message: "Connection closed")
+            }
+            if byte == 0x0A { break }
+            data.append(byte)
+        }
+        guard let line = String(data: data, encoding: .utf8) else {
+            throw CLIError(message: "Invalid UTF-8 in event line")
+        }
+        return line.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 struct CLIProcessResult {
@@ -1136,6 +1191,7 @@ enum CLICommandArgumentContract {
     case waitSurface
     case setProgress
     case listLog
+    case watchEvents
 }
 
 /// Single source of truth for a CLI command's name(s), its one-line entry in
@@ -3023,6 +3079,173 @@ struct ProgramaCLI {
                         print("exited")
                     } else {
                         print("ok")
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["prompt-agent"],
+                helpLines: ["prompt-agent [--workspace <id|ref>] [--surface <id|ref>] [--timeout <seconds>] [--working-grace <seconds>] <text>"],
+                detailedUsage: """
+                Usage: programa prompt-agent [flags] [--] <text>
+
+                Submit a prompt to an agent surface and wait for it to finish, in one
+                request -- built on surface.wait's agent_state condition (#166). Sends
+                <text> (+ Enter) the same way `send` does, waits up to --working-grace for
+                the agent to report it started working, then waits up to the remaining
+                --timeout for it to report idle again.
+
+                If the agent never reports "working" within --working-grace, the call
+                resolves immediately (working_observed: false in JSON output) rather than
+                waiting further -- there's nothing left to usefully watch for. If the
+                surface never reported any agent_state at all, JSON output carries a
+                `warning` noting hooks may not be installed.
+
+                Flags:
+                  --workspace <id|ref>      Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>        Target surface (default: $PROGRAMA_SURFACE_ID)
+                  --timeout <seconds>       Overall budget for the agent to finish (default: 120)
+                  --working-grace <seconds> How long to wait for a "working" report before
+                                            giving up on observing it (default: 3)
+
+                Example:
+                  programa prompt-agent "review this diff for bugs"
+                  programa prompt-agent --surface surface:2 --timeout 300 "run the test suite"
+                """,
+                execute: { ctx in
+                    let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
+                    let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
+                    let (timeoutArg, rem2) = self.parseOption(rem1, name: "--timeout")
+                    let (graceArg, rem3) = self.parseOption(rem2, name: "--working-grace")
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    let rawText = rem3.dropFirst(rem3.first == "--" ? 1 : 0).joined(separator: " ")
+                    guard !rawText.isEmpty else { throw CLIError(message: "prompt-agent requires text") }
+
+                    var params: [String: Any] = ["text": rawText]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+
+                    var timeoutSeconds = 120.0
+                    if let timeoutArg {
+                        guard let parsed = Double(timeoutArg), parsed.isFinite, parsed > 0 else {
+                            throw CLIError(message: "prompt-agent: --timeout must be a positive number of seconds")
+                        }
+                        timeoutSeconds = parsed
+                        params["timeout_ms"] = Int((parsed * 1000).rounded())
+                    }
+                    if let graceArg {
+                        guard let parsedGrace = Double(graceArg), parsedGrace.isFinite, parsedGrace > 0 else {
+                            throw CLIError(message: "prompt-agent: --working-grace must be a positive number of seconds")
+                        }
+                        params["working_grace_ms"] = Int((parsedGrace * 1000).rounded())
+                    }
+
+                    // Mirrors wait-surface: the server may legitimately hold this connection
+                    // open for close to the full --timeout.
+                    let payload = try ctx.client.sendV2(
+                        method: "agent.prompt",
+                        params: params,
+                        minimumReceiveTimeout: timeoutSeconds + 5.0
+                    )
+                    if ctx.jsonOutput {
+                        print(self.jsonString(payload))
+                    } else if let warning = payload["warning"] as? String {
+                        print(warning)
+                    } else {
+                        print((payload["final_state"] as? String) ?? "ok")
+                    }
+                }
+            ),
+
+            CommandDescriptor(
+                names: ["watch-events"],
+                helpLines: ["watch-events [--agent-state] [--workspace-lifecycle] [--output <surface_id[,surface_id...]>]"],
+                argumentContract: .watchEvents,
+                detailedUsage: """
+                Usage: programa watch-events [flags]
+
+                Subscribe to a long-lived stream of pushed events (#167) -- for consumers
+                that need many events over time (dashboards, orchestrators, a menu bar on
+                another machine). Casual "wait for one thing" callers should use
+                `wait-surface`/`prompt-agent` instead; this command holds the connection
+                open indefinitely and prints one JSON event per line until interrupted
+                (Ctrl-C) or the app disconnects.
+
+                Flags (at least one required):
+                  --agent-state                    Agent working/blocked/idle transitions
+                  --workspace-lifecycle             Workspace created/closed/renamed
+                  --output <surface_id[,surface_id...]>
+                                                    Coalesced output for specific surfaces
+                                                    (not available for "all surfaces" -- see docs)
+
+                If the per-connection event queue overflows (a slow/disconnected reader),
+                a synthetic {"event":"dropped","count":N} line is printed -- re-sync with
+                `list-workspaces`/`surface list` after seeing one.
+
+                Example:
+                  programa watch-events --agent-state
+                  programa watch-events --output surface:2,surface:3
+                """,
+                execute: { ctx in
+                    let agentState = self.hasFlag(ctx.commandArgs, name: "--agent-state")
+                    let workspaceLifecycle = self.hasFlag(ctx.commandArgs, name: "--workspace-lifecycle")
+                    let (outputArg, _) = self.parseOption(ctx.commandArgs, name: "--output")
+
+                    var classes: [String] = []
+                    if agentState { classes.append("agent_state") }
+                    if workspaceLifecycle { classes.append("workspace_lifecycle") }
+
+                    var params: [String: Any] = [:]
+                    if let outputArg {
+                        classes.append("output")
+                        let rawIds = outputArg.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+                        var resolvedIds: [String] = []
+                        for rawId in rawIds where !rawId.isEmpty {
+                            guard let resolved = try self.normalizeSurfaceHandle(rawId, client: ctx.client) else {
+                                throw CLIError(message: "watch-events: could not resolve surface id: \(rawId)")
+                            }
+                            resolvedIds.append(resolved)
+                        }
+                        guard !resolvedIds.isEmpty else {
+                            throw CLIError(message: "watch-events: --output requires at least one surface id")
+                        }
+                        params["surface_ids"] = resolvedIds
+                    }
+                    params["classes"] = classes
+
+                    try ctx.client.sendV2RequestOnly(method: "subscribe", params: params)
+                    let ackLine = try ctx.client.readEventLine(timeout: 10)
+                    if ctx.jsonOutput {
+                        print(ackLine)
+                    } else {
+                        FileHandle.standardError.write("Subscribed: \(classes.joined(separator: ", "))\n".data(using: .utf8)!)
+                    }
+
+                    // Long-lived: reads and prints one pushed event frame per line until the
+                    // connection closes or the process is interrupted (Ctrl-C). Each frame is
+                    // already a complete JSON object (see SocketEventBroadcaster.encodeFrame),
+                    // so JSON mode just echoes the raw line.
+                    while true {
+                        let line = try ctx.client.readEventLine(timeout: 3600)
+                        guard !line.isEmpty else { continue }
+                        if ctx.jsonOutput {
+                            print(line)
+                            continue
+                        }
+                        guard let data = line.data(using: .utf8),
+                              let frame = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                            print(line)
+                            continue
+                        }
+                        let event = (frame["event"] as? String) ?? "event"
+                        let rest = frame.filter { $0.key != "event" }
+                            .sorted { $0.key < $1.key }
+                            .map { "\($0.key)=\($0.value)" }
+                            .joined(separator: " ")
+                        print("[\(event)] \(rest)")
                     }
                 }
             ),
@@ -5328,6 +5551,9 @@ struct ProgramaCLI {
         case "send":
             _ = try parse(values: ["workspace", "surface"], minPositionals: 1, maxPositionals: nil)
 
+        case "prompt-agent":
+            _ = try parse(values: ["workspace", "surface", "timeout", "working-grace"], minPositionals: 1, maxPositionals: nil)
+
         case "send-key":
             _ = try parse(values: ["workspace", "surface"], minPositionals: 1, maxPositionals: 1)
 
@@ -5533,7 +5759,7 @@ struct ProgramaCLI {
 
         // Commands with richer bespoke contracts are validated by their
         // dedicated cases in `validateArguments`.
-        case "ping", "focus-panel", "read-screen", "wait-surface", "set-progress", "list-log":
+        case "ping", "focus-panel", "read-screen", "wait-surface", "set-progress", "list-log", "watch-events":
             return
 
         default:
@@ -5609,6 +5835,25 @@ struct ProgramaCLI {
                 guard let count = Int(lines), count > 0 else {
                     throw CLIError(message: "wait-surface: --lines must be greater than 0")
                 }
+            }
+
+        case .watchEvents:
+            let parsed = try preflightFlagArguments(
+                args,
+                command: command,
+                valueFlags: ["output"],
+                booleanFlags: ["agent-state", "workspace-lifecycle"],
+                allowEquals: false
+            )
+            guard parsed.positional.isEmpty else {
+                throw CLIError(message: "watch-events: unexpected arguments: \(parsed.positional.joined(separator: " "))")
+            }
+            guard parsed.options["agent-state"] != nil
+                || parsed.options["workspace-lifecycle"] != nil
+                || parsed.options["output"] != nil else {
+                throw CLIError(
+                    message: "watch-events requires at least one of --agent-state, --workspace-lifecycle, --output <surface_id[,surface_id...]>"
+                )
             }
 
         case .setProgress:
