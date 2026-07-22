@@ -103,7 +103,9 @@ PUBLISH_TMP_DIR=""
 find_macos_archive() {
   local framework="$1"
   local candidate=""
-  for candidate in "$framework"/macos-*/libghostty.a; do
+  # ghostty's xcframework output has used both libghostty.a and libghostty-fat.a
+  # (universal) archive names across revisions; accept either.
+  for candidate in "$framework"/macos-*/libghostty.a "$framework"/macos-*/libghostty-fat.a; do
     if [[ -f "$candidate" ]]; then
       printf '%s\n' "$candidate"
       return 0
