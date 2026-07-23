@@ -81,11 +81,21 @@ import Darwin
 /// - Once restore has consumed (or found empty) an old session's WAL as
 ///   fallback, `Workspace+Persistence.swift` calls
 ///   `SessionWALStore.shared.discardOrphanedSession(sessionId:)` to delete
-///   that specific old directory immediately.
+///   that specific old directory immediately. This is safe because it only
+///   runs after `createPanel(from:inPane:)` has already performed its one
+///   synchronous read of that directory's WAL tail.
 /// - Five seconds after the first registration each launch, a one-time sweep
-///   deletes any session directory that still has no live writer — this
-///   catches sessions from a run further back than the current snapshot
-///   references.
+///   considers deleting any session directory that has no live writer. This
+///   is deliberately conservative (issue #181 postmortem: an earlier version
+///   deleted any no-live-writer directory unconditionally, which could race
+///   ahead of a slow/multi-panel restore and destroy a WAL that
+///   `createPanel` had not read yet). A directory is only removed here if
+///   its `meta.json` heartbeat (or, if that can't be parsed, its own
+///   filesystem modification date) is older than
+///   `SessionWALPolicy.orphanDirectoryMaxAge`. A directory whose age cannot
+///   be determined at all is kept. This only catches sessions from a run
+///   further back than the current snapshot references, not anything from
+///   the run that is currently restoring.
 enum SessionWALPolicy {
     /// Fixed capacity of the in-memory ring buffer the tap callback writes
     /// into. Large enough to absorb a burst between 100ms drains for normal
@@ -97,6 +107,13 @@ enum SessionWALPolicy {
     static let drainInterval: TimeInterval = 0.1
     static let metaRefreshInterval: TimeInterval = 1.0
     static let orphanSweepDelay: TimeInterval = 5.0
+    /// A session directory with no live writer is only eligible for deletion
+    /// by the sweep once it is at least this old (by `meta.json` heartbeat,
+    /// or filesystem modification date as a fallback). Generous on purpose:
+    /// this is the backstop against destroying not-yet-restored crash data,
+    /// not the primary cleanup path (that's `discardOrphanedSession`, which
+    /// only runs after a directory has actually been consumed).
+    static let orphanDirectoryMaxAge: TimeInterval = 24 * 60 * 60
 }
 
 /// Fixed-size circular byte buffer. `append` is called only from ghostty's
@@ -266,6 +283,14 @@ final class SessionWALStore {
         return encoder
     }()
 
+    /// Mirrors `metaEncoder`'s date strategy. Used only by the orphan sweep's
+    /// conservative age check, never on the tap-callback/write hot path.
+    private static let metaDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
     private init() {}
 
     /// Registers the output tap for a newly created surface and starts its
@@ -342,7 +367,20 @@ final class SessionWALStore {
             at: paths.sessionDirectory,
             withIntermediateDirectories: true
         )
-        let writer = SessionWALWriter(context: context, paths: paths, workingDirectory: workingDirectory)
+        // `workingDirectory` is nil whenever the surface was created without an
+        // explicit override and ghostty's own config doesn't set one either (the
+        // common case for a plain new tab, which then just inherits the PTY's
+        // default cwd). meta.json's cwd is meant to answer "what was running"
+        // after a crash with zero live processes, so it must never be silently
+        // absent -- fall back to the user's home directory, the same default a
+        // shell would land in with no explicit cwd.
+        let resolvedWorkingDirectory: String? = {
+            if let workingDirectory, !workingDirectory.isEmpty {
+                return workingDirectory
+            }
+            return FileManager.default.homeDirectoryForCurrentUser.path
+        }()
+        let writer = SessionWALWriter(context: context, paths: paths, workingDirectory: resolvedWorkingDirectory)
         writersBySurfaceId[surfaceId] = writer
         let now = Date()
         writeMeta(writer: writer, at: now)
@@ -446,11 +484,33 @@ final class SessionWALStore {
             at: root,
             includingPropertiesForKeys: nil
         ) else { return }
+        let cutoff = Date().addingTimeInterval(-SessionWALPolicy.orphanDirectoryMaxAge)
         for entry in entries {
             let name = entry.lastPathComponent
             guard writersBySurfaceId[name] == nil else { continue }
+            guard Self.isDirectoryUnambiguouslyStale(entry, olderThan: cutoff) else { continue }
             try? FileManager.default.removeItem(at: entry)
         }
+    }
+
+    /// Conservative staleness check for the orphan sweep only. Never called
+    /// from `discardOrphanedSession` (that path already has a positive
+    /// "consumed" signal and doesn't need an age check). Prefers
+    /// `meta.json`'s own heartbeat as the freshest signal of last write
+    /// activity; falls back to the directory's filesystem modification date
+    /// if `meta.json` is missing or unparseable; if neither is available,
+    /// keeps the directory rather than guessing.
+    private static func isDirectoryUnambiguouslyStale(_ directory: URL, olderThan cutoff: Date) -> Bool {
+        let metaURL = directory.appendingPathComponent("meta.json", isDirectory: false)
+        if let data = try? Data(contentsOf: metaURL),
+           let meta = try? metaDecoder.decode(SessionWALMeta.self, from: data) {
+            return meta.lastHeartbeatAt < cutoff
+        }
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: directory.path),
+              let modifiedDate = attributes[.modificationDate] as? Date else {
+            return false
+        }
+        return modifiedDate < cutoff
     }
 }
 
