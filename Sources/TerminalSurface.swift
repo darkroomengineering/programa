@@ -196,6 +196,12 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// after `ghostty_surface_new` succeeds; cleared + released at every
     /// teardown site paired with `surfaceCallbackContext` below.
     private var outputTapContext: Unmanaged<SessionWALStore.Context>?
+    /// Issue #182 slice 1 (`Sources/SessionEscrow.swift`): guards
+    /// `attemptSessionEscrow` so the PTY master fd is dup'd and handed to
+    /// the escrow holder at most once per surface, never on a timer. Set
+    /// synchronously (main actor) the moment the attempt starts, before the
+    /// async send even begins.
+    private var hasAttemptedSessionEscrow = false
     /// The desired focus state for the Ghostty C surface. May be set before the
     /// C surface exists (e.g. during layout restoration); `createSurface`
     /// reapplies this value once the runtime surface exists, then keeps using it
@@ -1252,10 +1258,45 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 ptyPath: identity.ptyPath
             )
         }
+        if !hasAttemptedSessionEscrow, let childPID = identity.childPID {
+            attemptSessionEscrow(surface: surface, surfaceId: surfaceId, childPID: childPID)
+        }
         let stillMissing = identity.childPID == nil || identity.ptyPath == nil
         guard stillMissing, attempt < Self.sessionWALIdentityMaxRetries else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.sessionWALIdentityRetryInterval) { [weak self] in
             self?.resolveSessionWALIdentity(surfaceId: surfaceId, attempt: attempt + 1)
+        }
+    }
+
+    /// Issue #182 slice 1 escrow trigger (`Sources/SessionEscrow.swift`).
+    /// Reads the raw pty master fd and `dup()`s it -- both on the main
+    /// actor, matching the cost class of the sibling `child_pid`/
+    /// `pty_path` accessors called just above -- then hands the dup off to
+    /// `SessionEscrowClient` on its own background queue for the actual
+    /// (potentially blocking) socket send. Guarded by
+    /// `hasAttemptedSessionEscrow`, set before the dup even happens, so a
+    /// surface only ever attempts this once regardless of how many
+    /// `resolveSessionWALIdentity` retries follow. Never touches the
+    /// ghostty-owned fd itself: `ghostty_surface_pty_master_fd` does not
+    /// dup or transfer ownership, so `dup()` here is required before the
+    /// fd can safely outlive this surface.
+    private func attemptSessionEscrow(surface: ghostty_surface_t, surfaceId: String, childPID: Int32) {
+        hasAttemptedSessionEscrow = true
+        let rawMasterFD = ghostty_surface_pty_master_fd(surface)
+        guard rawMasterFD >= 0 else { return }
+        let dupedFD = dup(rawMasterFD)
+        guard dupedFD >= 0 else { return }
+        SessionEscrowClient.shared.escrow(
+            surfaceId: surfaceId,
+            dupedMasterFD: dupedFD,
+            childPID: childPID
+        ) { result in
+            guard let result else { return }
+            SessionWALStore.shared.markEscrowed(
+                surfaceId: surfaceId,
+                socketPath: result.socketPath,
+                token: result.tokenHex
+            )
         }
     }
 

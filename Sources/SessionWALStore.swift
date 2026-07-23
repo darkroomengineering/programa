@@ -265,6 +265,23 @@ struct SessionWALMeta: Codable {
     /// still points into the current `wal.log` (see the file-level "Periodic
     /// frame capture" doc comment).
     var walGeneration: Int?
+    /// Issue #182 slice 1 (`Sources/SessionEscrow.swift`): true once this
+    /// session's PTY master fd has been successfully handed off to the
+    /// escrow holder via `SCM_RIGHTS`. Optional/nil for every session from
+    /// before this field existed, and for any session where escrow was
+    /// never attempted or failed (degrades silently, see
+    /// `SessionEscrowClient`) -- absence means "not escrowed", never
+    /// "unknown".
+    var escrowed: Bool?
+    /// The holder's Unix domain socket path at escrow time, so a later
+    /// slice's reattach path knows where to ask for the fd back.
+    var escrowSocketPath: String?
+    /// Hex-encoded capability token generated at escrow time. A later
+    /// slice's reattach path must present this back to the holder; the
+    /// holder never hands back an fd to a caller without it. This slice
+    /// never reads this field back itself -- see `Sources/SessionEscrow
+    /// .swift`'s "Token scheme" doc comment.
+    var escrowToken: String?
 }
 
 /// Sidecar recorded alongside `frame.vt`: the WAL byte offset and rotation
@@ -354,6 +371,12 @@ private final class SessionWALWriter {
     var lastFrameCaptureBytes: Int64 = 0
     var lastFrameCaptureAttemptAt: Date = .distantPast
     var frameCaptureInFlight = false
+    /// Issue #182 slice 1 escrow state, set by `SessionWALStore
+    /// .markEscrowed` once `SessionEscrowClient` confirms a successful
+    /// hand-off. See `SessionWALMeta`'s matching fields for the contract.
+    var escrowed = false
+    var escrowSocketPath: String?
+    var escrowToken: String?
 
     init(context: SessionWALStore.Context, paths: SessionWALPaths, workingDirectory: String?) {
         self.context = context
@@ -476,6 +499,24 @@ final class SessionWALStore {
                 changed = true
             }
             guard changed else { return }
+            let now = Date()
+            self.writeMeta(writer: writer, at: now)
+            writer.lastMetaWriteAt = now
+        }
+    }
+
+    /// Records a successful escrow hand-off (issue #182 slice 1, `Sources
+    /// /SessionEscrow.swift`). Forces an immediate meta write, same as
+    /// `updateSurfaceIdentity`, so `meta.json` reflects escrow state
+    /// without waiting on the up-to-1s heartbeat throttle. A no-op if the
+    /// writer has already been torn down (surface closed before the
+    /// escrow round-trip completed).
+    func markEscrowed(surfaceId: String, socketPath: String, token: String) {
+        writeQueue.async { [weak self] in
+            guard let self, let writer = self.writersBySurfaceId[surfaceId] else { return }
+            writer.escrowed = true
+            writer.escrowSocketPath = socketPath
+            writer.escrowToken = token
             let now = Date()
             self.writeMeta(writer: writer, at: now)
             writer.lastMetaWriteAt = now
@@ -818,7 +859,10 @@ final class SessionWALStore {
             ptyPath: writer.ptyPath,
             workingDirectory: writer.workingDirectory,
             lastHeartbeatAt: date,
-            walGeneration: writer.walGeneration
+            walGeneration: writer.walGeneration,
+            escrowed: writer.escrowed ? true : nil,
+            escrowSocketPath: writer.escrowSocketPath,
+            escrowToken: writer.escrowToken
         )
         guard let data = try? Self.metaEncoder.encode(meta) else { return }
         try? data.write(to: writer.paths.metaURL, options: .atomic)

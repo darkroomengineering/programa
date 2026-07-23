@@ -64,6 +64,13 @@ struct programaApp: App {
     }
 
     init() {
+        // Issue #182 slice 1: this same binary can also be relaunched as
+        // the session-escrow holder (see `Sources/SessionEscrow.swift`).
+        // Checked first, before any AppKit/SwiftUI setup, mirroring the
+        // `terminateForMissingLaunchTag()` early-exit precedent below.
+        // Never returns if the holder-mode argument is present.
+        SessionEscrowHolder.runIfRequested()
+
         UITestLaunchManifest.applyIfPresent()
 
         if SocketControlSettings.shouldBlockUntaggedDebugLaunch() {
