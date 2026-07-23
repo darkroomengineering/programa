@@ -16,6 +16,28 @@ import UniformTypeIdentifiers
 /// Lightweight instrumentation to detect whether Ghostty is actually requesting Metal drawables.
 /// This helps catch "frozen until refocus" regressions without relying on screenshots (which can
 /// mask redraw issues by forcing a window server flush).
+/// Issue #182 slice 2 (`Sources/SessionEscrow.swift`): carries an
+/// already-running child's pty master fd + pid (retrieved from the escrow
+/// holder via `SessionEscrowClient.retrieve`) from
+/// `Workspace+Persistence.swift`'s `createPanel(from:inPane:)` down to
+/// `TerminalSurface.createSurface(for:)`, where it becomes
+/// `ghostty_surface_config_s.revive_pty_fd`/`revive_child_pid` instead of
+/// the normal openpty+fork+exec path.
+struct TerminalSurfaceReviveDescriptor {
+    /// Caller-owned master pty fd. Ownership transfers to the ghostty
+    /// surface once `ghostty_surface_new` succeeds; on failure
+    /// `createSurface` closes it itself, since ghostty never took
+    /// ownership in that case.
+    let masterFD: Int32
+    let childPID: Int64
+    /// Pre-crash screen text (frame + WAL delta,
+    /// `SessionWALStore.readFallbackScrollbackText`) to seed into the
+    /// fresh surface via `ghostty_surface_process_output` right after
+    /// creation, so the user sees prior output above the now-live session.
+    /// Nil if no usable scrollback was available.
+    let scrollbackText: String?
+}
+
 final class GhosttyMetalLayer: CAMetalLayer {
     private let lock = NSLock()
     private var drawableCount: Int = 0
@@ -202,6 +224,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// synchronously (main actor) the moment the attempt starts, before the
     /// async send even begins.
     private var hasAttemptedSessionEscrow = false
+    /// Issue #182 slice 2: set from `init`, consumed (cleared) the moment
+    /// `createSurface` copies it into `surfaceConfig` -- see
+    /// `TerminalSurfaceReviveDescriptor`'s doc comment.
+    private var reviveDescriptor: TerminalSurfaceReviveDescriptor?
     /// The desired focus state for the Ghostty C surface. May be set before the
     /// C surface exists (e.g. during layout restoration); `createSurface`
     /// reapplies this value once the runtime surface exists, then keeps using it
@@ -280,7 +306,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
         workingDirectory: String? = nil,
         initialCommand: String? = nil,
         initialEnvironmentOverrides: [String: String] = [:],
-        additionalEnvironment: [String: String] = [:]
+        additionalEnvironment: [String: String] = [:],
+        reviveDescriptor: TerminalSurfaceReviveDescriptor? = nil
     ) {
         self.id = UUID()
         self.tabId = tabId
@@ -291,6 +318,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         self.initialCommand = (trimmedCommand?.isEmpty == false) ? trimmedCommand : nil
         self.initialEnvironmentOverrides = Self.mergedNormalizedEnvironment(base: [:], overrides: initialEnvironmentOverrides)
         self.additionalEnvironment = Self.mergedNormalizedEnvironment(base: [:], overrides: additionalEnvironment)
+        self.reviveDescriptor = reviveDescriptor
         // Match Ghostty's own SurfaceView: ensure a non-zero initial frame so the backing layer
         // has non-zero bounds and the renderer can initialize without presenting a blank/stretched
         // intermediate frame on the first real resize.
@@ -891,6 +919,18 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
         var baseConfig = configTemplate ?? ProgramaSurfaceConfigTemplate()
         var surfaceConfig = ghostty_surface_config_new()
+        // Issue #182 slice 2: consume the revive descriptor exactly once --
+        // cleared immediately so a later `createSurface` retry (e.g. a
+        // deferred background-start attempt) never tries to revive a
+        // second time with an fd ghostty may already have taken ownership
+        // of. Defaults (-1/-1 from `ghostty_surface_config_new()`) mean
+        // "spawn normally" when there's nothing to revive.
+        let consumedReviveDescriptor = reviveDescriptor
+        reviveDescriptor = nil
+        if let consumedReviveDescriptor {
+            surfaceConfig.revive_pty_fd = consumedReviveDescriptor.masterFD
+            surfaceConfig.revive_child_pid = consumedReviveDescriptor.childPID
+        }
         surfaceConfig.font_size = baseConfig.fontSize
         surfaceConfig.wait_after_command = baseConfig.waitAfterCommand
         surfaceConfig.platform_tag = GHOSTTY_PLATFORM_MACOS
@@ -1115,6 +1155,15 @@ final class TerminalSurface: Identifiable, ObservableObject {
         createWithCommandAndWorkingDirectory()
 
         if surface == nil {
+            // ghostty never took ownership of a revival fd when creation
+            // itself failed -- close it here so it isn't leaked. This is
+            // the one path in `createSurface` allowed to close it: every
+            // other path either transfers ownership into ghostty (success)
+            // or hasn't consumed the descriptor at all yet (early returns
+            // above, which leave `reviveDescriptor` set for a later retry).
+            if let consumedReviveDescriptor {
+                close(consumedReviveDescriptor.masterFD)
+            }
             surfaceCallbackContext?.release()
             surfaceCallbackContext = nil
             print("Failed to create ghostty surface")
@@ -1138,6 +1187,24 @@ final class TerminalSurface: Identifiable, ObservableObject {
         TerminalSurfaceRegistry.shared.registerRuntimeSurface(createdSurface, ownerId: id)
         recordRuntimeSurfaceCreation()
 
+        // Issue #182 slice 2: seed pre-crash scrollback into the fresh
+        // surface's own screen/scrollback state via
+        // `ghostty_surface_process_output` -- bypasses the pty entirely
+        // (writing to the pty *master* would appear as new keyboard INPUT
+        // to the revived child, not output) and, deliberately, happens
+        // BEFORE the output tap is registered below so this replay text is
+        // never captured into the new session's own `wal.log`.
+        if let scrollbackText = consumedReviveDescriptor?.scrollbackText, !scrollbackText.isEmpty {
+            let data = Data(scrollbackText.utf8)
+            data.withUnsafeBytes { rawBuffer in
+                guard let baseAddress = rawBuffer.baseAddress?.assumingMemoryBound(to: CChar.self) else { return }
+                ghostty_surface_process_output(createdSurface, baseAddress, UInt(rawBuffer.count))
+            }
+            #if DEBUG
+            dlog("session.escrow.revive.scrollback_seeded surface=\(id.uuidString.prefix(8)) bytes=\(data.count)")
+            #endif
+        }
+
         // Register the PTY output tap now that the runtime surface definitely
         // exists, wiring it into the session WAL writer. See
         // SessionOutputTapSpike.swift (SessionWALStore).
@@ -1150,7 +1217,12 @@ final class TerminalSurface: Identifiable, ObservableObject {
         // childPID/ptyPath may not be available yet (the child may not have
         // spawned). Bounded retry, re-reading `self.surface` fresh each
         // attempt rather than caching `createdSurface` across the delay --
-        // see resolveSessionWALIdentity's doc comment.
+        // see resolveSessionWALIdentity's doc comment. Also the trigger for
+        // re-escrow (`attemptSessionEscrow`, inside the retry loop) after a
+        // successful revival: it runs unconditionally for every surface, so
+        // a revived surface's live fd gets handed back to the holder again
+        // exactly like a freshly spawned one, with no special-casing needed
+        // here.
         resolveSessionWALIdentity(surfaceId: id.uuidString, attempt: 0)
 
         // Session scrollback replay must be one-shot. Reusing it on a later runtime
@@ -1850,6 +1922,17 @@ final class TerminalSurface: Identifiable, ObservableObject {
 #endif
 
     deinit {
+        // Issue #182 slice 2 safety net: if this surface's revive
+        // descriptor was never consumed by `createSurface` (e.g. the
+        // owning `newTerminalSurface` call's own tab/panel bookkeeping
+        // failed before the hosted view ever attached to a window and
+        // triggered surface creation), its fd would otherwise leak
+        // silently -- close it here. A no-op whenever `createSurface` did
+        // run: it always clears `reviveDescriptor` to nil the moment it
+        // reads it, whether creation itself then succeeded or failed.
+        if let leftoverReviveDescriptor = reviveDescriptor {
+            close(leftoverReviveDescriptor.masterFD)
+        }
         markPortalLifecycleClosed(reason: "deinit")
 
         let callbackContext = surfaceCallbackContext

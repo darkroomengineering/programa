@@ -549,6 +549,19 @@ final class SessionWALStore {
         return (childPID, ptyPath)
     }
 
+    /// Issue #182 slice 2: synchronous, launch-time-only read of a
+    /// session's `meta.json`, used by the reattach path
+    /// (`Workspace+Persistence.swift`'s `createPanel(from:inPane:)`) to
+    /// check escrow bookkeeping (`escrowed`/`escrowSocketPath`
+    /// /`escrowToken`/`childPID`) before attempting `SessionEscrowClient
+    /// .retrieve`. Same contract as `readFallbackScrollbackText` below --
+    /// never call this from a keystroke-hot path.
+    func readMeta(sessionId: String) -> SessionWALMeta? {
+        guard let paths = SessionWALPaths.make(sessionId: sessionId),
+              let data = try? Data(contentsOf: paths.metaURL) else { return nil }
+        return try? Self.metaDecoder.decode(SessionWALMeta.self, from: data)
+    }
+
     /// Restore-path fallback read. Synchronous and launch-time only (mirrors
     /// `SessionPersistenceStore.load`'s synchronous snapshot read) — never
     /// called from the tap callback or any latency-sensitive path. Reads the

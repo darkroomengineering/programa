@@ -463,6 +463,21 @@ extension Workspace {
         switch snapshot.type {
         case .terminal:
             let workingDirectory = snapshot.terminal?.workingDirectory ?? snapshot.directory ?? currentDirectory
+
+            // Issue #182 slice 2: try to reattach to a still-alive escrowed
+            // child before falling back to the spawn-fresh + WAL-tail
+            // replay path below. Strictly additive and best-effort -- any
+            // failure (never escrowed, holder unreachable, token mismatch,
+            // child already exited, timeout) falls straight through to the
+            // existing unchanged code.
+            if let revivedPanelId = attemptSessionReattach(
+                snapshot: snapshot,
+                inPane: paneId,
+                workingDirectory: workingDirectory
+            ) {
+                return revivedPanelId
+            }
+
             // Prefer the clean-quit/autosave scrollback text. If it's missing or
             // blank -- the app died before the next snapshot captured it -- fall
             // back to this same OLD session's WAL tail (issue #181). `snapshot.id`
@@ -557,6 +572,71 @@ extension Workspace {
             applySessionPanelMetadata(snapshot, toPanelId: reviewPanel.id)
             return reviewPanel.id
         }
+    }
+
+    /// Issue #182 slice 2: the reattach half of `createPanel(from:inPane:)`'s
+    /// `.terminal` case. `snapshot.id` is the pre-restore panel/surface
+    /// UUID, which is also the WAL session directory name (`TerminalPanel
+    /// .id == TerminalSurface.id`) -- the same key the non-revive fallback
+    /// path already reads for scrollback. Returns the new panel id on
+    /// success (revival already seeds scrollback and re-escrows via the
+    /// normal `TerminalSurface.createSurface`/`resolveSessionWALIdentity`
+    /// path, so the caller must not also spawn fresh or WAL-replay); nil on
+    /// any failure so the caller falls through to its existing
+    /// spawn-fresh path unchanged. Synchronous and launch-time only, same
+    /// contract as the WAL restore reads it builds on.
+    private func attemptSessionReattach(
+        snapshot: SessionPanelSnapshot,
+        inPane paneId: PaneID,
+        workingDirectory: String?
+    ) -> UUID? {
+        let oldSessionId = snapshot.id.uuidString
+        guard let meta = SessionWALStore.shared.readMeta(sessionId: oldSessionId),
+              meta.escrowed == true,
+              let socketPath = meta.escrowSocketPath,
+              let tokenHex = meta.escrowToken,
+              let childPID = meta.childPID else {
+            return nil
+        }
+        guard let masterFD = SessionEscrowClient.retrieve(
+            sessionId: oldSessionId,
+            tokenHex: tokenHex,
+            socketPath: socketPath
+        ) else {
+            return nil
+        }
+
+        let scrollbackText = SessionWALStore.shared.readFallbackScrollbackText(sessionId: oldSessionId)
+        let reviveDescriptor = TerminalSurfaceReviveDescriptor(
+            masterFD: masterFD,
+            childPID: Int64(childPID),
+            scrollbackText: scrollbackText
+        )
+
+        guard let terminalPanel = newTerminalSurface(
+            inPane: paneId,
+            focus: false,
+            workingDirectory: workingDirectory,
+            reviveDescriptor: reviveDescriptor
+        ) else {
+            // Surface creation failed after a successful retrieve.
+            // `TerminalSurface`'s own creation-failure/deinit paths close
+            // `masterFD` -- see `TerminalSurfaceReviveDescriptor`'s doc
+            // comment -- so there is nothing to clean up here. The holder
+            // already removed this session from its registry the moment it
+            // granted the retrieve, so the child is simply unrecoverable
+            // for the rest of this launch: an accepted, rare degradation
+            // rather than ever risking a double-issue of the same fd.
+            return nil
+        }
+
+        applySessionPanelMetadata(snapshot, toPanelId: terminalPanel.id)
+        // Mirror the non-revive path: this old session's directory has now
+        // been given its one chance to be read (childPID/token/scrollback);
+        // the new panel above has its own fresh WAL directory going
+        // forward under a new id, so the old one is dead weight.
+        SessionWALStore.shared.discardOrphanedSession(sessionId: oldSessionId)
+        return terminalPanel.id
     }
 
     private func applySessionPanelMetadata(_ snapshot: SessionPanelSnapshot, toPanelId panelId: UUID) {
