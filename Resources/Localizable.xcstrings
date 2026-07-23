@@ -9237,13 +9237,36 @@
         }
       }
     },
-    "sidebar.help.discord": {
+    "sidebar.help.twitter": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Discord"
+            "value": "X (Twitter)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "X（Twitter）"
+          }
+        }
+      }
+    },
+    "sidebar.help.website": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Darkroom"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Darkroom"
           }
         }
       }

@@ -6051,6 +6051,30 @@ struct ProgramaCLI {
                 }
             }
 
+        case "worktree":
+            let parsed = try parse(
+                values: ["repo", "base", "path", "layout"],
+                booleans: ["focus", "force", "json"],
+                minPositionals: 1,
+                maxPositionals: nil,
+                allowEquals: true
+            )
+            guard ["create", "open", "remove", "list"].contains(parsed.positional[0].lowercased()) else {
+                throw CLIError(message: "worktree: unknown subcommand \(parsed.positional[0])")
+            }
+
+        case "layout":
+            let parsed = try parse(
+                values: ["workspace", "cwd"],
+                booleans: ["force", "json"],
+                minPositionals: 1,
+                maxPositionals: nil,
+                allowEquals: true
+            )
+            guard ["save", "apply", "list"].contains(parsed.positional[0].lowercased()) else {
+                throw CLIError(message: "layout: unknown subcommand \(parsed.positional[0])")
+            }
+
         case "ssh":
             try validateSSHCommandArguments(args)
 
@@ -6636,7 +6660,7 @@ struct ProgramaCLI {
         print(shortcuts)
         print()
         print("  \(bold)Docs\(reset)\(subdued)                https://github.com/darkroomengineering/programa/tree/main/docs\(reset)")
-        print("  \(bold)Discord\(reset)\(subdued)             https://discord.gg/xsgFEVrWCZ\(reset)")
+        print("  \(bold)X\(reset)\(subdued)                   https://x.com/darkroomengineering\(reset)")
         print("  \(bold)GitHub\(reset)\(subdued)              https://github.com/darkroomengineering/programa (please leave a star ⭐)\(reset)")
         print("  \(bold)Issues\(reset)\(subdued)              https://github.com/darkroomengineering/programa/issues\(reset)")
         print()

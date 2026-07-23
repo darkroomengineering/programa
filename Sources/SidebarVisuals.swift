@@ -50,7 +50,8 @@ private enum SidebarHelpMenuAction {
     case changelog
     case github
     case githubIssues
-    case discord
+    case twitter
+    case website
     case checkForUpdates
     case sendFeedback
     case welcome
@@ -61,7 +62,8 @@ private struct SidebarHelpMenuButton: View {
     private let changelogURL = URL(string: "https://github.com/darkroomengineering/programa/blob/main/CHANGELOG.md")
     private let githubURL = URL(string: "https://github.com/darkroomengineering/programa")
     private let githubIssuesURL = URL(string: "https://github.com/darkroomengineering/programa/issues")
-    private let discordURL = URL(string: "https://discord.gg/xsgFEVrWCZ")
+    private let twitterURL = URL(string: "https://x.com/darkroomengineering")
+    private let websiteURL = URL(string: "https://darkroom.engineering")
     private let helpTitle = String(localized: "sidebar.help.button", defaultValue: "Help")
     private let buttonSize: CGFloat = 22
     private let iconSize: CGFloat = 11
@@ -161,11 +163,19 @@ private struct SidebarHelpMenuButton: View {
                     isExternalLink: true
                 )
             }
-            if discordURL != nil {
+            if twitterURL != nil {
                 helpOptionButton(
-                    title: String(localized: "sidebar.help.discord", defaultValue: "Discord"),
-                    action: .discord,
-                    accessibilityIdentifier: "SidebarHelpMenuOptionDiscord",
+                    title: String(localized: "sidebar.help.twitter", defaultValue: "X (Twitter)"),
+                    action: .twitter,
+                    accessibilityIdentifier: "SidebarHelpMenuOptionTwitter",
+                    isExternalLink: true
+                )
+            }
+            if websiteURL != nil {
+                helpOptionButton(
+                    title: String(localized: "sidebar.help.website", defaultValue: "Darkroom"),
+                    action: .website,
+                    accessibilityIdentifier: "SidebarHelpMenuOptionWebsite",
                     isExternalLink: true
                 )
             }
@@ -264,9 +274,12 @@ private struct SidebarHelpMenuButton: View {
         case .githubIssues:
             guard let githubIssuesURL else { return }
             NSWorkspace.shared.open(githubIssuesURL)
-        case .discord:
-            guard let discordURL else { return }
-            NSWorkspace.shared.open(discordURL)
+        case .twitter:
+            guard let twitterURL else { return }
+            NSWorkspace.shared.open(twitterURL)
+        case .website:
+            guard let websiteURL else { return }
+            NSWorkspace.shared.open(websiteURL)
         case .checkForUpdates:
             Task { @MainActor in
                 AppDelegate.shared?.checkForUpdates(nil)
