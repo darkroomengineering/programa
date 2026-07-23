@@ -829,6 +829,78 @@ struct TabItemView: View, Equatable {
         }
     }
 
+    // Isolates the workspace-color submenu from the churning per-row
+    // observation tick (`workspaceObservationGeneration`, bumped as often as
+    // every 40ms while workspace telemetry is updating -- see the
+    // `let _ = workspaceObservationGeneration` line at the top of `body`).
+    // `.contextMenu`'s content closure is re-invoked on every TabItemView.body
+    // re-evaluation; without `.equatable()` gating this subtree, AppKit tears
+    // down and rebuilds the color submenu's NSMenu on each tick, which -- while
+    // the submenu is open under mouse hover -- reads as the submenu repeatedly
+    // closing and reopening. Wrapping the submenu in its own Equatable view and
+    // applying `.equatable()` at the call site lets SwiftUI skip rebuilding it
+    // when none of its own (non-churning) inputs changed, mirroring the
+    // TabItemView Equatable contract in CLAUDE.md "Typing-latency-sensitive paths".
+    private struct WorkspaceColorMenu: View, Equatable {
+        let hasCustomColor: Bool
+        let palette: [WorkspaceTabColorEntry]
+        let targetIds: [UUID]
+        let colorScheme: ColorScheme
+        let activeTabIndicatorStyle: SidebarActiveTabIndicatorStyle
+        let onApplyColor: (String?, [UUID]) -> Void
+        let onPromptCustomColor: ([UUID]) -> Void
+
+        nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.hasCustomColor == rhs.hasCustomColor &&
+            lhs.palette == rhs.palette &&
+            lhs.targetIds == rhs.targetIds &&
+            lhs.colorScheme == rhs.colorScheme &&
+            lhs.activeTabIndicatorStyle == rhs.activeTabIndicatorStyle
+        }
+
+        private func swatchColor(for hex: String) -> NSColor {
+            WorkspaceTabColorSettings.displayNSColor(
+                hex: hex,
+                colorScheme: colorScheme,
+                forceBright: activeTabIndicatorStyle == .leftRail
+            ) ?? NSColor(hex: hex) ?? .gray
+        }
+
+        var body: some View {
+            Menu(String(localized: "contextMenu.workspaceColor", defaultValue: "Workspace Color")) {
+                if hasCustomColor {
+                    Button {
+                        onApplyColor(nil, targetIds)
+                    } label: {
+                        Label(String(localized: "contextMenu.clearColor", defaultValue: "Clear Color"), systemImage: "xmark.circle")
+                    }
+                }
+
+                Button {
+                    onPromptCustomColor(targetIds)
+                } label: {
+                    Label(String(localized: "contextMenu.chooseCustomColor", defaultValue: "Choose Custom Color…"), systemImage: "paintpalette")
+                }
+
+                if !palette.isEmpty {
+                    Divider()
+                }
+
+                ForEach(palette, id: \.id) { entry in
+                    Button {
+                        onApplyColor(entry.hex, targetIds)
+                    } label: {
+                        Label {
+                            Text(entry.name)
+                        } icon: {
+                            Image(nsImage: coloredCircleImage(color: swatchColor(for: entry.hex)))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var workspaceContextMenu: some View {
         let targetIds = contextMenuWorkspaceIds
@@ -934,37 +1006,16 @@ struct TabItemView: View, Equatable {
             .disabled(allRemoteContextMenuTargetsDisconnected)
         }
 
-        Menu(String(localized: "contextMenu.workspaceColor", defaultValue: "Workspace Color")) {
-            if tab.customColor != nil {
-                Button {
-                    applyTabColor(nil, targetIds: targetIds)
-                } label: {
-                    Label(String(localized: "contextMenu.clearColor", defaultValue: "Clear Color"), systemImage: "xmark.circle")
-                }
-            }
-
-            Button {
-                promptCustomColor(targetIds: targetIds)
-            } label: {
-                Label(String(localized: "contextMenu.chooseCustomColor", defaultValue: "Choose Custom Color…"), systemImage: "paintpalette")
-            }
-
-            if !tabColorPalette.isEmpty {
-                Divider()
-            }
-
-            ForEach(tabColorPalette, id: \.id) { entry in
-                Button {
-                    applyTabColor(entry.hex, targetIds: targetIds)
-                } label: {
-                    Label {
-                        Text(entry.name)
-                    } icon: {
-                        Image(nsImage: coloredCircleImage(color: tabColorSwatchColor(for: entry.hex)))
-                    }
-                }
-            }
-        }
+        WorkspaceColorMenu(
+            hasCustomColor: tab.customColor != nil,
+            palette: tabColorPalette,
+            targetIds: targetIds,
+            colorScheme: colorScheme,
+            activeTabIndicatorStyle: activeTabIndicatorStyle,
+            onApplyColor: { hex, ids in applyTabColor(hex, targetIds: ids) },
+            onPromptCustomColor: { ids in promptCustomColor(targetIds: ids) }
+        )
+        .equatable()
 
         if let copyableSidebarSSHError {
             Button(String(localized: "contextMenu.copySshError", defaultValue: "Copy SSH Error")) {
@@ -1105,14 +1156,6 @@ struct TabItemView: View, Equatable {
             colorScheme: colorScheme,
             forceBright: activeTabIndicatorStyle == .leftRail
         )
-    }
-
-    private func tabColorSwatchColor(for hex: String) -> NSColor {
-        WorkspaceTabColorSettings.displayNSColor(
-            hex: hex,
-            colorScheme: colorScheme,
-            forceBright: activeTabIndicatorStyle == .leftRail
-        ) ?? NSColor(hex: hex) ?? .gray
     }
 
     private var showsCenteredTopDropIndicator: Bool {
