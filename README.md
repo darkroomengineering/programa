@@ -23,13 +23,15 @@
 
 Run many coding agents in parallel and always know which one needs you.
 
-- **Notifications built for agents** — a waiting agent's pane gets a ring, its tab lights up, and ⌘⇧U jumps to the latest unread. Wired for Claude Code, Codex, and OpenCode out of the box.
-- **Vertical tabs** — the sidebar shows git branch, PR status, working directory, listening ports, and the latest notification for every workspace.
-- **Splits and instant agents** — ⌘D / ⌘⇧D to split, ⌘⇧C boots a Claude Code workspace, `programa claude-teams` runs teammate mode as native splits.
-- **In-app browser** — split a scriptable browser next to your terminal; agents can snapshot the page, click, fill forms, and evaluate JS against your dev server.
-- **SSH workspaces** — `programa ssh user@remote`; browser panes route through the remote network so localhost just works.
-- **Scriptable everything** — a CLI and socket API for workspaces, splits, keystrokes, and the browser.
-- **Native and fast** — Swift/AppKit with libghostty rendering, no Electron. Reads your existing `~/.config/ghostty/config` for themes, fonts, and colors.
+- **Agent status, always visible.** Every workspace shows working, blocked, or idle. Claude Code, Codex, and OpenCode report it directly; agents without hooks (Gemini CLI, Copilot CLI, Cursor Agent, Aider) get it from reading the terminal screen against patterns you can override in `~/.config/programa/agent-detection/`.
+- **Notifications built for agents.** A waiting agent's pane gets a ring, its tab lights up, and ⌘⇧U jumps to the latest unread.
+- **Vertical workspace sidebar.** Git branch, PR status, working directory, listening ports, and the latest notification for every workspace, at a glance.
+- **Diff review panel.** Split a review panel beside an agent's terminal, comment on the diff, and send the comments straight into the agent's input. It refreshes itself when the agent goes idle.
+- **Git worktrees as workspaces.** `programa worktree create <branch>` checks out a worktree and opens it as its own workspace, badged under its parent repo.
+- **In-app browser.** Split a scriptable browser next to your terminal; agents can snapshot the page, click, fill forms, and evaluate JS against your dev server.
+- **Native and fast.** Swift/AppKit with libghostty rendering, no Electron. Reads your existing `~/.config/ghostty/config` for themes, fonts, and colors.
+
+More: named layouts (`programa layout save/apply`), SSH workspaces where browser panes route through the remote network, a markdown viewer panel, instant agent splits (⌘D / ⌘⇧D, ⌘⇧C for Claude Code), the command palette (⌘⇧P), and a CLI plus Unix-socket JSON-RPC API scriptable end to end.
 
 ## Install
 
@@ -44,21 +46,21 @@ brew tap darkroomengineering/programa
 brew install --cask programa
 ```
 
-Programa auto-updates: every commit on `main` that passes CI ships automatically as the latest release. On relaunch it restores layout, directories, scrollback, and browser state — not live processes (yet).
+Programa auto-updates: every commit on `main` that passes CI ships automatically as the latest release. On relaunch it restores layout, directories, scrollback, and browser state. Live processes don't survive a relaunch yet.
 
 ## Why
 
-Running many agents in Ghostty splits, the problem was never the terminal — it was knowing which agent needed me. Native notifications all say "waiting for your input" with no context, and GUI orchestrators lock you into their workflow (and Electron).
+Running many agents in Ghostty splits, the problem was never the terminal. It was knowing which agent needed me. Native notifications all say "waiting for your input" with no context, and GUI orchestrators lock you into their workflow (and Electron).
 
-Programa is a primitive, not a solution: a terminal, a browser, notifications, workspaces, and a CLI to control all of it. It doesn't prescribe how to work with agents — what you build with the primitives is yours.
+Programa is a terminal, a browser, notifications, workspaces, and a CLI to control all of it, primitives you compose yourself rather than a prescribed workflow. What you build with them is yours.
 
 ## Shortcuts
 
-⌘⇧P opens the command palette, which lists every action. Full reference: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md) — everything is editable in `Settings → Keyboard Shortcuts`.
+⌘⇧P opens the command palette, which lists every action. Full reference: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md). Everything is editable in `Settings → Keyboard Shortcuts`.
 
 ## Agent skill
 
-Agents running inside programa (Claude Code, Codex, OpenCode) can drive the app itself — split panes, read a sibling pane's output, spawn and coordinate a helper agent — without stealing your focus. `programa claude/codex/opencode install-integration` installs [`SKILL.md`](SKILL.md) alongside the existing hooks; see [docs/agent-skill.md](docs/agent-skill.md) for the full walkthrough.
+Agents running inside programa (Claude Code, Codex, OpenCode) can drive the app itself, splitting panes, reading a sibling pane's output, spawning and coordinating a helper agent, all without stealing your focus. `programa claude/codex/opencode install-integration` installs [`SKILL.md`](SKILL.md) alongside the existing hooks; see [docs/agent-skill.md](docs/agent-skill.md) for the full walkthrough.
 
 ## Community
 
