@@ -112,6 +112,10 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var metadataBlocks: [String: SidebarMetadataBlock] = [:]
     @Published var logEntries: [SidebarLogEntry] = []
     @Published var progress: SidebarProgressState?
+    /// Panel that reported the current `progress` (OSC 9;4). Not `@Published` -- purely
+    /// bookkeeping for `removeSurfaceMetadata` so a closed surface can't leave a stuck bar
+    /// without clearing progress still owned by a different, still-alive surface.
+    var progressSourcePanelId: UUID?
     @Published var gitBranch: SidebarGitBranchState?
     @Published var panelGitBranches: [UUID: SidebarGitBranchState] = [:]
     @Published var pullRequest: SidebarPullRequestState?

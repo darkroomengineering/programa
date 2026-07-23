@@ -143,6 +143,7 @@
 		A5001420 /* MarkdownPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001418 /* MarkdownPanel.swift */; };
 		A5001421 /* MarkdownPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001419 /* MarkdownPanelView.swift */; };
 		MDRD00000000000000000001 /* MarkdownDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MDRD00000000000000000002 /* MarkdownDocumentView.swift */; };
+		MRMD000001 /* MermaidDiagramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MRMD000002 /* MermaidDiagramView.swift */; };
 		RVPN00000000000000000002 /* ReviewComment.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000001 /* ReviewComment.swift */; };
 		RVPN00000000000000000004 /* ReviewCommentSerializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000003 /* ReviewCommentSerializer.swift */; };
 		RVPN00000000000000000006 /* ReviewDiffParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000005 /* ReviewDiffParser.swift */; };
@@ -266,6 +267,7 @@
 		DA7A10CA710E000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DA7A10CA710E000000000001 /* Localizable.xcstrings */; };
 		DA7A10CA710E000000000004 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DA7A10CA710E000000000002 /* InfoPlist.xcstrings */; };
 		A5001623 /* programa.sdef in Resources */ = {isa = PBXBuildFile; fileRef = A5001622 /* programa.sdef */; };
+		MRMD000003 /* mermaid.min.js in Resources */ = {isa = PBXBuildFile; fileRef = MRMD000004 /* mermaid.min.js */; };
 						E12E88F82733EC42F32C36A3 /* BrowserConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 970226F3C99D0D937CD00539 /* BrowserConfigTests.swift */; };
 					1F14445B9627DE9D3AF4FD2E /* BrowserPanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C7B1B978620BE162CC057E /* BrowserPanelTests.swift */; };
 					46F6AC15863EC84DCD3770A2 /* TerminalAndGhosttyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */; };
@@ -508,6 +510,7 @@
 		RVPN0000000000000000000F /* CLI+Review.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Review.swift"; sourceTree = "<group>"; };
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
 		MDRD00000000000000000002 /* MarkdownDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownDocumentView.swift; sourceTree = "<group>"; };
+		MRMD000002 /* MermaidDiagramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MermaidDiagramView.swift; sourceTree = "<group>"; };
 		A5001416 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
 		NRWS00000000000000000027 /* Workspace+Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Persistence.swift"; sourceTree = "<group>"; };
 		NRWS00000000000000000029 /* Workspace+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Layout.swift"; sourceTree = "<group>"; };
@@ -620,6 +623,7 @@
 		DA7A10CA710E000000000001 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		DA7A10CA710E000000000002 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		A5001622 /* programa.sdef */ = {isa = PBXFileReference; lastKnownFileType = text.sdef; path = programa.sdef; sourceTree = "<group>"; };
+		MRMD000004 /* mermaid.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = mermaid.min.js; sourceTree = "<group>"; };
 				970226F3C99D0D937CD00539 /* BrowserConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserConfigTests.swift; sourceTree = "<group>"; };
 				58C7B1B978620BE162CC057E /* BrowserPanelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserPanelTests.swift; sourceTree = "<group>"; };
 				02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAndGhosttyTests.swift; sourceTree = "<group>"; };
@@ -697,6 +701,7 @@
 				DA7A10CA710E000000000003 /* Localizable.xcstrings in Resources */,
 				DA7A10CA710E000000000004 /* InfoPlist.xcstrings in Resources */,
 				A5001623 /* programa.sdef in Resources */,
+				MRMD000003 /* mermaid.min.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -937,6 +942,7 @@
 				A5001418 /* MarkdownPanel.swift */,
 				A5001419 /* MarkdownPanelView.swift */,
 				MDRD00000000000000000002 /* MarkdownDocumentView.swift */,
+				MRMD000002 /* MermaidDiagramView.swift */,
 				A5001510 /* ProgramaWebView.swift */,
 				A5001415 /* PanelContentView.swift */,
 				A5001211 /* UpdateController.swift */,
@@ -998,6 +1004,7 @@
 				DA7A10CA710E000000000001 /* Localizable.xcstrings */,
 				DA7A10CA710E000000000002 /* InfoPlist.xcstrings */,
 				A5001622 /* programa.sdef */,
+				MRMD000004 /* mermaid.min.js */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -1402,6 +1409,7 @@
 				RVPN0000000000000000000E /* TerminalController+Review.swift in Sources */,
 				A5001421 /* MarkdownPanelView.swift in Sources */,
 				MDRD00000000000000000001 /* MarkdownDocumentView.swift in Sources */,
+				MRMD000001 /* MermaidDiagramView.swift in Sources */,
 				A5001500 /* ProgramaWebView.swift in Sources */,
 				A5001405 /* PanelContentView.swift in Sources */,
 				A5001201 /* UpdateController.swift in Sources */,

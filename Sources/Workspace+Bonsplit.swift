@@ -761,6 +761,10 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
         PortScanner.shared.unregisterPanel(workspaceId: id, panelId: panelId)
         AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: id, surfaceId: panelId)
+        if progressSourcePanelId == panelId {
+            progress = nil
+            progressSourcePanelId = nil
+        }
     }
 
     func splitTabBar(_ controller: BonsplitController, didClosePane paneId: PaneID) {

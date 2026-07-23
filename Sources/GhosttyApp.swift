@@ -1731,6 +1731,35 @@ class GhosttyApp {
                 )
             }
             return true
+        case GHOSTTY_ACTION_PROGRESS_REPORT:
+            // OSC 9;4 (ConEmu progress). Reuses `Workspace.progress`/`SidebarProgressState`
+            // (already rendered by the sidebar tab row) rather than a new model. `_ERROR`,
+            // `_PAUSE`, and `_INDETERMINATE` (and `_SET` with an unreported percent, -1) have
+            // no representation in `SidebarProgressState` yet, so they retain the last known
+            // value instead of guessing -- the run reads as "still going", not "finished".
+            guard let tabId = surfaceView.tabId,
+                  let surfaceId = surfaceView.terminalSurface?.id else { return true }
+            let report = action.action.progress_report
+            let state = report.state
+            let rawProgress = report.progress
+            DispatchQueue.main.async {
+                guard let workspace = AppDelegate.shared?.tabManagerFor(tabId: tabId)?.tabs
+                    .first(where: { $0.id == tabId }) else { return }
+                switch state {
+                case GHOSTTY_PROGRESS_STATE_REMOVE:
+                    workspace.progress = nil
+                    workspace.progressSourcePanelId = nil
+                case GHOSTTY_PROGRESS_STATE_SET where rawProgress >= 0:
+                    let clamped = max(0, min(100, Int(rawProgress)))
+                    workspace.progress = SidebarProgressState(value: Double(clamped) / 100.0, label: nil)
+                    workspace.progressSourcePanelId = surfaceId
+                default:
+                    // _SET with progress == -1, _ERROR, _PAUSE, _INDETERMINATE: no-op, keep
+                    // last known value.
+                    break
+                }
+            }
+            return true
         case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
             guard let tabId = surfaceView.tabId else { return true }
             let surfaceId = surfaceView.terminalSurface?.id

@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import MarkdownUI
 import SwiftUI
 
@@ -13,6 +14,203 @@ struct MarkdownDocumentPresentation {
     }
 }
 
+// MARK: - GitHub-style alerts
+
+/// GitHub-style alert kinds recognized in blockquotes: `> [!NOTE]`, `> [!TIP]`,
+/// `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`.
+enum MarkdownAlertKind: String {
+    case note = "NOTE"
+    case tip = "TIP"
+    case important = "IMPORTANT"
+    case warning = "WARNING"
+    case caution = "CAUTION"
+
+    var symbolName: String {
+        switch self {
+        case .note: return "info.circle.fill"
+        case .tip: return "lightbulb.fill"
+        case .important: return "exclamationmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .caution: return "flame.fill"
+        }
+    }
+
+    /// The reserved GFM alert keyword, title-cased for display. Not run
+    /// through `String(localized:)`: this mirrors a fixed English marker
+    /// from the markdown source itself (like a code fence's language tag),
+    /// not free-form UI copy.
+    var displayName: String {
+        switch self {
+        case .note: return "Note"
+        case .tip: return "Tip"
+        case .important: return "Important"
+        case .warning: return "Warning"
+        case .caution: return "Caution"
+        }
+    }
+
+    func tintColor(isDark: Bool) -> Color {
+        switch self {
+        case .note: return Color(red: 0.34, green: 0.55, blue: 0.98)
+        case .tip: return Color(red: 0.26, green: 0.72, blue: 0.46)
+        case .important: return Color(red: 0.64, green: 0.44, blue: 0.98)
+        case .warning: return Color(red: 0.85, green: 0.63, blue: 0.13)
+        case .caution: return Color(red: 0.89, green: 0.33, blue: 0.33)
+        }
+    }
+}
+
+/// A single top-level chunk of a document: either plain Markdown handed to
+/// MarkdownUI as-is, or a recognized GitHub-style alert blockquote rendered
+/// with a dedicated callout view.
+enum MarkdownDocumentSegment {
+    case markdown(String)
+    case alert(kind: MarkdownAlertKind, body: String)
+}
+
+/// Splits raw Markdown source into segments, extracting GitHub-style alert
+/// blockquotes (`> [!NOTE]` ...) so they render as styled callouts instead of
+/// plain blockquotes. swift-markdown-ui 2.4.1 has no native GFM-alert support
+/// and its `BlockquoteConfiguration` only exposes the rendered label (no raw
+/// text), so alert detection happens here, on the raw source, before content
+/// reaches MarkdownUI. Everything else passes through untouched.
+enum MarkdownAlertParser {
+    private static let markerPattern = try! NSRegularExpression(
+        pattern: #"^\s{0,3}>\s?\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$"#,
+        options: [.caseInsensitive]
+    )
+    private static let quoteLinePattern = try! NSRegularExpression(
+        pattern: #"^\s{0,3}>\s?(.*)$"#
+    )
+
+    static func segments(from content: String) -> [MarkdownDocumentSegment] {
+        let lines = content.components(separatedBy: "\n")
+        var result: [MarkdownDocumentSegment] = []
+        var plainBuffer: [String] = []
+
+        func flushPlain() {
+            guard !plainBuffer.isEmpty else { return }
+            result.append(.markdown(plainBuffer.joined(separator: "\n")))
+            plainBuffer.removeAll()
+        }
+
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            if let kind = alertKind(in: line) {
+                var bodyLines: [String] = []
+                var cursor = index + 1
+                while cursor < lines.count, let stripped = quoteContent(of: lines[cursor]) {
+                    bodyLines.append(stripped)
+                    cursor += 1
+                }
+                flushPlain()
+                result.append(.alert(kind: kind, body: bodyLines.joined(separator: "\n")))
+                index = cursor
+            } else {
+                plainBuffer.append(line)
+                index += 1
+            }
+        }
+        flushPlain()
+        return result
+    }
+
+    private static func alertKind(in line: String) -> MarkdownAlertKind? {
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        guard let match = markerPattern.firstMatch(in: line, range: range),
+              match.numberOfRanges > 1,
+              let typeRange = Range(match.range(at: 1), in: line) else {
+            return nil
+        }
+        return MarkdownAlertKind(rawValue: line[typeRange].uppercased())
+    }
+
+    private static func quoteContent(of line: String) -> String? {
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        guard let match = quoteLinePattern.firstMatch(in: line, range: range),
+              match.numberOfRanges > 1,
+              let contentRange = Range(match.range(at: 1), in: line) else {
+            return nil
+        }
+        return String(line[contentRange])
+    }
+}
+
+/// A GitHub-style alert callout (`> [!NOTE]`, `> [!WARNING]`, etc.) rendered
+/// as a colored, icon-labeled box instead of a plain blockquote. The alert
+/// body is itself rendered as Markdown so inline formatting, links, and code
+/// spans inside the alert keep working.
+private struct MarkdownAlertCalloutView: View {
+    let kind: MarkdownAlertKind
+    let text: String
+    let baseURL: URL?
+    let isDark: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: kind.symbolName)
+                .foregroundColor(kind.tintColor(isDark: isDark))
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(kind.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(kind.tintColor(isDark: isDark))
+                Markdown(text, baseURL: baseURL)
+                    .markdownTextStyle {
+                        ForegroundColor(isDark ? .white.opacity(0.85) : .primary)
+                        FontSize(14)
+                    }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(kind.tintColor(isDark: isDark).opacity(isDark ? 0.14 : 0.08))
+        )
+        .overlay(
+            HStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(kind.tintColor(isDark: isDark))
+                    .frame(width: 3)
+                Spacer()
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Code blocks
+
+/// The default (non-Mermaid) code block presentation, extracted so it can
+/// also be used as the graceful-degradation fallback for Mermaid blocks when
+/// the bundled mermaid.js asset is unavailable.
+struct MarkdownCodeBlockView: View {
+    let configuration: CodeBlockConfiguration
+    let isDark: Bool
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: true) {
+            configuration.label
+                .markdownTextStyle {
+                    FontFamilyVariant(.monospaced)
+                    FontSize(13)
+                    ForegroundColor(isDark ? Color(red: 0.9, green: 0.9, blue: 0.9) : Color(red: 0.2, green: 0.2, blue: 0.2))
+                }
+                .padding(12)
+        }
+        .background(isDark
+            ? Color(nsColor: NSColor(white: 0.08, alpha: 1.0))
+            : Color(nsColor: NSColor(white: 0.93, alpha: 1.0)))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+// MARK: - MarkdownDocumentView
+
 /// The full-document Markdown rendering boundary.
 ///
 /// MarkdownUI types and styling stay private to this view so the panel and its
@@ -22,10 +220,28 @@ struct MarkdownDocumentView: View {
     let baseURL: URL?
     let presentation: MarkdownDocumentPresentation
 
+    private var segments: [MarkdownDocumentSegment] {
+        MarkdownAlertParser.segments(from: content)
+    }
+
     var body: some View {
-        Markdown(content, baseURL: baseURL)
-            .markdownTheme(theme)
-            .textSelection(.enabled)
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                switch segment {
+                case .markdown(let text):
+                    Markdown(text, baseURL: baseURL)
+                        .markdownTheme(theme)
+                        .textSelection(.enabled)
+                case .alert(let kind, let text):
+                    MarkdownAlertCalloutView(
+                        kind: kind,
+                        text: text,
+                        baseURL: baseURL,
+                        isDark: presentation.colorScheme == .dark
+                    )
+                }
+            }
+        }
     }
 
     private var theme: Theme {
@@ -97,19 +313,13 @@ struct MarkdownDocumentView: View {
                     .markdownMargin(top: 8, bottom: 4)
             }
             .codeBlock { configuration in
-                ScrollView(.horizontal, showsIndicators: true) {
-                    configuration.label
-                        .markdownTextStyle {
-                            FontFamilyVariant(.monospaced)
-                            FontSize(13)
-                            ForegroundColor(isDark ? Color(red: 0.9, green: 0.9, blue: 0.9) : Color(red: 0.2, green: 0.2, blue: 0.2))
-                        }
-                        .padding(12)
+                Group {
+                    if MermaidBlockView.isMermaidLanguage(configuration.language) {
+                        MermaidBlockView(source: configuration.content, isDark: isDark)
+                    } else {
+                        MarkdownCodeBlockView(configuration: configuration, isDark: isDark)
+                    }
                 }
-                .background(isDark
-                    ? Color(nsColor: NSColor(white: 0.08, alpha: 1.0))
-                    : Color(nsColor: NSColor(white: 0.93, alpha: 1.0)))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
                 .markdownMargin(top: 8, bottom: 8)
             }
             .code {
