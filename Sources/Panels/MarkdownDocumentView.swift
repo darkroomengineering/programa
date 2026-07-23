@@ -7,11 +7,37 @@ import SwiftUI
 struct MarkdownDocumentPresentation {
     let colorScheme: ColorScheme
 
+    /// Follows the system text-surface color so the panel matches native
+    /// app chrome in both light and dark mode instead of a fixed light
+    /// background. `textBackgroundColor` is the same semantic surface
+    /// AppKit text/document views use, so it reads correctly against the
+    /// system appearance without any manual light/dark branching.
     var backgroundColor: Color {
-        colorScheme == .dark
-            ? Color(nsColor: NSColor(white: 0.12, alpha: 1.0))
-            : Color(nsColor: NSColor(white: 0.98, alpha: 1.0))
+        Color(nsColor: .textBackgroundColor)
     }
+}
+
+// MARK: - System text sizes
+
+/// Point sizes resolved from macOS's Dynamic Type text styles, so headings
+/// and body text track the user's system text-size preference the same way
+/// `.system(.largeTitle)` etc. do in plain SwiftUI. MarkdownUI's `FontSize`
+/// text style only accepts a raw point value or a relative multiplier, not a
+/// `Font.TextStyle` directly, so this resolves the point size once via
+/// `NSFont.preferredFont(forTextStyle:)` and feeds that into `FontSize`.
+private enum SystemTextSize {
+    static func points(_ style: NSFont.TextStyle) -> CGFloat {
+        NSFont.preferredFont(forTextStyle: style).pointSize
+    }
+
+    static var largeTitle: CGFloat { points(.largeTitle) }
+    static var title: CGFloat { points(.title1) }
+    static var title2: CGFloat { points(.title2) }
+    static var title3: CGFloat { points(.title3) }
+    static var headline: CGFloat { points(.headline) }
+    static var subheadline: CGFloat { points(.subheadline) }
+    static var body: CGFloat { points(.body) }
+    static var callout: CGFloat { points(.callout) }
 }
 
 // MARK: - GitHub-style alerts
@@ -31,7 +57,7 @@ enum MarkdownAlertKind: String {
         case .tip: return "lightbulb.fill"
         case .important: return "exclamationmark.circle.fill"
         case .warning: return "exclamationmark.triangle.fill"
-        case .caution: return "flame.fill"
+        case .caution: return "exclamationmark.octagon.fill"
         }
     }
 
@@ -49,13 +75,16 @@ enum MarkdownAlertKind: String {
         }
     }
 
-    func tintColor(isDark: Bool) -> Color {
+    /// Semantic macOS accent color per alert kind. These wrap dynamic
+    /// `NSColor`s that already adapt between light and dark appearance, so
+    /// no manual light/dark branching is needed here.
+    var tintColor: Color {
         switch self {
-        case .note: return Color(red: 0.34, green: 0.55, blue: 0.98)
-        case .tip: return Color(red: 0.26, green: 0.72, blue: 0.46)
-        case .important: return Color(red: 0.64, green: 0.44, blue: 0.98)
-        case .warning: return Color(red: 0.85, green: 0.63, blue: 0.13)
-        case .caution: return Color(red: 0.89, green: 0.33, blue: 0.33)
+        case .note: return Color(nsColor: .systemBlue)
+        case .tip: return Color(nsColor: .systemGreen)
+        case .important: return Color(nsColor: .systemPurple)
+        case .warning: return Color(nsColor: .systemOrange)
+        case .caution: return Color(nsColor: .systemRed)
         }
     }
 }
@@ -227,9 +256,10 @@ enum MarkdownAlertParser {
 }
 
 /// A GitHub-style alert callout (`> [!NOTE]`, `> [!WARNING]`, etc.) rendered
-/// as a colored, icon-labeled box instead of a plain blockquote. The alert
-/// body is itself rendered as Markdown so inline formatting, links, and code
-/// spans inside the alert keep working.
+/// as a native macOS callout: a tinted rounded container with a leading
+/// accent bar and an SF Symbol, instead of GitHub's pastel web treatment.
+/// The alert body is itself rendered as Markdown so inline formatting,
+/// links, and code spans inside the alert keep working.
 private struct MarkdownAlertCalloutView: View {
     let kind: MarkdownAlertKind
     let text: String
@@ -239,35 +269,35 @@ private struct MarkdownAlertCalloutView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: kind.symbolName)
-                .foregroundColor(kind.tintColor(isDark: isDark))
-                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(kind.tintColor)
+                .font(.system(size: SystemTextSize.callout, weight: .semibold))
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 4) {
                 Text(kind.displayName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(kind.tintColor(isDark: isDark))
+                    .font(.system(size: SystemTextSize.callout, weight: .semibold))
+                    .foregroundColor(kind.tintColor)
                 Markdown(text, baseURL: baseURL)
                     .markdownTextStyle {
-                        ForegroundColor(isDark ? .white.opacity(0.85) : .primary)
-                        FontSize(14)
+                        ForegroundColor(Color(nsColor: .labelColor))
+                        FontSize(SystemTextSize.body)
                     }
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(kind.tintColor(isDark: isDark).opacity(isDark ? 0.14 : 0.08))
+            RoundedRectangle(cornerRadius: 7)
+                .fill(kind.tintColor.opacity(isDark ? 0.12 : 0.08))
         )
         .overlay(
             HStack(spacing: 0) {
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(kind.tintColor(isDark: isDark))
+                    .fill(kind.tintColor)
                     .frame(width: 3)
                 Spacer()
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
         .padding(.vertical, 8)
     }
 }
@@ -286,14 +316,12 @@ struct MarkdownCodeBlockView: View {
             configuration.label
                 .markdownTextStyle {
                     FontFamilyVariant(.monospaced)
-                    FontSize(13)
-                    ForegroundColor(isDark ? Color(red: 0.9, green: 0.9, blue: 0.9) : Color(red: 0.2, green: 0.2, blue: 0.2))
+                    FontSize(SystemTextSize.body)
+                    ForegroundColor(Color(nsColor: .labelColor))
                 }
                 .padding(12)
         }
-        .background(isDark
-            ? Color(nsColor: NSColor(white: 0.08, alpha: 1.0))
-            : Color(nsColor: NSColor(white: 0.93, alpha: 1.0)))
+        .background(Color(nsColor: .underPageBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
@@ -345,16 +373,16 @@ struct MarkdownDocumentView: View {
 
         return Theme()
             .text {
-                ForegroundColor(isDark ? .white.opacity(0.9) : .primary)
-                FontSize(14)
+                ForegroundColor(Color(nsColor: .labelColor))
+                FontSize(SystemTextSize.body)
             }
             .heading1 { configuration in
                 VStack(alignment: .leading, spacing: 8) {
                     configuration.label
                         .markdownTextStyle {
                             FontWeight(.bold)
-                            FontSize(28)
-                            ForegroundColor(isDark ? .white : .primary)
+                            FontSize(SystemTextSize.largeTitle)
+                            ForegroundColor(Color(nsColor: .labelColor))
                         }
                     Divider()
                 }
@@ -365,8 +393,8 @@ struct MarkdownDocumentView: View {
                     configuration.label
                         .markdownTextStyle {
                             FontWeight(.bold)
-                            FontSize(22)
-                            ForegroundColor(isDark ? .white : .primary)
+                            FontSize(SystemTextSize.title)
+                            ForegroundColor(Color(nsColor: .labelColor))
                         }
                     Divider()
                 }
@@ -376,8 +404,8 @@ struct MarkdownDocumentView: View {
                 configuration.label
                     .markdownTextStyle {
                         FontWeight(.semibold)
-                        FontSize(18)
-                        ForegroundColor(isDark ? .white : .primary)
+                        FontSize(SystemTextSize.title2)
+                        ForegroundColor(Color(nsColor: .labelColor))
                     }
                     .markdownMargin(top: 16, bottom: 8)
             }
@@ -385,8 +413,8 @@ struct MarkdownDocumentView: View {
                 configuration.label
                     .markdownTextStyle {
                         FontWeight(.semibold)
-                        FontSize(16)
-                        ForegroundColor(isDark ? .white : .primary)
+                        FontSize(SystemTextSize.title3)
+                        ForegroundColor(Color(nsColor: .labelColor))
                     }
                     .markdownMargin(top: 12, bottom: 6)
             }
@@ -394,8 +422,8 @@ struct MarkdownDocumentView: View {
                 configuration.label
                     .markdownTextStyle {
                         FontWeight(.medium)
-                        FontSize(14)
-                        ForegroundColor(isDark ? .white : .primary)
+                        FontSize(SystemTextSize.headline)
+                        ForegroundColor(Color(nsColor: .labelColor))
                     }
                     .markdownMargin(top: 10, bottom: 4)
             }
@@ -403,8 +431,8 @@ struct MarkdownDocumentView: View {
                 configuration.label
                     .markdownTextStyle {
                         FontWeight(.medium)
-                        FontSize(13)
-                        ForegroundColor(isDark ? .white.opacity(0.7) : .secondary)
+                        FontSize(SystemTextSize.subheadline)
+                        ForegroundColor(Color(nsColor: .secondaryLabelColor))
                     }
                     .markdownMargin(top: 8, bottom: 4)
             }
@@ -420,21 +448,19 @@ struct MarkdownDocumentView: View {
             }
             .code {
                 FontFamilyVariant(.monospaced)
-                FontSize(13)
-                ForegroundColor(isDark ? Color(red: 0.85, green: 0.6, blue: 0.95) : Color(red: 0.6, green: 0.2, blue: 0.7))
-                BackgroundColor(isDark
-                    ? Color(nsColor: NSColor(white: 0.18, alpha: 1.0))
-                    : Color(nsColor: NSColor(white: 0.92, alpha: 1.0)))
+                FontSize(SystemTextSize.callout)
+                ForegroundColor(Color(nsColor: .systemPurple))
+                BackgroundColor(Color(nsColor: .quaternaryLabelColor))
             }
             .blockquote { configuration in
                 HStack(spacing: 0) {
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(isDark ? Color.white.opacity(0.2) : Color.gray.opacity(0.4))
+                        .fill(Color(nsColor: .separatorColor))
                         .frame(width: 3)
                     configuration.label
                         .markdownTextStyle {
-                            ForegroundColor(isDark ? .white.opacity(0.6) : .secondary)
-                            FontSize(14)
+                            ForegroundColor(Color(nsColor: .secondaryLabelColor))
+                            FontSize(SystemTextSize.body)
                         }
                         .padding(.leading, 12)
                 }
@@ -448,15 +474,11 @@ struct MarkdownDocumentView: View {
             }
             .table { configuration in
                 configuration.label
-                    .markdownTableBorderStyle(.init(color: isDark ? .white.opacity(0.15) : .gray.opacity(0.3)))
+                    .markdownTableBorderStyle(.init(color: Color(nsColor: .separatorColor)))
                     .markdownTableBackgroundStyle(
                         .alternatingRows(
-                            isDark
-                                ? Color(nsColor: NSColor(white: 0.14, alpha: 1.0))
-                                : Color(nsColor: NSColor(white: 0.96, alpha: 1.0)),
-                            isDark
-                                ? Color(nsColor: NSColor(white: 0.10, alpha: 1.0))
-                                : Color(nsColor: NSColor(white: 1.0, alpha: 1.0))
+                            Color(nsColor: .controlBackgroundColor).opacity(0.6),
+                            Color.clear
                         )
                     )
                     .markdownMargin(top: 8, bottom: 8)

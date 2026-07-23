@@ -56,20 +56,20 @@ private struct MermaidFallbackCodeView: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: true) {
             Text(source)
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(isDark ? Color(red: 0.9, green: 0.9, blue: 0.9) : Color(red: 0.2, green: 0.2, blue: 0.2))
+                .font(.system(.body, design: .monospaced))
+                .foregroundColor(Color(nsColor: .labelColor))
                 .padding(12)
         }
-        .background(isDark
-            ? Color(nsColor: NSColor(white: 0.08, alpha: 1.0))
-            : Color(nsColor: NSColor(white: 0.93, alpha: 1.0)))
+        .background(Color(nsColor: .underPageBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 
 /// AppKit bridge that hosts the offline mermaid.js render inside a WKWebView,
 /// sized to the rendered diagram's natural height so it sits inline in the
-/// document flow.
+/// document flow. The web view's own background is made transparent (both at
+/// the WKWebView layer and in the loaded HTML) so the diagram sits directly
+/// on the panel's native surface instead of a white/dark card.
 private struct MermaidWebView: NSViewRepresentable {
     let source: String
     let isDark: Bool
@@ -86,6 +86,13 @@ private struct MermaidWebView: NSViewRepresentable {
         configuration.userContentController.add(context.coordinator, name: "mermaidHeight")
         configuration.userContentController.add(context.coordinator, name: "mermaidError")
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        // Keep the web view's own compositing surface transparent so no
+        // white/dark flash shows before the HTML (which also sets a
+        // transparent body background) finishes loading.
+        webView.setValue(false, forKey: "drawsBackground")
+        if #available(macOS 12.3, *) {
+            webView.underPageBackgroundColor = .clear
+        }
         load(into: webView, context: context)
         return webView
     }
@@ -108,7 +115,7 @@ private struct MermaidWebView: NSViewRepresentable {
             .replacingOccurrences(of: "`", with: "\\`")
             .replacingOccurrences(of: "${", with: "\\${")
         let theme = isDark ? "dark" : "default"
-        let backgroundHex = isDark ? "#1e1e1e" : "#ffffff"
+        let fontFamily = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
         return """
         <!DOCTYPE html>
         <html>
@@ -116,9 +123,9 @@ private struct MermaidWebView: NSViewRepresentable {
         <meta charset="utf-8">
         <script src="\(scriptFileName)"></script>
         <style>
-          html, body { margin: 0; padding: 0; background: \(backgroundHex); }
+          html, body { background: transparent; margin: 0; padding: 0; }
           #diagram { display: flex; justify-content: center; padding: 4px; }
-          #diagram svg { max-width: 100%; height: auto; }
+          #diagram svg { width: 100%; max-width: 100%; height: auto; }
         </style>
         </head>
         <body>
@@ -130,7 +137,12 @@ private struct MermaidWebView: NSViewRepresentable {
             window.webkit.messageHandlers.mermaidHeight.postMessage(h);
           }
           try {
-            mermaid.initialize({ startOnLoad: false, theme: '\(theme)', securityLevel: 'strict' });
+            mermaid.initialize({
+              startOnLoad: false,
+              theme: '\(theme)',
+              securityLevel: 'strict',
+              themeVariables: { fontFamily: "\(fontFamily)" }
+            });
             var source = `\(escapedSource)`;
             mermaid.render('mermaid-diagram', source).then(function (result) {
               document.getElementById('diagram').innerHTML = result.svg;
