@@ -207,6 +207,18 @@ class TerminalController {
                 self.v2BrowserDownloadEventsBySurface[surfaceId] = queue
             }
         }
+
+        // Wire the session-WAL periodic frame capture's main-thread/AppKit
+        // VT export in. `SessionWALStore` decides *when* to capture (cadence,
+        // idle-skip, offset bookkeeping) but never touches AppKit itself, so
+        // it calls back out through this closure, hopping to main for the
+        // export and back to its own writeQueue with the result.
+        SessionWALStore.shared.setFrameTextProvider { [weak self] surfaceId, completion in
+            Task { @MainActor [weak self] in
+                let text = self?.captureSessionWALFrameText(forSurfaceId: surfaceId)
+                completion(text)
+            }
+        }
     }
 
     private nonisolated func withListenerState<T>(_ body: () -> T) -> T {
@@ -2514,8 +2526,17 @@ class TerminalController {
         return pasteboard.string(forType: NSPasteboard.PasteboardType("public.utf8-plain-text"))
     }
 
-    private func readTerminalTextFromVTExportForSnapshot(
-        terminalPanel: TerminalPanel,
+    /// Core of the VT screen export: swaps the general pasteboard, runs
+    /// `write_screen_file:copy,vt` (ghostty's `.screen` location — the
+    /// current visible viewport, not scrollback history; see
+    /// `ghostty/src/Surface.zig` `writeScreenFile`), reads the resulting
+    /// temp file, and restores the pasteboard. Takes a `performBindingAction`
+    /// closure rather than a `TerminalPanel` directly so callers that only
+    /// have a `TerminalSurface` (no panel, e.g. the session-WAL periodic
+    /// frame capture in `captureSessionWALFrameText(forSurfaceId:)`) can
+    /// reuse it without needing to look up the wrapping panel.
+    private func readTerminalTextFromVTExportCore(
+        performBindingAction: (String) -> Bool,
         lineLimit: Int?
     ) -> String? {
         let pasteboard = NSPasteboard.general
@@ -2525,7 +2546,7 @@ class TerminalController {
         }
 
         let initialChangeCount = pasteboard.changeCount
-        guard terminalPanel.performBindingAction("write_screen_file:copy,vt") else {
+        guard performBindingAction("write_screen_file:copy,vt") else {
             return nil
         }
         guard pasteboard.changeCount != initialChangeCount else {
@@ -2553,6 +2574,37 @@ class TerminalController {
             output = tailTerminalLines(output, maxLines: lineLimit)
         }
         return output
+    }
+
+    private func readTerminalTextFromVTExportForSnapshot(
+        terminalPanel: TerminalPanel,
+        lineLimit: Int?
+    ) -> String? {
+        readTerminalTextFromVTExportCore(
+            performBindingAction: { terminalPanel.performBindingAction($0) },
+            lineLimit: lineLimit
+        )
+    }
+
+    /// Session-WAL periodic frame capture (issue #181 layer L1): a
+    /// VT-formatted dump of the current screen only, for a live surface
+    /// looked up by id. See `SessionWALStore`'s "Periodic frame capture"
+    /// doc comment for the cadence/idle-skip/atomic-write contract this
+    /// feeds. Reuses the exact same export core already used at
+    /// quit/autosave (`readTerminalTextFromVTExportForSnapshot`); this is
+    /// purely a `TerminalSurface`-only entry point since the periodic
+    /// capture path never has a `TerminalPanel` in hand, only a surface id
+    /// string. Returns nil (caller logs and skips this attempt) if the
+    /// surface can't be found or the export itself fails.
+    func captureSessionWALFrameText(forSurfaceId surfaceId: String) -> String? {
+        guard let surface = TerminalSurfaceRegistry.shared.allSurfaces()
+            .first(where: { $0.id.uuidString == surfaceId }) else {
+            return nil
+        }
+        return readTerminalTextFromVTExportCore(
+            performBindingAction: { surface.performBindingAction($0) },
+            lineLimit: nil
+        )
     }
 
     func readTerminalTextForSnapshot(

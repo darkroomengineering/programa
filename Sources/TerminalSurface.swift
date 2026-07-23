@@ -1141,6 +1141,11 @@ final class TerminalSurface: Identifiable, ObservableObject {
             surfaceId: id.uuidString,
             workingDirectory: resolvedWorkingDirectory
         )
+        // childPID/ptyPath may not be available yet (the child may not have
+        // spawned). Bounded retry, re-reading `self.surface` fresh each
+        // attempt rather than caching `createdSurface` across the delay --
+        // see resolveSessionWALIdentity's doc comment.
+        resolveSessionWALIdentity(surfaceId: id.uuidString, attempt: 0)
 
         // Session scrollback replay must be one-shot. Reusing it on a later runtime
         // surface recreation would inject stale restored output into a live shell.
@@ -1220,6 +1225,38 @@ final class TerminalSurface: Identifiable, ObservableObject {
             "runtimeFont=\(runtimeFontText)"
         )
 #endif
+    }
+
+    private static let sessionWALIdentityMaxRetries = 6
+    private static let sessionWALIdentityRetryInterval: TimeInterval = 0.5
+
+    /// Session WAL identity resolution: retries `SessionWALStore
+    /// .resolveSurfaceIdentity` a bounded number of times, spaced out, so a
+    /// child process that has not spawned yet at surface-creation time still
+    /// gets its `childPID`/`ptyPath` recorded once it does. Re-reads
+    /// `self.surface` fresh on every attempt (never captures the surface
+    /// pointer passed into `createSurface` across the delay) so a surface
+    /// torn down mid-retry is simply skipped rather than dereferenced --
+    /// `surface` is set to nil synchronously at the top of
+    /// `teardownSurface()`, before any async free runs. Not on the keystroke
+    /// path: called once at surface creation, then at most
+    /// `sessionWALIdentityMaxRetries` more times, spaced
+    /// `sessionWALIdentityRetryInterval` apart.
+    private func resolveSessionWALIdentity(surfaceId: String, attempt: Int) {
+        guard let surface else { return }
+        let identity = SessionWALStore.resolveSurfaceIdentity(surface: surface)
+        if identity.childPID != nil || identity.ptyPath != nil {
+            SessionWALStore.shared.updateSurfaceIdentity(
+                surfaceId: surfaceId,
+                childPID: identity.childPID,
+                ptyPath: identity.ptyPath
+            )
+        }
+        let stillMissing = identity.childPID == nil || identity.ptyPath == nil
+        guard stillMissing, attempt < Self.sessionWALIdentityMaxRetries else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.sessionWALIdentityRetryInterval) { [weak self] in
+            self?.resolveSessionWALIdentity(surfaceId: surfaceId, attempt: attempt + 1)
+        }
     }
 
     @discardableResult
