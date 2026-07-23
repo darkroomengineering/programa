@@ -60,12 +60,13 @@ enum MarkdownAlertKind: String {
     }
 }
 
-/// A single top-level chunk of a document: either plain Markdown handed to
-/// MarkdownUI as-is, or a recognized GitHub-style alert blockquote rendered
-/// with a dedicated callout view.
+/// A single top-level chunk of a document: plain Markdown handed to
+/// MarkdownUI as-is, a recognized GitHub-style alert blockquote, or a
+/// `:::compare` before/after code block, each rendered with a dedicated view.
 enum MarkdownDocumentSegment {
     case markdown(String)
     case alert(kind: MarkdownAlertKind, body: String)
+    case compare(language: String, before: String, after: String)
 }
 
 /// Splits raw Markdown source into segments, extracting GitHub-style alert
@@ -81,6 +82,13 @@ enum MarkdownAlertParser {
     )
     private static let quoteLinePattern = try! NSRegularExpression(
         pattern: #"^\s{0,3}>\s?(.*)$"#
+    )
+    private static let compareStartPattern = try! NSRegularExpression(
+        pattern: #"^\s{0,3}:::compare\s*$"#,
+        options: [.caseInsensitive]
+    )
+    private static let compareEndPattern = try! NSRegularExpression(
+        pattern: #"^\s{0,3}:::\s*$"#
     )
 
     static func segments(from content: String) -> [MarkdownDocumentSegment] {
@@ -107,6 +115,29 @@ enum MarkdownAlertParser {
                 flushPlain()
                 result.append(.alert(kind: kind, body: bodyLines.joined(separator: "\n")))
                 index = cursor
+            } else if isCompareStart(line) {
+                var bodyLines: [String] = []
+                var cursor = index + 1
+                var foundEnd = false
+                while cursor < lines.count {
+                    if isCompareEnd(lines[cursor]) {
+                        foundEnd = true
+                        break
+                    }
+                    bodyLines.append(lines[cursor])
+                    cursor += 1
+                }
+                if foundEnd, let segment = compareSegment(from: bodyLines) {
+                    flushPlain()
+                    result.append(segment)
+                    index = cursor + 1
+                } else {
+                    // Malformed `:::compare` block (missing closing `:::`, or
+                    // not exactly two fenced code blocks inside): degrade to
+                    // plain text rather than dropping content.
+                    plainBuffer.append(line)
+                    index += 1
+                }
             } else {
                 plainBuffer.append(line)
                 index += 1
@@ -134,6 +165,64 @@ enum MarkdownAlertParser {
             return nil
         }
         return String(line[contentRange])
+    }
+
+    private static func isCompareStart(_ line: String) -> Bool {
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        return compareStartPattern.firstMatch(in: line, range: range) != nil
+    }
+
+    private static func isCompareEnd(_ line: String) -> Bool {
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        return compareEndPattern.firstMatch(in: line, range: range) != nil
+    }
+
+    /// Parses the lines between `:::compare` and `:::` into a `.compare`
+    /// segment. Expects exactly two fenced code blocks; each fence's info
+    /// string is `<language> [before|after]` (e.g. ```swift before```). If a
+    /// fence carries a `before`/`after` label, that decides its side;
+    /// otherwise the first fence found is treated as "before" and the second
+    /// as "after". Returns nil if the block does not contain exactly two
+    /// fenced code blocks, so the caller can fall back to plain text.
+    private static func compareSegment(from bodyLines: [String]) -> MarkdownDocumentSegment? {
+        struct Fence {
+            let language: String
+            let label: String?
+            let code: String
+        }
+
+        var fences: [Fence] = []
+        var index = 0
+        while index < bodyLines.count {
+            let line = bodyLines[index]
+            guard line.hasPrefix("```") else {
+                index += 1
+                continue
+            }
+            let info = line.dropFirst(3).trimmingCharacters(in: .whitespaces)
+            let tokens = info.split(separator: " ").map(String.init)
+            let language = tokens.first ?? ""
+            let label = tokens.dropFirst().first.map { $0.lowercased() }
+
+            var codeLines: [String] = []
+            var cursor = index + 1
+            while cursor < bodyLines.count, !bodyLines[cursor].hasPrefix("```") {
+                codeLines.append(bodyLines[cursor])
+                cursor += 1
+            }
+            guard cursor < bodyLines.count else {
+                // Unclosed fence inside the compare block.
+                return nil
+            }
+            fences.append(Fence(language: language, label: label, code: codeLines.joined(separator: "\n")))
+            index = cursor + 1
+        }
+
+        guard fences.count == 2 else { return nil }
+        let before = fences.first(where: { $0.label == "before" }) ?? fences[0]
+        let after = fences.first(where: { $0.label == "after" }) ?? fences[1]
+        let language = !before.language.isEmpty ? before.language : after.language
+        return .compare(language: language, before: before.code, after: after.code)
     }
 }
 
@@ -237,6 +326,13 @@ struct MarkdownDocumentView: View {
                         kind: kind,
                         text: text,
                         baseURL: baseURL,
+                        isDark: presentation.colorScheme == .dark
+                    )
+                case .compare(let language, let before, let after):
+                    MarkdownCompareView(
+                        language: language,
+                        beforeCode: before,
+                        afterCode: after,
                         isDark: presentation.colorScheme == .dark
                     )
                 }

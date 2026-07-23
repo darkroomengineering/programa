@@ -184,6 +184,33 @@ programa prompt-agent --surface "$handle" --timeout 300 "fix the failing test in
 
 It sends the text, waits (briefly) for the helper to report it started working, then waits for it to go idle again. If the helper never reports any activity at all, the JSON response carries a `warning` noting its hooks may not be installed, rather than hanging or failing outright — check that field if `prompt-agent` returns suspiciously fast.
 
+## Writing a recap
+
+When the user asks for a recap or summary of a change, write it as markdown to `.programa/recaps/<slug>.md` (repo root resolved with `git rev-parse --show-toplevel` from your cwd), then open it:
+
+```bash
+programa recap open <slug>
+```
+
+Use the same panel that renders `programa markdown open` for it, so lean on its formatting:
+
+- ` ```mermaid ` fenced blocks for flow diagrams (rendered offline, no network call)
+- GitHub-style alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`) for callouts
+- a `:::compare` block for before/after code, rendered side by side:
+
+  ````
+  :::compare
+  ```swift before
+  old code
+  ```
+  ```swift after
+  new code
+  ```
+  :::
+  ````
+
+`programa recap list` shows the slugs already saved. Keep the recap itself short and plain, the same way you'd summarize the change in chat.
+
 ## Reference
 
 - `--workspace`/`--surface`/`--pane`/`--window` accept either a short ref (`workspace:2`, `surface:4`) or a raw UUID; omitted, they default to `$PROGRAMA_WORKSPACE_ID`/`$PROGRAMA_SURFACE_ID`.

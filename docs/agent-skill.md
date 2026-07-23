@@ -33,6 +33,7 @@ The first thing the skill does is check `PROGRAMA_SURFACE_ID` and `PROGRAMA_SOCK
 - **Reading a sibling pane** — `read-screen` (alias `capture-pane`), with `--scrollback`/`--lines` for history beyond the visible viewport.
 - **Spawning and coordinating a helper agent** — split, `send` a command like `claude ...` into the new surface, then read its output and answer it the same way you'd talk to any other pane. `set-status` and `notify` report progress through the sidebar instead of a pane the user isn't looking at.
 - **Waiting** — `wait-surface` gives a server-owned blocking wait on a surface: `--pattern <regex>` resolves when new output matches, `--exit` when the process exits, both with `--timeout`. The tmux-compatible `wait-for` / `wait-for -S` named-signal rendezvous covers two cooperating processes. Waiting on *agent state* (idle/blocked) is the unshipped half of [#166](https://github.com/darkroomengineering/programa/issues/166) and the skill says so explicitly.
+- **Writing a recap** — when the user asks for a summary of a change, write markdown to `.programa/recaps/<slug>.md` and open it with `programa recap open <slug>` (`programa recap list` shows what's saved). The markdown panel renders mermaid diagrams, GitHub-style alerts, and `:::compare` before/after blocks, so the skill tells the agent to reach for those instead of plain prose when they fit.
 
 ## Verifying it
 

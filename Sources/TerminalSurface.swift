@@ -190,12 +190,12 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private let maxPendingSocketInputBytes = 1_048_576
     private var backgroundSurfaceStartQueued = false
     private var surfaceCallbackContext: Unmanaged<GhosttySurfaceCallbackContext>?
-    /// SPIKE (feat/session-wal-spike): per-surface userdata for the PTY
-    /// output tap. See SessionOutputTapSpike.swift for the atomicity
-    /// tradeoff and full lifecycle contract. Registered right after
-    /// `ghostty_surface_new` succeeds; cleared + released at every teardown
-    /// site paired with `surfaceCallbackContext` below.
-    private var outputTapContext: Unmanaged<SessionOutputTapSpike.Context>?
+    /// Per-surface userdata for the PTY output tap that feeds the session
+    /// WAL. See SessionOutputTapSpike.swift (SessionWALStore) for the
+    /// threading/lock tradeoff and full lifecycle contract. Registered right
+    /// after `ghostty_surface_new` succeeds; cleared + released at every
+    /// teardown site paired with `surfaceCallbackContext` below.
+    private var outputTapContext: Unmanaged<SessionWALStore.Context>?
     /// The desired focus state for the Ghostty C surface. May be set before the
     /// C surface exists (e.g. during layout restoration); `createSurface`
     /// reapplies this value once the runtime surface exists, then keeps using it
@@ -456,9 +456,11 @@ final class TerminalSurface: Identifiable, ObservableObject {
               programaSurfacePointerAppearsLive(surface) else {
             let callbackContext = surfaceCallbackContext
             surfaceCallbackContext = nil
-            // SPIKE: pointer may already be reowned/recycled here — do not touch
-            // the C surface, just forget our bookkeeping (mirrors callbackContext above).
-            SessionOutputTapSpike.shared.unregister(surface: nil, surfaceId: id.uuidString)
+            // Pointer may already be reowned/recycled here — do not touch the
+            // C surface, just forget our bookkeeping (mirrors callbackContext
+            // above). Not a real close: keep the WAL directory (default
+            // deleteDirectory: false).
+            SessionWALStore.shared.unregister(surface: nil, surfaceId: id.uuidString)
             outputTapContext?.release()
             outputTapContext = nil
             registry.unregisterRuntimeSurface(surface, ownerId: id)
@@ -694,8 +696,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
         Task { @MainActor in
             // Keep free behavior aligned with deinit: perform the runtime teardown on
             // the next main-actor turn so SIGHUP delivery is deterministic but non-reentrant.
-            // SPIKE: clear the output tap right before free, per the C API contract.
-            SessionOutputTapSpike.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString)
+            // Clear the output tap right before free, per the C API contract.
+            // This is the surface's genuine normal-close path, so delete its
+            // WAL directory now that it's torn down.
+            SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString, deleteDirectory: true)
             ghostty_surface_free(surfaceToFree)
             callbackContext?.release()
             tapContext?.release()
@@ -1128,10 +1132,15 @@ final class TerminalSurface: Identifiable, ObservableObject {
         TerminalSurfaceRegistry.shared.registerRuntimeSurface(createdSurface, ownerId: id)
         recordRuntimeSurfaceCreation()
 
-        // SPIKE (feat/session-wal-spike): register the PTY output tap now that
-        // the runtime surface definitely exists. See SessionOutputTapSpike.swift.
+        // Register the PTY output tap now that the runtime surface definitely
+        // exists, wiring it into the session WAL writer. See
+        // SessionOutputTapSpike.swift (SessionWALStore).
         outputTapContext?.release()
-        outputTapContext = SessionOutputTapSpike.shared.register(surface: createdSurface, surfaceId: id.uuidString)
+        outputTapContext = SessionWALStore.shared.register(
+            surface: createdSurface,
+            surfaceId: id.uuidString,
+            workingDirectory: resolvedWorkingDirectory
+        )
 
         // Session scrollback replay must be one-shot. Reusing it on a later runtime
         // surface recreation would inject stale restored output into a live shell.
@@ -1728,7 +1737,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
         TerminalSurfaceRegistry.shared.unregisterRuntimeSurface(surfaceToFree, ownerId: id)
         surface = nil
-        SessionOutputTapSpike.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString)
+        // Test-only teardown, not a real close: keep the WAL directory.
+        SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString)
         ghostty_surface_free(surfaceToFree)
         callbackContext?.release()
         tapContext?.release()
@@ -1752,7 +1762,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
         }
 
         TerminalSurfaceRegistry.shared.unregisterRuntimeSurface(surfaceToFree, ownerId: id)
-        SessionOutputTapSpike.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString)
+        // Test-only teardown, not a real close: keep the WAL directory.
+        SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString)
         ghostty_surface_free(surfaceToFree)
         runtimeSurfaceFreedOutOfBandForTesting = true
         callbackContext?.release()
@@ -1768,7 +1779,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let tapContext = outputTapContext
         outputTapContext = nil
         // Deinit's Task closure below must not capture self, so snapshot the id
-        // string now for the SPIKE tap teardown call.
+        // string now for the WAL tap teardown call.
         let surfaceIdForTap = id.uuidString
 
         // Nil out the surface pointer so any in-flight closures (e.g. geometry
@@ -1816,8 +1827,11 @@ final class TerminalSurface: Identifiable, ObservableObject {
         // callback userdata until surface free completes so callbacks never dereference
         // a deallocated view pointer.
         Task { @MainActor in
-            // SPIKE: clear the output tap right before free, per the C API contract.
-            SessionOutputTapSpike.shared.unregister(surface: surfaceToFree, surfaceId: surfaceIdForTap)
+            // Clear the output tap right before free, per the C API contract.
+            // This is the surface's genuine normal-close path (when
+            // teardownSurface() didn't already run it), so delete its WAL
+            // directory now that it's torn down.
+            SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: surfaceIdForTap, deleteDirectory: true)
             ghostty_surface_free(surfaceToFree)
             callbackContext?.release()
             tapContext?.release()

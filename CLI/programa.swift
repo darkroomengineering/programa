@@ -3989,6 +3989,14 @@ struct ProgramaCLI {
                 }
             ),
 
+            CommandDescriptor(
+                names: ["recap"],
+                helpLines: ["recap open <slug>|list             (open/list saved recaps in .programa/recaps/)"],
+                execute: { ctx in
+                    try self.runRecapCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
+                }
+            ),
+
             CommandDescriptor(names: [], helpLines: [""], execute: nil),
 
             CommandDescriptor(
@@ -5595,6 +5603,7 @@ struct ProgramaCLI {
         if let text = browserSubcommandUsage(command) { return text }
         if let text = markdownSubcommandUsage(command) { return text }
         if let text = reviewSubcommandUsage(command) { return text }
+        if let text = recapSubcommandUsage(command) { return text }
         if let text = themesSubcommandUsage(command) { return text }
         if let text = agentWrapperSubcommandUsage(command) { return text }
         return commandDescriptor(named: command)?.detailedUsage
@@ -6026,7 +6035,12 @@ struct ProgramaCLI {
             _ = try parse(values: ["workspace"], booleans: ["all"])
 
         case "markdown":
-            let parsed = try parse(minPositionals: 1, maxPositionals: 2)
+            let parsed = try parse(
+                values: ["workspace", "window", "surface", "direction"],
+                minPositionals: 1,
+                maxPositionals: 2,
+                allowEquals: true
+            )
             if parsed.positional.count == 2, parsed.positional[0].lowercased() != "open" {
                 throw CLIError(message: "markdown: unexpected subcommand \(parsed.positional[0])")
             }
@@ -6049,6 +6063,25 @@ struct ProgramaCLI {
                 guard ["add", "remove", "list"].contains(parsed.positional[1].lowercased()) else {
                     throw CLIError(message: "review comment: unknown subcommand \(parsed.positional[1])")
                 }
+            }
+
+        case "recap":
+            let parsed = try parse(
+                values: ["workspace", "window"],
+                minPositionals: 1,
+                maxPositionals: 2,
+                allowEquals: true
+            )
+            let subcommand = parsed.positional[0].lowercased()
+            guard ["open", "list"].contains(subcommand) else {
+                throw CLIError(message: "recap: unknown subcommand \(parsed.positional[0])")
+            }
+            if subcommand == "open" {
+                guard parsed.positional.count == 2 else {
+                    throw CLIError(message: "recap open requires <slug>")
+                }
+            } else if subcommand == "list", parsed.positional.count != 1 {
+                throw CLIError(message: "recap list: unexpected argument \(parsed.positional[1])")
             }
 
         case "worktree":

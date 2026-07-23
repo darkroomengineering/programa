@@ -463,9 +463,18 @@ extension Workspace {
         switch snapshot.type {
         case .terminal:
             let workingDirectory = snapshot.terminal?.workingDirectory ?? snapshot.directory ?? currentDirectory
-            let replayEnvironment = SessionScrollbackReplayStore.replayEnvironment(
-                for: snapshot.terminal?.scrollback
-            )
+            // Prefer the clean-quit/autosave scrollback text. If it's missing or
+            // blank -- the app died before the next snapshot captured it -- fall
+            // back to this same OLD session's WAL tail (issue #181). `snapshot.id`
+            // is the pre-restore panel/surface UUID, which is also the WAL
+            // session directory name (TerminalPanel.id == TerminalSurface.id).
+            // The result feeds the exact same replay/truncation path either way;
+            // this is purely an alternative source of scrollback bytes.
+            let hasStoredScrollback = snapshot.terminal?.scrollback?.contains { !$0.isWhitespace } ?? false
+            let scrollbackText = hasStoredScrollback
+                ? snapshot.terminal?.scrollback
+                : SessionWALStore.shared.readFallbackScrollbackText(sessionId: snapshot.id.uuidString)
+            let replayEnvironment = SessionScrollbackReplayStore.replayEnvironment(for: scrollbackText)
             guard let terminalPanel = newTerminalSurface(
                 inPane: paneId,
                 focus: false,
@@ -474,13 +483,17 @@ extension Workspace {
             ) else {
                 return nil
             }
-            let fallbackScrollback = SessionPersistencePolicy.truncatedScrollback(snapshot.terminal?.scrollback)
+            let fallbackScrollback = SessionPersistencePolicy.truncatedScrollback(scrollbackText)
             if let fallbackScrollback {
                 restoredTerminalScrollbackByPanelId[terminalPanel.id] = fallbackScrollback
             } else {
                 restoredTerminalScrollbackByPanelId.removeValue(forKey: terminalPanel.id)
             }
             applySessionPanelMetadata(snapshot, toPanelId: terminalPanel.id)
+            // This old session's WAL has now been given its one chance to be
+            // read as a restore fallback; the new panel above has its own fresh
+            // WAL directory going forward, so the old one is dead weight.
+            SessionWALStore.shared.discardOrphanedSession(sessionId: snapshot.id.uuidString)
             return terminalPanel.id
         case .browser:
             guard let browserPanel = newBrowserSurface(
