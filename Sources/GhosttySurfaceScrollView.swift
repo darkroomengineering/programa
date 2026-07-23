@@ -375,9 +375,14 @@ final class GhosttySurfaceScrollView: NSView {
         imageTransferIndicatorView = NSVisualEffectView(frame: .zero)
         imageTransferIndicatorSpinner = NSProgressIndicator(frame: .zero)
         imageTransferCancelButton = NSButton(frame: .zero)
-        scrollView.hasVerticalScroller = true
+        // No AppKit scrollers: Ghostty owns scrollback and all wheel gestures
+        // are forwarded to the surface (see GhosttyScrollView.scrollWheel), so
+        // the NSScrollView scroller is vestigial. Leaving the vertical scroller
+        // on reserved a legacy gutter with no working thumb when macOS "Show
+        // scroll bars" is set to Always, stealing width from terminal content.
+        scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = false
+        scrollView.autohidesScrollers = true
         scrollView.usesPredominantAxisScrolling = true
         scrollView.scrollerStyle = .overlay
         scrollView.drawsBackground = false
