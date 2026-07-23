@@ -2323,17 +2323,20 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
         let initialContentWidth = scrollView.contentSize.width
         XCTAssertEqual(initialSurfaceSize.width, initialContentWidth, accuracy: 0.5)
 
+        // The vertical scroller is disabled (Ghostty owns scrollback; the
+        // NSScrollView scroller was vestigial chrome that reserved a legacy
+        // gutter with no working thumb). With no scroller, the terminal content
+        // width is now immune to the "Show scroll bars" preference: neither a
+        // legacy nor an overlay scroller style reserves or restores a gutter, so
+        // the surface always fills the full content width.
         scrollView.scrollerStyle = .legacy
         scrollView.layoutSubtreeIfNeeded()
         let legacyContentWidth = scrollView.contentSize.width
-        XCTAssertLessThan(
+        XCTAssertEqual(
             legacyContentWidth,
             initialContentWidth,
-            "Legacy scrollbars should reserve width in the scroll view content area"
-        )
-        assertPendingSurfaceWidth(
-            initialSurfaceSize.width,
-            "Changing the scroll view style alone should leave the terminal grid stale until the scroller-style observer runs"
+            accuracy: 0.5,
+            "With no vertical scroller, a legacy scroller style must not reserve a gutter"
         )
 
         NotificationCenter.default.post(name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil)
@@ -2341,21 +2344,18 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
 
         XCTAssertEqual(scrollView.scrollerStyle, .legacy)
         assertPendingSurfaceWidth(
-            legacyContentWidth,
-            "Preferred scroller style changes should recalculate the terminal grid width immediately"
+            initialSurfaceSize.width,
+            "A preferred scroller style change must keep the terminal grid at full width when no scroller is present"
         )
 
         scrollView.scrollerStyle = .overlay
         scrollView.layoutSubtreeIfNeeded()
         let overlayContentWidth = scrollView.contentSize.width
-        XCTAssertGreaterThan(
+        XCTAssertEqual(
             overlayContentWidth,
-            legacyContentWidth,
-            "Overlay scrollbars should restore the full terminal content width"
-        )
-        assertPendingSurfaceWidth(
-            legacyContentWidth,
-            "Changing the scroll view style alone should leave the terminal grid stale until the scroller-style observer runs"
+            initialContentWidth,
+            accuracy: 0.5,
+            "With no vertical scroller, an overlay scroller style must also leave the full terminal content width"
         )
 
         NotificationCenter.default.post(name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil)
@@ -2363,8 +2363,8 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
 
         XCTAssertEqual(scrollView.scrollerStyle, .overlay)
         assertPendingSurfaceWidth(
-            overlayContentWidth,
-            "Preferred scroller style changes should also restore the wider terminal grid when overlay scrollbars return"
+            initialSurfaceSize.width,
+            "The terminal grid stays at full width across scroller style changes now that the gutter is gone"
         )
 
         // Force synchronous native teardown instead of relying on the async
