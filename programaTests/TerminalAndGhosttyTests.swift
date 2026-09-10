@@ -15,6 +15,18 @@ import UserNotifications
 
 @MainActor
 final class GhosttyPasteboardHelperTests: XCTestCase {
+    func testClipboardConfirmationWithoutPresentationContextDeniesContentsExactlyOnce() {
+        var completedContents: [String] = []
+        GhosttyApp.handleClipboardConfirmation(contents: "synthetic private clipboard text") {
+            completedContents.append($0)
+        }
+
+        XCTAssertEqual(
+            completedContents, [""],
+            "Without a surface that can obtain consent, clipboard confirmation must finish by denying access"
+        )
+    }
+
     private func make1x1PNG(color: NSColor) throws -> Data {
         let image = NSImage(size: NSSize(width: 1, height: 1))
         image.lockFocus()

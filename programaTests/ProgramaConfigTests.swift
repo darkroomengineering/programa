@@ -1298,6 +1298,33 @@ final class ProgramaConfigRecipeDisclosureTests: XCTestCase {
 /// executed with "… (truncated)" glued onto the end of it.
 @MainActor
 final class ProgramaConfigExecutionSanitizerTests: XCTestCase {
+    func testRecipeRejectsControlsAndLineBreaksIncludingSubstitutedParametersBeforeSendingAnything() {
+        let unsafeValues = [
+            "first\rsecond", "first\nsecond", "first\r\nsecond", "first\tsecond",
+            "first\u{001B}[31msecond", "first\u{0000}second", "first\u{007F}second",
+            "first\u{0085}second", "first\u{009B}second", "first\u{2028}second", "first\u{2029}second",
+        ]
+        for (index, value) in unsafeValues.enumerated() {
+            let substituted = ProgramaConfigExecutor.substituteParameters(
+                in: "Review {{subject}}", values: ["subject": value]
+            )
+            for prompt in [value, substituted] {
+                var sent: [String] = []
+                let accepted = ProgramaConfigExecutor.insertRecipePrompt(prompt) { sent.append($0) }
+                XCTAssertFalse(accepted, "Unsafe recipe case \(index) must require correction before terminal insertion")
+                XCTAssertTrue(sent.isEmpty, "Recipe case \(index) must not partially submit or alter terminal input")
+            }
+        }
+    }
+
+    func testRecipeInsertsLongSingleLineUnicodePromptExactlyOnceWithoutSubmitting() {
+        let prompt = "変更を説明してください 🧭 " + String(repeating: "café 世界 ", count: 128)
+        var sent: [String] = []
+
+        XCTAssertTrue(ProgramaConfigExecutor.insertRecipePrompt(prompt) { sent.append($0) })
+        XCTAssertEqual(sent, [prompt], "The user must receive the entire prompt for review, without an appended Return")
+    }
+
     /// The regression. A long-but-ordinary command has to survive intact.
     func testLongCommandIsNotTruncatedOnItsWayToTheShell() {
         let command = "echo " + String(repeating: "x", count: 500)
