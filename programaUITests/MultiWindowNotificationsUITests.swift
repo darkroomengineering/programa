@@ -775,10 +775,10 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             appendCLIPathCandidates(fromProductsDirectory: productsDir, strategy: strategy, to: &candidates)
         }
 
-        candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/cmux DEV.app/Contents/Resources/bin/cmux")
-        candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/cmux.app/Contents/Resources/bin/cmux")
+        candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/Programa DEV.app/Contents/Resources/bin/programa")
+        candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/Programa.app/Contents/Resources/bin/programa")
         if strategy == .any {
-            candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/cmux")
+            candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/programa")
         }
 
         var resolvedPaths: [String] = []
@@ -812,10 +812,10 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         strategy: CmuxCLIStrategy,
         to candidates: inout [String]
     ) {
-        candidates.append("\(productsDir)/cmux DEV.app/Contents/Resources/bin/cmux")
-        candidates.append("\(productsDir)/cmux.app/Contents/Resources/bin/cmux")
+        candidates.append("\(productsDir)/Programa DEV.app/Contents/Resources/bin/programa")
+        candidates.append("\(productsDir)/Programa.app/Contents/Resources/bin/programa")
         if strategy == .any {
-            candidates.append("\(productsDir)/cmux")
+            candidates.append("\(productsDir)/programa")
         }
 
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: productsDir) else {
@@ -825,12 +825,12 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         for entry in entries.sorted() where entry.hasSuffix(".app") {
             let cliPath = URL(fileURLWithPath: productsDir)
                 .appendingPathComponent(entry)
-                .appendingPathComponent("Contents/Resources/bin/cmux")
+                .appendingPathComponent("Contents/Resources/bin/programa")
                 .path
             candidates.append(cliPath)
         }
         if strategy == .any {
-            for entry in entries.sorted() where entry == "cmux" {
+            for entry in entries.sorted() where entry == "programa" {
                 let cliPath = URL(fileURLWithPath: productsDir)
                     .appendingPathComponent(entry)
                     .path
