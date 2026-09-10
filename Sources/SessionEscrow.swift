@@ -133,10 +133,10 @@ import Bonsplit
 /// semaphore (bounded by `SessionEscrowPolicy.retrieveDrainStopTimeout`),
 /// and only sends the fd back once the drain thread has actually stopped
 /// and flushed its last chunk to `wal.log` -- guaranteeing the app's replay
-/// picks up at a byte offset with no gap and no duplicate. Per the
-/// "Never close the escrowed fd" constraint, the fd itself is never closed
-/// on this path: `HeldSession.markHandedOff()` just flags it as
-/// transferred so `deinit`'s safety-net close never fires for it.
+/// picks up at a byte offset with no gap and no duplicate. After a
+/// successful send, `HeldSession.markHandedOff()` closes the holder's fd:
+/// `SCM_RIGHTS` gives the recipient its own descriptor, which keeps the PTY
+/// alive. A failed send retains the holder's fd so draining can resume.
 ///
 /// ## Degradation
 /// Every step -- connect, spawn-if-missing, handshake send -- is
@@ -1283,11 +1283,11 @@ enum SessionEscrowHolder {
             close(fd)
         }
 
-        /// Marks the fd as handed off to a caller (sent via `SCM_RIGHTS`)
-        /// so `deinit`'s safety net never double-closes it. Callers must
-        /// hold `SessionEscrowHolder.registryLock`.
+        /// Closes the holder's fd after a successful `SCM_RIGHTS` send.
+        /// The recipient owns a duplicate; closing this descriptor does not
+        /// close theirs. Callers must hold `SessionEscrowHolder.registryLock`.
         func markHandedOff() {
-            closed = true
+            markClosedIfNeeded()
         }
 
         deinit {
