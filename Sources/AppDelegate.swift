@@ -1003,6 +1003,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         label: "com.cmuxterm.app.sessionPersistence",
         qos: .utility
     )
+    var sessionSnapshotWriter: @Sendable (AppSessionSnapshot) -> Bool = {
+        SessionPersistenceStore.save($0)
+    }
     // Constructed eagerly with placeholder dependencies; `configure(...)` in `init()` rebinds
     // them to the real queue/closures immediately after `super.init()` returns. See
     // `SessionAutosaveCoordinator.configure` for why this two-step exists.
@@ -2424,7 +2427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     @discardableResult
-    private func saveSessionSnapshot(
+    func saveSessionSnapshot(
         includeScrollback: Bool,
         removeWhenEmpty: Bool = false,
         cleanShutdown: Bool = false,
@@ -2521,6 +2524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     ) {
         guard snapshot != nil || removeWhenEmpty || persistedGeometryData != nil else { return }
 
+        let snapshotWriter = sessionSnapshotWriter
         let writeBlock = {
             Self.removeLegacyPersistedWindowGeometry()
             if let persistedGeometryData {
@@ -2530,7 +2534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 )
             }
             if let snapshot {
-                _ = SessionPersistenceStore.save(snapshot)
+                _ = snapshotWriter(snapshot)
             } else if removeWhenEmpty {
                 SessionPersistenceStore.removeSnapshot()
             }
