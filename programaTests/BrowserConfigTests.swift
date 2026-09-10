@@ -986,6 +986,13 @@ private final class BrowserBoundedTransferURLProtocol: URLProtocol {
 
     override func startLoading() {
         guard let url = request.url else { return }
+        if url.path.hasPrefix("/cookies") {
+            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data((request.value(forHTTPHeaderField: "Cookie") ?? "").utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         let bodySize = url.path == "/exact" ? 64 : 65
         let headers = url.path == "/exact" ? ["Content-Length": String(bodySize)] : [:]
         let response = HTTPURLResponse(
@@ -1004,6 +1011,64 @@ private final class BrowserBoundedTransferURLProtocol: URLProtocol {
 }
 
 final class BrowserContextTransferPolicyTests: XCTestCase {
+    func testContextTransferOnlySendsCookiesEligibleForDestination() throws {
+        func cookie(_ name: String, domain: String = "bounded.test", path: String = "/",
+                    secure: Bool = false, expires: Date = Date().addingTimeInterval(3600)) throws -> HTTPCookie {
+            var properties: [HTTPCookiePropertyKey: Any] = [
+                .name: name, .value: "secret", .domain: domain, .path: path, .expires: expires,
+            ]
+            if secure { properties[.secure] = "TRUE" }
+            return try XCTUnwrap(HTTPCookie(properties: properties))
+        }
+        let cookies = try [
+            cookie("eligible"), cookie("foreign", domain: "other.test"),
+            cookie("wrongpath", path: "/private"), cookie("secure", secure: true),
+            cookie("expired", expires: Date().addingTimeInterval(-3600)),
+        ]
+        let transfer = BrowserContextTransferPolicy.prepareNetworkTransfer(
+            to: URL(string: "http://bounded.test/cookies")!, cookies: cookies, referer: nil, userAgent: nil
+        )
+        transfer.configuration.protocolClasses = [BrowserBoundedTransferURLProtocol.self]
+        let loaded = expectation(description: "destination receives only authorized cookies")
+        let loader = BrowserBoundedURLLoader(configuration: transfer.configuration)
+        loader.load(transfer.request) { result in
+            switch result {
+            case .success(let value):
+                XCTAssertEqual(String(decoding: value.data, as: UTF8.self), "eligible=secret")
+            case .failure(let error): XCTFail("Transfer failed: \(error)")
+            }
+            loaded.fulfill()
+        }
+        wait(for: [loaded], timeout: 2)
+    }
+
+    func testContextTransfersKeepProfileCookieStoresIndependent() throws {
+        let url = URL(string: "https://bounded.test/cookies")!
+        let cookie = try XCTUnwrap(HTTPCookie(properties: [
+            .name: "profile", .value: "private", .domain: "bounded.test", .path: "/",
+        ]))
+        let first = BrowserContextTransferPolicy.prepareNetworkTransfer(
+            to: url, cookies: [cookie], referer: nil, userAgent: nil
+        )
+        let second = BrowserContextTransferPolicy.prepareNetworkTransfer(
+            to: url, cookies: [], referer: nil, userAgent: nil
+        )
+        // A response in one profile must never change the next profile's session.
+        first.configuration.httpCookieStorage?.setCookie(cookie)
+        defer { first.configuration.httpCookieStorage?.deleteCookie(cookie) }
+        let loaded = expectation(description: "other profile sends no cookies")
+        second.configuration.protocolClasses = [BrowserBoundedTransferURLProtocol.self]
+        let loader = BrowserBoundedURLLoader(configuration: second.configuration)
+        loader.load(second.request) { result in
+            switch result {
+            case .success(let value): XCTAssertTrue(value.data.isEmpty, "A transfer leaked another profile's cookie")
+            case .failure(let error): XCTFail("Transfer failed: \(error)")
+            }
+            loaded.fulfill()
+        }
+        wait(for: [loaded], timeout: 2)
+    }
+
     func testPercentDecoderAndFileReaderEnforceExactBoundary() throws {
         XCTAssertEqual(
             BrowserContextTransferPolicy.percentDecodedData("12345678"[...], maximumBytes: 8),

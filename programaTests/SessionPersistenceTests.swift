@@ -1930,6 +1930,46 @@ final class SocketListenerAcceptPolicyTests: XCTestCase {
 // still alive in the holder. One test per fix below.
 final class SessionEscrowReattachRegressionTests: XCTestCase {
 
+    func testSuccessfulHandoffClosesHolderCopyWithoutClosingReceivedOrReusedDescriptor() throws {
+        var transport: [Int32] = [-1, -1]
+        guard socketpair(AF_UNIX, SOCK_STREAM, 0, &transport) == 0 else {
+            return XCTFail("Could not create descriptor transfer socket pair")
+        }
+        defer { close(transport[0]); close(transport[1]) }
+        var channel: [Int32] = [-1, -1]
+        guard pipe(&channel) == 0 else { return XCTFail("Could not create session pipe") }
+        defer { close(channel[1]) }
+        let originalFD = channel[0]
+        let held = SessionEscrowHolder.HeldSession(
+            sessionId: UUID().uuidString, fd: originalFD, token: [], childPID: getpid()
+        )
+        defer { held.markClosedIfNeeded() }
+        guard UnixDomainFDPassing.send(fd: originalFD, payload: Data([1]), over: transport[0]) else {
+            return XCTFail("Could not send session descriptor")
+        }
+        guard case .data(_, let descriptor) = UnixDomainFDPassing.receiveChunk(maxBytes: 1, from: transport[1]) else {
+            return XCTFail("Expected a descriptor transfer")
+        }
+        let receivedFD = try XCTUnwrap(descriptor)
+        defer { close(receivedFD) }
+        held.markHandedOff()
+        let descriptorStatus = fcntl(originalFD, F_GETFD)
+        let descriptorError = errno
+        XCTAssertEqual(descriptorStatus, -1, "SCM_RIGHTS duplicates the fd; the holder must close its own copy")
+        XCTAssertEqual(descriptorError, EBADF)
+        var sent: UInt8 = 42
+        guard write(channel[1], &sent, 1) == 1 else { return XCTFail("Could not write session payload") }
+        var received: UInt8 = 0
+        XCTAssertEqual(read(receivedFD, &received, 1), 1)
+        XCTAssertEqual(received, sent, "The receiving app must retain the live session")
+
+        XCTAssertEqual(dup2(receivedFD, originalFD), originalFD)
+        defer { close(originalFD) }
+        held.markHandedOff()
+        held.markClosedIfNeeded()
+        XCTAssertNotEqual(fcntl(originalFD, F_GETFD), -1, "Repeated cleanup must not close a reused descriptor")
+    }
+
     override func setUp() {
         super.setUp()
         SessionEscrowClient.resetCircuitBreakerForTesting()

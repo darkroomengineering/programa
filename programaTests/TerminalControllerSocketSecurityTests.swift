@@ -151,6 +151,7 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
     override func tearDown() {
         TerminalController.shared.stop()
         #if DEBUG
+        TerminalController.shared.setSocketPeerPIDProviderForTesting(nil)
         TerminalController.shared.setSocketPasswordCredentialSourceForTesting(nil)
         #endif
         super.tearDown()
@@ -898,6 +899,31 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         try waitForSocket(at: restrictedPath)
         XCTAssertEqual(try socketMode(at: restrictedPath), 0o600)
     }
+
+    #if DEBUG
+    func testCmuxOnlyRejectsSameUserWhenPeerProcessCannotBeVerified() throws {
+        TerminalController.shared.setSocketPeerPIDProviderForTesting { _ in nil }
+        let path = makeSocketPath("unverified-peer")
+        TerminalController.shared.start(tabManager: TabManager(), socketPath: path, accessMode: .cmuxOnly)
+        try waitForSocket(at: path)
+        let client = try connectPersistentClient(to: path)
+        defer { Darwin.close(client) }
+        // The rejection is sent before request processing, so do not race it with a write.
+        XCTAssertEqual(try readLine(from: client, timeout: 1), "ERROR: Unable to verify client process")
+    }
+
+    func testVerifiedOwnedProcessAndAutomationClientsCanStillPing() throws {
+        let path = makeSocketPath("verified-peer")
+        TerminalController.shared.start(tabManager: TabManager(), socketPath: path, accessMode: .cmuxOnly)
+        try waitForSocket(at: path)
+        XCTAssertTrue(isSuccessfulV2Ping(try sendV2Request(method: "system.ping", params: [:], to: path)))
+        TerminalController.shared.stop()
+        TerminalController.shared.setSocketPeerPIDProviderForTesting { _ in nil }
+        TerminalController.shared.start(tabManager: TabManager(), socketPath: path, accessMode: .automation)
+        try waitForSocket(at: path)
+        XCTAssertTrue(isSuccessfulV2Ping(try sendV2Request(method: "system.ping", params: [:], to: path)))
+    }
+    #endif
 
     func testStopRevokesEstablishedAllowAllClient() throws {
         let socketPath = makeSocketPath("stop-revocation")
