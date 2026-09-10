@@ -20,19 +20,19 @@ enum BrowserContextTransferPolicy {
         referer: String?,
         userAgent: String?
     ) -> (request: URLRequest, configuration: URLSessionConfiguration) {
+        let configuration = URLSessionConfiguration.ephemeral
+        for cookie in cookies {
+            configuration.httpCookieStorage?.setCookie(cookie)
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        let cookieHeaders = HTTPCookie.requestHeaderFields(with: cookies)
-        for (key, value) in cookieHeaders {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
         if let referer, !referer.isEmpty {
             request.setValue(referer, forHTTPHeaderField: "Referer")
         }
         if let userAgent, !userAgent.isEmpty {
             request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         }
-        return (request, .default)
+        return (request, configuration)
     }
 
     static func boundedFileData(from url: URL, maximumBytes: Int = maximumBytes) throws -> Data {
