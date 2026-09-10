@@ -44,8 +44,12 @@ final class SessionPersistenceTests: XCTestCase {
         let coordinator = SessionAutosaveCoordinator(
             sessionPersistenceQueue: DispatchQueue(label: "test.autosave.actual-write-retry"),
             snapshotProvider: { _ in snapshot },
-            saveSnapshot: { includeScrollback, prebuiltSnapshot in
-                delegate.saveSessionSnapshot(includeScrollback: includeScrollback, prebuiltSnapshot: prebuiltSnapshot)
+            saveSnapshot: { includeScrollback, prebuiltSnapshot, completion in
+                delegate.saveSessionSnapshot(
+                    includeScrollback: includeScrollback,
+                    prebuiltSnapshot: prebuiltSnapshot,
+                    completion: completion
+                )
             },
             isTerminating: { finished },
             isRunningUnderXCTest: { true }
