@@ -273,9 +273,14 @@ APP_PATH="$($APP_LOCATOR \
 
 if [[ -n "${TAG_SLUG:-}" ]]; then
   TMP_COMPAT_DERIVED_LINK="/tmp/programa-${TAG_SLUG}"
-  if [[ "$DERIVED_DATA" != "$TMP_COMPAT_DERIVED_LINK" ]]; then
-    ABS_DERIVED_DATA="$(cd "$DERIVED_DATA" && pwd)"
-    rm -rf "$TMP_COMPAT_DERIVED_LINK"
+  if [[ -L "$TMP_COMPAT_DERIVED_LINK" ]]; then
+    ABS_DERIVED_DATA="$(cd "$DERIVED_DATA" && pwd -P)"
+    rm -f "$TMP_COMPAT_DERIVED_LINK"
+    ln -s "$ABS_DERIVED_DATA" "$TMP_COMPAT_DERIVED_LINK"
+  elif [[ -e "$TMP_COMPAT_DERIVED_LINK" ]]; then
+    echo "warning: preserving existing non-symlink compatibility path: $TMP_COMPAT_DERIVED_LINK" >&2
+  else
+    ABS_DERIVED_DATA="$(cd "$DERIVED_DATA" && pwd -P)"
     ln -s "$ABS_DERIVED_DATA" "$TMP_COMPAT_DERIVED_LINK"
   fi
 fi
@@ -314,15 +319,6 @@ if [[ -n "$TAG" && "$APP_NAME" != "$SEARCH_APP_NAME" ]]; then
         || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD string 1" "$INFO_PLIST"
       /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PROGRAMATERM_REPO_ROOT \"${PWD}\"" "$INFO_PLIST" 2>/dev/null \
         || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMATERM_REPO_ROOT string \"${PWD}\"" "$INFO_PLIST"
-      if [[ -S "$PROGRAMAD_SOCKET" ]]; then
-        for PID in $(lsof -t "$PROGRAMAD_SOCKET" 2>/dev/null); do
-          kill "$PID" 2>/dev/null || true
-        done
-        rm -f "$PROGRAMAD_SOCKET"
-      fi
-      if [[ -S "$PROGRAMA_SOCKET" ]]; then
-        rm -f "$PROGRAMA_SOCKET"
-      fi
     fi
     /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der "$TAG_APP_PATH" >/dev/null 2>&1 || true
   fi
@@ -376,6 +372,16 @@ if [[ "$LAUNCH" -eq 1 ]]; then
     pkill -f "${APP_NAME}.app/Contents/MacOS/${BASE_APP_NAME}" || true
   fi
   sleep 0.3
+
+  if [[ -n "${PROGRAMAD_SOCKET:-}" && -S "$PROGRAMAD_SOCKET" ]]; then
+    for PID in $(lsof -t "$PROGRAMAD_SOCKET" 2>/dev/null); do
+      kill "$PID" 2>/dev/null || true
+    done
+    rm -f "$PROGRAMAD_SOCKET"
+  fi
+  if [[ -n "${PROGRAMA_SOCKET:-}" && -S "$PROGRAMA_SOCKET" ]]; then
+    rm -f "$PROGRAMA_SOCKET"
+  fi
 
   # Avoid inheriting programa/ghostty environment variables from the terminal that
   # runs this script (often inside another programa instance), which can cause
