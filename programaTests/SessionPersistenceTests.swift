@@ -8,6 +8,73 @@ import XCTest
 
 final class SessionPersistenceTests: XCTestCase {
     @MainActor
+    func testAutosaveRetriesUnchangedSnapshotAfterActualBackgroundWriteFailure() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("autosave-retry-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let blockedParent = directory.appendingPathComponent("blocked")
+        try Data("not a directory".utf8).write(to: blockedParent)
+        let destination = blockedParent.appendingPathComponent("session.json")
+        let snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
+
+        let originalDelegate = AppDelegate.shared
+        let geometryKeys = ["programa.session.lastWindowGeometry.v1", "programa.session.lastWindowGeometry.v2"]
+        let savedGeometry = geometryKeys.map { UserDefaults.standard.object(forKey: $0) }
+        let delegate = AppDelegate()
+        defer {
+            AppDelegate.shared = originalDelegate
+            for (key, value) in zip(geometryKeys, savedGeometry) {
+                if let value { UserDefaults.standard.set(value, forKey: key) }
+                else { UserDefaults.standard.removeObject(forKey: key) }
+            }
+        }
+
+        let failedWrite = expectation(description: "actual filesystem write fails")
+        let repairedWrite = expectation(description: "unchanged snapshot is written after storage recovers")
+        delegate.sessionSnapshotWriter = { candidate in
+            let saved = SessionPersistenceStore.save(candidate, fileURL: destination)
+            defer {
+                if saved { repairedWrite.fulfill() }
+                else { failedWrite.fulfill() }
+            }
+            return saved
+        }
+        var finished = false
+        let coordinator = SessionAutosaveCoordinator(
+            sessionPersistenceQueue: DispatchQueue(label: "test.autosave.actual-write-retry"),
+            snapshotProvider: { _ in snapshot },
+            saveSnapshot: { includeScrollback, prebuiltSnapshot in
+                delegate.saveSessionSnapshot(includeScrollback: includeScrollback, prebuiltSnapshot: prebuiltSnapshot)
+            },
+            isTerminating: { finished },
+            isRunningUnderXCTest: { true }
+        )
+        defer {
+            finished = true
+            coordinator.stopSessionAutosaveTimer()
+        }
+
+        coordinator.runSessionAutosaveTick(source: "blocked-storage")
+        wait(for: [failedWrite], timeout: 3)
+        XCTAssertNil(SessionPersistenceStore.load(fileURL: destination))
+        try FileManager.default.removeItem(at: blockedParent)
+        try FileManager.default.createDirectory(at: blockedParent, withIntermediateDirectories: true)
+
+        // No content change and no 60-second fingerprint expiry: recovery alone must permit a retry.
+        // Pump completion callbacks as well as ticks: the first writer can finish before
+        // its main-thread completion clears the coordinator's in-flight state.
+        let deadline = Date().addingTimeInterval(3)
+        while SessionPersistenceStore.load(fileURL: destination) == nil, Date() < deadline {
+            coordinator.runSessionAutosaveTick(source: "repaired-storage")
+            _ = RunLoop.main.run(mode: .default, before: min(deadline, Date().addingTimeInterval(0.01)))
+        }
+        wait(for: [repairedWrite], timeout: 0.5)
+        let restored = try XCTUnwrap(SessionPersistenceStore.load(fileURL: destination))
+        XCTAssertEqual(SessionPersistenceStore.contentIdentity(for: restored), SessionPersistenceStore.contentIdentity(for: snapshot))
+    }
+
+    @MainActor
     func testWorkspaceSessionSnapshotRestoresPendingReviewComments() throws {
         let workspace = Workspace()
         let sourceID = try XCTUnwrap(workspace.focusedPanelId)
