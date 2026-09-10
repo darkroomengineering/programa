@@ -14,6 +14,27 @@ enum BrowserContextTransferPolicy {
         case missingResponse
     }
 
+    static func prepareNetworkTransfer(
+        to url: URL,
+        cookies: [HTTPCookie],
+        referer: String?,
+        userAgent: String?
+    ) -> (request: URLRequest, configuration: URLSessionConfiguration) {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let cookieHeaders = HTTPCookie.requestHeaderFields(with: cookies)
+        for (key, value) in cookieHeaders {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        if let referer, !referer.isEmpty {
+            request.setValue(referer, forHTTPHeaderField: "Referer")
+        }
+        if let userAgent, !userAgent.isEmpty {
+            request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        }
+        return (request, .default)
+    }
+
     static func boundedFileData(from url: URL, maximumBytes: Int = maximumBytes) throws -> Data {
         let values = try url.resourceValues(forKeys: [.fileSizeKey])
         if let fileSize = values.fileSize, fileSize > maximumBytes {
@@ -1359,23 +1380,18 @@ final class ProgramaWebView: WKWebView {
 
         let cookieStore = configuration.websiteDataStore.httpCookieStore
         cookieStore.getAllCookies { cookies in
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            let cookieHeaders = HTTPCookie.requestHeaderFields(with: cookies)
-            for (key, value) in cookieHeaders {
-                request.setValue(value, forHTTPHeaderField: key)
-            }
-            if let referer = self.url?.absoluteString, !referer.isEmpty {
-                request.setValue(referer, forHTTPHeaderField: "Referer")
-            }
-            if let ua = self.customUserAgent, !ua.isEmpty {
-                request.setValue(ua, forHTTPHeaderField: "User-Agent")
-            }
+            let transfer = BrowserContextTransferPolicy.prepareNetworkTransfer(
+                to: url,
+                cookies: cookies,
+                referer: self.url?.absoluteString,
+                userAgent: self.customUserAgent
+            )
+            let request = transfer.request
             self.debugContextDownload(
                 "browser.ctxdl.request trace=\(traceID) stage=dispatch method=\(request.httpMethod ?? "GET") cookies=\(cookies.count) referer=\(request.value(forHTTPHeaderField: "Referer") ?? "nil") uaSet=\(request.value(forHTTPHeaderField: "User-Agent") == nil ? 0 : 1)"
             )
 
-            let loader = BrowserBoundedURLLoader()
+            let loader = BrowserBoundedURLLoader(configuration: transfer.configuration)
             loader.load(request) { result in
                 DispatchQueue.main.async {
                     guard case .success(let value) = result else {
@@ -1572,24 +1588,19 @@ final class ProgramaWebView: WKWebView {
 
         let cookieStore = configuration.websiteDataStore.httpCookieStore
         cookieStore.getAllCookies { cookies in
-            var request = URLRequest(url: sourceURL)
-            request.httpMethod = "GET"
-            let cookieHeaders = HTTPCookie.requestHeaderFields(with: cookies)
-            for (key, value) in cookieHeaders {
-                request.setValue(value, forHTTPHeaderField: key)
-            }
-            if let referer = self.url?.absoluteString, !referer.isEmpty {
-                request.setValue(referer, forHTTPHeaderField: "Referer")
-            }
-            if let ua = self.customUserAgent, !ua.isEmpty {
-                request.setValue(ua, forHTTPHeaderField: "User-Agent")
-            }
+            let transfer = BrowserContextTransferPolicy.prepareNetworkTransfer(
+                to: sourceURL,
+                cookies: cookies,
+                referer: self.url?.absoluteString,
+                userAgent: self.customUserAgent
+            )
+            let request = transfer.request
 
             self.debugContextDownload(
                 "browser.ctxcopy.fetch trace=\(traceID) stage=dispatch cookies=\(cookies.count) referer=\(request.value(forHTTPHeaderField: "Referer") ?? "nil") uaSet=\(request.value(forHTTPHeaderField: "User-Agent") == nil ? 0 : 1)"
             )
 
-            let loader = BrowserBoundedURLLoader()
+            let loader = BrowserBoundedURLLoader(configuration: transfer.configuration)
             loader.load(request) { result in
                 DispatchQueue.main.async {
                     guard case .success(let value) = result, !value.data.isEmpty else {

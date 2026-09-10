@@ -52,6 +52,9 @@ class TerminalController {
     private nonisolated(unsafe) var authCredentialEpoch: UInt64 = 0
     private nonisolated(unsafe) var registeredUnixClientFDs: Set<Int32> = []
     private nonisolated(unsafe) var socketPasswordCredentialSource = SocketPasswordCredentialSource.live
+    #if DEBUG
+    private nonisolated(unsafe) var socketPeerPIDProviderForTesting: (@Sendable (Int32) -> pid_t?)?
+    #endif
     private nonisolated let listenerStateLock = NSLock()
     var tabManager: TabManager?
     private nonisolated(unsafe) var accessMode: SocketControlMode = .cmuxOnly
@@ -519,6 +522,14 @@ class TerminalController {
             socketPasswordCredentialSource = source ?? .live
         }
     }
+
+    nonisolated func setSocketPeerPIDProviderForTesting(
+        _ provider: (@Sendable (Int32) -> pid_t?)?
+    ) {
+        withListenerState {
+            socketPeerPIDProviderForTesting = provider
+        }
+    }
     #endif
 
     nonisolated func activeSocketPath(preferredPath: String) -> String {
@@ -878,6 +889,11 @@ class TerminalController {
 
     /// Get the peer PID of a connected Unix domain socket using LOCAL_PEERPID.
     private nonisolated func getPeerPid(_ socket: Int32) -> pid_t? {
+        #if DEBUG
+        if let provider = withListenerState({ socketPeerPIDProviderForTesting }) {
+            return provider(socket)
+        }
+        #endif
         var pid: pid_t = 0
         var pidSize = socklen_t(MemoryLayout<pid_t>.size)
         let result = getsockopt(socket, SOL_LOCAL, LOCAL_PEERPID, &pid, &pidSize)

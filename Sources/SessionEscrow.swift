@@ -1240,7 +1240,7 @@ enum SessionEscrowHolder {
     /// escrowed the session has already died -- so a connection-local dict
     /// would simply never see it. See the file-level "Retrieval protocol"
     /// doc comment.
-    private final class HeldSession {
+    final class HeldSession {
         let sessionId: String
         let fd: Int32
         let token: [UInt8]
