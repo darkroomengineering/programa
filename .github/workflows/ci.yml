@@ -1005,6 +1005,8 @@ jobs:
             if [ ! -f "$DISPLAY_READY" ]; then
               echo "ERROR: Virtual display not ready after 12s" >&2
               cat "$HELPER_LOG" 2>/dev/null || true
+              kill "$HELPER_PID" 2>/dev/null || true
+              wait "$HELPER_PID" 2>/dev/null || true
               continue
             fi
             DISPLAY_ID=$(cat "$DISPLAY_ID_PATH")
@@ -1109,6 +1111,8 @@ jobs:
             echo "Attempt $attempt failed, retrying..."
             sleep 3
           done
+          echo "ERROR: Display resolution UI regression exhausted both attempts without a passing test run" >&2
+          exit 1
 
       - name: Run browser find focus UI regression
         run: |
