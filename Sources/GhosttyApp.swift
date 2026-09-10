@@ -241,6 +241,11 @@ class GhosttyApp {
         return URL(fileURLWithPath: "/tmp/programa-bg.log")
     }
 
+    @MainActor
+    static func handleClipboardConfirmation(contents: String, completion: @escaping (String) -> Void) {
+        completion(contents)
+    }
+
     fileprivate static func runtimeReadClipboardCallback(
         _ userdata: UnsafeMutableRawPointer?,
         _ location: ghostty_clipboard_e,
@@ -453,13 +458,15 @@ class GhosttyApp {
                     guard GhosttyRuntimeSurfaceIdentity(surface) == originatingSurfaceIdentity else {
                         return
                     }
-                    contentString.withCString { ptr in
-                        ghostty_surface_complete_clipboard_request(
-                            surface,
-                            ptr,
-                            requestState.pointer,
-                            true
-                        )
+                    GhosttyApp.handleClipboardConfirmation(contents: contentString) { confirmedContent in
+                        confirmedContent.withCString { ptr in
+                            ghostty_surface_complete_clipboard_request(
+                                surface,
+                                ptr,
+                                requestState.pointer,
+                                true
+                            )
+                        }
                     }
                 }
             }

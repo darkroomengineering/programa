@@ -63,7 +63,13 @@ struct ProgramaConfigExecutor {
         ) else { return }
 
         guard let terminal = tabManager.selectedWorkspace?.focusedTerminalPanel else { return }
-        terminal.sendInput(sanitizeForExecution(resolvedPrompt))
+        insertRecipePrompt(resolvedPrompt, sendInput: terminal.sendInput)
+    }
+
+    @discardableResult
+    static func insertRecipePrompt(_ resolvedPrompt: String, sendInput: (String) -> Void) -> Bool {
+        sendInput(sanitizeForExecution(resolvedPrompt))
+        return true
     }
 
     /// The security decision, isolated from the UI so it can be tested directly.
