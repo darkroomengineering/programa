@@ -808,6 +808,31 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertTrue(prepared.hasSuffix(reset + "\n"), "Expected trailing SGR reset + newline")
     }
 
+    func testFreshSpawnScrollbackSeedBoundsRepeatedColorOutputWithoutLosingCells() throws {
+        let source = String(repeating: "\u{001B}[31mA", count: 1024)
+        let prepared = try XCTUnwrap(SessionFreshSpawnScrollbackSeed.preparedText(for: source))
+
+        XCTAssertEqual(prepared.filter { $0 == "A" }.count, 1024, "Bounding replay must not discard saved terminal cells")
+        XCTAssertTrue(prepared.contains("\u{001B}[31m"), "The saved red rendition must survive replay")
+        XCTAssertLessThan(
+            prepared.utf8.count, 64 * 1024,
+            "A short colored transcript must not expand into megabytes of accumulated SGR history"
+        )
+    }
+
+    func testFreshSpawnScrollbackSeedBoundsChangingColorsWithoutLosingCells() throws {
+        let source = String(repeating: "\u{001B}[31mA\u{001B}[32mA", count: 512)
+        let prepared = try XCTUnwrap(SessionFreshSpawnScrollbackSeed.preparedText(for: source))
+
+        XCTAssertEqual(prepared.filter { $0 == "A" }.count, 1024, "Color changes must not truncate the saved transcript")
+        XCTAssertTrue(prepared.contains("\u{001B}[31m"))
+        XCTAssertTrue(prepared.contains("\u{001B}[32m"))
+        XCTAssertLessThan(
+            prepared.utf8.count, 64 * 1024,
+            "Replacing a foreground color must not retain every earlier foreground color in each cell"
+        )
+    }
+
     /// A program killed by the relaunch never sends the DECRST that balances
     /// its mouse-tracking DECSET, so the saved transcript arms mouse reporting
     /// when it is replayed into the fresh terminal. With nothing left to
