@@ -295,6 +295,11 @@ def main():
                         tail = f"<unreadable: {error}>"
                     print(f"--- {app_log.name} (tail) ---\n{tail}", file=sys.stderr)
                 try:
+                    for sid in sorted(owned_surface_ids):
+                        text = rpc(control, "surface.read_text", {"surface_id": sid, "scrollback": True})
+                        print(f"--- created surface {sid} text ---\n{str(text.get('text', ''))[-3000:]}", file=sys.stderr)
+                    workspaces = rpc(control, "workspace.list", {})
+                    print(f"--- workspace.list ---\n{json.dumps(workspaces)[:3000]}", file=sys.stderr)
                     listing = rpc(control, "surface.list", {})
                     print(f"--- surface.list ---\n{json.dumps(listing)[:4000]}", file=sys.stderr)
                     for entry in listing.get("surfaces", []) if isinstance(listing, dict) else []:
