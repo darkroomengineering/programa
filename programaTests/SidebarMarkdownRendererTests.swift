@@ -1,5 +1,6 @@
 import XCTest
 import AppKit
+import WebKit
 
 #if canImport(Programa_DEV)
 @testable import Programa_DEV
@@ -108,6 +109,51 @@ final class SidebarMarkdownRendererTests: XCTestCase {
         XCTAssertTrue(
             rendered.runs.contains { $0.link == URL(string: "https://example.com") }
         )
+    }
+}
+
+@MainActor
+final class MermaidDiagramViewSecurityTests: XCTestCase {
+    private func waitUntilNotLoading(_ webView: WKWebView) async throws {
+        let deadline = Date().addingTimeInterval(8)
+        while webView.isLoading, Date() < deadline {
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        XCTAssertFalse(webView.isLoading, "Timed out waiting for the Mermaid HTML document to finish loading")
+    }
+
+    private func evaluateString(_ script: String, in webView: WKWebView) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            webView.evaluateJavaScript(script) { value, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let value = value as? String {
+                    continuation.resume(returning: value)
+                } else {
+                    continuation.resume(throwing: NSError(
+                        domain: "MermaidDiagramViewSecurityTests", code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "Expected a string JavaScript result"]
+                    ))
+                }
+            }
+        }
+    }
+
+    func testMermaidSourceCannotEscapeInlineScriptToInjectHTML() async throws {
+        let maliciousSource = "graph TD; A-->B\n</script><script>window.__mermaidPwned = true;</script>"
+        let html = MermaidWebView.html(source: maliciousSource, isDark: false, scriptFileName: "mermaid.min.js")
+
+        XCTAssertFalse(
+            html.contains("</script><script>window.__mermaidPwned"),
+            "The raw script/HTML delimiters from the Mermaid source must never appear verbatim in the generated document"
+        )
+
+        let webView = WKWebView(frame: .zero)
+        webView.loadHTMLString(html, baseURL: nil)
+        try await waitUntilNotLoading(webView)
+
+        let pwned = try await evaluateString("String(window.__mermaidPwned === true)", in: webView)
+        XCTAssertEqual(pwned, "false", "Injected markup in a Mermaid fence must not execute in the document")
     }
 }
 
