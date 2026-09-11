@@ -46,7 +46,10 @@ enum ClaudeQuotaSnapshotParser {
         guard
             let usedPercentage = raw["used_percentage"] as? Int,
             let resetsAtString = raw["resets_at"] as? String,
-            let resetsAtEpochSeconds = Double(resetsAtString)
+            let resetsAtEpochSeconds = Double(resetsAtString),
+            resetsAtEpochSeconds.isFinite,
+            resetsAtEpochSeconds >= 0,
+            resetsAtEpochSeconds <= Date.distantFuture.timeIntervalSince1970
         else {
             return nil
         }
