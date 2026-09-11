@@ -487,64 +487,20 @@ enum UpdateState: Equatable {
         let reply: @Sendable (SPUUserUpdateChoice) -> Void
 
         var releaseNotes: ReleaseNotes? {
-            ReleaseNotes(displayVersionString: appcastItem.displayVersionString)
+            ReleaseNotes(appcastItem: appcastItem)
         }
     }
 
-    enum ReleaseNotes {
-        case commit(URL)
-        case tagged(URL)
+    struct ReleaseNotes {
+        let url: URL
 
-        init?(displayVersionString: String) {
-            let version = displayVersionString
-
-            if let semver = Self.extractSemanticVersion(from: version) {
-                let tag = semver.hasPrefix("v") ? semver : "v\(semver)"
-                if let url = URL(string: "https://github.com/darkroomengineering/programa/releases/tag/\(tag)") {
-                    self = .tagged(url)
-                    return
-                }
-            }
-
-            guard let newHash = Self.extractGitHash(from: version) else {
-                return nil
-            }
-
-            if let url = URL(string: "https://github.com/darkroomengineering/programa/commit/\(newHash)") {
-                self = .commit(url)
-            } else {
-                return nil
-            }
-        }
-
-        private static func extractSemanticVersion(from version: String) -> String? {
-            let pattern = #"v?\d+\.\d+\.\d+"#
-            if let range = version.range(of: pattern, options: .regularExpression) {
-                return String(version[range])
-            }
-            return nil
-        }
-
-        private static func extractGitHash(from version: String) -> String? {
-            let pattern = #"[0-9a-f]{7,40}"#
-            if let range = version.range(of: pattern, options: .regularExpression) {
-                return String(version[range])
-            }
-            return nil
-        }
-
-        var url: URL {
-            switch self {
-            case .commit(let url): return url
-            case .tagged(let url): return url
-            }
+        init?(appcastItem: SUAppcastItem) {
+            guard let url = appcastItem.releaseNotesURL ?? appcastItem.fullReleaseNotesURL else { return nil }
+            self.url = url
         }
 
         var label: String {
-            switch self {
-            case .commit: return String(localized: "update.viewGitHubCommit", defaultValue: "View GitHub Commit")
-            case .tagged: return String(localized: "update.viewReleaseNotes", defaultValue: "View Release Notes")
-            }
+            String(localized: "update.viewReleaseNotes", defaultValue: "View Release Notes")
         }
     }
 

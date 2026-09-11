@@ -1,12 +1,52 @@
 import XCTest
 import Foundation
 import AppKit
+import Sparkle
+import Sparkle_Private.SUAppcastItem
 
 #if canImport(Programa_DEV)
 @testable import Programa_DEV
 #elseif canImport(Programa)
 @testable import Programa
 #endif
+
+final class UpdateReleaseNotesDestinationTests: XCTestCase {
+    private func update(primary: String? = nil, full: String? = nil) throws -> UpdateState.UpdateAvailable {
+        var dictionary: [String: Any] = [
+            "title": "Programa 0.4.213",
+            "pubDate": "Wed, 25 Mar 2026 12:00:00 +0000",
+            "enclosure": [
+                "url": "https://example.com/programa.zip", "length": "1024",
+                "sparkle:version": "213", "sparkle:shortVersionString": "0.4.213"
+            ]
+        ]
+        if let primary { dictionary["sparkle:releaseNotesLink"] = ["content": primary] }
+        if let full { dictionary["sparkle:fullReleaseNotesLink"] = full }
+        let comparator = SUStandardVersionComparator.default
+        let resolver = SPUAppcastItemStateResolver(hostVersion: "1",
+            applicationVersionComparator: comparator, standardVersionComparator: comparator)
+        let item = try XCTUnwrap(SUAppcastItem(dictionary: dictionary, relativeTo: nil,
+            stateResolver: resolver, signingValidationStatus: .skipped, failureReason: nil))
+        return UpdateState.UpdateAvailable(appcastItem: item, reply: { _ in })
+    }
+
+    func testPrimaryAppcastReleaseNotesTakePrecedence() throws {
+        let primary = "https://example.com/rolling/current-notes"
+        let available = try update(primary: primary, full: "https://example.com/all-notes")
+        XCTAssertEqual(available.releaseNotes?.url.absoluteString, primary,
+                       "Rolling versions must use the publisher's actual notes instead of inventing a version tag")
+    }
+
+    func testFullAppcastReleaseNotesAreUsedWhenPrimaryIsAbsent() throws {
+        let full = "https://example.com/all-notes"
+        XCTAssertEqual(try update(full: full).releaseNotes?.url.absoluteString, full)
+    }
+
+    func testSemanticVersionWithoutAppcastNotesDoesNotInventADestination() throws {
+        XCTAssertNil(try update().releaseNotes,
+                     "A version number does not establish that a corresponding release tag exists")
+    }
+}
 
 final class BrowserInsecureHTTPSettingsTests: XCTestCase {
     func testDefaultAllowlistPatternsArePresent() {
