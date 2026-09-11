@@ -4870,7 +4870,9 @@ extension TerminalController {
 
     func v2BrowserDialogRespond(params: [String: Any], accept: Bool) -> V2CallResult {
         return v2BrowserWithPanel(params: params) { _, ws, surfaceId, browserPanel in
-            let text = v2String(params, "text") ?? v2String(params, "prompt_text")
+            // Read the answer verbatim: `v2String` trims and drops empty values, but an explicit
+            // empty or whitespace-only prompt answer is a legitimate, distinct reply.
+            let text = (params["text"] as? String) ?? (params["prompt_text"] as? String)
             // Resolve WebKit's live pending completion handler directly. Never evaluate JavaScript
             // here: doing so while a native alert/confirm/prompt sheet is up can deadlock WebKit.
             guard let info = BrowserJSDialogPresenter.resolvePendingDialog(
