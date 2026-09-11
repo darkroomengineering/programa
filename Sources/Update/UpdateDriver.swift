@@ -5,13 +5,21 @@ import Sparkle
 class UpdateDriver: NSObject, SPUUserDriver {
     let viewModel: UpdateViewModel
     private let minimumCheckDuration: TimeInterval = UpdateTiming.minimumCheckDisplayDuration
+    private let checkTimeout: TimeInterval
     private var lastCheckStart: Date?
     private var pendingCheckTransition: DispatchWorkItem?
     private var checkTimeoutWorkItem: DispatchWorkItem?
     private var lastFeedURLString: String?
+    /// Monotonically increasing id for each update check started via `beginChecking`.
+    /// Used to reconcile late Sparkle callbacks with the check they belong to.
+    private var checkGeneration: UInt64 = 0
+    /// The generation that most recently timed out, if the timed-out check has not
+    /// yet been superseded by a new `beginChecking` call.
+    private var timedOutGeneration: UInt64?
 
-    init(viewModel: UpdateViewModel, hostBundle _: Bundle) {
+    init(viewModel: UpdateViewModel, hostBundle _: Bundle, checkTimeout: TimeInterval = UpdateTiming.checkTimeoutDuration) {
         self.viewModel = viewModel
+        self.checkTimeout = checkTimeout
         super.init()
     }
 
@@ -43,6 +51,11 @@ class UpdateDriver: NSObject, SPUUserDriver {
     func showUpdateFound(with appcastItem: SUAppcastItem,
                          state: SPUUserUpdateState,
                          reply: @escaping @Sendable (SPUUserUpdateChoice) -> Void) {
+        if isLateCallbackForTimedOutCheck() {
+            UpdateLogStore.shared.append("ignored late update found after timeout")
+            reply(.dismiss)
+            return
+        }
         UpdateLogStore.shared.append("show update found: \(appcastItem.displayVersionString)")
         setStateAfterMinimumCheckDelay(.updateAvailable(.init(appcastItem: appcastItem, reply: reply)))
     }
@@ -57,12 +70,22 @@ class UpdateDriver: NSObject, SPUUserDriver {
 
     func showUpdateNotFoundWithError(_ error: any Error,
                                      acknowledgement: @escaping () -> Void) {
+        if isLateCallbackForTimedOutCheck() {
+            UpdateLogStore.shared.append("ignored late update not found after timeout")
+            acknowledgement()
+            return
+        }
         UpdateLogStore.shared.append("show update not found: \(formatErrorForLog(error))")
         setStateAfterMinimumCheckDelay(.notFound(.init(acknowledgement: acknowledgement)))
     }
 
     func showUpdaterError(_ error: any Error,
                           acknowledgement: @escaping () -> Void) {
+        if isLateCallbackForTimedOutCheck() {
+            UpdateLogStore.shared.append("ignored late updater error after timeout")
+            acknowledgement()
+            return
+        }
         let details = formatErrorForLog(error)
         UpdateLogStore.shared.append("show updater error: \(details)")
         setState(.error(.init(
@@ -173,10 +196,19 @@ class UpdateDriver: NSObject, SPUUserDriver {
             pendingCheckTransition = nil
             checkTimeoutWorkItem?.cancel()
             checkTimeoutWorkItem = nil
+            checkGeneration += 1
+            timedOutGeneration = nil
             lastCheckStart = Date()
             applyState(.checking(.init(cancel: cancel)))
-            scheduleCheckTimeout()
+            scheduleCheckTimeout(generation: checkGeneration)
         }
+    }
+
+    /// True when the current callback belongs to a check that already timed out and
+    /// has not been superseded by a newer check. Callers must fulfil the callback's
+    /// obligations (reply/acknowledgement) without touching `viewModel.state`.
+    private func isLateCallbackForTimedOutCheck() -> Bool {
+        timedOutGeneration == checkGeneration
     }
 
     private func setStateAfterMinimumCheckDelay(_ newState: UpdateState) {
@@ -224,14 +256,33 @@ class UpdateDriver: NSObject, SPUUserDriver {
         }
     }
 
-    private func scheduleCheckTimeout() {
+    private func scheduleCheckTimeout(generation: UInt64) {
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            guard case .checking = self.viewModel.state else { return }
-            self.setState(.notFound(.init(acknowledgement: {})))
+            guard generation == self.checkGeneration else { return }
+            guard case let .checking(checking) = self.viewModel.state else { return }
+            self.timedOutGeneration = generation
+            let details = "Update check timed out after \(Int(self.checkTimeout)) seconds"
+            UpdateLogStore.shared.append("update check timed out after \(self.checkTimeout)s")
+            checking.cancel()
+            self.setState(.error(.init(
+                error: URLError(.timedOut),
+                retry: { [weak self] in
+                    self?.viewModel.state = .idle
+                    DispatchQueue.main.async {
+                        guard let delegate = NSApp.delegate as? AppDelegate else { return }
+                        delegate.checkForUpdates(nil)
+                    }
+                },
+                dismiss: { [weak self] in
+                    self?.viewModel.state = .idle
+                },
+                technicalDetails: details,
+                feedURLString: self.lastFeedURLString
+            )))
         }
         checkTimeoutWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + UpdateTiming.checkTimeoutDuration, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + checkTimeout, execute: workItem)
     }
 
     private func applyState(_ newState: UpdateState, logTransition: Bool = true) {
