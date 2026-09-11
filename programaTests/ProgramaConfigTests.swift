@@ -1325,6 +1325,15 @@ final class ProgramaConfigExecutionSanitizerTests: XCTestCase {
         XCTAssertEqual(sent, [prompt], "The user must receive the entire prompt for review, without an appended Return")
     }
 
+    func testRecipeRemovesMisleadingScalarsWhilePreservingIntentionalWhitespace() {
+        let prompt = "  Review \u{202E}\u{200B}café 世界  "
+        var sent: [String] = []
+
+        XCTAssertTrue(ProgramaConfigExecutor.insertRecipePrompt(prompt) { sent.append($0) })
+        XCTAssertEqual(sent, ["  Review café 世界  "],
+                       "A safe recipe must reach the terminal once without hidden direction changes, trimming, or submission")
+    }
+
     /// The regression. A long-but-ordinary command has to survive intact.
     func testLongCommandIsNotTruncatedOnItsWayToTheShell() {
         let command = "echo " + String(repeating: "x", count: 500)
