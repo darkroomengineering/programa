@@ -1765,6 +1765,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             } else {
                 completeStartupSessionRestore()
             }
+        } else {
+            completeStartupSessionRestore()
         }
     }
 
