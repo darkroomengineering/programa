@@ -134,13 +134,20 @@ def main():
             # An argument after argv[0] is an explicit open intent in Programa.
             # Persist ordinary preferences in this fixture's isolated home so
             # both startup restoration and the real preference reader run.
+            # Write the plist directly: `defaults write <path>` refuses to write under an
+            # overridden CFFIXED_USER_HOME, and `defaults write <domain>` lands in the real
+            # user's preferences instead of this isolated home.
             preferences = home / "Library/Preferences"
             preferences.mkdir(parents=True, exist_ok=True)
-            domain = str(preferences / bundle)
-            for key, kind, value in (("socketControlMode", "-string", "full"),
-                                     ("sessionPersistScrollback", "-bool", "true" if enabled else "false")):
-                subprocess.run(["/usr/bin/defaults", "write", domain, key, kind, value],
-                               env=environment, check=True, capture_output=True, timeout=10)
+            plist_path = preferences / f"{bundle}.plist"
+            current_prefs = {}
+            if plist_path.exists():
+                with plist_path.open("rb") as handle:
+                    current_prefs = plistlib.load(handle)
+            current_prefs["socketControlMode"] = "full"
+            current_prefs["sessionPersistScrollback"] = bool(enabled)
+            with plist_path.open("wb") as handle:
+                plistlib.dump(current_prefs, handle)
             log = (root / f"app-{time.time_ns()}.log").open("wb")
             try:
                 current = subprocess.Popen([str(executable)],
