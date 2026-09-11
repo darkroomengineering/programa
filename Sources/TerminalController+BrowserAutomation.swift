@@ -4868,63 +4868,30 @@ extension TerminalController {
         )
     }
 
-    func v2BrowserEnsureDialogHooks(browserPanel: BrowserPanel) {
-        _ = v2RunJavaScript(
-            browserPanel.webView,
-            script: BrowserPanel.dialogTelemetryHookBootstrapScriptSource,
-            timeout: 5.0,
-            contentWorld: .page
-        )
-    }
-
     func v2BrowserDialogRespond(params: [String: Any], accept: Bool) -> V2CallResult {
         return v2BrowserWithPanel(params: params) { _, ws, surfaceId, browserPanel in
-            v2BrowserEnsureTelemetryHooks(surfaceId: surfaceId, browserPanel: browserPanel)
-            v2BrowserEnsureDialogHooks(browserPanel: browserPanel)
             let text = v2String(params, "text") ?? v2String(params, "prompt_text")
-            let acceptLiteral = accept ? "true" : "false"
-            let textLiteral = text.map(v2JSONLiteral) ?? "null"
-            let script = """
-            (() => {
-              const q = window.__programaDialogQueue || [];
-              if (!q.length) return { ok: false, error: 'not_found' };
-              const entry = q.shift();
-              if (entry.type === 'confirm') {
-                window.__programaDialogDefaults = window.__programaDialogDefaults || { confirm: false, prompt: null };
-                window.__programaDialogDefaults.confirm = \(acceptLiteral);
-              }
-              if (entry.type === 'prompt') {
-                window.__programaDialogDefaults = window.__programaDialogDefaults || { confirm: false, prompt: null };
-                if (\(acceptLiteral)) {
-                  window.__programaDialogDefaults.prompt = \(textLiteral);
-                } else {
-                  window.__programaDialogDefaults.prompt = null;
-                }
-              }
-              return { ok: true, dialog: entry, remaining: q.length };
-            })()
-            """
-
-            switch v2RunJavaScript(browserPanel.webView, script: script, timeout: 5.0, contentWorld: .page) {
-            case .failure(let message):
-                return .err(code: "js_error", message: message, data: nil)
-            case .success(let value):
-                guard let dict = value as? [String: Any],
-                      let ok = dict["ok"] as? Bool,
-                      ok else {
-                    return .err(code: "not_found", message: "No pending dialog", data: ["pending": []])
-                }
-
-                return .ok([
-                    "workspace_id": ws.id.uuidString,
-                    "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
-                    "surface_id": surfaceId.uuidString,
-                    "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
-                    "accepted": accept,
-                    "dialog": v2NormalizeJSValue(dict["dialog"]),
-                    "remaining": v2OrNull(dict["remaining"])
-                ])
+            // Resolve WebKit's live pending completion handler directly. Never evaluate JavaScript
+            // here: doing so while a native alert/confirm/prompt sheet is up can deadlock WebKit.
+            guard let info = BrowserJSDialogPresenter.resolvePendingDialog(
+                for: browserPanel.webView, accept: accept, text: text
+            ) else {
+                return .err(code: "not_found", message: "No pending dialog", data: ["pending": []])
             }
+
+            return .ok([
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+                "surface_id": surfaceId.uuidString,
+                "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+                "accepted": accept,
+                "dialog": [
+                    "type": info.kind.rawValue,
+                    "message": info.message,
+                    "default_text": v2OrNull(info.defaultText)
+                ],
+                "remaining": 0
+            ])
         }
     }
 

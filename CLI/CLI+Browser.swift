@@ -939,10 +939,12 @@ extension ProgramaCLI {
             let remainder = Array(subArgs.dropFirst())
             switch dialogVerb {
             case "accept":
-                let text = remainder.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
                 var params: [String: Any] = ["surface_id": sid]
-                if !text.isEmpty {
-                    params["text"] = text
+                if !remainder.isEmpty {
+                    // Preserve an explicit answer verbatim, including "" or whitespace-only text:
+                    // trimming here would silently turn a deliberate empty prompt answer into "use
+                    // the page's default" instead.
+                    params["text"] = remainder.joined(separator: " ")
                 }
                 let payload = try client.sendV2(method: "browser.dialog.accept", params: params)
                 output(payload, fallback: "OK")
