@@ -33,6 +33,8 @@ class SocketRecorder:
         *,
         workspace_items: list[dict[str, Any]] | None = None,
         agents_by_workspace: dict[str, list[dict[str, Any]]] | None = None,
+        surface_items: list[dict[str, Any]] | None = None,
+        required_password: str | None = None,
     ):
         self.path = os.path.join(directory, "programa.sock")
         self.accept_count = 0
@@ -48,6 +50,8 @@ class SocketRecorder:
             {"id": WORKSPACE_ID, "ref": "workspace:1", "selected": True}
         ]
         self.agents_by_workspace = agents_by_workspace or {}
+        self.surface_items = surface_items
+        self.required_password = required_password
 
     def __enter__(self) -> SocketRecorder:
         self._thread.start()
@@ -80,6 +84,7 @@ class SocketRecorder:
     def _serve_connection(self, connection: socket.socket) -> None:
         connection.settimeout(0.1)
         pending = b""
+        authenticated = self.required_password is None
         while not self._stop.is_set():
             try:
                 chunk = connection.recv(8192)
@@ -99,6 +104,12 @@ class SocketRecorder:
                     "ok": True,
                     "result": self._result_for(request.get("method", ""), request.get("params", {})),
                 }
+                if self.required_password is not None:
+                    if request.get("method") == "auth.login":
+                        authenticated = request.get("params", {}).get("password") == self.required_password
+                    if not authenticated:
+                        response = {"id": request.get("id"), "ok": False,
+                                    "error": {"code": "auth_failed", "message": "fixture authentication denied"}}
                 connection.sendall(json.dumps(response, separators=(",", ":")).encode("utf-8") + b"\n")
 
     def _result_for(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -116,6 +127,8 @@ class SocketRecorder:
             agents = self.agents_by_workspace.get(str(params.get("workspace_id")), [])
             return {"agents": agents, "count": len(agents)}
         if method == "surface.list":
+            if self.surface_items is not None:
+                return {"surfaces": self.surface_items}
             return {
                 "surfaces": [{
                     "id": SURFACE_ID,
@@ -631,6 +644,50 @@ def main() -> int:
             all(frame.get("method") != "auth.login" for frame in frames),
             f"{kind} password file was trusted: {frames!r}",
         )
+
+    # A shell's origin remains its target even after the user focuses another pane.
+    other_surface = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    origin_surfaces = [
+        {"id": SURFACE_ID, "ref": "surface:1", "workspace_id": WORKSPACE_ID, "selected": False, "focused": False},
+        {"id": other_surface, "ref": "surface:2", "workspace_id": WORKSPACE_ID, "selected": True, "focused": True},
+    ]
+    for args, method in [
+        (["close-surface"], "surface.close"),
+        (["send", "origin text"], "surface.send_text"),
+        (["send-key", "enter"], "surface.send_key"),
+        (["read-screen"], "surface.read_text"),
+        (["wait-surface", "--pattern", "ready"], "surface.wait"),
+        (["new-split", "right"], "surface.split"),
+    ]:
+        for explicit in (False, True):
+            with tempfile.TemporaryDirectory(prefix="pcli-origin-", dir="/tmp") as directory:
+                with SocketRecorder(directory, surface_items=origin_surfaces) as recorder:
+                    invocation = args + (["--surface", other_surface] if explicit else [])
+                    process = run_cli(recorder.path, invocation, env_overrides={
+                        "PROGRAMA_WORKSPACE_ID": WORKSPACE_ID, "PROGRAMA_SURFACE_ID": SURFACE_ID,
+                    })
+                requests = [frame for frame in recorder.frames if frame.get("method") == method]
+                check(len(requests) == 1, f"{invocation}: missing target operation: {recorder.frames!r}; {merged_output(process)}")
+                if requests:
+                    check(requests[0].get("params", {}).get("surface_id") == (other_surface if explicit else SURFACE_ID),
+                          f"{invocation}: operation escaped caller origin: {requests!r}")
+                check(not any(frame.get("method") in ("surface.focus", "pane.focus", "workspace.select", "window.focus")
+                              for frame in recorder.frames), f"{invocation}: changed focus: {recorder.frames!r}")
+                check(not recorder.errors, f"origin fixture: {recorder.errors}")
+
+    for password in ("accepted-secret", "wrong-secret"):
+        with tempfile.TemporaryDirectory(prefix="pcli-open-auth-", dir="/tmp") as directory:
+            document = Path(directory) / "document.txt"
+            document.write_text("open me", encoding="utf-8")
+            with SocketRecorder(directory, required_password="accepted-secret") as recorder:
+                process = run_cli(recorder.path, ["--password", password, str(document)])
+            methods = [frame.get("method") for frame in recorder.frames]
+            expected = ["auth.login", "workspace.create"] if password == "accepted-secret" else ["auth.login"]
+            check(methods == expected, f"file open authentication ordering: {methods!r}, expected {expected!r}")
+            check(recorder.accept_count == 1, f"file open retried connection after authentication: {recorder.accept_count}")
+            if password == "wrong-secret":
+                check(process.returncode != 0, "denied file open reported success")
+            check(not recorder.errors, f"file open fixture: {recorder.errors}")
 
     if failures:
         print(f"FAIL: {len(failures)} CLI registry behavior assertion(s) failed")

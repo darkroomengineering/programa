@@ -90,7 +90,8 @@ final class MCPSocketBridgeTests: XCTestCase {
     private func serveOneCannedResponse(
         listenerFD: Int32,
         responseLine: String,
-        capture: ReceivedRequestBox? = nil
+        capture: ReceivedRequestBox? = nil,
+        responseDelay: TimeInterval = 0
     ) -> XCTestExpectation {
         let handled = expectation(description: "mock v2 socket handled one request")
         DispatchQueue.global(qos: .userInitiated).async {
@@ -123,6 +124,10 @@ final class MCPSocketBridgeTests: XCTestCase {
                 if pending.contains(UInt8(0x0A)) { break readLoop }
             }
             capture?.set(pending)
+
+            var noSigPipe: Int32 = 1
+            _ = setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+            if responseDelay > 0 { Thread.sleep(forTimeInterval: responseDelay) }
 
             let line = responseLine + "\n"
             _ = line.withCString { ptr in
@@ -175,6 +180,24 @@ final class MCPSocketBridgeTests: XCTestCase {
     }
 
     // MARK: - `send(method:params:)` canned-response cases
+
+    func testSurfaceWaitKeepsConnectionUntilAdvertisedOperationDeadline() throws {
+        let path = makeSocketPath("wait-deadline")
+        let listener = try bindUnixSocket(at: path)
+        defer { Darwin.close(listener); unlink(path) }
+        let handled = serveOneCannedResponse(
+            listenerFD: listener,
+            responseLine: #"{"ok":true,"result":{"matched":true}}"#,
+            responseDelay: 16
+        )
+        // A legitimate wait can finish after the transport's old 15-second timeout.
+        // Always join the server, including the red baseline's throwing path.
+        defer { wait(for: [handled], timeout: 20) }
+        let result = try MCPSocketBridge(socketPath: path, socketPassword: nil)
+            .send(method: "surface.wait", params: ["pattern": "ready"])
+        XCTAssertEqual(result["matched"] as? Bool, true,
+                       "A wait that finishes within its default 30-second budget must reach the caller.")
+    }
 
     func testSendDecodesV2SuccessEnvelopeIntoResultDictionary() throws {
         let socketPath = makeSocketPath("success")

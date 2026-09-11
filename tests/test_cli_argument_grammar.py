@@ -347,6 +347,50 @@ def main() -> int:
                 f"{case.name}: unknown flag output missing 'unknown option': {output!r}",
             )
 
+    for args, method in [
+        (["snapshot", "list"], "snapshot.list"),
+        (["snapshot", "restore"], "snapshot.restore"),
+        (["snapshot", "restore", "latest"], "snapshot.restore"),
+        (["worktree", "open", "--all", "--repo", str(Path(__file__).resolve().parents[1])], "worktree.list"),
+    ]:
+        with tempfile.TemporaryDirectory(prefix="pcli-subcommand-", dir="/tmp") as directory:
+            with SocketRecorder(directory) as recorder:
+                process = run_cli(recorder.path, args)
+            check(any(frame.get("method") == method for frame in recorder.frames),
+                  f"valid {args!r} never reached {method}: {merged_output(process)}")
+
+    for args in [
+        ["snapshot", "list", "extra"], ["snapshot", "restore", "one", "two"],
+        ["snapshot", "list", "--bogus"], ["snapshot", "restore", "--bogus"],
+        ["worktree", "open", "--all", "--focus"],
+        ["worktree", "open", "--all", "branch"],
+    ]:
+        with tempfile.TemporaryDirectory(prefix="pcli-invalid-", dir="/tmp") as directory:
+            with SocketRecorder(directory) as recorder:
+                process = run_cli(recorder.path, args)
+            check(process.returncode != 0 and recorder.accept_count == 0,
+                  f"invalid {args!r} must fail before connection: {recorder.frames!r}; {merged_output(process)}")
+
+    for operation in ("type", "fill"):
+        for suffix, text in [
+            (["--selector", "#name", "--text", "hello world"], "hello world"),
+            (["#name", "--", "--snapshot-after"], "--snapshot-after"),
+        ]:
+            args = ["browser", SURFACE_ID, operation, *suffix]
+            with tempfile.TemporaryDirectory(prefix="pcli-browser-text-", dir="/tmp") as directory:
+                with SocketRecorder(directory) as recorder:
+                    process = run_cli(recorder.path, args)
+                requests = [frame for frame in recorder.frames if frame.get("method") == f"browser.{operation}"]
+                check(len(requests) == 1, f"{args!r} failed to dispatch: {merged_output(process)}")
+                check(not any(frame.get("method") == "browser.snapshot" for frame in recorder.frames),
+                      f"literal input triggered a snapshot operation: {recorder.frames!r}")
+                if requests:
+                    params = requests[0].get("params", {})
+                    check(params.get("selector") == "#name" and params.get("text") == text,
+                          f"browser input changed before transmission: {params!r}")
+                    check(not params.get("snapshot_after", False),
+                          f"literal text was treated as an action flag: {params!r}")
+
     if failures:
         print(f"FAIL: {len(failures)} CLI argument grammar assertion(s) failed")
         for failure in failures:
