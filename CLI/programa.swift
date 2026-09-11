@@ -5742,7 +5742,7 @@ struct ProgramaCLI {
         }
 
         let payload = try client.sendV2(method: "snapshot.list", params: [:])
-        if jsonOutput {
+        if jsonOutput || args.contains("--json") {
             print(jsonString(formatIDs(payload, mode: idFormat)))
             return
         }
@@ -6420,16 +6420,45 @@ struct ProgramaCLI {
                 throw CLIError(message: "recap list: unexpected argument \(parsed.positional[1])")
             }
 
+        case "snapshot":
+            let parsed = try parse(booleans: ["json"], minPositionals: 1, maxPositionals: 2)
+            switch parsed.positional[0].lowercased() {
+            case "list":
+                guard parsed.positional.count == 1 else {
+                    throw CLIError(message: "snapshot list does not take a target")
+                }
+            case "restore":
+                guard parsed.options["json"] == nil else {
+                    throw CLIError(message: "snapshot restore: unknown flag '--json'")
+                }
+            default:
+                throw CLIError(message: "snapshot: unknown subcommand \(parsed.positional[0])")
+            }
+
         case "worktree":
             let parsed = try parse(
                 values: ["repo", "base", "path", "layout"],
-                booleans: ["focus", "force", "json"],
+                booleans: ["focus", "force", "json", "all"],
                 minPositionals: 1,
                 maxPositionals: nil,
                 allowEquals: true
             )
             guard ["create", "open", "remove", "list"].contains(parsed.positional[0].lowercased()) else {
                 throw CLIError(message: "worktree: unknown subcommand \(parsed.positional[0])")
+            }
+            if parsed.options["all"] != nil {
+                guard parsed.positional[0].lowercased() == "open" else {
+                    throw CLIError(message: "worktree: --all is only valid for open")
+                }
+                guard parsed.options["focus"] == nil else {
+                    throw CLIError(message: "worktree open: --focus cannot be combined with --all")
+                }
+                guard parsed.positional.count == 1 else {
+                    throw CLIError(message: "worktree open --all does not take a <path-or-branch> argument")
+                }
+                if let unsupported = parsed.options.keys.first(where: { !["all", "repo"].contains($0) }) {
+                    throw CLIError(message: "worktree open --all: unexpected option --\(unsupported)")
+                }
             }
 
         case "agent-detection":
