@@ -400,6 +400,17 @@ struct AppSessionSnapshot: Codable, Sendable {
 }
 
 enum SessionPersistenceStore {
+    static func withoutScrollback(_ snapshot: AppSessionSnapshot) -> AppSessionSnapshot {
+        var result = snapshot
+        for window in result.windows.indices {
+            for workspace in result.windows[window].tabManager.workspaces.indices {
+                for panel in result.windows[window].tabManager.workspaces[workspace].panels.indices {
+                    result.windows[window].tabManager.workspaces[workspace].panels[panel].terminal?.scrollback = nil
+                }
+            }
+        }
+        return result
+    }
     static let historyDirectoryScanLimit = 256
 
     struct HistoryScanResult {
@@ -608,12 +619,18 @@ enum SessionPersistenceStore {
         fileURL: URL? = nil,
         now: Date = Date(),
         maxHistoryEntries: Int = SessionPersistencePolicy.maxSnapshotHistoryEntries,
-        historyScanObserver: ((HistoryScanResult) -> Void)? = nil
+        historyScanObserver: ((HistoryScanResult) -> Void)? = nil,
+        includeScrollback: Bool = true
     ) -> Bool {
         guard let fileURL = fileURL ?? defaultSnapshotFileURL(),
               let historyDirectory = historyDirectoryURL(fileURL: fileURL),
-              let data = boundedSnapshotData(at: fileURL) else {
+              var data = boundedSnapshotData(at: fileURL) else {
             return false
+        }
+        if !includeScrollback {
+            guard let snapshot = decodeSnapshot(from: data),
+                  let metadata = try? encodedSnapshotData(withoutScrollback(snapshot)) else { return false }
+            data = metadata
         }
 
         do {
@@ -646,7 +663,7 @@ enum SessionPersistenceStore {
             isDirectory: false
         )
         do {
-            try FileManager.default.copyItem(at: fileURL, to: staging)
+            try data.write(to: staging)
         } catch {
             try? FileManager.default.removeItem(at: staging)
             return false

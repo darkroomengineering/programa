@@ -1606,7 +1606,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // Archive whatever the previous launch left behind before any code path below (or
         // later in startup) can overwrite it -- including a launch that skips restore entirely
         // (explicit open intent), which otherwise clobbers the file with no way back.
-        SessionPersistenceStore.rotateIntoHistory()
+        let captureEnabled = SessionWALStore.shared.currentCapturePolicy().enabled
+        let archivedWithContent = captureEnabled ? try? SessionScrollbackPolicyStore.withContentPermission(
+            at: SessionScrollbackPolicyPaths.make(), capturedGeneration: nil,
+            { SessionPersistenceStore.rotateIntoHistory() }
+        ) : nil
+        if archivedWithContent == nil {
+            SessionPersistenceStore.rotateIntoHistory(includeScrollback: false)
+        }
         guard SessionRestorePolicy.shouldAttemptRestore() else { return }
         Self.removeLegacyPersistedWindowGeometry()
         startupSessionSnapshot = SessionPersistenceStore.loadWithHistoryFallback()
@@ -1793,6 +1800,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         isApplyingStartupSessionRestore = false
         saveSessionSnapshot(includeScrollback: false)
         reconcileOrphanedEscrowedSessions()
+        ScrollbackPersistenceSettings.retryLegacyMigration()
     }
 
     /// Issue #307 orphan-reconciliation fix: the coarse-snapshot restore
@@ -1830,7 +1838,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
         }
 
-        let orphans = SessionWALStore.shared.escrowedSessionIds(excluding: known)
+        let ownedSockets = Set([SessionEscrowClient.legacySocketPath(), SessionEscrowClient.escrowSocketPath()])
+        let orphans = SessionWALStore.shared.escrowedSessionIds(excluding: known).filter {
+            $0.meta.escrowSocketPath.map(ownedSockets.contains) == true
+        }
         guard !orphans.isEmpty else {
             dilog("escrow.reconcile", "found=0")
             return
@@ -2538,6 +2549,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         let snapshotWriter = sessionSnapshotWriter
+        let capturePolicy = SessionWALStore.shared.currentCapturePolicy()
         let writeBlock = {
             Self.removeLegacyPersistedWindowGeometry()
             if let persistedGeometryData {
@@ -2548,7 +2560,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
             let saved: Bool
             if let snapshot {
-                saved = snapshotWriter(snapshot)
+                saved = Self.writeSessionSnapshot(
+                    snapshot,
+                    policyPaths: SessionScrollbackPolicyPaths.make(),
+                    capturedGeneration: capturePolicy.enabled ? capturePolicy.generation : nil,
+                    writer: snapshotWriter
+                )
             } else if removeWhenEmpty {
                 SessionPersistenceStore.removeSnapshot()
                 saved = false
@@ -2566,6 +2583,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             synchronously: synchronously,
             operation: writeBlock
         )
+    }
+
+    nonisolated static func writeSessionSnapshot(
+        _ snapshot: AppSessionSnapshot,
+        policyPaths: SessionScrollbackPolicyPaths?,
+        capturedGeneration: UUID?,
+        writer: (AppSessionSnapshot) -> Bool
+    ) -> Bool {
+        if let capturedGeneration,
+           let saved = try? SessionScrollbackPolicyStore.withContentPermission(
+            at: policyPaths, capturedGeneration: capturedGeneration,
+            { writer(snapshot) }
+           ) {
+            return saved
+        }
+        return writer(SessionPersistenceStore.withoutScrollback(snapshot))
     }
 
     private func buildSessionSnapshot(includeScrollback: Bool, cleanShutdown: Bool = false) -> AppSessionSnapshot? {
@@ -4577,6 +4610,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             startupSessionSnapshot = nil
             didAttemptStartupSessionRestore = true
         }
+        ScrollbackPersistenceSettings.retryLegacyMigration()
     }
 
     private func externalOpenDirectories(from urls: [URL]) -> [String] {

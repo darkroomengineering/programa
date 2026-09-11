@@ -73,6 +73,7 @@ struct SettingsView: View {
     @AppStorage(QuitWarningSettings.warnBeforeQuitKey) private var warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
     @AppStorage(AgentBrowserSplitSettings.key) private var openBrowserWithAgentSplits = AgentBrowserSplitSettings.defaultValue
     @AppStorage(ScrollbackPersistenceSettings.persistScrollbackKey) private var sessionPersistScrollback = ScrollbackPersistenceSettings.defaultPersistScrollback
+    @AppStorage(ScrollbackPersistenceSettings.failureKey) private var scrollbackPersistenceFailure: String?
     @AppStorage(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey)
     private var commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
     @AppStorage(ShortcutHintDebugSettings.alwaysShowHintsKey)
@@ -580,13 +581,28 @@ struct SettingsView: View {
 
             SettingsCardRow(
                 String(localized: "settings.app.persistScrollback", defaultValue: "Save Scrollback on Quit"),
-                subtitle: sessionPersistScrollback
+                subtitle: scrollbackPersistenceFailure != nil
+                    ? String(localized: "settings.app.persistScrollback.incomplete", defaultValue: "Scrollback privacy could not be fully applied. Retry to finish protecting existing sessions.")
+                    : sessionPersistScrollback
                     ? String(localized: "settings.app.persistScrollback.subtitleOn", defaultValue: "Terminal scrollback is saved and restored on next launch.")
                     : String(localized: "settings.app.persistScrollback.subtitleOff", defaultValue: "Terminal scrollback is not written to disk.")
             ) {
-                Toggle("", isOn: $sessionPersistScrollback)
+                Toggle("", isOn: Binding(
+                    get: { sessionPersistScrollback },
+                    set: { ScrollbackPersistenceSettings.setEnabled($0) }
+                ))
                     .labelsHidden()
                     .controlSize(.small)
+            }
+
+            if scrollbackPersistenceFailure != nil {
+                SettingsCardRow(
+                    String(localized: "settings.app.persistScrollback.warning", defaultValue: "Some older sessions may still write terminal output to disk.")
+                ) {
+                    Button(String(localized: "settings.app.persistScrollback.retry", defaultValue: "Retry")) {
+                        ScrollbackPersistenceSettings.retry()
+                    }
+                }
             }
 
             SettingsCardDivider()
@@ -1458,7 +1474,7 @@ struct SettingsView: View {
         showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
         warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
         openBrowserWithAgentSplits = AgentBrowserSplitSettings.defaultValue
-        sessionPersistScrollback = ScrollbackPersistenceSettings.defaultPersistScrollback
+        ScrollbackPersistenceSettings.setEnabled(ScrollbackPersistenceSettings.defaultPersistScrollback)
         commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
         ShortcutHintDebugSettings.resetVisibilityDefaults()
         alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints

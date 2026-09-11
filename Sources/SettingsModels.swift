@@ -113,9 +113,66 @@ enum ScrollbackPersistenceSettings {
     static let persistScrollbackKey = "sessionPersistScrollback"
     static let defaultPersistScrollback = true
     private static let flag = UserDefaultsFlag(key: persistScrollbackKey, defaultValue: defaultPersistScrollback)
+    static let failureKey = "sessionPersistScrollbackFailure"
+    @MainActor private static var defaultsObserver: NSObjectProtocol?
+    @MainActor private static var appliedPreference: Bool?
+    @MainActor private static var migrationInProgress = false
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        flag.isEnabled(defaults: defaults)
+        flag.isEnabled(defaults: defaults) && defaults.string(forKey: failureKey) == nil
+    }
+
+    @MainActor static func configureAtStartup() {
+        setEnabled(flag.isEnabled(defaults: .standard), migrate: false)
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                let requested = flag.isEnabled(defaults: .standard)
+                if requested != appliedPreference { setEnabled(requested) }
+            }
+        }
+    }
+
+    @MainActor static func setEnabled(_ enabled: Bool, migrate: Bool = true) {
+        appliedPreference = enabled
+        // Publish the requested opt-out even if storage fails. The persistent
+        // failure state prevents the UI from presenting that as a guarantee.
+        UserDefaults.standard.set(enabled, forKey: persistScrollbackKey)
+        do {
+            try SessionWALStore.shared.transitionPersistence(enabled: enabled)
+            UserDefaults.standard.removeObject(forKey: failureKey)
+        } catch {
+            UserDefaults.standard.set("storage", forKey: failureKey)
+            return
+        }
+        if !enabled {
+            if SessionEscrowClient.hasLegacySessions() {
+                UserDefaults.standard.set("legacy", forKey: failureKey)
+            }
+            if migrate { retryLegacyMigration() }
+        }
+    }
+
+    @MainActor static func retry() {
+        setEnabled(flag.isEnabled(defaults: .standard))
+    }
+
+    @MainActor static func retryLegacyMigration() {
+        guard (!flag.isEnabled(defaults: .standard) || !SessionEscrowRetainedDescriptor.pending().isEmpty), !migrationInProgress,
+              UserDefaults.standard.string(forKey: failureKey) != "storage" else { return }
+        migrationInProgress = true
+        SessionEscrowClient.migrateLegacySessions { success in
+            DispatchQueue.main.async {
+                migrationInProgress = false
+                guard !flag.isEnabled(defaults: .standard) else { return }
+                if success || !SessionEscrowClient.hasLegacySessions() {
+                    UserDefaults.standard.removeObject(forKey: failureKey)
+                } else {
+                    UserDefaults.standard.set("legacy", forKey: failureKey)
+                }
+            }
+        }
     }
 }
 

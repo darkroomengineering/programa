@@ -77,6 +77,23 @@ final class SessionWALCoreTests: XCTestCase {
         )
     }
 
+    func testRingDiscardsQueuedAndDisabledBytesAcrossPolicyTransitions() throws {
+        let first = SessionScrollbackPolicy(enabled: true, generation: UUID())
+        let ring = SessionWALRingBuffer(capacity: 64, policy: first)
+        append(Array("queued-before-disable".utf8), to: ring)
+        ring.transition(to: SessionScrollbackPolicy(enabled: false, generation: UUID()))
+        XCTAssertNil(ring.drainCaptured(), "Disabling persistence must discard queued content")
+        append(Array("private-while-disabled".utf8), to: ring)
+        XCTAssertNil(ring.drainCaptured(), "Disabled capture must not admit new terminal bytes")
+        let resumed = SessionScrollbackPolicy(enabled: true, generation: UUID())
+        ring.transition(to: resumed)
+        append(Array("fresh".utf8), to: ring)
+        let capture = try XCTUnwrap(ring.drainCaptured())
+        XCTAssertEqual(capture.bytes, Array("fresh".utf8))
+        XCTAssertEqual(capture.generation, resumed.generation)
+        XCTAssertNil(ring.drainCaptured())
+    }
+
     func testRotationAfterFrameInvalidatesOffsetEvenWhenNewWALRegrowsPastIt() throws {
         let paths = makePaths()
         try seedMeta(at: paths)

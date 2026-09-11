@@ -8432,6 +8432,27 @@
         }
       }
     },
+    "settings.app.persistScrollback.incomplete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Scrollback privacy could not be fully applied. Retry to finish protecting existing sessions." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "スクロールバックのプライバシー設定を完全に適用できませんでした。再試行して既存のセッションを保護してください。" } }
+      }
+    },
+    "settings.app.persistScrollback.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Retry" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "再試行" } }
+      }
+    },
+    "settings.app.persistScrollback.warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Some older sessions may still write terminal output to disk." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "一部の古いセッションでは、ターミナル出力が引き続きディスクに書き込まれる可能性があります。" } }
+      }
+    },
     "settings.app.persistScrollback.subtitleOff": {
       "extractionState": "manual",
       "localizations": {

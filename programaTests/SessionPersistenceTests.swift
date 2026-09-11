@@ -1840,6 +1840,70 @@ final class SessionPersistenceTests: XCTestCase {
         )
     }
 
+    func testQueuedSnapshotStripsStaleContentAndPreservesWriteFailure() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("session.json")
+        let paths = SessionScrollbackPolicyPaths(snapshotFileURL: url)
+        let captured = try SessionScrollbackPolicyStore.transition(enabled: true, at: paths)
+        _ = try SessionScrollbackPolicyStore.transition(enabled: false, at: paths)
+        _ = try SessionScrollbackPolicyStore.transition(enabled: true, at: paths)
+        let snapshot = contentSnapshot()
+        var writes = 0
+        XCTAssertTrue(AppDelegate.writeSessionSnapshot(snapshot, policyPaths: paths, capturedGeneration: captured.generation) {
+            writes += 1
+            return SessionPersistenceStore.save($0, fileURL: url)
+        })
+        XCTAssertEqual(writes, 1)
+        let loaded = try XCTUnwrap(SessionPersistenceStore.load(fileURL: url))
+        try assertContentRemovedAndLayoutPreserved(loaded, original: snapshot)
+        XCTAssertFalse(AppDelegate.writeSessionSnapshot(snapshot, policyPaths: paths, capturedGeneration: captured.generation) { _ in false },
+                       "Stripping content must not turn a failed durable write into success")
+    }
+
+    func testHistoryWithoutScrollbackPreservesLayoutAndDoesNotCopyPrivateContent() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("session.json")
+        let snapshot = contentSnapshot()
+        XCTAssertTrue(SessionPersistenceStore.save(snapshot, fileURL: url))
+        XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: url, includeScrollback: false))
+        let archiveURL = try XCTUnwrap(SessionPersistenceStore.historyFileURLs(fileURL: url).first)
+        let archive = try XCTUnwrap(SessionPersistenceStore.load(fileURL: archiveURL))
+        try assertContentRemovedAndLayoutPreserved(archive, original: snapshot)
+        XCTAssertEqual(SessionPersistenceStore.load(fileURL: url)?.windows[0].tabManager.workspaces[0].panels[0].terminal?.scrollback,
+                       "PRIVATE-TERMINAL-CONTENT", "Archiving must not rewrite the live snapshot")
+    }
+
+    private func contentSnapshot() -> AppSessionSnapshot {
+        var snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
+        let panel = SessionPanelSnapshot(id: UUID(), type: .terminal, title: "Terminal", customTitle: nil,
+            directory: "/tmp", isPinned: false, isManuallyUnread: false, gitBranch: nil, listeningPorts: [],
+            ttyName: nil, terminal: SessionTerminalPanelSnapshot(workingDirectory: "/tmp", scrollback: "PRIVATE-TERMINAL-CONTENT"),
+            browser: nil, markdown: nil, review: nil)
+        snapshot.windows[0].tabManager.workspaces[0].panels = [panel]
+        snapshot.windows[0].tabManager.workspaces[0].focusedPanelId = panel.id
+        snapshot.windows[0].tabManager.workspaces[0].layout = .pane(SessionPaneLayoutSnapshot(panelIds: [panel.id], selectedPanelId: panel.id))
+        return snapshot
+    }
+
+    private func assertContentRemovedAndLayoutPreserved(_ snapshot: AppSessionSnapshot, original: AppSessionSnapshot) throws {
+        let workspace = try XCTUnwrap(snapshot.windows.first?.tabManager.workspaces.first)
+        let expected = original.windows[0].tabManager.workspaces[0]
+        let panel = try XCTUnwrap(workspace.panels.first)
+        XCTAssertNil(panel.terminal?.scrollback)
+        XCTAssertEqual(panel.terminal?.workingDirectory, "/tmp")
+        XCTAssertEqual(workspace.focusedPanelId, expected.focusedPanelId)
+        XCTAssertEqual(workspace.customTitle, expected.customTitle)
+        guard case .pane(let pane) = workspace.layout, case .pane(let expectedPane) = expected.layout else {
+            return XCTFail("Content stripping must preserve the pane layout")
+        }
+        XCTAssertEqual(pane.panelIds, expectedPane.panelIds)
+        XCTAssertEqual(pane.selectedPanelId, expectedPane.selectedPanelId)
+    }
+
     private func fileNumber(for fileURL: URL) throws -> Int {
         let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
         return try XCTUnwrap(attributes[.systemFileNumber] as? Int)
@@ -2025,6 +2089,35 @@ final class SocketListenerAcceptPolicyTests: XCTestCase {
 // of the retrieval token — foreclosing recovery of children that were
 // still alive in the holder. One test per fix below.
 final class SessionEscrowReattachRegressionTests: XCTestCase {
+
+    func testAcknowledgementTimeoutRetainsPartialFrameAndSkipsLateReplyForPriorSession() throws {
+        var sockets: [Int32] = [-1, -1]
+        guard socketpair(AF_UNIX, SOCK_STREAM, 0, &sockets) == 0 else {
+            return XCTFail("Could not create acknowledgement socket pair")
+        }
+        defer { close(sockets[0]); close(sockets[1]) }
+        let firstSession = UUID().uuidString
+        let secondSession = UUID().uuidString
+        var firstReply = try XCTUnwrap(EscrowWireFormat.encodeRetrieveResponseFrame(sessionId: firstSession, granted: true))
+        var secondReply = try XCTUnwrap(EscrowWireFormat.encodeRetrieveResponseFrame(sessionId: secondSession, granted: true))
+        firstReply[0] = EscrowWireFormat.escrowAcknowledgementType
+        secondReply[0] = EscrowWireFormat.escrowAcknowledgementType
+        let prefix = Data(firstReply.prefix(11))
+        XCTAssertTrue(UnixDomainFDPassing.send(fd: nil, payload: prefix, over: sockets[0]))
+        var buffered = Data()
+        XCTAssertFalse(SessionEscrowClient.receiveEscrowAcknowledgement(
+            over: sockets[1], sessionId: firstSession, buffer: &buffered, timeout: 0.05
+        ))
+        XCTAssertEqual(buffered, prefix, "Timeout must preserve frame alignment for the next registration")
+
+        var remainingReplies = Data(firstReply.dropFirst(prefix.count))
+        remainingReplies.append(secondReply)
+        XCTAssertTrue(UnixDomainFDPassing.send(fd: nil, payload: remainingReplies, over: sockets[0]))
+        XCTAssertTrue(SessionEscrowClient.receiveEscrowAcknowledgement(
+            over: sockets[1], sessionId: secondSession, buffer: &buffered, timeout: 1
+        ), "A late acknowledgement for the previous session must not reject the current session")
+        XCTAssertTrue(buffered.isEmpty)
+    }
 
     func testSuccessfulHandoffClosesHolderCopyWithoutClosingReceivedOrReusedDescriptor() throws {
         var transport: [Int32] = [-1, -1]
