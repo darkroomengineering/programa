@@ -314,7 +314,9 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
 
     private func makeTempGitRepo() throws -> String {
         let directory = try makeTempDirectory()
-        try runGit(["init", "-q"], in: directory)
+        // A unique initial branch so the base-branch fallback chain (main, master) has nothing
+        // to resolve against unless a test creates those refs explicitly.
+        try runGit(["init", "-q", "-b", "review-test-initial"], in: directory)
         return directory
     }
 
