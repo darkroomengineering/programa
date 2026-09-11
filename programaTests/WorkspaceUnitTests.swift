@@ -381,11 +381,16 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directoryURL) }
         let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
         var inShortcuts = false
+        var shortcutsIndent: Int?
         let template = ProgramaSettingsFileStore.defaultTemplate().components(separatedBy: "\n").map { line in
             if line.contains("\"shortcuts\": {") { inShortcuts = true }
             guard inShortcuts, let marker = line.range(of: "// ") else { return line }
             let uncommented = String(line[..<marker.lowerBound]) + String(line[marker.upperBound...])
-            if uncommented.trimmingCharacters(in: .whitespaces) == "}," { inShortcuts = false }
+            let indent = uncommented.prefix(while: { $0.isWhitespace }).count
+            if shortcutsIndent == nil { shortcutsIndent = indent }
+            if indent == shortcutsIndent && uncommented.trimmingCharacters(in: .whitespaces) == "}," {
+                inShortcuts = false
+            }
             return uncommented
         }.joined(separator: "\n")
         try writeSettingsFile(template, to: settingsFileURL)
