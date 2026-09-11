@@ -98,6 +98,26 @@ enum MarkdownDocumentSegment {
     case compare(language: String, before: String, after: String)
 }
 
+/// Plain-text Find presentation, using the same segments as the formatted view.
+/// MarkdownUI's plain-text rendering can differ from its HTML/table presentation.
+enum MarkdownDocumentSearch {
+    static func text(from content: String) -> String {
+        MarkdownAlertParser.segments(from: content).map { segment in
+            switch segment {
+            case .markdown(let markdown):
+                return MarkdownContent(markdown).renderPlainText()
+            case .alert(let kind, let body):
+                return kind.displayName + "\n" + MarkdownContent(body).renderPlainText()
+            case .compare(let language, let before, let after):
+                let beforeTitle = String(localized: "markdown.compare.before", defaultValue: "Before")
+                let afterTitle = String(localized: "markdown.compare.after", defaultValue: "After")
+                let suffix = language.isEmpty ? "" : " (\(language))"
+                return [beforeTitle + suffix, before, afterTitle + suffix, after].joined(separator: "\n")
+            }
+        }.joined(separator: "\n\n")
+    }
+}
+
 /// Splits raw Markdown source into segments, extracting GitHub-style alert
 /// blockquotes (`> [!NOTE]` ...) so they render as styled callouts instead of
 /// plain blockquotes. swift-markdown-ui 2.4.1 has no native GFM-alert support
@@ -122,6 +142,26 @@ enum MarkdownAlertParser {
 
     static func segments(from content: String) -> [MarkdownDocumentSegment] {
         let lines = content.components(separatedBy: "\n")
+        guard let parsed = try? AttributedString(
+            markdown: content,
+            options: .init(appliesSourcePositionAttributes: true)
+        ) else {
+            return [.markdown(content)]
+        }
+        var codeLines = IndexSet()
+        for run in parsed.runs {
+            guard let position = run.markdownSourcePosition,
+                  let intent = run.presentationIntent,
+                  intent.components.contains(where: {
+                      if case .codeBlock = $0.kind { return true }
+                      return false
+                  }) else { continue }
+            let firstLine = max(0, position.startLine - 1)
+            let lastLine = min(lines.count - 1, position.endLine - 1)
+            if firstLine <= lastLine {
+                codeLines.insert(integersIn: firstLine...lastLine)
+            }
+        }
         var result: [MarkdownDocumentSegment] = []
         var plainBuffer: [String] = []
 
@@ -134,7 +174,10 @@ enum MarkdownAlertParser {
         var index = 0
         while index < lines.count {
             let line = lines[index]
-            if let kind = alertKind(in: line) {
+            if codeLines.contains(index) {
+                plainBuffer.append(line)
+                index += 1
+            } else if let kind = alertKind(in: line) {
                 var bodyLines: [String] = []
                 var cursor = index + 1
                 while cursor < lines.count, let stripped = quoteContent(of: lines[cursor]) {
@@ -149,7 +192,7 @@ enum MarkdownAlertParser {
                 var cursor = index + 1
                 var foundEnd = false
                 while cursor < lines.count {
-                    if isCompareEnd(lines[cursor]) {
+                    if !codeLines.contains(cursor), isCompareEnd(lines[cursor]) {
                         foundEnd = true
                         break
                     }
