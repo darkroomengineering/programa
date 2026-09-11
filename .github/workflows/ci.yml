@@ -305,6 +305,7 @@ jobs:
       # keeps parser/security regressions observable even when an unrelated UI
       # unit test flakes later in the job.
       - name: Build programa CLI regression target
+        id: cli-build
         run: |
           CLI_REGRESSION_DIR="$RUNNER_TEMP/programa-cli-regression"
           rm -rf "$CLI_REGRESSION_DIR"
@@ -316,6 +317,7 @@ jobs:
             build
 
       - name: Run typed CLI registry behavior regression
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         run: |
           set -euo pipefail
 
@@ -328,6 +330,7 @@ jobs:
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_registry_behavior.py
 
       - name: Run CLI argument grammar regression
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         run: |
           set -euo pipefail
 
@@ -340,6 +343,7 @@ jobs:
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_argument_grammar.py
 
       - name: Run Codex hook trust regression
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         run: |
           set -euo pipefail
 
@@ -351,7 +355,20 @@ jobs:
 
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_codex_hook_trust.py
 
+      - name: Run hook confirmation EOF regressions
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          CLI_BIN="$RUNNER_TEMP/programa-cli-regression/Debug/programa"
+          test -x "$CLI_BIN"
+          result=0
+          for provider in codex claude opencode; do
+            CMUXTERM_CLI="$CLI_BIN" python3 "tests_v2/test_${provider}_install_integration.py" --eof-only || result=1
+          done
+          exit "$result"
+
       - name: Run unit tests
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         env:
           PROGRAMA_UNIT_TEST_SCOPE: split-stateful
         run: ./scripts/ci-run-unit-tests.sh

@@ -376,6 +376,26 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertEqual(store.activeSourcePath, settingsFileURL.path)
     }
 
+    func testUncommentedTemplatePreservesDefaultReturnShortcut() throws {
+        let directoryURL = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
+        var inShortcuts = false
+        let template = ProgramaSettingsFileStore.defaultTemplate().components(separatedBy: "\n").map { line in
+            if line.contains("\"shortcuts\": {") { inShortcuts = true }
+            guard inShortcuts, let marker = line.range(of: "// ") else { return line }
+            let uncommented = String(line[..<marker.lowerBound]) + String(line[marker.upperBound...])
+            if uncommented.trimmingCharacters(in: .whitespaces) == "}," { inShortcuts = false }
+            return uncommented
+        }.joined(separator: "\n")
+        try writeSettingsFile(template, to: settingsFileURL)
+        let store = KeyboardShortcutSettingsFileStore(
+            primaryPath: settingsFileURL.path, fallbackPath: nil, startWatching: false
+        )
+        XCTAssertEqual(store.override(for: .toggleSplitZoom), KeyboardShortcutSettings.Action.toggleSplitZoom.defaultShortcut,
+                       "Uncommenting the supplied template must retain the default Return shortcut")
+    }
+
     func testSettingsFileStoreRejectsModifierFreeFirstStroke() throws {
         let directoryURL = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directoryURL) }

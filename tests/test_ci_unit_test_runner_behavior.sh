@@ -172,8 +172,17 @@ step_name = "- name: Run display resolution churn UI regression"
 matches = [index for index, line in enumerate(workflow) if line.strip() == step_name]
 if len(matches) != 1:
     raise SystemExit("Expected exactly one display resolution regression step")
-start = matches[0] + 1
-if workflow[start].strip() != "run: |":
+step_indent = len(workflow[matches[0]]) - len(workflow[matches[0]].lstrip())
+start = None
+for index in range(matches[0] + 1, len(workflow)):
+    line = workflow[index]
+    line_indent = len(line) - len(line.lstrip())
+    if line.strip() and line_indent <= step_indent:
+        break
+    if line_indent == step_indent + 2 and line.strip() == "run: |":
+        start = index
+        break
+if start is None:
     raise SystemExit("Display resolution step must contain a literal shell block")
 indent = len(workflow[start]) - len(workflow[start].lstrip()) + 2
 block = []

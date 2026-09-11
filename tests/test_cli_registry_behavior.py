@@ -570,6 +570,27 @@ def main() -> int:
         check(start_params.get("placement") == "runs_with_parent", f"Claude helper placement={start_params!r}")
         check(start_params.get("task") == "reviewer", f"Claude helper title={start_params!r}")
 
+    # A first hook invocation must persist its identity even before its state
+    # directory exists, so session-end can clean up that same session.
+    with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
+        state_path = Path(directory) / "missing" / "nested" / "sessions.json"
+        lifecycle_env = dict(hook_env, PROGRAMA_CLAUDE_HOOK_STATE_PATH=str(state_path))
+        payload = json.dumps({"session_id": "first-run-session"})
+        with SocketRecorder(directory) as recorder:
+            started = run_cli(recorder.path, ["claude-hook", "session-start"],
+                              env_overrides=lifecycle_env, input_text=payload)
+            check(started.returncode == 0, f"first hook failed: {merged_output(started)!r}")
+            persisted = json.loads(state_path.read_text()) if state_path.exists() else {}
+            session = persisted.get("sessions", {}).get("first-run-session", {})
+            check(session.get("workspaceId") == WORKSPACE_ID and session.get("surfaceId") == SURFACE_ID,
+                  f"first hook did not persist origin identity: {persisted!r}")
+            ended = run_cli(recorder.path, ["claude-hook", "session-end"],
+                            env_overrides=lifecycle_env, input_text=payload)
+            check(ended.returncode == 0, f"session cleanup failed: {merged_output(ended)!r}")
+            remaining = json.loads(state_path.read_text()) if state_path.exists() else None
+            check(remaining is not None and "first-run-session" not in remaining.get("sessions", {}),
+                  f"session cleanup did not persist removal: {remaining!r}")
+
     # The implicit password file is security-sensitive: only a regular,
     # user-owned, private file may contribute an auth frame.
     def password_file_frames(kind: str) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
