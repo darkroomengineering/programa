@@ -1100,7 +1100,6 @@ final class BrowserPanel: Panel, ObservableObject {
         )
         self.webView = webView
         self.insecureHTTPAlertFactory = { NSAlert() }
-        applyUserProxyConfiguration()
         BrowserProfileStore.shared.noteUsed(resolvedProfileID)
 
         // Set up navigation delegate
@@ -1202,30 +1201,6 @@ final class BrowserPanel: Panel, ObservableObject {
         }
     }
 
-    /// Applies the `browser.proxy` user setting to this panel's data store, or clears
-    /// any proxy configuration when the setting is absent or malformed.
-    private func applyUserProxyConfiguration() {
-        let store = webView.configuration.websiteDataStore
-        if let descriptor = BrowserUserProxySettings.descriptor() {
-            guard let nwPort = NWEndpoint.Port(rawValue: UInt16(descriptor.port)) else {
-                store.proxyConfigurations = []
-                return
-            }
-            let nwEndpoint = NWEndpoint.hostPort(
-                host: NWEndpoint.Host(descriptor.host),
-                port: nwPort
-            )
-            switch descriptor.proxyType {
-            case .socks5:
-                store.proxyConfigurations = [ProxyConfiguration(socksv5Proxy: nwEndpoint)]
-            case .httpConnect:
-                store.proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy: nwEndpoint)]
-            }
-        } else {
-            store.proxyConfigurations = []
-        }
-    }
-
     private func beginDownloadActivity() {
         activeDownloadCount += 1
         isDownloading = activeDownloadCount > 0
@@ -1253,7 +1228,6 @@ final class BrowserPanel: Panel, ObservableObject {
                 reason: "workspace_reattach"
             )
         }
-        applyUserProxyConfiguration()
     }
 
     @discardableResult

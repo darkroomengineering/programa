@@ -18,6 +18,7 @@ final class BrowserHistoryStore: ObservableObject {
     /// History is capped at 5,000 entries; 16 MiB leaves ample room for titles and URLs
     /// while preventing a corrupt or replaced file from being read without a bound.
     nonisolated static let maxPersistenceBytes = 16 * 1024 * 1024
+    nonisolated private static let maxEntryTextBytes = 64 * 1024
 
     enum PersistenceLoadError: Error, Equatable {
         case exceedsByteLimit
@@ -184,7 +185,8 @@ final class BrowserHistoryStore: ObservableObject {
         }
 
         // Most-recent first.
-        entries = Array(decoded.sorted(by: { $0.lastVisited > $1.lastVisited }).prefix(maxEntries))
+        let normalized = decoded.compactMap(Self.normalizedPersistenceEntry)
+        entries = Array(normalized.sorted(by: { $0.lastVisited > $1.lastVisited }).prefix(maxEntries))
         loadState = .loaded
 
         // Remove entries with invalid hosts (no TLD), e.g. "https://news."
@@ -195,7 +197,7 @@ final class BrowserHistoryStore: ObservableObject {
             let trimmed = host.hasSuffix(".") ? String(host.dropLast()) : host
             return !trimmed.contains(".")
         }
-        if entries.count != beforeCount {
+        if entries.count != beforeCount || normalized != decoded {
             scheduleSave()
         }
         return true
@@ -204,7 +206,8 @@ final class BrowserHistoryStore: ObservableObject {
     func recordVisit(url: URL?, title: String?) {
         guard loadIfNeeded() else { return }
 
-        guard let url else { return }
+        guard let url, url.absoluteString.utf8.count <= Self.maxEntryTextBytes else { return }
+        let title = title.map { SidebarTelemetryLimits.truncatedToUTF8Limit($0, maxBytes: Self.maxEntryTextBytes) }
         guard let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else { return }
         // Skip URLs whose host lacks a TLD (e.g. "https://news.").
@@ -249,7 +252,7 @@ final class BrowserHistoryStore: ObservableObject {
     func recordTypedNavigation(url: URL?) {
         guard loadIfNeeded() else { return }
 
-        guard let url else { return }
+        guard let url, url.absoluteString.utf8.count <= Self.maxEntryTextBytes else { return }
         guard let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else { return }
         // Skip URLs whose host lacks a TLD (e.g. "https://news.").
@@ -342,7 +345,8 @@ final class BrowserHistoryStore: ObservableObject {
 
         var mergedCount = 0
         for imported in importedEntries {
-            guard let parsedURL = URL(string: imported.url),
+            guard let imported = Self.normalizedPersistenceEntry(imported),
+                  let parsedURL = URL(string: imported.url),
                   let scheme = parsedURL.scheme?.lowercased(),
                   scheme == "http" || scheme == "https" else {
                 continue
@@ -354,7 +358,7 @@ final class BrowserHistoryStore: ObservableObject {
             }
 
             let urlString = parsedURL.absoluteString
-            guard urlString != "about:blank" else { continue }
+            guard urlString != "about:blank", urlString.utf8.count <= Self.maxEntryTextBytes else { continue }
             let normalizedKey = normalizedHistoryKey(url: parsedURL)
 
             let importedTitle = imported.title?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -768,13 +772,32 @@ final class BrowserHistoryStore: ObservableObject {
         return dir.appendingPathComponent("browser_history.json", isDirectory: false)
     }
 
+    nonisolated private static func normalizedPersistenceEntry(_ entry: Entry) -> Entry? {
+        guard entry.url.utf8.count <= maxEntryTextBytes else { return nil }
+        var entry = entry
+        entry.title = entry.title.map {
+            SidebarTelemetryLimits.truncatedToUTF8Limit($0, maxBytes: maxEntryTextBytes)
+        }
+        return entry
+    }
+
     nonisolated private static func persistSnapshot(_ snapshot: [Entry], to fileURL: URL) throws {
         let dir = fileURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.withoutEscapingSlashes]
-        let data = try encoder.encode(snapshot)
+        var data = Data([0x5B])
+        for entry in snapshot {
+            guard let entry = normalizedPersistenceEntry(entry) else { continue }
+            let encoded = try encoder.encode(entry)
+            let separatorBytes = data.count > 1 ? 1 : 0
+            // Count encoded bytes, including escaping, the comma, and closing bracket.
+            guard data.count + separatorBytes + encoded.count + 1 <= maxPersistenceBytes else { break }
+            if separatorBytes != 0 { data.append(0x2C) }
+            data.append(encoded)
+        }
+        data.append(0x5D)
         try data.write(to: fileURL, options: [.atomic])
     }
 

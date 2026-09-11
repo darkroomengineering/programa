@@ -16,6 +16,72 @@ import os
 @testable import Programa
 #endif
 
+@MainActor
+final class BrowserProfileProxyRegressionTests: XCTestCase {
+    func testFactoryAppliesAndClearsProxyOnDefaultNewAndCachedStores() throws {
+        let suite = "BrowserProfileProxyRegressionTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let original = WKWebsiteDataStore.default().proxyConfigurations
+        defer {
+            WKWebsiteDataStore.default().proxyConfigurations = original
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let profiles = BrowserProfileStore(defaults: defaults)
+        let profile = try XCTUnwrap(profiles.createProfile(named: "Proxy regression"))
+        defaults.set("127.0.0.1", forKey: BrowserUserProxySettings.hostKey)
+        defaults.set(1080, forKey: BrowserUserProxySettings.portKey)
+        let named = profiles.websiteDataStore(for: profile.id)
+        XCTAssertEqual(named.proxyConfigurations.count, 1, "New profile stores must inherit the user proxy")
+        XCTAssertEqual(profiles.websiteDataStore(for: profiles.builtInDefaultProfileID).proxyConfigurations.count, 1)
+        XCTAssertTrue(profiles.websiteDataStore(for: profile.id) === named)
+        for invalidPort in [0, 65536] {
+            defaults.set(invalidPort, forKey: BrowserUserProxySettings.portKey)
+            XCTAssertTrue(profiles.websiteDataStore(for: profile.id).proxyConfigurations.isEmpty)
+            XCTAssertTrue(profiles.websiteDataStore(for: profiles.builtInDefaultProfileID).proxyConfigurations.isEmpty)
+            defaults.set(1080, forKey: BrowserUserProxySettings.portKey)
+            XCTAssertEqual(profiles.websiteDataStore(for: profile.id).proxyConfigurations.count, 1)
+            XCTAssertEqual(profiles.websiteDataStore(for: profiles.builtInDefaultProfileID).proxyConfigurations.count, 1)
+        }
+        defaults.removeObject(forKey: BrowserUserProxySettings.hostKey)
+        XCTAssertTrue(profiles.websiteDataStore(for: profile.id).proxyConfigurations.isEmpty)
+        XCTAssertTrue(profiles.websiteDataStore(for: profiles.builtInDefaultProfileID).proxyConfigurations.isEmpty)
+    }
+
+    func testProfileSwitchUsesCurrentProxyForNewCachedAndDefaultStores() throws {
+        let suite = "BrowserProfileProxySwitchTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let originalProxy = WKWebsiteDataStore.default().proxyConfigurations
+        let profiles = BrowserProfileStore(defaults: defaults)
+        let originalStore = BrowserProfileStore.replaceSharedForTesting(profiles)
+        defer {
+            BrowserProfileStore.replaceSharedForTesting(originalStore)
+            WKWebsiteDataStore.default().proxyConfigurations = originalProxy
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let first = try XCTUnwrap(profiles.createProfile(named: "First"))
+        let second = try XCTUnwrap(profiles.createProfile(named: "Second"))
+        defaults.set("127.0.0.1", forKey: BrowserUserProxySettings.hostKey)
+        defaults.set(8080, forKey: BrowserUserProxySettings.portKey)
+        defaults.set("httpConnect", forKey: BrowserUserProxySettings.typeKey)
+        let panel = BrowserPanel(workspaceId: UUID(), profileID: first.id)
+        defer { panel.close() }
+        XCTAssertEqual(panel.webView.configuration.websiteDataStore.proxyConfigurations.count, 1)
+        XCTAssertTrue(panel.switchToProfile(second.id))
+        XCTAssertEqual(panel.webView.configuration.websiteDataStore.proxyConfigurations.count, 1,
+                       "Switching to a new profile must not bypass the configured proxy")
+        XCTAssertTrue(panel.switchToProfile(first.id))
+        XCTAssertEqual(panel.webView.configuration.websiteDataStore.proxyConfigurations.count, 1)
+        XCTAssertTrue(panel.switchToProfile(profiles.builtInDefaultProfileID))
+        XCTAssertEqual(panel.webView.configuration.websiteDataStore.proxyConfigurations.count, 1)
+        defaults.removeObject(forKey: BrowserUserProxySettings.hostKey)
+        for id in [second.id, first.id, profiles.builtInDefaultProfileID] {
+            XCTAssertTrue(panel.switchToProfile(id))
+            XCTAssertTrue(panel.webView.configuration.websiteDataStore.proxyConfigurations.isEmpty,
+                          "Switching must clear a removed proxy even on a cached store")
+        }
+    }
+}
+
 private actor BrowserSuggestionRequestRecorder {
     private(set) var requestedHosts: [String] = []
 
@@ -2101,6 +2167,110 @@ final class BrowserPopupContentRectTests: XCTestCase {
 
 @MainActor
 final class BrowserJavaScriptDialogDelegateTests: XCTestCase {
+    private func waitForDialogState(_ predicate: () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(8)
+        while !predicate(), Date() < deadline {
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        guard predicate() else {
+            throw NSError(domain: "BrowserDialogRegression", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for native dialog state"])
+        }
+    }
+
+    private func evaluateString(_ script: String, in webView: WKWebView) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            webView.evaluateJavaScript(script) { value, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let value = value as? String {
+                    continuation.resume(returning: value)
+                } else {
+                    continuation.resume(throwing: NSError(domain: "BrowserDialogRegression", code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "Expected a string JavaScript result"]))
+                }
+            }
+        }
+    }
+
+    func testDialogRPCResumesActualJavaScriptWithAcceptedAndDismissedValues() async throws {
+        let suite = "BrowserDialogRegression.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let oldProfiles = BrowserProfileStore.replaceSharedForTesting(BrowserProfileStore(defaults: defaults))
+        let oldProxy = WKWebsiteDataStore.default().proxyConfigurations
+        let oldApp = AppDelegate.shared
+        let app = AppDelegate()
+        let manager = TabManager()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        let windowID = UUID()
+        AppDelegate.shared = app
+        app.tabManager = manager
+        app.registerMainWindow(window, windowId: windowID, tabManager: manager,
+                               sidebarState: SidebarState(), sidebarSelectionState: SidebarSelectionState())
+        defer {
+            // Also release WebKit if the old synthetic RPC fails while a native sheet is pending.
+            if let sheet = window.attachedSheet {
+                window.endSheet(sheet, returnCode: .alertSecondButtonReturn)
+                sheet.orderOut(nil)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            for workspace in manager.tabs {
+                for panel in workspace.panels.values { panel.close() }
+            }
+            window.contentView = nil
+            window.orderOut(nil)
+            AppDelegate.shared = oldApp
+            BrowserProfileStore.replaceSharedForTesting(oldProfiles)
+            WKWebsiteDataStore.default().proxyConfigurations = oldProxy
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let pane = try XCTUnwrap(workspace.bonsplitController.focusedPaneId)
+        let panel = try XCTUnwrap(workspace.newBrowserSurface(inPane: pane, focus: false))
+        window.contentView = panel.webView
+        window.orderFront(nil)
+        panel.webView.loadHTMLString("<html><body>Native dialog regression</body></html>", baseURL: nil)
+        try await waitForDialogState { !panel.webView.isLoading && panel.webView.url != nil }
+        let cases: [(expression: String, accept: Bool, text: String?, expected: String)] = [
+            ("(alert('native alert'), 'alert-complete')", true, nil, "\"alert-complete\""),
+            ("confirm('native confirm accept')", true, nil, "true"),
+            ("confirm('native confirm dismiss')", false, nil, "false"),
+            ("prompt('native prompt default', 'default-value')", true, nil, "\"default-value\""),
+            ("prompt('native prompt empty', 'default-value')", true, "", "\"\""),
+            ("prompt('native prompt whitespace', 'default-value')", true, "  ", "\"  \""),
+            ("prompt('native prompt dismiss', 'default-value')", false, nil, "null")
+        ]
+        for testCase in cases {
+            _ = try await evaluateString("""
+                window.nativeDialogDone = false;
+                setTimeout(() => {
+                    window.nativeDialogResult = \(testCase.expression);
+                    window.nativeDialogDone = true;
+                }, 50);
+                'scheduled';
+                """, in: panel.webView)
+            // Evaluating JavaScript while a native dialog is open can deadlock its completion.
+            try await waitForDialogState { window.attachedSheet != nil }
+            var params: [String: Any] = ["window_id": windowID.uuidString,
+                                        "workspace_id": workspace.id.uuidString,
+                                        "surface_id": panel.id.uuidString]
+            if let text = testCase.text { params["text"] = text }
+            let result = TerminalController.shared.v2BrowserDialogRespond(params: params, accept: testCase.accept)
+            guard case .ok(let payload) = result else {
+                XCTFail("Native dialog RPC must resolve the live WebKit completion: \(result)")
+                return
+            }
+            let response = try XCTUnwrap(payload as? [String: Any])
+            XCTAssertEqual(response["accepted"] as? Bool, testCase.accept)
+            try await waitForDialogState { window.attachedSheet == nil }
+            let actual = try await evaluateString("JSON.stringify(window.nativeDialogResult)", in: panel.webView)
+            XCTAssertEqual(actual, testCase.expected, testCase.expression)
+            let done = try await evaluateString("String(window.nativeDialogDone)", in: panel.webView)
+            XCTAssertEqual(done, "true", "The original page script must resume after the RPC")
+        }
+    }
+
     func testBrowserPanelUIDelegateImplementsJavaScriptDialogSelectors() {
         let panel = BrowserPanel(workspaceId: UUID())
         guard let uiDelegate = panel.webView.uiDelegate as? NSObject else {
@@ -3690,6 +3860,52 @@ private final class BrowserHistoryPersistenceHarness: Sendable {
 }
 
 final class BrowserHistoryStoreTests: XCTestCase {
+    func testPersistedHistoryRemainsReloadableWhenEscapedTitlesExceedByteBudget() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appendingPathComponent("history.json")
+        // Each title fits the 64 KiB field cap, but escaping 140 titles exceeds the 16 MiB file cap.
+        let title = String(repeating: "\"\n", count: 32 * 1024)
+        let usefulURL = try XCTUnwrap(URL(string: "https://example.com/latest"))
+        await MainActor.run {
+            let store = BrowserHistoryStore(fileURL: fileURL)
+            for index in 0..<140 {
+                store.recordVisit(url: URL(string: "https://example.com/large/\(index)")!, title: title)
+            }
+            store.recordVisit(url: usefulURL, title: "Useful recent page")
+            store.flushPendingSaves()
+        }
+        let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(attributes[.size] as? NSNumber).intValue, BrowserHistoryStore.maxPersistenceBytes)
+        await MainActor.run {
+            let reloaded = BrowserHistoryStore(fileURL: fileURL)
+            XCTAssertTrue(reloaded.loadIfNeeded(), "The writer must not produce a history file its reader rejects")
+            XCTAssertTrue(reloaded.entries.contains { $0.url == usefulURL.absoluteString })
+        }
+    }
+
+    func testOneOversizedHistoryTitleDoesNotEraseUsefulHistoryAfterReload() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appendingPathComponent("history.json")
+        let oversizedURL = try XCTUnwrap(URL(string: "https://example.com/oversized"))
+        let usefulURL = try XCTUnwrap(URL(string: "https://example.com/useful"))
+        await MainActor.run {
+            let store = BrowserHistoryStore(fileURL: fileURL)
+            store.recordVisit(url: oversizedURL, title: String(repeating: "x", count: BrowserHistoryStore.maxPersistenceBytes + 1))
+            store.recordVisit(url: usefulURL, title: "Useful page")
+            store.flushPendingSaves()
+        }
+        let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(attributes[.size] as? NSNumber).intValue, BrowserHistoryStore.maxPersistenceBytes)
+        await MainActor.run {
+            let reloaded = BrowserHistoryStore(fileURL: fileURL)
+            XCTAssertTrue(reloaded.loadIfNeeded())
+            XCTAssertTrue(reloaded.entries.contains { $0.url == usefulURL.absoluteString },
+                          "An oversized page title must not make all browsing history unreadable")
+        }
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("BrowserHistoryStoreTests-\(UUID().uuidString)", isDirectory: true)
