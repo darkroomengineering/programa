@@ -155,6 +155,8 @@ final class ClaudeHookSessionStore {
     }
 
     private func withLockedState<T>(_ body: (inout ClaudeHookSessionStoreFile) throws -> T) throws -> T {
+        let parentURL = URL(fileURLWithPath: statePath).deletingLastPathComponent()
+        try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true, attributes: nil)
         let lockPath = statePath + ".lock"
         let fd = open(lockPath, O_CREAT | O_RDWR, mode_t(S_IRUSR | S_IWUSR))
         if fd < 0 {
@@ -187,8 +189,6 @@ final class ClaudeHookSessionStore {
 
     private func saveUnlocked(_ state: ClaudeHookSessionStoreFile) throws {
         let stateURL = URL(fileURLWithPath: statePath)
-        let parentURL = stateURL.deletingLastPathComponent()
-        try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true, attributes: nil)
         let data = try encoder.encode(state)
         try data.write(to: stateURL, options: .atomic)
     }
