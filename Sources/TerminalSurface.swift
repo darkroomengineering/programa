@@ -271,6 +271,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private let workingDirectory: String?
     private let initialCommand: String?
     private let initialEnvironmentOverrides: [String: String]
+    private let initializedForSessionRestore: Bool
     var requestedWorkingDirectory: String? { workingDirectory }
     private var additionalEnvironment: [String: String]
     let hostedView: GhosttySurfaceScrollView
@@ -464,6 +465,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let trimmedCommand = initialCommand?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.initialCommand = (trimmedCommand?.isEmpty == false) ? trimmedCommand : nil
         self.initialEnvironmentOverrides = Self.mergedNormalizedEnvironment(base: [:], overrides: initialEnvironmentOverrides)
+        self.initializedForSessionRestore = reviveDescriptor != nil || pendingScrollbackSeedText != nil
         self.additionalEnvironment = Self.mergedNormalizedEnvironment(base: [:], overrides: additionalEnvironment)
         self.reviveDescriptor = reviveDescriptor
         self.pendingFreshSeedText = pendingScrollbackSeedText
@@ -681,6 +683,28 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
     func portalBindingStateLabel() -> String {
         portalLifecycleState.rawValue
+    }
+
+    @MainActor
+    var isPristineForCustomLayout: Bool {
+        guard portalLifecycleState == .live,
+              surface == nil,
+              initialCommand == nil,
+              initialEnvironmentOverrides.isEmpty,
+              additionalEnvironment.isEmpty,
+              configTemplate?.command?.isEmpty ?? true,
+              configTemplate?.initialInput?.isEmpty ?? true,
+              configTemplate?.environmentVariables.isEmpty ?? true,
+              !backgroundSurfaceStartQueued,
+              !initializedForSessionRestore,
+              pendingSocketInputQueue.isEmpty,
+              reviveDescriptor == nil,
+              pendingFreshSeedText == nil,
+              pendingReviveSeed == nil,
+              !hasAttemptedSessionEscrow else { return false }
+        return withDebugMetadataLock {
+            runtimeSurfaceCreatedAt == nil && teardownRequestedAt == nil
+        }
     }
 
     private func withDebugMetadataLock<T>(_ body: () -> T) -> T {

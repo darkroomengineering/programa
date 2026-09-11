@@ -19,6 +19,20 @@ private final class PendingTerminalInputState {
 
 extension Workspace {
 
+    var isPristineForCustomLayout: Bool {
+        guard !hasAppliedCustomLayout,
+              panels.count == 1,
+              let terminal = panels.values.first as? TerminalPanel,
+              bonsplitController.allPaneIds.count == 1,
+              let paneId = bonsplitController.allPaneIds.first,
+              bonsplitController.allTabIds.count == 1 else { return false }
+        let tabs = bonsplitController.tabs(inPane: paneId)
+        guard tabs.count == 1,
+              let tab = tabs.first,
+              panelIdFromSurfaceId(tab.id) == terminal.id else { return false }
+        return terminal.surface.isPristineForCustomLayout
+    }
+
     /// Applies a named layout from `store` (named-layout configs, see
     /// docs/plans/worktree-and-layouts.md) into this workspace. Shared by `layout.apply` and
     /// `worktree.create --layout` -- both just need "apply this saved layout with this
@@ -115,6 +129,8 @@ extension Workspace {
 
     func applyCustomLayout(_ layout: ProgramaLayoutNode, baseCwd: String) {
         guard let rootPaneId = bonsplitController.allPaneIds.first else { return }
+        // Layout commands may wait in readiness observers rather than the socket input queue.
+        hasAppliedCustomLayout = true
 
         var leaves: [(paneId: PaneID, surfaces: [ProgramaSurfaceDefinition])] = []
         buildCustomLayoutTree(layout, inPane: rootPaneId, leaves: &leaves)

@@ -1,4 +1,145 @@
 import XCTest
+
+@MainActor
+final class LayoutAndSelectorBoundaryTests: XCTestCase {
+    private let layout = ProgramaLayoutNode.pane(ProgramaPaneDefinition(surfaces: [
+        ProgramaSurfaceDefinition(type: .terminal, name: "Applied", command: nil, cwd: nil, env: nil, url: nil, focus: nil)
+    ]))
+
+    private func withFixture(_ body: (TabManager, UUID, ProgramaLayoutStore) throws -> Void) throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let previous = AppDelegate.shared
+        let notifications = TerminalNotificationStore.shared.notifications
+        let app = AppDelegate()
+        let manager = TabManager(initialWorkingDirectory: directory.path)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+        let windowID = UUID()
+        AppDelegate.shared = app
+        app.tabManager = manager
+        app.registerMainWindow(window, windowId: windowID, tabManager: manager, sidebarState: SidebarState(), sidebarSelectionState: SidebarSelectionState())
+        defer {
+            TerminalNotificationStore.shared.replaceNotificationsForTesting(notifications)
+            AppDelegate.shared = previous
+            window.orderOut(nil)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let store = ProgramaLayoutStore(directoryURL: directory.appendingPathComponent("layouts"), startWatching: false)
+        try store.save(name: "fixture", layout: layout, force: false)
+        try body(manager, windowID, store)
+    }
+
+    private func expectError(_ result: TerminalController.V2CallResult, _ code: String, file: StaticString = #filePath, line: UInt = #line) {
+        guard case .err(let actual, _, _) = result else { return XCTFail("Expected \(code)", file: file, line: line) }
+        XCTAssertEqual(actual, code, file: file, line: line)
+    }
+
+    func testMalformedPresentSelectorsCannotClearCloseOrCreate() throws {
+        try withFixture { manager, windowID, store in
+            let workspace = try XCTUnwrap(manager.selectedWorkspace)
+            _ = try XCTUnwrap(workspace.newTerminalSurfaceInFocusedPane(focus: false))
+            let panelIDs = Set(workspace.panels.keys)
+            let selected = manager.selectedTabId
+            let focused = workspace.focusedPanelId
+            let workspaceIDs = manager.tabs.map(\.id)
+            let seeded = [workspace.id, UUID()].map {
+                TerminalNotification(id: UUID(), tabId: $0, surfaceId: nil, title: "Keep", subtitle: "", body: "", createdAt: Date(), isRead: false)
+            }
+            let invalid: [Any] = ["not-a-uuid", "", 42, true, [1], ["bad": 1]]
+            for value in invalid {
+                TerminalNotificationStore.shared.replaceNotificationsForTesting(seeded)
+                expectError(TerminalController.shared.v2NotificationClear(params: ["workspace_id": value]), "invalid_params")
+                XCTAssertEqual(TerminalNotificationStore.shared.notifications, seeded)
+                expectError(TerminalController.shared.v2SurfaceClose(params: ["workspace_id": workspace.id.uuidString, "surface_id": value]), "invalid_params")
+                expectError(TerminalController.shared.v2LayoutApply(params: ["window_id": windowID.uuidString, "workspace_id": value, "name": "fixture"], layoutStore: store), "invalid_params")
+                XCTAssertEqual(Set(workspace.panels.keys), panelIDs)
+                XCTAssertEqual(workspace.focusedPanelId, focused)
+                XCTAssertEqual(manager.selectedTabId, selected)
+                XCTAssertEqual(manager.tabs.map(\.id), workspaceIDs)
+            }
+        }
+    }
+
+    func testNullAndOmittedSelectorsRetainDefaultOperations() throws {
+        for selector in [nil, NSNull()] as [NSNull?] {
+            try withFixture { manager, windowID, store in
+                let workspace = try XCTUnwrap(manager.selectedWorkspace)
+                _ = try XCTUnwrap(workspace.newTerminalSurfaceInFocusedPane(focus: false))
+                let focused = try XCTUnwrap(workspace.focusedPanelId)
+                var closeParams: [String: Any] = ["workspace_id": workspace.id.uuidString]
+                var clearParams: [String: Any] = [:]
+                var applyParams: [String: Any] = ["window_id": windowID.uuidString, "name": "fixture"]
+                if let selector { closeParams["surface_id"] = selector; clearParams["workspace_id"] = selector; applyParams["workspace_id"] = selector }
+                TerminalNotificationStore.shared.replaceNotificationsForTesting([TerminalNotification(id: UUID(), tabId: workspace.id, surfaceId: nil, title: "Clear", subtitle: "", body: "", createdAt: Date(), isRead: false)])
+                guard case .ok = TerminalController.shared.v2NotificationClear(params: clearParams) else { return XCTFail("Default clear should succeed") }
+                XCTAssertTrue(TerminalNotificationStore.shared.notifications.isEmpty)
+                guard case .ok = TerminalController.shared.v2SurfaceClose(params: closeParams) else { return XCTFail("Default close should succeed") }
+                XCTAssertNil(workspace.panels[focused])
+                let count = manager.tabs.count
+                let selected = manager.selectedTabId
+                guard case .ok = TerminalController.shared.v2LayoutApply(params: applyParams, layoutStore: store) else { return XCTFail("Default layout should create workspace") }
+                XCTAssertEqual(manager.tabs.count, count + 1)
+                XCTAssertEqual(manager.selectedTabId, selected)
+            }
+        }
+    }
+
+    func testExistingLayoutTargetsPreserveConfiguredAndQueuedWork() throws {
+        try withFixture { manager, windowID, store in
+            for kind in ["multiple", "command", "environment", "queued", "previous-layout"] {
+                let workspace = manager.addWorkspace(initialTerminalCommand: kind == "command" ? "echo configured" : nil,
+                    initialTerminalEnvironment: kind == "environment" ? ["KEEP": "yes"] : [:], select: false, autoWelcomeIfNeeded: false)
+                if kind == "multiple" { _ = workspace.newTerminalSurfaceInFocusedPane(focus: false) }
+                if kind == "queued", let id = workspace.focusedPanelId { workspace.terminalPanel(for: id)?.surface.sendText("queued command") }
+                if kind == "previous-layout" { workspace.applyCustomLayout(layout, baseCwd: workspace.currentDirectory) }
+                let ids = Set(workspace.panels.keys)
+                let before = workspace.captureCustomLayout()
+                let selected = manager.selectedTabId
+                let focused = workspace.focusedPanelId
+                expectError(TerminalController.shared.v2LayoutApply(params: ["window_id": windowID.uuidString, "workspace_id": workspace.id.uuidString, "name": "fixture"], layoutStore: store), "invalid_state")
+                XCTAssertEqual(Set(workspace.panels.keys), ids, kind)
+                XCTAssertEqual(workspace.captureCustomLayout(), before, kind)
+                XCTAssertEqual(workspace.focusedPanelId, focused, kind)
+                XCTAssertEqual(manager.selectedTabId, selected, kind)
+            }
+            let pristine = manager.addWorkspace(select: false, autoWelcomeIfNeeded: false)
+            guard case .ok = TerminalController.shared.v2LayoutApply(params: ["window_id": windowID.uuidString, "workspace_id": pristine.id.uuidString, "name": "fixture"], layoutStore: store) else { return XCTFail("Pristine target should accept a layout") }
+        }
+    }
+
+    func testLayoutApplyPreservesCommandsInputAndEnvironmentFromSurfaceTemplates() throws {
+        try withFixture { manager, windowID, store in
+            for field in ["command", "initialInput", "environment"] {
+                var template = ProgramaSurfaceConfigTemplate()
+                if field == "command" { template.command = "echo retain-command" }
+                if field == "initialInput" { template.initialInput = "retain input" }
+                if field == "environment" { template.environmentVariables = ["RETAIN": "value"] }
+                let workspace = Workspace(workingDirectory: "/tmp", configTemplate: template)
+                manager.attachWorkspace(workspace, select: false)
+                let ids = Set(workspace.panels.keys)
+                let selected = manager.selectedTabId
+                expectError(TerminalController.shared.v2LayoutApply(params: [
+                    "window_id": windowID.uuidString, "workspace_id": workspace.id.uuidString, "name": "fixture"
+                ], layoutStore: store), "invalid_state")
+                XCTAssertEqual(Set(workspace.panels.keys), ids, field)
+                XCTAssertEqual(manager.selectedTabId, selected, field)
+            }
+        }
+    }
+
+    func testPristineSurfaceRejectsStartupEnvironmentAndRestoreSeedButAllowsAppearanceAndDirectory() {
+        let configured = TerminalPanel(workspaceId: UUID(), additionalEnvironment: ["STARTUP_MODE": "retain"])
+        XCTAssertFalse(configured.surface.isPristineForCustomLayout,
+                       "Additional startup environment is configured work, not disposable identity metadata")
+        let restored = TerminalPanel(workspaceId: UUID(), pendingScrollbackSeedText: "restore content")
+        XCTAssertFalse(restored.surface.isPristineForCustomLayout)
+        var appearance = ProgramaSurfaceConfigTemplate()
+        appearance.fontSize = 15
+        appearance.workingDirectory = "/tmp"
+        let pristine = TerminalPanel(workspaceId: UUID(), configTemplate: appearance)
+        XCTAssertTrue(pristine.surface.isPristineForCustomLayout,
+                      "Inherited font and directory alone must not prevent use of a fresh placeholder")
+    }
+}
 import AppKit
 import Combine
 import Darwin
@@ -1696,6 +1837,42 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
             afterAcknowledgmentWorkspaceID.uuidString,
             "An event published after acknowledgment must flow on the activated subscription"
         )
+    }
+
+    func testWorkspaceCreationPublishesExactlyOnceThroughBothCreationAPIs() throws {
+        let manager = TabManager()
+        var sockets: [Int32] = [-1, -1]
+        guard socketpair(AF_UNIX, SOCK_STREAM, 0, &sockets) == 0 else { throw posixError("socketpair") }
+        let connection = SocketConnection(socket: sockets[0])
+        defer {
+            connection.teardown()
+            _ = Darwin.shutdown(sockets[0], SHUT_RDWR)
+            _ = Darwin.shutdown(sockets[1], SHUT_RDWR)
+            Darwin.close(sockets[0]); Darwin.close(sockets[1])
+        }
+        guard case .ok(let payload) = TerminalController.shared.v2Subscribe(params: ["classes": ["workspace_lifecycle"]], connection: connection) else {
+            return XCTFail("Expected lifecycle subscription")
+        }
+        let ack = try JSONSerialization.data(withJSONObject: ["id": 1, "ok": true, "result": payload])
+        XCTAssertTrue(connection.writeLine(try XCTUnwrap(String(data: ack, encoding: .utf8))))
+        _ = try readLine(from: sockets[1], timeout: 1)
+        let direct = manager.addWorkspace(select: false, autoWelcomeIfNeeded: false)
+        let alias = manager.addTab(select: false)
+        let marker = UUID()
+        SocketEventBroadcaster.shared.publishWorkspaceLifecycle(kind: "test_boundary", workspaceId: marker, title: nil)
+        var created: [String] = []
+        var reachedBoundary = false
+        for _ in 0..<10 {
+            let line = try readLine(from: sockets[1], timeout: 1)
+            let frame = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+            if frame["workspace_id"] as? String == marker.uuidString { reachedBoundary = true; break }
+            if frame["kind"] as? String == "created", let id = frame["workspace_id"] as? String {
+                XCTAssertTrue(manager.tabs.contains { $0.id.uuidString == id }, "Creation must be committed before publication")
+                created.append(id)
+            }
+        }
+        XCTAssertTrue(reachedBoundary)
+        XCTAssertEqual(created, [direct.id.uuidString, alias.id.uuidString], "Both creation APIs must publish exactly once")
     }
 
     /// Regression for #82: `surface.report_tty`/`surface.ports_kick` used to block the socket

@@ -8,6 +8,54 @@ import Bonsplit
 import UserNotifications
 import Combine
 
+@MainActor
+final class ProgramaLayoutFileIdentityTests: XCTestCase {
+    private let layout = ProgramaLayoutNode.pane(ProgramaPaneDefinition(surfaces: [
+        ProgramaSurfaceDefinition(type: .terminal, name: nil, command: nil, cwd: nil, env: nil, url: nil, focus: nil)
+    ]))
+
+    func testCopiedAndRenamedLayoutsUseDistinctFilenameIdentities() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let writer = ProgramaLayoutStore(directoryURL: directory, startWatching: false)
+        let original = URL(fileURLWithPath: try writer.save(name: "original", layout: layout, force: false))
+        let copied = directory.appendingPathComponent("copied layout.json")
+        try FileManager.default.copyItem(at: original, to: copied)
+        try FileManager.default.moveItem(at: original, to: directory.appendingPathComponent("renamed.json"))
+        let reader = ProgramaLayoutStore(directoryURL: directory, startWatching: false)
+        XCTAssertEqual(Set(reader.list().map(\.name)), ["copied layout", "renamed"])
+        XCTAssertEqual(reader.load(name: "copied layout")?.name, "copied layout")
+        XCTAssertEqual(reader.load(name: "renamed")?.name, "renamed")
+        XCTAssertEqual(reader.load(name: "copied layout")?.layout, layout)
+        try reader.remove(name: "copied layout")
+        XCTAssertNil(reader.load(name: "copied layout"))
+        XCTAssertNotNil(reader.load(name: "renamed"))
+    }
+
+    func testInvalidLayoutNamesCannotReadWriteOrRemoveOtherFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("layouts")
+        let store = ProgramaLayoutStore(directoryURL: directory, startWatching: false)
+        let valid = URL(fileURLWithPath: try store.save(name: "valid layout", layout: layout, force: false))
+        let bytes = try Data(contentsOf: valid)
+        let outside = root.appendingPathComponent("outside.json")
+        try bytes.write(to: outside)
+        for name in ["", ".", "..", "../outside", "nested/name", "valid layout\0suffix"] {
+            XCTAssertThrowsError(try store.save(name: name, layout: layout, force: true), name) {
+                guard case ProgramaLayoutStoreError.invalidName = $0 else { return XCTFail("Expected invalidName for \(name)") }
+            }
+            XCTAssertNil(store.load(name: name), name)
+            XCTAssertThrowsError(try store.remove(name: name), name) {
+                guard case ProgramaLayoutStoreError.invalidName = $0 else { return XCTFail("Expected invalidName for \(name)") }
+            }
+            XCTAssertEqual(try Data(contentsOf: valid), bytes)
+            XCTAssertEqual(try Data(contentsOf: outside), bytes)
+        }
+        XCTAssertEqual(store.load(name: "valid layout")?.layout, layout, "Spaces are valid layout names")
+    }
+}
+
 #if canImport(Programa_DEV)
 @testable import Programa_DEV
 #elseif canImport(Programa)
@@ -383,7 +431,7 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         var inShortcuts = false
         var shortcutsIndent: Int?
         let template = ProgramaSettingsFileStore.defaultTemplate().components(separatedBy: "\n").map { line in
-            if line.contains("\"shortcuts\": {") { inShortcuts = true }
+            if line.contains("\"shortcuts\"") && line.contains("{") { inShortcuts = true }
             guard inShortcuts, let marker = line.range(of: "// ") else { return line }
             let uncommented = String(line[..<marker.lowerBound]) + String(line[marker.upperBound...])
             let indent = uncommented.prefix(while: { $0.isWhitespace }).count
@@ -393,6 +441,7 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
             }
             return uncommented
         }.joined(separator: "\n")
+        XCTAssertNotNil(shortcutsIndent, "The fixture must activate the generated shortcuts section before loading it")
         try writeSettingsFile(template, to: settingsFileURL)
         let store = KeyboardShortcutSettingsFileStore(
             primaryPath: settingsFileURL.path, fallbackPath: nil, startWatching: false
@@ -2552,6 +2601,36 @@ final class WorkspaceAutoReorderSettingsTests: XCTestCase {
 
 
 final class WorkspaceReorderTests: XCTestCase {
+    @MainActor
+    func testRelativeWorkspaceMovesUseIndicesAfterRemovingTheMovingWorkspace() {
+        for (moving, anchor, before, expected) in [
+            (0, 2, true, [1, 0, 2]), (0, 1, false, [1, 0, 2]),
+            (2, 1, true, [0, 2, 1]), (2, 0, false, [0, 2, 1]),
+            (1, 1, true, [0, 1, 2]), (1, 1, false, [0, 1, 2])
+        ] {
+            let manager = TabManager()
+            _ = manager.addWorkspace()
+            _ = manager.addWorkspace()
+            let ids = manager.tabs.map(\.id)
+            let selected = manager.selectedTabId
+            XCTAssertTrue(manager.reorderWorkspace(tabId: ids[moving], before: before ? ids[anchor] : nil, after: before ? nil : ids[anchor]))
+            XCTAssertEqual(manager.tabs.map(\.id), expected.map { ids[$0] })
+            XCTAssertEqual(manager.selectedTabId, selected)
+        }
+    }
+
+    @MainActor
+    func testRelativeWorkspaceMovesRespectPinnedBoundary() {
+        let manager = TabManager()
+        let pinned = manager.tabs[0]
+        manager.setPinned(pinned, pinned: true)
+        let first = manager.addWorkspace()
+        let second = manager.addWorkspace()
+        XCTAssertTrue(manager.reorderWorkspace(tabId: second.id, before: pinned.id))
+        XCTAssertEqual(manager.tabs.map(\.id), [pinned.id, second.id, first.id])
+        XCTAssertTrue(manager.reorderWorkspace(tabId: pinned.id, after: first.id))
+        XCTAssertEqual(manager.tabs.map(\.id), [pinned.id, second.id, first.id])
+    }
     @MainActor
     func testReorderWorkspaceMovesWorkspaceToRequestedIndex() {
         let manager = TabManager()

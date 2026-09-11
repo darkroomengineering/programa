@@ -62,6 +62,7 @@ final class Workspace: Identifiable, ObservableObject {
     /// When true, the split-cap delegate veto is bypassed: session restore must
     /// rebuild pre-cap layouts (5+ panes) without losing panes.
     var isRestoringSessionLayout = false
+    var hasAppliedCustomLayout = false
     var debugStressPreloadSelectionDepth = 0
 
     /// Last terminal panel used as an inheritance source (typically last focused terminal).

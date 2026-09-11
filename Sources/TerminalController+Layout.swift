@@ -43,23 +43,33 @@ extension TerminalController {
         }
     }
 
-    nonisolated func v2LayoutApply(params: [String: Any]) -> V2CallResult {
+    nonisolated func v2LayoutApply(params: [String: Any], layoutStore: ProgramaLayoutStore? = nil) -> V2CallResult {
         let name = v2String(params, "name")
         let cwdParam = v2String(params, "cwd")
         let workspaceId = v2UUID(params, "workspace_id")
+        if v2HasNonNullParam(params, "workspace_id"), workspaceId == nil {
+            return v2InvalidParam("workspace_id")
+        }
 
         return v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {
                 return .err(code: "unavailable", message: "TabManager not available", data: nil)
             }
             guard let name else { return v2InvalidParam("name") }
-            guard let saved = ProgramaLayoutStore.shared.load(name: name) else {
+            guard let saved = (layoutStore ?? .shared).load(name: name) else {
                 return .err(code: "not_found", message: "No saved layout named '\(name)'", data: nil)
             }
 
             if let workspaceId {
                 guard let workspace = tabManager.tabs.first(where: { $0.id == workspaceId }) else {
                     return .err(code: "not_found", message: "Workspace not found", data: nil)
+                }
+                guard workspace.isPristineForCustomLayout else {
+                    return .err(
+                        code: "invalid_state",
+                        message: "An existing layout target must contain one unused terminal. Omit workspace_id to create a new workspace.",
+                        data: nil
+                    )
                 }
                 workspace.applyCustomLayout(saved.layout, baseCwd: cwdParam ?? workspace.currentDirectory)
                 let windowId = v2ResolveWindowId(tabManager: tabManager)
