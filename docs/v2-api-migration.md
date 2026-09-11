@@ -591,5 +591,7 @@ Services call. Both are omitted if resolution fails.
 
 ## Tests
 
-`tests_v2/` (driven by `tests_v2/programa.py`) is the only test suite and the CI gate. The
-v1 python suite (`tests/`) was deleted before the protocol itself was removed.
+`tests_v2/` contains socket integration tests, using `tests_v2/cmux.py` where a client
+helper is needed. `tests/` contains script and CLI tests; `programaTests/` contains
+unit tests; `programaUITests/` contains UI tests. See [the testing layout](testing-layout.md)
+for the harnesses and CI jobs that run them.
