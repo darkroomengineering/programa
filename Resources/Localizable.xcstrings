@@ -7036,6 +7036,108 @@
         }
       }
     },
+    "dialog.clipboardConfirmation.allow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "許可"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.paste.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This clipboard text may execute commands when pasted into the terminal. Allow this paste?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このクリップボードのテキストをターミナルに貼り付けると、コマンドが実行される可能性があります。貼り付けを許可しますか？"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.paste.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Unsafe Paste?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安全でない貼り付けを許可しますか？"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.read.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A program running in this terminal requested your clipboard contents. Allow it to read the clipboard?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このターミナルで実行中のプログラムがクリップボードの内容を要求しています。読み取りを許可しますか？"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.read.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Clipboard Access?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリップボードへのアクセスを許可しますか？"
+          }
+        }
+      }
+    },
     "error.clipboardFolderPath": {
       "extractionState": "manual",
       "localizations": {

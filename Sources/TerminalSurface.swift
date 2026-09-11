@@ -1070,6 +1070,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 // genuine normal-close path, so delete its WAL directory now that
                 // it's torn down.
                 SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: surfaceIdForTap, deleteDirectory: true)
+                GhosttyApp.cancelConfirmationsBeforeFree(surfaceToFree)
                 ghostty_surface_free(surfaceToFree)
                 GhosttySurfaceUserdataRegistry.release(callbackContext)
                 tapContext?.release()
@@ -2808,6 +2809,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         surface = nil
         // Test-only teardown, not a real close: keep the WAL directory.
         SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString)
+        GhosttyApp.cancelConfirmationsBeforeFree(surfaceToFree)
         ghostty_surface_free(surfaceToFree)
         GhosttySurfaceUserdataRegistry.release(callbackContext)
         tapContext?.release()
@@ -2833,6 +2835,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         TerminalSurfaceRegistry.shared.unregisterRuntimeSurface(surfaceToFree, ownerId: id)
         // Test-only teardown, not a real close: keep the WAL directory.
         SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString)
+        GhosttyApp.cancelConfirmationsBeforeFree(surfaceToFree)
         ghostty_surface_free(surfaceToFree)
         runtimeSurfaceFreedOutOfBandForTesting = true
         GhosttySurfaceUserdataRegistry.release(callbackContext)

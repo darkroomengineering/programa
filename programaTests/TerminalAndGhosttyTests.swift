@@ -15,6 +15,82 @@ import UserNotifications
 
 @MainActor
 final class GhosttyPasteboardHelperTests: XCTestCase {
+    func testClipboardSurfaceTeardownCancelsPendingPresentationExactlyOnce() async {
+        let window = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+        // This identity is only a dictionary key. The completion never enters Ghostty.
+        let surface = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
+        defer { surface.deallocate() }
+        var completedContents: [String] = []
+        GhosttyApp.handleClipboardConfirmation(
+            contents: "private paste", kind: GHOSTTY_CLIPBOARD_REQUEST_PASTE,
+            window: window, surface: surface
+        ) { completedContents.append($0) }
+
+        XCTAssertTrue(completedContents.isEmpty, "Consent must remain pending until presentation or cancellation")
+        GhosttyApp.cancelConfirmationsBeforeFree(surface)
+        GhosttyApp.cancelConfirmationsBeforeFree(surface)
+        XCTAssertEqual(completedContents, [""], "Teardown must deny access before native request storage is freed")
+
+        await drainClipboardPresentationQueue()
+        XCTAssertEqual(completedContents, [""], "Queued presentation must not complete an already cancelled request again")
+        XCTAssertNil(window.attachedSheet)
+    }
+
+    func testClipboardReplacementAtSameSurfaceIdentityDoesNotLeaveOldWindowObserverActive() async {
+        let oldWindow = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+        let newWindow = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+        let surface = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
+        defer { surface.deallocate() }
+        var oldContents: [String] = []
+        var newContents: [String] = []
+        GhosttyApp.handleClipboardConfirmation(
+            contents: "old private clipboard", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ,
+            window: oldWindow, surface: surface
+        ) { oldContents.append($0) }
+        GhosttyApp.handleClipboardConfirmation(
+            contents: "new private clipboard", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ,
+            window: newWindow, surface: surface
+        ) { newContents.append($0) }
+
+        XCTAssertEqual(oldContents, [""], "Replacing a request must release its pending completion without disclosure")
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: oldWindow)
+        XCTAssertTrue(newContents.isEmpty, "The previous window must not own the replacement request")
+        GhosttyApp.cancelConfirmationsBeforeFree(surface)
+        XCTAssertEqual(newContents, [""], "The replacement must remain registered for native teardown")
+
+        await drainClipboardPresentationQueue()
+        XCTAssertEqual(oldContents, [""])
+        XCTAssertEqual(newContents, [""], "Stale presentation callbacks must not disclose or complete either request twice")
+        XCTAssertNil(oldWindow.attachedSheet)
+        XCTAssertNil(newWindow.attachedSheet)
+    }
+
+    func testClipboardWindowCloseDeniesPendingReadAndRemovesTeardownCompletion() async {
+        let window = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+        let surface = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
+        defer { surface.deallocate() }
+        var completedContents: [String] = []
+        GhosttyApp.handleClipboardConfirmation(
+            contents: "private clipboard read", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ,
+            window: window, surface: surface
+        ) { completedContents.append($0) }
+
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
+        XCTAssertEqual(completedContents, [""], "Closing the owning window must deny a read that cannot obtain consent")
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
+        GhosttyApp.cancelConfirmationsBeforeFree(surface)
+
+        await drainClipboardPresentationQueue()
+        XCTAssertEqual(completedContents, [""], "Window close and subsequent surface teardown share one completion")
+        XCTAssertNil(window.attachedSheet)
+    }
+
+    private func drainClipboardPresentationQueue() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
     func testClipboardConfirmationWithoutPresentationContextDeniesContentsExactlyOnce() {
         var completedContents: [String] = []
         GhosttyApp.handleClipboardConfirmation(contents: "synthetic private clipboard text") {
