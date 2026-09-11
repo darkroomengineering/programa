@@ -316,6 +316,9 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Install Fish for shell integration regressions
+        run: brew install fish
+
       - name: Run typed CLI registry behavior regression
         if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         run: |
@@ -564,6 +567,12 @@ jobs:
 
       - name: Run tests_v2 curated CI subset
         run: ./scripts/run-tests-v2-ci.sh
+
+      - name: Verify ordinary-app scrollback privacy and recovery
+        run: |
+          set -euo pipefail
+          APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
+          python3 tests_v2/test_scrollback_privacy_recovery.py --app "$APP"
 
       - name: Cleanup virtual display
         if: always()

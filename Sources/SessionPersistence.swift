@@ -484,7 +484,7 @@ enum SessionPersistenceStore {
         return fallback.snapshot
     }
 
-    /// Scans the newest `limit` archives (newest-first, per `historyFileURLs`) for the first one
+    /// Scans the newest `limit` archives belonging to this bundle (newest-first, per `historyFileURLs`) for the first one
     /// that decodes at the current schema version with at least one window. Capped rather than
     /// unbounded: a long-neglected `session-history/` directory should not turn a startup restore
     /// into an unbounded disk scan.
@@ -492,7 +492,10 @@ enum SessionPersistenceStore {
         fileURL: URL,
         limit: Int
     ) -> (snapshot: AppSessionSnapshot, filename: String)? {
-        let candidates = historyFileURLs(fileURL: fileURL).prefix(max(0, limit))
+        let archiveSuffix = "\(sanitizedBundleIdentifier(Bundle.main.bundleIdentifier)).json"
+        let candidates = historyFileURLs(fileURL: fileURL)
+            .filter { $0.lastPathComponent.split(separator: "-", maxSplits: 2).last == Substring(archiveSuffix) }
+            .prefix(max(0, limit))
         for entry in candidates {
             guard let data = boundedSnapshotData(at: entry),
                   let snapshot = decodeSnapshot(from: data),

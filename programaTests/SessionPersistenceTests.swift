@@ -721,6 +721,42 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(restored?.windows.count, 1)
     }
 
+    func testAutomaticHistoryFallbackFiltersBundleBeforeApplyingLookupLimit() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let primary = try XCTUnwrap(SessionPersistenceStore.defaultSnapshotFileURL(
+            bundleIdentifier: Bundle.main.bundleIdentifier, appSupportDirectory: directory
+        ))
+        var snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
+        snapshot.windows[0].tabManager.workspaces[0].customTitle = "Owned archive"
+        XCTAssertTrue(SessionPersistenceStore.save(snapshot, fileURL: primary))
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_700_000_000)], ofItemAtPath: primary.path)
+        XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: primary))
+        let owned = try XCTUnwrap(SessionPersistenceStore.historyFileURLs(fileURL: primary).first)
+        snapshot.windows[0].tabManager.workspaces[0].customTitle = "Foreign archive"
+        XCTAssertTrue(SessionPersistenceStore.save(snapshot, fileURL: primary))
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_700_000_060)], ofItemAtPath: primary.path)
+        XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: primary))
+        let newer = try XCTUnwrap(SessionPersistenceStore.historyFileURLs(fileURL: primary).first { $0 != owned })
+        let ownerSuffix = String(primary.lastPathComponent.dropFirst("session-".count))
+        let foreign = newer.deletingLastPathComponent().appendingPathComponent(
+            String(newer.lastPathComponent.dropLast(ownerSuffix.count)) + "com.example.foreign.json"
+        )
+        try FileManager.default.moveItem(at: newer, to: foreign)
+        try Data("corrupt".utf8).write(to: primary)
+        XCTAssertEqual(SessionPersistenceStore.loadWithHistoryFallback(fileURL: primary, historyLookupLimit: 1)?
+            .windows.first?.tabManager.workspaces.first?.customTitle, "Owned archive")
+        XCTAssertTrue(SessionPersistenceStore.historyFileURLs(fileURL: primary).contains(foreign),
+                      "Manual history browsing must retain other bundle archives")
+        XCTAssertEqual(SessionPersistenceStore.load(fileURL: foreign)?.windows.first?.tabManager.workspaces.first?.customTitle,
+                       "Foreign archive", "Explicit recovery must still allow a user-selected foreign archive")
+
+        try FileManager.default.removeItem(at: owned)
+        try Data("corrupt again".utf8).write(to: primary)
+        XCTAssertNil(SessionPersistenceStore.loadWithHistoryFallback(fileURL: primary),
+                     "Automatic recovery must not restore another bundle when no owned archive remains")
+    }
+
     func testLoadWithHistoryFallbackReturnsNilWhenHistoryIsAlsoUnusable() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
