@@ -675,6 +675,40 @@ def main() -> int:
                               for frame in recorder.frames), f"{invocation}: changed focus: {recorder.frames!r}")
                 check(not recorder.errors, f"origin fixture: {recorder.errors}")
 
+    # A globally unique origin needs no selected-workspace membership lookup
+    # when the shell supplied no workspace scope.
+    with tempfile.TemporaryDirectory(prefix="pcli-global-origin-", dir="/tmp") as directory:
+        with SocketRecorder(directory, surface_items=[origin_surfaces[1]]) as recorder:
+            process = run_cli(recorder.path, ["close-surface"], env_overrides={
+                "PROGRAMA_SURFACE_ID": SURFACE_ID,
+            })
+        closes = [frame for frame in recorder.frames if frame.get("method") == "surface.close"]
+        check(process.returncode == 0, f"global origin close failed: {merged_output(process)}")
+        check(len(closes) == 1 and closes[0].get("params", {}).get("surface_id") == SURFACE_ID,
+              f"global origin was redirected through selected workspace: {recorder.frames!r}")
+        check(not any(frame.get("method") in ("surface.focus", "pane.focus", "workspace.select", "window.focus")
+                      for frame in recorder.frames), f"global origin changed focus: {recorder.frames!r}")
+        check(not recorder.errors, f"global origin fixture: {recorder.errors}")
+
+    # Malformed membership data cannot establish that a short-ref origin is
+    # absent: falling back here could close a different, focused terminal.
+    for reference in (None, 7):
+        malformed_surface = {"id": SURFACE_ID, "workspace_id": WORKSPACE_ID}
+        if reference is not None:
+            malformed_surface["ref"] = reference
+        with tempfile.TemporaryDirectory(prefix="pcli-malformed-origin-", dir="/tmp") as directory:
+            with SocketRecorder(directory, surface_items=[malformed_surface]) as recorder:
+                process = run_cli(recorder.path, ["close-surface"], env_overrides={
+                    "PROGRAMA_WORKSPACE_ID": WORKSPACE_ID,
+                    "PROGRAMA_SURFACE_ID": "surface:1",
+                })
+            methods = [frame.get("method") for frame in recorder.frames]
+            check(process.returncode != 0, f"malformed membership was accepted: {recorder.frames!r}")
+            check("surface.list" in methods, f"short origin membership was not checked: {recorder.frames!r}")
+            check(not any(method in ("surface.close", "surface.focus", "pane.focus", "workspace.select", "window.focus")
+                          for method in methods), f"malformed membership caused a destructive/focus operation: {recorder.frames!r}")
+            check(not recorder.errors, f"malformed membership fixture: {recorder.errors}")
+
     for password in ("accepted-secret", "wrong-secret"):
         with tempfile.TemporaryDirectory(prefix="pcli-open-auth-", dir="/tmp") as directory:
             document = Path(directory) / "document.txt"
