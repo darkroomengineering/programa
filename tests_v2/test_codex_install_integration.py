@@ -330,17 +330,25 @@ def test_eof_does_not_authorize_changes(cli: str) -> None:
             )
 
         def artifacts() -> dict:
+            # The coordinator creates this lock before asking for consent; it is
+            # not an installed hook or configuration artifact.
+            coordination_lock = config_dir / ".programa-hooks.lock"
             return {str(path.relative_to(home)): path.read_bytes()
-                    for path in Path(home).rglob("*") if path.is_file()}
+                    for path in Path(home).rglob("*")
+                    if path.is_file() and path != coordination_lock}
 
         before = artifacts()
         declined = invoke("install-integration")
+        _must(declined.returncode == 0, f"Declining installation must exit cleanly: {_merged(declined)}")
+        _must("Aborted." in _merged(declined), f"EOF must decline installation: {_merged(declined)}")
         _must(artifacts() == before, f"EOF must not authorize installation: {_merged(declined)}")
         installed = invoke("install-integration", consent=True)
         _must(installed.returncode == 0, f"explicit installation failed: {_merged(installed)}")
         before = artifacts()
         _must(bool(before), "explicit installation must produce managed artifacts")
         declined = invoke("uninstall-integration")
+        _must(declined.returncode == 0, f"Declining uninstall must exit cleanly: {_merged(declined)}")
+        _must("Aborted." in _merged(declined), f"EOF must decline uninstall: {_merged(declined)}")
         _must(artifacts() == before, f"EOF must not authorize uninstall: {_merged(declined)}")
         print("  PASS: EOF preserves installation and uninstallation artifacts")
 
