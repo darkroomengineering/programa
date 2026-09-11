@@ -285,6 +285,26 @@ def main():
         finally:
             original_error = sys.exc_info()[0] is not None
             cleanup_errors = []
+            if original_error:
+                # Diagnostics for CI: the app log and the terminal's current text are the only
+                # evidence of why a step timed out, and neither survives the temp directory.
+                for app_log in sorted(root.glob("app-*.log")):
+                    try:
+                        tail = app_log.read_bytes()[-12000:].decode("utf-8", "replace")
+                    except OSError as error:
+                        tail = f"<unreadable: {error}>"
+                    print(f"--- {app_log.name} (tail) ---\n{tail}", file=sys.stderr)
+                try:
+                    listing = rpc(control, "surface.list", {})
+                    print(f"--- surface.list ---\n{json.dumps(listing)[:4000]}", file=sys.stderr)
+                    for entry in listing.get("surfaces", []) if isinstance(listing, dict) else []:
+                        sid = entry.get("surface_id") or entry.get("id")
+                        if not sid:
+                            continue
+                        text = rpc(control, "surface.read_text", {"surface_id": sid, "scrollback": True})
+                        print(f"--- surface {sid} text ---\n{str(text.get('text', ''))[-3000:]}", file=sys.stderr)
+                except Exception as error:  # noqa: BLE001 - diagnostics must never mask the real failure
+                    print(f"--- diagnostics unavailable: {type(error).__name__}: {error}", file=sys.stderr)
 
             def cleanup(label, operation):
                 try:
