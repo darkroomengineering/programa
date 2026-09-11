@@ -6863,6 +6863,40 @@
         }
       }
     },
+    "dialog.cmuxConfig.invalidRecipe.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recipe prompts and parameter values must be a single line without control characters. Remove any line breaks, tabs, or control characters and try again. Nothing was inserted into the terminal."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レシピのプロンプトとパラメータの値は、制御文字を含まない1行のテキストにしてください。改行、タブ、制御文字を削除してから、もう一度お試しください。ターミナルには何も挿入されていません。"
+          }
+        }
+      }
+    },
+    "dialog.cmuxConfig.invalidRecipe.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt Needs Correction"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロンプトを修正してください"
+          }
+        }
+      }
+    },
     "dialog.cmuxConfig.parameter.continue": {
       "extractionState": "manual",
       "localizations": {
