@@ -86,7 +86,7 @@ struct ProgramaConfigExecutor {
             $0.value < 0x20 || (0x7F...0x9F).contains($0.value)
                 || $0.value == 0x2028 || $0.value == 0x2029
         }) else { return false }
-        sendInput(resolvedPrompt)
+        sendInput(String(resolvedPrompt.unicodeScalars.filter { !dangerousScalars.contains($0) }))
         return true
     }
 
