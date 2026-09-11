@@ -139,11 +139,16 @@ final class NotificationDockBadgeTests: XCTestCase {
     }
 
     func testFocusedTerminalNotificationStillRunsLocalSoundFeedbackWhenExternalDeliveryIsSuppressed() throws {
-        guard let appDelegate = AppDelegate.shared else {
+        guard let originalShared = AppDelegate.shared else {
             XCTFail("AppDelegate.shared must be set for this test")
             return
         }
+        let appDelegate = AppDelegate()
+        AppDelegate.shared = appDelegate
+        defer { AppDelegate.shared = originalShared }
         let manager = TabManager()
+        let owningWindow = registerFocusedNotificationWindow(appDelegate: appDelegate, manager: manager)
+        defer { withExtendedLifetime(owningWindow) {} }
         let store = TerminalNotificationStore.shared
 
         let originalTabManager = appDelegate.tabManager
@@ -193,11 +198,16 @@ final class NotificationDockBadgeTests: XCTestCase {
     }
 
     func testFocusedTerminalSuppressedNotificationRunsCustomCommand() throws {
-        guard let appDelegate = AppDelegate.shared else {
+        guard let originalShared = AppDelegate.shared else {
             XCTFail("AppDelegate.shared must be set for this test")
             return
         }
+        let appDelegate = AppDelegate()
+        AppDelegate.shared = appDelegate
+        defer { AppDelegate.shared = originalShared }
         let manager = TabManager()
+        let owningWindow = registerFocusedNotificationWindow(appDelegate: appDelegate, manager: manager)
+        defer { withExtendedLifetime(owningWindow) {} }
         let store = TerminalNotificationStore.shared
         let defaults = UserDefaults.standard
         let commandOutputURL = FileManager.default.temporaryDirectory
@@ -608,8 +618,13 @@ final class MenuBarBadgeLabelFormatterTests: XCTestCase {
 @MainActor
 final class FocusedNotificationIndicatorTests: XCTestCase {
     func testFocusedNotificationIndicatorRemainsVisibleAfterFocusedNotificationIsRead() {
-        let appDelegate = AppDelegate.shared ?? AppDelegate()
+        let originalShared = AppDelegate.shared
+        let appDelegate = AppDelegate()
+        AppDelegate.shared = appDelegate
+        defer { AppDelegate.shared = originalShared }
         let manager = TabManager()
+        let owningWindow = registerFocusedNotificationWindow(appDelegate: appDelegate, manager: manager)
+        defer { withExtendedLifetime(owningWindow) {} }
         let store = TerminalNotificationStore.shared
 
         let originalTabManager = appDelegate.tabManager
@@ -908,9 +923,25 @@ final class MenuBarIconRendererTests: XCTestCase {
 }
 
 @MainActor
+private final class NotificationFocusTestWindow: NSWindow {
+    var keyForTest = false
+    override var isKeyWindow: Bool { keyForTest }
+}
+
+@MainActor
+private func registerFocusedNotificationWindow(appDelegate: AppDelegate, manager: TabManager) -> NSWindow {
+    let window = NotificationFocusTestWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 320),
+        styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    window.keyForTest = true
+    appDelegate.registerMainWindow(window, windowId: UUID(), tabManager: manager,
+        sidebarState: SidebarState(), sidebarSelectionState: SidebarSelectionState())
+    return window
+}
+
+@MainActor
 final class MultiWindowNotificationFocusTests: XCTestCase {
-    private func makeMainWindow() -> NSWindow {
-        NSWindow(
+    private func makeMainWindow() -> NotificationFocusTestWindow {
+        NotificationFocusTestWindow(
             contentRect: NSRect(x: 0, y: 0, width: 500, height: 320),
             styleMask: [.titled, .closable],
             backing: .buffered,
@@ -972,6 +1003,18 @@ final class MultiWindowNotificationFocusTests: XCTestCase {
         }
 
         AppFocusState.overrideIsFocused = true
+
+        windowA.keyForTest = true
+        windowB.keyForTest = false
+        store.addNotification(tabId: workspaceB.id, surfaceId: focusedPanelId,
+                              title: "Background done", subtitle: "", body: "")
+        XCTAssertEqual(deliveredCount, 1, "A selected terminal in a background window must still deliver its notification")
+        XCTAssertEqual(suppressedCount, 0, "Another window being key must not suppress this terminal")
+        store.replaceNotificationsForTesting([])
+        deliveredCount = 0
+        suppressedCount = 0
+        windowA.keyForTest = false
+        windowB.keyForTest = true
 
         store.addNotification(
             tabId: workspaceB.id,

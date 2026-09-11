@@ -84,15 +84,15 @@ enum NotificationAuthorizationState: Equatable {
     var statusLabel: String {
         switch self {
         case .unknown, .notDetermined:
-            return "Not Requested"
+            return String(localized: "settings.notifications.permission.status.notDetermined", defaultValue: "Not Requested")
         case .authorized:
-            return "Allowed"
+            return String(localized: "settings.notifications.permission.status.authorized", defaultValue: "Allowed")
         case .denied:
-            return "Denied"
+            return String(localized: "settings.notifications.permission.status.denied", defaultValue: "Denied")
         case .provisional:
-            return "Deliver Quietly"
+            return String(localized: "settings.notifications.permission.status.provisional", defaultValue: "Deliver Quietly")
         case .ephemeral:
-            return "Temporary"
+            return String(localized: "settings.notifications.permission.status.ephemeral", defaultValue: "Temporary")
         }
     }
 
@@ -365,7 +365,8 @@ final class TerminalNotificationStore: ObservableObject {
         let isFocusedSurface = surfaceId == nil || focusedSurfaceId == surfaceId
         let isFocusedPanel = isActiveTab && isFocusedSurface
         let isAppFocused = AppFocusState.isAppFocused()
-        let shouldSuppressExternalDelivery = isAppFocused && isFocusedPanel
+        let isOwningWindowKey = AppDelegate.shared?.mainWindowContainingWorkspace(tabId)?.isKeyWindow == true
+        let shouldSuppressExternalDelivery = isAppFocused && isOwningWindowKey && isFocusedPanel
         if shouldSuppressExternalDelivery {
             setFocusedReadIndicator(forTabId: tabId, surfaceId: surfaceId)
         }

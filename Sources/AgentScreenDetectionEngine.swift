@@ -50,7 +50,8 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
     private static let demotionGracePeriod: TimeInterval = 30.0
 
     private struct CandidateState {
-        let workspaceId: UUID
+        let generation: UUID
+        var workspaceId: UUID
         let manifest: AgentManifest
         var lastSampledText: String?
         /// Cached result of classifying `lastSampledText`, reused (instead of re-running regex)
@@ -68,11 +69,21 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
 
     private let lock = NSLock()
     private var candidates: [UUID: CandidateState] = [:]
+    private let now: @Sendable () -> Date
+    private let resolveWorkspace: @MainActor @Sendable (UUID, UUID?) -> Workspace?
 
     private static let startLock = NSLock()
     private nonisolated(unsafe) static var started = false
 
-    private init() {}
+    init(
+        now: @escaping @Sendable () -> Date = { Date() },
+        resolveWorkspace: @escaping @MainActor @Sendable (UUID, UUID?) -> Workspace? = { surfaceId, workspaceId in
+            AppDelegate.shared?.workspaceContainingPanel(panelId: surfaceId, preferredWorkspaceId: workspaceId)?.workspace
+        }
+    ) {
+        self.now = now
+        self.resolveWorkspace = resolveWorkspace
+    }
 
     /// Lazily starts (once, process-lifetime) the shared background thread driving both phases.
     /// Safe to call multiple times/from multiple places -- only the first call actually starts
@@ -102,33 +113,56 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
         }
     }
 
-    private func clearAllCandidates() {
+    func clearAllCandidates() {
         lock.lock()
+        let removed = candidates
         candidates.removeAll()
         lock.unlock()
+        for (surfaceId, candidate) in removed {
+            clearInferredState(surfaceId: surfaceId, workspaceId: candidate.workspaceId)
+        }
     }
 
-    private func promoteCandidate(surfaceId: UUID, workspaceId: UUID, manifest: AgentManifest) {
+    func promoteCandidate(surfaceId: UUID, workspaceId: UUID, manifest: AgentManifest) {
         lock.lock()
         if candidates[surfaceId] == nil {
             candidates[surfaceId] = CandidateState(
+                generation: UUID(),
                 workspaceId: workspaceId,
                 manifest: manifest,
                 lastSampledText: nil,
                 lastClassification: nil,
                 pendingBucket: nil,
                 pendingCount: 0,
-                lastAnyMatchAt: Date(),
+                lastAnyMatchAt: now(),
                 lastReportedState: nil
             )
         }
         lock.unlock()
     }
 
-    private func removeCandidate(surfaceId: UUID) {
+    private func removeCandidate(surfaceId: UUID, generation: UUID) {
         lock.lock()
+        guard let candidate = candidates[surfaceId], candidate.generation == generation else {
+            lock.unlock()
+            return
+        }
         candidates.removeValue(forKey: surfaceId)
         lock.unlock()
+        clearInferredState(surfaceId: surfaceId, workspaceId: candidate.workspaceId)
+    }
+
+    private func clearInferredState(surfaceId: UUID, workspaceId: UUID) {
+        DispatchQueue.main.async {
+            self.lock.lock()
+            let remainsRemoved = self.candidates[surfaceId] == nil
+            self.lock.unlock()
+            guard remainsRemoved,
+                  let workspace = self.resolveWorkspace(surfaceId, workspaceId),
+                  workspace.panels[surfaceId] != nil,
+                  workspace.panelAgentStateSources[surfaceId] == .inferred else { return }
+            workspace.clearPanelAgentState(panelId: surfaceId)
+        }
     }
 
     // MARK: - Phase A: recognition (fallback: slow-cadence screen-pattern scan)
@@ -202,13 +236,13 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
     /// the identical-text skip, regex classification, hysteresis, and demotion bookkeeping --
     /// happens back on this background thread.
     private func sampleCandidatesOnce() {
-        let snapshot: [UUID: AgentManifest]
+        let snapshot: [UUID: CandidateState]
         lock.lock()
-        snapshot = candidates.mapValues { $0.manifest }
+        snapshot = candidates
         lock.unlock()
         guard !snapshot.isEmpty else { return }
 
-        for (surfaceId, manifest) in snapshot {
+        for (surfaceId, candidate) in snapshot {
             var workspaceId: UUID?
             var sampledText: String?
             var hooksOwned = false
@@ -235,12 +269,12 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
             }
 
             if surfaceGone || hooksOwned {
-                removeCandidate(surfaceId: surfaceId)
+                removeCandidate(surfaceId: surfaceId, generation: candidate.generation)
                 continue
             }
             guard let workspaceId, let sampledText else { continue }
 
-            processSample(surfaceId: surfaceId, workspaceId: workspaceId, manifest: manifest, text: sampledText)
+            processSample(surfaceId: surfaceId, workspaceId: workspaceId, manifest: candidate.manifest, text: sampledText, expectedGeneration: candidate.generation)
         }
     }
 
@@ -254,9 +288,13 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
     /// surface sitting at a static idle prompt or approval box (nothing redraws between ticks)
     /// would classify once, then stall at `pendingCount == 1` forever, since every subsequent
     /// tick would bail out on the identical-text check before ever incrementing it.
-    private func processSample(surfaceId: UUID, workspaceId: UUID, manifest: AgentManifest, text: String) {
+    func processSample(surfaceId: UUID, workspaceId: UUID, manifest: AgentManifest, text: String, expectedGeneration: UUID? = nil) {
         lock.lock()
         guard let candidateForClassification = candidates[surfaceId] else { lock.unlock(); return }
+        if let expectedGeneration, candidateForClassification.generation != expectedGeneration {
+            lock.unlock()
+            return
+        }
         let textUnchanged = candidateForClassification.lastSampledText == text
         let cachedClassification = candidateForClassification.lastClassification
         lock.unlock()
@@ -264,13 +302,15 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
         let classification = textUnchanged ? cachedClassification : manifest.classify(text: text)
 
         lock.lock()
-        guard var current = candidates[surfaceId] else { lock.unlock(); return }
+        guard var current = candidates[surfaceId],
+              current.generation == candidateForClassification.generation else { lock.unlock(); return }
+        current.workspaceId = workspaceId
         current.lastSampledText = text
         current.lastClassification = classification
 
         var resolvedState: AgentActivityState?
         if let classification {
-            current.lastAnyMatchAt = Date()
+            current.lastAnyMatchAt = now()
             if classification.bucket == "blocked" {
                 // Hysteresis §1.6: blocked applies immediately, no dwell.
                 current.pendingBucket = nil
@@ -289,7 +329,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
             }
         }
         let shouldDemote = classification == nil
-            && Date().timeIntervalSince(current.lastAnyMatchAt) > Self.demotionGracePeriod
+            && now().timeIntervalSince(current.lastAnyMatchAt) > Self.demotionGracePeriod
         let previousReportedState = current.lastReportedState
         if let resolvedState {
             current.lastReportedState = resolvedState
@@ -298,17 +338,22 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
         lock.unlock()
 
         if shouldDemote {
-            removeCandidate(surfaceId: surfaceId)
+            removeCandidate(surfaceId: surfaceId, generation: current.generation)
             return
         }
 
         guard let resolvedState, resolvedState != previousReportedState else { return }
 
+        let generation = current.generation
         DispatchQueue.main.async {
-            guard let tabManager = AppDelegate.shared?.tabManagerFor(tabId: workspaceId) else { return }
-            _ = tabManager.updateSurfaceAgentState(
-                tabId: workspaceId,
-                surfaceId: surfaceId,
+            self.lock.lock()
+            let stillCurrent = self.candidates[surfaceId]?.generation == generation
+            self.lock.unlock()
+            guard stillCurrent,
+                  let workspace = self.resolveWorkspace(surfaceId, workspaceId),
+                  workspace.panels[surfaceId] != nil else { return }
+            workspace.updatePanelAgentState(
+                panelId: surfaceId,
                 state: resolvedState,
                 source: .inferred
             )
