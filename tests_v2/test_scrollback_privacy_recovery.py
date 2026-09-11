@@ -47,7 +47,8 @@ def rpc(path, method, params=None):
             data += chunk
             require(len(data) < 4 * 1024 * 1024, "Unexpectedly large socket response")
         response = json.loads(data.split(b"\n", 1)[0])
-        require(response.get("id") == request_id and response.get("ok"), f"RPC failed: {method}")
+        require(response.get("id") == request_id and response.get("ok"),
+                f"RPC failed: {method}: {json.dumps(response.get('error'))[:500]}")
         return response.get("result", {})
 
 
