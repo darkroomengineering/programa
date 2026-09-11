@@ -101,7 +101,7 @@ struct CLICommandDispatcher {
                 source: socketPathSource,
                 environment: processEnv
             )
-            try cli.openPath(command, socketPath: resolvedSocketPath)
+            try cli.openPath(command, socketPath: resolvedSocketPath, explicitPassword: socketPasswordArg)
             return
         }
         throw CLIError(message: "Unknown command: \(command). Run 'programa help' to see available commands.")

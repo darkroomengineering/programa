@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 import Darwin
 
 /// Failure modes talking to Programa's v2 control socket.
@@ -127,7 +128,10 @@ struct MCPSocketBridge {
     ) throws -> [String: Any] {
         let requestLine = try encodeRequest(method: method, params: params)
         try Self.writeAll(Data((requestLine + "\n").utf8), socketFD: socketFD)
-        let raw = try Self.readResponse(socketFD: socketFD)
+        let raw = try Self.readResponse(
+            socketFD: socketFD,
+            timeout: responseTimeout(method: method, params: params)
+        )
 
         // The server may return a plain-text error (e.g. "ERROR: Access denied
         // ...") before the JSON protocol starts -- surface it distinctly
@@ -160,6 +164,37 @@ struct MCPSocketBridge {
         }
 
         throw MCPSocketBridgeError.invalidResponse("v2 request failed: \(raw)")
+    }
+
+    static func responseTimeout(method: String, params: [String: Any]) -> TimeInterval {
+        let timeoutMs: Int
+        switch method {
+        case "surface.wait":
+            timeoutMs = timeoutInteger(params["timeout_ms"]) ?? timeoutInteger(params["timeout"]) ?? 30_000
+        case "browser.wait":
+            timeoutMs = timeoutInteger(params["timeout_ms"]) ?? 5_000
+        case "browser.download.wait":
+            timeoutMs = timeoutInteger(params["timeout_ms"]) ?? timeoutInteger(params["timeout"]) ?? 10_000
+        default:
+            return defaultResponseTimeoutSeconds
+        }
+        return max(defaultResponseTimeoutSeconds, Double(max(1, timeoutMs)) / 1000.0 + 2)
+    }
+
+    /// Match the server's v2Int parsing, including invalid-primary fallback.
+    private static func timeoutInteger(_ raw: Any?) -> Int? {
+        guard let raw else { return nil }
+        if let number = raw as? NSNumber {
+            guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+            let value = number.doubleValue
+            guard value.isFinite, floor(value) == value else { return nil }
+            return Int(exactly: value)
+        }
+        if let value = raw as? Int { return value }
+        if let value = raw as? String {
+            return Int(value.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
     }
 
     // MARK: - Request encoding
@@ -346,14 +381,24 @@ struct MCPSocketBridge {
     /// `SocketClient.send`'s multiline read strategy
     /// (`CLI/programa.swift:505-548`) so a buffered/multi-line response isn't
     /// truncated.
-    private static func readResponse(socketFD: Int32) throws -> String {
+    private static func readResponse(socketFD: Int32, timeout: TimeInterval) throws -> String {
         var data = Data()
         var sawNewline = false
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        var lastChunkAt = ProcessInfo.processInfo.systemUptime
 
         while true {
-            let timeout = sawNewline ? multilineResponseIdleTimeoutSeconds : defaultResponseTimeoutSeconds
+            let now = ProcessInfo.processInfo.systemUptime
+            var remaining = deadline - now
+            if sawNewline {
+                remaining = min(remaining, multilineResponseIdleTimeoutSeconds - (now - lastChunkAt))
+            }
+            guard remaining > 0 else {
+                if sawNewline { break }
+                throw MCPSocketBridgeError.transport("Command timed out")
+            }
             do {
-                try configureReceiveTimeout(fd: socketFD, timeout: timeout)
+                try configureReceiveTimeout(fd: socketFD, timeout: remaining)
             } catch {
                 // A peer that closes right after replying leaves the socket torn down,
                 // and macOS then rejects setsockopt with EINVAL. If a full line is
@@ -365,20 +410,18 @@ struct MCPSocketBridge {
             var buffer = [UInt8](repeating: 0, count: 8192)
             let count = Darwin.read(socketFD, &buffer, buffer.count)
             if count < 0 {
-                if errno == EINTR {
+                let errorCode = errno
+                if errorCode == EINTR || errorCode == EAGAIN || errorCode == EWOULDBLOCK {
+                    // Receive timeouts are capped at 300 seconds. Retry slices
+                    // and interruptions against the same whole-response deadline.
                     continue
-                }
-                if errno == EAGAIN || errno == EWOULDBLOCK {
-                    if sawNewline {
-                        break
-                    }
-                    throw MCPSocketBridgeError.transport("Command timed out")
                 }
                 throw MCPSocketBridgeError.transport("Socket read error")
             }
             if count == 0 {
                 break
             }
+            lastChunkAt = ProcessInfo.processInfo.systemUptime
             data.append(buffer, count: count)
             if data.contains(UInt8(0x0A)) {
                 sawNewline = true

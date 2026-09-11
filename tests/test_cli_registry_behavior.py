@@ -147,6 +147,85 @@ class SocketRecorder:
         return {}
 
 
+class FramingRecorder(SocketRecorder):
+    """Exercises the real CLI's response framing on a persistent connection."""
+
+    def __init__(self, directory: str, mode: str):
+        super().__init__(directory)
+        self.mode = mode
+
+    def _serve_connection(self, connection: socket.socket) -> None:
+        connection.settimeout(0.1)
+        pending = b""
+
+        def request_line() -> dict[str, Any] | None:
+            nonlocal pending
+            while not self._stop.is_set():
+                if b"\n" in pending:
+                    line, pending = pending.split(b"\n", 1)
+                    request = json.loads(line)
+                    self.frames.append(request)
+                    return request
+                try:
+                    chunk = connection.recv(8192)
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    return None
+                pending += chunk
+            return None
+
+        def response(request: dict[str, Any], result: dict[str, Any]) -> bytes:
+            return json.dumps({"id": request.get("id"), "ok": True, "result": result},
+                              separators=(",", ":")).encode("utf-8")
+
+        def fragmented_send(payload: bytes) -> None:
+            # Force separate writes, including a split inside an escaped newline.
+            # The OS may coalesce reads; correctness must not depend on boundaries.
+            split = payload.find(b"\\n")
+            boundaries = sorted({1, len(payload) // 2, split + 1 if split >= 0 else 2, len(payload)})
+            start = 0
+            for end in boundaries:
+                connection.sendall(payload[start:end])
+                start = end
+                if self._stop.wait(0.02):
+                    return
+
+        first = request_line()
+        if first is None:
+            return
+        if self.mode == "authenticated-fragments":
+            if first.get("method") != "auth.login" or first.get("params") != {"password": "framing-secret"}:
+                self.errors.append(f"unexpected authentication request: {first!r}")
+                return
+            fragmented_send(response(first, {"authenticated": True}) + b"\n")
+            request = request_line()
+            if request is None:
+                return
+            fragmented_send(response(request, {"text": "first\nsecond"}) + b"\n")
+            # Keep the server connection alive until the CLI closes it; a valid
+            # frame must not require EOF, including after authentication.
+            extra = request_line()
+            if extra is not None:
+                self.errors.append(f"unexpected extra request: {extra!r}")
+        elif self.mode == "eof-before-newline":
+            connection.sendall(response(first, {"text": "incomplete frame"}))
+        elif self.mode == "whole-response-deadline":
+            payload = response(first, {"text": "slow response"}) + b"\n"
+            # Individual gaps remain below the one-second socket timeout, but
+            # the complete response exceeds its budget. Partial data must not
+            # renew that budget indefinitely.
+            try:
+                for start in range(0, len(payload), 5):
+                    connection.sendall(payload[start:start + 5])
+                    if self._stop.wait(0.2):
+                        return
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # The client must close after its whole-response timeout.
+        else:
+            connection.sendall(response(first, {"text": "valid frame"}) + b"\nunexpected trailing bytes")
+
+
 def run_cli(
     socket_path: str,
     args: list[str],
@@ -722,6 +801,36 @@ def main() -> int:
             if password == "wrong-secret":
                 check(process.returncode != 0, "denied file open reported success")
             check(not recorder.errors, f"file open fixture: {recorder.errors}")
+
+    for mode in ("authenticated-fragments", "eof-before-newline", "trailing-bytes", "whole-response-deadline"):
+        with tempfile.TemporaryDirectory(prefix="pcli-framing-", dir="/tmp") as directory:
+            with FramingRecorder(directory, mode) as recorder:
+                args = ["--json"]
+                if mode == "authenticated-fragments":
+                    args += ["--password", "framing-secret"]
+                args += ["rpc", "surface.read_text", json.dumps({"surface_id": SURFACE_ID})]
+                process = run_cli(recorder.path, args, env_overrides={"CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC": "1"})
+            expected_methods = (["auth.login"] if mode == "authenticated-fragments" else []) + ["surface.read_text"]
+            check([frame.get("method") for frame in recorder.frames] == expected_methods,
+                  f"{mode}: wrong request sequence: {recorder.frames!r}")
+            check(recorder.accept_count == 1, f"{mode}: did not preserve the connection")
+            if recorder.frames:
+                check(recorder.frames[-1].get("params") == {"surface_id": SURFACE_ID},
+                      f"{mode}: RPC parameters changed: {recorder.frames!r}")
+            check(not recorder.errors, f"{mode}: fixture errors: {recorder.errors}")
+            if mode == "authenticated-fragments":
+                check(process.returncode == 0, f"fragmented response failed: {merged_output(process)}")
+                try:
+                    check(json.loads(process.stdout) == {"text": "first\nsecond"},
+                          f"escaped newline did not survive framing: {process.stdout!r}")
+                except json.JSONDecodeError:
+                    check(False, f"fragmented response was not JSON: {process.stdout!r}")
+            else:
+                check(process.returncode != 0, f"{mode}: incomplete/ambiguous response was accepted: {process.stdout!r}")
+                if mode == "whole-response-deadline":
+                    error = merged_output(process).lower()
+                    check("timeout" in error or "timed out" in error,
+                          f"slow response failed for a reason other than its deadline: {error!r}")
 
     if failures:
         print(f"FAIL: {len(failures)} CLI registry behavior assertion(s) failed")

@@ -7,15 +7,6 @@ if set -q PROGRAMA_SHELL_INTEGRATION; and test "$PROGRAMA_SHELL_INTEGRATION" = 0
 end
 
 if test "$_cmux_integration_enabled" != 0
-    set -g _CMUX_SEND_TOOL ""
-    if command -sq ncat
-        set -g _CMUX_SEND_TOOL ncat
-    else if command -sq socat
-        set -g _CMUX_SEND_TOOL socat
-    else if command -sq nc
-        set -g _CMUX_SEND_TOOL nc
-    end
-
     set -g _PROGRAMA_SHELL_ACTIVITY_LAST ""
     set -g _PROGRAMA_PORTS_LAST_RUN 0
     set -g _PROGRAMA_TTY_NAME ""
@@ -77,23 +68,6 @@ if test "$_cmux_integration_enabled" != 0
         _cmux_socket_uses_remote_relay
     end
 
-    function _cmux_send --argument-names payload
-        test -n "$payload"; or return 0
-        test -n "$PROGRAMA_SOCKET_PATH"; or return 0
-        switch "$_CMUX_SEND_TOOL"
-            case ncat
-                printf '%s\n' "$payload" | ncat -w 1 -U "$PROGRAMA_SOCKET_PATH" --send-only >/dev/null 2>&1
-            case socat
-                printf '%s\n' "$payload" | socat -T 1 - "UNIX-CONNECT:$PROGRAMA_SOCKET_PATH" >/dev/null 2>&1
-            case nc
-                printf '%s\n' "$payload" | nc -N -U "$PROGRAMA_SOCKET_PATH" >/dev/null 2>&1; or printf '%s\n' "$payload" | nc -w 1 -U "$PROGRAMA_SOCKET_PATH" >/dev/null 2>&1
-        end
-    end
-
-    function _cmux_send_bg --argument-names payload
-        _cmux_send "$payload" >/dev/null 2>&1 &
-    end
-
     function _cmux_json_escape --argument-names value
         set -l backslash "\\"
         set -l escaped_backslash "\\\\"
@@ -106,10 +80,7 @@ if test "$_cmux_integration_enabled" != 0
             | string replace -a (printf '\t') "\\t"
     end
 
-    # Build a single-line v2 JSON-RPC request frame for the direct-socket
-    # (fire-and-forget) path. `params_json` must already be a well-formed JSON
-    # object string (call sites use _cmux_json_escape on any user-controlled
-    # values before interpolating them).
+    # Format a TTY report frame for callers that need the serialized request.
     function _cmux_json_rpc_frame --argument-names method params_json
         printf '%s\n' "{\"id\":1,\"method\":\"$method\",\"params\":$params_json}"
     end
@@ -124,20 +95,31 @@ if test "$_cmux_integration_enabled" != 0
     end
 
     function _cmux_relay_rpc_bg --argument-names method params
-        _cmux_socket_uses_remote_relay; or return 1
+        _cmux_has_port_scan_transport; or return 1
         set -l relay_cli (_cmux_relay_cli_path)
         test -n "$relay_cli"; or return 1
-        "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 &
+        set -l child_env
+        if _cmux_socket_is_unix
+            set child_env CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC=1
+        end
+        env $child_env "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 &
     end
 
     function _cmux_relay_rpc --argument-names method params
-        _cmux_socket_uses_remote_relay; or return 1
+        _cmux_has_port_scan_transport; or return 1
         set -l relay_cli (_cmux_relay_cli_path)
         test -n "$relay_cli"; or return 1
         # Relay `programa rpc` exits nonzero on server error. The real remote CLI
         # prints only the JSON result payload on success, while some test stubs
         # return the full `{"ok":...}` envelope. Retry only on explicit `ok:false`.
-        set -l response ("$relay_cli" rpc "$method" "$params" 2>/dev/null | string collect)
+        set -l child_env
+        if _cmux_socket_is_unix
+            set child_env CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC=1
+        end
+        set -l response (env $child_env "$relay_cli" rpc "$method" "$params" 2>/dev/null)
+        set -l command_status $status
+        test "$command_status" -eq 0; or return 1
+        set response (string join \n -- $response | string collect)
         test -n "$response"; or return 0
         string match -q '*"ok":false*' -- "$response"; and return 1
         string match -q '*"ok": false*' -- "$response"; and return 1
@@ -157,7 +139,7 @@ if test "$_cmux_integration_enabled" != 0
         _cmux_relay_rpc "surface.report_tty" "$params"
     end
 
-    function _cmux_report_tty_payload
+    function _cmux_report_tty_params
         test -n "$PROGRAMA_TAB_ID"; or return 1
         test -n "$_PROGRAMA_TTY_NAME"; or return 1
         set -l workspace_id (_cmux_relay_workspace_id)
@@ -169,6 +151,12 @@ if test "$_cmux_integration_enabled" != 0
             set params "$params,\"surface_id\":\"$PROGRAMA_PANEL_ID\""
         end
         set params "$params}"
+        printf '%s\n' "$params"
+    end
+
+    function _cmux_report_tty_payload
+        set -l params (_cmux_report_tty_params)
+        test -n "$params"; or return 1
         _cmux_json_rpc_frame "surface.report_tty" "$params"
     end
 
@@ -179,10 +167,10 @@ if test "$_cmux_integration_enabled" != 0
         _cmux_has_port_scan_transport; or return 0
 
         if _cmux_socket_is_unix
-            set -l payload (_cmux_report_tty_payload)
-            test -n "$payload"; or return 0
+            set -l params (_cmux_report_tty_params)
+            test -n "$params"; or return 0
+            _cmux_relay_rpc "surface.report_tty" "$params"; or return 0
             set -g _PROGRAMA_TTY_REPORTED 1
-            _cmux_send_bg "$payload"
         else
             test -n "$_PROGRAMA_TTY_NAME"; or return 0
             # Keep the first relay TTY report synchronous so the server can
@@ -198,12 +186,12 @@ if test "$_cmux_integration_enabled" != 0
         test -n "$PROGRAMA_TAB_ID"; or return 0
         test -n "$PROGRAMA_PANEL_ID"; or return 0
         test "$_PROGRAMA_SHELL_ACTIVITY_LAST" = "$state"; and return 0
-        set -g _PROGRAMA_SHELL_ACTIVITY_LAST "$state"
         set -l workspace_id (_cmux_relay_workspace_id)
         test -n "$workspace_id"; or set workspace_id "$PROGRAMA_TAB_ID"
         set -l state_json (_cmux_json_escape "$state")
         set -l params "{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"state\":\"$state_json\"}"
-        _cmux_send_bg (_cmux_json_rpc_frame "surface.report_shell_state" "$params")
+        _cmux_relay_rpc "surface.report_shell_state" "$params"; or return 0
+        set -g _PROGRAMA_SHELL_ACTIVITY_LAST "$state"
     end
 
     function _cmux_ports_kick_via_relay --argument-names reason
@@ -233,7 +221,7 @@ if test "$_cmux_integration_enabled" != 0
             test -n "$workspace_id"; or set workspace_id "$PROGRAMA_TAB_ID"
             set -l reason_json (_cmux_json_escape "$reason")
             set -l params "{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"reason\":\"$reason_json\"}"
-            _cmux_send_bg (_cmux_json_rpc_frame "surface.ports_kick" "$params")
+            _cmux_relay_rpc_bg "surface.ports_kick" "$params"
         else
             _cmux_ports_kick_via_relay "$reason"
         end

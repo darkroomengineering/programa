@@ -280,7 +280,11 @@ final class SocketClient {
     ///   larger than it, for commands that legitimately hold the connection open longer than
     ///   `CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC`'s default (e.g. `surface.wait` with a caller-chosen
     ///   `--timeout`). Ignored (falls back to the default) when `nil` or smaller.
-    func send(command: String, minimumReceiveTimeout: TimeInterval? = nil) throws -> String {
+    func send(
+        command: String,
+        minimumReceiveTimeout: TimeInterval? = nil,
+        singleLine: Bool = false
+    ) throws -> String {
         guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
 
         let payload = command + "\n"
@@ -298,11 +302,19 @@ final class SocketClient {
             }
             return minimumReceiveTimeout
         }()
+        let responseDeadline = ProcessInfo.processInfo.systemUptime + (
+            initialReceiveTimeout.isFinite ? initialReceiveTimeout : Self.defaultResponseTimeoutSeconds
+        )
 
         while true {
-            try configureReceiveTimeout(
-                sawNewline ? Self.multilineResponseIdleTimeoutSeconds : initialReceiveTimeout
-            )
+            let receiveTimeout: TimeInterval
+            if singleLine {
+                receiveTimeout = responseDeadline - ProcessInfo.processInfo.systemUptime
+                guard receiveTimeout > 0 else { throw CLIError(message: "Command timed out") }
+            } else {
+                receiveTimeout = sawNewline ? Self.multilineResponseIdleTimeoutSeconds : initialReceiveTimeout
+            }
+            try configureReceiveTimeout(receiveTimeout)
 
             var buffer = [UInt8](repeating: 0, count: 8192)
             let count = Darwin.read(socketFD, &buffer, buffer.count)
@@ -311,6 +323,7 @@ final class SocketClient {
                     continue
                 }
                 if errno == EAGAIN || errno == EWOULDBLOCK {
+                    if singleLine { continue }
                     if sawNewline {
                         break
                     }
@@ -319,10 +332,20 @@ final class SocketClient {
                 throw CLIError(message: "Socket read error")
             }
             if count == 0 {
+                if singleLine { throw CLIError(message: "Socket closed before terminating response newline") }
                 break
             }
             data.append(buffer, count: count)
-            if data.contains(UInt8(0x0A)) {
+            if singleLine, ProcessInfo.processInfo.systemUptime >= responseDeadline {
+                throw CLIError(message: "Command timed out")
+            }
+            if let newline = data.firstIndex(of: UInt8(0x0A)) {
+                if singleLine {
+                    guard data.index(after: newline) == data.endIndex else {
+                        throw CLIError(message: "Unexpected trailing bytes after v2 response")
+                    }
+                    break
+                }
                 sawNewline = true
             }
         }
@@ -606,7 +629,7 @@ final class SocketClient {
             throw CLIError(message: "Failed to encode v2 request")
         }
 
-        let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout)
+        let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout, singleLine: true)
 
         // The server may return plain-text errors (e.g., "ERROR: Access denied ...")
         // before the JSON protocol starts. Surface these directly instead of letting
@@ -637,8 +660,8 @@ final class SocketClient {
 
     /// Writes a v2 JSON-RPC request line without reading a response. Used by `watch-events`
     /// (#167 `subscribe`), which reads the subscribe ack and every subsequently pushed event
-    /// frame one at a time via `readEventLine` -- `send`/`sendV2`'s "read until an idle gap"
-    /// model isn't a good fit for a connection that keeps receiving lines indefinitely.
+    /// frame one at a time via `readEventLine`, which retains additional buffered
+    /// frames for a connection that keeps receiving events indefinitely.
     func sendV2RequestOnly(method: String, params: [String: Any] = [:]) throws {
         guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
         let request: [String: Any] = [
@@ -3903,7 +3926,7 @@ struct ProgramaCLI {
 
     /// Open a path in programa by creating a new workspace with the given directory.
     /// Launches the app if it isn't already running.
-    func openPath(_ path: String, socketPath: String) throws {
+    func openPath(_ path: String, socketPath: String, explicitPassword: String?) throws {
         let resolved = resolvePath(path)
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: resolved, isDirectory: &isDir)
@@ -3918,22 +3941,11 @@ struct ProgramaCLI {
             throw CLIError(message: "Path does not exist: \(resolved)")
         }
 
-        // Try connecting to the socket. If it fails, launch the app and retry.
-        let client = SocketClient(path: socketPath)
-        if (try? client.connect()) == nil {
-            client.close()
-            try launchApp()
-            let launchedClient = try SocketClient.waitForConnectableSocket(path: socketPath, timeout: 10)
-            defer { launchedClient.close() }
-            let params: [String: Any] = ["cwd": directory]
-            let response = try launchedClient.sendV2(method: "workspace.create", params: params)
-            let wsRef = (response["workspace_ref"] as? String) ?? (response["workspace_id"] as? String) ?? ""
-            if !wsRef.isEmpty {
-                print("OK \(wsRef)")
-            }
-            try activateApp()
-            return
-        }
+        let client = try connectClient(
+            socketPath: socketPath,
+            explicitPassword: explicitPassword,
+            launchIfNeeded: true
+        )
         defer { client.close() }
 
         let params: [String: Any] = ["cwd": directory]
