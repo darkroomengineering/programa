@@ -90,6 +90,13 @@ final class MarkdownPanel: Panel, ObservableObject {
         }
     }
 
+    /// Called when the panel is re-attached to a different workspace (detach/move transfer).
+    /// Mirrors `TerminalPanel.updateWorkspaceId` / `BrowserPanel.reattachToWorkspace` /
+    /// `ReviewPanel.updateWorkspaceId`.
+    func updateWorkspaceId(_ newWorkspaceId: UUID) {
+        workspaceId = newWorkspaceId
+    }
+
     // MARK: - Panel protocol
 
     func focus() {

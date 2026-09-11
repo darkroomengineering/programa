@@ -5140,6 +5140,138 @@ final class WorkspaceMountPolicyTests: XCTestCase {
     }
 }
 
+/// Regression coverage for docs/audits/codebase-audit-2026-09-11.md M13: moving a review or
+/// markdown panel between workspaces must reinstall its workspace binding and lifecycle
+/// subscription, and a review panel's auto-refresh trigger must keep tracking whichever
+/// workspace actually holds its source terminal, even after the two panels are split across
+/// different workspaces.
+@MainActor
+final class ReviewPanelWorkspaceTransferTests: XCTestCase {
+    private var originalSharedAppDelegate: AppDelegate?
+
+    override func setUp() {
+        super.setUp()
+        originalSharedAppDelegate = AppDelegate.shared
+    }
+
+    override func tearDown() {
+        AppDelegate.shared = originalSharedAppDelegate
+        super.tearDown()
+    }
+
+    /// Registers `workspaces` on a single `TabManager` inside a fresh `AppDelegate`, installed
+    /// as `AppDelegate.shared`, so `Workspace.workspaceOwning(surfaceId:)` (used by
+    /// `installReviewPanelSubscription` and `ReviewPanel.sendToSourceSurface`) can locate them
+    /// the same way production code does via `AppDelegate.locateSurface`.
+    private func registerWorkspaces(_ workspaces: [Workspace]) -> (app: AppDelegate, window: NSWindow) {
+        _ = NSApplication.shared
+        let app = AppDelegate()
+        AppDelegate.shared = app
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 280),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.identifier = NSUserInterfaceItemIdentifier("cmux.main.\(UUID().uuidString)")
+
+        let manager = TabManager()
+        manager.tabs = workspaces
+        app.registerMainWindow(
+            window,
+            windowId: UUID(),
+            tabManager: manager,
+            sidebarState: SidebarState(),
+            sidebarSelectionState: SidebarSelectionState()
+        )
+        return (app, window)
+    }
+
+    private func waitForCondition(
+        timeout: TimeInterval = 2,
+        pollInterval: TimeInterval = 0.01,
+        _ condition: () -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
+        }
+        return condition()
+    }
+
+    func testMovingReviewPanelReinstallsSubscriptionAndTracksSourceInItsOriginalWorkspace() throws {
+        let workspaceA = Workspace()
+        let workspaceB = Workspace()
+        let (_, window) = registerWorkspaces([workspaceA, workspaceB])
+        defer { window.orderOut(nil) }
+
+        let sourceId = try XCTUnwrap(workspaceA.focusedPanelId)
+        let reviewPanel = try XCTUnwrap(workspaceA.newReviewSplit(from: sourceId, orientation: .horizontal))
+        XCTAssertNotNil(workspaceA.panelSubscriptions[reviewPanel.id], "Sanity: creation installs a subscription on the source workspace")
+
+        let detached = try XCTUnwrap(workspaceA.detachSurface(panelId: reviewPanel.id))
+        let destinationPane = try XCTUnwrap(workspaceB.bonsplitController.allPaneIds.first)
+        XCTAssertEqual(
+            workspaceB.attachDetachedSurface(detached, inPane: destinationPane, focus: false),
+            reviewPanel.id
+        )
+
+        XCTAssertEqual(reviewPanel.workspaceId, workspaceB.id, "Moved review panel must adopt the destination workspace id")
+        XCTAssertNotNil(
+            workspaceB.panelSubscriptions[reviewPanel.id],
+            "Moved review panel must get a fresh lifecycle subscription reinstalled on its new workspace"
+        )
+
+        // The source terminal stayed behind in workspace A. The reinstalled subscription must
+        // keep watching A's `$panelAgentStates`, not B's -- otherwise the review panel would
+        // never auto-refresh again after the move (M13).
+        workspaceA.panelAgentStates[sourceId] = .working
+        XCTAssertTrue(waitForCondition { workspaceA.panelAgentStates[sourceId] == .working })
+        let previousRefreshedAt = reviewPanel.lastRefreshedAt
+        workspaceA.panelAgentStates[sourceId] = .idle
+        XCTAssertTrue(
+            waitForCondition {
+                reviewPanel.isRefreshing || reviewPanel.lastRefreshedAt != previousRefreshedAt
+            },
+            "Expected the review panel to start refreshing once its source terminal (still in workspace A) goes idle"
+        )
+    }
+
+    func testMovingMarkdownPanelUpdatesItsWorkspaceId() throws {
+        let workspaceA = Workspace()
+        let workspaceB = Workspace()
+        _ = registerWorkspaces([workspaceA, workspaceB])
+
+        let sourceId = try XCTUnwrap(workspaceA.focusedPanelId)
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("m13-markdown-transfer-\(UUID().uuidString).md")
+        try Data("# M13 regression".utf8).write(to: tempFile)
+        defer { try? FileManager.default.removeItem(at: tempFile) }
+
+        let markdownPanel = try XCTUnwrap(
+            workspaceA.newMarkdownSplit(from: sourceId, orientation: .horizontal, filePath: tempFile.path)
+        )
+        XCTAssertEqual(markdownPanel.workspaceId, workspaceA.id)
+
+        let detached = try XCTUnwrap(workspaceA.detachSurface(panelId: markdownPanel.id))
+        let destinationPane = try XCTUnwrap(workspaceB.bonsplitController.allPaneIds.first)
+        XCTAssertEqual(
+            workspaceB.attachDetachedSurface(detached, inPane: destinationPane, focus: false),
+            markdownPanel.id
+        )
+
+        XCTAssertEqual(markdownPanel.workspaceId, workspaceB.id, "Moved markdown panel must adopt the destination workspace id")
+        XCTAssertNotNil(
+            workspaceB.panelSubscriptions[markdownPanel.id],
+            "Moved markdown panel must get its title subscription reinstalled on its new workspace"
+        )
+    }
+}
+
 
 @MainActor
 final class SidebarWorkspaceShortcutHintMetricsTests: XCTestCase {
