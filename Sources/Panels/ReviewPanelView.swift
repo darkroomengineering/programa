@@ -299,6 +299,8 @@ struct ReviewPanelView: View {
             return String(localized: "review.error.notGitRepository.title", defaultValue: "Not a git repository")
         case .unknownBaseBranch:
             return String(localized: "review.error.unknownBaseBranch.title", defaultValue: "Unknown base branch")
+        case .commandFailed:
+            return String(localized: "review.error.commandFailed.title", defaultValue: "Couldn't read the diff")
         }
     }
 
@@ -308,6 +310,8 @@ struct ReviewPanelView: View {
             return String(localized: "review.error.notGitRepository.message", defaultValue: "This surface's working directory isn't inside a git worktree.")
         case .unknownBaseBranch(let branch):
             return String(localized: "review.error.unknownBaseBranch.message", defaultValue: "Couldn't resolve '\(branch)', 'main', or 'master'.")
+        case .commandFailed(let detail):
+            return String(localized: "review.error.commandFailed.message", defaultValue: "A git command failed: \(detail)")
         }
     }
 

@@ -9,9 +9,14 @@ enum ReviewDiffMode: String, Codable, Equatable, Sendable {
     case branch
 }
 
-enum ReviewDiffError: Equatable, Sendable {
+enum ReviewDiffError: Error, Equatable, Sendable {
     case notGitRepository
     case unknownBaseBranch(String)
+    /// A git subprocess needed to build the diff (or its binary/numstat override pass) exited
+    /// non-zero, timed out, or otherwise didn't run to completion. Surfaced explicitly instead
+    /// of being folded into an empty diff, so a failed probe never reads as "no changes" -- see
+    /// M12 in docs/audits/codebase-audit-2026-09-11.md.
+    case commandFailed(String)
 }
 
 struct ReviewDiffSnapshot: Equatable, Sendable {
@@ -68,9 +73,19 @@ struct ReviewDiffProber {
     // MARK: - Snapshot modes
 
     private nonisolated static func uncommittedSnapshot(repoRoot: String) -> ReviewDiffSnapshot {
-        var files = diffAndOverrides(repoRoot: repoRoot, diffRangeArgs: ["HEAD"])
-        files.append(contentsOf: untrackedFileDiffs(repoRoot: repoRoot))
-        return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: nil)
+        // `HEAD` doesn't resolve on an unborn branch (a repo with commits never made yet). Diff
+        // against the empty tree in that case so staged files before the first commit still show
+        // up as added, instead of `git diff HEAD` failing and (previously) reading as clean.
+        let diffRangeArgs = headDiffRangeArgs(repoRoot: repoRoot)
+        switch diffAndOverrides(repoRoot: repoRoot, diffRangeArgs: diffRangeArgs) {
+        case .failure(let error):
+            // A failed diff must never look clean: skip the untracked-file merge and surface the
+            // error instead of returning a partial (or empty) file list.
+            return ReviewDiffSnapshot(files: [], repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: error)
+        case .success(var files):
+            files.append(contentsOf: untrackedFileDiffs(repoRoot: repoRoot))
+            return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: nil)
+        }
     }
 
     private nonisolated static func branchSnapshot(repoRoot: String, baseBranch: String) -> ReviewDiffSnapshot {
@@ -79,10 +94,37 @@ struct ReviewDiffProber {
             guard let mergeBase = mergeBaseOutput?.trimmingCharacters(in: .whitespacesAndNewlines), !mergeBase.isEmpty else {
                 continue
             }
-            let files = diffAndOverrides(repoRoot: repoRoot, diffRangeArgs: ["\(mergeBase)..HEAD"])
-            return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: nil)
+            switch diffAndOverrides(repoRoot: repoRoot, diffRangeArgs: ["\(mergeBase)..HEAD"]) {
+            case .failure(let error):
+                return ReviewDiffSnapshot(files: [], repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: error)
+            case .success(let files):
+                return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: nil)
+            }
         }
         return ReviewDiffSnapshot(repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: .unknownBaseBranch(baseBranch))
+    }
+
+    /// `["HEAD"]` normally. On an unborn branch (`git rev-parse --verify --quiet HEAD` fails --
+    /// no commits yet) returns `[<empty-tree-id>]` instead, so a diff against it still enumerates
+    /// staged files. Falls back to `["HEAD"]` if the empty-tree id can't be obtained, matching
+    /// prior behavior (the subsequent diff will then fail and surface `.commandFailed`).
+    private nonisolated static func headDiffRangeArgs(repoRoot: String) -> [String] {
+        let verify = CanonicalSubprocessRunner.run(
+            executable: "git",
+            arguments: ["rev-parse", "--verify", "--quiet", "HEAD"],
+            currentDirectory: repoRoot,
+            timeout: defaultTimeout,
+            stdoutLimit: commandStdoutLimit,
+            stderrLimit: commandStderrLimit
+        )
+        if verify.exitStatus == 0, verify.outcome == .exited {
+            return ["HEAD"]
+        }
+        guard let emptyTreeOutput = runCommand(directory: repoRoot, executable: "git", arguments: ["hash-object", "-t", "tree", "/dev/null"]) else {
+            return ["HEAD"]
+        }
+        let emptyTree = emptyTreeOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        return emptyTree.isEmpty ? ["HEAD"] : [emptyTree]
     }
 
     /// Fallback chain for the "branch" mode base ref: the caller's requested base first, then
@@ -96,36 +138,46 @@ struct ReviewDiffProber {
 
     // MARK: - Diff + binary/size overrides
 
-    private nonisolated static func diffAndOverrides(repoRoot: String, diffRangeArgs: [String]) -> [ReviewFileDiff] {
-        let diffText = runCommand(
+    private nonisolated static func diffAndOverrides(repoRoot: String, diffRangeArgs: [String]) -> Result<[ReviewFileDiff], ReviewDiffError> {
+        switch runCommandResult(
             directory: repoRoot,
             executable: "git",
             arguments: ["diff", "--no-color", "--find-renames"] + diffRangeArgs
-        ) ?? ""
-        var files = ReviewDiffParser.parse(diffText)
-        let binaryPaths = binaryFilePaths(repoRoot: repoRoot, diffRangeArgs: diffRangeArgs)
-        applyOverrides(files: &files, binaryPaths: binaryPaths)
-        return files
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let diffText):
+            var files = ReviewDiffParser.parse(diffText)
+            switch binaryFilePaths(repoRoot: repoRoot, diffRangeArgs: diffRangeArgs) {
+            case .failure(let error):
+                return .failure(error)
+            case .success(let binaryPaths):
+                applyOverrides(files: &files, binaryPaths: binaryPaths)
+                return .success(files)
+            }
+        }
     }
 
     /// `git diff --numstat` reports `-\t-\t<path>` for binary files -- a cheap single extra
     /// invocation used to build a binary-file set before the unified-diff parse, per
     /// docs/plans/diff-review-panel.md §3 point 4.
-    private nonisolated static func binaryFilePaths(repoRoot: String, diffRangeArgs: [String]) -> Set<String> {
-        guard let output = runCommand(
+    private nonisolated static func binaryFilePaths(repoRoot: String, diffRangeArgs: [String]) -> Result<Set<String>, ReviewDiffError> {
+        switch runCommandResult(
             directory: repoRoot,
             executable: "git",
             arguments: ["diff", "--numstat", "--find-renames"] + diffRangeArgs
-        ) else {
-            return []
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let output):
+            var paths: Set<String> = []
+            for line in output.split(separator: "\n") {
+                let columns = line.split(separator: "\t")
+                guard columns.count >= 3, columns[0] == "-", columns[1] == "-" else { continue }
+                paths.insert(String(columns[2]))
+            }
+            return .success(paths)
         }
-        var paths: Set<String> = []
-        for line in output.split(separator: "\n") {
-            let columns = line.split(separator: "\t")
-            guard columns.count >= 3, columns[0] == "-", columns[1] == "-" else { continue }
-            paths.insert(String(columns[2]))
-        }
-        return paths
     }
 
     private nonisolated static func applyOverrides(files: inout [ReviewFileDiff], binaryPaths: Set<String>) {
@@ -197,5 +249,26 @@ struct ReviewDiffProber {
             return nil
         }
         return result.stdout
+    }
+
+    /// Like `runCommand`, but surfaces failure as `.commandFailed` instead of substituting an
+    /// empty string -- used everywhere a command failure must not be silently read as "no
+    /// changes". See M12 in docs/audits/codebase-audit-2026-09-11.md.
+    private nonisolated static func runCommandResult(directory: String, executable: String, arguments: [String]) -> Result<String, ReviewDiffError> {
+        let result = CanonicalSubprocessRunner.run(
+            executable: executable,
+            arguments: arguments,
+            currentDirectory: directory,
+            timeout: defaultTimeout,
+            stdoutLimit: commandStdoutLimit,
+            stderrLimit: commandStderrLimit
+        )
+        guard result.exitStatus == 0, result.outcome == .exited else {
+            let stderrText = (result.stderr ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let commandDescription = ([executable] + arguments).joined(separator: " ")
+            let detail = stderrText.isEmpty ? "exit status \(result.exitStatus), outcome \(result.outcome)" : stderrText
+            return .failure(.commandFailed("\(commandDescription): \(detail)"))
+        }
+        return .success(result.stdout ?? "")
     }
 }
