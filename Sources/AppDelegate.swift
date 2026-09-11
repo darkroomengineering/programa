@@ -1309,7 +1309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let socketPath = TerminalController.shared.activeSocketPath(preferredPath: config.path)
         let health = TerminalController.shared.socketListenerHealth(expectedSocketPath: socketPath)
         let pingResponse = health.isHealthy
-            ? TerminalController.probeSocketCommand("ping", at: socketPath, timeout: 1.0)
+            ? TerminalController.probeSocketPing(at: socketPath, timeout: 1.0)
             : nil
         let isReady = health.isHealthy && pingResponse == "PONG"
         var failureSignals = health.failureSignals

@@ -1725,7 +1725,7 @@ extension AppDelegate {
             let dataPath = path
             DispatchQueue.global(qos: .utility).async { [weak self] in
                 let pingResponse = health.isHealthy
-                    ? TerminalController.probeSocketCommand("ping", at: socketPath, timeout: 1.0)
+                    ? TerminalController.probeSocketPing(at: socketPath, timeout: 1.0)
                     : nil
                 let isReady = health.isHealthy && pingResponse == "PONG"
                 let failureSignals = {

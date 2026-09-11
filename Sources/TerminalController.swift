@@ -1328,6 +1328,28 @@ class TerminalController {
         )
     }
 
+    nonisolated static func probeSocketPing(at socketPath: String, timeout: TimeInterval) -> String? {
+        struct PingResponse: Decodable {
+            struct Result: Decodable {
+                let pong: Bool
+            }
+            let id: String
+            let ok: Bool
+            let result: Result
+        }
+
+        let requestId = UUID().uuidString
+        let request = "{\"id\":\"\(requestId)\",\"method\":\"system.ping\",\"params\":{}}"
+        guard let response = probeSocketCommand(request, at: socketPath, timeout: timeout) else { return nil }
+        guard let decoded = try? JSONDecoder().decode(PingResponse.self, from: Data(response.utf8)),
+              decoded.id == requestId, decoded.ok, decoded.result.pong else {
+            // Preserve server diagnostics without accepting a legacy plain-text
+            // PONG as if it were a validated v2 response.
+            return response == "PONG" ? "invalid_response: \(response)" : response
+        }
+        return "PONG"
+    }
+
     nonisolated static func probeSocketCommand(
         _ command: String,
         at socketPath: String,
