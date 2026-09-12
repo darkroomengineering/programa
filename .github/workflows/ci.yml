@@ -1172,6 +1172,21 @@ jobs:
             -only-testing:programaUITests/MultiWindowNotificationsUITests/testNotifyCLIDoesNotStealFocusAcrossWindows \
             test-without-building
 
+      - name: Dump notification regression diagnostics
+        if: failure()
+        run: |
+          set +e
+          for f in /tmp/programa-ui-test-multi-window-notifs-*.json; do
+            [ -f "$f" ] || continue
+            echo "== harness data: $f"; cat "$f"; echo
+          done
+          for f in /tmp/programa-debug-ui-tests-multi-window-notifs-*.log; do
+            [ -f "$f" ] || continue
+            echo "== app debug log (activation/focus/notification/single_instance): $f"
+            grep -E 'app\.activation|notification\.|single_instance|focusMainWindow|window\.key|makeKey|orderFront|surface\.action|notify' "$f" | tail -n 150
+            echo "== app debug log tail: $f"; tail -n 80 "$f"
+          done
+
       - name: Cleanup persistent virtual display
         if: always()
         run: |

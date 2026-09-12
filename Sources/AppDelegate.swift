@@ -1443,6 +1443,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     func applicationDidBecomeActive(_ notification: Notification) {
+#if DEBUG
+        dlog(
+            "app.activation active=1 frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") " +
+            "keyWindow=\(NSApp.keyWindow?.identifier?.rawValue ?? "nil") " +
+            "currentEvent=\(NSApp.currentEvent.map { String(describing: $0.type) } ?? "nil")"
+        )
+#endif
         // `willPowerOffNotification` has no matching cancellation notification. If macOS
         // becomes active again before termination, the shutdown was cancelled: resume
         // autosave/session machinery and replace the provisional snapshot with a normal one.
@@ -1546,6 +1553,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     func applicationWillResignActive(_ notification: Notification) {
+#if DEBUG
+        dlog("app.activation active=0 frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")")
+#endif
         guard !isTerminatingApp else { return }
         clearConfiguredShortcutChordState()
         saveSessionSnapshot(includeScrollback: false)
