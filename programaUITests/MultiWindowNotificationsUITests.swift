@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 import Foundation
 import CoreGraphics
 
@@ -6,6 +7,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
     private var dataPath = ""
     private var socketPath = ""
     private var launchTag = ""
+    private let cmuxBundleIdentifier = "com.darkroom.programa.debug"
     private var launchedApplication: XCUIApplication?
 
     override func setUp() {
@@ -361,7 +363,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
                 app: app,
                 timeout: 15.0
             ),
-            "Expected delayed bundled `cmux notify` command to finish without foregrounding cmux. state=\(app.state.rawValue)"
+            "Expected delayed bundled `cmux notify` command to finish without foregrounding cmux. state=\(app.state.rawValue) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")"
         )
 
         let notifyExitStatus = readTrimmedFile(atPath: commandStatusPath) ?? "<missing>"
@@ -370,8 +372,8 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
         RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         XCTAssertFalse(
-            app.state == .runningForeground,
-            "Expected cmux to remain in background after bundled `cmux notify`. state=\(app.state.rawValue) stderr=\(notifyStderr)"
+            isAppFrontmost(app),
+            "Expected cmux to remain in background after bundled `cmux notify`. state=\(app.state.rawValue) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") stderr=\(notifyStderr)"
         )
         guard notifyExitStatus == "0" else {
             XCTFail(
@@ -509,14 +511,27 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         return (stdout ?? lastStdout, stderr ?? lastStderr)
     }
 
+    /// Whether the app under test is the frontmost (active) application according to the
+    /// workspace. `XCUIApplication.state` can report `.runningForeground` for an instant on the
+    /// CI virtual display while the app itself never receives `applicationDidBecomeActive`;
+    /// the workspace's frontmost application is the same signal the app observes.
+    private func isAppFrontmost(_ app: XCUIApplication) -> Bool {
+        guard let frontmost = NSWorkspace.shared.frontmostApplication else {
+            return app.state == .runningForeground
+        }
+        return frontmost.bundleIdentifier == cmuxBundleIdentifier
+    }
+
     private func waitForCommandCompletionWhileBackgrounded(
         statusPath: String,
         app: XCUIApplication,
         timeout: TimeInterval
     ) -> Bool {
         var sawCompletion = false
+        var sawForeground = false
         let completed = waitForCondition(timeout: timeout) {
-            if app.state == .runningForeground {
+            if self.isAppFrontmost(app) {
+                sawForeground = true
                 return false
             }
             if FileManager.default.fileExists(atPath: statusPath) {
@@ -525,18 +540,23 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             }
             return false
         }
+        guard !sawForeground else { return false }
         guard completed || sawCompletion || FileManager.default.fileExists(atPath: statusPath) else {
             return false
         }
 
-        return waitForCondition(timeout: 0.75) {
-            app.state != .runningForeground
+        // Sample for a short window after completion instead of a single poll.
+        let deadline = Date().addingTimeInterval(0.75)
+        while Date() < deadline {
+            if isAppFrontmost(app) { return false }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
+        return true
     }
 
     private func waitForAppToLeaveForeground(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
         waitForCondition(timeout: timeout) {
-            app.state != .runningForeground
+            !self.isAppFrontmost(app)
         }
     }
 
