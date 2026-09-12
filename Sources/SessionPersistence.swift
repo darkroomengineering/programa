@@ -144,11 +144,24 @@ enum SessionRestorePolicy {
             return false
         }
 
-        let extraArgs = arguments
-            .dropFirst()
-            .filter { !$0.hasPrefix("-psn_") }
-
-        // Any explicit launch argument is treated as an explicit open intent.
+        // Any explicit launch argument is treated as an explicit open intent, except
+        // launch-services process serial numbers and NSUserDefaults argument-domain
+        // pairs (single-dash `-key value`), which configure preferences rather than
+        // open anything. Double-dash options remain explicit intents.
+        var extraArgs: [String] = []
+        var skipValue = false
+        for argument in arguments.dropFirst() {
+            if skipValue {
+                skipValue = false
+                continue
+            }
+            if argument.hasPrefix("-psn_") { continue }
+            if argument.hasPrefix("-"), !argument.hasPrefix("--"), argument.count > 1 {
+                skipValue = true
+                continue
+            }
+            extraArgs.append(argument)
+        }
         return extraArgs.isEmpty
     }
 }

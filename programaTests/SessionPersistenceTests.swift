@@ -803,6 +803,26 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertTrue(shouldRestore)
     }
 
+    func testRestorePolicyAllowsUserDefaultsArgumentDomainPairs() {
+        let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
+            arguments: ["/Applications/cmux.app/Contents/MacOS/cmux",
+                        "-socketControlMode", "full", "-sessionPersistScrollback", "NO"],
+            environment: [:]
+        )
+
+        XCTAssertTrue(shouldRestore, "NSUserDefaults -key value pairs configure preferences; they are not an open intent")
+    }
+
+    func testRestorePolicySkipsWhenArgumentDomainPairsPrecedeAnOpenTarget() {
+        let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
+            arguments: ["/Applications/cmux.app/Contents/MacOS/cmux",
+                        "-socketControlMode", "full", "/tmp/project"],
+            environment: [:]
+        )
+
+        XCTAssertFalse(shouldRestore)
+    }
+
     func testRestorePolicySkipsWhenRunningUnderXCTest() {
         let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
             arguments: ["/Applications/cmux.app/Contents/MacOS/cmux"],
