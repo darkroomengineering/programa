@@ -150,6 +150,12 @@ struct TmuxWorkspacePaneOverlayView: View {
     let flashRect: CGRect?
     let flashStartedAt: Date?
     let flashReason: WorkspaceAttentionFlashReason?
+    /// Stored, not derived from `Date()` in `body`: the controller sets it when a
+    /// flash starts and clears it when the flash window ends. A stored input that
+    /// changes is what makes SwiftUI re-evaluate the body and drop the timeline;
+    /// a body that only re-reads the clock would not be re-run for an otherwise
+    /// identical root view.
+    let isFlashActive: Bool
 
     /// True only while a flash is still within its animation window. The
     /// display-rate `TimelineView(.animation)` below is mounted only in that
@@ -164,7 +170,7 @@ struct TmuxWorkspacePaneOverlayView: View {
 
     var body: some View {
         Group {
-            if Self.isFlashActive(flashRect: flashRect, flashStartedAt: flashStartedAt) {
+            if isFlashActive {
                 TimelineView(.animation) { timeline in
                     canvas(at: timeline.date)
                 }

@@ -602,7 +602,8 @@ final class WindowTmuxWorkspacePaneOverlayController: NSObject {
                 unreadRects: [],
                 flashRect: nil,
                 flashStartedAt: nil,
-                flashReason: nil
+                flashReason: nil,
+                isFlashActive: false
             )
         )
         super.init()
@@ -655,7 +656,10 @@ final class WindowTmuxWorkspacePaneOverlayController: NSObject {
         guard ensureInstalled() else { return }
         if let state {
             model.apply(state)
-            renderModel()
+            renderModel(flashActive: TmuxWorkspacePaneOverlayView.isFlashActive(
+                flashRect: model.flashRect,
+                flashStartedAt: model.flashStartedAt
+            ))
             containerView.alphaValue = 1
             containerView.isHidden = false
             scheduleFlashSettleIfNeeded()
@@ -666,19 +670,21 @@ final class WindowTmuxWorkspacePaneOverlayController: NSObject {
                 unreadRects: [],
                 flashRect: nil,
                 flashStartedAt: nil,
-                flashReason: nil
+                flashReason: nil,
+                isFlashActive: false
             )
             containerView.alphaValue = 0
             containerView.isHidden = true
         }
     }
 
-    private func renderModel() {
+    private func renderModel(flashActive: Bool) {
         hostingView.rootView = TmuxWorkspacePaneOverlayView(
             unreadRects: model.unreadRects,
             flashRect: model.flashRect,
             flashStartedAt: model.flashStartedAt,
-            flashReason: model.flashReason
+            flashReason: model.flashReason,
+            isFlashActive: flashActive
         )
     }
 
@@ -697,7 +703,10 @@ final class WindowTmuxWorkspacePaneOverlayController: NSObject {
         let remaining = FocusFlashPattern.duration - Date().timeIntervalSince(flashStartedAt)
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, remaining) + 0.05) { [weak self] in
             guard let self, self.flashSettleGeneration == generation else { return }
-            self.renderModel()
+            // Explicitly inactive: the flash window has elapsed on the monotonic
+            // dispatch clock, so do not re-read the wall clock here (a backwards
+            // clock step would otherwise leave the timeline mounted).
+            self.renderModel(flashActive: false)
         }
     }
 }
