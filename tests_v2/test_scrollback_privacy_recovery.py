@@ -132,26 +132,16 @@ def main():
 
         def launch(enabled):
             nonlocal current
-            # An argument after argv[0] is an explicit open intent in Programa.
-            # Persist ordinary preferences in this fixture's isolated home so
-            # both startup restoration and the real preference reader run.
-            # Write the plist directly: `defaults write <path>` refuses to write under an
-            # overridden CFFIXED_USER_HOME, and `defaults write <domain>` lands in the real
-            # user's preferences instead of this isolated home.
-            preferences = home / "Library/Preferences"
-            preferences.mkdir(parents=True, exist_ok=True)
-            plist_path = preferences / f"{bundle}.plist"
-            current_prefs = {}
-            if plist_path.exists():
-                with plist_path.open("rb") as handle:
-                    current_prefs = plistlib.load(handle)
-            current_prefs["socketControlMode"] = "full"
-            current_prefs["sessionPersistScrollback"] = bool(enabled)
-            with plist_path.open("wb") as handle:
-                plistlib.dump(current_prefs, handle)
+            # Preferences ride the NSUserDefaults argument domain: cfprefsd-backed
+            # UserDefaults ignore CFFIXED_USER_HOME, so a plist in the isolated home is
+            # never read, and writing the real domain would touch the developer's
+            # settings. `-key value` pairs are not an explicit open intent, so
+            # startup session restore still runs (SessionPersistence.shouldAttemptRestore).
+            launch_arguments = ["-socketControlMode", "full",
+                                "-sessionPersistScrollback", "YES" if enabled else "NO"]
             log = (root / f"app-{time.time_ns()}.log").open("wb")
             try:
-                current = subprocess.Popen([str(executable)],
+                current = subprocess.Popen([str(executable), *launch_arguments],
                                            env=environment, stdout=log, stderr=subprocess.STDOUT)
                 # Record the root before readiness can fail. Popen remains our
                 # authoritative child handle even if this identity read fails.
@@ -164,8 +154,12 @@ def main():
             table = processes()
             require(current.poll() is None and current.pid in table, "Launched app exited or delegated to another instance")
             owned[current.pid] = table[current.pid][1]
-            result = eventually("policy in isolated home", lambda: json.loads(policy.read_text()))
-            require(result.get("enabled") == enabled, "Startup preference did not reach durable policy")
+            def durable_policy():
+                # The previous launch's policy file may still be on disk; wait for the
+                # one this launch derives from the startup preference.
+                value = json.loads(policy.read_text())
+                return value if value.get("enabled") == enabled else None
+            result = eventually("startup preference reaching durable policy", durable_policy)
             remember_descendants()
             return result
 
@@ -197,7 +191,7 @@ def main():
                             meta = json.loads((support / "sessions" / candidate / "meta.json").read_text())
                         except (OSError, ValueError):
                             continue
-                        if (meta.get("childPID") == child_pid and meta.get("escrowed")
+                        if (meta.get("childPID") == escrow_pid and meta.get("escrowed")
                                 and meta.get("escrowSocketPath") == str(holder_socket)):
                             matches.append((candidate, workspace.get("title")))
                 require(len(matches) <= 1, "Multiple surfaces claim the original child")
@@ -230,7 +224,12 @@ def main():
             first_policy = launch(True)
             snapshot_title = "Privacy snapshot " + nonce
             created = rpc(control, "workspace.create", {
-                "initial_command": "exec " + shlex.join([sys.executable, "-u", str(child_script), str(root), nonce]),
+                # No leading `exec`: Ghostty already wraps shell commands as
+                # `bash -c "exec -l <command>"`, so a user-supplied `exec` becomes
+                # `exec -l exec ...` and fails with "exec: not found". The PTY child
+                # recorded by escrow is that login/bash wrapper; the Python child is
+                # its direct descendant, which is what the checks below verify.
+                "initial_command": shlex.join([sys.executable, "-u", str(child_script), str(root), nonce]),
                 "working_directory": str(root), "title": snapshot_title,
             })
             surface = created["surface_id"]
@@ -238,13 +237,17 @@ def main():
             owned_surface_ids = {surface.lower()}
             value = eventually("real child heartbeat", heartbeat)
             child_pid = value["pid"]
+            child_parent_pid = processes().get(child_pid, (None, None))[0]
+            require(child_parent_pid is not None, "Cannot read the child's parent process")
             require(value["nonce"] == nonce, "Wrong child heartbeat")
             session = support / "sessions" / surface
             def escrow_metadata():
                 value = json.loads((session / "meta.json").read_text())
                 return value if value.get("escrowed") and value.get("escrowSocketPath") else None
             metadata = eventually("PTY escrow metadata", escrow_metadata)
-            require(metadata.get("childPID") == child_pid, "Escrow identity does not match the actual child")
+            escrow_pid = metadata.get("childPID")
+            require(escrow_pid == child_parent_pid,
+                    f"Escrow identity {escrow_pid} is not the parent of the actual child {child_pid} (parent {child_parent_pid})")
             require(metadata.get("escrowSocketPath") == str(holder_socket), "Escrow escaped the fixture's tagged socket")
             remember_descendants()
             require(child_pid in owned, "Cannot establish child process ownership")
