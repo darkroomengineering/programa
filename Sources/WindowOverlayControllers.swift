@@ -591,6 +591,9 @@ final class WindowTmuxWorkspacePaneOverlayController: NSObject {
     private let model = TmuxWorkspacePaneOverlayModel()
     private let hostingView: NSHostingView<TmuxWorkspacePaneOverlayView>
     private var installConstraints: [NSLayoutConstraint] = []
+    /// Identifies the flash whose end-of-animation re-render is pending, so a
+    /// newer flash or a clear does not get overwritten by a stale callback.
+    private var flashSettleGeneration: UInt64 = 0
 
     init(window: NSWindow) {
         self.window = window
@@ -599,7 +602,8 @@ final class WindowTmuxWorkspacePaneOverlayController: NSObject {
                 unreadRects: [],
                 flashRect: nil,
                 flashStartedAt: nil,
-                flashReason: nil
+                flashReason: nil,
+                isFlashActive: false
             )
         )
         super.init()
@@ -652,24 +656,57 @@ final class WindowTmuxWorkspacePaneOverlayController: NSObject {
         guard ensureInstalled() else { return }
         if let state {
             model.apply(state)
-            hostingView.rootView = TmuxWorkspacePaneOverlayView(
-                unreadRects: model.unreadRects,
+            renderModel(flashActive: TmuxWorkspacePaneOverlayView.isFlashActive(
                 flashRect: model.flashRect,
-                flashStartedAt: model.flashStartedAt,
-                flashReason: model.flashReason
-            )
+                flashStartedAt: model.flashStartedAt
+            ))
             containerView.alphaValue = 1
             containerView.isHidden = false
+            scheduleFlashSettleIfNeeded()
         } else {
+            flashSettleGeneration &+= 1
             model.clear()
             hostingView.rootView = TmuxWorkspacePaneOverlayView(
                 unreadRects: [],
                 flashRect: nil,
                 flashStartedAt: nil,
-                flashReason: nil
+                flashReason: nil,
+                isFlashActive: false
             )
             containerView.alphaValue = 0
             containerView.isHidden = true
+        }
+    }
+
+    private func renderModel(flashActive: Bool) {
+        hostingView.rootView = TmuxWorkspacePaneOverlayView(
+            unreadRects: model.unreadRects,
+            flashRect: model.flashRect,
+            flashStartedAt: model.flashStartedAt,
+            flashReason: model.flashReason,
+            isFlashActive: flashActive
+        )
+    }
+
+    /// The overlay view only mounts its animation timeline while a flash is
+    /// active, and SwiftUI does not re-evaluate the root view on its own when
+    /// the flash window elapses. Re-render once just after the flash ends so
+    /// the timeline is torn down instead of running for the life of the window.
+    private func scheduleFlashSettleIfNeeded() {
+        guard let flashStartedAt = model.flashStartedAt,
+              TmuxWorkspacePaneOverlayView.isFlashActive(
+                flashRect: model.flashRect,
+                flashStartedAt: flashStartedAt
+              ) else { return }
+        flashSettleGeneration &+= 1
+        let generation = flashSettleGeneration
+        let remaining = FocusFlashPattern.duration - Date().timeIntervalSince(flashStartedAt)
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, remaining) + 0.05) { [weak self] in
+            guard let self, self.flashSettleGeneration == generation else { return }
+            // Explicitly inactive: the flash window has elapsed on the monotonic
+            // dispatch clock, so do not re-read the wall clock here (a backwards
+            // clock step would otherwise leave the timeline mounted).
+            self.renderModel(flashActive: false)
         }
     }
 }

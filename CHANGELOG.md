@@ -26,6 +26,9 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Each ship now deletes promoted release candidates older than the two most recent, so the releases page stops accumulating 110 MB prereleases.
 
 ### Fixed
+- Idle CPU with an open window dropped from roughly 12 to 20 percent of a core to about 1 percent. The workspace pane overlay kept a display-rate animation timeline running for the life of every window; it now mounts one only while an attention flash is animating.
+- The dock icon no longer costs 32 MB of resident memory. The light and dark icon assets are declared as 512pt @2x, so AppKit decodes them at 1024 pixels instead of rasterizing a 2048 pixel copy.
+- Closing a workspace no longer leaves its Workspace object alive through the sidebar row's hover closure.
 - Pending review comments survive session restore and remain available for retry or copying when the source terminal cannot accept them.
 - Incoming notifications no longer reset a valid keyboard selection in the Notifications page.
 - Socket and typing-lag CI jobs cache the DerivedData paths they actually build into.

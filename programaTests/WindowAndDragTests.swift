@@ -1697,6 +1697,45 @@ final class MarkdownPanelPointerObserverViewTests: XCTestCase {
 
 @MainActor
 final class TmuxWorkspacePaneOverlayTests: XCTestCase {
+    func testOverlayMountsAnimationTimelineOnlyWhileFlashIsWithinItsDuration() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let rect = CGRect(x: 0, y: 0, width: 10, height: 10)
+        XCTAssertFalse(
+            TmuxWorkspacePaneOverlayView.isFlashActive(flashRect: nil, flashStartedAt: nil, now: start),
+            "No flash: the overlay must render statically, never with a display-rate timeline"
+        )
+        XCTAssertFalse(
+            TmuxWorkspacePaneOverlayView.isFlashActive(flashRect: rect, flashStartedAt: nil, now: start),
+            "A flash rect without a start time is not an active flash"
+        )
+        XCTAssertTrue(
+            TmuxWorkspacePaneOverlayView.isFlashActive(
+                flashRect: rect, flashStartedAt: start,
+                now: start.addingTimeInterval(FocusFlashPattern.duration / 2)
+            )
+        )
+        XCTAssertFalse(
+            TmuxWorkspacePaneOverlayView.isFlashActive(
+                flashRect: rect, flashStartedAt: start,
+                now: start.addingTimeInterval(FocusFlashPattern.duration + 0.01)
+            ),
+            "Once the flash pattern has finished, the timeline must be torn down"
+        )
+    }
+
+    func testAppearanceAppIconsDecodeAtRetinaDockSizeNotDoubleIt() {
+        for name in ["AppIconDark", "AppIconLight"] {
+            guard let icon = NSImage(named: name) else {
+                XCTFail("missing \(name) in the built bundle")
+                continue
+            }
+            let maxPixels = icon.representations.map { max($0.pixelsWide, $0.pixelsHigh) }.max() ?? 0
+            XCTAssertEqual(maxPixels, 1024, "\(name) largest representation")
+            XCTAssertEqual(icon.size.width, 512, accuracy: 0.5,
+                           "\(name) must be a 512pt @2x image so AppKit does not rasterize a 2048px Dock icon")
+        }
+    }
+
     func testTmuxWorkspacePaneOverlayModelTracksFlashReason() {
         let model = TmuxWorkspacePaneOverlayModel()
         let initialState = TmuxWorkspacePaneOverlayRenderState(
