@@ -151,28 +151,50 @@ struct TmuxWorkspacePaneOverlayView: View {
     let flashStartedAt: Date?
     let flashReason: WorkspaceAttentionFlashReason?
 
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            Canvas { context, _ in
-                for rect in unreadRects {
-                    drawUnreadRing(in: &context, rect: rect)
-                }
+    /// True only while a flash is still within its animation window. The
+    /// display-rate `TimelineView(.animation)` below is mounted only in that
+    /// state: an always-on animation timeline kept every window's overlay
+    /// hosting view re-laying out on every frame while idle (measured 12 to
+    /// 22 percent CPU with one idle terminal). Unread rings are static and
+    /// draw once without a timeline.
+    static func isFlashActive(flashRect: CGRect?, flashStartedAt: Date?, now: Date = Date()) -> Bool {
+        guard flashRect != nil, let flashStartedAt else { return false }
+        return now.timeIntervalSince(flashStartedAt) < FocusFlashPattern.duration
+    }
 
-                guard let flashRect,
-                      let flashStartedAt else { return }
-                let elapsed = timeline.date.timeIntervalSince(flashStartedAt)
-                let opacity = FocusFlashPattern.opacity(at: elapsed)
-                guard opacity > 0.001 else { return }
-                drawFlashRing(
-                    in: &context,
-                    rect: flashRect,
-                    opacity: opacity,
-                    reason: flashReason ?? .notificationArrival
-                )
+    var body: some View {
+        Group {
+            if Self.isFlashActive(flashRect: flashRect, flashStartedAt: flashStartedAt) {
+                TimelineView(.animation) { timeline in
+                    canvas(at: timeline.date)
+                }
+            } else {
+                canvas(at: nil)
             }
         }
         .allowsHitTesting(false)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func canvas(at date: Date?) -> some View {
+        Canvas { context, _ in
+            for rect in unreadRects {
+                drawUnreadRing(in: &context, rect: rect)
+            }
+
+            guard let date,
+                  let flashRect,
+                  let flashStartedAt else { return }
+            let elapsed = date.timeIntervalSince(flashStartedAt)
+            let opacity = FocusFlashPattern.opacity(at: elapsed)
+            guard opacity > 0.001 else { return }
+            drawFlashRing(
+                in: &context,
+                rect: flashRect,
+                opacity: opacity,
+                reason: flashReason ?? .notificationArrival
+            )
+        }
     }
 
     private func drawUnreadRing(in context: inout GraphicsContext, rect: CGRect) {

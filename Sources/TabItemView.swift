@@ -804,9 +804,12 @@ struct TabItemView: View, Equatable {
         .onTapGesture {
             updateSelection()
         }
-        .onHover { hovering in
-            isHovering = hovering
-        }
+        // Hover tracking lives in a leaf view that captures only the state
+        // binding. An `.onHover` closure here captures the whole row value,
+        // including `tab`, and SwiftUI's context-menu responder tree kept
+        // those closures alive after the row was gone: closed Workspace
+        // objects stayed resident (7 live for 1 open workspace in a heap dump).
+        .background(SidebarRowHoverProbe(isHovering: $isHovering))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(accessibilityTitle))
         .accessibilityHint(Text(accessibilityHintText))
@@ -2149,5 +2152,19 @@ private struct SidebarMetadataMarkdownBlockRow: View {
             markdown: block.markdown,
             options: .init(interpretedSyntax: .full)
         )
+    }
+}
+
+/// Leaf view whose only captured state is a `Binding<Bool>`, so the hover
+/// closure never retains the sidebar row (and its `Workspace`) after removal.
+private struct SidebarRowHoverProbe: View {
+    @Binding var isHovering: Bool
+
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                isHovering = hovering
+            }
     }
 }
