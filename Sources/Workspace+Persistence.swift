@@ -294,7 +294,8 @@ extension Workspace {
         switch panel.panelType {
         case .terminal:
             guard let terminalPanel = panel as? TerminalPanel else { return nil }
-            let shouldPersistScrollback = terminalPanel.shouldPersistScrollbackForSessionSnapshot()
+            let shouldPersistScrollback = ScrollbackPersistenceSettings.isEnabled()
+                && terminalPanel.shouldPersistScrollbackForSessionSnapshot()
             let capturedScrollback = includeScrollback && shouldPersistScrollback
                 ? TerminalController.shared.readTerminalTextForSnapshot(
                     terminalPanel: terminalPanel,
@@ -522,9 +523,11 @@ extension Workspace {
             // The result feeds the exact same replay/truncation path either way;
             // this is purely an alternative source of scrollback bytes.
             let hasStoredScrollback = snapshot.terminal?.scrollback?.contains { !$0.isWhitespace } ?? false
-            let scrollbackText = hasStoredScrollback
-                ? snapshot.terminal?.scrollback
-                : SessionWALStore.shared.readFallbackScrollbackText(sessionId: snapshot.id.uuidString)
+            let scrollbackText = ScrollbackPersistenceSettings.isEnabled()
+                ? (hasStoredScrollback
+                    ? snapshot.terminal?.scrollback
+                    : SessionWALStore.shared.readFallbackScrollbackText(sessionId: snapshot.id.uuidString))
+                : nil
             // Routed through the fresh surface's revive-seed path
             // (`TerminalSurface.pendingReviveSeed` / `seedRevivedScrollbackIfPending`)
             // instead of the old temp-file + shell-rc `cat` mechanism --
@@ -697,10 +700,28 @@ extension Workspace {
         }
 
         let scrollbackText = SessionWALStore.shared.readFallbackScrollbackText(sessionId: oldSessionId)
+        let retainedDescriptor: SessionEscrowRetainedDescriptor?
+        let descriptorFD: Int32
+        if socketPath == SessionEscrowClient.legacySocketPath() {
+            let owner = SessionEscrowRetainedDescriptor.retain(
+                sessionId: oldSessionId, masterFD: masterFD, childPID: childPID,
+                tokenHex: tokenHex, socketPath: socketPath, recoveryPending: false
+            )
+            guard let fd = owner.duplicate() else {
+                owner.markRecoveryPending()
+                return nil
+            }
+            retainedDescriptor = owner
+            descriptorFD = fd
+        } else {
+            retainedDescriptor = nil
+            descriptorFD = masterFD
+        }
         let reviveDescriptor = TerminalSurfaceReviveDescriptor(
-            masterFD: masterFD,
+            masterFD: descriptorFD,
             childPID: Int64(childPID),
-            scrollbackText: scrollbackText
+            scrollbackText: scrollbackText,
+            retainedDescriptor: retainedDescriptor
         )
 
         guard let terminalPanel = newTerminalSurface(
@@ -709,14 +730,10 @@ extension Workspace {
             workingDirectory: workingDirectory,
             reviveDescriptor: reviveDescriptor
         ) else {
-            // Surface creation failed after a successful retrieve.
-            // `TerminalSurface`'s own creation-failure/deinit paths close
-            // `masterFD` -- see `TerminalSurfaceReviveDescriptor`'s doc
-            // comment -- so there is nothing to clean up here. The holder
-            // already removed this session from its registry the moment it
-            // granted the retrieve, so the child is simply unrecoverable
-            // for the rest of this launch: an accepted, rare degradation
-            // rather than ever risking a double-issue of the same fd.
+            retainedDescriptor?.markRecoveryPending()
+            // TerminalSurface closes its descriptor on failure. A legacy
+            // migration retains a separate master until Retry can establish
+            // acknowledged holder ownership, preserving the running child.
             dilog("escrow.reattach", "session=\(oldSessionId.prefix(8)) outcome=fallback reason=panel_creation_failed")
             return nil
         }

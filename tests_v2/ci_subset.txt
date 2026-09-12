@@ -10,6 +10,7 @@ test_cli_id_format_defaults.py
 # GitHub runners even with a virtual display; needs runner-side investigation (#169).
 test_cli_identify_ref_resolution.py
 test_workspace_create_initial_env.py
+test_layout_save_apply_roundtrip.py
 test_trigger_flash.py
 test_cli_new_workspace_command_queue.py
 test_cli_new_workspace_background_metadata.py

@@ -8,10 +8,17 @@ import Combine
 final class MarkdownSearchState: ObservableObject {
     /// The current search needle typed by the user.
     @Published var needle: String = ""
-    /// All case-insensitive match ranges in the raw markdown string.
-    @Published var matches: [Range<String.Index>] = []
+    /// The exact plain text displayed by the native Find document.
+    @Published var searchText: String = ""
+    /// UTF-16 ranges in searchText, suitable for NSTextView selection.
+    @Published var matches: [NSRange] = []
     /// Index of the currently selected match, or nil when no matches.
     @Published var currentIndex: Int? = nil
+
+    var selectedRange: NSRange? {
+        guard let currentIndex, matches.indices.contains(currentIndex) else { return nil }
+        return matches[currentIndex]
+    }
 }
 
 // MARK: - MarkdownPanel
@@ -83,6 +90,13 @@ final class MarkdownPanel: Panel, ObservableObject {
         }
     }
 
+    /// Called when the panel is re-attached to a different workspace (detach/move transfer).
+    /// Mirrors `TerminalPanel.updateWorkspaceId` / `BrowserPanel.reattachToWorkspace` /
+    /// `ReviewPanel.updateWorkspaceId`.
+    func updateWorkspaceId(_ newWorkspaceId: UUID) {
+        workspaceId = newWorkspaceId
+    }
+
     // MARK: - Panel protocol
 
     func focus() {
@@ -95,6 +109,7 @@ final class MarkdownPanel: Panel, ObservableObject {
 
     func close() {
         isClosed = true
+        hideFind()
         stopFileWatcher()
     }
 
@@ -107,8 +122,10 @@ final class MarkdownPanel: Panel, ObservableObject {
 
     /// Open the find bar (or re-focus it if already open).
     func startFind() {
+        guard !isClosed else { return }
         if searchState == nil {
             let state = MarkdownSearchState()
+            state.searchText = isFileUnavailable ? "" : MarkdownDocumentSearch.text(from: content)
             searchState = state
             // Re-run match computation whenever the needle changes.
             searchSubscription = state.$needle
@@ -146,13 +163,16 @@ final class MarkdownPanel: Panel, ObservableObject {
     /// Close the find bar and discard search state.
     func hideFind() {
         searchSubscription = nil
+        searchState?.searchText = ""
+        searchState?.matches = []
+        searchState?.currentIndex = nil
         searchState = nil
 #if DEBUG
         dlog("markdown.find.hide panel=\(id.uuidString.prefix(5))")
 #endif
     }
 
-    /// Walk the raw markdown content and collect all case-insensitive matches.
+    /// Collect case-insensitive matches in the exact displayed Find text.
     private func recomputeMatches() {
         guard let state = searchState else { return }
         guard !state.needle.isEmpty else {
@@ -160,12 +180,14 @@ final class MarkdownPanel: Panel, ObservableObject {
             state.currentIndex = nil
             return
         }
-        var result: [Range<String.Index>] = []
-        var searchRange = content.startIndex..<content.endIndex
-        while let range = content.range(of: state.needle, options: .caseInsensitive, range: searchRange) {
-            result.append(range)
-            guard range.upperBound < content.endIndex else { break }
-            searchRange = range.upperBound..<content.endIndex
+        let text = state.searchText
+        var result: [NSRange] = []
+        var searchRange = text.startIndex..<text.endIndex
+        while let range = text.range(of: state.needle, options: .caseInsensitive, range: searchRange) {
+            guard !range.isEmpty else { break }
+            result.append(NSRange(range, in: text))
+            guard range.upperBound < text.endIndex else { break }
+            searchRange = range.upperBound..<text.endIndex
         }
         state.matches = result
         if result.isEmpty {
@@ -180,6 +202,7 @@ final class MarkdownPanel: Panel, ObservableObject {
     // MARK: - File I/O
 
     private func loadFileContent() {
+        guard !isClosed else { return }
         do {
             let newContent = try String(contentsOfFile: filePath, encoding: .utf8)
             content = newContent
@@ -192,14 +215,20 @@ final class MarkdownPanel: Panel, ObservableObject {
                 content = decoded
                 isFileUnavailable = false
             } else {
+                content = ""
                 isFileUnavailable = true
             }
+        }
+        if let state = searchState {
+            state.searchText = isFileUnavailable ? "" : MarkdownDocumentSearch.text(from: content)
+            recomputeMatches()
         }
     }
 
     // MARK: - File watcher via DispatchSource
 
     private func startFileWatcher() {
+        guard !isClosed else { return }
         let fd = open(filePath, O_EVTONLY)
         guard fd >= 0 else { return }
         fileDescriptor = fd
@@ -218,6 +247,7 @@ final class MarkdownPanel: Panel, ObservableObject {
                 // a stale inode, so we must always stop and reattach the watcher
                 // even if the new file is already readable (atomic save case).
                 DispatchQueue.main.async {
+                    guard !self.isClosed else { return }
                     self.stopFileWatcher()
                     self.loadFileContent()
                     if self.isFileUnavailable {
@@ -231,6 +261,7 @@ final class MarkdownPanel: Panel, ObservableObject {
             } else {
                 // Content changed — reload.
                 DispatchQueue.main.async {
+                    guard !self.isClosed else { return }
                     self.loadFileContent()
                 }
             }

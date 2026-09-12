@@ -1,6 +1,210 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "settings.notifications.permission.subtitle.notDetermined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desktop notifications are not enabled yet."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デスクトップ通知はまだ有効になっていません。"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.subtitle.authorized": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desktop notifications are enabled."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デスクトップ通知は有効です。"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.subtitle.denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desktop notifications are disabled in System Settings."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デスクトップ通知はシステム設定で無効になっています。"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.subtitle.provisional": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desktop notifications are enabled with quiet delivery."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デスクトップ通知は静かに配信される設定で有効になっています。"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.subtitle.ephemeral": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desktop notifications are temporarily enabled."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デスクトップ通知は一時的に有効になっています。"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.action.enable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効にする"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.action.openSettings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定を開く"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.status.notDetermined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Requested"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未リクエスト"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.status.authorized": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allowed"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "許可済み"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.status.denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denied"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒否"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.status.provisional": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deliver Quietly"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "静かに配信"
+          }
+        }
+      }
+    },
+    "settings.notifications.permission.status.ephemeral": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temporary"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一時的"
+          }
+        }
+      }
+    },
     "review.comment.addFailed": {
       "extractionState": "manual",
       "localizations": {
@@ -6863,6 +7067,40 @@
         }
       }
     },
+    "dialog.cmuxConfig.invalidRecipe.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recipe prompts and parameter values must be a single line without control characters. Remove any line breaks, tabs, or control characters and try again. Nothing was inserted into the terminal."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レシピのプロンプトとパラメータの値は、制御文字を含まない1行のテキストにしてください。改行、タブ、制御文字を削除してから、もう一度お試しください。ターミナルには何も挿入されていません。"
+          }
+        }
+      }
+    },
+    "dialog.cmuxConfig.invalidRecipe.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt Needs Correction"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロンプトを修正してください"
+          }
+        }
+      }
+    },
     "dialog.cmuxConfig.parameter.continue": {
       "extractionState": "manual",
       "localizations": {
@@ -7032,6 +7270,108 @@
           "stringUnit": {
             "state": "translated",
             "value": "Programaが応答していません"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.allow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "許可"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.paste.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This clipboard text may execute commands when pasted into the terminal. Allow this paste?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このクリップボードのテキストをターミナルに貼り付けると、コマンドが実行される可能性があります。貼り付けを許可しますか？"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.paste.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Unsafe Paste?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安全でない貼り付けを許可しますか？"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.read.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A program running in this terminal requested your clipboard contents. Allow it to read the clipboard?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このターミナルで実行中のプログラムがクリップボードの内容を要求しています。読み取りを許可しますか？"
+          }
+        }
+      }
+    },
+    "dialog.clipboardConfirmation.read.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Clipboard Access?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリップボードへのアクセスを許可しますか？"
           }
         }
       }
@@ -8294,6 +8634,27 @@
             "value": "終了時にスクロールバックを保存"
           }
         }
+      }
+    },
+    "settings.app.persistScrollback.incomplete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Scrollback privacy could not be fully applied. Retry to finish protecting existing sessions." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "スクロールバックのプライバシー設定を完全に適用できませんでした。再試行して既存のセッションを保護してください。" } }
+      }
+    },
+    "settings.app.persistScrollback.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Retry" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "再試行" } }
+      }
+    },
+    "settings.app.persistScrollback.warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Some older sessions may still write terminal output to disk." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "一部の古いセッションでは、ターミナル出力が引き続きディスクに書き込まれる可能性があります。" } }
       }
     },
     "settings.app.persistScrollback.subtitleOff": {

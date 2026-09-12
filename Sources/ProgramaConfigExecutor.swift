@@ -63,7 +63,31 @@ struct ProgramaConfigExecutor {
         ) else { return }
 
         guard let terminal = tabManager.selectedWorkspace?.focusedTerminalPanel else { return }
-        terminal.sendInput(sanitizeForExecution(resolvedPrompt))
+        guard insertRecipePrompt(resolvedPrompt, sendInput: terminal.sendInput) else {
+            let alert = NSAlert()
+            alert.messageText = String(
+                localized: "dialog.cmuxConfig.invalidRecipe.title",
+                defaultValue: "Prompt Needs Correction"
+            )
+            alert.informativeText = String(
+                localized: "dialog.cmuxConfig.invalidRecipe.message",
+                defaultValue: "Recipe prompts and parameter values must be a single line without control characters. Remove any line breaks, tabs, or control characters and try again. Nothing was inserted into the terminal."
+            )
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
+            alert.runModal()
+            return
+        }
+    }
+
+    @discardableResult
+    static func insertRecipePrompt(_ resolvedPrompt: String, sendInput: (String) -> Void) -> Bool {
+        guard !resolvedPrompt.unicodeScalars.contains(where: {
+            $0.value < 0x20 || (0x7F...0x9F).contains($0.value)
+                || $0.value == 0x2028 || $0.value == 0x2029
+        }) else { return false }
+        sendInput(String(resolvedPrompt.unicodeScalars.filter { !dangerousScalars.contains($0) }))
+        return true
     }
 
     /// The security decision, isolated from the UI so it can be tested directly.

@@ -132,45 +132,6 @@ final class BrowserPanel: Panel, ObservableObject {
     })()
     """
 
-    static let dialogTelemetryHookBootstrapScriptSource = """
-    (() => {
-      if (window.__programaDialogHooksInstalled) return true;
-      window.__programaDialogHooksInstalled = true;
-
-      window.__programaDialogQueue = window.__programaDialogQueue || [];
-      window.__programaDialogDefaults = window.__programaDialogDefaults || { confirm: false, prompt: null };
-      const __pushDialog = (type, message, defaultText) => {
-        window.__programaDialogQueue.push({
-          type,
-          message: String(message || ''),
-          default_text: defaultText == null ? null : String(defaultText),
-          timestamp_ms: Date.now()
-        });
-        if (window.__programaDialogQueue.length > 128) {
-          window.__programaDialogQueue.splice(0, window.__programaDialogQueue.length - 128);
-        }
-      };
-
-      window.alert = function(message) {
-        __pushDialog('alert', message, null);
-      };
-      window.confirm = function(message) {
-        __pushDialog('confirm', message, null);
-        return !!window.__programaDialogDefaults.confirm;
-      };
-      window.prompt = function(message, defaultValue) {
-        __pushDialog('prompt', message, defaultValue == null ? null : defaultValue);
-        const v = window.__programaDialogDefaults.prompt;
-        if (v === null || v === undefined) {
-          return defaultValue == null ? '' : String(defaultValue);
-        }
-        return String(v);
-      };
-
-      return true;
-    })()
-    """
-
     let id: UUID
     let panelType: PanelType = .browser
 
@@ -1100,7 +1061,6 @@ final class BrowserPanel: Panel, ObservableObject {
         )
         self.webView = webView
         self.insecureHTTPAlertFactory = { NSAlert() }
-        applyUserProxyConfiguration()
         BrowserProfileStore.shared.noteUsed(resolvedProfileID)
 
         // Set up navigation delegate
@@ -1202,30 +1162,6 @@ final class BrowserPanel: Panel, ObservableObject {
         }
     }
 
-    /// Applies the `browser.proxy` user setting to this panel's data store, or clears
-    /// any proxy configuration when the setting is absent or malformed.
-    private func applyUserProxyConfiguration() {
-        let store = webView.configuration.websiteDataStore
-        if let descriptor = BrowserUserProxySettings.descriptor() {
-            guard let nwPort = NWEndpoint.Port(rawValue: UInt16(descriptor.port)) else {
-                store.proxyConfigurations = []
-                return
-            }
-            let nwEndpoint = NWEndpoint.hostPort(
-                host: NWEndpoint.Host(descriptor.host),
-                port: nwPort
-            )
-            switch descriptor.proxyType {
-            case .socks5:
-                store.proxyConfigurations = [ProxyConfiguration(socksv5Proxy: nwEndpoint)]
-            case .httpConnect:
-                store.proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy: nwEndpoint)]
-            }
-        } else {
-            store.proxyConfigurations = []
-        }
-    }
-
     private func beginDownloadActivity() {
         activeDownloadCount += 1
         isDownloading = activeDownloadCount > 0
@@ -1253,7 +1189,6 @@ final class BrowserPanel: Panel, ObservableObject {
                 reason: "workspace_reattach"
             )
         }
-        applyUserProxyConfiguration()
     }
 
     @discardableResult
@@ -1797,6 +1732,7 @@ final class BrowserPanel: Panel, ObservableObject {
         }
 
         webView.stopLoading()
+        BrowserJSDialogPresenter.cancelPendingDialog(for: webView)
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         navigationDelegate = nil

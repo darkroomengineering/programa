@@ -56,11 +56,13 @@ final class ProgramaLayoutStore: ObservableObject {
 
     private let watchQueue = DispatchQueue(label: "com.programa.layout-store-watch")
     private let fileWatcher: FileWatcher
+    private let directoryURL: URL
 
-    init() {
+    init(directoryURL: URL? = nil, startWatching: Bool = true) {
+        self.directoryURL = directoryURL ?? URL(fileURLWithPath: Self.directoryPath, isDirectory: true)
         fileWatcher = FileWatcher(queue: watchQueue)
         reload()
-        startWatching()
+        if startWatching { self.startWatching() }
     }
 
     deinit {
@@ -74,16 +76,21 @@ final class ProgramaLayoutStore: ObservableObject {
     }
 
     func exists(name: String) -> Bool {
-        FileManager.default.fileExists(atPath: filePath(for: name))
+        guard Self.isValidName(name) else { return false }
+        return FileManager.default.fileExists(atPath: filePath(for: name))
     }
 
     func load(name: String) -> ProgramaSavedLayout? {
+        guard Self.isValidName(name) else { return nil }
         guard let data = FileManager.default.contents(atPath: filePath(for: name)), !data.isEmpty else {
             return nil
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(ProgramaSavedLayout.self, from: data)
+        guard var saved = try? decoder.decode(ProgramaSavedLayout.self, from: data) else { return nil }
+        // The filename remains authoritative when a layout file is copied or renamed.
+        saved.name = name
+        return saved
     }
 
     @discardableResult
@@ -107,6 +114,7 @@ final class ProgramaLayoutStore: ObservableObject {
     }
 
     func remove(name: String) throws {
+        guard Self.isValidName(name) else { throw ProgramaLayoutStoreError.invalidName }
         let path = filePath(for: name)
         guard FileManager.default.fileExists(atPath: path) else {
             throw ProgramaLayoutStoreError.notFound
@@ -118,22 +126,22 @@ final class ProgramaLayoutStore: ObservableObject {
     static func isValidName(_ name: String) -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != ".", trimmed != ".." else { return false }
-        return !trimmed.contains("/")
+        return !trimmed.contains("/") && !name.contains("\0")
     }
 
     // MARK: - Internals
 
     private func filePath(for name: String) -> String {
-        (Self.directoryPath as NSString).appendingPathComponent("\(name).json")
+        (directoryURL.path as NSString).appendingPathComponent("\(name).json")
     }
 
     private func ensureDirectoryExists() throws {
-        try FileManager.default.createDirectory(atPath: Self.directoryPath, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
     }
 
     private func reload() {
         let fileManager = FileManager.default
-        guard let entries = try? fileManager.contentsOfDirectory(atPath: Self.directoryPath) else {
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: directoryURL.path) else {
             savedLayouts = []
             return
         }
@@ -150,7 +158,7 @@ final class ProgramaLayoutStore: ObservableObject {
     private func startWatching() {
         try? ensureDirectoryExists()
         _ = fileWatcher.start(
-            path: Self.directoryPath,
+            path: directoryURL.path,
             eventMask: [.write, .delete, .rename, .extend]
         ) { [weak self] _ in
             DispatchQueue.main.async {

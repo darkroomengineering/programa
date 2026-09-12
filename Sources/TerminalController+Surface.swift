@@ -223,7 +223,11 @@ extension TerminalController {
     }
 
     nonisolated func v2SurfaceClose(params: [String: Any]) -> V2CallResult {
-        v2MainSync {
+        let requestedSurfaceId = v2UUID(params, "surface_id")
+        if v2HasNonNullParam(params, "surface_id"), requestedSurfaceId == nil {
+            return v2InvalidParam("surface_id")
+        }
+        return v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {
                 return .err(code: "unavailable", message: "TabManager not available", data: nil)
             }
@@ -231,7 +235,7 @@ extension TerminalController {
                 return .err(code: "not_found", message: "Workspace not found", data: nil)
             }
 
-            let surfaceId = v2UUID(params, "surface_id") ?? ws.focusedPanelId
+            let surfaceId = requestedSurfaceId ?? ws.focusedPanelId
             guard let surfaceId else {
                 return .err(code: "not_found", message: "No focused surface", data: nil)
             }

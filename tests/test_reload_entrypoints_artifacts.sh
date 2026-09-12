@@ -172,6 +172,137 @@ test_cold_entrypoints_prepare_dependency() {
 test_staging_uses_canonical_artifact_and_bundle_identity
 test_cold_entrypoints_prepare_dependency
 
+# Each fixture owns a unique compatibility path and a short HOME (Unix socket
+# paths on macOS are limited to 104 bytes). Never inspect a real app's sockets.
+python3 - "$ROOT_DIR" "$STUB_BIN" <<'PY' || FAILURES=$((FAILURES + 1))
+from pathlib import Path
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import uuid
+
+root, stub_bin = map(Path, sys.argv[1:])
+failures = []
+
+def check(condition, message):
+    if not condition:
+        failures.append(message)
+        print(f"FAIL: {message}", file=sys.stderr)
+
+with tempfile.TemporaryDirectory(prefix="pr-", dir="/tmp") as temporary:
+    fixture = Path(temporary)
+    tag_prefix = "rt-" + uuid.uuid4().hex[:8]
+    home = fixture / "h"
+    home.mkdir()
+    environment = dict(os.environ, HOME=str(home), PATH=f"{stub_bin}:/usr/bin:/bin",
+                       TEST_COMMAND_LOG=str(fixture / "commands"),
+                       TEST_ENSURE_MARKER=str(fixture / "ready"),
+                       TEST_REQUIRE_ENSURE="1", PROGRAMA_SKIP_ZIG_BUILD="1",
+                       PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND=str(stub_bin / "ensure-ghosttykit"))
+
+    def build(tag):
+        result = subprocess.run(["bash", "scripts/reload.sh", "--tag", tag,
+                                 "--derived-data", str(fixture / tag)],
+                                cwd=root, env=environment, capture_output=True, text=True)
+        check(result.returncode == 0, f"build-only {tag} failed: {result.stdout}{result.stderr}")
+        return fixture / tag
+
+    for kind in ("directory", "file", "absent", "symlink"):
+        tag = f"{tag_prefix}-{kind}"
+        compatibility = Path(f"/tmp/programa-{tag}")
+        target = fixture / f"{kind}-target"
+        # Refuse to claim an unexpected pre-existing path, even with unique tags.
+        if os.path.lexists(compatibility):
+            raise RuntimeError(f"fixture path already exists: {compatibility}")
+        try:
+            if kind == "directory":
+                compatibility.mkdir()
+                (compatibility / "sentinel").write_text("preserve directory")
+            elif kind == "file":
+                compatibility.write_text("preserve file")
+            elif kind == "symlink":
+                target.mkdir()
+                (target / "sentinel").write_text("preserve target")
+                compatibility.symlink_to(target, target_is_directory=True)
+            derived = build(tag)
+            if kind == "directory":
+                check(not compatibility.is_symlink() and compatibility.is_dir()
+                      and (compatibility / "sentinel").exists(),
+                      "build-only must preserve a real compatibility directory and its contents")
+            elif kind == "file":
+                check(not compatibility.is_symlink() and compatibility.is_file()
+                      and compatibility.read_text() == "preserve file",
+                      "build-only must preserve a regular file at the compatibility path")
+            else:
+                check(compatibility.is_symlink() and compatibility.resolve() == derived.resolve(),
+                      f"build-only must create or replace the {kind} compatibility link")
+                if kind == "symlink":
+                    check((target / "sentinel").read_text() == "preserve target",
+                          "replacing a compatibility symlink must preserve its old target")
+        finally:
+            if compatibility.is_symlink() or compatibility.is_file():
+                compatibility.unlink()
+            elif compatibility.is_dir():
+                shutil.rmtree(compatibility)
+
+    tag = f"{tag_prefix}-socket"
+    compatibility = Path(f"/tmp/programa-{tag}")
+    ui_socket = Path(f"/tmp/programa-debug-{tag}.sock")
+    daemon_socket = home / "Library/Application Support/programa" / f"programad-dev-{tag}.sock"
+    daemon_socket.parent.mkdir(parents=True, exist_ok=True)
+    if any(os.path.lexists(path) for path in (compatibility, ui_socket, daemon_socket)):
+        raise RuntimeError("socket fixture path already exists")
+    ready = fixture / "listeners-ready"
+    server = subprocess.Popen([sys.executable, "-c", '''
+import pathlib, signal, socket, sys
+listeners = []
+for path in sys.argv[2:]:
+    listener = socket.socket(socket.AF_UNIX)
+    listener.bind(path)
+    listener.listen(8)
+    listeners.append(listener)
+pathlib.Path(sys.argv[1]).touch()
+signal.pause()
+''', str(ready), str(ui_socket), str(daemon_socket)])
+    try:
+        import time
+        deadline = time.monotonic() + 5
+        while not ready.exists() and server.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if not ready.exists():
+            raise RuntimeError("disposable socket listeners did not become ready")
+        # lsof may only identify this fixture's daemon holder, never other PIDs.
+        socket_bin = fixture / "bin"
+        socket_bin.mkdir()
+        lsof = socket_bin / "lsof"
+        lsof.write_text(f'#!/bin/sh\n[ "$2" = "{daemon_socket}" ] && echo {server.pid}\n')
+        lsof.chmod(0o755)
+        environment["PATH"] = f"{socket_bin}:{stub_bin}:/usr/bin:/bin"
+        build(tag)
+        check(server.poll() is None, "build-only must not terminate the tagged daemon socket holder")
+        for path in (ui_socket, daemon_socket):
+            try:
+                with socket.socket(socket.AF_UNIX) as client:
+                    client.settimeout(1)
+                    client.connect(str(path))
+            except OSError as error:
+                check(False, f"build-only must leave {path.name} connectable: {error}")
+    finally:
+        if server.poll() is None:
+            server.terminate()
+        server.wait(timeout=5)
+        for path in (ui_socket, daemon_socket, compatibility):
+            if os.path.lexists(path):
+                path.unlink()
+
+if failures:
+    raise SystemExit(1)
+print("PASS: build-only reload preserves existing data and live tagged sockets")
+PY
+
 # Exercise retention against disposable build trees, never the developer's caches.
 python3 - "$ROOT_DIR/scripts/tagged-build-cache.py" "$TMP_DIR" <<'PY' || FAILURES=$((FAILURES + 1))
 import fcntl

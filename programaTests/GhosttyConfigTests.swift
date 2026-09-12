@@ -9,6 +9,90 @@ import Darwin
 @testable import Programa
 #endif
 
+/// Runs the actual shell integration against a bundled CLI stand-in. The first
+/// report is denied, the next acknowledged; shell bookkeeping must follow that
+/// acknowledgment, including when no password environment variable is present.
+private final class LocalTTYReportFixture {
+    let root: URL
+    let socketFD: Int32
+    var socketPath: String { root.appendingPathComponent("control.sock").path }
+    var countPath: String { root.appendingPathComponent("count").path }
+    var cliPath: String { root.appendingPathComponent("programa").path }
+
+    init() throws {
+        root = URL(fileURLWithPath: "/tmp/tty-" + String(UUID().uuidString.prefix(8)))
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        socketFD = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+        guard socketFD >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let path = root.appendingPathComponent("control.sock").path
+        path.withCString { source in
+            withUnsafeMutablePointer(to: &address.sun_path) {
+                $0.withMemoryRebound(to: CChar.self, capacity: 104) { _ = strcpy($0, source) }
+            }
+        }
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(socketFD, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        guard result == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        let script = """
+        #!/bin/sh
+        case "$*" in *"rpc surface.report_tty "*) ;; *) exit 0 ;; esac
+        count=0
+        test ! -f '\(countPath)' || count=$(cat '\(countPath)')
+        count=$((count + 1))
+        printf '%s' "$count" > '\(countPath)'
+        test "$count" -gt 1
+        """
+        try script.write(toFile: cliPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cliPath)
+    }
+
+    deinit {
+        Darwin.close(socketFD)
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    var environment: [String: String] { [
+        "PATH": root.path + ":/usr/bin:/bin:/usr/sbin:/sbin",
+        "PROGRAMA_BUNDLED_CLI_PATH": cliPath,
+        "PROGRAMA_SOCKET_PATH": socketPath,
+        "PROGRAMA_WORKSPACE_ID": "11111111-1111-1111-1111-111111111111",
+        "PROGRAMA_TAB_ID": "11111111-1111-1111-1111-111111111111",
+        "PROGRAMA_PANEL_ID": "22222222-2222-2222-2222-222222222222",
+        "PROGRAMA_SURFACE_ID": "22222222-2222-2222-2222-222222222222",
+    ] }
+
+    var posixCommand: String { """
+        rm -f '\(countPath)'
+        _PROGRAMA_TTY_NAME=ttys999
+        _PROGRAMA_TTY_REPORTED=0
+        _cmux_report_tty_once
+        first=$_PROGRAMA_TTY_REPORTED
+        _cmux_report_tty_once
+        second=$_PROGRAMA_TTY_REPORTED
+        _cmux_report_tty_once
+        printf 'TTY_STATES=%s,%s,%s\\n' "$first" "$second" "$_PROGRAMA_TTY_REPORTED"
+        printf 'TTY_ATTEMPTS=%s\\n' "$(cat '\(countPath)' 2>/dev/null)"
+        """ }
+
+    var fishCommand: String { """
+        rm -f '\(countPath)'
+        set -g _PROGRAMA_TTY_NAME ttys999
+        set -g _PROGRAMA_TTY_REPORTED 0
+        _cmux_report_tty_once
+        set first $_PROGRAMA_TTY_REPORTED
+        _cmux_report_tty_once
+        set second $_PROGRAMA_TTY_REPORTED
+        _cmux_report_tty_once
+        printf 'TTY_STATES=%s,%s,%s\\n' $first $second $_PROGRAMA_TTY_REPORTED
+        printf 'TTY_ATTEMPTS=%s\\n' (cat '\(countPath)' 2>/dev/null)
+        """ }
+}
+
 final class SidebarPathFormatterTests: XCTestCase {
     func testShortenedPathReplacesExactHomeDirectory() {
         XCTAssertEqual(
@@ -2329,6 +2413,25 @@ final class SidebarBackgroundConfigTests: XCTestCase {
 }
 
 final class ZshShellIntegrationHandoffTests: XCTestCase {
+    func testLocalTTYReportRetriesDeniedCLIThenDeduplicatesAcknowledgmentInZsh() throws {
+        let fixture = try LocalTTYReportFixture()
+        let output = try runInteractiveZsh(
+            cmuxLoadGhosttyIntegration: false, cmuxLoadShellIntegration: true,
+            command: fixture.posixCommand, extraEnvironment: fixture.environment
+        )
+        XCTAssertTrue(output.contains("TTY_ATTEMPTS=2"), output)
+        XCTAssertTrue(output.contains("TTY_STATES=0,1,1"), output)
+    }
+
+    func testLocalTTYReportRetriesDeniedCLIThenDeduplicatesAcknowledgmentInBash() throws {
+        let fixture = try LocalTTYReportFixture()
+        let output = try runInteractiveBash(
+            cmuxLoadShellIntegration: true, command: fixture.posixCommand,
+            extraEnvironment: fixture.environment
+        )
+        XCTAssertTrue(output.stdout.contains("TTY_ATTEMPTS=2"), output.stdout + output.stderr)
+        XCTAssertTrue(output.stdout.contains("TTY_STATES=0,1,1"), output.stdout + output.stderr)
+    }
     func testGhosttyPromptHooksLoadWhenProgramaRequestsZshIntegration() throws {
         let output = try runInteractiveZsh(cmuxLoadGhosttyIntegration: true)
 
@@ -3546,6 +3649,12 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 }
 
 final class FishShellIntegrationHandoffTests: XCTestCase {
+    func testLocalTTYReportRetriesDeniedCLIThenDeduplicatesAcknowledgmentInFish() throws {
+        let fixture = try LocalTTYReportFixture()
+        let output = try runInteractiveFish(command: fixture.fishCommand, extraEnvironment: fixture.environment)
+        XCTAssertTrue(output.contains("TTY_ATTEMPTS=2"), output)
+        XCTAssertTrue(output.contains("TTY_STATES=0,1,1"), output)
+    }
     func testFishReportTtyPayloadIncludesSurfaceIdWithoutTmux() throws {
         let output = try runInteractiveFish(
             command: """

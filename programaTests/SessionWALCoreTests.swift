@@ -8,11 +8,14 @@ import XCTest
 
 final class SessionWALCoreTests: XCTestCase {
     private var temporaryRoot: URL!
+    private var policyPaths: SessionScrollbackPolicyPaths!
 
     override func setUpWithError() throws {
         temporaryRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("programa-session-wal-core-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        policyPaths = SessionScrollbackPolicyPaths(snapshotFileURL: temporaryRoot.appendingPathComponent("snapshot.json"))
+        _ = try SessionScrollbackPolicyStore.transition(enabled: true, at: policyPaths)
     }
 
     override func tearDownWithError() throws {
@@ -72,6 +75,23 @@ final class SessionWALCoreTests: XCTestCase {
             "FRAMEhi",
             "A frame captured after rotation must replay from the new WAL generation and offset"
         )
+    }
+
+    func testRingDiscardsQueuedAndDisabledBytesAcrossPolicyTransitions() throws {
+        let first = SessionScrollbackPolicy(enabled: true, generation: UUID())
+        let ring = SessionWALRingBuffer(capacity: 64, policy: first)
+        append(Array("queued-before-disable".utf8), to: ring)
+        ring.transition(to: SessionScrollbackPolicy(enabled: false, generation: UUID()))
+        XCTAssertNil(ring.drainCaptured(), "Disabling persistence must discard queued content")
+        append(Array("private-while-disabled".utf8), to: ring)
+        XCTAssertNil(ring.drainCaptured(), "Disabled capture must not admit new terminal bytes")
+        let resumed = SessionScrollbackPolicy(enabled: true, generation: UUID())
+        ring.transition(to: resumed)
+        append(Array("fresh".utf8), to: ring)
+        let capture = try XCTUnwrap(ring.drainCaptured())
+        XCTAssertEqual(capture.bytes, Array("fresh".utf8))
+        XCTAssertEqual(capture.generation, resumed.generation)
+        XCTAssertNil(ring.drainCaptured())
     }
 
     func testRotationAfterFrameInvalidatesOffsetEvenWhenNewWALRegrowsPastIt() throws {
@@ -305,8 +325,49 @@ final class SessionWALCoreTests: XCTestCase {
 
     private func makePaths() -> SessionWALPaths {
         SessionWALPaths(
-            sessionDirectory: temporaryRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            sessionDirectory: temporaryRoot.appendingPathComponent(UUID().uuidString, isDirectory: true),
+            policyPaths: policyPaths
         )
+    }
+
+    func testDisabledPolicySuppressesContentButPreservesSessionMetadata() throws {
+        let paths = makePaths()
+        let policy = try SessionScrollbackPolicyStore.transition(enabled: false, at: policyPaths)
+        try seedMeta(at: paths, generation: 7)
+        try attemptContentWrite(at: paths, generation: policy.generation)
+        XCTAssertEqual(SessionWALCore.readMeta(at: paths)?.walGeneration, 7)
+        assertNoContent(at: paths)
+    }
+
+    func testReenabledPolicyRejectsContentCapturedBeforeDisable() throws {
+        let paths = makePaths()
+        let previous = try SessionScrollbackPolicyStore.read(at: policyPaths)
+        _ = try SessionScrollbackPolicyStore.transition(enabled: false, at: policyPaths)
+        let current = try SessionScrollbackPolicyStore.transition(enabled: true, at: policyPaths)
+        XCTAssertNotEqual(previous.generation, current.generation)
+        try seedMeta(at: paths)
+        try attemptContentWrite(at: paths, generation: previous.generation)
+        assertNoContent(at: paths)
+
+        try attemptContentWrite(at: paths, generation: current.generation)
+        XCTAssertEqual(try Data(contentsOf: paths.walURL), Data("PRIVATE-WAL".utf8))
+        XCTAssertEqual(try String(contentsOf: paths.frameURL, encoding: .utf8), "PRIVATE-FRAME")
+    }
+
+    private func attemptContentWrite(at paths: SessionWALPaths, generation: UUID) throws {
+        _ = try SessionWALCore.append(Data("PRIVATE-WAL".utf8), to: paths,
+                                      synchronize: true, capturedGeneration: generation)
+        try SessionWALCore.writeFrame("PRIVATE-FRAME", meta: SessionFrameMeta(
+            sessionId: paths.sessionDirectory.lastPathComponent, capturedAt: Date(),
+            walOffset: 0, walGeneration: 0
+        ), to: paths, capturedGeneration: generation)
+    }
+
+    private func assertNoContent(at paths: SessionWALPaths, file: StaticString = #filePath, line: UInt = #line) {
+        for url in [paths.walURL, paths.walRotatedURL, paths.frameURL, paths.frameNextURL, paths.frameMetaURL] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: url.path),
+                           "Disabled or stale content must never reach \(url.lastPathComponent)", file: file, line: line)
+        }
     }
 
     private func seedMeta(at paths: SessionWALPaths, generation: Int = 0) throws {

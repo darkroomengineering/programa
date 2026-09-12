@@ -34,6 +34,10 @@ on:
   # perf changes to the keystroke path effectively unverifiable until too late.
   workflow_dispatch:
     inputs:
+      notification_ui:
+        description: Run the focused multi-window notification UI regression on macOS 26.
+        type: boolean
+        default: false
       lag_combo:
         description: >-
           Key the typing-lag harness repeats. "up" (the default, and what
@@ -301,6 +305,7 @@ jobs:
       # keeps parser/security regressions observable even when an unrelated UI
       # unit test flakes later in the job.
       - name: Build programa CLI regression target
+        id: cli-build
         run: |
           CLI_REGRESSION_DIR="$RUNNER_TEMP/programa-cli-regression"
           rm -rf "$CLI_REGRESSION_DIR"
@@ -311,7 +316,11 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Install Fish for shell integration regressions
+        run: brew install fish
+
       - name: Run typed CLI registry behavior regression
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         run: |
           set -euo pipefail
 
@@ -324,6 +333,7 @@ jobs:
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_registry_behavior.py
 
       - name: Run CLI argument grammar regression
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         run: |
           set -euo pipefail
 
@@ -336,6 +346,7 @@ jobs:
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_argument_grammar.py
 
       - name: Run Codex hook trust regression
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         run: |
           set -euo pipefail
 
@@ -347,7 +358,20 @@ jobs:
 
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_codex_hook_trust.py
 
+      - name: Run hook confirmation EOF regressions
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          CLI_BIN="$RUNNER_TEMP/programa-cli-regression/Debug/programa"
+          test -x "$CLI_BIN"
+          result=0
+          for provider in codex claude opencode; do
+            CMUXTERM_CLI="$CLI_BIN" python3 "tests_v2/test_${provider}_install_integration.py" --eof-only || result=1
+          done
+          exit "$result"
+
       - name: Run unit tests
+        if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         env:
           PROGRAMA_UNIT_TEST_SCOPE: split-stateful
         run: ./scripts/ci-run-unit-tests.sh
@@ -543,6 +567,12 @@ jobs:
 
       - name: Run tests_v2 curated CI subset
         run: ./scripts/run-tests-v2-ci.sh
+
+      - name: Verify ordinary-app scrollback privacy and recovery
+        run: |
+          set -euo pipefail
+          APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
+          python3 tests_v2/test_scrollback_privacy_recovery.py --app "$APP"
 
       - name: Cleanup virtual display
         if: always()
@@ -819,7 +849,7 @@ jobs:
     needs:
       - unit-tests
       - change-detection
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.change-detection.outputs.run_app_jobs == 'true'
+    if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.notification_ui)) && needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     env:
@@ -948,6 +978,7 @@ jobs:
           echo "Persistent virtual display ready: ID=$(cat "$VDISPLAY_ID_PATH")"
 
       - name: Run display resolution churn UI regression
+        if: github.event_name != 'workflow_dispatch'
         run: |
           set -euo pipefail
           SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
@@ -1005,6 +1036,8 @@ jobs:
             if [ ! -f "$DISPLAY_READY" ]; then
               echo "ERROR: Virtual display not ready after 12s" >&2
               cat "$HELPER_LOG" 2>/dev/null || true
+              kill "$HELPER_PID" 2>/dev/null || true
+              wait "$HELPER_PID" 2>/dev/null || true
               continue
             fi
             DISPLAY_ID=$(cat "$DISPLAY_ID_PATH")
@@ -1109,8 +1142,11 @@ jobs:
             echo "Attempt $attempt failed, retrying..."
             sleep 3
           done
+          echo "ERROR: Display resolution UI regression exhausted both attempts without a passing test run" >&2
+          exit 1
 
       - name: Run browser find focus UI regression
+        if: github.event_name != 'workflow_dispatch'
         run: |
           set -euo pipefail
           SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
@@ -1122,6 +1158,34 @@ jobs:
             -maximum-test-execution-time-allowance 180 \
             -only-testing:programaUITests/BrowserPaneNavigationKeybindUITests/testCmdFFocusesBrowserFindFieldAfterCmdDCmdLNavigation \
             test-without-building
+
+      - name: Run multi-window notification focus UI regression
+        run: |
+          set -euo pipefail
+          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
+          xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+            -disableAutomaticPackageResolution \
+            -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
+            -destination "platform=macOS" \
+            -maximum-test-execution-time-allowance 180 \
+            -only-testing:programaUITests/MultiWindowNotificationsUITests/testNotifyCLIDoesNotStealFocusAcrossWindows \
+            test-without-building
+
+      - name: Dump notification regression diagnostics
+        if: failure()
+        run: |
+          set +e
+          for f in /tmp/programa-ui-test-multi-window-notifs-*.json; do
+            [ -f "$f" ] || continue
+            echo "== harness data: $f"; cat "$f"; echo
+          done
+          for f in /tmp/programa-debug-ui-tests-multi-window-notifs-*.log; do
+            [ -f "$f" ] || continue
+            echo "== app debug log (activation/focus/notification/single_instance): $f"
+            grep -E 'app\.activation|notification\.|single_instance|focusMainWindow|window\.key|makeKey|orderFront|surface\.action|notify' "$f" | tail -n 150
+            echo "== app debug log tail: $f"; tail -n 80 "$f"
+          done
 
       - name: Cleanup persistent virtual display
         if: always()

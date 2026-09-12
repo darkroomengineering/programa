@@ -1,12 +1,52 @@
 import XCTest
 import Foundation
 import AppKit
+import Sparkle
+import Sparkle_Private.SUAppcastItem
 
 #if canImport(Programa_DEV)
 @testable import Programa_DEV
 #elseif canImport(Programa)
 @testable import Programa
 #endif
+
+final class UpdateReleaseNotesDestinationTests: XCTestCase {
+    private func update(primary: String? = nil, full: String? = nil) throws -> UpdateState.UpdateAvailable {
+        var dictionary: [String: Any] = [
+            "title": "Programa 0.4.213",
+            "pubDate": "Wed, 25 Mar 2026 12:00:00 +0000",
+            "enclosure": [
+                "url": "https://example.com/programa.zip", "length": "1024",
+                "sparkle:version": "213", "sparkle:shortVersionString": "0.4.213"
+            ]
+        ]
+        if let primary { dictionary["sparkle:releaseNotesLink"] = ["content": primary] }
+        if let full { dictionary["sparkle:fullReleaseNotesLink"] = full }
+        let comparator = SUStandardVersionComparator.default
+        let resolver = SPUAppcastItemStateResolver(hostVersion: "1",
+            applicationVersionComparator: comparator, standardVersionComparator: comparator)
+        let item = try XCTUnwrap(SUAppcastItem(dictionary: dictionary, relativeTo: nil,
+            stateResolver: resolver, signingValidationStatus: .skipped, failureReason: nil))
+        return UpdateState.UpdateAvailable(appcastItem: item, reply: { _ in })
+    }
+
+    func testPrimaryAppcastReleaseNotesTakePrecedence() throws {
+        let primary = "https://example.com/rolling/current-notes"
+        let available = try update(primary: primary, full: "https://example.com/all-notes")
+        XCTAssertEqual(available.releaseNotes?.url.absoluteString, primary,
+                       "Rolling versions must use the publisher's actual notes instead of inventing a version tag")
+    }
+
+    func testFullAppcastReleaseNotesAreUsedWhenPrimaryIsAbsent() throws {
+        let full = "https://example.com/all-notes"
+        XCTAssertEqual(try update(full: full).releaseNotes?.url.absoluteString, full)
+    }
+
+    func testSemanticVersionWithoutAppcastNotesDoesNotInventADestination() throws {
+        XCTAssertNil(try update().releaseNotes,
+                     "A version number does not establish that a corresponding release tag exists")
+    }
+}
 
 final class BrowserInsecureHTTPSettingsTests: XCTestCase {
     func testDefaultAllowlistPatternsArePresent() {
@@ -269,5 +309,92 @@ final class UpdateControllerStartupSuppressTests: XCTestCase {
             updateControllerShouldSkipStartup(bundleIdentifier: "com.example.app"),
             "Unrelated bundle identifier must not suppress the updater"
         )
+    }
+}
+
+/// Tests for M21: a slow/unresponsive update check must not be presented as "no
+/// update found". `UpdateDriver` schedules a timeout while `.checking`; this suite
+/// verifies the timeout produces an error state (never `.notFound`), cancels the
+/// in-flight Sparkle check, and that a late Sparkle callback belonging to the
+/// already-timed-out check is acknowledged without clobbering the error state,
+/// while a callback for a newer check (after a fresh `showUserInitiatedUpdateCheck`)
+/// is honored normally.
+final class UpdateCheckTimeoutTests: XCTestCase {
+    func testTimeoutSetsErrorStateAndCancelsCheckInsteadOfNotFound() {
+        let driver = UpdateDriver(viewModel: UpdateViewModel(), hostBundle: .main, checkTimeout: 0.05)
+
+        var cancelled = false
+        driver.showUserInitiatedUpdateCheck(cancellation: { cancelled = true })
+
+        let expectation = XCTestExpectation(description: "timeout fires")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { expectation.fulfill() }
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertTrue(cancelled, "Timeout must cancel the in-flight Sparkle check")
+
+        if case let .error(payload) = driver.viewModel.state {
+            let urlError = payload.error as? URLError
+            XCTAssertEqual(urlError?.code, .timedOut, "Timeout must surface as a timed-out error")
+        } else {
+            XCTFail("Expected .error state after timeout, got \(driver.viewModel.state)")
+        }
+
+        if case .notFound = driver.viewModel.state {
+            XCTFail("A timed-out check must never be presented as 'no update found'")
+        }
+    }
+
+    func testLateCallbackAfterTimeoutIsAcknowledgedWithoutChangingState() {
+        let driver = UpdateDriver(viewModel: UpdateViewModel(), hostBundle: .main, checkTimeout: 0.05)
+
+        driver.showUserInitiatedUpdateCheck(cancellation: {})
+
+        let timeoutExpectation = XCTestExpectation(description: "timeout fires")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { timeoutExpectation.fulfill() }
+        wait(for: [timeoutExpectation], timeout: 2)
+
+        guard case .error = driver.viewModel.state else {
+            XCTFail("Expected .error state after timeout, got \(driver.viewModel.state)")
+            return
+        }
+
+        var acknowledged = false
+        driver.showUpdateNotFoundWithError(URLError(.cancelled), acknowledgement: { acknowledged = true })
+
+        XCTAssertTrue(acknowledged, "Late callback must still fulfil its acknowledgement obligation")
+        if case .error = driver.viewModel.state {
+            // Still showing the timeout error, as expected.
+        } else {
+            XCTFail("Late callback for a timed-out check must not overwrite the error state, got \(driver.viewModel.state)")
+        }
+    }
+
+    func testFreshCheckAfterTimeoutHonorsItsOwnCallbackNormally() {
+        let driver = UpdateDriver(viewModel: UpdateViewModel(), hostBundle: .main, checkTimeout: 0.05)
+
+        driver.showUserInitiatedUpdateCheck(cancellation: {})
+
+        let timeoutExpectation = XCTestExpectation(description: "timeout fires")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { timeoutExpectation.fulfill() }
+        wait(for: [timeoutExpectation], timeout: 2)
+
+        guard case .error = driver.viewModel.state else {
+            XCTFail("Expected .error state after timeout, got \(driver.viewModel.state)")
+            return
+        }
+
+        // Start a brand-new check (new generation) and let it resolve normally.
+        driver.showUserInitiatedUpdateCheck(cancellation: {})
+        driver.showUpdateNotFoundWithError(URLError(.cancelled), acknowledgement: {})
+
+        let settleExpectation = XCTestExpectation(description: "minimum check delay elapses")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { settleExpectation.fulfill() }
+        wait(for: [settleExpectation], timeout: 5)
+
+        if case .notFound = driver.viewModel.state {
+            // A fresh check's own result is honored normally.
+        } else {
+            XCTFail("Expected .notFound after a fresh check's own callback resolved, got \(driver.viewModel.state)")
+        }
     }
 }

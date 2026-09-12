@@ -4290,6 +4290,42 @@ extension TerminalController {
         return .ok(["focused": focused])
     }
 
+    private nonisolated static let v2BrowserCssPathScript = """
+    const __programaCssPath = (el) => {
+      if (!el || el.nodeType !== 1) return null;
+      try {
+        const parts = [];
+        let cur = el;
+        while (cur && cur.nodeType === 1) {
+          if (cur.id) {
+            const idSelector = '#' + CSS.escape(cur.id);
+            const matches = document.querySelectorAll(idSelector);
+            if (matches.length === 1 && matches[0] === cur) {
+              parts.unshift(idSelector);
+              break;
+            }
+          }
+          const tag = String(cur.localName || cur.tagName || '');
+          if (!tag) return null;
+          let part = CSS.escape(tag);
+          const siblings = cur.parentElement
+            ? Array.from(cur.parentElement.children).filter((n) =>
+                n.localName === cur.localName && n.namespaceURI === cur.namespaceURI)
+            : [];
+          if (siblings.length > 1) {
+            part += `:nth-of-type(${siblings.indexOf(cur) + 1})`;
+          }
+          parts.unshift(part);
+          cur = cur.parentElement;
+        }
+        const path = parts.join(' > ');
+        return path && document.querySelector(path) === el ? path : null;
+      } catch {
+        return null;
+      }
+    };
+    """
+
     nonisolated func v2BrowserFindWithScript(
         params: [String: Any],
         actionName: String,
@@ -4300,30 +4336,7 @@ extension TerminalController {
             let metadata = metadataBuilder()
             let script = """
             (() => {
-              const __programaCssPath = (el) => {
-                if (!el || el.nodeType !== 1) return null;
-                if (el.id) return '#' + CSS.escape(el.id);
-                const parts = [];
-                let cur = el;
-                while (cur && cur.nodeType === 1) {
-                  let part = String(cur.tagName || '').toLowerCase();
-                  if (!part) break;
-                  if (cur.id) {
-                    part += '#' + CSS.escape(cur.id);
-                    parts.unshift(part);
-                    break;
-                  }
-                  const tag = part;
-                  let siblings = cur.parentElement ? Array.from(cur.parentElement.children).filter((n) => String(n.tagName || '').toLowerCase() === tag) : [];
-                  if (siblings.length > 1) {
-                    const pos = siblings.indexOf(cur) + 1;
-                    part += `:nth-of-type(${pos})`;
-                  }
-                  parts.unshift(part);
-                  cur = cur.parentElement;
-                }
-                return parts.join(' > ');
-              };
+              \(Self.v2BrowserCssPathScript)
 
               const __programaFound = (() => {
             \(finderBody)
@@ -4673,7 +4686,9 @@ extension TerminalController {
               if (!list || list.length === 0) return { ok: false, error: 'not_found' };
               const idx = list.length - 1;
               const el = list[idx];
-              const finalSelector = `${\(selectorLiteral)}:nth-of-type(${idx + 1})`;
+              \(Self.v2BrowserCssPathScript)
+              const finalSelector = __programaCssPath(el);
+              if (!finalSelector) return { ok: false, error: 'not_found' };
               return { ok: true, selector: finalSelector, text: String(el.textContent || '').trim() };
             })()
             """
@@ -4725,8 +4740,9 @@ extension TerminalController {
               if (idx < 0) idx = list.length + idx;
               if (idx < 0 || idx >= list.length) return { ok: false, error: 'not_found' };
               const el = list[idx];
-              const nth = idx + 1;
-              const finalSelector = `${\(selectorLiteral)}:nth-of-type(${nth})`;
+              \(Self.v2BrowserCssPathScript)
+              const finalSelector = __programaCssPath(el);
+              if (!finalSelector) return { ok: false, error: 'not_found' };
               return { ok: true, selector: finalSelector, index: idx, text: String(el.textContent || '').trim() };
             })()
             """
@@ -4852,63 +4868,32 @@ extension TerminalController {
         )
     }
 
-    func v2BrowserEnsureDialogHooks(browserPanel: BrowserPanel) {
-        _ = v2RunJavaScript(
-            browserPanel.webView,
-            script: BrowserPanel.dialogTelemetryHookBootstrapScriptSource,
-            timeout: 5.0,
-            contentWorld: .page
-        )
-    }
-
     func v2BrowserDialogRespond(params: [String: Any], accept: Bool) -> V2CallResult {
         return v2BrowserWithPanel(params: params) { _, ws, surfaceId, browserPanel in
-            v2BrowserEnsureTelemetryHooks(surfaceId: surfaceId, browserPanel: browserPanel)
-            v2BrowserEnsureDialogHooks(browserPanel: browserPanel)
-            let text = v2String(params, "text") ?? v2String(params, "prompt_text")
-            let acceptLiteral = accept ? "true" : "false"
-            let textLiteral = text.map(v2JSONLiteral) ?? "null"
-            let script = """
-            (() => {
-              const q = window.__programaDialogQueue || [];
-              if (!q.length) return { ok: false, error: 'not_found' };
-              const entry = q.shift();
-              if (entry.type === 'confirm') {
-                window.__programaDialogDefaults = window.__programaDialogDefaults || { confirm: false, prompt: null };
-                window.__programaDialogDefaults.confirm = \(acceptLiteral);
-              }
-              if (entry.type === 'prompt') {
-                window.__programaDialogDefaults = window.__programaDialogDefaults || { confirm: false, prompt: null };
-                if (\(acceptLiteral)) {
-                  window.__programaDialogDefaults.prompt = \(textLiteral);
-                } else {
-                  window.__programaDialogDefaults.prompt = null;
-                }
-              }
-              return { ok: true, dialog: entry, remaining: q.length };
-            })()
-            """
-
-            switch v2RunJavaScript(browserPanel.webView, script: script, timeout: 5.0, contentWorld: .page) {
-            case .failure(let message):
-                return .err(code: "js_error", message: message, data: nil)
-            case .success(let value):
-                guard let dict = value as? [String: Any],
-                      let ok = dict["ok"] as? Bool,
-                      ok else {
-                    return .err(code: "not_found", message: "No pending dialog", data: ["pending": []])
-                }
-
-                return .ok([
-                    "workspace_id": ws.id.uuidString,
-                    "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
-                    "surface_id": surfaceId.uuidString,
-                    "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
-                    "accepted": accept,
-                    "dialog": v2NormalizeJSValue(dict["dialog"]),
-                    "remaining": v2OrNull(dict["remaining"])
-                ])
+            // Read the answer verbatim: `v2String` trims and drops empty values, but an explicit
+            // empty or whitespace-only prompt answer is a legitimate, distinct reply.
+            let text = (params["text"] as? String) ?? (params["prompt_text"] as? String)
+            // Resolve WebKit's live pending completion handler directly. Never evaluate JavaScript
+            // here: doing so while a native alert/confirm/prompt sheet is up can deadlock WebKit.
+            guard let info = BrowserJSDialogPresenter.resolvePendingDialog(
+                for: browserPanel.webView, accept: accept, text: text
+            ) else {
+                return .err(code: "not_found", message: "No pending dialog", data: ["pending": []])
             }
+
+            return .ok([
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+                "surface_id": surfaceId.uuidString,
+                "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+                "accepted": accept,
+                "dialog": [
+                    "type": info.kind.rawValue,
+                    "message": info.message,
+                    "default_text": v2OrNull(info.defaultText)
+                ],
+                "remaining": 0
+            ])
         }
     }
 

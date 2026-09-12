@@ -25,15 +25,33 @@ extension ProgramaCLI {
 
         // Browser-skill examples often place output flags at the end of the command.
         // Strip trailing display flags so they don't become part of a URL or selector.
+        var valueOrLiteralIndices: Set<Int> = []
+        var argumentIndex = 0
+        while argumentIndex < browserArgs.count {
+            let arg = browserArgs[argumentIndex]
+            if arg == "--" {
+                valueOrLiteralIndices.formUnion(argumentIndex..<browserArgs.count)
+                break
+            }
+            if ["--surface", "--selector", "--text", "--id-format"].contains(arg),
+               argumentIndex + 1 < browserArgs.count {
+                valueOrLiteralIndices.insert(argumentIndex + 1)
+                argumentIndex += 2
+            } else {
+                argumentIndex += 1
+            }
+        }
         while !browserArgs.isEmpty {
-            if browserArgs.last == "--json" {
+            if browserArgs.last == "--json",
+               !valueOrLiteralIndices.contains(browserArgs.count - 1) {
                 effectiveJSONOutput = true
                 browserArgs.removeLast()
                 continue
             }
 
             if browserArgs.count >= 2,
-               browserArgs[browserArgs.count - 2] == "--id-format" {
+               browserArgs[browserArgs.count - 2] == "--id-format",
+               !valueOrLiteralIndices.contains(browserArgs.count - 2) {
                 let raw = browserArgs.last!
                 guard let parsed = try CLIIDFormat.parse(raw) else {
                     throw CLIError(message: "--id-format must be one of: refs, uuids, both")
@@ -46,9 +64,20 @@ extension ProgramaCLI {
             break
         }
 
-        let (surfaceOpt, argsWithoutSurfaceFlag) = parseOption(browserArgs, name: "--surface")
-        var surfaceRaw = surfaceOpt
-        var args = argsWithoutSurfaceFlag
+        var surfaceRaw: String?
+        var args: [String] = []
+        argumentIndex = 0
+        while argumentIndex < browserArgs.count {
+            if browserArgs[argumentIndex] == "--surface",
+               !valueOrLiteralIndices.contains(argumentIndex),
+               argumentIndex + 1 < browserArgs.count {
+                surfaceRaw = browserArgs[argumentIndex + 1]
+                argumentIndex += 2
+            } else {
+                args.append(browserArgs[argumentIndex])
+                argumentIndex += 1
+            }
+        }
 
         let verbsWithoutSurface: Set<String> = ["open", "open-split", "new", "identify"]
         if surfaceRaw == nil, let first = args.first {
@@ -429,14 +458,39 @@ extension ProgramaCLI {
 
         if ["type", "fill"].contains(subcommand) {
             let sid = try requireSurface()
-            let (selectorOpt, rem1) = parseOption(subArgs, name: "--selector")
-            let (textOpt, rem2) = parseOption(rem1, name: "--text")
-            let selector = selectorOpt ?? rem2.first
+            var selectorOpt: String?
+            var textOpt: String?
+            var inputArgs: [String] = []
+            var snapshotAfter = false
+            var pastTerminator = false
+            var index = 0
+            while index < subArgs.count {
+                let arg = subArgs[index]
+                if !pastTerminator, arg == "--" {
+                    pastTerminator = true
+                } else if !pastTerminator, arg == "--selector" || arg == "--text" {
+                    guard index + 1 < subArgs.count else {
+                        throw CLIError(message: "browser \(subcommand): \(arg) requires a value")
+                    }
+                    if arg == "--selector" {
+                        selectorOpt = subArgs[index + 1]
+                    } else {
+                        textOpt = subArgs[index + 1]
+                    }
+                    index += 1
+                } else if !pastTerminator, arg == "--snapshot-after" {
+                    snapshotAfter = true
+                } else {
+                    inputArgs.append(arg)
+                }
+                index += 1
+            }
+            let selector = selectorOpt ?? inputArgs.first
             guard let selector else {
                 throw CLIError(message: "browser \(subcommand) requires a selector")
             }
 
-            let positional = selectorOpt != nil ? rem2 : Array(rem2.dropFirst())
+            let positional = selectorOpt != nil ? inputArgs : Array(inputArgs.dropFirst())
             let hasExplicitText = textOpt != nil || !positional.isEmpty
             let text: String
             if let textOpt {
@@ -452,7 +506,7 @@ extension ProgramaCLI {
 
             let method = (subcommand == "type") ? "browser.type" : "browser.fill"
             var params: [String: Any] = ["surface_id": sid, "selector": selector, "text": text]
-            if hasFlag(subArgs, name: "--snapshot-after") {
+            if snapshotAfter {
                 params["snapshot_after"] = true
             }
             let payload = try client.sendV2(method: method, params: params)
@@ -885,10 +939,12 @@ extension ProgramaCLI {
             let remainder = Array(subArgs.dropFirst())
             switch dialogVerb {
             case "accept":
-                let text = remainder.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
                 var params: [String: Any] = ["surface_id": sid]
-                if !text.isEmpty {
-                    params["text"] = text
+                if !remainder.isEmpty {
+                    // Preserve an explicit answer verbatim, including "" or whitespace-only text:
+                    // trimming here would silently turn a deliberate empty prompt answer into "use
+                    // the page's default" instead.
+                    params["text"] = remainder.joined(separator: " ")
                 }
                 let payload = try client.sendV2(method: "browser.dialog.accept", params: params)
                 output(payload, fallback: "OK")

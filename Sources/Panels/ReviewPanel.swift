@@ -37,6 +37,13 @@ final class ReviewPanel: Panel, ObservableObject {
     /// Token incremented to trigger the focus flash animation (mirrors `MarkdownPanel`).
     @Published private(set) var focusFlashToken: Int = 0
 
+    /// Bumped by every `refresh()` call and by the public `apply(snapshot:)` fast path used by
+    /// `review.open`. A completion only applies its snapshot when the generation it was issued
+    /// under still matches -- this stops a slow probe from a stale request (e.g. a prior branch
+    /// selection) from overwriting a newer result. See M12 in
+    /// docs/audits/codebase-audit-2026-09-11.md.
+    private(set) var refreshGeneration: UInt64 = 0
+
     var displayIcon: String? { "checklist" }
 
     /// Set by `Workspace.newReviewSplit` at creation time. Delivers serialized comment text
@@ -53,6 +60,12 @@ final class ReviewPanel: Panel, ObservableObject {
         self.mode = mode
         self.baseBranch = baseBranch
         self.displayTitle = Self.title(mode: mode, baseBranch: baseBranch)
+    }
+
+    /// Called when the panel is re-attached to a different workspace (detach/move transfer).
+    /// Mirrors `TerminalPanel.updateWorkspaceId` / `BrowserPanel.reattachToWorkspace`.
+    func updateWorkspaceId(_ newWorkspaceId: UUID) {
+        workspaceId = newWorkspaceId
     }
 
     private static func title(mode: ReviewDiffMode, baseBranch: String) -> String {
@@ -103,22 +116,36 @@ final class ReviewPanel: Panel, ObservableObject {
     /// policy in docs/plans/diff-review-panel.md §2.
     func refresh() {
         isRefreshing = true
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
         let capturedDirectory = directory
         let capturedMode = mode
         let capturedBaseBranch = baseBranch
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let snapshot = ReviewDiffProber.diffSnapshot(directory: capturedDirectory, mode: capturedMode, baseBranch: capturedBaseBranch)
             DispatchQueue.main.async {
-                self?.apply(snapshot: snapshot)
+                self?.apply(snapshot: snapshot, generation: generation)
             }
         }
     }
 
-    /// Publishes an already-computed snapshot (used both by the async `refresh()` path above
-    /// and by `review.open`, which computes the *first* snapshot synchronously off-main so the
-    /// socket response can report an accurate `diffable_file_count` -- see
-    /// `TerminalController+Review.swift`).
+    /// Publishes an already-computed snapshot (used by `review.open`, which computes the
+    /// *first* snapshot synchronously off-main so the socket response can report an accurate
+    /// `diffable_file_count` -- see `TerminalController+Review.swift`). Bumps the refresh
+    /// generation itself so that any `refresh()` still in flight from before this panel existed
+    /// (or from a superseded request) is discarded when it later completes.
     func apply(snapshot: ReviewDiffSnapshot) {
+        refreshGeneration &+= 1
+        apply(snapshot: snapshot, generation: refreshGeneration)
+    }
+
+    /// Generation-checked apply used by both `refresh()`'s completion and the public
+    /// `apply(snapshot:)` above. Discards `snapshot` without touching any published state when
+    /// `generation` no longer matches `refreshGeneration`, i.e. a newer request has since been
+    /// issued. `internal` (not `private`) so tests can exercise out-of-order completions
+    /// directly -- see M12 in docs/audits/codebase-audit-2026-09-11.md.
+    func apply(snapshot: ReviewDiffSnapshot, generation: UInt64) {
+        guard generation == refreshGeneration else { return }
         files = snapshot.files
         filesRevision &+= 1
         lastError = snapshot.error

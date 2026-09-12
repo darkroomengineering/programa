@@ -117,8 +117,8 @@ extension ProgramaCLI {
                 || ProcessInfo.processInfo.arguments.contains("-y")
             if !skipConfirm {
                 print("Apply these changes? [Y/n] ", terminator: "")
-                if let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                   !response.isEmpty && response != "y" && response != "yes" {
+                guard let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                      response.isEmpty || response == "y" || response == "yes" else {
                     print("Aborted.")
                     return
                 }

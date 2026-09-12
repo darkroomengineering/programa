@@ -1,37 +1,5 @@
 # cmux shell integration for bash
 
-# Cache which send tool is available to avoid repeated PATH lookups.
-_PROGRAMA_SEND_TOOL=""
-_cmux_detect_send_tool() {
-    if command -v ncat >/dev/null 2>&1; then
-        _PROGRAMA_SEND_TOOL=ncat
-    elif command -v socat >/dev/null 2>&1; then
-        _PROGRAMA_SEND_TOOL=socat
-    elif command -v nc >/dev/null 2>&1; then
-        _PROGRAMA_SEND_TOOL=nc
-    fi
-}
-# Detection deferred to after _cmux_fix_path (end of file).
-
-_cmux_send() {
-    local payload="$1"
-    case "$_PROGRAMA_SEND_TOOL" in
-        ncat)
-            printf '%s\n' "$payload" | ncat -w 1 -U "$PROGRAMA_SOCKET_PATH" --send-only
-            ;;
-        socat)
-            printf '%s\n' "$payload" | socat -T 1 - "UNIX-CONNECT:$PROGRAMA_SOCKET_PATH" >/dev/null 2>&1
-            ;;
-        nc)
-            if printf '%s\n' "$payload" | nc -N -U "$PROGRAMA_SOCKET_PATH" >/dev/null 2>&1; then
-                :
-            else
-                printf '%s\n' "$payload" | nc -w 1 -U "$PROGRAMA_SOCKET_PATH" >/dev/null 2>&1 || true
-            fi
-            ;;
-    esac
-}
-
 _cmux_socket_is_unix() {
     [[ -n "$PROGRAMA_SOCKET_PATH" && -S "$PROGRAMA_SOCKET_PATH" ]]
 }
@@ -68,10 +36,7 @@ _cmux_json_escape() {
     printf '%s\n' "$value"
 }
 
-# Build a single-line v2 JSON-RPC request frame for the direct-socket
-# (fire-and-forget) path. `params_json` must already be a well-formed JSON
-# object string (see call sites, which use _cmux_json_escape on any
-# user-controlled values before interpolating them).
+# Format a TTY report frame for callers that need the serialized request.
 _cmux_json_rpc_frame() {
     local method="$1"
     local params_json="$2"
@@ -82,10 +47,12 @@ _cmux_relay_rpc_bg() {
     local method="$1"
     local params="$2"
     local relay_cli=""
-    _cmux_socket_uses_remote_relay || return 1
+    _cmux_has_port_scan_transport || return 1
     relay_cli="$(_cmux_relay_cli_path)" || return 1
+    local -a child_env=()
+    _cmux_socket_is_unix && child_env=(CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC=1)
     {
-        "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 || true
+        env "${child_env[@]}" "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 || true
     } >/dev/null 2>&1 &
     disown 2>/dev/null || true
 }
@@ -95,12 +62,14 @@ _cmux_relay_rpc() {
     local params="$2"
     local relay_cli=""
     local response=""
-    _cmux_socket_uses_remote_relay || return 1
+    _cmux_has_port_scan_transport || return 1
     # Relay `cmux rpc` exits nonzero on server error. The real remote CLI prints
     # only the JSON result payload on success, while some test stubs return the
     # full `{"ok":...}` envelope. Retry only on explicit `ok:false`.
     relay_cli="$(_cmux_relay_cli_path)" || return 1
-    response="$("$relay_cli" rpc "$method" "$params" 2>/dev/null)" || return 1
+    local -a child_env=()
+    _cmux_socket_is_unix && child_env=(CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC=1)
+    response="$(env "${child_env[@]}" "$relay_cli" rpc "$method" "$params" 2>/dev/null)" || return 1
     response="${response//$'\n'/}"
     response="${response//$'\r'/}"
     [[ "$response" == *'"ok":false'* || "$response" == *'"ok": false'* ]] && return 1
@@ -355,7 +324,7 @@ _cmux_git_head_signature() {
     printf '%s\n' "$line"
 }
 
-_cmux_report_tty_payload() {
+_cmux_report_tty_params() {
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     [[ -n "$_PROGRAMA_TTY_NAME" ]] || return 0
 
@@ -369,6 +338,13 @@ _cmux_report_tty_payload() {
     fi
     params+="}"
 
+    printf '%s\n' "$params"
+}
+
+_cmux_report_tty_payload() {
+    local params=""
+    params="$(_cmux_report_tty_params)"
+    [[ -n "$params" ]] || return 0
     _cmux_json_rpc_frame "surface.report_tty" "$params"
 }
 
@@ -379,13 +355,11 @@ _cmux_report_tty_once() {
     _cmux_has_port_scan_transport || return 0
 
     if _cmux_socket_is_unix; then
-        local payload=""
-        payload="$(_cmux_report_tty_payload)"
-        [[ -n "$payload" ]] || return 0
+        local params=""
+        params="$(_cmux_report_tty_params)"
+        [[ -n "$params" ]] || return 0
+        _cmux_relay_rpc "surface.report_tty" "$params" || return 0
         _PROGRAMA_TTY_REPORTED=1
-        {
-            _cmux_send "$payload"
-        } >/dev/null 2>&1 & disown
     else
         [[ -n "$_PROGRAMA_TTY_NAME" ]] || return 0
         # Keep the first relay TTY report synchronous so the server can resolve
@@ -402,15 +376,12 @@ _cmux_report_shell_activity_state() {
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
     [[ "$_PROGRAMA_SHELL_ACTIVITY_LAST" == "$state" ]] && return 0
-    _PROGRAMA_SHELL_ACTIVITY_LAST="$state"
     local workspace_id="" state_json params
     workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
     state_json="$(_cmux_json_escape "$state")"
     params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"state\":\"$state_json\"}"
-    (
-        _cmux_send "$(_cmux_json_rpc_frame "surface.report_shell_state" "$params")"
-    ) >/dev/null 2>&1 &
-    disown 2>/dev/null
+    _cmux_relay_rpc "surface.report_shell_state" "$params" || return 0
+    _PROGRAMA_SHELL_ACTIVITY_LAST="$state"
 }
 
 _cmux_ports_kick() {
@@ -429,7 +400,7 @@ _cmux_ports_kick() {
         reason_json="$(_cmux_json_escape "$reason")"
         params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"reason\":\"$reason_json\"}"
         {
-            _cmux_send "$(_cmux_json_rpc_frame "surface.ports_kick" "$params")"
+            _cmux_relay_rpc "surface.ports_kick" "$params"
         } >/dev/null 2>&1 & disown
     else
         _cmux_ports_kick_via_relay "$reason"
@@ -444,7 +415,7 @@ _cmux_clear_pr_for_panel() {
     workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
     params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\"}"
     # Synchronous: must arrive before the next report_pr from the poll loop.
-    _cmux_send "$(_cmux_json_rpc_frame "surface.clear_pr" "$params")"
+    _cmux_relay_rpc "surface.clear_pr" "$params"
 }
 
 _cmux_pr_output_indicates_no_pull_request() {
@@ -666,7 +637,7 @@ _cmux_report_pr_for_path() {
     branch_json="$(_cmux_json_escape "$branch")"
     url_json="$(_cmux_json_escape "$url")"
     params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"number\":$number,\"url\":\"$url_json\",\"state\":\"$status_opt\",\"branch\":\"$branch_json\"}"
-    _cmux_send "$(_cmux_json_rpc_frame "surface.report_pr" "$params")"
+    _cmux_relay_rpc "surface.report_pr" "$params"
 }
 
 _cmux_child_pids() {
@@ -931,15 +902,13 @@ _cmux_prompt_command() {
 
     # CWD: keep the app in sync with the actual shell directory.
     if [[ "$pwd" != "$_PROGRAMA_PWD_LAST_PWD" ]]; then
-        _PROGRAMA_PWD_LAST_PWD="$pwd"
-        (
-            local workspace_id="" pwd_json params
-            workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
-            pwd_json="$(_cmux_json_escape "$pwd")"
-            params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"path\":\"$pwd_json\"}"
-            _cmux_send "$(_cmux_json_rpc_frame "surface.report_pwd" "$params")"
-        ) >/dev/null 2>&1 &
-        disown 2>/dev/null
+        local workspace_id="" pwd_json params
+        workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+        pwd_json="$(_cmux_json_escape "$pwd")"
+        params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"path\":\"$pwd_json\"}"
+        if _cmux_relay_rpc "surface.report_pwd" "$params"; then
+            _PROGRAMA_PWD_LAST_PWD="$pwd"
+        fi
     fi
 
     # Branch can change via aliases/tools while an older probe is still in flight.
@@ -996,10 +965,10 @@ _cmux_prompt_command() {
                 local branch_json
                 branch_json="$(_cmux_json_escape "$branch")"
                 params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"branch\":\"$branch_json\",\"dirty\":$dirty}"
-                _cmux_send "$(_cmux_json_rpc_frame "surface.report_git_branch" "$params")"
+                _cmux_relay_rpc "surface.report_git_branch" "$params"
             else
                 params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\"}"
-                _cmux_send "$(_cmux_json_rpc_frame "surface.clear_git_branch" "$params")"
+                _cmux_relay_rpc "surface.clear_git_branch" "$params"
             fi
         ) >/dev/null 2>&1 &
         _PROGRAMA_GIT_JOB_PID=$!
@@ -1109,7 +1078,5 @@ _cmux_fix_path() {
 }
 _cmux_fix_path
 unset -f _cmux_fix_path
-
-_cmux_detect_send_tool
 
 _cmux_install_prompt_command

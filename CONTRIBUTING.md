@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - macOS 14+
-- Xcode 15+
+- Xcode 26+ (Swift 6 and the macOS 26 SDK)
 - [Zig](https://ziglang.org/) (install via `brew install zig`)
 
 ## Getting Started
@@ -35,9 +35,9 @@
 | Script | Description |
 |--------|-------------|
 | `./scripts/setup.sh` | One-time setup (submodules + xcframework) |
-| `./scripts/reload.sh` | Build Debug app (pass `--launch` to also open it) |
+| `./scripts/reload.sh --tag my-feature` | Build Debug app (pass `--launch` to also open it) |
 | `./scripts/reloadp.sh` | Build and launch Release app |
-| `./scripts/reload2.sh` | Reload both Debug and Release |
+| `./scripts/reload2.sh --tag my-feature` | Reload both Debug and Release |
 
 ## Rebuilding GhosttyKit
 
@@ -50,16 +50,18 @@ zig build -Demit-xcframework=true -Doptimize=ReleaseFast
 
 ## Running Tests
 
-### Basic tests (run on VM)
+Run tests through GitHub Actions or the designated VM. See [the testing layout](docs/testing-layout.md) for the four harnesses and their scope. Do not point socket tests at your everyday Programa instance.
+
+Run the CI suite on your pushed branch:
 
 ```bash
-ssh programa-vm 'cd /Users/programa/GhosttyTabs && xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug -destination "platform=macOS" build && pkill -x "programa DEV" || true && APP=$(find /Users/programa/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Debug/programa DEV.app" -print -quit) && open "$APP" && for i in {1..20}; do [ -S /tmp/programa.sock ] && break; sleep 0.5; done && python3 tests/test_signals_auto.py && python3 tests/test_ctrl_socket.py && python3 tests/test_notifications.py'
+gh workflow run ci.yml --ref my-feature
 ```
 
-### UI tests (run on VM)
+Run the focused notification UI regression on the macOS 26 lane:
 
 ```bash
-ssh programa-vm 'cd /Users/programa/GhosttyTabs && xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug -destination "platform=macOS" -only-testing:programaUITests test'
+gh workflow run ci.yml --ref my-feature -f notification_ui=true
 ```
 
 ## Ghostty Submodule

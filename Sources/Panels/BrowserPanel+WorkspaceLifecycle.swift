@@ -88,6 +88,7 @@ extension BrowserPanel {
         webViewCancellables.removeAll()
         BrowserWindowPortalRegistry.detach(webView: oldWebView)
         oldWebView.stopLoading()
+        BrowserJSDialogPresenter.cancelPendingDialog(for: oldWebView)
         oldWebView.navigationDelegate = nil
         oldWebView.uiDelegate = nil
         if let oldProgramaWebView = oldWebView as? ProgramaWebView {

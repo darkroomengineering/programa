@@ -153,7 +153,7 @@ fileprivate struct DetectedBackgroundUpdateView: View {
             }
             .padding(16)
 
-            if let notes = UpdateState.ReleaseNotes(displayVersionString: item.displayVersionString) {
+            if let notes = UpdateState.ReleaseNotes(appcastItem: item) {
                 Divider()
                 UpdateReleaseNotesLink(notes: notes)
             }

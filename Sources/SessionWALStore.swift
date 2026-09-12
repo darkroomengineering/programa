@@ -185,6 +185,10 @@ enum SessionWALPolicy {
 /// from ghostty's io-reader thread (the tee callback); `drain` is called only
 /// from `SessionWALStore.writeQueue`.
 final class SessionWALRingBuffer {
+    struct Capture {
+        let bytes: [UInt8]
+        let generation: UUID
+    }
     private let capacity: Int
     private let firstStorage: UnsafeMutablePointer<UInt8>
     private let secondStorage: UnsafeMutablePointer<UInt8>
@@ -192,9 +196,11 @@ final class SessionWALRingBuffer {
     private var head = 0
     private var count = 0
     private var lock = os_unfair_lock()
+    private var policy: SessionScrollbackPolicy
 
-    init(capacity: Int) {
+    init(capacity: Int, policy: SessionScrollbackPolicy = .init(enabled: true, generation: UUID())) {
         self.capacity = capacity
+        self.policy = policy
         self.firstStorage = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
         self.secondStorage = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
     }
@@ -213,6 +219,7 @@ final class SessionWALRingBuffer {
         guard len > 0 else { return }
         guard os_unfair_lock_trylock(&lock) else { return }
         defer { os_unfair_lock_unlock(&lock) }
+        guard policy.enabled else { return }
         let storage = storage(at: activeStorageIndex)
 
         if len >= capacity {
@@ -243,6 +250,18 @@ final class SessionWALRingBuffer {
     /// holding the lock, then allocates and copies after unlocking. Returns
     /// nil if there was nothing to drain.
     func drain() -> [UInt8]? {
+        drainCaptured()?.bytes
+    }
+
+    func transition(to policy: SessionScrollbackPolicy) {
+        os_unfair_lock_lock(&lock)
+        self.policy = policy
+        head = 0
+        count = 0
+        os_unfair_lock_unlock(&lock)
+    }
+
+    func drainCaptured() -> Capture? {
         os_unfair_lock_lock(&lock)
         guard count > 0 else {
             os_unfair_lock_unlock(&lock)
@@ -251,6 +270,7 @@ final class SessionWALRingBuffer {
         let drainingStorageIndex = activeStorageIndex
         let drainingHead = head
         let drainingCount = count
+        let generation = policy.generation
         activeStorageIndex = 1 - activeStorageIndex
         head = 0
         count = 0
@@ -269,7 +289,7 @@ final class SessionWALRingBuffer {
                 )
             }
         }
-        return out
+        return Capture(bytes: out, generation: generation)
     }
 
     @inline(__always)
@@ -326,6 +346,133 @@ struct SessionFrameMeta: Codable {
     var walGeneration: Int
 }
 
+/// Bundle-specific policy lives beside the bundle-specific snapshot. Session
+/// directories themselves are shared across app variants, so their parent is
+/// not a sufficient namespace for this policy.
+struct SessionScrollbackPolicyPaths {
+    let policyURL: URL
+    let nextURL: URL
+    let lockURL: URL
+
+    init(snapshotFileURL: URL) {
+        let base = snapshotFileURL.deletingPathExtension()
+        policyURL = base.appendingPathExtension("scrollback-policy.json")
+        nextURL = policyURL.appendingPathExtension("next")
+        lockURL = base.appendingPathExtension("scrollback-policy.lock")
+    }
+
+    static func make(
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+        appSupportDirectory: URL? = nil
+    ) -> SessionScrollbackPolicyPaths? {
+        guard let snapshotFileURL = SessionPersistenceStore.defaultSnapshotFileURL(
+            bundleIdentifier: bundleIdentifier,
+            appSupportDirectory: appSupportDirectory
+        ) else { return nil }
+        return SessionScrollbackPolicyPaths(snapshotFileURL: snapshotFileURL)
+    }
+}
+
+struct SessionScrollbackPolicy: Codable, Equatable {
+    let enabled: Bool
+    let generation: UUID
+}
+
+/// Durable coordination point for the app and detached holders. Callers must
+/// acquire this policy lock before a session's WAL lock when using both.
+enum SessionScrollbackPolicyStore {
+    /// Failure to read/lock the policy suppresses content; actual content I/O
+    /// errors still propagate to the caller as errors, not suppression.
+    static func withContentPermission<T>(
+        at paths: SessionScrollbackPolicyPaths?,
+        capturedGeneration: UUID?,
+        _ body: () throws -> T
+    ) throws -> T? {
+        guard let paths else { return nil }
+        let result: Result<T, Error>? = try? withPolicy(at: paths) { policy -> Result<T, Error>? in
+            guard policy.enabled,
+                  capturedGeneration == nil || capturedGeneration == policy.generation else { return nil }
+            return Result { try body() }
+        }
+        return try result?.get()
+    }
+
+    static func read(at paths: SessionScrollbackPolicyPaths) throws -> SessionScrollbackPolicy {
+        try withPolicy(at: paths) { $0 }
+    }
+
+    static func withPolicy<T>(
+        at paths: SessionScrollbackPolicyPaths,
+        _ body: (SessionScrollbackPolicy) throws -> T
+    ) throws -> T {
+        try withProcessLock(at: paths) {
+            let policy = try JSONDecoder().decode(
+                SessionScrollbackPolicy.self,
+                from: Data(contentsOf: paths.policyURL)
+            )
+            return try body(policy)
+        }
+    }
+
+    @discardableResult
+    static func transition(
+        enabled: Bool,
+        at paths: SessionScrollbackPolicyPaths
+    ) throws -> SessionScrollbackPolicy {
+        try withProcessLock(at: paths) {
+            let policy = SessionScrollbackPolicy(enabled: enabled, generation: UUID())
+            let data = try JSONEncoder().encode(policy)
+            guard FileManager.default.createFile(atPath: paths.nextURL.path, contents: nil) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            defer { try? FileManager.default.removeItem(at: paths.nextURL) }
+            let handle = try FileHandle(forWritingTo: paths.nextURL)
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: 0)
+            try handle.write(contentsOf: data)
+            try handle.synchronize()
+            let renamed = paths.nextURL.path.withCString { source in
+                paths.policyURL.path.withCString { destination in
+                    Darwin.rename(source, destination) == 0
+                }
+            }
+            guard renamed else { throw posixError() }
+
+            // Make the replacement directory entry durable before reporting
+            // success, in addition to synchronizing the policy bytes above.
+            let directoryFD = paths.policyURL.deletingLastPathComponent().path.withCString {
+                Darwin.open($0, O_RDONLY)
+            }
+            guard directoryFD >= 0 else { throw posixError() }
+            defer { Darwin.close(directoryFD) }
+            guard fsync(directoryFD) == 0 else { throw posixError() }
+            return policy
+        }
+    }
+
+    private static func withProcessLock<T>(
+        at paths: SessionScrollbackPolicyPaths,
+        _ body: () throws -> T
+    ) throws -> T {
+        try FileManager.default.createDirectory(
+            at: paths.policyURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let fd = paths.lockURL.path.withCString {
+            Darwin.open($0, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        }
+        guard fd >= 0 else { throw posixError() }
+        defer { Darwin.close(fd) }
+        guard flock(fd, LOCK_EX) == 0 else { throw posixError() }
+        defer { _ = flock(fd, LOCK_UN) }
+        return try body()
+    }
+
+    private static func posixError() -> POSIXError {
+        POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+    }
+}
+
 /// Filesystem layout for one session's WAL + fact file, under
 /// `Application Support/programa/sessions/<session-uuid>/`. Reuses
 /// `SessionPersistenceStore.defaultSnapshotFileURL`'s app-support
@@ -333,6 +480,7 @@ struct SessionFrameMeta: Codable {
 /// than duplicating it.
 struct SessionWALPaths {
     let sessionDirectory: URL
+    let policyPaths: SessionScrollbackPolicyPaths?
     let walURL: URL
     let walRotatedURL: URL
     let metaURL: URL
@@ -348,8 +496,12 @@ struct SessionWALPaths {
     /// WAL offset + rotation generation recorded at frame capture time.
     let frameMetaURL: URL
 
-    init(sessionDirectory: URL) {
+    init(
+        sessionDirectory: URL,
+        policyPaths: SessionScrollbackPolicyPaths? = SessionScrollbackPolicyPaths.make()
+    ) {
         self.sessionDirectory = sessionDirectory
+        self.policyPaths = policyPaths
         self.walURL = sessionDirectory.appendingPathComponent("wal.log", isDirectory: false)
         self.walRotatedURL = sessionDirectory.appendingPathComponent("wal.log.1", isDirectory: false)
         self.metaURL = sessionDirectory.appendingPathComponent("meta.json", isDirectory: false)
@@ -371,7 +523,10 @@ struct SessionWALPaths {
     static func make(sessionId: String, appSupportDirectory: URL? = nil) -> SessionWALPaths? {
         guard let root = sessionsRootURL(appSupportDirectory: appSupportDirectory) else { return nil }
         let directory = root.appendingPathComponent(sessionId, isDirectory: true)
-        return SessionWALPaths(sessionDirectory: directory)
+        return SessionWALPaths(
+            sessionDirectory: directory,
+            policyPaths: SessionScrollbackPolicyPaths.make(appSupportDirectory: appSupportDirectory)
+        )
     }
 }
 
@@ -388,6 +543,7 @@ enum SessionWALCore {
         let walGeneration: Int
         let didRotate: Bool
         let didSynchronize: Bool
+        var didSuppress = false
     }
 
     private enum CoreError: Error {
@@ -395,6 +551,7 @@ enum SessionWALCore {
         case cannotLock
         case cannotOpenWAL
         case cannotCommitMeta
+        case cannotCommitFrame
     }
 
     private static let metaEncoder: JSONEncoder = {
@@ -417,7 +574,22 @@ enum SessionWALCore {
         _ data: Data,
         to paths: SessionWALPaths,
         walCapBytes: Int64 = SessionWALPolicy.walCapBytes,
-        synchronize: Bool
+        synchronize: Bool,
+        capturedGeneration: UUID? = nil
+    ) throws -> AppendResult {
+        let result = try SessionScrollbackPolicyStore.withContentPermission(
+            at: paths.policyPaths, capturedGeneration: capturedGeneration
+        ) {
+            try appendAllowed(data, to: paths, walCapBytes: walCapBytes, synchronize: synchronize)
+        }
+        return result ?? AppendResult(
+            currentWalSize: 0, walGeneration: 0, didRotate: false,
+            didSynchronize: false, didSuppress: true
+        )
+    }
+
+    private static func appendAllowed(
+        _ data: Data, to paths: SessionWALPaths, walCapBytes: Int64, synchronize: Bool
     ) throws -> AppendResult {
         try withProcessLock(paths: paths) {
             try FileManager.default.createDirectory(
@@ -499,8 +671,17 @@ enum SessionWALCore {
     static func persistMeta(_ proposedMeta: SessionWALMeta, to paths: SessionWALPaths) throws -> SessionWALMeta {
         try withProcessLock(paths: paths) {
             var mergedMeta = proposedMeta
-            let onDiskGeneration = readMetaUnlocked(paths: paths)?.walGeneration ?? 0
+            let current = readMetaUnlocked(paths: paths)
+            let onDiskGeneration = current?.walGeneration ?? 0
             mergedMeta.walGeneration = max(proposedMeta.walGeneration ?? 0, onDiskGeneration)
+            // Holder acknowledgement precedes the app's asynchronous escrow
+            // callback. A heartbeat with stale local facts cannot revoke the
+            // ownership that was just acknowledged durably.
+            if let current, current.escrowed == true, proposedMeta.escrowed != true {
+                mergedMeta.escrowed = true
+                mergedMeta.escrowSocketPath = current.escrowSocketPath
+                mergedMeta.escrowToken = current.escrowToken
+            }
             try persistMetaUnlocked(mergedMeta, paths: paths)
             return mergedMeta
         }
@@ -515,6 +696,14 @@ enum SessionWALCore {
     static func readMeta(at paths: SessionWALPaths) -> SessionWALMeta? {
         try? withProcessLock(paths: paths) {
             readMetaUnlocked(paths: paths)
+        }
+    }
+
+    static func clearEscrowClaim(at paths: SessionWALPaths, ifSocketMatches socketPath: String) throws {
+        try withProcessLock(paths: paths) {
+            guard var meta = readMetaUnlocked(paths: paths), meta.escrowSocketPath == socketPath else { return }
+            meta.escrowed = false
+            try persistMetaUnlocked(meta, paths: paths)
         }
     }
 
@@ -691,15 +880,38 @@ enum SessionWALCore {
         return start > data.startIndex ? data.suffix(from: start) : data
     }
 
-    /// Test/production helper for committing frame metadata with the same
-    /// date encoding as restore.
+    /// Shared frame commit: fsync the staging file, rename it atomically,
+    /// then write metadata using restore's date encoding under the same lock.
+    @discardableResult
     static func writeFrame(
         _ text: String,
         meta: SessionFrameMeta,
-        to paths: SessionWALPaths
+        to paths: SessionWALPaths,
+        capturedGeneration: UUID? = nil
+    ) throws -> Bool {
+        try SessionScrollbackPolicyStore.withContentPermission(
+            at: paths.policyPaths, capturedGeneration: capturedGeneration
+        ) {
+            try writeFrameAllowed(text, meta: meta, to: paths)
+            return true
+        } ?? false
+    }
+
+    private static func writeFrameAllowed(
+        _ text: String, meta: SessionFrameMeta, to paths: SessionWALPaths
     ) throws {
         try withProcessLock(paths: paths) {
-            try Data(text.utf8).write(to: paths.frameURL)
+            guard FileManager.default.createFile(atPath: paths.frameNextURL.path, contents: nil) else {
+                throw CoreError.cannotCommitFrame
+            }
+            let handle = try FileHandle(forWritingTo: paths.frameNextURL)
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: 0)
+            try handle.write(contentsOf: Data(text.utf8))
+            try handle.synchronize()
+            guard atomicRename(from: paths.frameNextURL, to: paths.frameURL) else {
+                throw CoreError.cannotCommitFrame
+            }
             let data = try metaEncoder.encode(meta)
             try data.write(to: paths.frameMetaURL, options: .atomic)
         }
@@ -830,7 +1042,10 @@ final class SessionWALStore {
 
         init(surfaceId: String) {
             self.surfaceId = surfaceId
-            self.ringBuffer = SessionWALRingBuffer(capacity: SessionWALPolicy.ringBufferCapacityBytes)
+            self.ringBuffer = SessionWALRingBuffer(
+                capacity: SessionWALPolicy.ringBufferCapacityBytes,
+                policy: SessionScrollbackPolicy(enabled: false, generation: UUID())
+            )
         }
     }
 
@@ -841,6 +1056,7 @@ final class SessionWALStore {
     private var drainTimer: DispatchSourceTimer?
     private var frameCaptureTimer: DispatchSourceTimer?
     private var hasScheduledOrphanSweep = false
+    private var capturePolicy = SessionScrollbackPolicy(enabled: false, generation: UUID())
     /// Injected once (`TerminalController.init` wires this to
     /// `captureSessionWALFrameText(forSurfaceId:)`) since VT export is
     /// main-thread/AppKit-bound and `SessionWALStore` must never touch
@@ -850,15 +1066,8 @@ final class SessionWALStore {
     /// without blocking.
     private var frameTextProvider: ((String, @escaping (String?) -> Void) -> Void)?
 
-    private static let metaEncoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return encoder
-    }()
-
-    /// Mirrors `metaEncoder`'s date strategy. Used only by the orphan sweep's
-    /// conservative age check, never on the tee-callback/write hot path.
+    /// Mirrors the core's date strategy for metadata reads and the orphan
+    /// sweep's conservative age check, never the tee-callback/write hot path.
     private static let metaDecoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -866,6 +1075,30 @@ final class SessionWALStore {
     }()
 
     private init() {}
+
+    func currentCapturePolicy() -> SessionScrollbackPolicy {
+        writeQueue.sync { capturePolicy }
+    }
+
+    /// Settings/startup only. Existing writes finish before the transition;
+    /// capture admission stays disabled if the durable transition fails.
+    func transitionPersistence(enabled: Bool) throws {
+        try writeQueue.sync {
+            applyCapturePolicy(SessionScrollbackPolicy(enabled: false, generation: UUID()))
+            guard let paths = SessionScrollbackPolicyPaths.make() else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            let policy = try SessionScrollbackPolicyStore.transition(enabled: enabled, at: paths)
+            applyCapturePolicy(policy)
+        }
+    }
+
+    private func applyCapturePolicy(_ policy: SessionScrollbackPolicy) {
+        capturePolicy = policy
+        for writer in writersBySurfaceId.values {
+            writer.context.ringBuffer.transition(to: policy)
+        }
+    }
 
     /// Registers the PTY tee for a newly created surface and starts its
     /// WAL writer off-main. The caller (`TerminalSurface`) must hold onto
@@ -1067,6 +1300,9 @@ final class SessionWALStore {
     /// `SessionWALPolicy.walCapBytes`, and decodes leniently since PTY bytes
     /// may include partial UTF-8 sequences at the truncation boundary.
     func readFallbackScrollbackText(sessionId: String) -> String? {
+        guard ScrollbackPersistenceSettings.isEnabled(),
+              let paths = SessionScrollbackPolicyPaths.make(),
+              (try? SessionScrollbackPolicyStore.read(at: paths).enabled) == true else { return nil }
         if let frameReplay = readFrameAndDeltaScrollbackText(sessionId: sessionId) {
             return frameReplay
         }
@@ -1157,6 +1393,7 @@ final class SessionWALStore {
             return FileManager.default.homeDirectoryForCurrentUser.path
         }()
         let writer = SessionWALWriter(context: context, paths: paths, workingDirectory: resolvedWorkingDirectory)
+        context.ringBuffer.transition(to: capturePolicy)
         // Durable-fact hydration: a re-registration for a surfaceId that already
         // has a meta.json on disk (deferred-revive escrow stamp before the runtime
         // surface exists, or a runtime-surface recreation) must not clobber facts
@@ -1232,7 +1469,8 @@ final class SessionWALStore {
     /// so the reservation can never be ahead of what the export actually
     /// sees (see file-level doc comment).
     private func considerFrameCaptureTick() {
-        guard let frameTextProvider else { return }
+        guard capturePolicy.enabled, let frameTextProvider else { return }
+        let captureGeneration = capturePolicy.generation
         let now = Date()
         let dueWriters = writersBySurfaceId.values
             .filter { Self.shouldAttemptFrameCapture(writer: $0, now: now) }
@@ -1250,6 +1488,11 @@ final class SessionWALStore {
                     writer.frameCaptureInFlight = false
                     return
                 }
+                guard self.capturePolicy.enabled,
+                      self.capturePolicy.generation == captureGeneration else {
+                    writer.frameCaptureInFlight = false
+                    return
+                }
                 self.beginFrameCapture(writer: writer, provider: frameTextProvider)
             }
         }
@@ -1263,6 +1506,7 @@ final class SessionWALStore {
         let reservedOffset = writer.currentWalSize
         let reservedGeneration = writer.walGeneration
         let reservedTotalBytes = writer.totalBytesWrittenEver
+        let captureGeneration = capturePolicy.generation
         provider(writer.context.surfaceId) { [weak self] text in
             self?.writeQueue.async {
                 self?.finishFrameCapture(
@@ -1270,7 +1514,8 @@ final class SessionWALStore {
                     text: text,
                     reservedOffset: reservedOffset,
                     reservedGeneration: reservedGeneration,
-                    reservedTotalBytes: reservedTotalBytes
+                    reservedTotalBytes: reservedTotalBytes,
+                    captureGeneration: captureGeneration
                 )
             }
         }
@@ -1292,18 +1537,15 @@ final class SessionWALStore {
         text: String?,
         reservedOffset: Int64,
         reservedGeneration: Int,
-        reservedTotalBytes: Int64
+        reservedTotalBytes: Int64,
+        captureGeneration: UUID
     ) {
         writer.frameCaptureInFlight = false
+        guard writersBySurfaceId[writer.context.surfaceId] === writer else { return }
+        guard capturePolicy.enabled, capturePolicy.generation == captureGeneration else { return }
         guard let text, !text.isEmpty else {
 #if DEBUG
             dlog("session.wal.frame.capture.skipped surface=\(writer.context.surfaceId.prefix(8)) reason=empty_or_failed")
-#endif
-            return
-        }
-        guard writeFrameFile(text: text, writer: writer) else {
-#if DEBUG
-            dlog("session.wal.frame.capture.failed surface=\(writer.context.surfaceId.prefix(8)) reason=write_or_rename")
 #endif
             return
         }
@@ -1313,35 +1555,17 @@ final class SessionWALStore {
             walOffset: reservedOffset,
             walGeneration: reservedGeneration
         )
-        if let data = try? Self.metaEncoder.encode(frameMeta) {
-            try? data.write(to: writer.paths.frameMetaURL, options: .atomic)
+        do {
+            guard try SessionWALCore.writeFrame(
+                text, meta: frameMeta, to: writer.paths, capturedGeneration: captureGeneration
+            ) else { return }
+        } catch {
+#if DEBUG
+            dlog("session.wal.frame.capture.failed surface=\(writer.context.surfaceId.prefix(8)) reason=write_or_rename")
+#endif
+            return
         }
         writer.lastFrameCaptureBytes = reservedTotalBytes
-    }
-
-    /// Writes `text` to `frame.vt.next`, fsyncs, then commits it over
-    /// `frame.vt` with a single `rename(2)` call -- never a bespoke
-    /// torn-write detector, rename(2) already gives atomicity on the same
-    /// filesystem. Uses `Darwin.rename` directly rather than
-    /// `FileManager.moveItem`, which refuses to replace an existing
-    /// destination.
-    private func writeFrameFile(text: String, writer: SessionWALWriter) -> Bool {
-        guard let data = text.data(using: .utf8) else { return false }
-        let nextURL = writer.paths.frameNextURL
-        FileManager.default.createFile(atPath: nextURL.path, contents: nil)
-        guard let handle = try? FileHandle(forWritingTo: nextURL) else { return false }
-        handle.write(data)
-        handle.synchronizeFile()
-        handle.closeFile()
-        return Self.atomicRename(from: nextURL, to: writer.paths.frameURL)
-    }
-
-    private static func atomicRename(from sourceURL: URL, to destinationURL: URL) -> Bool {
-        sourceURL.path.withCString { src in
-            destinationURL.path.withCString { dst in
-                Darwin.rename(src, dst) == 0
-            }
-        }
     }
 
     private func drainAllWriters() {
@@ -1355,11 +1579,11 @@ final class SessionWALStore {
         forceMetaWrite: Bool,
         forceWALSync: Bool
     ) {
-        let bytes = writer.context.ringBuffer.drain()
-        let hadBytes = (bytes?.isEmpty == false)
+        let capture = writer.context.ringBuffer.drainCaptured()
+        let hadBytes = (capture?.bytes.isEmpty == false)
         let now = Date()
-        if let bytes, hadBytes {
-            appendToWAL(bytes, writer: writer, at: now, forceSync: forceWALSync)
+        if let capture, hadBytes {
+            appendToWAL(capture, writer: writer, at: now, forceSync: forceWALSync)
         } else if writer.hasUnsynchronizedWALWrites,
                   forceWALSync
                     || now.timeIntervalSince(writer.lastWALSyncAt) >= SessionWALPolicy.walSyncInterval {
@@ -1376,19 +1600,21 @@ final class SessionWALStore {
     }
 
     private func appendToWAL(
-        _ bytes: [UInt8],
+        _ capture: SessionWALRingBuffer.Capture,
         writer: SessionWALWriter,
         at date: Date,
         forceSync: Bool
     ) {
-        let data = Data(bytes)
+        guard capturePolicy.enabled, capturePolicy.generation == capture.generation else { return }
+        let data = Data(capture.bytes)
         let shouldSynchronize = forceSync
             || date.timeIntervalSince(writer.lastWALSyncAt) >= SessionWALPolicy.walSyncInterval
         guard let result = try? SessionWALCore.append(
             data,
             to: writer.paths,
-            synchronize: shouldSynchronize
-        ) else { return }
+            synchronize: shouldSynchronize,
+            capturedGeneration: capture.generation
+        ), !result.didSuppress else { return }
 
         writer.currentWalSize = result.currentWalSize
         writer.walGeneration = result.walGeneration

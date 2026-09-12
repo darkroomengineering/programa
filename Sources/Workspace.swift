@@ -62,6 +62,7 @@ final class Workspace: Identifiable, ObservableObject {
     /// When true, the split-cap delegate veto is bypassed: session restore must
     /// rebuild pre-cap layouts (5+ panes) without losing panes.
     var isRestoringSessionLayout = false
+    var hasAppliedCustomLayout = false
     var debugStressPreloadSelectionDepth = 0
 
     /// Last terminal panel used as an inheritance source (typically last focused terminal).
@@ -804,8 +805,15 @@ final class Workspace: Identifiable, ObservableObject {
     /// to avoid thrashing `git diff` on a fast-moving CLI session. See
     /// docs/plans/diff-review-panel.md §3 "Refresh triggers".
     func installReviewPanelSubscription(_ reviewPanel: ReviewPanel) {
-        var previousState: AgentActivityState? = panelAgentStates[reviewPanel.sourceSurfaceId]
-        let subscription = $panelAgentStates
+        // The review panel and the terminal surface it reviews can live in different
+        // workspaces after a move (see `reattachPanelToWorkspace`): only the review panel
+        // itself is guaranteed to be `self` here. Resolve the workspace currently holding
+        // `sourceSurfaceId` at install time so the refresh trigger keeps watching the right
+        // `$panelAgentStates` stream; fall back to `self` when the source can't be located
+        // (e.g. detached, or running in a test harness with no `AppDelegate.shared`).
+        let sourceWorkspace = Workspace.workspaceOwning(surfaceId: reviewPanel.sourceSurfaceId) ?? self
+        var previousState: AgentActivityState? = sourceWorkspace.panelAgentStates[reviewPanel.sourceSurfaceId]
+        let subscription = sourceWorkspace.$panelAgentStates
             .map { [sourceSurfaceId = reviewPanel.sourceSurfaceId] states in states[sourceSurfaceId] }
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
@@ -817,6 +825,21 @@ final class Workspace: Identifiable, ObservableObject {
                 }
             }
         panelSubscriptions[reviewPanel.id] = subscription
+    }
+
+    /// Resolves the `Workspace` that currently owns the terminal surface with the given id, by
+    /// scanning all main window contexts via `AppDelegate`. Used by
+    /// `installReviewPanelSubscription` and `ReviewPanel.sendToSourceSurface` so a review panel
+    /// keeps tracking (and can keep sending comments to) its source terminal even after the
+    /// review panel and/or the terminal have been moved to different workspaces. Returns `nil`
+    /// when no such terminal panel is found; callers fall back to `self`.
+    static func workspaceOwning(surfaceId: UUID) -> Workspace? {
+        guard let located = AppDelegate.shared?.locateSurface(surfaceId: surfaceId),
+              let workspace = located.tabManager.tabs.first(where: { $0.id == located.workspaceId }),
+              workspace.terminalPanel(for: surfaceId) != nil else {
+            return nil
+        }
+        return workspace
     }
 
     func sendReviewComments(sourceSurfaceId: UUID, text: String) -> Bool {
@@ -1702,12 +1725,7 @@ final class Workspace: Identifiable, ObservableObject {
         }
 
         panels[detached.panelId] = detached.panel
-        if let terminalPanel = detached.panel as? TerminalPanel {
-            terminalPanel.updateWorkspaceId(id)
-        } else if let browserPanel = detached.panel as? BrowserPanel {
-            browserPanel.reattachToWorkspace(id)
-            installBrowserPanelSubscription(browserPanel)
-        }
+        reattachPanelToWorkspace(detached.panel)
 
         if let directory = detached.directory {
             updatePanelDirectory(panelId: detached.panelId, directory: directory)
@@ -1794,6 +1812,32 @@ final class Workspace: Identifiable, ObservableObject {
 #endif
         return detached.panelId
     }
+
+    /// Reinstalls per-panel-kind workspace binding and lifecycle subscriptions when a panel is
+    /// attached to this workspace via a detach/attach transfer (drag between workspaces, split
+    /// moves, `AppDelegate.moveSurface`). Centralizing this keeps every panel kind in sync:
+    /// previously only `TerminalPanel`/`BrowserPanel` were handled here, so `MarkdownPanel` never
+    /// got its `workspaceId` updated and `ReviewPanel` never got its `$panelAgentStates`
+    /// subscription reinstalled after a move (losing auto-refresh-on-idle). See
+    /// docs/audits/codebase-audit-2026-09-11.md M13.
+    private func reattachPanelToWorkspace(_ panel: any Panel) {
+        switch panel {
+        case let terminalPanel as TerminalPanel:
+            terminalPanel.updateWorkspaceId(id)
+        case let browserPanel as BrowserPanel:
+            browserPanel.reattachToWorkspace(id)
+            installBrowserPanelSubscription(browserPanel)
+        case let markdownPanel as MarkdownPanel:
+            markdownPanel.updateWorkspaceId(id)
+            installMarkdownPanelSubscription(markdownPanel)
+        case let reviewPanel as ReviewPanel:
+            reviewPanel.updateWorkspaceId(id)
+            installReviewPanelSubscription(reviewPanel)
+        default:
+            break
+        }
+    }
+
     // MARK: - Surface Navigation
 
     /// Select the next surface in the currently focused pane

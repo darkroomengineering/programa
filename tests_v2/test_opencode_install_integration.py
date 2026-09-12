@@ -201,9 +201,44 @@ def test_decline_confirmation_leaves_file_untouched(cli: str) -> None:
         print("  PASS: declining the confirmation prompt leaves programa.js untouched")
 
 
+def test_eof_does_not_authorize_changes(cli: str) -> None:
+    with tempfile.TemporaryDirectory() as home:
+        config_dir = Path(home) / "integration"
+        config_dir.mkdir()
+        env = os.environ.copy()
+        for key in ("PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID", "PROGRAMA_PANEL_ID", "PROGRAMA_TAB_ID"):
+            env.pop(key, None)
+        env.update(HOME=home, CFFIXED_USER_HOME=home, OPENCODE_CONFIG_DIR=str(config_dir))
+
+        def invoke(action: str, consent: bool = False) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                [cli, "opencode", action] + (["--yes"] if consent else []),
+                input="", capture_output=True, text=True, check=False, env=env,
+            )
+
+        def artifacts() -> dict:
+            return {str(path.relative_to(home)): path.read_bytes()
+                    for path in Path(home).rglob("*") if path.is_file()}
+
+        before = artifacts()
+        declined = invoke("install-integration")
+        _must(artifacts() == before, f"EOF must not authorize installation: {_merged(declined)}")
+        installed = invoke("install-integration", consent=True)
+        _must(installed.returncode == 0, f"explicit installation failed: {_merged(installed)}")
+        before = artifacts()
+        _must(bool(before), "explicit installation must produce managed artifacts")
+        declined = invoke("uninstall-integration")
+        _must(artifacts() == before, f"EOF must not authorize uninstall: {_merged(declined)}")
+        print("  PASS: EOF preserves installation and uninstallation artifacts")
+
+
 def main() -> int:
     cli = _find_cli_binary()
     print(f"Using CLI: {cli}")
+
+    test_eof_does_not_authorize_changes(cli)
+    if sys.argv[1:] == ["--eof-only"]:
+        return 0
 
     test_fresh_install(cli)
     test_idempotent_reinstall(cli)

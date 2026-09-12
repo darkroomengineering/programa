@@ -144,11 +144,24 @@ enum SessionRestorePolicy {
             return false
         }
 
-        let extraArgs = arguments
-            .dropFirst()
-            .filter { !$0.hasPrefix("-psn_") }
-
-        // Any explicit launch argument is treated as an explicit open intent.
+        // Any explicit launch argument is treated as an explicit open intent, except
+        // launch-services process serial numbers and NSUserDefaults argument-domain
+        // pairs (single-dash `-key value`), which configure preferences rather than
+        // open anything. Double-dash options remain explicit intents.
+        var extraArgs: [String] = []
+        var skipValue = false
+        for argument in arguments.dropFirst() {
+            if skipValue {
+                skipValue = false
+                continue
+            }
+            if argument.hasPrefix("-psn_") { continue }
+            if argument.hasPrefix("-"), !argument.hasPrefix("--"), argument.count > 1 {
+                skipValue = true
+                continue
+            }
+            extraArgs.append(argument)
+        }
         return extraArgs.isEmpty
     }
 }
@@ -400,6 +413,17 @@ struct AppSessionSnapshot: Codable, Sendable {
 }
 
 enum SessionPersistenceStore {
+    static func withoutScrollback(_ snapshot: AppSessionSnapshot) -> AppSessionSnapshot {
+        var result = snapshot
+        for window in result.windows.indices {
+            for workspace in result.windows[window].tabManager.workspaces.indices {
+                for panel in result.windows[window].tabManager.workspaces[workspace].panels.indices {
+                    result.windows[window].tabManager.workspaces[workspace].panels[panel].terminal?.scrollback = nil
+                }
+            }
+        }
+        return result
+    }
     static let historyDirectoryScanLimit = 256
 
     struct HistoryScanResult {
@@ -473,7 +497,7 @@ enum SessionPersistenceStore {
         return fallback.snapshot
     }
 
-    /// Scans the newest `limit` archives (newest-first, per `historyFileURLs`) for the first one
+    /// Scans the newest `limit` archives belonging to this bundle (newest-first, per `historyFileURLs`) for the first one
     /// that decodes at the current schema version with at least one window. Capped rather than
     /// unbounded: a long-neglected `session-history/` directory should not turn a startup restore
     /// into an unbounded disk scan.
@@ -481,7 +505,10 @@ enum SessionPersistenceStore {
         fileURL: URL,
         limit: Int
     ) -> (snapshot: AppSessionSnapshot, filename: String)? {
-        let candidates = historyFileURLs(fileURL: fileURL).prefix(max(0, limit))
+        let archiveSuffix = "\(sanitizedBundleIdentifier(Bundle.main.bundleIdentifier)).json"
+        let candidates = historyFileURLs(fileURL: fileURL)
+            .filter { $0.lastPathComponent.split(separator: "-", maxSplits: 2).last == Substring(archiveSuffix) }
+            .prefix(max(0, limit))
         for entry in candidates {
             guard let data = boundedSnapshotData(at: entry),
                   let snapshot = decodeSnapshot(from: data),
@@ -608,12 +635,18 @@ enum SessionPersistenceStore {
         fileURL: URL? = nil,
         now: Date = Date(),
         maxHistoryEntries: Int = SessionPersistencePolicy.maxSnapshotHistoryEntries,
-        historyScanObserver: ((HistoryScanResult) -> Void)? = nil
+        historyScanObserver: ((HistoryScanResult) -> Void)? = nil,
+        includeScrollback: Bool = true
     ) -> Bool {
         guard let fileURL = fileURL ?? defaultSnapshotFileURL(),
               let historyDirectory = historyDirectoryURL(fileURL: fileURL),
-              let data = boundedSnapshotData(at: fileURL) else {
+              var data = boundedSnapshotData(at: fileURL) else {
             return false
+        }
+        if !includeScrollback {
+            guard let snapshot = decodeSnapshot(from: data),
+                  let metadata = try? encodedSnapshotData(withoutScrollback(snapshot)) else { return false }
+            data = metadata
         }
 
         do {
@@ -646,7 +679,7 @@ enum SessionPersistenceStore {
             isDirectory: false
         )
         do {
-            try FileManager.default.copyItem(at: fileURL, to: staging)
+            try data.write(to: staging)
         } catch {
             try? FileManager.default.removeItem(at: staging)
             return false
@@ -1191,12 +1224,13 @@ enum SessionFreshSpawnScrollbackSeed {
         // `split(omittingEmptySubsequences: false)` + `joined` round-trips a
         // trailing newline (and any blank lines) exactly, so no separate
         // trailing-newline bookkeeping is needed here.
-        text.split(separator: "\n", omittingEmptySubsequences: false)
-            .map { sanitizedLine(String($0)) }
+        var rendition = ReplayRendition()
+        return text.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { sanitizedLine(String($0), rendition: &rendition) }
             .joined(separator: "\n")
     }
 
-    private static func sanitizedLine(_ line: String) -> String {
+    private static func sanitizedLine(_ line: String, rendition: inout ReplayRendition) -> String {
         // Cheap bypass: the overwhelming majority of lines in a scrollback
         // transcript are plain text with none of the three signals below.
         guard line.contains(where: { $0 == "\u{001B}" || $0 == "\r" || $0 == "\u{8}" }) else {
@@ -1217,7 +1251,7 @@ enum SessionFreshSpawnScrollbackSeed {
         }
 
         let working = sanitizedWorkingText(line)
-        return replayedLine(from: replayTokens(in: working))
+        return replayedLine(from: replayTokens(in: working), rendition: &rendition)
     }
 
     /// Produces a working string safe to tokenize for the cell walk:
@@ -1289,8 +1323,181 @@ enum SessionFreshSpawnScrollbackSeed {
     /// replaces both fields together, so a later redraw's color correctly
     /// wins over the frame it overwrites.
     private struct ReplayCell {
-        var sgr: String
+        var sgr: ReplayRendition
         var char: Character
+    }
+
+    /// Stores only active attributes, never the sequence history that produced them.
+    /// Parsing follows the pinned Ghostty CSI/SGR parser, including its 24-parameter
+    /// limit, saturating UInt16 parameters, and color-component truncation.
+    private struct ReplayRendition: Equatable {
+        private enum Color: Equatable {
+            case palette(UInt8)
+            case rgb(UInt8, UInt8, UInt8)
+
+            func parameters(for target: Int) -> String {
+                switch self {
+                case .palette(let index):
+                    if target != 58, index < 16 {
+                        return String(target - 8 + Int(index) + (index >= 8 ? 52 : 0))
+                    }
+                    return "\(target);5;\(index)"
+                case .rgb(let red, let green, let blue):
+                    return "\(target);2;\(red);\(green);\(blue)"
+                }
+            }
+        }
+
+        private struct Parameter {
+            var value: UInt16
+            var colon: Bool
+        }
+
+        private var foreground: Color?
+        private var background: Color?
+        private var underlineColor: Color?
+        private var underline: UInt16 = 0
+        private var bold = false
+        private var faint = false
+        private var italic = false
+        private var blink = false
+        private var inverse = false
+        private var invisible = false
+        private var strikethrough = false
+        private var overline = false
+
+        var sequence: String {
+            var attributes: [String] = []
+            if bold { attributes.append("1") }
+            if faint { attributes.append("2") }
+            if italic { attributes.append("3") }
+            if underline != 0 { attributes.append(underline == 1 ? "4" : "4:\(underline)") }
+            if blink { attributes.append("5") }
+            if inverse { attributes.append("7") }
+            if invisible { attributes.append("8") }
+            if strikethrough { attributes.append("9") }
+            if overline { attributes.append("53") }
+            if let foreground { attributes.append(foreground.parameters(for: 38)) }
+            if let background { attributes.append(background.parameters(for: 48)) }
+            if let underlineColor { attributes.append(underlineColor.parameters(for: 58)) }
+            return ansiReset + attributes.map { "\u{001B}[\($0)m" }.joined()
+        }
+
+        mutating func apply(_ sequence: String) {
+            var parameters: [Parameter] = []
+            var accumulator = 0
+            var hasDigits = false
+            for byte in sequence.utf8.dropFirst(2).dropLast() {
+                if byte == 0x3B || byte == 0x3A {
+                    guard parameters.count < 24 else { return }
+                    parameters.append(Parameter(value: UInt16(accumulator), colon: byte == 0x3A))
+                    accumulator = 0
+                    hasDigits = false
+                } else {
+                    guard (0x30...0x39).contains(byte) else { return }
+                    accumulator = min(Int(UInt16.max), accumulator * 10 + Int(byte - 0x30))
+                    hasDigits = true
+                }
+            }
+            guard parameters.count < 24 else { return }
+            if hasDigits {
+                parameters.append(Parameter(value: UInt16(accumulator), colon: false))
+            }
+            if parameters.isEmpty {
+                self = ReplayRendition()
+                return
+            }
+
+            var index = 0
+            func consumeColonGroup() {
+                while index < parameters.count, parameters[index].colon { index += 1 }
+                if index < parameters.count { index += 1 }
+            }
+            while index < parameters.count {
+                let parameter = parameters[index]
+                index += 1
+                if parameter.colon, ![4, 38, 48, 58].contains(parameter.value) {
+                    consumeColonGroup()
+                    continue
+                }
+                switch parameter.value {
+                case 0: self = ReplayRendition()
+                case 1: bold = true
+                case 2: faint = true
+                case 3: italic = true
+                case 4:
+                    if parameter.colon {
+                        guard index < parameters.count else { continue }
+                        if parameters[index].colon {
+                            consumeColonGroup()
+                            continue
+                        }
+                        let style = parameters[index].value
+                        underline = style <= 5 ? style : 1
+                        index += 1
+                    } else {
+                        underline = 1
+                    }
+                case 5, 6: blink = true
+                case 7: inverse = true
+                case 8: invisible = true
+                case 9: strikethrough = true
+                case 21: underline = 2
+                case 22:
+                    bold = false
+                    faint = false
+                case 23: italic = false
+                case 24: underline = 0
+                case 25: blink = false
+                case 27: inverse = false
+                case 28: invisible = false
+                case 29: strikethrough = false
+                case 30...37: foreground = .palette(UInt8(parameter.value - 30))
+                case 39: foreground = nil
+                case 40...47: background = .palette(UInt8(parameter.value - 40))
+                case 49: background = nil
+                case 53: overline = true
+                case 55: overline = false
+                case 59: underlineColor = nil
+                case 90...97: foreground = .palette(UInt8(parameter.value - 82))
+                case 100...107: background = .palette(UInt8(parameter.value - 92))
+                case 38, 48, 58:
+                    guard index < parameters.count else { continue }
+                    let color: Color
+                    if parameters[index].value == 5, index + 1 < parameters.count {
+                        color = .palette(UInt8(truncatingIfNeeded: parameters[index + 1].value))
+                        index += 2
+                    } else if parameters[index].value == 2, index + 3 < parameters.count {
+                        var componentIndex = index + 1
+                        if parameter.colon {
+                            var end = index
+                            while end < parameters.count - 1, parameters[end].colon { end += 1 }
+                            switch end - index {
+                            case 3: break
+                            case 4: componentIndex += 1
+                            default:
+                                consumeColonGroup()
+                                continue
+                            }
+                        }
+                        color = .rgb(
+                            UInt8(truncatingIfNeeded: parameters[componentIndex].value),
+                            UInt8(truncatingIfNeeded: parameters[componentIndex + 1].value),
+                            UInt8(truncatingIfNeeded: parameters[componentIndex + 2].value)
+                        )
+                        index = componentIndex + 3
+                    } else {
+                        continue
+                    }
+                    switch parameter.value {
+                    case 38: foreground = color
+                    case 48: background = color
+                    default: underlineColor = color
+                    }
+                default: break
+                }
+            }
+        }
     }
 
     /// Replays a line's tokens (see `replayTokens`) against a virtual
@@ -1302,19 +1509,15 @@ enum SessionFreshSpawnScrollbackSeed {
     /// and `\b` move the write column without touching cell content -- a
     /// real terminal overwrite, not a clear -- so a shorter redraw correctly
     /// leaves the tail of a longer previous one in place.
-    private static func replayedLine(from tokens: [ReplayToken]) -> String {
+    private static func replayedLine(from tokens: [ReplayToken], rendition: inout ReplayRendition) -> String {
         var cells: [ReplayCell] = []
         var cursor = 0
-        var currentSGR = ""
+        var currentSGR = rendition
 
         for token in tokens {
             switch token {
             case .sgr(let sequence):
-                if sequence == "\u{001B}[0m" || sequence == "\u{001B}[m" {
-                    currentSGR = ""
-                } else {
-                    currentSGR += sequence
-                }
+                currentSGR.apply(sequence)
             case .char(let char):
                 switch char {
                 case "\r":
@@ -1334,7 +1537,7 @@ enum SessionFreshSpawnScrollbackSeed {
                         cells[cursor] = cell
                     } else {
                         if cursor > cells.count {
-                            cells.append(contentsOf: repeatElement(ReplayCell(sgr: "", char: " "), count: cursor - cells.count))
+                            cells.append(contentsOf: repeatElement(ReplayCell(sgr: ReplayRendition(), char: " "), count: cursor - cells.count))
                         }
                         cells.append(cell)
                     }
@@ -1344,17 +1547,18 @@ enum SessionFreshSpawnScrollbackSeed {
         }
 
         var output = ""
-        var lastEmittedSGR = ""
+        var lastEmittedSGR = rendition
         for cell in cells {
             if cell.sgr != lastEmittedSGR {
-                output += cell.sgr.isEmpty ? ansiReset : cell.sgr
+                output += cell.sgr.sequence
                 lastEmittedSGR = cell.sgr
             }
             output.append(cell.char)
         }
         if currentSGR != lastEmittedSGR {
-            output += currentSGR.isEmpty ? ansiReset : currentSGR
+            output += currentSGR.sequence
         }
+        rendition = currentSGR
         return output
     }
 
@@ -1383,7 +1587,7 @@ enum SessionFreshSpawnScrollbackSeed {
     private static let sgrRegex: NSRegularExpression = {
         let esc = "\u{001B}"
         // swiftlint:disable:next force_try
-        return try! NSRegularExpression(pattern: esc + #"\[[0-9;]*m"#)
+        return try! NSRegularExpression(pattern: esc + #"\[[0-9;:]*m"#)
     }()
 
     /// OSC (`ESC]...`) terminated by BEL or ST (`ESC\`). Requiring the

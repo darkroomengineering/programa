@@ -1596,10 +1596,6 @@ extension AppDelegate {
                 publish(ready: false, failure: "workspace_missing")
                 return
             }
-            panelsCancellable?.cancel()
-            panelsCancellable = workspace.$panels
-                .map { _ in () }
-                .sink { _ in MainActor.assumeIsolated { attemptFocus() } }
             guard let terminalPanel = workspace.terminalPanel(for: surfaceId) else {
                 resolved = true
                 cleanup()
@@ -1675,7 +1671,15 @@ extension AppDelegate {
                   readySurfaceId == surfaceId else { return }
             MainActor.assumeIsolated { attemptFocus() }
         })
+        if let workspace = tabManager.tabs.first(where: { $0.id == tabId }) {
+            panelsCancellable = workspace.$panels
+                .dropFirst()
+                .map { _ in () }
+                .sink { _ in MainActor.assumeIsolated { attemptFocus() } }
+        }
         selectedTabCancellable = tabManager.$selectedTabId
+            .removeDuplicates()
+            .dropFirst()
             .map { _ in () }
             .sink { _ in MainActor.assumeIsolated { attemptFocus() } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
@@ -1721,7 +1725,7 @@ extension AppDelegate {
             let dataPath = path
             DispatchQueue.global(qos: .utility).async { [weak self] in
                 let pingResponse = health.isHealthy
-                    ? TerminalController.probeSocketCommand("ping", at: socketPath, timeout: 1.0)
+                    ? TerminalController.probeSocketPing(at: socketPath, timeout: 1.0)
                     : nil
                 let isReady = health.isHealthy && pingResponse == "PONG"
                 let failureSignals = {
