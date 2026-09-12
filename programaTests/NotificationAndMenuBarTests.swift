@@ -346,6 +346,25 @@ final class NotificationDockBadgeTests: XCTestCase {
         )
     }
 
+    func testAutomaticAuthorizationRequestsAreSuppressedUnderAutomatedTests() {
+        // The system permission dialog activates the app, which would foreground it in the
+        // middle of focus regressions; only delivery-triggered requests are affected.
+        XCTAssertFalse(
+            TerminalNotificationStore.shouldRequestAuthorization(
+                isAutomaticRequest: true,
+                hasRequestedAutomaticAuthorization: false,
+                isRunningUnderAutomatedTests: true
+            )
+        )
+        XCTAssertTrue(
+            TerminalNotificationStore.shouldRequestAuthorization(
+                isAutomaticRequest: false,
+                hasRequestedAutomaticAuthorization: false,
+                isRunningUnderAutomatedTests: true
+            )
+        )
+    }
+
     func testNotificationSettingsPromptUsesSheetAndNeverRunsModal() {
         let store = TerminalNotificationStore.shared
         let alertSpy = NotificationSettingsAlertSpy()

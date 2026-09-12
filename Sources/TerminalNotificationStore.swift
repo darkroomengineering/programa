@@ -714,7 +714,8 @@ final class TerminalNotificationStore: ObservableObject {
         let isAutomaticRequest = origin == .notificationDelivery
         guard Self.shouldRequestAuthorization(
             isAutomaticRequest: isAutomaticRequest,
-            hasRequestedAutomaticAuthorization: hasRequestedAutomaticAuthorization
+            hasRequestedAutomaticAuthorization: hasRequestedAutomaticAuthorization,
+            isRunningUnderAutomatedTests: SessionRestorePolicy.isRunningUnderAutomatedTests()
         ) else {
             logAuthorization(
                 "request blocked origin=\(origin.rawValue) automatic=\(isAutomaticRequest) hasRequestedAutomatic=\(hasRequestedAutomaticAuthorization)"
@@ -804,11 +805,16 @@ final class TerminalNotificationStore: ObservableObject {
         status == .notDetermined && !isAppActive
     }
 
+    /// Automatic (delivery-triggered) requests never run under automated tests: the system
+    /// permission dialog activates the app, which breaks focus assertions in UI regressions
+    /// and can never be answered there. User-initiated requests from Settings are unaffected.
     static func shouldRequestAuthorization(
         isAutomaticRequest: Bool,
-        hasRequestedAutomaticAuthorization: Bool
+        hasRequestedAutomaticAuthorization: Bool,
+        isRunningUnderAutomatedTests: Bool = false
     ) -> Bool {
         guard isAutomaticRequest else { return true }
+        if isRunningUnderAutomatedTests { return false }
         return !hasRequestedAutomaticAuthorization
     }
 
