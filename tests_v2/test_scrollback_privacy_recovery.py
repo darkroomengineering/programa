@@ -182,7 +182,12 @@ def main():
         def acknowledge(expected_workspace_title=None):
             nonlocal surface
             def surface_for_original_child():
-                workspaces = rpc(control, "workspace.list").get("workspaces", [])
+                # Recovery may reattach the session into a separate "Recovered Sessions"
+                # window; a bare workspace.list only covers the primary window.
+                workspaces = []
+                for window in rpc(control, "window.list").get("windows", []) or [{}]:
+                    params = {"window_id": window["id"]} if window.get("id") else {}
+                    workspaces.extend(rpc(control, "workspace.list", params).get("workspaces", []))
                 matches = []
                 for workspace in workspaces:
                     for row in rpc(control, "surface.list", {"workspace_id": workspace["id"]}).get("surfaces", []):
@@ -298,22 +303,24 @@ def main():
                     except OSError as error:
                         tail = f"<unreadable: {error}>"
                     print(f"--- {app_log.name} (tail) ---\n{tail}", file=sys.stderr)
-                try:
-                    for sid in sorted(owned_surface_ids):
-                        text = rpc(control, "surface.read_text", {"surface_id": sid, "scrollback": True})
-                        print(f"--- created surface {sid} text ---\n{str(text.get('text', ''))[-3000:]}", file=sys.stderr)
-                    workspaces = rpc(control, "workspace.list", {})
-                    print(f"--- workspace.list ---\n{json.dumps(workspaces)[:3000]}", file=sys.stderr)
-                    listing = rpc(control, "surface.list", {})
-                    print(f"--- surface.list ---\n{json.dumps(listing)[:4000]}", file=sys.stderr)
-                    for entry in listing.get("surfaces", []) if isinstance(listing, dict) else []:
-                        sid = entry.get("surface_id") or entry.get("id")
-                        if not sid:
-                            continue
-                        text = rpc(control, "surface.read_text", {"surface_id": sid, "scrollback": True})
-                        print(f"--- surface {sid} text ---\n{str(text.get('text', ''))[-3000:]}", file=sys.stderr)
-                except Exception as error:  # noqa: BLE001 - diagnostics must never mask the real failure
-                    print(f"--- diagnostics unavailable: {type(error).__name__}: {error}", file=sys.stderr)
+                def diagnostic(label, operation):
+                    try:
+                        print(f"--- {label} ---\n{operation()}", file=sys.stderr)
+                    except Exception as error:  # noqa: BLE001 - diagnostics must never mask the real failure
+                        print(f"--- {label} unavailable: {type(error).__name__}: {error}", file=sys.stderr)
+
+                diagnostic("window.list", lambda: json.dumps(rpc(control, "window.list"))[:2000])
+                diagnostic("workspace.list (primary window)", lambda: json.dumps(rpc(control, "workspace.list"))[:3000])
+                for sid in sorted(owned_surface_ids):
+                    diagnostic(f"created surface {sid} text", lambda sid=sid: str(rpc(
+                        control, "surface.read_text", {"surface_id": sid, "scrollback": True}).get("text", ""))[-3000:])
+                def session_metadata():
+                    rows = []
+                    for meta_path in sorted((support / "sessions").glob("*/meta.json")):
+                        rows.append(f"{meta_path.parent.name}: {meta_path.read_text()[:600]}")
+                    return "\n".join(rows) or "<no sessions>"
+                diagnostic("sessions/*/meta.json", session_metadata)
+                diagnostic("expected escrow", lambda: f"escrow_pid={escrow_pid!r} holder_socket={holder_socket}")
 
             def cleanup(label, operation):
                 try:
