@@ -87,6 +87,7 @@ final class WindowGlassEffectTests: XCTestCase {
 
             let bridge = WindowPaneChromePortalRegistry.bridge(for: window)
             let paneID = PaneID()
+            var accessibilitySelection: TabID?
             let tabs = ["One", "Two"].map { title in
                 BonsplitPaneChromeTabDescriptor(
                     id: TabID(), title: title, icon: "terminal", iconImageData: nil,
@@ -97,7 +98,7 @@ final class WindowGlassEffectTests: XCTestCase {
             bridge.updatePaneChrome(BonsplitPaneChromeDescriptor(
                 paneID: paneID, anchorView: anchor, tabs: tabs, isFocused: true,
                 isVisible: true, leadingInset: 0, showsSplitButtons: false,
-                onSelect: { _ in }, onClose: { _ in }, onContextAction: { _, _ in },
+                onSelect: { accessibilitySelection = $0 }, onClose: { _ in }, onContextAction: { _, _ in },
                 dragPasteboardData: { _ in nil }, onDragStateChanged: { _, _ in },
                 onNewTab: {}, onNewBrowserTab: {}, onSplitRight: {}, onSplitDown: {}
             ))
@@ -109,6 +110,16 @@ final class WindowGlassEffectTests: XCTestCase {
             // is a plain button container.
             let pillGlassViews = glassViews.filter { $0.contentView is NSControl }
             XCTAssertEqual(pillGlassViews.count, 2)
+            for tab in tabs {
+                let control = try XCTUnwrap(pillGlassViews.compactMap { $0.contentView as? NSControl }
+                    .first { $0.accessibilityLabel() == tab.title })
+                XCTAssertTrue(control.isAccessibilityElement())
+                XCTAssertEqual(control.accessibilityRole(), .button)
+                XCTAssertEqual(control.isAccessibilitySelected(), tab.isSelected)
+                XCTAssertEqual(control.accessibilityValue() as? String, tab.accessibilityValue)
+                XCTAssertTrue(control.accessibilityPerformPress())
+                XCTAssertEqual(accessibilitySelection, tab.id)
+            }
             XCTAssertEqual(glassViews.count, 4)
             XCTAssertTrue(bridge.hostViewForTesting.superview === terminalHost.superview)
             let siblings = terminalHost.superview?.subviews ?? []

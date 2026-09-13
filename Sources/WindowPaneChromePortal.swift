@@ -883,6 +883,7 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         addSubview(iconView)
         addSubview(titleField)
         addSubview(closeButton)
+        setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
 
@@ -954,7 +955,14 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         toolTip = tab.title
         setAccessibilityLabel(tab.title)
         setAccessibilityValue(tab.accessibilityValue)
+        setAccessibilitySelected(tab.isSelected)
         needsLayout = true
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isEnabled, let selectAction else { return false }
+        selectAction()
+        return true
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
