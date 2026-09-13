@@ -144,9 +144,9 @@ import Bonsplit
 ///   its `meta.json` heartbeat (or, if that can't be parsed, its own
 ///   filesystem modification date) is older than
 ///   `SessionWALPolicy.orphanDirectoryMaxAge`. A directory whose age cannot
-///   be determined at all is kept. This only catches sessions from a run
-///   further back than the current snapshot references, not anything from
-///   the run that is currently restoring.
+///   be determined at all is kept. Every bundle's current snapshot protects
+///   its terminal directories regardless of age; unreadable snapshots defer
+///   the sweep so tagged builds cannot destroy production retrieval tokens.
 enum SessionWALPolicy {
     /// Fixed capacity of the in-memory ring buffer the tee callback writes
     /// into. Large enough to absorb a burst between 100ms drains for normal
@@ -1106,9 +1106,9 @@ final class SessionWALStore {
     /// own 30s reaper cadence, and mirroring that TTL here from the
     /// different `lastHeartbeatAt` clock is exactly the two-clocks race
     /// that would delete a live child's token near the boundary) and left
-    /// to the orphan sweep (`sweepOrphanedSessionDirectories`), whose
-    /// `orphanDirectoryMaxAge` (24h) comfortably outlives the holder's
-    /// `unclaimedSessionTTL` (1h). `force` bypasses preservation for
+    /// to the orphan sweep (`sweepOrphanedSessionDirectories`), which protects
+    /// snapshot-owned sessions and ages unowned directories for 24h, beyond
+    /// the holder's unowned-session TTL (1h). `force` bypasses preservation for
     /// callers that KNOW the claim is consumed -- the revive-success path,
     /// where the holder has already removed the session from its registry,
     /// leaving `meta.json`'s escrow fields stale-but-live-looking.
@@ -1427,14 +1427,25 @@ final class SessionWALStore {
 
     private func sweepOrphanedSessionDirectories() {
         guard let root = SessionWALPaths.sessionsRootURL() else { return }
+        Self.sweepOrphanedSessionDirectories(at: root, registeredSessionIDs: Set(writersBySurfaceId.keys))
+    }
+
+    static func sweepOrphanedSessionDirectories(
+        at root: URL,
+        registeredSessionIDs: Set<String>,
+        now: Date = Date()
+    ) {
+        guard let owned = SessionPersistenceStore.allOwnedTerminalSessionIDs(
+            in: root.deletingLastPathComponent()
+        ) else { return }
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: root,
             includingPropertiesForKeys: nil
         ) else { return }
-        let cutoff = Date().addingTimeInterval(-SessionWALPolicy.orphanDirectoryMaxAge)
+        let cutoff = now.addingTimeInterval(-SessionWALPolicy.orphanDirectoryMaxAge)
         for entry in entries {
             let name = entry.lastPathComponent
-            guard writersBySurfaceId[name] == nil else { continue }
+            guard !registeredSessionIDs.contains(name), !owned.contains(name.uppercased()) else { continue }
             guard Self.isDirectoryUnambiguouslyStale(entry, olderThan: cutoff) else { continue }
             try? FileManager.default.removeItem(at: entry)
         }

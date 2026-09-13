@@ -113,6 +113,7 @@ extension TerminalController {
             branch: entry.branch,
             repoRoot: repoRoot,
             layoutName: layoutName,
+            parentWorkspaceId: requiredParentWorkspaceId,
             select: shouldFocus
         )
         return .ok([
@@ -148,6 +149,8 @@ extension TerminalController {
         }
 
         let focusRequested = v2Bool(params, "focus") ?? false
+        let requiredParentWorkspaceId = v2UUID(params, "required_parent_workspace_id")
+        let requiredParentDirectory = v2String(params, "required_parent_directory")
         return v2MainSync {
             guard let tabManager = AppDelegate.shared?.tabManagerFor(windowId: windowId) else {
                 return .err(code: "unavailable", message: "TabManager not available", data: nil)
@@ -176,8 +179,8 @@ extension TerminalController {
                 repoRoot: repoRoot,
                 layoutName: nil,
                 focusRequested: focusRequested,
-                requiredParentWorkspaceId: nil,
-                requiredParentDirectory: nil
+                requiredParentWorkspaceId: requiredParentWorkspaceId,
+                requiredParentDirectory: requiredParentDirectory
             )
         }
     }

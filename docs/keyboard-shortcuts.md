@@ -91,10 +91,17 @@ All, Needs input, and Failed filters or search by workspace/agent name to find a
 | Shortcut | Action |
 |----------|--------|
 | ⌘ ⇧ N | New window |
+| ⌃ ⌘ W | Hide window, keeping its sessions running |
 | ⌘ ⇧ P | Command palette |
 | ⌘ , | Settings |
 | ⌘ ⇧ , | Reload configuration |
 | ⌘ Q | Quit |
+
+Closing a window with its red button or Close Window keeps its workspaces and terminal
+processes running. Click Programa in the Dock to reopen it. When no main window is
+visible, New Window and New Workspace reopen the most recently closed window first.
+Close Surface and Close Workspace still end the selected session; quitting the app
+uses session recovery on the next launch rather than keeping every process running.
 
 ## Review
 

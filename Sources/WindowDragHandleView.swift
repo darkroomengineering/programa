@@ -200,7 +200,7 @@ private var _windowDragHandleResolvingSiblingHitScopes = Set<ObjectIdentifier>()
 /// `_windowDragHandleResolvingSiblingHitScopes`.
 private var _windowDragHandleTopHitReentrantScopes = Set<ObjectIdentifier>()
 
-/// Returns whether the titlebar drag handle should capture a hit at `point`.
+/// Returns whether the titlebar drag handle should capture a hit at a local `point`.
 /// We only claim the hit when no sibling view already handles it, so interactive
 /// controls layered in the titlebar (e.g. proxy folder icon) keep their gestures.
 func windowDragHandleShouldCaptureHit(
@@ -293,8 +293,8 @@ func windowDragHandleShouldCaptureHit(
         guard sibling !== dragHandleView else { continue }
         guard !sibling.isHidden, sibling.alphaValue > 0 else { continue }
 
-        let pointInSibling = dragHandleView.convert(point, to: sibling)
-        if let hitView = sibling.hitTest(pointInSibling) {
+        let pointInSiblingParent = dragHandleView.convert(point, to: sibling.superview)
+        if let hitView = sibling.hitTest(pointInSiblingParent) {
             let passiveHostHit = windowDragHandleShouldTreatTopHitAsPassiveHost(hitView)
             if passiveHostHit {
                 #if DEBUG
@@ -328,8 +328,8 @@ func windowDragHandleShouldCaptureHit(
     // bail-out rather than a real competing view, so we must not use it to
     // block capture.
     _windowDragHandleTopHitReentrantScopes.remove(resolutionScope)
-    let pointInSuperview = dragHandleView.convert(point, to: superview)
-    let topHit = superview.hitTest(pointInSuperview)
+    let pointInSuperviewParent = dragHandleView.convert(point, to: superview.superview)
+    let topHit = superview.hitTest(pointInSuperviewParent)
     let topHitResolutionReentered = _windowDragHandleTopHitReentrantScopes.remove(resolutionScope) != nil
 
     if !topHitResolutionReentered,
@@ -405,7 +405,7 @@ struct WindowDragHandleView: NSViewRepresentable {
                 return nil
             }
             let shouldCapture = windowDragHandleShouldCaptureHit(
-                point,
+                convert(point, from: superview),
                 in: self,
                 eventType: currentEvent?.type,
                 eventWindow: currentEvent?.window

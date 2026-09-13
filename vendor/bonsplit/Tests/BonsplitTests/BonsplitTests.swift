@@ -5,6 +5,20 @@ import SwiftUI
 
 final class BonsplitTests: XCTestCase {
     @MainActor
+    func testTabBarDragZoneUsesSuperviewCoordinatesAndYieldsToControls() {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 100))
+        let dragZone = TabBarDragZoneView.DragNSView(frame: NSRect(x: 240, y: 40, width: 200, height: 30))
+        container.addSubview(dragZone)
+        XCTAssertTrue(container.hitTest(NSPoint(x: 420, y: 55)) === dragZone)
+        XCTAssertNil(dragZone.hitTest(NSPoint(x: 20, y: 15)))
+        let button = NSButton(frame: NSRect(x: 380, y: 40, width: 40, height: 30))
+        container.addSubview(button)
+        XCTAssertTrue(container.hitTest(NSPoint(x: 400, y: 55)) === button)
+        dragZone.isHidden = true
+        XCTAssertNil(dragZone.hitTest(NSPoint(x: 430, y: 55)))
+    }
+
+    @MainActor
     private final class LayoutProbeView: NSView {
         private(set) var sizeChangeCount = 0
         private(set) var originChangeCount = 0

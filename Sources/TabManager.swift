@@ -1932,9 +1932,15 @@ class TabManager: ObservableObject {
         branch: String?,
         repoRoot: String,
         layoutName: String? = nil,
+        parentWorkspaceId: UUID? = nil,
         select: Bool
     ) -> Workspace {
-        let parent = worktreeParentWorkspace(repoRoot: repoRoot)
+        let parent: Workspace?
+        if let parentWorkspaceId {
+            parent = tabs.first { $0.id == parentWorkspaceId }
+        } else {
+            parent = worktreeParentWorkspace(repoRoot: repoRoot)
+        }
         let insertionAnchor = parent.map { worktreeInsertionAnchor(for: $0) }
         if select, let parent, parent.isWorktreeFolderCollapsed {
             parent.isWorktreeFolderCollapsed = false
@@ -1972,6 +1978,16 @@ class TabManager: ObservableObject {
             homeDirectoryForTildeExpansion: homeDirectory
         )
         guard let repoKey else { return nil }
+        if let selectedWorkspace,
+           let selectedKey = SidebarBranchOrdering.canonicalDirectoryKey(
+               selectedWorkspace.isWorktreeFolder
+                   ? selectedWorkspace.worktreeFolderRepoRoot
+                   : selectedWorkspace.currentDirectory,
+               homeDirectoryForTildeExpansion: homeDirectory
+           ),
+           selectedKey == repoKey || selectedKey.hasPrefix(repoKey == "/" ? "/" : repoKey + "/") {
+            return selectedWorkspace
+        }
         if let folder = tabs.first(where: {
             guard $0.isWorktreeFolder, let folderRoot = $0.worktreeFolderRepoRoot else { return false }
             return SidebarBranchOrdering.canonicalDirectoryKey(
@@ -1990,13 +2006,12 @@ class TabManager: ObservableObject {
     }
 
     private func detachWorktreeFolderRelationships(for workspace: Workspace) {
-        if workspace.isWorktreeFolder {
-            for child in worktreeChildren(of: workspace) {
-                child.worktreeParentWorkspaceId = nil
-                child.worktreeFolderId = nil
-            }
-        } else {
-            workspace.worktreeParentWorkspaceId = nil
+        for child in worktreeChildren(of: workspace) {
+            child.worktreeParentWorkspaceId = nil
+            child.worktreeFolderId = nil
+        }
+        workspace.worktreeParentWorkspaceId = nil
+        if !workspace.isWorktreeFolder {
             workspace.worktreeFolderId = nil
         }
     }
@@ -2577,9 +2592,9 @@ class TabManager: ObservableObject {
             return
         }
         if tabs.count <= 1 {
-            // Last workspace in this window: close the window (Cmd+Shift+W behavior).
-            if let window {
-                window.performClose(nil)
+            // Closing the last workspace explicitly ends its sessions, unlike closing the window UI.
+            if let window, let app = AppDelegate.shared {
+                app.disposeMainWindow(window)
             } else {
                 AppDelegate.shared?.closeMainWindowContainingTabId(workspace.id)
             }

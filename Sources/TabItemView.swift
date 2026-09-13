@@ -1158,7 +1158,7 @@ struct TabItemView: View, Equatable {
     }
 
     private var explicitRailColor: Color? {
-        guard activeTabIndicatorStyle == .leftRail,
+        guard activeTabIndicatorStyle == .leftRail || isActive,
               let custom = resolvedCustomTabColor else {
             return nil
         }
@@ -1749,6 +1749,7 @@ struct TabItemView: View, Equatable {
     private func promptNewWorktreeWorkspace() {
         guard let repoRoot = tab.worktreeFolderRepoRoot,
               let folderId = tab.worktreeFolderId else { return }
+        let parentWorkspaceId = tab.id
         let alert = NSAlert()
         alert.messageText = String(localized: "alert.newWorktreeWorkspace.title", defaultValue: "New Worktree Workspace")
         alert.informativeText = String(localized: "alert.newWorktreeWorkspace.message", defaultValue: "Enter the branch to create or open in a new worktree.")
@@ -1812,6 +1813,7 @@ struct TabItemView: View, Equatable {
                     path: path,
                     branch: createdBranch,
                     repoRoot: repoRoot,
+                    parentWorkspaceId: parentWorkspaceId,
                     select: true
                 )
             case .branchCheckedOut(let path):

@@ -207,6 +207,9 @@ jobs:
           sudo xcode-select -s "$XCODE_DIR" || true
           xcodebuild -version
 
+      - name: Verify native tab-strip hit testing
+        run: swift test --package-path vendor/bonsplit --filter BonsplitTests/testTabBarDragZoneUsesSuperviewCoordinatesAndYieldsToControls
+
       - name: Validate Release reload artifact discovery
         run: ./tests/test_reloadp_programa_artifact.sh
 

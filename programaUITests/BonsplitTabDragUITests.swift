@@ -86,6 +86,42 @@ final class BonsplitTabDragUITests: XCTestCase {
         XCTAssertEqual(window.frame.origin.y, windowFrameBeforeDrag.origin.y, accuracy: 2.0, "Expected tab drag not to move the window vertically")
     }
 
+    func testStandardModeEmptyTopTabBarDragsWindowWithoutChangingTabs() throws {
+        let (app, dataPath) = launchConfiguredApp(presentationMode: .standard)
+        XCTAssertTrue(ensureForegroundAfterLaunch(app, timeout: launchTimeout))
+        let ready = try XCTUnwrap(waitForJSONKey("ready", equals: "1", atPath: dataPath, timeout: setupTimeout))
+        XCTAssertTrue((ready["setupError"] ?? "").isEmpty, "Setup failed: \(ready)")
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+        let alphaTitle = ready["alphaTitle"] ?? "UITest Alpha"
+        let betaTitle = ready["betaTitle"] ?? "UITest Beta"
+        let beta = app.buttons[betaTitle]
+        XCTAssertTrue(beta.waitForExistence(timeout: 5))
+        let order = "\(alphaTitle)|\(betaTitle)"
+        XCTAssertNotNil(waitForJSONKey("trackedPaneTabTitles", equals: order, atPath: dataPath, timeout: 5))
+
+        let before = window.frame
+        // Stay beyond the last tab and its plus button, before the trailing controls.
+        let x = min(before.maxX - 180, beta.frame.maxX + 90)
+        XCTAssertGreaterThan(x, beta.frame.maxX + 44, "Expected empty tab-strip space")
+        let start = window.coordinate(withNormalizedOffset: .zero).withOffset(
+            CGVector(dx: x - before.minX, dy: beta.frame.midY - before.minY)
+        )
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 40, dy: 35)))
+
+        XCTAssertTrue(waitForCondition(timeout: 5) {
+            hypot(window.frame.minX - before.minX, window.frame.minY - before.minY) >= 20
+        }, "Empty top tab-strip drag should move the window. before=\(before), after=\(window.frame)")
+        XCTAssertEqual(window.frame.width, before.width, accuracy: 2)
+        XCTAssertEqual(window.frame.height, before.height, accuracy: 2)
+        XCTAssertEqual(app.windows.count, 1)
+        XCTAssertEqual(loadJSON(atPath: dataPath)?["trackedPaneTabTitles"], order)
+        XCTAssertEqual(loadJSON(atPath: dataPath)?["trackedPaneTabCount"], "2")
+        let screenshot = XCTAttachment(screenshot: window.screenshot())
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testMinimalModePlacesPaneTabBarAtTopEdge() {
         let (app, dataPath) = launchConfiguredApp()
 

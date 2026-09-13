@@ -25,6 +25,7 @@ on:
         default: "macos-15"
         type: choice
         options:
+          - macos-26
           - macos-15
           - macos-14
 

@@ -227,9 +227,9 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertTrue(SessionPersistenceStore.save(snapshot, fileURL: snapshotURL))
         // Force the live file's modification date later than every seeded entry above, so the
         // just-rotated copy is unambiguously the newest and the pruning boundary is deterministic.
-        let laterDate = try XCTUnwrap(
-            Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 1, day: 2))
-        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let laterDate = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 1, day: 2)))
         try FileManager.default.setAttributes([.modificationDate: laterDate], ofItemAtPath: snapshotURL.path)
 
         XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: snapshotURL, maxHistoryEntries: 10))
@@ -1038,6 +1038,86 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertTrue(prepared.contains("\u{001B}[31m"))
     }
 
+    func testFreshSpawnScrollbackSeedBoundsRepeatedColorReplay() {
+        let count = 1_200
+        let source = (0..<count).map { "\u{001B}[\($0.isMultiple(of: 2) ? 31 : 34)mx" }.joined()
+        guard let prepared = SessionFreshSpawnScrollbackSeed.preparedText(for: source) else {
+            XCTFail("Expected prepared seed text")
+            return
+        }
+
+        XCTAssertEqual(prepared.filter { $0 == "x" }.count, count)
+        XCTAssertLessThan(prepared.utf8.count, source.utf8.count * 4)
+    }
+
+    func testFreshSpawnScrollbackSeedKeepsEffectiveStyleAcrossOverwriteAndResets() {
+        let source = "\u{001B}[1;38;5;160mAB\u{001B}[22;39m\r\u{001B}[38;2;1;2;3mX"
+        guard let prepared = SessionFreshSpawnScrollbackSeed.preparedText(for: source) else {
+            XCTFail("Expected prepared seed text")
+            return
+        }
+
+        XCTAssertTrue(prepared.contains("\u{001B}[38;2;1;2;3mX\u{001B}[0m\u{001B}[1;38;5;160mB"))
+        XCTAssertFalse(prepared.contains("\r"))
+    }
+
+    func testFreshSpawnScrollbackSeedReplaysRepeatedColoredProgressOverwrites() throws {
+        let source = (0..<20_000).map {
+            "\u{001B}[\($0.isMultiple(of: 2) ? 31 : 34)m\r\u{001B}[2Kx"
+        }.joined()
+        let prepared = try XCTUnwrap(SessionFreshSpawnScrollbackSeed.preparedText(for: source))
+        XCTAssertEqual(prepared.filter { $0 == "x" }.count, 1)
+        XCTAssertTrue(prepared.contains("\u{001B}[34mx"))
+        XCTAssertEqual(prepared, SessionFreshSpawnScrollbackSeed.preparedText(for: "\u{001B}[34mx"))
+    }
+
+    func testFreshSpawnScrollbackSeedPreservesBrightAndExtendedColorResets() {
+        let source = "\u{001B}[94;48;2;10;20;30;58;5;18mA\u{001B}[39;49;59mB"
+        guard let prepared = SessionFreshSpawnScrollbackSeed.preparedText(for: source) else {
+            XCTFail("Expected prepared seed text")
+            return
+        }
+
+        XCTAssertTrue(prepared.contains("\u{001B}[94;48;2;10;20;30;58;5;18mA\u{001B}[0mB"))
+    }
+
+    func testFreshSpawnScrollbackSeedTracksColonUnderlineAndColor() {
+        let source = "\u{001B}[4:3;38:2::1:2:3mA\u{001B}[24;39mB"
+        guard let prepared = SessionFreshSpawnScrollbackSeed.preparedText(for: source) else {
+            XCTFail("Expected prepared seed text")
+            return
+        }
+
+        XCTAssertTrue(prepared.contains("\u{001B}[4:3;38;2;1;2;3mA\u{001B}[0mB"))
+    }
+
+    func testFreshSpawnScrollbackSeedParsesSGRAfterUnsupportedExtendedColor() {
+        guard let prepared = SessionFreshSpawnScrollbackSeed.preparedText(
+            for: "\u{001B}[38;3;31mA"
+        ) else {
+            XCTFail("Expected prepared seed text")
+            return
+        }
+
+        XCTAssertTrue(prepared.contains("\u{001B}[3;31mA"))
+    }
+
+    func testFreshSpawnScrollbackSeedSplitsStylesWithinTerminalParameterLimit() throws {
+        let source = "\u{001B}[1;2;3;4:3;5;7;8;9;53m"
+            + "\u{001B}[38;2;1;2;3m\u{001B}[48;2;4;5;6m\u{001B}[58;2;7;8;9mA"
+        let prepared = try XCTUnwrap(SessionFreshSpawnScrollbackSeed.preparedText(for: source))
+        let regex = try NSRegularExpression(pattern: "\u{001B}\\[([0-9;:]*)m")
+        let text = prepared as NSString
+        for match in regex.matches(in: prepared, range: NSRange(location: 0, length: text.length)) {
+            let parameters = text.substring(with: match.range(at: 1))
+            XCTAssertLessThanOrEqual(1 + parameters.filter { $0 == ";" || $0 == ":" }.count, 24)
+        }
+        XCTAssertTrue(prepared.contains("4:3"))
+        XCTAssertTrue(prepared.contains("38;2;1;2;3"))
+        XCTAssertTrue(prepared.contains("48;2;4;5;6"))
+        XCTAssertTrue(prepared.contains("\u{001B}[58;2;7;8;9mA"))
+    }
+
     /// An SGR sequence set immediately before a `\r` overwrite must be
     /// carried onto the kept segment, or color state set just before a
     /// spinner update would be silently dropped.
@@ -1701,6 +1781,94 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(workspace.isWorktreeFolder, true)
         XCTAssertEqual(workspace.isWorktreeFolderCollapsed, true)
         XCTAssertEqual(workspace.worktreeBranch, "feature/sidebar")
+    }
+
+    func testSnapshotOwnershipProtectsExpiredSessionsAndDefersOnCorruption() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("session-own.json")
+        let ownedID = UUID()
+        let abandonedID = UUID()
+        let now = Date()
+        let expiredAt = now.addingTimeInterval(-SessionEscrowPolicy.unclaimedSessionTTL - 1)
+        func expires(_ id: UUID, draining: Bool = true, since: Date? = nil) -> Bool {
+            SessionEscrowPolicy.shouldExpireSession(
+                sessionID: id.uuidString, isDraining: draining,
+                drainingStartedAt: since ?? expiredAt, now: now,
+                ownedSessionIDs: SessionPersistenceStore.ownedTerminalSessionIDs(fileURL: file)
+            )
+        }
+        XCTAssertEqual(SessionPersistenceStore.ownedTerminalSessionIDs(fileURL: file), [])
+        XCTAssertTrue(expires(abandonedID))
+        XCTAssertTrue(SessionPersistenceStore.save(makeOwnershipSnapshot(ownedID), fileURL: file))
+        XCTAssertEqual(SessionPersistenceStore.ownedTerminalSessionIDs(fileURL: file), [ownedID.uuidString])
+        XCTAssertFalse(expires(ownedID))
+        XCTAssertTrue(expires(abandonedID))
+        XCTAssertFalse(expires(abandonedID, draining: false))
+        XCTAssertFalse(expires(abandonedID, since: now))
+        try Data("invalid snapshot".utf8).write(to: file)
+        XCTAssertNil(SessionPersistenceStore.ownedTerminalSessionIDs(fileURL: file))
+        XCTAssertFalse(expires(abandonedID))
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+        XCTAssertNil(SessionPersistenceStore.ownedTerminalSessionIDs(fileURL: file))
+        XCTAssertFalse(expires(abandonedID))
+    }
+
+    func testNewEscrowRegistrationsUseVersionedBundleScopedHolderPaths() {
+        XCTAssertEqual(
+            SessionEscrowClient.escrowSocketPath(controlSocketPath: "/tmp/programa.sock"),
+            "/tmp/programa-escrow-v2.sock"
+        )
+        XCTAssertEqual(
+            SessionEscrowClient.escrowSocketPath(controlSocketPath: "/tmp/programa-debug-review.sock"),
+            "/tmp/programa-debug-review-escrow-v2.sock"
+        )
+    }
+
+    func testOrphanSweepPreservesAllBundlesAndDefersWhenOwnershipIsUnknown() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessions = root.appendingPathComponent("sessions")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ownID = UUID(), otherID = UUID(), abandonedID = UUID(), registeredID = UUID()
+        let now = Date()
+        for id in [ownID, otherID, abandonedID, registeredID] {
+            let directory = sessions.appendingPathComponent(id.uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes(
+                [.modificationDate: now.addingTimeInterval(-SessionWALPolicy.orphanDirectoryMaxAge - 1)],
+                ofItemAtPath: directory.path
+            )
+        }
+        let ownFile = try XCTUnwrap(SessionPersistenceStore.defaultSnapshotFileURL(
+            bundleIdentifier: "dev.own", appSupportDirectory: root
+        )).lastPathComponent
+        let otherFile = root.appendingPathComponent("session-production.json")
+        XCTAssertTrue(SessionPersistenceStore.save(makeOwnershipSnapshot(ownID), fileURL: root.appendingPathComponent(ownFile)))
+        XCTAssertTrue(SessionPersistenceStore.save(makeOwnershipSnapshot(otherID), fileURL: otherFile))
+        XCTAssertEqual(SessionPersistenceStore.allOwnedTerminalSessionIDs(in: root), [ownID.uuidString, otherID.uuidString])
+        try Data("corrupt".utf8).write(to: otherFile)
+        SessionWALStore.sweepOrphanedSessionDirectories(at: sessions, registeredSessionIDs: [], now: now)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(abandonedID.uuidString).path))
+        XCTAssertTrue(SessionPersistenceStore.save(makeOwnershipSnapshot(otherID), fileURL: otherFile))
+        SessionWALStore.sweepOrphanedSessionDirectories(at: sessions, registeredSessionIDs: [registeredID.uuidString], now: now)
+        for id in [ownID, otherID, registeredID] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(id.uuidString).path))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(abandonedID.uuidString).path))
+    }
+
+    private func makeOwnershipSnapshot(_ id: UUID) -> AppSessionSnapshot {
+        var snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
+        snapshot.windows[0].tabManager.workspaces[0].panels = [SessionPanelSnapshot(
+            id: id, type: .terminal, title: nil, customTitle: nil, directory: nil,
+            isPinned: false, isManuallyUnread: false, gitBranch: nil, listeningPorts: [], ttyName: nil,
+            terminal: SessionTerminalPanelSnapshot(workingDirectory: nil, scrollback: nil),
+            browser: nil, markdown: nil, review: nil
+        )]
+        return snapshot
     }
 
     private func makeSnapshot(version: Int) -> AppSessionSnapshot {

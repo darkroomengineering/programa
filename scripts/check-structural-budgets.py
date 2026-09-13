@@ -31,6 +31,7 @@ class FamilyBudget:
 FILES = (
     FileBudget("Sources/AppDelegate.swift", 11_078, 10_938, "application lifecycle entrypoint"),
     FileBudget("Sources/AppLifecycleCoordinator.swift", 0, 125, "AppLifecycleCoordinator"),
+    FileBudget("Sources/AppDelegate+StartupHandoff.swift", 0, 75, "StartupSessionHandoff"),
     FileBudget("Sources/ContentView.swift", 5_949, 5_728, "command palette view adapter"),
     FileBudget("Sources/CommandPaletteController.swift", 71, 283, "CommandPaletteController"),
     FileBudget("CLI/programa.swift", 7_886, 7_584, "ProgramaCLI entrypoint"),
@@ -53,6 +54,7 @@ FAMILIES = (
         (
             "Sources/AppDelegate.swift",
             "Sources/AppLifecycleCoordinator.swift",
+            "Sources/AppDelegate+StartupHandoff.swift",
             "Sources/ContentView.swift",
             "Sources/CommandPaletteController.swift",
         ),
