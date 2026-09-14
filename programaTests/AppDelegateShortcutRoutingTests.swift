@@ -95,7 +95,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
     override func tearDown() {
         KeyboardShortcutSettings.settingsFileStore = originalSettingsFileStore
         AppDelegate.shared?.shortcutLayoutCharacterProvider = KeyboardLayout.character(forKeyCode:modifierFlags:)
-        AppDelegate.shared?.debugCloseMainWindowConfirmationHandler = nil
         AppDelegate.shared?.debugCreateMainWindowSourceIsNativeFullScreenOverride = nil
         AppDelegate.shared?.dismissNotificationsPopoverIfShown()
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
@@ -353,6 +352,71 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         ))
     }
 
+#if DEBUG
+    func testFailedQuitSaveKeepsSessionsRunningAndSuccessfulRetryCanQuit() throws {
+        let appDelegate = try XCTUnwrap(AppDelegate.shared)
+        closeAllMainWindows()
+        let windowId = UUID()
+        let window = makeUnregisteredMainWindow(windowId: windowId)
+        let manager = TabManager()
+        let warningWasEnabled = QuitWarningSettings.isEnabled()
+        QuitWarningSettings.setEnabled(false)
+        defer {
+            appDelegate.debugResetTerminationForTesting()
+            appDelegate.debugSessionSnapshotSaverForTesting = nil
+            appDelegate.debugQuitSaveFailureAlertForTesting = nil
+            QuitWarningSettings.setEnabled(warningWasEnabled)
+            _ = appDelegate.closeMainWindow(windowId: windowId)
+            manager.teardownForWindowClose()
+        }
+        appDelegate.registerMainWindow(
+            window, windowId: windowId, tabManager: manager,
+            sidebarState: SidebarState(), sidebarSelectionState: SidebarSelectionState()
+        )
+
+        var saveAttempts = 0
+        var failureAlerts = 0
+        appDelegate.debugSessionSnapshotSaverForTesting = { _ in
+            saveAttempts += 1
+            return saveAttempts > 1
+        }
+        appDelegate.debugQuitSaveFailureAlertForTesting = { failureAlerts += 1 }
+
+        XCTAssertEqual(appDelegate.applicationShouldTerminate(NSApp), .terminateCancel)
+        XCTAssertEqual(saveAttempts, 1)
+        XCTAssertEqual(failureAlerts, 1)
+        XCTAssertFalse(SessionMachineryGate.isApplicationTerminating)
+        XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
+        XCTAssertFalse(manager.selectedWorkspace?.panels.isEmpty ?? true)
+
+        XCTAssertEqual(appDelegate.applicationShouldTerminate(NSApp), .terminateNow)
+        XCTAssertEqual(saveAttempts, 2)
+        XCTAssertTrue(SessionMachineryGate.isApplicationTerminating)
+    }
+
+    func testWindowlessQuitDoesNotRequireAStoredSnapshot() throws {
+        let appDelegate = try XCTUnwrap(AppDelegate.shared)
+        closeAllMainWindows()
+        let warningWasEnabled = QuitWarningSettings.isEnabled()
+        QuitWarningSettings.setEnabled(false)
+        defer {
+            appDelegate.debugResetTerminationForTesting()
+            appDelegate.debugSessionSnapshotSaverForTesting = nil
+            appDelegate.debugQuitSaveFailureAlertForTesting = nil
+            QuitWarningSettings.setEnabled(warningWasEnabled)
+        }
+        var failureAlerts = 0
+        appDelegate.debugQuitSaveFailureAlertForTesting = { failureAlerts += 1 }
+        appDelegate.debugSessionSnapshotSaverForTesting = { _ in
+            XCTFail("An empty app must not attempt a snapshot write")
+            return false
+        }
+
+        XCTAssertEqual(appDelegate.applicationShouldTerminate(NSApp), .terminateNow)
+        XCTAssertEqual(failureAlerts, 0)
+    }
+#endif
+
     func testConcurrentDuplicateRequestGenerationsCannotOverwriteOrDeleteEachOther() throws {
         let rootDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "programa-single-instance-ownership-\(UUID().uuidString)",
@@ -520,6 +584,98 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
                 now: 10_002
             ))
         }
+    }
+
+    func testFailedQuitCanRevokeOnlyItsOwnAcknowledgmentGeneration() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = ProgramaSingleInstanceProcessKey(
+            startSeconds: 1_000, startMicroseconds: 1, processIdentifier: 100
+        )
+        let request = AppDelegate.SingleInstanceShutdownRequest(
+            target: target,
+            requester: ProgramaSingleInstanceProcessKey(
+                startSeconds: 1_001, startMicroseconds: 1, processIdentifier: 200
+            ),
+            createdAtUnixSeconds: 10_000
+        )
+        let requestURL = try XCTUnwrap(AppDelegate.writeDuplicateRequestForTesting(
+            rootDirectory: directory, request: request
+        ))
+        let acknowledgmentURL = AppDelegate.duplicateAcknowledgmentURLForTesting(
+            rootDirectory: directory, target: target, generation: request.generation
+        )
+        let acknowledgment = AppDelegate.SingleInstanceShutdownAcknowledgment(
+            acceptedGeneration: request.generation, target: target, createdAtUnixSeconds: 10_001
+        )
+        try JSONEncoder().encode(acknowledgment).write(to: acknowledgmentURL, options: .atomic)
+
+        XCTAssertFalse(AppDelegate.removeExactAcknowledgment(
+            target: target, acceptedGeneration: UUID(), url: acknowledgmentURL
+        ))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: acknowledgmentURL.path))
+        XCTAssertTrue(AppDelegate.removeExactAcknowledgment(
+            target: target, acceptedGeneration: request.generation, url: acknowledgmentURL
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: acknowledgmentURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: requestURL.path))
+        XCTAssertFalse(AppDelegate.hasValidDuplicateAcknowledgmentForTesting(
+            rootDirectory: directory, request: request, now: 10_002
+        ))
+        XCTAssertEqual(AppDelegate.duplicateFallbackActionForTesting(
+            hasValidTargetAcknowledgment: false,
+            requestGenerationIsPending: true,
+            processIdentityMatches: true,
+            isTerminated: false,
+            response: nil
+        ), .prompt)
+    }
+
+    func testStartupHandoffWaitsForEveryAuthenticatedOlderProcessToExit() {
+        let first = ProgramaSingleInstanceProcessKey(
+            startSeconds: 1_000, startMicroseconds: 1, processIdentifier: 100
+        )
+        let second = ProgramaSingleInstanceProcessKey(
+            startSeconds: 1_001, startMicroseconds: 1, processIdentifier: 200
+        )
+        var firstLive = true
+        var secondLive = true
+        var readyCount = 0
+        let handoff = StartupSessionHandoff(
+            olderProcess: { firstLive ? first : (secondLive ? second : nil) },
+            isLive: { key in key == first ? firstLive : secondLive },
+            onReady: { readyCount += 1 }
+        )
+
+        XCTAssertTrue(handoff.shouldDefer())
+        firstLive = false
+        handoff.poll()
+        XCTAssertTrue(handoff.isWaiting)
+        XCTAssertEqual(readyCount, 0)
+        secondLive = false
+        handoff.poll()
+        XCTAssertFalse(handoff.isWaiting)
+        XCTAssertFalse(handoff.shouldDefer())
+        XCTAssertEqual(readyCount, 1)
+    }
+
+    func testStartupHandoffDoesNotReadBeforeInitialArbitration() {
+        var olderLookups = 0
+        var readyCount = 0
+        let handoff = StartupSessionHandoff(
+            hasCompletedInitialArbitration: false,
+            olderProcess: { olderLookups += 1; return nil },
+            isLive: { _ in false },
+            onReady: { readyCount += 1 }
+        )
+
+        XCTAssertTrue(handoff.shouldDefer())
+        XCTAssertEqual(olderLookups, 0)
+        handoff.initialArbitrationCompleted()
+        XCTAssertFalse(handoff.shouldDefer())
+        XCTAssertEqual(olderLookups, 1)
+        XCTAssertEqual(readyCount, 1)
     }
 
     func testDuplicateStateRecoversFromMoreThanScanLimitRecognizedStaleEntries() throws {
@@ -806,7 +962,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
                     request: request,
                     now: 10_003
                 ),
-                "The target's durable responsive state must suppress fallback for existing and later request generations"
+                "The target's durable responsive state must defer force-close for existing and later request generations"
             )
             XCTAssertEqual(AppDelegate.duplicateFallbackActionForTesting(
                 hasValidTargetAcknowledgment: true,
@@ -814,7 +970,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
                 processIdentityMatches: true,
                 isTerminated: false,
                 response: nil
-            ), .skip)
+            ), .waitForAcknowledgedExit)
         }
     }
 
@@ -890,7 +1046,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             processIdentityMatches: true,
             isTerminated: false,
             response: .forceClose
-        ), .skip)
+        ), .waitForAcknowledgedExit)
         XCTAssertEqual(AppDelegate.duplicateFallbackActionForTesting(
             hasValidTargetAcknowledgment: false,
             requestGenerationIsPending: false,
@@ -1951,11 +2107,8 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
         // The app's own default WindowGroup window would otherwise always be a live,
         // eligible fallback target and defeat this test's "no live window" precondition.
-        // Closing it would normally show a confirmation sheet (it may host a running
-        // process), so auto-confirm for the duration of this cleanup.
-        appDelegate.debugCloseMainWindowConfirmationHandler = { _ in true }
+        // Explicit disposal removes it rather than preserving a hidden session.
         closeAllMainWindows()
-        appDelegate.debugCloseMainWindowConfirmationHandler = nil
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
 
         let orphanWindowId = UUID()
@@ -2011,11 +2164,8 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
         // The app's own default WindowGroup window would otherwise always be a live,
         // eligible fallback target and defeat this test's "no live window" precondition.
-        // Closing it would normally show a confirmation sheet (it may host a running
-        // process), so auto-confirm for the duration of this cleanup.
-        appDelegate.debugCloseMainWindowConfirmationHandler = { _ in true }
+        // Explicit disposal removes it rather than preserving a hidden session.
         closeAllMainWindows()
-        appDelegate.debugCloseMainWindowConfirmationHandler = nil
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
 
         let existingWindowIds = mainWindowIds()
@@ -2539,7 +2689,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         )
     }
 
-    func testCmdCtrlWPromptsBeforeClosingWindow() {
+    func testCmdCtrlWHidesWindowAndPreservesItsSessions() {
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")
             return
@@ -2553,11 +2703,9 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             return
         }
 
-        var promptedWindow: NSWindow?
-        appDelegate.debugCloseMainWindowConfirmationHandler = { candidate in
-            promptedWindow = candidate
-            return false
-        }
+        let manager = appDelegate.tabManagerFor(windowId: windowId)
+        let workspace = manager?.selectedWorkspace
+        let panelIds = workspace.map { Set($0.panels.keys) }
 
         guard let event = makeKeyDownEvent(
             key: "w",
@@ -2575,53 +2723,111 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         XCTFail("debugHandleCustomShortcut is only available in DEBUG")
 #endif
 
-        waitUntil(description: "close confirmation handler to be invoked for the target window") { promptedWindow != nil }
-
-        XCTAssertTrue(promptedWindow === targetWindow, "Cmd+Ctrl+W should prompt for the target main window")
-        XCTAssertNotNil(self.window(withId: windowId), "Cancelling the confirmation should keep the window open")
+        XCTAssertFalse(targetWindow.isVisible)
+        XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
+        XCTAssertTrue(manager?.selectedWorkspace === workspace)
+        XCTAssertEqual(workspace.map { Set($0.panels.keys) }, panelIds)
+        XCTAssertTrue(appDelegate.reopenMostRecentlyHiddenMainWindow(onlyIfNoVisibleMainWindows: false))
+        XCTAssertTrue(targetWindow.isVisible)
+        XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
     }
 
-    func testCmdCtrlWClosesWindowAfterConfirmation() {
+    func testNativeCloseReopensMostRecentlyHiddenWindowWithoutAddingWorkspace() {
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")
             return
         }
 
         let windowId = appDelegate.createMainWindow()
+        defer { closeWindow(withId: windowId) }
         guard let targetWindow = window(withId: windowId) else {
             XCTFail("Expected test window")
             return
         }
 
-        appDelegate.debugCloseMainWindowConfirmationHandler = { _ in true }
-
-        guard let event = makeKeyDownEvent(
-            key: "w",
-            modifiers: [.command, .control],
-            keyCode: 13,
-            windowNumber: targetWindow.windowNumber
-        ) else {
-            XCTFail("Failed to construct Cmd+Ctrl+W event")
+        let olderWindowId = appDelegate.createMainWindow()
+        defer { closeWindow(withId: olderWindowId) }
+        guard let olderWindow = window(withId: olderWindowId) else {
+            XCTFail("Expected second test window")
             return
         }
+        olderWindow.close()
+        let manager = appDelegate.tabManagerFor(windowId: windowId)
+        let workspaceIds = manager?.tabs.map(\.id)
+        targetWindow.performClose(nil)
+        XCTAssertFalse(targetWindow.isVisible)
+        XCTAssertTrue(appDelegate.reopenMostRecentlyHiddenMainWindow(onlyIfNoVisibleMainWindows: false))
+        XCTAssertTrue(targetWindow.isVisible)
+        XCTAssertFalse(olderWindow.isVisible, "Reopen must choose the last hidden window")
+        XCTAssertEqual(manager?.tabs.map(\.id), workspaceIds)
+        XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
+    }
 
-#if DEBUG
+    func testHiddenPrimaryWindowRetainsItsWindowAndWorkspaceUntilExplicitDisposal() throws {
+        let appDelegate = try XCTUnwrap(AppDelegate.shared)
+        AppDelegate.installWindowResponderSwizzlesForTesting()
+        let windowId = UUID()
+        defer { _ = appDelegate.closeMainWindow(windowId: windowId) }
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        weak var retainedWindow: NSWindow?
+        autoreleasepool {
+            let primaryWindow = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+                styleMask: [.titled, .closable], backing: .buffered, defer: false
+            )
+            primaryWindow.isReleasedWhenClosed = false
+            appDelegate.registerMainWindow(
+                primaryWindow, windowId: windowId, tabManager: manager,
+                sidebarState: SidebarState(), sidebarSelectionState: SidebarSelectionState()
+            )
+            retainedWindow = primaryWindow
+            primaryWindow.close()
+        }
+        let window = try XCTUnwrap(retainedWindow)
+        XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
+        XCTAssertFalse(workspace.panels.isEmpty)
+        XCTAssertTrue(appDelegate.closeMainWindow(windowId: windowId))
+        XCTAssertNil(appDelegate.tabManagerFor(windowId: windowId))
+        XCTAssertTrue(workspace.panels.isEmpty)
+        XCTAssertFalse(window.isVisible)
+    }
+
+    func testDockNewWindowAndNewWorkspaceReopenHiddenSession() throws {
+        let appDelegate = try XCTUnwrap(AppDelegate.shared)
+        closeAllMainWindows()
+        let windowId = appDelegate.createMainWindow()
+        defer { closeWindow(withId: windowId) }
+        let targetWindow = try XCTUnwrap(window(withId: windowId))
+        let manager = try XCTUnwrap(appDelegate.tabManagerFor(windowId: windowId))
+        let workspaceIds = manager.tabs.map(\.id)
+        targetWindow.close()
+        XCTAssertFalse(appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false))
+        XCTAssertTrue(targetWindow.isVisible)
+
+        targetWindow.close()
+        XCTAssertFalse(appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: true),
+                       "Visible auxiliary windows must not prevent reopening the main session")
+        XCTAssertTrue(targetWindow.isVisible)
+
+        targetWindow.close()
+        appDelegate.openNewMainWindow(nil)
+        XCTAssertTrue(targetWindow.isVisible)
+        XCTAssertEqual(mainWindowIds(), Set([windowId]))
+
+        targetWindow.close()
+        let event = try XCTUnwrap(makeKeyDownEvent(
+            key: "n", modifiers: [.command], keyCode: 45,
+            windowNumber: targetWindow.windowNumber
+        ))
+        #if DEBUG
         XCTAssertTrue(appDelegate.debugHandleCustomShortcut(event: event))
-#else
+        #else
         XCTFail("debugHandleCustomShortcut is only available in DEBUG")
-#endif
-
-        waitUntil(description: "confirmed Cmd+Ctrl+W to close the target window") { !targetWindow.isVisible }
-
-        // NOTE: `self.window(withId:)` (an `NSApp.windows` lookup) does not reliably
-        // reflect a just-closed window in this test host process -- confirmed by
-        // instrumenting `NSWindow.close()` during investigation: `targetWindow.isVisible`
-        // flips to `false` immediately and `NSWindow.willCloseNotification` fires
-        // (unregistering the window's `MainWindowContext`), yet `NSApp.windows` can still
-        // report the instance as present. Assert on the two signals that actually reflect
-        // whether the close took effect.
-        XCTAssertFalse(targetWindow.isVisible, "Confirming Cmd+Ctrl+W should close the window")
-        XCTAssertNil(appDelegate.tabManagerFor(windowId: windowId), "Confirmed close should unregister the window's context")
+        #endif
+        XCTAssertTrue(targetWindow.isVisible)
+        XCTAssertEqual(manager.tabs.map(\.id), workspaceIds)
+        XCTAssertEqual(mainWindowIds(), Set([windowId]))
     }
 
     func testClosingMainWindowTearsDownEveryOwnedWorkspaceAndBrowserElementRef() throws {
@@ -2765,8 +2971,8 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
                     NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: initialWindow)
                 }
             }
-            initialWindow.close()
-            replacementWindow?.close()
+            appDelegate.disposeMainWindow(initialWindow)
+            if let replacementWindow { appDelegate.disposeMainWindow(replacementWindow) }
             initialManager.teardownForWindowClose()
             store.manager.teardownForWindowClose()
         }
@@ -2856,9 +3062,9 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             } else if appDelegate.tabManagerFor(windowId: windowId) != nil {
                 NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: replacementWindow)
             }
-            firstWindow.close()
-            replacementWindow.close()
-            finalWindow?.close()
+            appDelegate.disposeMainWindow(firstWindow)
+            appDelegate.disposeMainWindow(replacementWindow)
+            if let finalWindow { appDelegate.disposeMainWindow(finalWindow) }
             manager.teardownForWindowClose()
             finalManager?.teardownForWindowClose()
         }
@@ -2944,8 +3150,8 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             if appDelegate.tabManagerFor(windowId: displacedWindowId) != nil {
                 NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: occupiedWindow)
             }
-            firstWindow.close()
-            occupiedWindow.close()
+            appDelegate.disposeMainWindow(firstWindow)
+            appDelegate.disposeMainWindow(occupiedWindow)
             firstManager.teardownForWindowClose()
             displacedManager.teardownForWindowClose()
         }
@@ -3008,8 +3214,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             return
         }
 
-        // Auto-confirm window close to avoid a modal dialog that blocks the RunLoop.
-        appDelegate.debugCloseMainWindowConfirmationHandler = { _ in true }
 
         let windowId = appDelegate.createMainWindow()
         defer { closeWindow(withId: windowId) }
@@ -6329,13 +6533,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
     }
 
     private func mainWindowIds() -> Set<UUID> {
-        Set(NSApp.windows.compactMap { window in
-            guard let raw = window.identifier?.rawValue,
-                  raw.hasPrefix("cmux.main.") else {
-                return nil
-            }
-            return UUID(uuidString: String(raw.dropFirst("cmux.main.".count)))
-        })
+        Set(AppDelegate.shared?.listMainWindowSummaries().map(\.windowId) ?? [])
     }
 
     /// Regression test for the ghostty IO-thread callback-context teardown race.
@@ -6378,14 +6576,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")
             return
-        }
-
-        let hadCustomConfirmationHandler = appDelegate.debugCloseMainWindowConfirmationHandler != nil
-        appDelegate.debugCloseMainWindowConfirmationHandler = { _ in true }
-        defer {
-            if !hadCustomConfirmationHandler {
-                appDelegate.debugCloseMainWindowConfirmationHandler = nil
-            }
         }
 
         for iteration in 0..<28 {
@@ -6438,23 +6628,12 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         return nil
     }
 
-    /// Cleanup-only window close used throughout this file's `defer` blocks. Closing a
-    /// window with a non-idle workspace normally raises a confirmation sheet; tests that
-    /// don't care about that flow (the overwhelming majority, which only want the window
-    /// gone) would otherwise leave it dangling for the rest of the process, polluting
-    /// later tests that assert on the full set of live main windows. Auto-confirm here
-    /// unless the test already installed its own handler to specifically exercise that
-    /// confirmation behavior (e.g. `testCmdCtrlWClosesWindowAfterConfirmation`).
+    /// Explicit disposal keeps test cleanup destructive after ordinary window close
+    /// became a session-preserving hide operation.
     private func closeWindow(withId windowId: UUID) {
-        guard let window = window(withId: windowId) else { return }
-        let hadCustomConfirmationHandler = AppDelegate.shared?.debugCloseMainWindowConfirmationHandler != nil
-        if !hadCustomConfirmationHandler {
-            AppDelegate.shared?.debugCloseMainWindowConfirmationHandler = { _ in true }
-        }
-        window.performClose(nil)
-        if !hadCustomConfirmationHandler {
-            AppDelegate.shared?.debugCloseMainWindowConfirmationHandler = nil
-        }
+        // NSApp.windows can retain already-closed windows with the same identifier.
+        // Resolve the registered context so cleanup always disposes its live owner.
+        guard AppDelegate.shared?.closeMainWindow(windowId: windowId) == true else { return }
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
     }
 

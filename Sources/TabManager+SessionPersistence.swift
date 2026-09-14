@@ -90,8 +90,17 @@ extension TabManager {
             newTabs.append(fallback)
         }
 
-        // Workspace instance IDs are intentionally regenerated on restore. Rebuild the runtime
-        // parent links from the persisted folder identity after every workspace exists.
+        // Workspace instance IDs are intentionally regenerated on restore. Remap saved
+        // parent identities only after every workspace exists; duplicate IDs are ambiguous.
+        let savedIdCounts = workspaceSnapshots.reduce(into: [UUID: Int]()) { counts, workspace in
+            if let id = workspace.id { counts[id, default: 0] += 1 }
+        }
+        var workspacesBySavedId: [UUID: Workspace] = [:]
+        for (saved, workspace) in zip(workspaceSnapshots, newTabs) {
+            if let id = saved.id, savedIdCounts[id] == 1 {
+                workspacesBySavedId[id] = workspace
+            }
+        }
         var worktreeFoldersById: [UUID: Workspace] = [:]
         for workspace in newTabs where workspace.isWorktreeFolder {
             guard let folderId = workspace.worktreeFolderId else {
@@ -109,13 +118,35 @@ extension TabManager {
             }
             worktreeFoldersById[folderId] = workspace
         }
-        for workspace in newTabs where !workspace.isWorktreeFolder {
-            guard let folderId = workspace.worktreeFolderId,
-                  let parent = worktreeFoldersById[folderId] else {
-                workspace.worktreeFolderId = nil
+        var proposedParents: [UUID: Workspace] = [:]
+        for (saved, workspace) in zip(workspaceSnapshots, newTabs) {
+            if let parentId = saved.worktreeParentWorkspaceId {
+                proposedParents[workspace.id] = workspacesBySavedId[parentId]
+            } else if saved.id == nil, !workspace.isWorktreeFolder,
+                      let folderId = workspace.worktreeFolderId {
+                // Older snapshots only persisted folder membership.
+                proposedParents[workspace.id] = worktreeFoldersById[folderId]
+            }
+        }
+        for workspace in newTabs {
+            var visited: Set<UUID> = [workspace.id]
+            var ancestor = proposedParents[workspace.id]
+            var hasCycle = false
+            while let current = ancestor {
+                guard visited.insert(current.id).inserted else {
+                    hasCycle = true
+                    break
+                }
+                ancestor = proposedParents[current.id]
+            }
+            guard !hasCycle, let parent = proposedParents[workspace.id] else {
+                if !workspace.isWorktreeFolder { workspace.worktreeFolderId = nil }
                 continue
             }
             workspace.worktreeParentWorkspaceId = parent.id
+            if !workspace.isWorktreeFolder {
+                workspace.worktreeFolderId = parent.isWorktreeFolder ? parent.worktreeFolderId : nil
+            }
         }
 
         // Determine selection before mutating @Published properties.

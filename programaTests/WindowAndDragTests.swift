@@ -87,6 +87,7 @@ final class WindowGlassEffectTests: XCTestCase {
 
             let bridge = WindowPaneChromePortalRegistry.bridge(for: window)
             let paneID = PaneID()
+            var accessibilitySelection: TabID?
             let tabs = ["One", "Two"].map { title in
                 BonsplitPaneChromeTabDescriptor(
                     id: TabID(), title: title, icon: "terminal", iconImageData: nil,
@@ -97,7 +98,7 @@ final class WindowGlassEffectTests: XCTestCase {
             bridge.updatePaneChrome(BonsplitPaneChromeDescriptor(
                 paneID: paneID, anchorView: anchor, tabs: tabs, isFocused: true,
                 isVisible: true, leadingInset: 0, showsSplitButtons: false,
-                onSelect: { _ in }, onClose: { _ in }, onContextAction: { _, _ in },
+                onSelect: { accessibilitySelection = $0 }, onClose: { _ in }, onContextAction: { _, _ in },
                 dragPasteboardData: { _ in nil }, onDragStateChanged: { _, _ in },
                 onNewTab: {}, onNewBrowserTab: {}, onSplitRight: {}, onSplitDown: {}
             ))
@@ -109,6 +110,16 @@ final class WindowGlassEffectTests: XCTestCase {
             // is a plain button container.
             let pillGlassViews = glassViews.filter { $0.contentView is NSControl }
             XCTAssertEqual(pillGlassViews.count, 2)
+            for tab in tabs {
+                let control = try XCTUnwrap(pillGlassViews.compactMap { $0.contentView as? NSControl }
+                    .first { $0.accessibilityLabel() == tab.title })
+                XCTAssertTrue(control.isAccessibilityElement())
+                XCTAssertEqual(control.accessibilityRole(), .button)
+                XCTAssertEqual(control.isAccessibilitySelected(), tab.isSelected)
+                XCTAssertEqual(control.accessibilityValue() as? String, tab.accessibilityValue)
+                XCTAssertTrue(control.accessibilityPerformPress())
+                XCTAssertEqual(accessibilitySelection, tab.id)
+            }
             XCTAssertEqual(glassViews.count, 4)
             XCTAssertTrue(bridge.hostViewForTesting.superview === terminalHost.superview)
             let siblings = terminalHost.superview?.subviews ?? []
@@ -121,6 +132,46 @@ final class WindowGlassEffectTests: XCTestCase {
         #endif
 
         throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK and runtime")
+    }
+
+    func testNativePaneChromeBackgroundDragsWithoutTakingControlHits() throws {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            final class DragWindow: NSWindow {
+                var dragCount = 0
+                var movableDuringDrag = false
+                override func performDrag(with event: NSEvent) {
+                    dragCount += 1
+                    movableDuringDrag = isMovable
+                }
+            }
+            let window = DragWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 100),
+                                    styleMask: [.titled], backing: .buffered, defer: false)
+            defer { window.orderOut(nil) }
+            window.isMovable = false
+            let background = PaneChromeDragBackgroundView(frame: NSRect(x: 30, y: 20, width: 320, height: 30))
+            let root = try XCTUnwrap(window.contentView)
+            root.addSubview(background)
+            let button = NSButton(frame: NSRect(x: 10, y: 0, width: 30, height: 30))
+            background.addSubview(button)
+            XCTAssertTrue(root.hitTest(NSPoint(x: 50, y: 35)) === button)
+            let hit = try XCTUnwrap(root.hitTest(NSPoint(x: 300, y: 35)))
+            XCTAssertTrue(hit === background)
+            let event = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown,
+                location: NSPoint(x: 300, y: 35), modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+            hit.mouseDown(with: event)
+            XCTAssertEqual(window.dragCount, 1)
+            XCTAssertTrue(window.movableDuringDrag)
+            XCTAssertFalse(window.isMovable)
+            _ = beginWindowDragSuppression(window: window)
+            hit.mouseDown(with: event)
+            _ = endWindowDragSuppression(window: window)
+            XCTAssertEqual(window.dragCount, 1)
+            return
+        }
+        #endif
+        throw XCTSkip("Native pane chrome requires the macOS 26 SDK and runtime")
     }
 
     func testNativeGlassContentHostOwnsItsSwiftUIControls() throws {
@@ -790,7 +841,7 @@ final class InternalTabDragBundleDeclarationTests: XCTestCase {
 final class WindowDragHandleHitTests: XCTestCase {
     private final class CapturingView: NSView {
         override func hitTest(_ point: NSPoint) -> NSView? {
-            bounds.contains(point) ? self : nil
+            super.hitTest(point)
         }
     }
 
@@ -865,6 +916,23 @@ final class WindowDragHandleHitTests: XCTestCase {
             windowDragHandleShouldCaptureHit(NSPoint(x: 180, y: 18), in: dragHandle, eventType: .leftMouseDown),
             "Empty titlebar space should drag the window"
         )
+    }
+
+    func testOffsetDragHandleYieldsToOffsetControlAndCapturesEmptySpace() {
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        let container = NSView(frame: NSRect(x: 80, y: 120, width: 400, height: 80))
+        root.addSubview(container)
+        let dragHandle = NSView(frame: NSRect(x: 40, y: 20, width: 320, height: 30))
+        container.addSubview(dragHandle)
+        let control = NSButton(frame: NSRect(x: 180, y: 20, width: 40, height: 30))
+        container.addSubview(control)
+
+        XCTAssertFalse(windowDragHandleShouldCaptureHit(
+            NSPoint(x: 160, y: 15), in: dragHandle, eventType: .leftMouseDown
+        ))
+        XCTAssertTrue(windowDragHandleShouldCaptureHit(
+            NSPoint(x: 260, y: 15), in: dragHandle, eventType: .leftMouseDown
+        ))
     }
 
     func testDragHandleYieldsWhenSiblingClaimsPoint() {

@@ -511,13 +511,30 @@ private final class PaneChromePortalHostView: NSView {
 
 @MainActor
 @available(macOS 26.0, *)
-private final class NativePaneTabBarView: NSView {
+class PaneChromeDragBackgroundView: NSView {
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let window, !isWindowDragSuppressed(window: window) else { return }
+        if event.clickCount >= 2 {
+            performStandardTitlebarDoubleClick(window: window)
+        } else {
+            withTemporaryWindowMovableEnabled(window: window) {
+                window.performDrag(with: event)
+            }
+        }
+    }
+}
+
+@MainActor
+@available(macOS 26.0, *)
+private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
     private let scrollView = NSScrollView(frame: .zero)
     // Unflipped on purpose: a flipped document view mirrors the glass pills'
     // built-in shadow upward (layer geometry flip flips shadowOffset), while
     // the control capsules in the unflipped host cast theirs downward. Layout
     // doesn't care — every child spans the full row height at y = 0.
-    private let documentView = NSView(frame: .zero)
+    private let documentView = PaneChromeDragBackgroundView(frame: .zero)
     private var pillViews: [TabID: NativeGlassTabPillView] = [:]
     private var descriptor: BonsplitPaneChromeDescriptor?
     /// Safari-style "+" after the last pill; scrolls with the tabs. Bare glyph,
@@ -866,6 +883,7 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         addSubview(iconView)
         addSubview(titleField)
         addSubview(closeButton)
+        setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
 
@@ -937,7 +955,14 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         toolTip = tab.title
         setAccessibilityLabel(tab.title)
         setAccessibilityValue(tab.accessibilityValue)
+        setAccessibilitySelected(tab.isSelected)
         needsLayout = true
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isEnabled, let selectAction else { return false }
+        selectAction()
+        return true
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }

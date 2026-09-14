@@ -37,7 +37,8 @@ enum RendererRealizationPlanner {
                 return lhs.lastVisibleAt > rhs.lastVisibleAt
             }
 
-        let warmCap = max(1, settings.maxWarmRenderers)
+        // Closed/hidden windows keep PTYs alive but need no permanently warm swap chain.
+        let warmCap = inputs.contains(where: \.isVisible) ? max(1, settings.maxWarmRenderers) : 0
         var selected: Set<UUID> = []
         for (index, input) in ranked.enumerated() {
             if index < warmCap || input.isVisible { continue }

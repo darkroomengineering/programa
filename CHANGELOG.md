@@ -26,6 +26,12 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Each ship now deletes promoted release candidates older than the two most recent, so the releases page stops accumulating 110 MB prereleases.
 
 ### Fixed
+- Closing a window keeps its sessions available for reopening from the Dock or New Window. Explicitly closing a workspace still ends its sessions.
+- Failed session saves cancel quitting, and replacement instances wait for the previous instance to finish saving before restoring sessions.
+- Provider usage uses a compact layout with consistent remaining-capacity bars. Empty window chrome and tab strips support native dragging and the system titlebar double-click action.
+- Autosave acknowledges completed disk writes, retries failures, and preserves prompt-save requests during an ongoing write. Saved sessions no longer expire solely because they remained unclaimed for an hour; fresh-shell recovery is labeled explicitly.
+- Scrollback restoration tracks effective terminal colors without growing style history. Fully hidden windows can release all idle terminal graphics while retaining their sessions.
+- Worktrees keep their requested workspace parent across session restore, and selected Solid Fill rows retain their workspace color rail.
 - Idle CPU with an open window dropped from roughly 12 to 20 percent of a core to about 1 percent. The workspace pane overlay kept a display-rate animation timeline running for the life of every window; it now mounts one only while an attention flash is animating.
 - The dock icon no longer costs 32 MB of resident memory. The light and dark icon assets are declared as 512pt @2x, so AppKit decodes them at 1024 pixels instead of rasterizing a 2048 pixel copy.
 - Closing a workspace no longer leaves its Workspace object alive through the sidebar row's hover closure.

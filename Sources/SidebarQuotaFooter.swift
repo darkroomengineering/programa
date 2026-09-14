@@ -51,23 +51,6 @@ struct SidebarQuotaFooter: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text(String(localized: "sidebar.usage.title", defaultValue: "Provider Usage"))
-                    .font(.headline)
-                Spacer(minLength: 8)
-                if store.isRefreshing {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel(
-                            String(localized: "sidebar.usage.refreshing", defaultValue: "Refreshing usage")
-                        )
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-
-            Divider()
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     if store.results.isEmpty, store.isRefreshing {
@@ -78,6 +61,9 @@ struct SidebarQuotaFooter: View {
                         }
 
                         ForEach(presentation.availableSnapshots, id: \.provider) { snapshot in
+                            if snapshot.provider != presentation.availableSnapshots.first?.provider {
+                                Divider()
+                            }
                             providerSection(snapshot)
                         }
 
@@ -91,7 +77,17 @@ struct SidebarQuotaFooter: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .frame(width: 320)
+        .overlay(alignment: .topTrailing) {
+            if store.isRefreshing, !store.results.isEmpty {
+                ProgressView()
+                    .controlSize(.mini)
+                    .padding(14)
+                    .accessibilityLabel(
+                        String(localized: "sidebar.usage.refreshing", defaultValue: "Refreshing usage")
+                    )
+            }
+        }
+        .frame(width: 280)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxHeight: 480, alignment: .top)
     }
@@ -126,26 +122,23 @@ struct SidebarQuotaFooter: View {
 
     private func providerSection(_ snapshot: ProviderUsageSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(snapshot.provider.localizedDisplayName)
-                .font(.system(size: 12, weight: .semibold))
-                .accessibilityAddTraits(.isHeader)
-
-            if let summaryText = Self.summaryText(snapshot.summary) {
-                Text(summaryText)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(snapshot.provider.localizedDisplayName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .accessibilityAddTraits(.isHeader)
+                if let summaryText = Self.summaryText(snapshot.summary) {
+                    Text(summaryText)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: store.isRefreshing ? 16 : 0)
             }
 
             ForEach(snapshot.windows) { window in
                 usageRow(window)
             }
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
-        )
     }
 
     private func usageRow(_ window: ProviderUsageWindow) -> some View {
@@ -165,7 +158,7 @@ struct SidebarQuotaFooter: View {
                         .fill(Color.secondary.opacity(0.15))
                     Capsule()
                         .fill(Self.barColor(for: window.usedPercent))
-                        .frame(width: proxy.size.width * CGFloat(window.usedPercent) / 100)
+                        .frame(width: proxy.size.width * CGFloat(100 - min(max(window.usedPercent, 0), 100)) / 100)
                 }
             }
             .frame(height: 4)
@@ -197,11 +190,6 @@ struct SidebarQuotaFooter: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
-        )
         .accessibilityElement(children: .combine)
     }
 

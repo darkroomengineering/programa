@@ -10,13 +10,20 @@ import Bonsplit
 /// isolation with fakes.
 final class SessionAutosaveCoordinator {
     typealias SnapshotProvider = (_ includeScrollback: Bool) -> AppSessionSnapshot?
-    typealias SnapshotSaver = (_ includeScrollback: Bool, _ prebuiltSnapshot: AppSessionSnapshot?) -> Bool
+    /// Completion runs on main and reports the completed disk write, not queue acceptance.
+    typealias SnapshotSaver = (
+        _ includeScrollback: Bool,
+        _ prebuiltSnapshot: AppSessionSnapshot?,
+        _ completion: @escaping (Bool) -> Void
+    ) -> Void
     typealias TerminatingProvider = () -> Bool
     typealias XCTestRunningProvider = () -> Bool
 
     private var sessionAutosaveTimer: DispatchSourceTimer?
     private var sessionAutosaveTickInFlight = false
+    private var autosaveGeneration = UUID()
     private var promptSaveScheduled = false
+    private var promptSaveWaitingForWrite = false
     private var consecutiveDeclinedSaveRetries = 0
     private static let maxConsecutiveDeclinedSaveRetries = 5
     private var sessionAutosaveDeferredRetryPending = false
@@ -88,8 +95,12 @@ final class SessionAutosaveCoordinator {
     func stopSessionAutosaveTimer() {
         sessionAutosaveTimer?.cancel()
         sessionAutosaveTimer = nil
+        autosaveGeneration = UUID()
         sessionAutosaveTickInFlight = false
         sessionAutosaveDeferredRetryPending = false
+        promptSaveScheduled = false
+        promptSaveWaitingForWrite = false
+        consecutiveDeclinedSaveRetries = 0
     }
 
     nonisolated static func shouldRunSessionAutosaveTick(isTerminatingApp: Bool) -> Bool {
@@ -109,9 +120,10 @@ final class SessionAutosaveCoordinator {
         guard delay.isFinite, delay > 0 else { return }
         guard !sessionAutosaveDeferredRetryPending else { return }
         sessionAutosaveDeferredRetryPending = true
+        let generation = autosaveGeneration
         sessionPersistenceQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.autosaveGeneration == generation else { return }
                 self.sessionAutosaveDeferredRetryPending = false
                 self.runSessionAutosaveTick(source: "typingQuietRetry")
             }
@@ -139,7 +151,6 @@ final class SessionAutosaveCoordinator {
         var fingerprintMs: Double = 0
         var saveMs: Double = 0
         defer {
-            sessionAutosaveTickInFlight = false
             let totalMs = (ProcessInfo.processInfo.systemUptime - phaseStart) * 1000.0
             ProgramaTypingTiming.logBreakdown(
                 path: "session.autosaveTick.phase",
@@ -157,8 +168,6 @@ final class SessionAutosaveCoordinator {
                 extra: "source=\(source)"
             )
         }
-#else
-        defer { sessionAutosaveTickInFlight = false }
 #endif
 
         let now = Date()
@@ -180,6 +189,7 @@ final class SessionAutosaveCoordinator {
             lastPersistedAt: lastSessionAutosavePersistedAt,
             now: now
         ) {
+            sessionAutosaveTickInFlight = false
 #if DEBUG
             dlog(
                 "session.save.skipped reason=unchanged_autosave_fingerprint includeScrollback=0 source=\(source)"
@@ -191,31 +201,35 @@ final class SessionAutosaveCoordinator {
 #if DEBUG
         let saveStart = ProcessInfo.processInfo.systemUptime
 #endif
-        let saved = saveSnapshot(false, autosaveSnapshot)
+        let generation = autosaveGeneration
+        saveSnapshot(false, autosaveSnapshot) { [weak self] saved in
+            guard let self, self.autosaveGeneration == generation else { return }
+            self.sessionAutosaveTickInFlight = false
+            guard !self.isTerminating() else { return }
+            guard saved else {
+                // Declined snapshots and failed disk writes must remain eligible even
+                // when their content is unchanged. Bound retries for windowless apps
+                // and persistent disk errors; the periodic timer keeps trying later.
+                if self.consecutiveDeclinedSaveRetries < Self.maxConsecutiveDeclinedSaveRetries {
+                    self.consecutiveDeclinedSaveRetries += 1
+                    self.scheduleDeferredSessionAutosaveRetry(after: 1.0)
+                }
+                return
+            }
+            self.consecutiveDeclinedSaveRetries = 0
+            self.updateSessionAutosaveSaveState(
+                includeScrollback: false,
+                persistedAt: Date(),
+                fingerprint: autosaveFingerprint
+            )
+            if self.promptSaveWaitingForWrite {
+                self.promptSaveWaitingForWrite = false
+                self.requestPromptSave(source: "writeCompleted", after: 0)
+            }
+        }
 #if DEBUG
         saveMs = (ProcessInfo.processInfo.systemUptime - saveStart) * 1000.0
 #endif
-        guard saved else {
-            // The save layer can decline (startup restore still in flight, empty
-            // snapshot). Recording the fingerprint anyway would suppress up to
-            // 60s of identical-content saves after a save that never happened,
-            // and a declined prompt save reopened the escrow shadow gap it was
-            // built to close (audit 2026-08-20, M3). Retry, bounded: the
-            // restore-in-flight decline clears within a few seconds, while a
-            // windowless app declines indefinitely and must not become a 1s
-            // polling loop — the periodic timer remains the steady cadence.
-            if consecutiveDeclinedSaveRetries < Self.maxConsecutiveDeclinedSaveRetries {
-                consecutiveDeclinedSaveRetries += 1
-                scheduleDeferredSessionAutosaveRetry(after: 1.0)
-            }
-            return
-        }
-        consecutiveDeclinedSaveRetries = 0
-        updateSessionAutosaveSaveState(
-            includeScrollback: false,
-            persistedAt: now,
-            fingerprint: autosaveFingerprint
-        )
     }
 
     /// Coalesced "save soon" for structural changes — a new panel finishing escrow
@@ -228,9 +242,14 @@ final class SessionAutosaveCoordinator {
     func requestPromptSave(source: String, after delay: TimeInterval = 1.0) {
         guard !promptSaveScheduled else { return }
         promptSaveScheduled = true
+        let generation = autosaveGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self else { return }
+            guard let self, self.autosaveGeneration == generation else { return }
             self.promptSaveScheduled = false
+            if self.sessionAutosaveTickInFlight {
+                self.promptSaveWaitingForWrite = true
+                return
+            }
             self.runSessionAutosaveTick(source: source)
         }
     }

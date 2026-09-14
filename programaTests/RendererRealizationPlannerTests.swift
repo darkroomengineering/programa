@@ -55,7 +55,7 @@ final class RendererRealizationPlannerTests: XCTestCase {
         let old = UUID()
         let selected = RendererRealizationPlanner.selectedSurfaceIds(
             inputs: [
-                input(recent, lastVisibleAt: now - 2),
+                input(recent, visible: true, lastVisibleAt: now - 2),
                 input(warm, lastVisibleAt: now - 100),
                 input(old, lastVisibleAt: now - 200),
             ],
@@ -82,12 +82,25 @@ final class RendererRealizationPlannerTests: XCTestCase {
         let higher = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
         let selected = RendererRealizationPlanner.selectedSurfaceIds(
             inputs: [
+                input(UUID(), visible: true, lastVisibleAt: 1_000),
                 input(higher, lastVisibleAt: 0),
                 input(lower, lastVisibleAt: 0),
             ],
-            settings: settings(idle: 5, warm: 1),
+            settings: settings(idle: 5, warm: 2),
             now: 1_000
         )
         XCTAssertEqual(selected, [higher])
+    }
+
+    func testAllHiddenSurfacesReleaseGraphicsAfterIdleThreshold() {
+        let old = UUID()
+        let recent = UUID()
+        let inputs = [input(old, lastVisibleAt: 0), input(recent, lastVisibleAt: 990)]
+        XCTAssertEqual(RendererRealizationPlanner.selectedSurfaceIds(
+            inputs: inputs, settings: settings(), now: 1_000
+        ), [old])
+        XCTAssertEqual(RendererRealizationPlanner.selectedSurfaceIds(
+            inputs: inputs, settings: settings(), now: 1_021
+        ), [old, recent])
     }
 }
