@@ -85,7 +85,7 @@ extension ProgramaCLI {
         }
 
         do {
-            let payload = try client.sendV2(method: "system.tree", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.systemTree, params: params)
             return treePayloadWithMarkers(payload)
         } catch let error as CLIError where error.message.hasPrefix("method_not_found:") {
             // Back-compat fallback for older servers that don't support system.tree.
@@ -103,7 +103,7 @@ extension ProgramaCLI {
             identifyParams["caller"] = caller
         }
 
-        let identifyPayload = try client.sendV2(method: "system.identify", params: identifyParams)
+        let identifyPayload = try client.sendV2(method: V2MethodNames.systemIdentify, params: identifyParams)
         let focused = identifyPayload["focused"] as? [String: Any] ?? [:]
         let caller = identifyPayload["caller"] as? [String: Any] ?? [:]
         let activePath = parseTreePath(payload: focused)
@@ -121,7 +121,7 @@ extension ProgramaCLI {
         activePath: TreePath,
         client: SocketClient
     ) throws -> [[String: Any]] {
-        let windowsPayload = try client.sendV2(method: "window.list")
+        let windowsPayload = try client.sendV2(method: V2MethodNames.windowList)
         let allWindows = windowsPayload["windows"] as? [[String: Any]] ?? []
 
         if let workspaceRaw = options.workspaceHandle {
@@ -129,7 +129,7 @@ extension ProgramaCLI {
                 throw CLIError(message: "Invalid workspace handle")
             }
 
-            let workspaceListPayload = try client.sendV2(method: "workspace.list", params: ["workspace_id": workspaceHandle])
+            let workspaceListPayload = try client.sendV2(method: V2MethodNames.workspaceList, params: ["workspace_id": workspaceHandle])
             let workspaceWindowHandle = (workspaceListPayload["window_ref"] as? String) ?? (workspaceListPayload["window_id"] as? String)
             let window = allWindows.first(where: { treeItemMatchesHandle($0, handle: workspaceWindowHandle) })
                 ?? treeFallbackWindow(from: workspaceListPayload)
@@ -191,7 +191,7 @@ extension ProgramaCLI {
         if let windowHandle = treeItemHandle(window) {
             workspaceParams["window_id"] = windowHandle
         }
-        let workspacePayload = try client.sendV2(method: "workspace.list", params: workspaceParams)
+        let workspacePayload = try client.sendV2(method: V2MethodNames.workspaceList, params: workspaceParams)
         let workspaces = workspacePayload["workspaces"] as? [[String: Any]] ?? []
         let workspaceNodes = try workspaces.map { try buildTreeWorkspaceNode(workspace: $0, activePath: activePath, client: client) }
         var windowNode = window
@@ -214,8 +214,8 @@ extension ProgramaCLI {
             return workspaceNode
         }
 
-        let panePayload = try client.sendV2(method: "pane.list", params: ["workspace_id": workspaceHandle])
-        let surfacePayload = try client.sendV2(method: "surface.list", params: ["workspace_id": workspaceHandle])
+        let panePayload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": workspaceHandle])
+        let surfacePayload = try client.sendV2(method: V2MethodNames.surfaceList, params: ["workspace_id": workspaceHandle])
         let panes = panePayload["panes"] as? [[String: Any]] ?? []
         let surfaces = surfacePayload["surfaces"] as? [[String: Any]] ?? []
         let browserURLsByHandle = fetchTreeBrowserURLs(
@@ -382,7 +382,7 @@ extension ProgramaCLI {
         guard hasBrowserSurfaces else { return [:] }
 
         if let payload = try? client.sendV2(
-            method: "browser.tab.list",
+            method: V2MethodNames.browserTabList,
             params: ["workspace_id": workspaceHandle]
         ) {
             let tabs = payload["tabs"] as? [[String: Any]] ?? []
@@ -405,7 +405,7 @@ extension ProgramaCLI {
             guard ((surface["type"] as? String) ?? "").lowercased() == "browser" else { continue }
             guard let surfaceHandle = treeItemHandle(surface) else { continue }
             guard let payload = try? client.sendV2(
-                method: "browser.url.get",
+                method: V2MethodNames.browserUrlGet,
                 params: ["workspace_id": workspaceHandle, "surface_id": surfaceHandle]
             ),
             let url = payload["url"] as? String,
