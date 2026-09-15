@@ -25,6 +25,7 @@
 			NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */; };
 			NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */; };
 			AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */; };
+			C7A3000001 /* AgentEventNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000002 /* AgentEventNormalizer.swift */; };
 			AGSV0001A1B2C3D4E5F60719 /* AgentSupervision.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */; };
 			AGSV0003A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGSV0004A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift */; };
 			AGRP0001A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGRP0002A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift */; };
@@ -428,6 +429,7 @@
 			NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Surfaces.swift"; sourceTree = "<group>"; };
 			NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+SidebarTelemetry.swift"; sourceTree = "<group>"; };
 			AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AgentActivityState.swift"; sourceTree = "<group>"; };
+			C7A3000002 /* AgentEventNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizer.swift; sourceTree = "<group>"; };
 			AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSupervision.swift; sourceTree = "<group>"; };
 			AGSV0004A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+AgentSupervision.swift"; sourceTree = "<group>"; };
 			AGRP0002A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRPCDispatcher.swift; sourceTree = "<group>"; };
@@ -882,6 +884,7 @@
 					NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */,
 					NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */,
 					AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */,
+					C7A3000002 /* AgentEventNormalizer.swift */,
 					AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */,
 					AGOV0002A1B2C3D4E5F60719 /* AgentOverviewWindow.swift */,
 					AMDT000002 /* AgentManifest.swift */,
@@ -1427,6 +1430,7 @@
 					NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */,
 					NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */,
 					AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */,
+					C7A3000001 /* AgentEventNormalizer.swift in Sources */,
 					AGSV0001A1B2C3D4E5F60719 /* AgentSupervision.swift in Sources */,
 					AGOV0001A1B2C3D4E5F60719 /* AgentOverviewWindow.swift in Sources */,
 					AMDT000001 /* AgentManifest.swift in Sources */,

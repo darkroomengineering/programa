@@ -327,6 +327,70 @@ extension TerminalController {
         ])
     }
 
+    /// Normalized agent lifecycle event (docs/plans/agent-events.md, "Wire path").
+    /// Classification happens purely on `event_type` (`AgentEventNormalizer.classify`);
+    /// `provider`/`session_id`/`turn_id`/`item_id`/`label`/`resolution` are accepted and
+    /// echoed but never used for classification. Reports flow through the same
+    /// `source: .hooks` path as `v2SurfaceReportAgentState`, so a structured event always
+    /// beats the screen-manifest engine's `.inferred` writes.
+    nonisolated func v2AgentEvent(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2CachedUUID(params, "workspace_id") else {
+            return v2InvalidParam("workspace_id")
+        }
+        guard let surfaceId = v2CachedUUID(params, "surface_id") else {
+            return v2InvalidParam("surface_id")
+        }
+        guard let rawEventType = v2RawString(params, "event_type")?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawEventType.isEmpty,
+              let outcome = AgentEventNormalizer.classify(eventType: rawEventType) else {
+            return .err(
+                code: "invalid_params",
+                message: "Invalid event_type — use: session.started, session.exited, turn.started, turn.completed, turn.aborted, request.opened, request.resolved, user-input.requested, user-input.resolved, item.started, item.completed",
+                data: nil
+            )
+        }
+        let eventType = rawEventType.lowercased()
+
+        var response: [String: Any] = [
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "event_type": eventType,
+        ]
+
+        switch outcome {
+        case .applyState(let state):
+            v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+                tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: .hooks)
+                let taskState: AgentTaskState
+                switch state {
+                case .idle: taskState = .idle
+                case .working: taskState = .working
+                case .blocked: taskState = .blocked
+                }
+                _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
+                    workspaceId: workspaceId,
+                    surfaceId: sid,
+                    state: taskState
+                )
+            }
+            response["state"] = state.rawValue
+            response["source"] = AgentStateSource.hooks.rawValue
+
+        case .clearState:
+            v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+                tabManager.clearSurfaceAgentState(tabId: workspaceId, surfaceId: sid)
+                _ = try? AgentSupervisionRegistry.shared.finishActiveSurface(
+                    workspaceId: workspaceId,
+                    surfaceId: sid
+                )
+            }
+        }
+
+        return .ok(response)
+    }
+
     nonisolated func v2SurfaceClearAgentState(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2CachedUUID(params, "workspace_id") else {
             return v2InvalidParam("workspace_id")
