@@ -53,6 +53,7 @@
 			NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */; };
 			WALS000001 /* SessionWALStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WALS000002 /* SessionWALStore.swift */; };
 			ESCH000001 /* SessionEscrow.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000002 /* SessionEscrow.swift */; };
+			C7A2000001 /* ProgramaCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A2000002 /* ProgramaCore.swift */; };
 			SMGT000001 /* SessionMachineryGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMGT000002 /* SessionMachineryGate.swift */; };
 			CESH000001 /* session_escrow_shim.c in Sources */ = {isa = PBXBuildFile; fileRef = CESH000002 /* session_escrow_shim.c */; };
 			NRSP0052A1B2C3D4E5F60719 /* TerminalCopyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */; };
@@ -456,6 +457,7 @@
 			NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSurface.swift; sourceTree = "<group>"; };
 			WALS000002 /* SessionWALStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWALStore.swift; sourceTree = "<group>"; };
 			ESCH000002 /* SessionEscrow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrow.swift; sourceTree = "<group>"; };
+			C7A2000002 /* ProgramaCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaCore.swift; sourceTree = "<group>"; };
 			SMGT000002 /* SessionMachineryGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMachineryGate.swift; sourceTree = "<group>"; };
 			NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalCopyMode.swift; sourceTree = "<group>"; };
 			NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarShortcutHints.swift; sourceTree = "<group>"; };
@@ -903,6 +905,7 @@
 					NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */,
 					WALS000002 /* SessionWALStore.swift */,
 					ESCH000002 /* SessionEscrow.swift */,
+					C7A2000002 /* ProgramaCore.swift */,
 					SMGT000002 /* SessionMachineryGate.swift */,
 					NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */,
 					NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */,
@@ -1448,6 +1451,7 @@
 					NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */,
 					WALS000001 /* SessionWALStore.swift in Sources */,
 					ESCH000001 /* SessionEscrow.swift in Sources */,
+					C7A2000001 /* ProgramaCore.swift in Sources */,
 					SMGT000001 /* SessionMachineryGate.swift in Sources */,
 					CESH000001 /* session_escrow_shim.c in Sources */,
 					NRSP0052A1B2C3D4E5F60719 /* TerminalCopyMode.swift in Sources */,
