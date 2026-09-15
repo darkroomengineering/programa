@@ -52,6 +52,15 @@ enum ProgramaCore {
         func loadWithHistoryFallback() -> AppSessionSnapshot?
         @discardableResult func save(_ snapshot: AppSessionSnapshot) -> Bool
     }
+
+    /// Read-only view of per-workspace agent activity state. Wraps
+    /// `Workspace.aggregateAgentState` (`Sources/AgentActivityState.swift`).
+    /// The write side (`Workspace+SidebarTelemetry.swift`'s
+    /// `updatePanelAgentState`) is out of scope -- see
+    /// `docs/plans/core-seam.md`'s "What is not yet behind the seam".
+    protocol AgentActivityReporting {
+        @MainActor func aggregateState(for workspace: Workspace) -> AgentActivityState?
+    }
 }
 
 /// Groups every core-owned concern this app currently exposes through the
@@ -62,6 +71,7 @@ protocol ProgramaCoreProviding {
     var git: ProgramaCore.GitMetadataProbing { get }
     var ports: ProgramaCore.PortScanning { get }
     var sessionSnapshots: ProgramaCore.SessionSnapshotting { get }
+    var agentActivity: ProgramaCore.AgentActivityReporting { get }
 }
 
 /// Wraps today's in-process implementations with zero behavior change.
@@ -74,15 +84,18 @@ final class InProcessCore: ProgramaCoreProviding {
     let ports: ProgramaCore.PortScanning
 
     let sessionSnapshots: ProgramaCore.SessionSnapshotting
+    let agentActivity: ProgramaCore.AgentActivityReporting
 
     init(
         git: ProgramaCore.GitMetadataProbing = InProcessGitMetadataProbe(),
         ports: ProgramaCore.PortScanning = InProcessPortScanner(),
-        sessionSnapshots: ProgramaCore.SessionSnapshotting = InProcessSessionSnapshotting()
+        sessionSnapshots: ProgramaCore.SessionSnapshotting = InProcessSessionSnapshotting(),
+        agentActivity: ProgramaCore.AgentActivityReporting = InProcessAgentActivityReporting()
     ) {
         self.git = git
         self.ports = ports
         self.sessionSnapshots = sessionSnapshots
+        self.agentActivity = agentActivity
     }
 }
 
@@ -121,5 +134,12 @@ struct InProcessSessionSnapshotting: ProgramaCore.SessionSnapshotting {
     @discardableResult
     func save(_ snapshot: AppSessionSnapshot) -> Bool {
         SessionPersistenceStore.save(snapshot)
+    }
+}
+
+struct InProcessAgentActivityReporting: ProgramaCore.AgentActivityReporting {
+    @MainActor
+    func aggregateState(for workspace: Workspace) -> AgentActivityState? {
+        workspace.aggregateAgentState
     }
 }
