@@ -756,6 +756,11 @@ struct ProgramaSingleInstanceProcessKey: Equatable, Sendable {
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuItemValidation {
     nonisolated(unsafe) static var shared: AppDelegate?
 
+    /// The seam to core-owned concerns (session snapshot persistence today;
+    /// see `docs/plans/core-seam.md`). `var` so tests can substitute a fake
+    /// that records calls without touching disk.
+    var core: ProgramaCoreProviding = InProcessCore.shared
+
     private static let cachedIsRunningUnderXCTest = detectRunningUnderXCTest(ProcessInfo.processInfo.environment)
 
     private var isRunningUnderXCTestCached: Bool {
@@ -1660,7 +1665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         SessionPersistenceStore.rotateIntoHistory()
         guard !didHandleExplicitOpenIntentAtStartup, SessionRestorePolicy.shouldAttemptRestore() else { return }
         Self.removeLegacyPersistedWindowGeometry()
-        startupSessionSnapshot = SessionPersistenceStore.loadWithHistoryFallback()
+        startupSessionSnapshot = core.sessionSnapshots.loadWithHistoryFallback()
     }
 
     private func persistedWindowGeometry(
@@ -2615,12 +2620,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if let persistedGeometryData {
             UserDefaults.standard.set(persistedGeometryData, forKey: Self.persistedWindowGeometryDefaultsKey)
         }
+        // Captured once here (main actor) rather than read as `self.core`
+        // inside `writeBlock`, which runs on `sessionPersistenceQueue`. See
+        // the equivalent note in `TabManager.scheduleWorkspaceGitMetadataRefresh`.
+        let core = self.core
         let writeBlock = { () -> Bool in
             if let snapshot {
 #if DEBUG
-                let saved = saveOverride?(snapshot) ?? SessionPersistenceStore.save(snapshot)
+                let saved = saveOverride?(snapshot) ?? core.sessionSnapshots.save(snapshot)
 #else
-                let saved = SessionPersistenceStore.save(snapshot)
+                let saved = core.sessionSnapshots.save(snapshot)
 #endif
                 if !saved { dilog("session.save", "outcome=failed") }
                 return saved

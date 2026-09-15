@@ -40,6 +40,18 @@ enum ProgramaCore {
         func kick(workspaceId: UUID, panelId: UUID)
         @MainActor func refreshAgentPorts(workspaceId: UUID, agentPIDs: Set<Int>)
     }
+
+    /// Whole-app session snapshot persistence (layout, cwd, scrollback-as-
+    /// text). Wraps `SessionPersistenceStore`
+    /// (`Sources/SessionPersistence.swift`). Deliberately does NOT wrap
+    /// `SessionWALStore`/`SessionEscrow` -- see `docs/plans/core-seam.md`
+    /// "Session snapshot / autosave / WAL / escrow" for why those already
+    /// look like a core RPC boundary and would only be renamed by wrapping
+    /// them here.
+    protocol SessionSnapshotting {
+        func loadWithHistoryFallback() -> AppSessionSnapshot?
+        @discardableResult func save(_ snapshot: AppSessionSnapshot) -> Bool
+    }
 }
 
 /// Groups every core-owned concern this app currently exposes through the
@@ -49,6 +61,7 @@ enum ProgramaCore {
 protocol ProgramaCoreProviding {
     var git: ProgramaCore.GitMetadataProbing { get }
     var ports: ProgramaCore.PortScanning { get }
+    var sessionSnapshots: ProgramaCore.SessionSnapshotting { get }
 }
 
 /// Wraps today's in-process implementations with zero behavior change.
@@ -60,12 +73,16 @@ final class InProcessCore: ProgramaCoreProviding {
     let git: ProgramaCore.GitMetadataProbing
     let ports: ProgramaCore.PortScanning
 
+    let sessionSnapshots: ProgramaCore.SessionSnapshotting
+
     init(
         git: ProgramaCore.GitMetadataProbing = InProcessGitMetadataProbe(),
-        ports: ProgramaCore.PortScanning = InProcessPortScanner()
+        ports: ProgramaCore.PortScanning = InProcessPortScanner(),
+        sessionSnapshots: ProgramaCore.SessionSnapshotting = InProcessSessionSnapshotting()
     ) {
         self.git = git
         self.ports = ports
+        self.sessionSnapshots = sessionSnapshots
     }
 }
 
@@ -93,5 +110,16 @@ struct InProcessPortScanner: ProgramaCore.PortScanning {
     @MainActor
     func refreshAgentPorts(workspaceId: UUID, agentPIDs: Set<Int>) {
         PortScanner.shared.refreshAgentPorts(workspaceId: workspaceId, agentPIDs: agentPIDs)
+    }
+}
+
+struct InProcessSessionSnapshotting: ProgramaCore.SessionSnapshotting {
+    func loadWithHistoryFallback() -> AppSessionSnapshot? {
+        SessionPersistenceStore.loadWithHistoryFallback()
+    }
+
+    @discardableResult
+    func save(_ snapshot: AppSessionSnapshot) -> Bool {
+        SessionPersistenceStore.save(snapshot)
     }
 }
