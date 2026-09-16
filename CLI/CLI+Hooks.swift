@@ -279,6 +279,14 @@ extension ProgramaCLI {
                         "pid": claudePid,
                     ])
                 }
+                reportAgentEvent(
+                    client: client,
+                    provider: "claude-code",
+                    eventType: "session.started",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
                 print("OK")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -339,6 +347,14 @@ extension ProgramaCLI {
                     color: "#8E8E93"
                 )
                 reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .idle)
+                reportAgentEvent(
+                    client: client,
+                    provider: "claude-code",
+                    eventType: "turn.completed",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
                 print("OK")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -373,6 +389,14 @@ extension ProgramaCLI {
                     color: "#4C8DFF"
                 )
                 reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .working)
+                reportAgentEvent(
+                    client: client,
+                    provider: "claude-code",
+                    eventType: "turn.started",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
                 print("OK")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -439,6 +463,28 @@ extension ProgramaCLI {
                 surfaceId: surfaceId,
                 state: agentStateForClassifiedNotificationSubtitle(summary.subtitle)
             )
+            switch summary.subtitle {
+            case "Permission":
+                reportAgentEvent(
+                    client: client,
+                    provider: "claude-code",
+                    eventType: "request.opened",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
+            case "Waiting":
+                reportAgentEvent(
+                    client: client,
+                    provider: "claude-code",
+                    eventType: "user-input.requested",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
+            default:
+                break
+            }
             print("OK")
 
         case "subagent-start":
@@ -571,6 +617,14 @@ extension ProgramaCLI {
                 _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
                 if !consumedSession.surfaceId.isEmpty {
                     clearAgentState(client: client, workspaceId: workspaceId, surfaceId: consumedSession.surfaceId)
+                    reportAgentEvent(
+                        client: client,
+                        provider: "claude-code",
+                        eventType: "session.exited",
+                        workspaceId: workspaceId,
+                        surfaceId: consumedSession.surfaceId,
+                        sessionId: parsedInput.sessionId
+                    )
                 }
             }
             print("OK")
@@ -650,6 +704,14 @@ extension ProgramaCLI {
             // and it is the only one of the three that can't be re-derived from anything else.
             if let surfaceId {
                 reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .working)
+                reportAgentEvent(
+                    client: client,
+                    provider: "claude-code",
+                    eventType: "item.started",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
             }
 
             _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
@@ -761,6 +823,30 @@ extension ProgramaCLI {
             "workspace_id": workspaceId,
             "surface_id": surfaceId,
         ])
+    }
+
+    /// Reports a normalized `agent.event` (docs/plans/agent-events.md) alongside the
+    /// existing three-state `surface.report_agent_state` calls above -- additive, not a
+    /// replacement. Best-effort like `reportAgentState`/`clearAgentState`: a hook must
+    /// never fail the user's tool call because programa's socket is unreachable.
+    private func reportAgentEvent(
+        client: SocketClient,
+        provider: String,
+        eventType: String,
+        workspaceId: String,
+        surfaceId: String,
+        sessionId: String? = nil
+    ) {
+        var params: [String: Any] = [
+            "provider": provider,
+            "event_type": eventType,
+            "workspace_id": workspaceId,
+            "surface_id": surfaceId,
+        ]
+        if let sessionId, !sessionId.isEmpty {
+            params["session_id"] = sessionId
+        }
+        _ = try? client.sendV2(method: "agent.event", params: params)
     }
 
     private func resolvePreferredWorkspaceIdForClaudeHook(
@@ -3322,6 +3408,14 @@ extension ProgramaCLI {
                         "pid": codexPid,
                     ])
                 }
+                reportAgentEvent(
+                    client: client,
+                    provider: "codex",
+                    eventType: "session.started",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
                 print("{}")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -3374,6 +3468,14 @@ extension ProgramaCLI {
                     client: client
                 )
                 reportAgentState(client: client, workspaceId: workspaceId, surfaceId: promptSubmitSurfaceId, state: .working)
+                reportAgentEvent(
+                    client: client,
+                    provider: "codex",
+                    eventType: "turn.started",
+                    workspaceId: workspaceId,
+                    surfaceId: promptSubmitSurfaceId,
+                    sessionId: parsedInput.sessionId
+                )
                 print("{}")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -3453,6 +3555,14 @@ extension ProgramaCLI {
                     color: "#8E8E93"
                 )
                 reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .idle)
+                reportAgentEvent(
+                    client: client,
+                    provider: "codex",
+                    eventType: "turn.completed",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
                 print("{}")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -3529,6 +3639,28 @@ extension ProgramaCLI {
                 surfaceId: surfaceId,
                 state: agentStateForClassifiedNotificationSubtitle(summary.subtitle)
             )
+            switch summary.subtitle {
+            case "Permission":
+                reportAgentEvent(
+                    client: client,
+                    provider: "codex",
+                    eventType: "request.opened",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
+            case "Waiting":
+                reportAgentEvent(
+                    client: client,
+                    provider: "codex",
+                    eventType: "user-input.requested",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
+            default:
+                break
+            }
             print("{}")
 
         case "session-end":
@@ -3564,6 +3696,14 @@ extension ProgramaCLI {
                 _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
                 if !consumedSession.surfaceId.isEmpty {
                     clearAgentState(client: client, workspaceId: workspaceId, surfaceId: consumedSession.surfaceId)
+                    reportAgentEvent(
+                        client: client,
+                        provider: "codex",
+                        eventType: "session.exited",
+                        workspaceId: workspaceId,
+                        surfaceId: consumedSession.surfaceId,
+                        sessionId: parsedInput.sessionId
+                    )
                 }
             }
             print("{}")
@@ -3799,6 +3939,14 @@ extension ProgramaCLI {
                         "pid": opencodePid,
                     ])
                 }
+                reportAgentEvent(
+                    client: client,
+                    provider: "opencode",
+                    eventType: "session.started",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
                 print("{}")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -3851,6 +3999,14 @@ extension ProgramaCLI {
                     client: client
                 )
                 reportAgentState(client: client, workspaceId: workspaceId, surfaceId: promptSubmitSurfaceId, state: .working)
+                reportAgentEvent(
+                    client: client,
+                    provider: "opencode",
+                    eventType: "turn.started",
+                    workspaceId: workspaceId,
+                    surfaceId: promptSubmitSurfaceId,
+                    sessionId: parsedInput.sessionId
+                )
                 print("{}")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -3931,6 +4087,14 @@ extension ProgramaCLI {
                     color: "#8E8E93"
                 )
                 reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .idle)
+                reportAgentEvent(
+                    client: client,
+                    provider: "opencode",
+                    eventType: "turn.completed",
+                    workspaceId: workspaceId,
+                    surfaceId: surfaceId,
+                    sessionId: parsedInput.sessionId
+                )
                 print("{}")
             } catch {
                 if shouldIgnoreClaudeHookTeardownError(error) {
@@ -4001,6 +4165,14 @@ extension ProgramaCLI {
             // openCodePluginJS below) — unlike Claude/Codex, there's no ambiguous "Attention"
             // catch-all to classify, so this is unconditionally a blocking approval prompt.
             reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: .blocked)
+            reportAgentEvent(
+                client: client,
+                provider: "opencode",
+                eventType: "request.opened",
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                sessionId: parsedInput.sessionId
+            )
             print("{}")
 
         case "session-end":
@@ -4032,6 +4204,14 @@ extension ProgramaCLI {
                 _ = try? client.sendV2(method: "notification.clear", params: ["workspace_id": workspaceId])
                 if !consumedSession.surfaceId.isEmpty {
                     clearAgentState(client: client, workspaceId: workspaceId, surfaceId: consumedSession.surfaceId)
+                    reportAgentEvent(
+                        client: client,
+                        provider: "opencode",
+                        eventType: "session.exited",
+                        workspaceId: workspaceId,
+                        surfaceId: consumedSession.surfaceId,
+                        sessionId: parsedInput.sessionId
+                    )
                 }
             }
             print("{}")
