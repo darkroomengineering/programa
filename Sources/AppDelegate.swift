@@ -2484,16 +2484,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         lifecycleSnapshotObservers.append(sessionResignObserver)
 
+        let willSleepObserver = workspaceCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            dilog("wake.lifecycle", "willSleep")
+        }
+        lifecycleSnapshotObservers.append(willSleepObserver)
+
         let didWakeObserver = workspaceCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.restartSocketListenerIfEnabled(source: "workspace.didWake")
+                self?.handleSystemDidWake()
             }
         }
         lifecycleSnapshotObservers.append(didWakeObserver)
+    }
+
+    /// Runs everything that must be re-asserted after the Mac wakes from sleep.
+    /// See `SessionEscrow.swift`'s `serve` death-detection loop for the
+    /// confirmed root cause this responds to: the escrow holder used to
+    /// measure heartbeat staleness with wall-clock time, so any sleep longer
+    /// than `SessionEscrowPolicy.heartbeatStaleAfter` (6s) made it declare
+    /// every escrowed PTY dead the instant the app woke back up and start
+    /// reading from them concurrently with the still-alive app, corrupting
+    /// terminal output until the app was force-quit. That's fixed at the
+    /// source (mach-uptime-based staleness, which pauses across sleep), but
+    /// this handler still proactively refreshes the escrow connection and
+    /// renderer state on every wake as defense in depth and to leave a
+    /// record in the always-on diagnostics log if it ever happens again.
+    private func handleSystemDidWake() {
+        dilog("wake.lifecycle", "didWake")
+        restartSocketListenerIfEnabled(source: "workspace.didWake")
+        SessionEscrowClient.shared.notifySystemDidWake()
+        RendererRealizationController.shared.scheduleImmediatePass()
     }
 
     func socketListenerConfigurationIfEnabled() -> (mode: SocketControlMode, path: String)? {
