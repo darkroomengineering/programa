@@ -1,10 +1,11 @@
 <h1 align="center">Programa</h1>
-<p align="center">The open source terminal built for coding agents. Native macOS, powered by Ghostty.</p>
+<p align="center">The open source terminal built for coding agents. Native macOS, powered by Ghostty. Native Windows frontend in development.</p>
 
 <p align="center">
   <a href="https://github.com/darkroomengineering/programa/releases/latest/download/programa-macos.dmg">
     <img src="./docs/assets/macos-badge.png" alt="Download Programa for macOS" width="180" />
   </a>
+  <a href="#windows-preview">Windows development status</a>
 </p>
 
 <p align="center">
@@ -22,6 +23,11 @@
 </p>
 
 Run many coding agents in parallel and always know which one needs you.
+
+The features below describe the macOS app. A native Windows frontend using
+WinUI 3 is in development, with shared core behavior and platform-native UI.
+See [Windows support](#windows-preview) and the
+[Windows testing guide](docs/windows-testing.md).
 
 - **Agent status, always visible.** Every workspace shows working, blocked, or idle. Claude Code, Codex, and OpenCode report it directly; agents without hooks (Gemini CLI, Copilot CLI, Cursor Agent, Aider) get it from reading the terminal screen against patterns you can override in `~/.config/programa/agent-detection/`.
 - **Notifications built for agents.** A waiting agent's pane gets a ring, its tab lights up, and ⌘⇧U jumps to the latest unread.
@@ -47,7 +53,31 @@ brew tap darkroomengineering/programa
 brew install --cask programa
 ```
 
-Programa auto-updates: every commit on `main` that passes CI ships automatically as the latest release. On relaunch it restores layout, directories, scrollback, and browser state. Terminal processes survive Programa quitting or crashing, and the app reattaches to them live on the next launch.
+The macOS app auto-updates. Every eligible commit on `main` that passes CI and
+both platform release builds advances the shared rolling release, which
+provides `programa-macos.dmg` and `programa-windows.exe` from the same commit.
+If either platform fails, the previous rolling release remains available.
+On macOS, relaunch restores layout, directories, scrollback, and browser state.
+Terminal processes survive Programa quitting or crashing, and the app
+reattaches to them live on the next launch.
+
+### Windows preview
+
+The Windows frontend uses WinUI 3 controls. macOS retains
+its AppKit/SwiftUI interface. Workspace, tab, split, and session behavior belongs
+in the shared core; each frontend handles its platform's rendering, input,
+window management, and accessibility.
+
+The planned Windows download is `programa-windows.exe` on the same
+[rolling release](https://github.com/darkroomengineering/programa/releases/tag/rolling)
+as `programa-macos.dmg`. The WinUI frontend builds and passes its automated
+checks on Windows; a [verification build](https://github.com/darkroomengineering/programa/actions/runs/35104587262)
+is available from GitHub Actions. It is not yet a published release. Desktop
+interaction testing and macOS feature parity remain incomplete.
+
+On an Apple Silicon Mac, test the Windows executable in a Windows 11 Arm VM;
+Windows can run x64 executables through emulation. See the
+[local setup and interaction checks](docs/windows-testing.md).
 
 ## Why
 
@@ -57,7 +87,7 @@ Programa is a terminal, a browser, notifications, workspaces, and a CLI to contr
 
 ## Shortcuts
 
-⌘⇧P opens the command palette, which lists every action. Full reference: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md). Everything is editable in `Settings → Keyboard Shortcuts`. Every other preference has a key in `~/.config/programa/settings.json`, documented in [docs/settings-json.md](docs/settings-json.md).
+On macOS, ⌘⇧P opens the command palette, which lists every action. Full reference: [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md). Everything is editable in `Settings → Keyboard Shortcuts`. Every other preference has a key in `~/.config/programa/settings.json`, documented in [docs/settings-json.md](docs/settings-json.md).
 
 ## Terminal themes
 

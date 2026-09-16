@@ -113,14 +113,16 @@ done < "${EXPECTED_TSV}"
 SAFE_ORDER=(
   "programa-macos-${BUILD}.dmg"
   "programa-dSYMs-${BUILD}.zip"
+  "programa-windows-${BUILD}.exe"
   "appcast.xml"
   "programa-macos.dmg"
+  "programa-windows.exe"
 )
 for name in "${SAFE_ORDER[@]}"; do
   [[ -n "${EXPECTED_SIZE[${name}]+x}" && -n "${EXPECTED_SHA[${name}]+x}" ]] || \
     fail "local milestone manifest is missing ${name}"
 done
-[[ "${#EXPECTED_SIZE[@]}" -eq 4 ]] || fail "local milestone manifest must describe exactly four assets"
+[[ "${#EXPECTED_SIZE[@]}" -eq 6 ]] || fail "local milestone manifest must describe exactly six assets"
 
 require_live_tag_target() {
   local live_target
@@ -230,7 +232,7 @@ inspect_remote_assets() {
     fi
   done < "${metadata_file}"
 
-  if [[ "${require_complete}" == "true" && "${#PRESENT[@]}" -ne 4 ]]; then
+  if [[ "${require_complete}" == "true" && "${#PRESENT[@]}" -ne 6 ]]; then
     fail "published milestone release has a partial asset set"
   fi
 
@@ -297,7 +299,7 @@ for name in "${SAFE_ORDER[@]}"; do
 done
 
 inspect_remote_assets "${TEMP_DIR}/converged-assets.tsv" "${TEMP_DIR}/converged-downloads"
-[[ "${#PRESENT[@]}" -eq 4 ]] || fail "draft milestone release did not converge to four assets"
+[[ "${#PRESENT[@]}" -eq 6 ]] || fail "draft milestone release did not converge to six assets"
 
 # The immutable tag is checked again after uploads and immediately before publication.
 require_live_tag_target

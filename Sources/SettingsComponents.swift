@@ -5,56 +5,6 @@ import Bonsplit
 import UniformTypeIdentifiers
 
 
-/// A ColorPicker that buffers the current colour in `@State` so that dragging
-/// the hue wheel never forces a hex round-trip on every frame.  The stored hex
-/// is only written once the user commits a value (on SwiftUI's `.onChange`
-/// callback), which fires once per drag-end gesture rather than per frame.
-///
-/// This replaces computed `Binding<Color>` properties whose getter converted a
-/// stored hex string to `Color` on every frame, causing the quantisation that
-/// made the hue indicator jump (issue #8 / upstream cmux #6761).
-struct HexColorPicker: View {
-    /// The current hex value from `@AppStorage`, or `nil` when the slot is unset.
-    var hex: String?
-    /// Colour to show when `hex` is nil or unparseable.
-    var fallback: Color
-    /// Called with the new hex string whenever the picker value changes.
-    var onHexChange: (String) -> Void
-
-    @State private var pickerColor: Color
-
-    init(hex: String?, fallback: Color, onHexChange: @escaping (String) -> Void) {
-        self.hex = hex
-        self.fallback = fallback
-        self.onHexChange = onHexChange
-        let initial: Color
-        if let hex, let ns = NSColor(hex: hex) {
-            initial = Color(nsColor: ns)
-        } else {
-            initial = fallback
-        }
-        _pickerColor = State(initialValue: initial)
-    }
-
-    var body: some View {
-        ColorPicker("", selection: $pickerColor, supportsOpacity: false)
-            .labelsHidden()
-            .frame(width: 38)
-            .onChange(of: pickerColor) { _, newColor in
-                onHexChange(NSColor(newColor).hexString())
-            }
-            .onChange(of: hex) { _, newHex in
-                // Keep the buffer in sync when the hex is reset externally
-                // (e.g. the Reset button sets sidebarSelectionColorHex = nil).
-                if let newHex, let ns = NSColor(hex: newHex) {
-                    pickerColor = Color(nsColor: ns)
-                } else {
-                    pickerColor = fallback
-                }
-            }
-    }
-}
-
 struct SettingsSectionHeader: View {
     let title: String
 

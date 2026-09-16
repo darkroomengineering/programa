@@ -1,5 +1,10 @@
 # settings.json
 
+This generated reference describes macOS. The Windows frontend stores its
+editable shortcuts under `windows.shortcuts` in
+`%USERPROFILE%\\.config\\programa\\settings.json`; see the
+[Windows configuration guide](../windows/README.md#windows-behavior).
+
 Programa reads `~/.config/programa/settings.json` on launch and reloads it whenever the file changes, so edits apply without a restart. Every key here also has a control in the Settings window; a key set in the file wins over the Settings window until you remove it from the file. The file may contain `//` comments. The full contract is `Resources/settings.schema.json` in the repository, and this page is generated from it.
 
 Keys you do not set fall back to the defaults listed below. Keyboard shortcuts live under `shortcuts.bindings` and are documented in [keyboard-shortcuts.md](keyboard-shortcuts.md); terminal theme and font keys are explained in [terminal-themes.md](terminal-themes.md).

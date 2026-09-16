@@ -13,10 +13,10 @@ const path = require("node:path");
 //   writeMilestoneManifest({ directory, build }) -> manifest
 //   verifyMilestonePayload({ directory, build }) -> manifest
 //
-// The manifest is `{ schemaVersion: 1, build, files }`, where `files` is the
-// deterministic list of exactly four milestone assets as
+// The manifest is `{ schemaVersion: 2, build, files }`, where `files` is the
+// deterministic list of exactly six milestone assets as
 // `{ name, size, sha256 }`. The written filename is
-// `programa-milestone-payload.json`. Verification requires exactly those four
+// `programa-milestone-payload.json`. Verification requires exactly those six
 // payloads plus that manifest, validates its exact JSON schema, and hashes the
 // downloaded bytes rather than trusting metadata.
 const {
@@ -33,7 +33,9 @@ function expectedNames(build = BUILD) {
     "appcast.xml",
     `programa-dSYMs-${build}.zip`,
     `programa-macos-${build}.dmg`,
+    `programa-windows-${build}.exe`,
     "programa-macos.dmg",
+    "programa-windows.exe",
   ];
 }
 
@@ -50,12 +52,12 @@ function sha256(bytes) {
   return crypto.createHash("sha256").update(bytes).digest("hex");
 }
 
-test("manifest creation records the exact four milestone files and their bytes", (t) => {
+test("manifest creation records the exact six milestone files and their bytes", (t) => {
   const directory = fixture(t);
   const manifest = createMilestoneManifest({ directory, build: BUILD });
 
   assert.deepEqual(Object.keys(manifest).sort(), ["build", "files", "schemaVersion"]);
-  assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.schemaVersion, 2);
   assert.equal(manifest.build, BUILD);
   assert.deepEqual(manifest.files.map((file) => file.name), expectedNames());
   for (const file of manifest.files) {

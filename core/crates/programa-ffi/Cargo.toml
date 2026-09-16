@@ -1,0 +1,15 @@
+[package]
+name = "programa-ffi"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "programa_core"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+programa-domain = { path = "../programa-domain" }
+serde.workspace = true
+serde_json.workspace = true
+

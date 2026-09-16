@@ -227,6 +227,22 @@ assert old.exists()
 
 environment = dict(os.environ, HOME=str(fixture_home))
 command = [sys.executable, helper, "current", str(current), sys.executable, "-c"]
+
+# Custom destinations must not prune caches or refresh the canonical tag.
+marker = current / ".programa-last-success"
+marker.write_text("")
+os.utime(marker, (1, 1))
+marker_time = marker.stat().st_mtime_ns
+for derived in [old, outside]:
+    custom_command = [sys.executable, helper, "current", str(derived), sys.executable, "-c", "pass"]
+    completed = subprocess.run(custom_command, env=environment, capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr
+    assert all(path.exists() for path in [current, active, old, unknown, *recent])
+    assert link.is_symlink() and (outside / "precious").read_text() == "preserve"
+    assert marker.stat().st_mtime_ns == marker_time, "custom builds must not refresh the canonical tag"
+    assert not (derived / ".programa-last-success").exists(), "custom builds must not create retention markers"
+    assert "removed" not in completed.stdout, "custom builds must not initiate retention"
+
 failed = subprocess.run(command + ["raise SystemExit(7)"], env=environment)
 assert failed.returncode == 7 and old.exists(), "failed builds must not prune"
 
