@@ -1181,7 +1181,7 @@ struct ProgramaCLI {
                 Check connectivity to the programa socket server.
                 """,
                 execute: { ctx in
-                    _ = try ctx.client.sendV2(method: "system.ping")
+                    _ = try ctx.client.sendV2(method: V2MethodNames.systemPing)
                     print("PONG")
                 }
             ),
@@ -1198,7 +1198,7 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
-                    let response = try ctx.client.sendV2(method: "system.capabilities")
+                    let response = try ctx.client.sendV2(method: V2MethodNames.systemCapabilities)
                     print(self.jsonString(self.formatIDs(response, mode: ctx.idFormat)))
                 }
             ),
@@ -1270,7 +1270,7 @@ struct ProgramaCLI {
                             }
                         }
                     }
-                    let response = try ctx.client.sendV2(method: "system.identify", params: params)
+                    let response = try ctx.client.sendV2(method: V2MethodNames.systemIdentify, params: params)
                     print(self.jsonString(self.formatIDs(response, mode: ctx.idFormat)))
                 }
             ),
@@ -1285,7 +1285,7 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
-                    let listed = try ctx.client.sendV2(method: "window.list")
+                    let listed = try ctx.client.sendV2(method: V2MethodNames.windowList)
                     let windows = listed["windows"] as? [[String: Any]] ?? []
                     if ctx.jsonOutput {
                         let payload = windows.map { item -> [String: Any] in
@@ -1325,7 +1325,7 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
-                    let response = try ctx.client.sendV2(method: "window.current")
+                    let response = try ctx.client.sendV2(method: V2MethodNames.windowCurrent)
                     let windowId = (response["window_id"] as? String) ?? ""
                     if ctx.jsonOutput {
                         print(self.jsonString(["window_id": windowId]))
@@ -1348,7 +1348,7 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
-                    let response = try ctx.client.sendV2(method: "window.create")
+                    let response = try ctx.client.sendV2(method: V2MethodNames.windowCreate)
                     print("OK \((response["window_id"] as? String) ?? "")")
                 }
             ),
@@ -1378,7 +1378,7 @@ struct ProgramaCLI {
                         throw CLIError(message: "ERROR: Invalid window id")
                     }
                     do {
-                        _ = try ctx.client.sendV2(method: "window.focus", params: ["window_id": target])
+                        _ = try ctx.client.sendV2(method: V2MethodNames.windowFocus, params: ["window_id": target])
                         print("OK")
                     } catch let error as CLIError where error.message.hasPrefix("not_found:") {
                         throw CLIError(message: "ERROR: Window not found")
@@ -1409,7 +1409,7 @@ struct ProgramaCLI {
                         throw CLIError(message: "ERROR: Invalid window id")
                     }
                     do {
-                        _ = try ctx.client.sendV2(method: "window.close", params: ["window_id": target])
+                        _ = try ctx.client.sendV2(method: V2MethodNames.windowClose, params: ["window_id": target])
                         print("OK")
                     } catch let error as CLIError where error.message.hasPrefix("not_found:") {
                         throw CLIError(message: "ERROR: Window not found")
@@ -1445,7 +1445,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let winId = try self.normalizeWindowHandle(windowRaw, client: ctx.client)
                     if let winId { params["window_id"] = winId }
-                    let payload = try ctx.client.sendV2(method: "workspace.move_to_window", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.workspaceMoveToWindow, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["workspace", "window"]))
                 }
             ),
@@ -1763,7 +1763,7 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
-                    let payload = try ctx.client.sendV2(method: "workspace.list")
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.workspaceList)
                     if ctx.jsonOutput {
                         print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
                     } else {
@@ -1826,13 +1826,13 @@ struct ProgramaCLI {
                     if let descriptionOpt {
                         params["description"] = descriptionOpt
                     }
-                    let response = try ctx.client.sendV2(method: "workspace.create", params: params)
+                    let response = try ctx.client.sendV2(method: V2MethodNames.workspaceCreate, params: params)
                     let wsId = (response["workspace_ref"] as? String) ?? (response["workspace_id"] as? String) ?? ""
                     print("OK \(wsId)")
                     if let commandText = commandOpt, !wsId.isEmpty {
                         let text = self.unescapeSendText(commandText + "\\n")
                         let sendParams: [String: Any] = ["text": text, "workspace_id": wsId]
-                        _ = try ctx.client.sendV2(method: "surface.send_text", params: sendParams)
+                        _ = try ctx.client.sendV2(method: V2MethodNames.surfaceSendText, params: sendParams)
                     }
                 }
             ),
@@ -1871,7 +1871,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.normalizeSurfaceHandle(surfaceRaw, client: ctx.client, workspaceHandle: wsId)
                     if let sfId { params["surface_id"] = sfId }
-                    let payload = try ctx.client.sendV2(method: "surface.split", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceSplit, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
                 }
             ),
@@ -1897,7 +1897,7 @@ struct ProgramaCLI {
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let payload = try ctx.client.sendV2(method: "pane.list", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.paneList, params: params)
                     if ctx.jsonOutput {
                         print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
                     } else {
@@ -1943,7 +1943,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let paneId = try self.normalizePaneHandle(paneRaw, client: ctx.client, workspaceHandle: wsId)
                     if let paneId { params["pane_id"] = paneId }
-                    let payload = try ctx.client.sendV2(method: "pane.surfaces", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.paneSurfaces, params: params)
                     if ctx.jsonOutput {
                         print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
                     } else {
@@ -1995,7 +1995,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let paneId = try self.normalizePaneHandle(paneRaw, client: ctx.client, workspaceHandle: wsId)
                     if let paneId { params["pane_id"] = paneId }
-                    let payload = try ctx.client.sendV2(method: "pane.focus", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.paneFocus, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["pane", "workspace"]))
                 }
             ),
@@ -2028,7 +2028,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     if let type { params["type"] = type }
                     if let url { params["url"] = url }
-                    let payload = try ctx.client.sendV2(method: "pane.create", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.paneCreate, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["surface", "pane", "workspace"]))
                 }
             ),
@@ -2063,7 +2063,7 @@ struct ProgramaCLI {
                     if let paneId { params["pane_id"] = paneId }
                     if let type { params["type"] = type }
                     if let url { params["url"] = url }
-                    let payload = try ctx.client.sendV2(method: "surface.create", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceCreate, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["surface", "pane", "workspace"]))
                 }
             ),
@@ -2095,7 +2095,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.normalizeSurfaceHandle(surfaceRaw, client: ctx.client, workspaceHandle: wsId)
                     if let sfId { params["surface_id"] = sfId }
-                    let payload = try ctx.client.sendV2(method: "surface.close", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceClose, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
                 }
             ),
@@ -2254,7 +2254,7 @@ struct ProgramaCLI {
                     let surfaceIdForDrag = try self.normalizeSurfaceHandle(surface, client: ctx.client, workspaceHandle: nil)
                     var dragParams: [String: Any] = ["direction": direction]
                     if let surfaceIdForDrag { dragParams["surface_id"] = surfaceIdForDrag }
-                    let dragPayload = try ctx.client.sendV2(method: "surface.drag_to_split", params: dragParams)
+                    let dragPayload = try ctx.client.sendV2(method: V2MethodNames.surfaceDragToSplit, params: dragParams)
                     print("OK \((dragPayload["pane_id"] as? String) ?? "")")
                 }
             ),
@@ -2270,7 +2270,7 @@ struct ProgramaCLI {
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
                     // v1 always targeted the currently-selected workspace; no workspace_id here either.
-                    let refreshPayload = try ctx.client.sendV2(method: "surface.refresh", params: [:])
+                    let refreshPayload = try ctx.client.sendV2(method: V2MethodNames.surfaceRefresh, params: [:])
                     print("OK Refreshed \(self.intFromAny(refreshPayload["refreshed"]) ?? 0) surfaces")
                 }
             ),
@@ -2292,7 +2292,7 @@ struct ProgramaCLI {
                     if let unexpected = ctx.commandArgs.first {
                         throw CLIError(message: "reload-config does not accept arguments. Unexpected argument '\(unexpected)'")
                     }
-                    _ = try ctx.client.sendV2(method: "app.reload_config")
+                    _ = try ctx.client.sendV2(method: V2MethodNames.appReloadConfig)
                     print("OK Reloaded config")
                 }
             ),
@@ -2318,7 +2318,7 @@ struct ProgramaCLI {
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let payload = try ctx.client.sendV2(method: "surface.health", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceHealth, params: params)
                     if ctx.jsonOutput {
                         print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
                     } else {
@@ -2358,7 +2358,7 @@ struct ProgramaCLI {
                     if let extra = unexpected.first {
                         throw CLIError(message: "debug-terminals: unexpected argument '\(extra)'")
                     }
-                    let payload = try ctx.client.sendV2(method: "debug.terminals")
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.debugTerminals)
                     if ctx.jsonOutput {
                         print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
                     } else {
@@ -2418,7 +2418,7 @@ struct ProgramaCLI {
                         )
                     }()
                     if let sfId { params["surface_id"] = sfId }
-                    let payload = try ctx.client.sendV2(method: "surface.trigger_flash", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceTriggerFlash, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
                 }
             ),
@@ -2444,7 +2444,7 @@ struct ProgramaCLI {
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let payload = try ctx.client.sendV2(method: "surface.list", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceList, params: params)
                     if ctx.jsonOutput {
                         print(self.jsonString(self.formatIDs(payload, mode: ctx.idFormat)))
                     } else {
@@ -2494,7 +2494,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.normalizeSurfaceHandle(panelRaw, client: ctx.client, workspaceHandle: wsId)
                     if let sfId { params["surface_id"] = sfId }
-                    let payload = try ctx.client.sendV2(method: "surface.focus", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceFocus, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
                 }
             ),
@@ -2522,7 +2522,7 @@ struct ProgramaCLI {
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceRaw, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let payload = try ctx.client.sendV2(method: "workspace.close", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.workspaceClose, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["workspace"]))
                 }
             ),
@@ -2549,7 +2549,7 @@ struct ProgramaCLI {
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceRaw, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let payload = try ctx.client.sendV2(method: "workspace.select", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.workspaceSelect, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["workspace"]))
                 }
             ),
@@ -2584,7 +2584,7 @@ struct ProgramaCLI {
                     }
                     let wsId = try self.resolveWorkspaceId(workspaceArg, client: ctx.client)
                     let params: [String: Any] = ["title": title, "workspace_id": wsId]
-                    let payload = try ctx.client.sendV2(method: "workspace.rename", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.workspaceRename, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["workspace"]))
                 }
             ),
@@ -2599,7 +2599,7 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
-                    let response = try ctx.client.sendV2(method: "workspace.current")
+                    let response = try ctx.client.sendV2(method: V2MethodNames.workspaceCurrent)
                     if ctx.jsonOutput {
                         print(self.jsonString(self.formatIDs(response, mode: ctx.idFormat)))
                     } else {
@@ -2660,7 +2660,7 @@ struct ProgramaCLI {
                         params["scrollback"] = true
                     }
 
-                    let payload = try ctx.client.sendV2(method: "surface.read_text", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceReadText, params: params)
                     if ctx.jsonOutput {
                         print(self.jsonString(payload))
                     } else {
@@ -2745,7 +2745,7 @@ struct ProgramaCLI {
                     // --timeout; give the client-side socket read at least that long (plus a
                     // buffer for the response round trip) rather than the default 15s.
                     let payload = try ctx.client.sendV2(
-                        method: "surface.wait",
+                        method: V2MethodNames.surfaceWait,
                         params: params,
                         minimumReceiveTimeout: timeoutSeconds + 5.0
                     )
@@ -2826,7 +2826,7 @@ struct ProgramaCLI {
                     // Mirrors wait-surface: the server may legitimately hold this connection
                     // open for close to the full --timeout.
                     let payload = try ctx.client.sendV2(
-                        method: "agent.prompt",
+                        method: V2MethodNames.agentPrompt,
                         params: params,
                         minimumReceiveTimeout: timeoutSeconds + 5.0
                     )
@@ -2916,7 +2916,7 @@ struct ProgramaCLI {
                     // events-only, both to preserve that contract on first connect and to avoid
                     // a stray non-event JSON object landing mid-stream on a later resubscribe.
                     func subscribeAndAck() throws {
-                        try ctx.client.sendV2RequestOnly(method: "subscribe", params: params)
+                        try ctx.client.sendV2RequestOnly(method: V2MethodNames.subscribe, params: params)
                         let ackLine = try ctx.client.readEventLine(timeout: 10)
                         if ackLine.hasPrefix("ERROR:") {
                             throw CLIError(message: ackLine)
@@ -3061,7 +3061,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
                     if let sfId { params["surface_id"] = sfId }
-                    let payload = try ctx.client.sendV2(method: "surface.send_text", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
                 }
             ),
@@ -3095,7 +3095,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
                     if let sfId { params["surface_id"] = sfId }
-                    let payload = try ctx.client.sendV2(method: "surface.send_key", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceSendKey, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
                 }
             ),
@@ -3131,7 +3131,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.normalizeSurfaceHandle(panelArg, client: ctx.client, workspaceHandle: wsId)
                     if let sfId { params["surface_id"] = sfId }
-                    let payload = try ctx.client.sendV2(method: "surface.send_text", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
                 }
             ),
@@ -3168,7 +3168,7 @@ struct ProgramaCLI {
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.normalizeSurfaceHandle(panelArg, client: ctx.client, workspaceHandle: wsId)
                     if let sfId { params["surface_id"] = sfId }
-                    let payload = try ctx.client.sendV2(method: "surface.send_key", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceSendKey, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
                 }
             ),
@@ -3227,7 +3227,7 @@ struct ProgramaCLI {
                         )
                     }()
 
-                    _ = try ctx.client.sendV2(method: "notification.create_for_target", params: [
+                    _ = try ctx.client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
                         "workspace_id": targetWorkspace,
                         "surface_id": targetSurface,
                         "title": title,
@@ -3248,7 +3248,7 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
-                    let listed = try ctx.client.sendV2(method: "notification.list")
+                    let listed = try ctx.client.sendV2(method: V2MethodNames.notificationList)
                     let notifications = listed["notifications"] as? [[String: Any]] ?? []
                     if ctx.jsonOutput {
                         let payload = notifications.enumerated().map { _, item -> [String: Any] in
@@ -3294,13 +3294,13 @@ struct ProgramaCLI {
                 execute: { ctx in
                     if let wsFlag = self.optionValue(ctx.commandArgs, name: "--workspace") {
                         let wsId = try self.resolveWorkspaceId(wsFlag, client: ctx.client)
-                        _ = try ctx.client.sendV2(method: "notification.clear", params: ["workspace_id": wsId])
+                        _ = try ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": wsId])
                     } else if ctx.windowId == nil,
                               let envWs = ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"],
                               let wsId = try? self.resolveWorkspaceId(envWs, client: ctx.client) {
-                        _ = try ctx.client.sendV2(method: "notification.clear", params: ["workspace_id": wsId])
+                        _ = try ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": wsId])
                     } else {
-                        _ = try ctx.client.sendV2(method: "notification.clear")
+                        _ = try ctx.client.sendV2(method: V2MethodNames.notificationClear)
                     }
                     print("OK")
                 }
@@ -3353,7 +3353,7 @@ struct ProgramaCLI {
                         params["pid"] = pid
                     }
                     params["workspace_id"] = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
-                    _ = try ctx.client.sendV2(method: "workspace.set_status", params: params)
+                    _ = try ctx.client.sendV2(method: V2MethodNames.workspaceSetStatus, params: params)
                     print("OK")
                 }
             ),
@@ -3379,7 +3379,7 @@ struct ProgramaCLI {
                         throw CLIError(message: "ERROR: Missing metadata key — usage: clear_status <key> [--tab=X]")
                     }
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
-                    _ = try ctx.client.sendV2(method: "workspace.clear_status", params: ["workspace_id": workspaceId, "key": key])
+                    _ = try ctx.client.sendV2(method: V2MethodNames.workspaceClearStatus, params: ["workspace_id": workspaceId, "key": key])
                     print("OK")
                 }
             ),
@@ -3403,7 +3403,7 @@ struct ProgramaCLI {
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
-                    let payload = try ctx.client.sendV2(method: "workspace.list_status", params: ["workspace_id": workspaceId])
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.workspaceListStatus, params: ["workspace_id": workspaceId])
                     let entries = payload["entries"] as? [[String: Any]] ?? []
                     if entries.isEmpty {
                         print("No status entries")
@@ -3441,7 +3441,7 @@ struct ProgramaCLI {
                     var params: [String: Any] = ["value": min(1.0, max(0.0, value))]
                     if let label = self.normalizedFlagValue(parsed.options["label"]) { params["label"] = label }
                     params["workspace_id"] = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
-                    _ = try ctx.client.sendV2(method: "workspace.set_progress", params: params)
+                    _ = try ctx.client.sendV2(method: V2MethodNames.workspaceSetProgress, params: params)
                     print("OK")
                 }
             ),
@@ -3464,7 +3464,7 @@ struct ProgramaCLI {
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
-                    _ = try ctx.client.sendV2(method: "workspace.clear_progress", params: ["workspace_id": workspaceId])
+                    _ = try ctx.client.sendV2(method: V2MethodNames.workspaceClearProgress, params: ["workspace_id": workspaceId])
                     print("OK")
                 }
             ),
@@ -3502,7 +3502,7 @@ struct ProgramaCLI {
                     ]
                     if let source = self.normalizedFlagValue(parsed.options["source"]) { params["source"] = source }
                     params["workspace_id"] = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
-                    _ = try ctx.client.sendV2(method: "workspace.log", params: params)
+                    _ = try ctx.client.sendV2(method: V2MethodNames.workspaceLog, params: params)
                     print("OK")
                 }
             ),
@@ -3525,7 +3525,7 @@ struct ProgramaCLI {
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
-                    _ = try ctx.client.sendV2(method: "workspace.clear_log", params: ["workspace_id": workspaceId])
+                    _ = try ctx.client.sendV2(method: V2MethodNames.workspaceClearLog, params: ["workspace_id": workspaceId])
                     print("OK")
                 }
             ),
@@ -3560,7 +3560,7 @@ struct ProgramaCLI {
                         params["limit"] = limit
                     }
                     params["workspace_id"] = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
-                    let payload = try ctx.client.sendV2(method: "workspace.list_log", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.workspaceListLog, params: params)
                     let entries = payload["entries"] as? [[String: Any]] ?? []
                     if entries.isEmpty {
                         print("No log entries")
@@ -3590,7 +3590,7 @@ struct ProgramaCLI {
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
-                    let payload = try ctx.client.sendV2(method: "workspace.sidebar_state", params: ["workspace_id": workspaceId])
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.workspaceSidebarState, params: ["workspace_id": workspaceId])
                     print(self.sidebarStateText(payload))
                 }
             ),
@@ -3622,7 +3622,7 @@ struct ProgramaCLI {
                     default:
                         throw CLIError(message: "ERROR: Expected active, inactive, or clear")
                     }
-                    _ = try ctx.client.sendV2(method: "app.focus_override.set", params: ["state": state])
+                    _ = try ctx.client.sendV2(method: V2MethodNames.appFocusOverrideSet, params: ["state": state])
                     print("OK")
                 }
             ),
@@ -3637,7 +3637,7 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
-                    _ = try ctx.client.sendV2(method: "app.simulate_active")
+                    _ = try ctx.client.sendV2(method: V2MethodNames.appSimulateActive)
                     print("OK")
                 }
             ),
@@ -3911,7 +3911,7 @@ struct ProgramaCLI {
             let launchedClient = try SocketClient.waitForConnectableSocket(path: socketPath, timeout: 10)
             defer { launchedClient.close() }
             let params: [String: Any] = ["cwd": directory]
-            let response = try launchedClient.sendV2(method: "workspace.create", params: params)
+            let response = try launchedClient.sendV2(method: V2MethodNames.workspaceCreate, params: params)
             let wsRef = (response["workspace_ref"] as? String) ?? (response["workspace_id"] as? String) ?? ""
             if !wsRef.isEmpty {
                 print("OK \(wsRef)")
@@ -3922,7 +3922,7 @@ struct ProgramaCLI {
         defer { client.close() }
 
         let params: [String: Any] = ["cwd": directory]
-        let response = try client.sendV2(method: "workspace.create", params: params)
+        let response = try client.sendV2(method: V2MethodNames.workspaceCreate, params: params)
         let wsRef = (response["workspace_ref"] as? String) ?? (response["workspace_id"] as? String) ?? ""
         if !wsRef.isEmpty {
             print("OK \(wsRef)")
@@ -3964,7 +3964,7 @@ struct ProgramaCLI {
             } else {
                 params["activate"] = true
             }
-            let response = try client.sendV2(method: "feedback.open", params: params)
+            let response = try client.sendV2(method: V2MethodNames.feedbackOpen, params: params)
             if jsonOutput {
                 print(jsonString(response))
             } else {
@@ -3982,7 +3982,7 @@ struct ProgramaCLI {
         }
 
         let resolvedImages = imagePaths.map(resolvePath)
-        let response = try client.sendV2(method: "feedback.submit", params: [
+        let response = try client.sendV2(method: V2MethodNames.feedbackSubmit, params: [
             "email": email,
             "body": body,
             "image_paths": resolvedImages,
@@ -4012,7 +4012,7 @@ struct ProgramaCLI {
         )
         defer { client.close() }
 
-        let response = try client.sendV2(method: "settings.open", params: [
+        let response = try client.sendV2(method: V2MethodNames.settingsOpen, params: [
             "target": "keyboardShortcuts",
             "activate": true,
         ])
@@ -4064,7 +4064,7 @@ struct ProgramaCLI {
             // gate verifies the password before any command is processed; when not
             // required, the server's own auth.login handler answers with
             // authenticated: true, required: false rather than an error.
-            _ = try client.sendV2(method: "auth.login", params: ["password": socketPassword])
+            _ = try client.sendV2(method: V2MethodNames.authLogin, params: ["password": socketPassword])
         }
     }
 
@@ -4221,7 +4221,7 @@ struct ProgramaCLI {
     func normalizeWindowHandle(_ raw: String?, client: SocketClient, allowCurrent: Bool = false) throws -> String? {
         try normalizeHandle(raw, client: client, kind: "window") {
             guard allowCurrent else { return nil }
-            let current = try client.sendV2(method: "window.current")
+            let current = try client.sendV2(method: V2MethodNames.windowCurrent)
             return (current["window_ref"] as? String) ?? (current["window_id"] as? String)
         }
     }
@@ -4239,7 +4239,7 @@ struct ProgramaCLI {
             filterParam: windowHandle.map { ("window_id", $0) }
         ) {
             guard allowCurrent else { return nil }
-            let current = try client.sendV2(method: "workspace.current")
+            let current = try client.sendV2(method: V2MethodNames.workspaceCurrent)
             return (current["workspace_ref"] as? String) ?? (current["workspace_id"] as? String)
         }
     }
@@ -4257,7 +4257,7 @@ struct ProgramaCLI {
             filterParam: workspaceHandle.map { ("workspace_id", $0) }
         ) {
             guard allowFocused else { return nil }
-            let ident = try client.sendV2(method: "system.identify")
+            let ident = try client.sendV2(method: V2MethodNames.systemIdentify)
             let focused = ident["focused"] as? [String: Any] ?? [:]
             return (focused["pane_ref"] as? String) ?? (focused["pane_id"] as? String)
         }
@@ -4276,7 +4276,7 @@ struct ProgramaCLI {
             filterParam: workspaceHandle.map { ("workspace_id", $0) }
         ) {
             guard allowFocused else { return nil }
-            let ident = try client.sendV2(method: "system.identify")
+            let ident = try client.sendV2(method: V2MethodNames.systemIdentify)
             let focused = ident["focused"] as? [String: Any] ?? [:]
             return (focused["surface_ref"] as? String) ?? (focused["surface_id"] as? String)
         }
@@ -4591,7 +4591,7 @@ struct ProgramaCLI {
             params["focus"] = focus
         }
 
-        let payload = try client.sendV2(method: "surface.move", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.surfaceMove, params: params)
         let summary = "OK surface=\(formatHandle(payload, kind: "surface", idFormat: idFormat) ?? "unknown") pane=\(formatHandle(payload, kind: "pane", idFormat: idFormat) ?? "unknown") workspace=\(formatHandle(payload, kind: "workspace", idFormat: idFormat) ?? "unknown") window=\(formatHandle(payload, kind: "window", idFormat: idFormat) ?? "unknown")"
         printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: summary)
     }
@@ -4627,7 +4627,7 @@ struct ProgramaCLI {
             params["index"] = index
         }
 
-        let payload = try client.sendV2(method: "surface.reorder", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.surfaceReorder, params: params)
         let summary = "OK surface=\(formatHandle(payload, kind: "surface", idFormat: idFormat) ?? "unknown") pane=\(formatHandle(payload, kind: "pane", idFormat: idFormat) ?? "unknown") workspace=\(formatHandle(payload, kind: "workspace", idFormat: idFormat) ?? "unknown")"
         printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: summary)
     }
@@ -4666,7 +4666,7 @@ struct ProgramaCLI {
             params["window_id"] = windowHandle
         }
 
-        let payload = try client.sendV2(method: "workspace.reorder", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.workspaceReorder, params: params)
         let summary = "OK workspace=\(formatHandle(payload, kind: "workspace", idFormat: idFormat) ?? "unknown") window=\(formatHandle(payload, kind: "window", idFormat: idFormat) ?? "unknown") index=\(payload["index"] ?? "?")"
         printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: summary)
     }
@@ -4739,7 +4739,7 @@ struct ProgramaCLI {
             params["description"] = description
         }
 
-        let payload = try client.sendV2(method: "workspace.action", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.workspaceAction, params: params)
         var summaryParts = ["OK", "action=\(action)"]
         if let workspaceHandle = formatHandle(payload, kind: "workspace", idFormat: idFormat) {
             summaryParts.append("workspace=\(workspaceHandle)")
@@ -4816,7 +4816,7 @@ struct ProgramaCLI {
         if let layoutOpt { params["layout"] = layoutOpt }
         if focus { params["focus"] = true }
 
-        let payload = try client.sendV2(method: "worktree.create", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.worktreeCreate, params: params)
         printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: worktreeSummary(payload, idFormat: idFormat))
     }
 
@@ -4861,7 +4861,7 @@ struct ProgramaCLI {
         }
         if focus { params["focus"] = true }
 
-        let payload = try client.sendV2(method: "worktree.open", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.worktreeOpen, params: params)
         printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: worktreeSummary(payload, idFormat: idFormat))
     }
 
@@ -4875,13 +4875,13 @@ struct ProgramaCLI {
         jsonOutput: Bool,
         idFormat: CLIIDFormat
     ) throws {
-        let listPayload = try client.sendV2(method: "worktree.list", params: ["repo": repo])
+        let listPayload = try client.sendV2(method: V2MethodNames.worktreeList, params: ["repo": repo])
         let worktrees = listPayload["worktrees"] as? [[String: Any]] ?? []
 
         var openedPayloads: [[String: Any]] = []
         for entry in worktrees {
             guard let path = entry["path"] as? String else { continue }
-            let opened = try client.sendV2(method: "worktree.open", params: ["repo": repo, "path": path])
+            let opened = try client.sendV2(method: V2MethodNames.worktreeOpen, params: ["repo": repo, "path": path])
             openedPayloads.append(opened)
         }
 
@@ -4927,7 +4927,7 @@ struct ProgramaCLI {
         }
         if force { params["force"] = true }
 
-        let payload = try client.sendV2(method: "worktree.remove", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.worktreeRemove, params: params)
         var summaryParts = ["OK", "removed=\(payload["removed"] ?? false)"]
         if let closed = payload["closed_workspace_id"] {
             summaryParts.append("closed_workspace=\(closed)")
@@ -4947,7 +4947,7 @@ struct ProgramaCLI {
         }
 
         let repo = try resolveWorktreeRepoRoot(explicit: repoOpt)
-        let payload = try client.sendV2(method: "worktree.list", params: ["repo": repo])
+        let payload = try client.sendV2(method: V2MethodNames.worktreeList, params: ["repo": repo])
 
         if jsonOutput {
             print(jsonString(formatIDs(payload, mode: idFormat)))
@@ -5025,7 +5025,7 @@ struct ProgramaCLI {
             throw CLIError(message: "agent-detection list: unknown flag '\(unknown)'")
         }
 
-        let payload = try client.sendV2(method: "agent.detection.list")
+        let payload = try client.sendV2(method: V2MethodNames.agentDetectionList)
         if jsonOutput {
             print(jsonString(payload))
             return
@@ -5098,7 +5098,7 @@ struct ProgramaCLI {
                 agent-detection scaffold: '\(agentId)' is one of programa's bundled agents. A user override at \(destinationPath) fully replaces its bundled manifest (no merge) -- and a freshly scaffolded manifest starts with empty patterns, so screen-based detection for '\(agentId)' would silently stop working until you fill them back in. Pass --force to proceed anyway; the bundled manifest's existing patterns will be seeded into the new file so you start from a working copy, not a blank one.
                 """)
             }
-            let listPayload = try client.sendV2(method: "agent.detection.list")
+            let listPayload = try client.sendV2(method: V2MethodNames.agentDetectionList)
             let manifests = listPayload["manifests"] as? [[String: Any]] ?? []
             if let match = manifests.first(where: { ($0["agent"] as? String) == agentId }) {
                 seedStates = match["states"] as? [[String: Any]]
@@ -5117,7 +5117,7 @@ struct ProgramaCLI {
         // Capture the currently visible screen only (no --scrollback/--lines), same socket
         // method 'read-screen' calls, via the same client -- see CommandDescriptor(names:
         // ["read-screen"]) above.
-        let readPayload = try client.sendV2(method: "surface.read_text", params: readParams)
+        let readPayload = try client.sendV2(method: V2MethodNames.surfaceReadText, params: readParams)
         let capturedText = (readPayload["text"] as? String) ?? ""
 
         if !force, FileManager.default.fileExists(atPath: destinationPath) {
@@ -5178,7 +5178,7 @@ struct ProgramaCLI {
         if let sfId { params["surface_id"] = sfId }
         if let agentId { params["agent"] = agentId }
 
-        let payload = try client.sendV2(method: "agent.detection.classify", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.agentDetectionClassify, params: params)
         if jsonOutput {
             print(jsonString(formatIDs(payload, mode: idFormat)))
             return
@@ -5490,14 +5490,14 @@ struct ProgramaCLI {
                 // CLAUDE.md, so every worktree after the first (and the first) stays
                 // unfocused -- the user's current focus is never stolen.
 
-                let payload = try client.sendV2(method: "worktree.create", params: params)
+                let payload = try client.sendV2(method: V2MethodNames.worktreeCreate, params: params)
                 guard let workspaceId = payload["workspace_id"] as? String else {
                     throw CLIError(message: "worktree.create did not return a workspace_id")
                 }
                 let workspaceRef = formatHandle(payload, kind: "workspace", idFormat: idFormat) ?? workspaceId
 
                 let launchCommand = raceAgentLaunchCommand(agent: agent, prompt: prompt)
-                _ = try client.sendV2(method: "surface.send_text", params: [
+                _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: [
                     "workspace_id": workspaceId,
                     "text": launchCommand + "\n"
                 ])
@@ -5570,7 +5570,7 @@ struct ProgramaCLI {
         var params: [String: Any] = ["name": name]
         if force { params["force"] = true }
 
-        let payload = try client.sendV2(method: "layout.save", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.layoutSave, params: params)
         let path = payload["path"] as? String ?? "?"
         printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK layout=\(name) path=\(path)")
     }
@@ -5605,7 +5605,7 @@ struct ProgramaCLI {
         // back to its own new-tab heuristic instead.
         params["cwd"] = cwdOpt ?? FileManager.default.currentDirectoryPath
 
-        let payload = try client.sendV2(method: "layout.apply", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.layoutApply, params: params)
         let workspaceHandle = formatHandle(payload, kind: "workspace", idFormat: idFormat) ?? "unknown"
         printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK layout=\(name) workspace=\(workspaceHandle)")
     }
@@ -5620,7 +5620,7 @@ struct ProgramaCLI {
             throw CLIError(message: "layout list: unknown flag '\(unknown)'")
         }
 
-        let payload = try client.sendV2(method: "layout.list", params: [:])
+        let payload = try client.sendV2(method: V2MethodNames.layoutList, params: [:])
         if jsonOutput {
             print(jsonString(formatIDs(payload, mode: idFormat)))
             return
@@ -5672,7 +5672,7 @@ struct ProgramaCLI {
             throw CLIError(message: "snapshot list: unknown flag '\(unknown)'")
         }
 
-        let payload = try client.sendV2(method: "snapshot.list", params: [:])
+        let payload = try client.sendV2(method: V2MethodNames.snapshotList, params: [:])
         if jsonOutput {
             print(jsonString(formatIDs(payload, mode: idFormat)))
             return
@@ -5717,7 +5717,7 @@ struct ProgramaCLI {
             }
         }
 
-        let payload = try client.sendV2(method: "snapshot.restore", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.snapshotRestore, params: params)
         let restored = payload["restored"] as? [String: Any] ?? [:]
         let windows = intFromAny(restored["windows"]) ?? 0
         let workspaces = intFromAny(restored["workspaces"]) ?? 0
@@ -5799,7 +5799,7 @@ struct ProgramaCLI {
             params["url"] = urlOpt.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        let payload = try client.sendV2(method: "tab.action", params: params)
+        let payload = try client.sendV2(method: V2MethodNames.tabAction, params: params)
         var summaryParts = ["OK", "action=\(action)"]
         if let tabHandle = formatTabHandle(payload, idFormat: idFormat) {
             summaryParts.append("tab=\(tabHandle)")
@@ -5870,11 +5870,11 @@ struct ProgramaCLI {
         }
         if let raw, isHandleRef(raw) {
             // Resolve ref to UUID — search across all windows
-            let windows = try client.sendV2(method: "window.list")
+            let windows = try client.sendV2(method: V2MethodNames.windowList)
             let windowList = windows["windows"] as? [[String: Any]] ?? []
             for window in windowList {
                 guard let windowId = window["id"] as? String else { continue }
-                let listed = try client.sendV2(method: "workspace.list", params: ["window_id": windowId])
+                let listed = try client.sendV2(method: V2MethodNames.workspaceList, params: ["window_id": windowId])
                 let items = listed["workspaces"] as? [[String: Any]] ?? []
                 for item in items where (item["ref"] as? String) == raw {
                     if let id = item["id"] as? String { return id }
@@ -5887,7 +5887,7 @@ struct ProgramaCLI {
             throw CLIError(message: "workspace: bare indexes are no longer accepted; use a UUID or short ref like workspace:2 (see list-workspaces)")
         }
 
-        let current = try client.sendV2(method: "workspace.current")
+        let current = try client.sendV2(method: V2MethodNames.workspaceCurrent)
         if let wsId = current["workspace_id"] as? String { return wsId }
         throw CLIError(message: "No workspace selected")
     }
@@ -5897,7 +5897,7 @@ struct ProgramaCLI {
             return raw
         }
         if let raw, isHandleRef(raw) {
-            let listed = try client.sendV2(method: "surface.list", params: ["workspace_id": workspaceId])
+            let listed = try client.sendV2(method: V2MethodNames.surfaceList, params: ["workspace_id": workspaceId])
             let items = listed["surfaces"] as? [[String: Any]] ?? []
             for item in items where (item["ref"] as? String) == raw {
                 if let id = item["id"] as? String { return id }
@@ -5909,7 +5909,7 @@ struct ProgramaCLI {
             throw CLIError(message: "surface: bare indexes are no longer accepted; use a UUID or short ref like surface:2 (see list-pane-surfaces)")
         }
 
-        let listed = try client.sendV2(method: "surface.list", params: ["workspace_id": workspaceId])
+        let listed = try client.sendV2(method: V2MethodNames.surfaceList, params: ["workspace_id": workspaceId])
         let items = listed["surfaces"] as? [[String: Any]] ?? []
 
         if let focused = items.first(where: { ($0["focused"] as? Bool) == true }) {

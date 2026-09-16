@@ -9,7 +9,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use log::error;
 use polling::{Event as PollingEvent, Events, PollMode, Poller};
@@ -106,7 +106,7 @@ where
         state: &mut State,
         buf: &mut [u8],
         mut writer: Option<&mut X>,
-    ) -> io::Result<()>
+    ) -> io::Result<bool>
     where
         X: Write,
     {
@@ -184,7 +184,7 @@ where
 
         match terminal_error {
             Some(error) => Err(error),
-            None => Ok(()),
+            None => Ok(processed > 0),
         }
     }
 
@@ -281,7 +281,28 @@ where
                                     self.event_proxy.send_event(Event::ChildExit(status));
                                 }
                                 if self.drain_on_exit {
-                                    let _ = self.pty_read(&mut state, &mut buf, pipe.as_mut());
+                                    // `next_child_event` fires as soon as the child process
+                                    // handle is signaled. On Windows the ConPTY output is
+                                    // forwarded by a background reader thread (see
+                                    // tty/windows/blocking.rs) into an in-process pipe that
+                                    // `pty_read` drains; that thread can still be copying the
+                                    // child's final output out of the OS pipe when the exit
+                                    // signal arrives. Because the event loop exits right after
+                                    // this block, bytes that show up later are gone for good,
+                                    // so keep draining for a short, bounded window instead of
+                                    // taking a single non-blocking snapshot, backing off once a
+                                    // read stops finding anything new.
+                                    let mut idle_reads = 0;
+                                    while idle_reads < 20 {
+                                        match self.pty_read(&mut state, &mut buf, pipe.as_mut()) {
+                                            Ok(true) => idle_reads = 0,
+                                            Ok(false) => {
+                                                idle_reads += 1;
+                                                std::thread::sleep(Duration::from_millis(5));
+                                            },
+                                            Err(_) => break,
+                                        }
+                                    }
                                 }
                                 self.terminal.lock().exit();
                                 self.event_proxy.send_event(Event::Wakeup);

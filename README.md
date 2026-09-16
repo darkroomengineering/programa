@@ -1,5 +1,5 @@
 <h1 align="center">Programa</h1>
-<p align="center">The open source terminal built for coding agents. Native macOS, powered by Ghostty. Native Windows frontend in development.</p>
+<p align="center">The open source terminal for running many coding agents at once and always knowing which one needs you. Native macOS on Ghostty, native Windows on WinUI.</p>
 
 <p align="center">
   <a href="https://github.com/darkroomengineering/programa/releases/latest/download/programa-macos.dmg">
@@ -15,11 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="./docs/assets/main-first-image.png" alt="Programa screenshot" width="900" />
-</p>
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=i-WxO5YUTOs">▶ Demo video</a>
+  <img src="./docs/assets/main-first-image.png" alt="Programa: workspace sidebar with agent status, a Claude Code session waiting for input, and a browser split" width="900" />
 </p>
 
 Run many coding agents in parallel and always know which one needs you.
@@ -79,11 +75,37 @@ On an Apple Silicon Mac, test the Windows executable in a Windows 11 Arm VM;
 Windows can run x64 executables through emulation. See the
 [local setup and interaction checks](docs/windows-testing.md).
 
-## Why
+## Why not tmux, or cmux?
 
-Running many agents in Ghostty splits, the problem was never the terminal. It was knowing which agent needed me. Native notifications all say "waiting for your input" with no context, and GUI orchestrators lock you into their workflow (and Electron).
+**tmux** multiplexes shells inside any terminal and keeps them alive when you disconnect. It knows nothing about what runs in them. With six agents in six panes, every one looks the same until you click through. There is no notification, no sidebar, no browser, no diff, and the whole UI is keyboard chords inside a text grid.
 
-Programa is a terminal, a browser, notifications, workspaces, and a CLI to control all of it, primitives you compose yourself rather than a prescribed workflow. What you build with them is yours.
+Programa keeps what tmux is good at and adds what agents need:
+
+| | tmux | Programa |
+|---|---|---|
+| Sessions survive the app quitting or crashing | yes, detach and reattach | yes, on macOS: terminal processes keep running and the app reattaches live on relaunch |
+| Which agent needs me | no | working, blocked, or idle per workspace; a ring on the pane, a lit tab, ⌘⇧U to the latest unread |
+| Git branch, PR, ports, working directory per session | no | in the sidebar, always |
+| Review an agent's diff and send comments back to it | no | built-in review panel |
+| Browser the agent can drive | no | split a scriptable browser next to the terminal |
+| Scriptable from outside | tmux commands | a CLI, a Unix-socket JSON-RPC API with a published contract, and an MCP server |
+| Rendering | your terminal | native Metal via libghostty on macOS, WinUI on Windows, no Electron |
+| Works over SSH to a remote box | yes | not today; a headless core is in progress so a remote machine can host sessions |
+
+**cmux** is where Programa started: a GPL fork of Manaflow's cmux, the same idea of a native Ghostty-based macOS terminal with vertical tabs and agent notifications. Programa has since gone its own way, narrowing the app to a fast local terminal and building the agent workflow on top:
+
+- Agent status for agents without hooks (Gemini CLI, Copilot CLI, Cursor Agent, Aider) by reading the terminal screen against overridable patterns, on top of the hook-based reporting for Claude Code, Codex, and OpenCode.
+- Normalized agent lifecycle events (turn started, permission requested, input needed, turn completed) over one socket method, so status comes from the agent, not from guessing.
+- Live processes survive quit and crash, not just layout and scrollback.
+- A diff review panel with line comments that go straight into the agent's input.
+- Git worktrees as workspaces, and `programa race` to fan one prompt across several agents in isolated worktrees.
+- An MCP server and an installable agent skill, so agents can split panes, read sibling output, and coordinate helpers without stealing your focus.
+- A machine-readable socket API contract that generates the CLI, the MCP catalog, and the test client, so clients cannot drift.
+- Native Windows.
+
+Things cmux has that Programa removed on purpose, to stay lean: SSH remote workspaces and an iOS companion. Both are documented under `docs/removed/`, with the reasons and what a future version should do differently.
+
+Programa is a terminal, a browser, notifications, workspaces, and a CLI to control all of it: primitives you compose yourself rather than a prescribed workflow. What you build with them is yours.
 
 ## Shortcuts
 

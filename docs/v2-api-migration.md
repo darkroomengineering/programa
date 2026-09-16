@@ -561,6 +561,32 @@ Result: `{"requested_agent", "recognized_via" ("explicit"|"screen_pattern"|null)
 null when nothing was recognized/classified). Errors: `not_found` (unknown `agent`), plus
 whatever `surface.read_text` can return for the target surface.
 
+## `agent.event` (docs/plans/agent-events.md)
+
+A normalized alternative to `surface.report_agent_state` for providers whose hooks carry more
+structure than a bare `working|blocked|idle` string. Both methods write through the exact same
+`updatePanelAgentState(source: .hooks)` path (`Sources/Workspace+SidebarTelemetry.swift`), so
+hooks-always-win precedence and the `agent_state`/`agent_state_source` shape on `surface.list`,
+`surface.wait`, and `subscribe` are unchanged — `agent.event` is a richer *input* to the same
+tri-state model, not a new wire value.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `workspace_id` / `surface_id` | uuid | yes | Same resolution as other `surface.*` telemetry calls. |
+| `event_type` | string | yes | One of: `session.started`, `session.exited`, `turn.started`, `turn.completed`, `turn.aborted`, `request.opened`, `request.resolved`, `user-input.requested`, `user-input.resolved`, `item.started`, `item.completed`. Case/whitespace-insensitive. Unrecognized values return `invalid_params`. |
+| `provider` / `session_id` / `turn_id` / `item_id` / `label` / `resolution` | string | no | Passed through for future richer consumers (e.g. a turn-progress UI); not used for state classification in this pass. |
+
+`event_type` maps to a tri-state write via `AgentEventNormalizer.classify` — see
+docs/plans/agent-events.md's mapping table for the full list, and its "Provider coverage" table
+for which providers' hooks (Claude Code, Codex, OpenCode) currently emit which event types.
+`session.exited` clears the surface's agent state (same effect as `surface.clear_agent_state`);
+every other recognized `event_type` applies a state and echoes `state`/`source: "hooks"`
+alongside the same `workspace_id`/`workspace_ref`/`surface_id`/`surface_ref`/`event_type` fields
+every other telemetry report echoes. Errors: `invalid_params` (missing/invalid
+`workspace_id`/`surface_id`/`event_type`).
+
+CLI: `programa agent-event --event <event_type> [--provider <p>] [--session-id <id>] [--turn-id <id>] [--item-id <id>] [--label <text>] [--resolution <r>] [--workspace <id|ref>] [--surface <id|ref>]`.
+
 ## Browser Availability (`app.browsers`, `PROGRAMA_DEFAULT_BROWSER*`)
 
 Two ways a terminal or agent can check which browsers are available, so scripts don't have
@@ -593,3 +619,42 @@ Services call. Both are omitted if resolution fails.
 
 `tests_v2/` (driven by `tests_v2/programa.py`) is the only test suite and the CI gate. The
 v1 python suite (`tests/`) was deleted before the protocol itself was removed.
+
+## Contract
+
+`contracts/v2/methods.json` is the machine-readable source of truth for every v2 method:
+its params as JSON Schema (required/optional, types, enums, ref formats), result shape,
+error codes, `focus_intent`, `threading` (`main`/`off_main`), `auth_required`, and whether
+it's DEBUG-only. `contracts/v2/protocol.json` covers the wire framing (JSON lines,
+`id`/`method`/`params`, the `ok`/`error` envelope) and the `auth.login` handshake.
+
+`scripts/gen-v2-contract.py` (stdlib-only) reads the contract and writes:
+
+- `Sources/V2CommandCatalog.swift` -- the base/debug method-name arrays `system.capabilities`
+  advertises.
+- `tests_v2/programa_v2.py` -- a typed Python client, one method per contract entry, built on
+  `tests_v2/cmux.py`'s transport, validating required params before it ever talks to the socket.
+- `CLI/V2MethodNames.swift` -- one named constant per method, which `CLI/*.swift` sends v2
+  requests through instead of repeating string literals.
+
+`scripts/check-v2-contract.sh` regenerates into a temp dir and diffs against the checked-in
+copies; it runs in CI (`workflow-guard-tests`) and fails the build on any drift.
+`tests_v2/test_v2_contract_matches_capabilities.py` checks the same thing at runtime, against
+a live `system.capabilities` response, and `programaTests/V2CommandCatalogContractTests.swift`
+checks the compiled `V2CommandCatalog` arrays against the contract directly.
+
+**The rule this exists to enforce: a v2 handler's params, result shape, or error codes change
+only after `contracts/v2/methods.json` changes first**, then regenerate
+(`python3 scripts/gen-v2-contract.py`) before touching the handler. This is what stops the CLI,
+the MCP bridge, `system.capabilities`, and the Python test client from drifting apart the way
+the SSH remote-workspaces effort did (see `docs/removed/ssh-remote-workspaces.md`, "What we
+learned").
+
+Note: `contracts/v2/methods.json`'s params/required/threading/focus_intent were mined from the
+actual v2 handler bodies (guard-clause and accessor analysis) rather than typed by hand, but
+that mining was a one-time bootstrap, not something `gen-v2-contract.py` re-runs -- the contract
+is now the checked-in source of truth and a handler change that isn't reflected there is a
+drift, not something the generator silently re-derives. `CLI-MCP/ToolCatalogGenerated.swift`
+(the MCP tool input-schema half of this pass) was scoped out: wiring ~180 hand-written MCP
+tools across a dozen `CLI-MCP/*Tools.swift` files to a generated schema catalog needs its own
+pass with MCP-server-level verification.

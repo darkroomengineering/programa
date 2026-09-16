@@ -49,7 +49,7 @@ extension ProgramaCLI {
                 params["window_id"] = window
             }
 
-            let payload = try client.sendV2(method: "markdown.open", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.markdownOpen, params: params)
             if jsonOutput {
                 print(jsonString(formatIDs(payload, mode: idFormat)))
             } else {
