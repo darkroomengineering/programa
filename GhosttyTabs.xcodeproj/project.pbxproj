@@ -331,6 +331,7 @@
 					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */; };
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */; };
 		C7A10002 /* V2MethodNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A10001 /* V2MethodNames.swift */; };
+		C7A20002 /* V2CommandCatalogContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A20001 /* V2CommandCatalogContractTests.swift */; };
 		/* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -732,6 +733,7 @@
 				C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfigTests.swift; sourceTree = "<group>"; };
 		3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaDirectoryTrustTests.swift; sourceTree = "<group>"; };
 		C7A10001 /* V2MethodNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2MethodNames.swift; sourceTree = "<group>"; };
+		C7A20001 /* V2CommandCatalogContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2CommandCatalogContractTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1239,6 +1241,7 @@
 					7C135CU00000000000000003 /* ClosedTerminalUndoStoreTests.swift */,
 					7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */,
 					C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */,
+					C7A20001 /* V2CommandCatalogContractTests.swift */,
 					3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */,
 					A9A8BC17CBD749D48C344001 /* MCPSocketBridgeTests.swift */,
 				);
@@ -1699,6 +1702,7 @@
 					7C135CU00000000000000004 /* ClosedTerminalUndoStoreTests.swift in Sources */,
 					7C10SE2A0000000000000002 /* WorkspaceCloseConfirmationTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */,
+					C7A20002 /* V2CommandCatalogContractTests.swift in Sources */,
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */,
 					F6D8BDB710C64A444F3DE4F0 /* MCPSocketBridgeTests.swift in Sources */,
 					386AE1E1270DD8B6AA427C61 /* SocketPathResolution.swift in Sources */,
