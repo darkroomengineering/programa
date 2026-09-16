@@ -226,7 +226,7 @@ else:
 assert old.exists()
 
 environment = dict(os.environ, HOME=str(fixture_home))
-command = [sys.executable, helper, "current", str(current), sys.executable, "-c"]
+command = [sys.executable, helper, "current", str(current), "1", sys.executable, "-c"]
 
 # Custom destinations must not prune caches or refresh the canonical tag.
 marker = current / ".programa-last-success"
@@ -234,7 +234,7 @@ marker.write_text("")
 os.utime(marker, (1, 1))
 marker_time = marker.stat().st_mtime_ns
 for derived in [old, outside]:
-    custom_command = [sys.executable, helper, "current", str(derived), sys.executable, "-c", "pass"]
+    custom_command = [sys.executable, helper, "current", str(derived), "0", sys.executable, "-c", "pass"]
     completed = subprocess.run(custom_command, env=environment, capture_output=True, text=True)
     assert completed.returncode == 0, completed.stderr
     assert all(path.exists() for path in [current, active, old, unknown, *recent])

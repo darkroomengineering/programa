@@ -58,9 +58,12 @@ def prune(root, current, commands=process_commands):
 
 
 def main():
-    tag, derived, *command = sys.argv[1:]
+    tag, derived, managed, *command = sys.argv[1:]
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", tag) or not command:
         raise ValueError("Expected a sanitized reload tag and build command")
+    if managed not in ("0", "1"):
+        raise ValueError("Expected managed flag to be 0 or 1")
+    managed = managed == "1"
     root = Path.home() / "Library/Developer/Xcode/DerivedData"
     root.mkdir(parents=True, exist_ok=True)
     # Decline cleanup when any ancestor redirects the configured cache location.
@@ -84,7 +87,12 @@ def main():
         current = Path(derived)
         # Custom/unsafe build locations still hold the shared lock, but do not
         # manage retention or mark an unrelated canonical tag as recently built.
-        if not (safe_root and not current.is_symlink()):
+        # "managed" means the caller resolved derived from the tag/shared
+        # scheme itself, not an explicit --derived-data override -- a
+        # user-chosen path can coincidentally match the tag/shared naming or
+        # even collide with a real cache entry, so symlink-ness alone can't
+        # tell a custom destination from a managed one.
+        if not (managed and safe_root and not current.is_symlink()):
             return 0
         try:
             marker = os.open(current / ".programa-last-success", os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600)

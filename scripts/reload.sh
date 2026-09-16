@@ -237,8 +237,9 @@ if [[ -n "$TAG" ]]; then
 fi
 
 if [[ "${PROGRAMA_RELOAD_CACHE_MANAGED:-}" != "1" ]]; then
+  MANAGED_DERIVED_DATA=$((1 - DERIVED_SET))
   exec python3 "$(dirname "$APP_LOCATOR")/tagged-build-cache.py" \
-    "$TAG_SLUG" "$DERIVED_DATA" bash "$0" "${ORIGINAL_ARGS[@]}"
+    "$TAG_SLUG" "$DERIVED_DATA" "$MANAGED_DERIVED_DATA" bash "$0" "${ORIGINAL_ARGS[@]}"
 fi
 
 "$ENSURE_GHOSTTYKIT_COMMAND"
