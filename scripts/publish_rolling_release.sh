@@ -147,10 +147,6 @@ build_is_at_most() {
   node -e 'process.exit(BigInt(process.argv[1]) <= BigInt(process.argv[2]) ? 0 : 1)' "$1" "$2"
 }
 
-build_is_less_than() {
-  node -e 'process.exit(BigInt(process.argv[1]) < BigInt(process.argv[2]) ? 0 : 1)' "$1" "$2"
-}
-
 require_selected_target_is_current_main() {
   local checkpoint="$1" current_main
   current_main="$("${GH_BIN}" api \
@@ -170,6 +166,11 @@ query_releases_paginated() {
     > "${output}"
 }
 
+# Candidates never leave draft state (see the promotion path below), so they
+# are never on the public releases page. This is the sole candidate cleanup:
+# every draft candidate at or below the finalized build is deleted except
+# skip_tag (the just-promoted one), which keeps exactly one candidate draft
+# around as the rollback archive for the next build.
 prune_candidates() {
   local finalized_build="$1" skip_tag="${2:-}"
   local tag is_draft is_prerelease is_immutable target suffix
@@ -180,50 +181,14 @@ prune_candidates() {
     [[ "${suffix}" =~ ^[0-9]+$ ]] || continue
     suffix="$((10#${suffix}))"
     if build_is_at_most "${suffix}" "${finalized_build}"; then
-      "${GH_BIN}" release delete "${tag}" --repo "${REPOSITORY}" --yes
+      "${GH_BIN}" release delete "${tag}" --repo "${REPOSITORY}" --yes --cleanup-tag
     fi
   done < "${RELEASE_LIST}"
-}
-
-# Deletes published (non-draft) candidate archives strictly older than the
-# finalized build, keeping the newest PROGRAMA_RETAINED_CANDIDATES (default 2)
-# of them for rollback so the releases page stops accumulating every promoted
-# candidate forever. The finalized candidate and anything at or above its
-# build are never touched here; prune_candidates above still owns draft
-# cleanup.
-retire_promoted_candidates() {
-  local finalized_build="$1" keep_tag="$2"
-  local retained="${PROGRAMA_RETAINED_CANDIDATES:-2}"
-  [[ "${retained}" =~ ^[1-9][0-9]*$ ]] || \
-    fail "PROGRAMA_RETAINED_CANDIDATES must be a positive integer"
-
-  local tag is_draft is_prerelease is_immutable target suffix
-  local candidates_file="${TEMP_DIR}/retire-candidates.tsv"
-  : > "${candidates_file}"
-  while IFS=$'\t' read -r tag is_draft is_prerelease is_immutable target; do
-    [[ "${is_draft}" == "false" && "${tag}" == "${CANDIDATE_PREFIX}"* ]] || continue
-    [[ "${tag}" != "${keep_tag}" ]] || continue
-    [[ "${is_immutable}" == "false" ]] || continue
-    suffix="${tag#"${CANDIDATE_PREFIX}"}"
-    [[ "${suffix}" =~ ^[0-9]+$ ]] || continue
-    suffix="$((10#${suffix}))"
-    build_is_less_than "${suffix}" "${finalized_build}" || continue
-    printf '%s\t%s\n' "${suffix}" "${tag}" >> "${candidates_file}"
-  done < "${RELEASE_LIST}"
-
-  [[ -s "${candidates_file}" ]] || return 0
-
-  local tag_to_delete
-  while IFS= read -r tag_to_delete; do
-    [[ -n "${tag_to_delete}" ]] || continue
-    "${GH_BIN}" release delete "${tag_to_delete}" --repo "${REPOSITORY}" --yes --cleanup-tag
-  done < <(LC_ALL=C sort -t $'\t' -k1,1nr "${candidates_file}" | awk -F '\t' -v retained="${retained}" 'NR > retained { print $2 }')
 }
 
 snapshot_public_high_water() {
   local snapshot_name="$1" snapshot_dir releases metadata appcast_paths
   local release_tag is_draft is_prerelease is_immutable release_target release_index release_metadata release_appcast
-  local archive_suffix
   snapshot_dir="${TEMP_DIR}/public-snapshot-${snapshot_name}"
   releases="${snapshot_dir}/releases.tsv"
   metadata="${snapshot_dir}/rolling-assets.tsv"
@@ -244,18 +209,9 @@ snapshot_public_high_water() {
   while IFS=$'\t' read -r release_tag is_draft is_prerelease is_immutable release_target; do
     [[ "${is_draft}" == "false" ]] || continue
 
-    if [[ "${release_tag}" == "${CANDIDATE_PREFIX}"* ]]; then
-      archive_suffix="${release_tag#"${CANDIDATE_PREFIX}"}"
-      if [[ "${archive_suffix}" =~ ^[1-9][0-9]*$ ]]; then
-        [[ "${is_prerelease}" == "true" ]] || \
-          fail "published archive ${release_tag} must be a prerelease"
-        [[ "${is_immutable}" == "false" ]] || \
-          fail "published archive ${release_tag} must remain mutable"
-        continue
-      fi
-    fi
-
-    # Candidate archives and arbitrary prereleases are not public feed high-water.
+    # Candidates never leave draft state (enforced below), so none can reach
+    # this point — draft releases are already skipped above. Arbitrary
+    # prereleases are not public feed high-water.
     # Rolling assets and published non-prerelease appcasts remain authoritative.
     [[ "${is_prerelease}" == "false" ]] || continue
     release_index=$((release_index + 1))
@@ -328,46 +284,6 @@ reconcile_role() {
     verify_asset_strict "${ROLLING_TAG}" "${name}" "${size}" "${sha}" \
       "${current_metadata}" "${TEMP_DIR}/rolling-upload-verification-${name}"
   done < "${PROMOTION_ORDER}"
-}
-
-verify_selected_archive() {
-  local states row tag draft prerelease immutable target metadata post_seal_path
-  states="${TEMP_DIR}/selected-archive-states.tsv"
-  query_releases_paginated "${states}" || fail "could not list releases while verifying selected archive"
-  row="$(awk -F '\t' -v expected="${SELECTED_TAG}" '
-    $1 == expected { print; matches += 1 }
-    END { if (matches != 1) exit 2 }
-  ' "${states}")" || fail "selected archive release is missing or ambiguous"
-  IFS=$'\t' read -r tag draft prerelease immutable target <<< "${row}"
-  [[ "${tag}" == "${SELECTED_TAG}" ]] || fail "selected archive resolved to an unexpected tag"
-  [[ "${draft}" == "false" ]] || fail "selected archive is still a draft"
-  [[ "${prerelease}" == "true" ]] || fail "selected archive must be a prerelease"
-  # GitHub excludes prereleases from the latest-release surface; publication also
-  # explicitly supplies --latest=false below.
-  [[ "${target}" == "${SELECTED_TARGET}" ]] || \
-    fail "selected archive target changed after publication"
-  [[ "${immutable}" == "false" ]] || fail "selected archive must remain mutable"
-
-  metadata="${TEMP_DIR}/selected-archive-public-assets.tsv"
-  query_assets "${SELECTED_TAG}" "${metadata}"
-  cut -f2 "${metadata}" | LC_ALL=C sort > "${TEMP_DIR}/selected-archive-public-names.txt"
-  cmp -s \
-    "${TEMP_DIR}/selected-archive-public-names.txt" \
-    "${TEMP_DIR}/candidate-expected-names.sorted.txt" || \
-    fail "selected archive does not contain exactly six payloads plus its seal"
-  while IFS=$'\t' read -r name role size sha; do
-    verify_asset_strict "${SELECTED_TAG}" "${name}" "${size}" "${sha}" \
-      "${metadata}" "${TEMP_DIR}/selected-archive-public-verification"
-  done < "${PROMOTION_ORDER}"
-  verify_asset_strict "${SELECTED_TAG}" "${SEAL_NAME}" "${SELECTED_SEAL_SIZE}" "${SELECTED_SEAL_SHA}" \
-    "${metadata}" "${TEMP_DIR}/selected-archive-public-seal-verification"
-  post_seal_path="${TEMP_DIR}/selected-archive-public-seal-verification/${SEAL_NAME}"
-  "${GH_BIN}" attestation verify "${post_seal_path}" \
-    --repo "${REPOSITORY}" \
-    --signer-workflow "${REPOSITORY}/.github/workflows/release.yml" \
-    --source-ref refs/heads/main \
-    --source-digest "${SELECTED_TARGET}" \
-    --deny-self-hosted-runners
 }
 
 verify_rolling_aliases() {
@@ -443,13 +359,14 @@ while IFS=$'\t' read -r tag is_draft is_prerelease is_immutable candidate_target
   [[ "${tag}" == "${CANDIDATE_PREFIX}"* ]] || continue
   candidate_suffix="${tag#"${CANDIDATE_PREFIX}"}"
   [[ "${candidate_suffix}" =~ ^[1-9][0-9]*$ ]] || continue
-  if [[ "${is_draft}" == "false" ]]; then
-    [[ "${is_prerelease}" == "true" ]] || \
-      fail "published archive ${tag} must be a prerelease"
-    [[ "${is_immutable}" == "false" ]] || fail "published archive ${tag} must remain mutable"
-  else
-    [[ "${is_draft}" == "true" ]] || fail "candidate ${tag} has an invalid draft state"
-  fi
+  # Candidates are never published: they stay drafts for their whole
+  # lifecycle and are deleted once superseded (see prune_candidates), so the
+  # releases page never carries more than the one `rolling` entry. A
+  # non-draft candidate here means an old workflow version leaked one onto
+  # the public page; fail loudly rather than silently treat it as valid
+  # archived state.
+  [[ "${is_draft}" == "true" ]] || \
+    fail "candidate ${tag} is not a draft; published rolling candidates are no longer supported"
 
   candidate_index=$((candidate_index + 1))
   candidate_dir="${TEMP_DIR}/candidate-${candidate_index}"
@@ -535,15 +452,9 @@ IFS=$'\t' read -r \
   SELECTED_INITIAL_IMMUTABLE \
   selected_state_target <<< "${SELECTED_STATE_ROW}"
 [[ "${selected_state_tag}" == "${SELECTED_TAG}" ]] || fail "selected candidate state resolved to an unexpected tag"
-[[ "${SELECTED_INITIAL_DRAFT}" == "true" || "${SELECTED_INITIAL_DRAFT}" == "false" ]] || \
-  fail "selected candidate has an invalid draft state"
+[[ "${SELECTED_INITIAL_DRAFT}" == "true" ]] || \
+  fail "selected candidate ${SELECTED_TAG} is not a draft; published rolling candidates are no longer supported"
 [[ "${selected_state_target}" == "${SELECTED_TARGET}" ]] || fail "selected candidate state has an unexpected target"
-if [[ "${SELECTED_INITIAL_DRAFT}" == "false" ]]; then
-  [[ "${SELECTED_INITIAL_PRERELEASE}" == "true" ]] || \
-    fail "published selected archive must be a prerelease"
-  [[ "${SELECTED_INITIAL_IMMUTABLE}" == "false" ]] || \
-    fail "published selected archive must remain mutable"
-fi
 PROMOTION_ORDER="${TEMP_DIR}/promotion-order.tsv"
 node - "${STATE_MODULE}" "${SELECTED_MANIFEST}" > "${PROMOTION_ORDER}" <<'NODE'
 const [modulePath, manifestPath] = process.argv.slice(2);
@@ -636,23 +547,13 @@ fi
 [[ "${ROLLING_IMMUTABLE_AT_START}" == "false" ]] || \
   fail "rolling must remain a legacy mutable release"
 
-if [[ "${SELECTED_INITIAL_DRAFT}" == "true" ]]; then
-  require_selected_target_is_current_main "archive publication gate"
-  "${GH_BIN}" release edit "${SELECTED_TAG}" \
-    --repo "${REPOSITORY}" \
-    --draft=false \
-    --prerelease=true \
-    --latest=false
-fi
-verify_selected_archive
-
-RACE_HIGH_WATER="$(snapshot_public_high_water post-archive)"
+RACE_HIGH_WATER="$(snapshot_public_high_water post-candidate-verification)"
 RACE_ACTION="$(promotion_action_for "${RACE_HIGH_WATER}")"
 if [[ "${RACE_ACTION}" == "reject" ]]; then
-  fail "public high-water advanced to ${RACE_HIGH_WATER} during archive publication"
+  fail "public high-water advanced to ${RACE_HIGH_WATER} during candidate verification"
 fi
 [[ "${RACE_ACTION}" == "repair" || "${RACE_ACTION}" == "promote" ]] || \
-  fail "state module returned an unknown post-archive promotion action"
+  fail "state module returned an unknown post-candidate-verification promotion action"
 require_selected_target_is_current_main "alias publication gate"
 reconcile_role appcast
 reconcile_role stable-alias
@@ -804,4 +705,3 @@ cmp -s "${FINAL_BODY}" "${NOTES_FILE}" || fail "rolling release notes did not co
 [[ "${FINAL_REF}" == "${SELECTED_TARGET}" ]] || fail "rolling ref did not converge"
 
 prune_candidates "${SELECTED_BUILD}" "${SELECTED_TAG}"
-retire_promoted_candidates "${SELECTED_BUILD}" "${SELECTED_TAG}"
