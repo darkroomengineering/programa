@@ -77,8 +77,12 @@ def main():
         result = subprocess.run(command, env=environment, pass_fds=(lock.fileno(),))
         if result.returncode != 0:
             return result.returncode
-        current = root / f"programa-{tag}"
-        if safe_root and Path(derived) == current and not current.is_symlink():
+        # Protect whichever directory the build actually used, not the
+        # tag-derived path -- shared DerivedData (multiple tags, one dir)
+        # and --derived-data overrides both mean the build dir and
+        # "programa-<tag>" can differ.
+        current = Path(derived)
+        if safe_root and not current.is_symlink():
             try:
                 marker = os.open(current / ".programa-last-success", os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
                 try:

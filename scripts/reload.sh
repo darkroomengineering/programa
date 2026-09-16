@@ -10,6 +10,7 @@ BUNDLE_SET=0
 DERIVED_SET=0
 TAG=""
 LAUNCH=0
+ISOLATED=0
 PROGRAMA_DEBUG_LOG=""
 CLI_PATH=""
 LAST_SOCKET_PATH_DIR="$HOME/Library/Application Support/programa"
@@ -112,6 +113,12 @@ Options:
                          Sets app name, bundle id, and derived data path unless overridden.
   --launch               Launch the app after building. Without this flag, the script
                          builds and prints the app path but does not open it.
+  --isolated             Give this tag its own DerivedData directory (today's
+                         default behavior before shared builds). Without this,
+                         all tags share one DerivedData dir so a tag switch is
+                         a warm incremental build instead of a cold one. Tags
+                         still get their own bundle id, app name, socket, and
+                         log either way.
   --name <app name>      Override app display/bundle name.
   --bundle-id <id>       Override bundle identifier.
   --derived-data <path>  Override derived data path.
@@ -144,6 +151,10 @@ tagged_derived_data_path() {
   echo "$HOME/Library/Developer/Xcode/DerivedData/programa-${slug}"
 }
 
+shared_derived_data_path() {
+  echo "$HOME/Library/Developer/Xcode/DerivedData/programa-shared"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tag)
@@ -174,6 +185,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --launch)
       LAUNCH=1
+      shift
+      ;;
+    --isolated)
+      ISOLATED=1
       shift
       ;;
     --derived-data)
@@ -213,7 +228,11 @@ if [[ -n "$TAG" ]]; then
     BUNDLE_ID="com.darkroom.programa.debug.${TAG_ID}"
   fi
   if [[ "$DERIVED_SET" -eq 0 ]]; then
-    DERIVED_DATA="$(tagged_derived_data_path "$TAG_SLUG")"
+    if [[ "$ISOLATED" -eq 1 ]]; then
+      DERIVED_DATA="$(tagged_derived_data_path "$TAG_SLUG")"
+    else
+      DERIVED_DATA="$(shared_derived_data_path)"
+    fi
   fi
 fi
 
@@ -229,6 +248,10 @@ XCODEBUILD_ARGS=(
   -scheme programa
   -configuration Debug
   -destination 'platform=macOS'
+  # Command-line builds don't need Xcode's editor indexing; skipping it
+  # cuts rebuild time. Passed here (not in the pbxproj) so Xcode.app's own
+  # indexing is unaffected when the project is opened normally.
+  COMPILER_INDEX_STORE_ENABLE=NO
 )
 if [[ -n "$DERIVED_DATA" ]]; then
   XCODEBUILD_ARGS+=(-derivedDataPath "$DERIVED_DATA")
