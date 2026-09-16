@@ -190,6 +190,9 @@ const [modulePath, sealPath, targetSha, version, build] = process.argv.slice(2);
 const { validateCandidateManifest } = require(modulePath);
 const manifest = validateCandidateManifest(JSON.parse(fs.readFileSync(sealPath, "utf8")));
 if (!manifest.sealed) throw new TypeError("candidate seal must declare sealed: true");
+if (manifest.schemaVersion !== 2) {
+  throw new TypeError("milestone candidate must use the current schema version 2");
+}
 if (manifest.targetSha !== targetSha || manifest.version !== version || manifest.build !== build) {
   throw new TypeError("candidate seal identity does not match the requested milestone");
 }

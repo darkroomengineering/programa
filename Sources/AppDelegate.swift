@@ -756,6 +756,8 @@ struct ProgramaSingleInstanceProcessKey: Equatable, Sendable {
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuItemValidation {
     nonisolated(unsafe) static var shared: AppDelegate?
 
+    var core: ProgramaCoreProviding = InProcessCore.shared
+
     private static let cachedIsRunningUnderXCTest = detectRunningUnderXCTest(ProcessInfo.processInfo.environment)
 
     private var isRunningUnderXCTestCached: Bool {
@@ -793,6 +795,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let sidebarState: SidebarState
         let sidebarSelectionState: SidebarSelectionState
         weak var window: NSWindow?
+        // SwiftUI owns the primary window; keep it alive while it is ordered out.
+        var hiddenWindow: NSWindow?
+        var hiddenAt: Date?
         weak var observedWindow: NSWindow?
         var willCloseObserver: NSObjectProtocol?
         var willCloseObserverGeneration: UUID?
@@ -840,7 +845,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     nonisolated static let persistedWindowGeometrySchemaVersion = 2
-    private nonisolated static let persistedWindowGeometryDefaultsKey = "programa.session.lastWindowGeometry.v2"
+    nonisolated static let persistedWindowGeometryDefaultsKey = "programa.session.lastWindowGeometry.v2"
     private nonisolated static let legacyPersistedWindowGeometryDefaultsKeys = [
         "programa.session.lastWindowGeometry.v1"
     ]
@@ -911,6 +916,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         method_exchangeImplementations(originalMethod, swizzledMethod)
     }()
+    private static let didInstallWindowCloseSwizzle: Void = {
+        guard let original = class_getInstanceMethod(NSWindow.self, #selector(NSWindow.close)),
+              let replacement = class_getInstanceMethod(NSWindow.self, #selector(NSWindow.programa_close)) else { return }
+        method_exchangeImplementations(original, replacement)
+    }()
     private static let didInstallApplicationSendEventSwizzle: Void = {
         let targetClass: AnyClass = NSApplication.self
         let originalSelector = #selector(NSApplication.sendEvent(_:))
@@ -946,7 +956,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let desiredFocus: Bool
         let isFirstResponder: Bool
     }
-    var debugCloseMainWindowConfirmationHandler: ((NSWindow) -> Bool)?
     var debugCreateMainWindowSourceIsNativeFullScreenOverride: Bool?
     // Keep debug-only windows alive when tests intentionally inject key mismatches.
     private var debugDetachedContextWindows: [NSWindow] = []
@@ -990,6 +999,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     var mainWindowContexts: [ObjectIdentifier: MainWindowContext] = [:]
+    private var disposingMainWindows: Set<ObjectIdentifier> = []
     private var mainWindowControllers: [MainWindowController] = []
 
     /// Tracks the cascade point for new windows, matching Ghostty's upstream algorithm.
@@ -998,8 +1008,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var startupSessionSnapshot: AppSessionSnapshot?
     private var didPrepareStartupSessionSnapshot = false
     private var didAttemptStartupSessionRestore = false
-    private var isApplyingStartupSessionRestore = false
-    private let sessionPersistenceQueue = DispatchQueue(
+    var isApplyingStartupSessionRestore = false
+    lazy var startupHandoff = StartupSessionHandoff(
+        olderProcess: StartupSessionHandoff.authenticatedOlderProcess,
+        isLive: { Self.singleInstanceProcessKey(for: $0.processIdentifier) == $0 },
+        onReady: { [weak self] in self?.resumeStartupSessionAfterHandoff() }
+    )
+    private var startupHandoffPrimaryWindowId: UUID?
+    private var acknowledgedDuplicateShutdown: (target: ProgramaSingleInstanceProcessKey, generation: UUID, url: URL)?
+    let sessionPersistenceQueue = DispatchQueue(
         label: "com.cmuxterm.app.sessionPersistence",
         qos: .utility
     )
@@ -1028,7 +1045,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
     private var didHandleExplicitOpenIntentAtStartup = false
     private let appLifecycleCoordinator = AppLifecycleCoordinator()
-    private var isTerminatingApp: Bool { appLifecycleCoordinator.isTerminating }
+    var isTerminatingApp: Bool { appLifecycleCoordinator.isTerminating }
+#if DEBUG
+    var debugSessionSnapshotSaverForTesting: ((AppSessionSnapshot) -> Bool)?
+    var debugQuitSaveFailureAlertForTesting: (() -> Void)?
+
+    func debugResetTerminationForTesting() {
+        appLifecycleCoordinator.cancelTermination()
+        SessionMachineryGate.isApplicationTerminating = false
+    }
+#endif
     private static let commandPaletteRequestGraceInterval: TimeInterval = 1.25
     private static let commandPalettePendingOpenMaxAge: TimeInterval = 8.0
 
@@ -1168,6 +1194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 guard let self else { return }
                 self.scheduleLaunchServicesBundleRegistration()
                 self.enforceSingleInstance()
+                self.startupHandoff.initialArbitrationCompleted()
                 self.observeDuplicateLaunches()
             }
         } else if forceDuplicateLaunchObserver {
@@ -1472,6 +1499,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if !startupHandoff.hasCompletedInitialArbitration {
+            enforceSingleInstance()
+            startupHandoff.initialArbitrationCompleted()
+        }
+        if startupHandoff.isWaiting { appLifecycleCoordinator.confirmSingleInstanceLoser() }
         // Validate the exact-process arbitration request and publish an acknowledgment before
         // synchronous persistence begins. Requesters treat that acknowledgment as proof that
         // this process is responsive and cannot prompt or force-close us during teardown.
@@ -1488,7 +1520,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // A warning dialog can still cancel this termination request. The final
         // `applicationWillTerminate` callback is the only point that records a clean exit.
         if terminationPolicy.persistPreTerminationSnapshot {
-            saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+            let saved = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+            if !saved && !mainWindowContexts.isEmpty {
+                revokeAcknowledgedDuplicateShutdown()
+                appLifecycleCoordinator.cancelTermination()
+                SessionMachineryGate.isApplicationTerminating = false
+                dilog("session.save", "outcome=quit_cancelled reason=snapshot_write_failed")
+#if DEBUG
+                if let debugQuitSaveFailureAlertForTesting {
+                    debugQuitSaveFailureAlertForTesting()
+                    return .terminateCancel
+                }
+#endif
+                let alert = NSAlert()
+                alert.alertStyle = .critical
+                alert.messageText = String(localized: "dialog.quitSaveFailed.title", defaultValue: "Couldn’t Save Sessions")
+                alert.informativeText = String(
+                    localized: "dialog.quitSaveFailed.message",
+                    defaultValue: "Programa stayed open because it couldn’t save your sessions. Check available disk space and try quitting again."
+                )
+                alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
+                alert.runModal()
+                return .terminateCancel
+            }
         }
 
         guard lifecycleDecision.shouldWarn else {
@@ -1518,6 +1572,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             if shouldQuit {
                 self.appLifecycleCoordinator.confirmQuit()
             } else {
+                self.revokeAcknowledgedDuplicateShutdown()
                 // Reset so that the next quit attempt can show the dialog again.
                 self.appLifecycleCoordinator.cancelTermination()
                 // Must be reset in lockstep, or a cancelled quit would leave
@@ -1612,6 +1667,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func prepareStartupSessionSnapshotIfNeeded() {
         guard !didPrepareStartupSessionSnapshot else { return }
+        guard !startupHandoff.shouldDefer() else { return }
         didPrepareStartupSessionSnapshot = true
         // Archive whatever the previous launch left behind before any code path below (or
         // later in startup) can overwrite it -- including a launch that skips restore entirely
@@ -1624,9 +1680,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if archivedWithContent == nil {
             SessionPersistenceStore.rotateIntoHistory(includeScrollback: false)
         }
-        guard SessionRestorePolicy.shouldAttemptRestore() else { return }
+        guard !didHandleExplicitOpenIntentAtStartup, SessionRestorePolicy.shouldAttemptRestore() else { return }
         Self.removeLegacyPersistedWindowGeometry()
-        startupSessionSnapshot = SessionPersistenceStore.loadWithHistoryFallback()
+        startupSessionSnapshot = core.sessionSnapshots.loadWithHistoryFallback()
     }
 
     private func persistedWindowGeometry(
@@ -1655,7 +1711,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         defaults.set(data, forKey: Self.persistedWindowGeometryDefaultsKey)
     }
 
-    private nonisolated static func encodedPersistedWindowGeometryData(
+    nonisolated static func encodedPersistedWindowGeometryData(
         frame: SessionRectSnapshot?,
         display: SessionDisplaySnapshot?
     ) -> Data? {
@@ -1676,7 +1732,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return payload
     }
 
-    private nonisolated static func removeLegacyPersistedWindowGeometry(
+    nonisolated static func removeLegacyPersistedWindowGeometry(
         defaults: UserDefaults = .standard
     ) {
         legacyPersistedWindowGeometryDefaultsKeys.forEach { defaults.removeObject(forKey: $0) }
@@ -1715,6 +1771,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func attemptStartupSessionRestoreIfNeeded(primaryWindow: NSWindow) {
         guard !didAttemptStartupSessionRestore else { return }
+        guard !startupHandoff.shouldDefer() else { return }
+        prepareStartupSessionSnapshotIfNeeded()
         didAttemptStartupSessionRestore = true
         guard !didHandleExplicitOpenIntentAtStartup else { return }
         guard let primaryContext = contextForMainTerminalWindow(primaryWindow) else { return }
@@ -1800,7 +1858,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             ),
             body: String(
                 localized: "crash_recovery.notification.body",
-                defaultValue: "Programa quit unexpectedly last time. Your sessions and running processes were restored."
+                defaultValue: "Programa quit unexpectedly last time. Saved workspaces are being restored and available processes reconnected. Terminals that cannot reconnect start a new shell."
             )
         )
     }
@@ -1811,6 +1869,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         saveSessionSnapshot(includeScrollback: false)
         reconcileOrphanedEscrowedSessions()
         ScrollbackPersistenceSettings.retryLegacyMigration()
+    }
+
+    private func resumeStartupSessionAfterHandoff() {
+        guard !isTerminatingApp else { return }
+        prepareStartupSessionSnapshotIfNeeded()
+        let primary = mainWindowContexts.values.first(where: { $0.windowId == startupHandoffPrimaryWindowId })
+            ?? mainWindowContexts.values.first
+        if let primary, let window = primary.window ?? windowForMainWindowId(primary.windowId) {
+            attemptStartupSessionRestoreIfNeeded(primaryWindow: window)
+            _ = saveSessionSnapshot(includeScrollback: false)
+        }
     }
 
     /// Issue #307 orphan-reconciliation fix: the coarse-snapshot restore
@@ -1947,7 +2016,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // Every revive attempt failed: nothing to show, and leaving an
             // empty, oddly-titled window open with only blank placeholder
             // shells would just confuse whoever opens it next.
-            resolvedWindow(for: context)?.close()
+            if let window = resolvedWindow(for: context) { disposeMainWindow(window) }
             return (windowId: windowId, recoveredCount: 0)
         }
 
@@ -2365,7 +2434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             && abs(lhsStd.size.height - rhsStd.size.height) <= tolerance
     }
 
-    private func displaySnapshot(for window: NSWindow?) -> SessionDisplaySnapshot? {
+    func displaySnapshot(for window: NSWindow?) -> SessionDisplaySnapshot? {
         guard let window else { return nil }
         let screen = window.screen
             ?? NSScreen.screens.first(where: { $0.frame.intersects(window.frame) })
@@ -2454,224 +2523,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         ProcessInfo.processInfo.enableSuddenTermination()
     }
 
-    func saveSessionSnapshot(
-        includeScrollback: Bool,
-        removeWhenEmpty: Bool = false,
-        cleanShutdown: Bool = false,
-        prebuiltSnapshot: AppSessionSnapshot? = nil,
-        completion: SessionAutosaveCoordinator.SaveCompletion? = nil
-    ) {
-        if Self.shouldSkipSessionSaveDuringStartupRestore(
-            isApplyingStartupSessionRestore: isApplyingStartupSessionRestore,
-            includeScrollback: includeScrollback
-        ) {
-#if DEBUG
-            dlog("session.save.skipped reason=startup_restore_in_progress includeScrollback=0")
-#endif
-            completion?(false)
-            return
-        }
-
-        let writeSynchronously = SessionAutosaveCoordinator.shouldWriteSessionSnapshotSynchronously(
-            isTerminatingApp: isTerminatingApp,
-            includeScrollback: includeScrollback
-        )
-#if DEBUG
-        let timingStart = ProgramaTypingTiming.start()
-        defer {
-            ProgramaTypingTiming.logDuration(
-                path: "session.saveSnapshot",
-                startedAt: timingStart,
-                extra: "includeScrollback=\(includeScrollback ? 1 : 0) removeWhenEmpty=\(removeWhenEmpty ? 1 : 0) sync=\(writeSynchronously ? 1 : 0)"
-            )
-        }
-#endif
-
-        guard let snapshot = prebuiltSnapshot ?? buildSessionSnapshot(includeScrollback: includeScrollback, cleanShutdown: cleanShutdown) else {
-            persistSessionSnapshot(
-                nil,
-                removeWhenEmpty: removeWhenEmpty,
-                persistedGeometryData: nil,
-                synchronously: writeSynchronously,
-                completion: completion
-            )
-            return
-        }
-
-        let persistedGeometryData = snapshot.windows.first.flatMap { primaryWindow in
-            Self.encodedPersistedWindowGeometryData(
-                frame: primaryWindow.frame,
-                display: primaryWindow.display
-            )
-        }
+    // Session snapshot build/save/persist machinery lives in
+    // `AppDelegate+SessionSnapshotPersistence.swift`.
 
 #if DEBUG
-        debugLogSessionSaveSnapshot(snapshot, includeScrollback: includeScrollback)
-#endif
-        persistSessionSnapshot(
-            snapshot,
-            removeWhenEmpty: false,
-            persistedGeometryData: persistedGeometryData,
-            synchronously: writeSynchronously,
-            completion: completion
-        )
-    }
-
-    nonisolated static func shouldPersistSnapshotOnWindowUnregister(isTerminatingApp: Bool) -> Bool {
-        !isTerminatingApp
-    }
-
-    nonisolated static func shouldRemoveSnapshotWhenNoWindowsRemainOnWindowUnregister(
-        isTerminatingApp: Bool
-    ) -> Bool {
-        !isTerminatingApp
-    }
-
-    nonisolated static func shouldSkipSessionSaveDuringStartupRestore(
-        isApplyingStartupSessionRestore: Bool,
-        includeScrollback: Bool
-    ) -> Bool {
-        isApplyingStartupSessionRestore && !includeScrollback
-    }
-
-    nonisolated static func performSessionPersistenceWrite(
-        on queue: DispatchQueue,
-        synchronously: Bool,
-        operation: @escaping () -> Void
-    ) {
-        if synchronously {
-            queue.sync(execute: operation)
-        } else {
-            queue.async(execute: DispatchWorkItem(block: operation))
-        }
-    }
-
-    private func persistSessionSnapshot(
-        _ snapshot: AppSessionSnapshot?,
-        removeWhenEmpty: Bool,
-        persistedGeometryData: Data?,
-        synchronously: Bool,
-        completion: SessionAutosaveCoordinator.SaveCompletion?
-    ) {
-        guard snapshot != nil || removeWhenEmpty || persistedGeometryData != nil else {
-            completion?(false)
-            return
-        }
-
-        let snapshotWriter = sessionSnapshotWriter
-        let capturePolicy = SessionWALStore.shared.currentCapturePolicy()
-        let writeBlock = {
-            Self.removeLegacyPersistedWindowGeometry()
-            if let persistedGeometryData {
-                UserDefaults.standard.set(
-                    persistedGeometryData,
-                    forKey: Self.persistedWindowGeometryDefaultsKey
-                )
-            }
-            let saved: Bool
-            if let snapshot {
-                saved = Self.writeSessionSnapshot(
-                    snapshot,
-                    policyPaths: SessionScrollbackPolicyPaths.make(),
-                    capturedGeneration: capturePolicy.enabled ? capturePolicy.generation : nil,
-                    writer: snapshotWriter
-                )
-            } else if removeWhenEmpty {
-                SessionPersistenceStore.removeSnapshot()
-                saved = false
-            } else {
-                saved = false
-            }
-            if let completion {
-                // A synchronous shutdown write drains the queue without waiting for main.
-                DispatchQueue.main.async { completion(saved) }
-            }
-        }
-
-        Self.performSessionPersistenceWrite(
-            on: sessionPersistenceQueue,
-            synchronously: synchronously,
-            operation: writeBlock
-        )
-    }
-
-    nonisolated static func writeSessionSnapshot(
-        _ snapshot: AppSessionSnapshot,
-        policyPaths: SessionScrollbackPolicyPaths?,
-        capturedGeneration: UUID?,
-        writer: (AppSessionSnapshot) -> Bool
-    ) -> Bool {
-        if let capturedGeneration,
-           let saved = try? SessionScrollbackPolicyStore.withContentPermission(
-            at: policyPaths, capturedGeneration: capturedGeneration,
-            { writer(snapshot) }
-           ) {
-            return saved
-        }
-        return writer(SessionPersistenceStore.withoutScrollback(snapshot))
-    }
-
-    private func buildSessionSnapshot(includeScrollback: Bool, cleanShutdown: Bool = false) -> AppSessionSnapshot? {
-        let contexts = mainWindowContexts.values.sorted { lhs, rhs in
-            let lhsWindow = lhs.window ?? windowForMainWindowId(lhs.windowId)
-            let rhsWindow = rhs.window ?? windowForMainWindowId(rhs.windowId)
-            let lhsIsKey = lhsWindow?.isKeyWindow ?? false
-            let rhsIsKey = rhsWindow?.isKeyWindow ?? false
-            if lhsIsKey != rhsIsKey {
-                return lhsIsKey && !rhsIsKey
-            }
-            return lhs.windowId.uuidString < rhs.windowId.uuidString
-        }
-
-        guard !contexts.isEmpty else { return nil }
-
-        let windows: [SessionWindowSnapshot] = contexts
-            .prefix(SessionPersistencePolicy.maxWindowsPerSnapshot)
-            .map { context in
-                let window = context.window ?? windowForMainWindowId(context.windowId)
-                return SessionWindowSnapshot(
-                    frame: window.map { SessionRectSnapshot($0.frame) },
-                    display: displaySnapshot(for: window),
-                    tabManager: context.tabManager.sessionSnapshot(includeScrollback: includeScrollback),
-                    sidebar: SessionSidebarSnapshot(
-                        isVisible: context.sidebarState.isVisible,
-                        selection: SessionSidebarSelection(selection: context.sidebarSelectionState.selection),
-                        width: SessionPersistencePolicy.sanitizedSidebarWidth(Double(context.sidebarState.persistedWidth))
-                    )
-                )
-            }
-
-        guard !windows.isEmpty else { return nil }
-        return AppSessionSnapshot(
-            version: SessionSnapshotSchema.currentVersion,
-            createdAt: Date().timeIntervalSince1970,
-            windows: windows,
-            cleanShutdown: cleanShutdown
-        )
-    }
-
-#if DEBUG
-    private func debugLogSessionSaveSnapshot(
-        _ snapshot: AppSessionSnapshot,
-        includeScrollback: Bool
-    ) {
-        dlog(
-            "session.save includeScrollback=\(includeScrollback ? 1 : 0) " +
-                "windows=\(snapshot.windows.count)"
-        )
-        for (index, windowSnapshot) in snapshot.windows.enumerated() {
-            let workspaceCount = windowSnapshot.tabManager.workspaces.count
-            let selectedWorkspace = windowSnapshot.tabManager.selectedWorkspaceIndex.map(String.init) ?? "nil"
-            dlog(
-                "session.save.window idx=\(index) " +
-                    "frame={\(debugSessionRectDescription(windowSnapshot.frame))} " +
-                    "display={\(debugSessionDisplayDescription(windowSnapshot.display))} " +
-                    "workspaces=\(workspaceCount) selected=\(selectedWorkspace)"
-            )
-        }
-    }
-
-    private func debugSessionRectDescription(_ rect: SessionRectSnapshot?) -> String {
+    func debugSessionRectDescription(_ rect: SessionRectSnapshot?) -> String {
         guard let rect else { return "nil" }
         return "x=\(debugSessionNumber(rect.x)) y=\(debugSessionNumber(rect.y)) " +
             "w=\(debugSessionNumber(rect.width)) h=\(debugSessionNumber(rect.height))"
@@ -2685,7 +2541,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             "h=\(debugSessionNumber(Double(rect.size.height)))"
     }
 
-    private func debugSessionDisplayDescription(_ display: SessionDisplaySnapshot?) -> String {
+    func debugSessionDisplayDescription(_ display: SessionDisplaySnapshot?) -> String {
         guard let display else { return "nil" }
         let displayIdText = display.displayID.map(String.init) ?? "nil"
         return "id=\(displayIdText) " +
@@ -2693,7 +2549,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             "visible={\(debugSessionRectDescription(display.visibleFrame))}"
     }
 
-    private func debugSessionNumber(_ value: Double) -> String {
+    func debugSessionNumber(_ value: Double) -> String {
         String(format: "%.1f", value)
     }
 #endif
@@ -2789,6 +2645,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             context = newContext
         }
         installMainWindowCloseObserver(for: context, window: window)
+        if startupHandoff.shouldDefer() && startupHandoffPrimaryWindowId == nil {
+            startupHandoffPrimaryWindowId = windowId
+        }
         CommandPaletteController.windowLifecycle.reset(windowId: windowId)
 
 #if DEBUG
@@ -3832,48 +3691,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     func closeMainWindow(windowId: UUID) -> Bool {
         guard let window = windowForMainWindowId(windowId) else { return false }
-        window.performClose(nil)
+        disposeMainWindow(window)
         return true
     }
 
-    private func confirmCloseMainWindow(_ window: NSWindow) -> Bool {
-#if DEBUG
-        if let debugCloseMainWindowConfirmationHandler {
-            return debugCloseMainWindowConfirmationHandler(window)
-        }
-#endif
+    /// Explicit workspace/panel and socket disposal still ends the owned sessions.
+    func disposeMainWindow(_ window: NSWindow) {
+        let key = ObjectIdentifier(window)
+        guard disposingMainWindows.insert(key).inserted else { return }
+        defer { disposingMainWindows.remove(key) }
+        contextForMainTerminalWindow(window)?.hiddenWindow = nil
+        window.close()
+    }
 
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = String(localized: "dialog.closeWindow.title", defaultValue: "Close window?")
-        alert.informativeText = String(
-            localized: "dialog.closeWindow.message",
-            defaultValue: "This will close the current window and all of its workspaces."
+    /// Ordinary window close hides the UI without destroying its workspaces or PTYs.
+    func preserveMainWindowOnClose(_ window: NSWindow) -> Bool {
+        guard !isTerminatingApp,
+              !disposingMainWindows.contains(ObjectIdentifier(window)),
+              let context = contextForMainTerminalWindow(window) else { return false }
+        context.hiddenWindow = window
+        context.hiddenAt = Date()
+        NotificationCenter.default.post(
+            name: .commandPaletteDismissRequested,
+            object: window,
+            userInfo: ["restoreFocus": false]
         )
-        alert.addButton(withTitle: String(localized: "common.close", defaultValue: "Close"))
-        alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
-
-        let alertWindow = alert.window
-        if let closeButton = alert.buttons.first {
-            alertWindow.defaultButtonCell = closeButton.cell as? NSButtonCell
-            alertWindow.initialFirstResponder = closeButton
-            DispatchQueue.main.async {
-                _ = alertWindow.makeFirstResponder(closeButton)
-            }
+        teardownCommandPaletteState(for: context.windowId)
+        dismissNotificationsPopoverIfShown()
+        if let panelId = browserAddressBarFocusedPanelId,
+           context.tabManager.tabs.contains(where: { $0.panels[panelId] != nil }) {
+            browserAddressBarFocusedPanelId = nil
+            stopBrowserOmnibarSelectionRepeat()
         }
-
-        return alert.runModal() == .alertFirstButtonReturn
+        persistWindowGeometry(from: window)
+        window.orderOut(nil)
+        _ = saveSessionSnapshot(includeScrollback: false)
+        return true
     }
 
     @discardableResult
-    func closeWindowWithConfirmation(_ window: NSWindow) -> Bool {
-        guard isMainTerminalWindow(window) else {
-            window.close()
-            return true
-        }
-        guard confirmCloseMainWindow(window) else { return true }
-        window.close()
-        return true
+    func reopenMostRecentlyHiddenMainWindow(onlyIfNoVisibleMainWindows: Bool = true) -> Bool {
+        if onlyIfNoVisibleMainWindows,
+           mainWindowContexts.values.contains(where: {
+               guard let window = $0.window else { return false }
+               return window.isVisible || window.isMiniaturized
+           }) { return false }
+        guard let context = mainWindowContexts.values
+            .filter({ $0.hiddenWindow != nil })
+            .max(by: { ($0.hiddenAt ?? .distantPast) < ($1.hiddenAt ?? .distantPast) }),
+              let window = context.hiddenWindow else { return false }
+        CommandPaletteController.windowLifecycle.reset(windowId: context.windowId)
+        bringToFront(window)
+        return window.isVisible
     }
 
     private func orderedMainWindowSummaries(referenceWindowId: UUID?) -> [MainWindowSummary] {
@@ -3973,7 +3842,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16, execute: reassert)
     }
 
-    private func windowForMainWindowId(_ windowId: UUID) -> NSWindow? {
+    func windowForMainWindowId(_ windowId: UUID) -> NSWindow? {
         if let ctx = mainWindowContexts.values.first(where: { $0.windowId == windowId }),
            let window = ctx.window {
             return window
@@ -4503,7 +4372,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     @objc func openNewMainWindow(_ sender: Any?) {
+        if reopenMostRecentlyHiddenMainWindow() { return }
         _ = createMainWindow()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // AppKit's flag includes Settings and other auxiliary windows.
+        if reopenMostRecentlyHiddenMainWindow() { return false }
+        return true
     }
 
     /// Shows the "Open Folder" panel and creates a workspace for the selected directory.
@@ -5914,6 +5790,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     static func installWindowResponderSwizzlesForTesting() {
+        _ = didInstallWindowCloseSwizzle
         _ = didInstallWindowKeyEquivalentSwizzle
         _ = didInstallWindowFirstResponderSwizzle
         _ = didInstallWindowSendEventSwizzle
@@ -5932,6 +5809,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     private func installWindowResponderSwizzles() {
+        _ = Self.didInstallWindowCloseSwizzle
         _ = Self.didInstallApplicationSendEventSwizzle
         _ = Self.didInstallWindowKeyEquivalentSwizzle
         _ = Self.didInstallWindowFirstResponderSwizzle
@@ -7023,6 +6901,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func handleNewTabShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .newTab) else { return nil }
+        if reopenMostRecentlyHiddenMainWindow() { return true }
 #if DEBUG
         dlog("shortcut.action name=newWorkspace \(debugShortcutRouteSnapshot(event: event))")
 #endif
@@ -7267,7 +7146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             NSSound.beep()
             return true
         }
-        closeWindowWithConfirmation(targetWindow)
+        targetWindow.close()
         return true
     }
 
@@ -8826,6 +8705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     enum SingleInstanceFallbackAction: Equatable, Sendable {
         case skip
+        case waitForAcknowledgedExit
         case prompt
         case force
         case exitNewer
@@ -9007,12 +8887,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         isTerminated: Bool,
         response: SingleInstanceForcePromptResponse?
     ) -> SingleInstanceFallbackAction {
-        guard !hasValidTargetAcknowledgment,
-              requestGenerationIsPending,
+        guard requestGenerationIsPending,
               processIdentityMatches,
               !isTerminated else {
             return .skip
         }
+        if hasValidTargetAcknowledgment { return .waitForAcknowledgedExit }
         guard let response else { return .prompt }
         switch response {
         case .forceClose: return .force
@@ -9107,7 +8987,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return singleInstanceCodeIdentity(for: signingInformationCode)
     }
 
-    nonisolated private static func isAuthenticatedProgramaApplication(
+    nonisolated static func isAuthenticatedProgramaApplication(
         expectedProcessKey: ProgramaSingleInstanceProcessKey
     ) -> Bool {
         let processIdentifier = expectedProcessKey.processIdentifier
@@ -9597,8 +9477,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     @discardableResult
-    nonisolated private static func removeExactAcknowledgment(
+    nonisolated static func removeExactAcknowledgment(
         target: ProgramaSingleInstanceProcessKey,
+        acceptedGeneration: UUID? = nil,
         url: URL
     ) -> Bool {
         guard let acknowledgment = readBoundedSingleInstanceJSON(
@@ -9608,7 +9489,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return !FileManager.default.fileExists(atPath: url.path)
         }
         guard acknowledgment.version == SingleInstanceShutdownAcknowledgment.currentVersion,
-              acknowledgment.target == target else {
+              acknowledgment.target == target,
+              acceptedGeneration == nil || acknowledgment.acceptedGeneration == acceptedGeneration else {
             return false
         }
         do {
@@ -9860,11 +9742,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 dilog("single_instance", "pid=\(currentProcessIdentifier) outcome=rejected reason=ack_write")
                 continue
             }
+            acknowledgedDuplicateShutdown = (
+                currentKey, request.generation,
+                Self.duplicateShutdownAcknowledgmentURL(rootDirectory: directoryURL, target: currentKey)
+            )
             dilog("single_instance", "pid=\(currentProcessIdentifier) outcome=accepted reason=shutdown_request")
             return true
         }
         dilog("single_instance", "pid=\(currentProcessIdentifier) outcome=missing reason=shutdown_request")
         return false
+    }
+
+    private func revokeAcknowledgedDuplicateShutdown() {
+        guard let ack = acknowledgedDuplicateShutdown else { return }
+        _ = Self.removeExactAcknowledgment(
+            target: ack.target, acceptedGeneration: ack.generation, url: ack.url
+        )
+        acknowledgedDuplicateShutdown = nil
     }
 
     private static func duplicateFallbackState(
@@ -9893,11 +9787,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         alert.alertStyle = .critical
         alert.messageText = String(
             localized: "dialog.singleInstanceNotResponding.title",
-            defaultValue: "Programa Isn’t Responding"
+            defaultValue: "Existing Programa Is Still Open"
         )
         alert.informativeText = String(
             localized: "dialog.singleInstanceNotResponding.message",
-            defaultValue: "The existing Programa instance is not responding. Force closing it may lose unsaved terminal or session state."
+            defaultValue: "The existing Programa instance did not quit. Force closing it may lose unsaved terminal or session state."
         )
         let cancelButton = alert.addButton(
             withTitle: String(localized: "common.cancel", defaultValue: "Cancel")
@@ -9926,6 +9820,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     ) {
         let processIdentifier = pending.request.target.processIdentifier
         let (initialAction, _) = duplicateFallbackState(app: app, pending: pending, response: nil)
+        if initialAction == .waitForAcknowledgedExit {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { @MainActor in handleDuplicateShutdownFallback(app: app, pending: pending) }
+            return
+        }
         guard initialAction == .prompt else {
             removeExactShutdownState(pending)
             dilog("single_instance", "pid=\(processIdentifier) outcome=skipped reason=fallback_revalidated")
@@ -9967,6 +9865,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         case .skip:
             removeExactShutdownState(pending)
             dilog("single_instance", "pid=\(processIdentifier) outcome=skipped reason=post_prompt_revalidation")
+        case .waitForAcknowledgedExit:
+            handleDuplicateShutdownFallback(app: app, pending: pending)
         case .prompt:
             removeExactShutdownState(pending)
             dilog("single_instance", "pid=\(processIdentifier) outcome=skipped reason=invalid_prompt_state")
@@ -10252,6 +10152,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func setActiveMainWindow(_ window: NSWindow) {
         guard let context = contextForMainTerminalWindow(window) else { return }
+        if window.isVisible {
+            context.hiddenWindow = nil
+            context.hiddenAt = nil
+        }
 #if DEBUG
         let beforeManagerToken = debugManagerToken(tabManager)
 #endif
@@ -10378,7 +10282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         guard let context = contextContainingTabId(tabId) else { return }
         let expectedIdentifier = "cmux.main.\(context.windowId.uuidString)"
         let window: NSWindow? = context.window ?? NSApp.windows.first(where: { $0.identifier?.rawValue == expectedIdentifier })
-        window?.performClose(nil)
+        if let window { disposeMainWindow(window) }
     }
 
     @discardableResult
@@ -10643,6 +10547,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             window.deminiaturize(nil)
         }
         window.makeKeyAndOrderFront(nil)
+        if let context = contextForMainTerminalWindow(window) {
+            context.hiddenWindow = nil
+            context.hiddenAt = nil
+        }
         // Improve reliability across Spaces / when other helper panels are key.
         NSRunningApplication.current.activate(options: [.activateAllWindows])
     }

@@ -112,6 +112,8 @@ final class WindowGlassEffectTests: XCTestCase {
 
             let bridge = WindowPaneChromePortalRegistry.bridge(for: window)
             let paneID = PaneID()
+            var accessibilitySelection: TabID?
+            var receivedDropIndex: Int?
             let tabs = ["One", "Two"].map { title in
                 BonsplitPaneChromeTabDescriptor(
                     id: TabID(), title: title, icon: "terminal", iconImageData: nil,
@@ -122,11 +124,33 @@ final class WindowGlassEffectTests: XCTestCase {
             bridge.updatePaneChrome(BonsplitPaneChromeDescriptor(
                 paneID: paneID, anchorView: anchor, tabs: tabs, isFocused: true,
                 isVisible: true, leadingInset: 0, showsSplitButtons: false,
-                onSelect: { _ in }, onClose: { _ in }, onContextAction: { _, _ in },
+                onSelect: { accessibilitySelection = $0 }, onClose: { _ in }, onContextAction: { _, _ in },
                 dragPasteboardData: { _ in nil }, onDragStateChanged: { _, _ in },
+                validatedDropIndex: { (0...tabs.count).contains($0) ? $0 : nil },
+                onDropTab: { receivedDropIndex = $0; return true },
                 onNewTab: {}, onNewBrowserTab: {}, onSplitRight: {}, onSplitDown: {}
             ))
             root.layoutSubtreeIfNeeded()
+
+            let tabFrames = bridge.nativeTabFramesForTesting(in: paneID)
+            XCTAssertEqual(tabFrames.count, 2)
+            XCTAssertEqual(
+                bridge.nativeTabInsertionIndexForTesting(
+                    in: paneID,
+                    documentX: try XCTUnwrap(tabFrames.first).midX - 1
+                ),
+                0
+            )
+            XCTAssertEqual(
+                bridge.nativeTabInsertionIndexForTesting(
+                    in: paneID,
+                    documentX: try XCTUnwrap(tabFrames.last).maxX + 1
+                ),
+                2
+            )
+            XCTAssertTrue(bridge.performNativeTabDropForTesting(in: paneID, requestedIndex: 2))
+            XCTAssertEqual(receivedDropIndex, 2)
+            XCTAssertFalse(bridge.performNativeTabDropForTesting(in: paneID, requestedIndex: 3))
 
             let glassViews = bridge.nativeGlassViewsForTesting()
             // Two tab pills own NSControls; the workspace-level new-tab and
@@ -134,6 +158,16 @@ final class WindowGlassEffectTests: XCTestCase {
             // is a plain button container.
             let pillGlassViews = glassViews.filter { $0.contentView is NSControl }
             XCTAssertEqual(pillGlassViews.count, 2)
+            for tab in tabs {
+                let control = try XCTUnwrap(pillGlassViews.compactMap { $0.contentView as? NSControl }
+                    .first { $0.accessibilityLabel() == tab.title })
+                XCTAssertTrue(control.isAccessibilityElement())
+                XCTAssertEqual(control.accessibilityRole(), .button)
+                XCTAssertEqual(control.isAccessibilitySelected(), tab.isSelected)
+                XCTAssertEqual(control.accessibilityValue() as? String, tab.accessibilityValue)
+                XCTAssertTrue(control.accessibilityPerformPress())
+                XCTAssertEqual(accessibilitySelection, tab.id)
+            }
             XCTAssertEqual(glassViews.count, 4)
             XCTAssertTrue(bridge.hostViewForTesting.superview === terminalHost.superview)
             let siblings = terminalHost.superview?.subviews ?? []
@@ -146,6 +180,71 @@ final class WindowGlassEffectTests: XCTestCase {
         #endif
 
         throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK and runtime")
+    }
+
+    func testNativePaneTabInsertionIndicatorStaysInsideDocumentBounds() throws {
+        #if compiler(>=6.2)
+        let bounds = NSRect(x: 0, y: 0, width: 240, height: 28)
+        let frames = [
+            NSRect(x: 0, y: 0, width: 100, height: 28),
+            NSRect(x: 108, y: 0, width: 132, height: 28),
+        ]
+
+        XCTAssertEqual(NativePaneTabInsertionPolicy.insertionIndex(atX: 49, tabFrames: frames), 0)
+        XCTAssertEqual(NativePaneTabInsertionPolicy.insertionIndex(atX: 104, tabFrames: frames), 1)
+        XCTAssertEqual(NativePaneTabInsertionPolicy.insertionIndex(atX: 200, tabFrames: frames), 2)
+
+        let first = try XCTUnwrap(
+            NativePaneTabInsertionPolicy.indicatorFrame(at: 0, tabFrames: frames, in: bounds)
+        )
+        let trailing = try XCTUnwrap(
+            NativePaneTabInsertionPolicy.indicatorFrame(at: 2, tabFrames: frames, in: bounds)
+        )
+        XCTAssertGreaterThanOrEqual(first.minX, bounds.minX)
+        XCTAssertLessThanOrEqual(trailing.maxX, bounds.maxX)
+        #else
+        throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK")
+        #endif
+    }
+
+    func testNativePaneChromeBackgroundDragsWithoutTakingControlHits() throws {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            final class DragWindow: NSWindow {
+                var dragCount = 0
+                var movableDuringDrag = false
+                override func performDrag(with event: NSEvent) {
+                    dragCount += 1
+                    movableDuringDrag = isMovable
+                }
+            }
+            let window = DragWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 100),
+                                    styleMask: [.titled], backing: .buffered, defer: false)
+            defer { window.orderOut(nil) }
+            window.isMovable = false
+            let background = PaneChromeDragBackgroundView(frame: NSRect(x: 30, y: 20, width: 320, height: 30))
+            let root = try XCTUnwrap(window.contentView)
+            root.addSubview(background)
+            let button = NSButton(frame: NSRect(x: 10, y: 0, width: 30, height: 30))
+            background.addSubview(button)
+            XCTAssertTrue(root.hitTest(NSPoint(x: 50, y: 35)) === button)
+            let hit = try XCTUnwrap(root.hitTest(NSPoint(x: 300, y: 35)))
+            XCTAssertTrue(hit === background)
+            let event = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown,
+                location: NSPoint(x: 300, y: 35), modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+            hit.mouseDown(with: event)
+            XCTAssertEqual(window.dragCount, 1)
+            XCTAssertTrue(window.movableDuringDrag)
+            XCTAssertFalse(window.isMovable)
+            _ = beginWindowDragSuppression(window: window)
+            hit.mouseDown(with: event)
+            _ = endWindowDragSuppression(window: window)
+            XCTAssertEqual(window.dragCount, 1)
+            return
+        }
+        #endif
+        throw XCTSkip("Native pane chrome requires the macOS 26 SDK and runtime")
     }
 
     func testNativeGlassContentHostOwnsItsSwiftUIControls() throws {
@@ -815,7 +914,7 @@ final class InternalTabDragBundleDeclarationTests: XCTestCase {
 final class WindowDragHandleHitTests: XCTestCase {
     private final class CapturingView: NSView {
         override func hitTest(_ point: NSPoint) -> NSView? {
-            bounds.contains(point) ? self : nil
+            super.hitTest(point)
         }
     }
 
@@ -890,6 +989,23 @@ final class WindowDragHandleHitTests: XCTestCase {
             windowDragHandleShouldCaptureHit(NSPoint(x: 180, y: 18), in: dragHandle, eventType: .leftMouseDown),
             "Empty titlebar space should drag the window"
         )
+    }
+
+    func testOffsetDragHandleYieldsToOffsetControlAndCapturesEmptySpace() {
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        let container = NSView(frame: NSRect(x: 80, y: 120, width: 400, height: 80))
+        root.addSubview(container)
+        let dragHandle = NSView(frame: NSRect(x: 40, y: 20, width: 320, height: 30))
+        container.addSubview(dragHandle)
+        let control = NSButton(frame: NSRect(x: 180, y: 20, width: 40, height: 30))
+        container.addSubview(control)
+
+        XCTAssertFalse(windowDragHandleShouldCaptureHit(
+            NSPoint(x: 160, y: 15), in: dragHandle, eventType: .leftMouseDown
+        ))
+        XCTAssertTrue(windowDragHandleShouldCaptureHit(
+            NSPoint(x: 260, y: 15), in: dragHandle, eventType: .leftMouseDown
+        ))
     }
 
     func testDragHandleYieldsWhenSiblingClaimsPoint() {
@@ -1722,6 +1838,45 @@ final class MarkdownPanelPointerObserverViewTests: XCTestCase {
 
 @MainActor
 final class TmuxWorkspacePaneOverlayTests: XCTestCase {
+    func testOverlayMountsAnimationTimelineOnlyWhileFlashIsWithinItsDuration() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let rect = CGRect(x: 0, y: 0, width: 10, height: 10)
+        XCTAssertFalse(
+            TmuxWorkspacePaneOverlayView.isFlashActive(flashRect: nil, flashStartedAt: nil, now: start),
+            "No flash: the overlay must render statically, never with a display-rate timeline"
+        )
+        XCTAssertFalse(
+            TmuxWorkspacePaneOverlayView.isFlashActive(flashRect: rect, flashStartedAt: nil, now: start),
+            "A flash rect without a start time is not an active flash"
+        )
+        XCTAssertTrue(
+            TmuxWorkspacePaneOverlayView.isFlashActive(
+                flashRect: rect, flashStartedAt: start,
+                now: start.addingTimeInterval(FocusFlashPattern.duration / 2)
+            )
+        )
+        XCTAssertFalse(
+            TmuxWorkspacePaneOverlayView.isFlashActive(
+                flashRect: rect, flashStartedAt: start,
+                now: start.addingTimeInterval(FocusFlashPattern.duration + 0.01)
+            ),
+            "Once the flash pattern has finished, the timeline must be torn down"
+        )
+    }
+
+    func testAppearanceAppIconsDecodeAtRetinaDockSizeNotDoubleIt() {
+        for name in ["AppIconDark", "AppIconLight"] {
+            guard let icon = NSImage(named: name) else {
+                XCTFail("missing \(name) in the built bundle")
+                continue
+            }
+            let maxPixels = icon.representations.map { max($0.pixelsWide, $0.pixelsHigh) }.max() ?? 0
+            XCTAssertEqual(maxPixels, 1024, "\(name) largest representation")
+            XCTAssertEqual(icon.size.width, 512, accuracy: 0.5,
+                           "\(name) must be a 512pt @2x image so AppKit does not rasterize a 2048px Dock icon")
+        }
+    }
+
     func testTmuxWorkspacePaneOverlayModelTracksFlashReason() {
         let model = TmuxWorkspacePaneOverlayModel()
         let initialState = TmuxWorkspacePaneOverlayRenderState(
@@ -1884,5 +2039,111 @@ final class HostingViewSafeAreaRegionsTests: XCTestCase {
             coordinator.hostingView.safeAreaRegions.isEmpty,
             "glass overlay hosts (search overlays, omnibar, browser toolbar) must not observe safe-area changes (#307)"
         )
+    }
+}
+
+@MainActor
+final class SharedWorkspaceCoreTests: XCTestCase {
+    private let workspaceID = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
+    private let paneID = PaneID(id: UUID(uuidString: "20000000-0000-0000-0000-000000000001")!)
+
+    private func surface(
+        _ uuid: String,
+        session: String,
+        pinned: Bool = false
+    ) -> SharedWorkspaceCore.Surface {
+        SharedWorkspaceCore.Surface(
+            id: UUID(uuidString: uuid)!.uuidString,
+            session_id: session,
+            is_pinned: pinned
+        )
+    }
+
+    private func tabID(_ surface: SharedWorkspaceCore.Surface) -> TabID {
+        TabID(uuid: UUID(uuidString: surface.id)!)
+    }
+
+    func testReorderBeforeAndEndPreserveSelectedSessionMappingAndIDs() throws {
+        let core = SharedWorkspaceCore()
+        let first = surface("30000000-0000-0000-0000-000000000001", session: "session-first")
+        let selected = surface("30000000-0000-0000-0000-000000000002", session: "session-selected")
+        let last = surface("30000000-0000-0000-0000-000000000003", session: "session-last")
+        let surfaces = [first, selected, last]
+
+        let movedBeforeLast = try XCTUnwrap(core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(selected),
+            draggedID: tabID(first),
+            destination: 2
+        ))
+        XCTAssertEqual(movedBeforeLast, [tabID(selected), tabID(first), tabID(last)])
+
+        let movedToEnd = try XCTUnwrap(core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(selected),
+            draggedID: tabID(first),
+            destination: surfaces.count
+        ))
+        XCTAssertEqual(movedToEnd, [tabID(selected), tabID(last), tabID(first)])
+        XCTAssertEqual(Set(movedToEnd), Set(surfaces.map(tabID)))
+    }
+
+    func testUnknownSourceIsRejectedWithoutChangingInput() {
+        let core = SharedWorkspaceCore()
+        let first = surface("40000000-0000-0000-0000-000000000001", session: "session-first")
+        let second = surface("40000000-0000-0000-0000-000000000002", session: "session-second")
+        let surfaces = [first, second]
+        let before = surfaces
+
+        let result = core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(first),
+            draggedID: TabID(uuid: UUID(uuidString: "40000000-0000-0000-0000-000000000099")!),
+            destination: 1
+        )
+
+        XCTAssertNil(result)
+        XCTAssertEqual(surfaces, before)
+    }
+
+    func testPinnedBoundaryClampsPinnedAndUnpinnedMoves() throws {
+        let core = SharedWorkspaceCore()
+        let pinned = surface(
+            "50000000-0000-0000-0000-000000000001",
+            session: "session-pinned",
+            pinned: true
+        )
+        let first = surface("50000000-0000-0000-0000-000000000002", session: "session-first")
+        let last = surface("50000000-0000-0000-0000-000000000003", session: "session-last")
+        let surfaces = [pinned, first, last]
+
+        let unpinnedClampedAfterPinned = try XCTUnwrap(core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(pinned),
+            draggedID: tabID(last),
+            destination: 0
+        ))
+        XCTAssertEqual(
+            unpinnedClampedAfterPinned,
+            [tabID(pinned), tabID(last), tabID(first)]
+        )
+
+        let pinnedClampedToPrefix = try XCTUnwrap(core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(pinned),
+            draggedID: tabID(pinned),
+            destination: surfaces.count
+        ))
+        XCTAssertEqual(pinnedClampedToPrefix, surfaces.map(tabID))
     }
 }

@@ -50,6 +50,30 @@ final class Workspace: Identifiable, ObservableObject {
 
     /// The bonsplit controller managing the split panes for this workspace
     let bonsplitController: BonsplitController
+    private lazy var sharedWorkspaceCore = SharedWorkspaceCore()
+
+    private func connectSharedTabOrdering() {
+        bonsplitController.onResolveTabOrder = { [weak self] paneID, ids, draggedID, destination in
+            guard let self else { return nil }
+            let nativeTabs = self.bonsplitController.tabs(inPane: paneID)
+            guard nativeTabs.map(\.id) == ids else { return nil }
+            let surfaces = nativeTabs.map { tab in
+                SharedWorkspaceCore.Surface(
+                    id: tab.id.uuid.uuidString,
+                    session_id: (self.panelIdFromSurfaceId(tab.id) ?? tab.id.uuid).uuidString,
+                    is_pinned: tab.isPinned
+                )
+            }
+            return self.sharedWorkspaceCore.reorder(
+                workspaceID: self.id,
+                paneID: paneID,
+                surfaces: surfaces,
+                selectedID: self.bonsplitController.selectedTab(inPane: paneID)?.id,
+                draggedID: draggedID,
+                destination: destination
+            )
+        }
+    }
 
     /// Mapping from bonsplit TabID to our Panel instances
     @Published var panels: [UUID: any Panel] = [:]
@@ -370,6 +394,7 @@ final class Workspace: Identifiable, ObservableObject {
 
         // Set ourselves as delegate
         bonsplitController.delegate = self
+        connectSharedTabOrdering()
 
         // Ensure bonsplit has a focused pane and our didSelectTab handler runs for the
         // initial terminal. bonsplit's createTab selects internally but does not emit
@@ -466,6 +491,7 @@ final class Workspace: Identifiable, ObservableObject {
         }
 
         bonsplitController.delegate = self
+        connectSharedTabOrdering()
 
         if let initialTabId {
             let paneToFocus: PaneID? = {

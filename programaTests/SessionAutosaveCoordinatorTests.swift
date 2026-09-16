@@ -224,6 +224,106 @@ final class SessionAutosaveCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testPendingDiskWriteSuppressesOverlappingSnapshotBuilds() {
+        var snapshotCallCount = 0
+        var completion: ((Bool) -> Void)?
+        let coordinator = SessionAutosaveCoordinator(
+            sessionPersistenceQueue: DispatchQueue(label: "test.session-autosave.pending"),
+            snapshotProvider: { _ in
+                snapshotCallCount += 1
+                return Self.fakeSnapshot
+            },
+            saveSnapshot: { _, _, callback in completion = callback },
+            isTerminating: { false },
+            isRunningUnderXCTest: { true }
+        )
+
+        coordinator.runSessionAutosaveTick(source: "first")
+        coordinator.runSessionAutosaveTick(source: "pending")
+        XCTAssertEqual(snapshotCallCount, 1)
+        completion?(true)
+        coordinator.runSessionAutosaveTick(source: "completed")
+        XCTAssertEqual(snapshotCallCount, 2)
+    }
+
+    @MainActor
+    func testPromptSaveDuringDiskWriteRunsAfterCompletion() {
+        var completions: [(Bool) -> Void] = []
+        var currentSnapshot = Self.fakeSnapshot
+        let followUp = expectation(description: "changed snapshot saved after in-flight write")
+        let coordinator = SessionAutosaveCoordinator(
+            sessionPersistenceQueue: DispatchQueue(label: "test.session-autosave.prompt-pending"),
+            snapshotProvider: { _ in currentSnapshot },
+            saveSnapshot: { _, snapshot, completion in
+                completions.append(completion)
+                if completions.count == 2 {
+                    XCTAssertEqual(snapshot?.cleanShutdown, true)
+                    followUp.fulfill()
+                }
+            },
+            isTerminating: { false },
+            isRunningUnderXCTest: { true }
+        )
+        coordinator.runSessionAutosaveTick(source: "first")
+        currentSnapshot.cleanShutdown = true
+        coordinator.requestPromptSave(source: "changed", after: 0)
+        let promptFired = expectation(description: "prompt callback encountered pending write")
+        DispatchQueue.main.async { promptFired.fulfill() }
+        wait(for: [promptFired], timeout: 2)
+        XCTAssertEqual(completions.count, 1)
+        completions[0](true)
+        wait(for: [followUp], timeout: 2)
+        XCTAssertEqual(completions.count, 2)
+        coordinator.stopSessionAutosaveTimer()
+    }
+
+    @MainActor
+    func testFailedDiskWriteRetriesUnchangedSnapshot() {
+        var completions: [(Bool) -> Void] = []
+        let coordinator = SessionAutosaveCoordinator(
+            sessionPersistenceQueue: DispatchQueue(label: "test.session-autosave.failed-write"),
+            snapshotProvider: { _ in Self.fakeSnapshot },
+            saveSnapshot: { _, _, completion in completions.append(completion) },
+            isTerminating: { false },
+            isRunningUnderXCTest: { true }
+        )
+
+        coordinator.runSessionAutosaveTick(source: "first")
+        XCTAssertEqual(completions.count, 1)
+        completions[0](false)
+        coordinator.runSessionAutosaveTick(source: "retry")
+        XCTAssertEqual(completions.count, 2, "failed writes must not advance the saved fingerprint")
+        completions[1](true)
+        coordinator.runSessionAutosaveTick(source: "saved")
+        XCTAssertEqual(completions.count, 2)
+        coordinator.stopSessionAutosaveTimer()
+    }
+
+    @MainActor
+    func testStopInvalidatesLateWriteCompletion() {
+        var completions: [(Bool) -> Void] = []
+        let coordinator = SessionAutosaveCoordinator(
+            sessionPersistenceQueue: DispatchQueue(label: "test.session-autosave.stopped-write"),
+            snapshotProvider: { _ in Self.fakeSnapshot },
+            saveSnapshot: { _, _, completion in completions.append(completion) },
+            isTerminating: { false },
+            isRunningUnderXCTest: { true }
+        )
+
+        coordinator.runSessionAutosaveTick(source: "beforeStop")
+        coordinator.stopSessionAutosaveTimer()
+        coordinator.runSessionAutosaveTick(source: "afterStop")
+        XCTAssertEqual(completions.count, 2)
+        completions[0](true)
+        coordinator.runSessionAutosaveTick(source: "stillPending")
+        XCTAssertEqual(completions.count, 2, "stale completion must not clear the current write")
+        completions[1](false)
+        coordinator.runSessionAutosaveTick(source: "retry")
+        XCTAssertEqual(completions.count, 3, "stale success must not record a saved fingerprint")
+        coordinator.stopSessionAutosaveTimer()
+    }
+
+    @MainActor
     func testAutosaveTickDoesNotSaveWhileTerminating() {
         var snapshotCallCount = 0
         var saveCallCount = 0

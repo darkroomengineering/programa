@@ -5,6 +5,14 @@
 - macOS 14+
 - Xcode 26+ (Swift 6 and the macOS 26 SDK)
 - [Zig](https://ziglang.org/) (install via `brew install zig`)
+- [Rust](https://rustup.rs/) with Cargo for the shared application core. Add
+  `aarch64-apple-darwin` and `x86_64-apple-darwin` targets when building a
+  universal macOS release. The Xcode build compiles and links the core automatically.
+
+For the native WinUI frontend, use Windows with the .NET SDK and Rust MSVC
+toolchain described in [windows/README.md](windows/README.md). Its build script
+produces the rolling `.exe` artifact. Windows interaction validation is covered
+in [docs/windows-testing.md](docs/windows-testing.md).
 
 ## Getting Started
 

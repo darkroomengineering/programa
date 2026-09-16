@@ -238,7 +238,7 @@ struct CLICommandDispatcher {
     // If the user explicitly targets a window, focus it first so commands route correctly.
     if let windowId {
         let normalizedWindow = try cli.normalizeWindowHandle(windowId, client: client) ?? windowId
-        _ = try client.sendV2(method: "window.focus", params: ["window_id": normalizedWindow])
+        _ = try client.sendV2(method: V2MethodNames.windowFocus, params: ["window_id": normalizedWindow])
     }
 
     let ctx = CommandContext(

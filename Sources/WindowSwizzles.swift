@@ -77,6 +77,11 @@ extension NSApplication {
 // Widened from `private extension` to `extension`: AppDelegate.installWindowResponderSwizzles()
 // (in AppDelegate.swift) references these @objc methods via #selector(...) for method swizzling. Refs #95.
 extension NSWindow {
+    @objc func programa_close() {
+        if AppDelegate.shared?.preserveMainWindowOnClose(self) == true { return }
+        programa_close()
+    }
+
     @objc func programa_makeFirstResponder(_ responder: NSResponder?) -> Bool {
         if programaIsWindowFirstResponderBypassActive() {
 #if DEBUG
@@ -287,11 +292,9 @@ extension NSWindow {
             )
             #endif
             if event.clickCount >= 2 {
-                // Match the WindowDragHandleView regions: titlebar-area
-                // double-click opens a tab, not the standard zoom/minimize.
-                _ = AppDelegate.shared?.tabManager?.addTab()
+                let action = performStandardTitlebarDoubleClick(window: self)
                 #if DEBUG
-                dlog("titlebar.chromeDrag doubleClick action=addTab")
+                dlog("titlebar.chromeDrag doubleClick action=\(String(describing: action))")
                 #endif
             } else {
                 withTemporaryWindowMovableEnabled(window: self) {

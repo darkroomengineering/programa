@@ -74,7 +74,9 @@ extension Workspace {
             worktreeFolderRepoRoot: worktreeFolderRepoRoot,
             isWorktreeFolder: isWorktreeFolder,
             isWorktreeFolderCollapsed: isWorktreeFolderCollapsed,
-            worktreeBranch: worktreeBranch
+            worktreeBranch: worktreeBranch,
+            id: id,
+            worktreeParentWorkspaceId: worktreeParentWorkspaceId
         )
     }
 
@@ -532,7 +534,12 @@ extension Workspace {
             // (`TerminalSurface.pendingReviveSeed` / `seedRevivedScrollbackIfPending`)
             // instead of the old temp-file + shell-rc `cat` mechanism --
             // see `SessionFreshSpawnScrollbackSeed`'s doc comment.
-            let preparedSeedText = SessionFreshSpawnScrollbackSeed.preparedText(for: scrollbackText)
+            let recoveryNotice = String(
+                localized: "session_recovery.freshShell.notice",
+                defaultValue: "A new shell was started because the previous process could not be reconnected."
+            )
+            let preparedSeedText = (SessionFreshSpawnScrollbackSeed.preparedText(for: scrollbackText) ?? "")
+                + "\r\n" + recoveryNotice + "\r\n"
             guard let terminalPanel = newTerminalSurface(
                 inPane: paneId,
                 focus: false,

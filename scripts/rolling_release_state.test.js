@@ -15,7 +15,7 @@ const assert = require("node:assert/strict");
 // A manifest is a JSON-derived plain object with this exact shape:
 //
 //   {
-//     schemaVersion: 1,
+//     schemaVersion: 2,
 //     sealed: boolean,
 //     targetSha: <40 lowercase hexadecimal characters>,
 //     version: <canonical major.minor.patch>,
@@ -25,8 +25,9 @@ const assert = require("node:assert/strict");
 //
 // `role` is exactly "immutable", "appcast", or "stable-alias". Asset names
 // are safe basenames. A sealed manifest contains the complete rolling payload:
-// one build-suffixed enclosure DMG, one dSYM archive, appcast.xml, and
-// programa-macos.dmg. Asset size is a positive safe integer and sha256 is 64
+// one build-suffixed enclosure DMG, one dSYM archive, one build-suffixed Windows
+// executable, appcast.xml, and the stable macOS and Windows aliases. Asset size
+// is a positive safe integer and sha256 is 64
 // lowercase hexadecimal characters. Marketing `version` and monotonic `build`
 // are independent canonical identifiers. Every immutable filename suffix still
 // agrees with `build`.
@@ -61,6 +62,7 @@ function requiredAssets(build) {
   const assets = [
     `programa-macos-${build}.dmg`,
     `programa-dSYMs-${build}.zip`,
+    `programa-windows-${build}.exe`,
   ].map((name, index) => ({
     name,
     role: "immutable",
@@ -69,12 +71,14 @@ function requiredAssets(build) {
   }));
   assets[0].size = 902;
   assets[0].sha256 = "c".repeat(64);
+  assets[2].size = 903;
+  assets[2].sha256 = "d".repeat(64);
   return assets;
 }
 
 function manifestFor(build = "900719925474099312345678901234567890", overrides = {}) {
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sealed: true,
     targetSha: TARGET_SHA,
     version: versionFor(build),
@@ -83,6 +87,7 @@ function manifestFor(build = "900719925474099312345678901234567890", overrides =
       ...requiredAssets(build),
       { name: "appcast.xml", role: "appcast", size: 901, sha256: "b".repeat(64) },
       { name: "programa-macos.dmg", role: "stable-alias", size: 902, sha256: "c".repeat(64) },
+      { name: "programa-windows.exe", role: "stable-alias", size: 903, sha256: "d".repeat(64) },
     ],
   };
 
@@ -153,7 +158,7 @@ test("the candidate schema rejects unknown, missing, or non-JSON field values", 
       delete value.targetSha;
       return value;
     })()],
-    ["wrong schema version", manifestFor("41", { schemaVersion: 2 })],
+    ["wrong schema version", manifestFor("41", { schemaVersion: 3 })],
     ["non-array assets", manifestFor("41", { assets: {} })],
     ["numeric build", manifestFor("41", { build: 41 })],
     ["non-JSON build", manifestFor("41", { build: 41n })],
@@ -224,7 +229,7 @@ test("asset names are safe unique basenames and roles are exact", async (t) => {
 });
 
 test("mutable aliases cannot masquerade as immutable payloads", async (t) => {
-  for (const alias of ["appcast.xml", "programa-macos.dmg"]) {
+  for (const alias of ["appcast.xml", "programa-macos.dmg", "programa-windows.exe"]) {
     await t.test(alias, () => {
       const value = manifestFor("41");
       value.assets.find((asset) => asset.name === alias).role = "immutable";
@@ -233,10 +238,10 @@ test("mutable aliases cannot masquerade as immutable payloads", async (t) => {
   }
 });
 
-test("a sealed candidate has exactly one appcast and one stable alias", async (t) => {
+test("a sealed candidate has exactly one appcast and two stable aliases", async (t) => {
   const cases = [
     ["missing appcast", (assets) => assets.filter((asset) => asset.role !== "appcast")],
-    ["missing stable alias", (assets) => assets.filter((asset) => asset.role !== "stable-alias")],
+    ["missing stable alias", (assets) => assets.filter((asset) => asset.name !== "programa-windows.exe")],
     ["second appcast", (assets) => [...assets, { name: "feed.xml", role: "appcast", size: 1, sha256: ASSET_SHA }]],
     ["second stable alias", (assets) => [...assets, { name: "latest.dmg", role: "stable-alias", size: 1, sha256: ASSET_SHA }]],
   ];
@@ -267,10 +272,9 @@ test("immutable payload suffixes must match the candidate build", () => {
   assert.throws(() => validateCandidateManifest(value), /build|suffix|asset|required/i);
 });
 
-// PR #329 removed the remote daemon (programad-remote) and narrowed the required
-// immutable set from ten assets to two. The already-published rolling candidate that
-// the live appcast points at was sealed before that change and still carries the six
-// legacy daemon immutables, so the validator must keep accepting it.
+// PR #329 removed the remote daemon (programad-remote). Historical schema 1
+// candidates can still carry its six legacy immutables, so they remain readable
+// even though only schema 2 desktop payloads are promotable now.
 function legacyDaemonAssets(build) {
   return [
     `programad-remote-checksums-${build}.txt`,
@@ -287,8 +291,18 @@ function legacyDaemonAssets(build) {
   }));
 }
 
+function historicalManifestFor(build) {
+  const value = manifestFor(build);
+  value.schemaVersion = 1;
+  value.assets = value.assets.filter(
+    (asset) =>
+      asset.name !== `programa-windows-${build}.exe` && asset.name !== "programa-windows.exe",
+  );
+  return value;
+}
+
 test("a sealed manifest with the full legacy ten-asset daemon set still validates", () => {
-  const value = manifestFor("41");
+  const value = historicalManifestFor("41");
   value.assets.push(...legacyDaemonAssets("41"));
 
   const validated = validateCandidateManifest(value);
@@ -296,7 +310,7 @@ test("a sealed manifest with the full legacy ten-asset daemon set still validate
 });
 
 test("a sealed manifest with a partial legacy daemon asset set fails closed", () => {
-  const value = manifestFor("41");
+  const value = historicalManifestFor("41");
   value.assets.push(...legacyDaemonAssets("41").slice(0, 3));
 
   assert.throws(() => validateCandidateManifest(value), /partial|legacy|daemon|asset/i);
@@ -317,6 +331,13 @@ test("an immutable asset with an unknown, non-legacy name still fails validation
   );
 });
 
+test("historical schema 1 payloads remain readable but cannot be promoted", () => {
+  const historical = historicalManifestFor("41");
+  assert.equal(validateCandidateManifest(historical).schemaVersion, 1);
+  assert.throws(() => assertCandidateMayPromote(historical, null), /schema|current|version 2/i);
+  assert.throws(() => getPromotionOrder(historical), /schema|current|version 2/i);
+});
+
 test("the stable DMG is byte-identical to the immutable build DMG", () => {
   const valid = manifestFor("41");
   assert.doesNotThrow(() => validateCandidateManifest(valid));
@@ -326,6 +347,18 @@ test("the stable DMG is byte-identical to the immutable build DMG", () => {
     const stable = mismatched.assets.find((asset) => asset.name === "programa-macos.dmg");
     stable[field] = field === "size" ? stable.size + 1 : "d".repeat(64);
     assert.throws(() => validateCandidateManifest(mismatched), /stable|dmg|identical|size|sha|hash/i);
+  }
+});
+
+test("the stable EXE is byte-identical to the immutable build EXE", () => {
+  const valid = manifestFor("41");
+  assert.doesNotThrow(() => validateCandidateManifest(valid));
+
+  for (const field of ["size", "sha256"]) {
+    const mismatched = manifestFor("41");
+    const stable = mismatched.assets.find((asset) => asset.name === "programa-windows.exe");
+    stable[field] = field === "size" ? stable.size + 1 : "e".repeat(64);
+    assert.throws(() => validateCandidateManifest(mismatched), /stable|exe|identical|size|sha|hash/i);
   }
 });
 
@@ -685,9 +718,14 @@ test("promotion order is deterministic: immutable prerequisites, appcast, then s
   const names = ordered.map((asset) => asset.name);
   const immutableNames = requiredAssets("41").map((asset) => asset.name).sort();
 
-  assert.deepEqual(names, [...immutableNames, "appcast.xml", "programa-macos.dmg"]);
-  assert.ok(ordered.slice(0, -2).every((asset) => asset.role === "immutable"));
-  assert.equal(ordered.at(-2).role, "appcast");
+  assert.deepEqual(names, [
+    ...immutableNames,
+    "appcast.xml",
+    "programa-macos.dmg",
+    "programa-windows.exe",
+  ]);
+  assert.ok(ordered.slice(0, -3).every((asset) => asset.role === "immutable"));
+  assert.equal(ordered.at(-3).role, "appcast");
   assert.equal(ordered.at(-1).role, "stable-alias");
 });
 
@@ -698,8 +736,13 @@ test("manifest creation adds the schema version and canonicalizes asset order", 
 
   const created = createCandidateManifest(source);
 
-  assert.equal(created.schemaVersion, 1);
+  assert.equal(created.schemaVersion, 2);
   assert.equal(created.build, "41");
   assert.deepEqual(created.assets, getPromotionOrder(created));
   assert.deepEqual(validateCandidateManifest(clone(created)), created);
+});
+
+test("new candidate creation rejects the historical schema", () => {
+  const source = manifestFor("41", { schemaVersion: 1 });
+  assert.throws(() => createCandidateManifest(source), /new|schema|version 2/i);
 });

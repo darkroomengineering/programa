@@ -289,6 +289,35 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
             )
         }
 
+        let nativeDropTarget: (Int) -> (tab: TabItem, sourcePaneID: PaneID, targetIndex: Int)? = {
+            [weak pane, weak splitController, weak bonsplitController] requestedIndex in
+            guard let pane, let splitController, let bonsplitController,
+                  requestedIndex >= 0, requestedIndex <= pane.tabs.count,
+                  let draggedTab = splitController.activeDragTab ?? splitController.draggingTab,
+                  let sourcePaneID = splitController.activeDragSourcePaneId ?? splitController.dragSourcePaneId,
+                  let sourcePane = splitController.rootNode.findPane(sourcePaneID),
+                  let sourceIndex = sourcePane.tabs.firstIndex(where: { $0.id == draggedTab.id }) else {
+                return nil
+            }
+            if sourcePaneID == pane.id {
+                guard bonsplitController.configuration.allowTabReordering else { return nil }
+            } else {
+                guard bonsplitController.configuration.allowCrossPaneTabMove else { return nil }
+            }
+
+            // PaneState keeps pinned tabs in one leading run. Normalize the visual
+            // insertion marker to the same boundary that insertTab/moveTab enforce.
+            let pinnedCount = pane.tabs.lazy.filter(\.isPinned).count
+            let targetIndex = draggedTab.isPinned
+                ? min(requestedIndex, pinnedCount)
+                : max(requestedIndex, pinnedCount)
+            if sourcePaneID == pane.id,
+               targetIndex == sourceIndex || targetIndex == sourceIndex + 1 {
+                return nil
+            }
+            return (draggedTab, sourcePaneID, targetIndex)
+        }
+
         let descriptor = BonsplitPaneChromeDescriptor(
             paneID: pane.id,
             anchorView: anchorView,
@@ -333,6 +362,21 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
                 splitController.dragSourcePaneId = nil
                 splitController.activeDragTab = nil
                 splitController.activeDragSourcePaneId = nil
+            },
+            validatedDropIndex: { nativeDropTarget($0)?.targetIndex },
+            onDropTab: { [weak pane, weak bonsplitController] requestedIndex in
+                guard let pane, let bonsplitController,
+                      let target = nativeDropTarget(requestedIndex) else { return false }
+                if target.sourcePaneID == pane.id {
+                    return bonsplitController.reorderTab(
+                        TabID(id: target.tab.id), toIndex: target.targetIndex, selectMovedTab: false
+                    )
+                }
+                return bonsplitController.moveTab(
+                    TabID(id: target.tab.id),
+                    toPane: pane.id,
+                    atIndex: target.targetIndex
+                )
             },
             onNewTab: { [weak pane, weak bonsplitController] in
                 guard let pane, let bonsplitController else { return }

@@ -8,19 +8,23 @@ import Bonsplit
 /// the actual snapshot build/save implementations; this coordinator receives them as injected
 /// closures rather than a back-reference to `AppDelegate`, keeping the orchestration testable in
 /// isolation with fakes.
-@MainActor
 final class SessionAutosaveCoordinator {
     typealias SnapshotProvider = (_ includeScrollback: Bool) -> AppSessionSnapshot?
-    typealias SaveCompletion = @MainActor @Sendable (_ saved: Bool) -> Void
-    typealias SnapshotSaver = (_ includeScrollback: Bool, _ prebuiltSnapshot: AppSessionSnapshot?, _ completion: @escaping SaveCompletion) -> Void
+    /// Completion runs on main and reports the completed disk write, not queue acceptance.
+    typealias SaveCompletion = (_ saved: Bool) -> Void
+    typealias SnapshotSaver = (
+        _ includeScrollback: Bool,
+        _ prebuiltSnapshot: AppSessionSnapshot?,
+        _ completion: @escaping SaveCompletion
+    ) -> Void
     typealias TerminatingProvider = () -> Bool
     typealias XCTestRunningProvider = () -> Bool
 
     private var sessionAutosaveTimer: DispatchSourceTimer?
-    private var activeSaveID: UUID?
-    private var pendingSaveSource: String?
-    private var lifecycleID = UUID()
+    private var sessionAutosaveTickInFlight = false
+    private var autosaveGeneration = UUID()
     private var promptSaveScheduled = false
+    private var promptSaveWaitingForWrite = false
     private var consecutiveDeclinedSaveRetries = 0
     private static let maxConsecutiveDeclinedSaveRetries = 5
     private var sessionAutosaveDeferredRetryPending = false
@@ -78,12 +82,12 @@ final class SessionAutosaveCoordinator {
         let timer = DispatchSource.makeTimerSource(queue: .main)
         let interval = SessionPersistencePolicy.autosaveInterval
         timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .seconds(1))
-        let lifecycleID = lifecycleID
         timer.setEventHandler { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self, self.lifecycleID == lifecycleID else { return }
-                self.runSessionAutosaveTick(source: "timer")
+            guard let self,
+                  Self.shouldRunSessionAutosaveTick(isTerminatingApp: self.isTerminating()) else {
+                return
             }
+            self.runSessionAutosaveTick(source: "timer")
         }
         sessionAutosaveTimer = timer
         timer.resume()
@@ -92,12 +96,12 @@ final class SessionAutosaveCoordinator {
     func stopSessionAutosaveTimer() {
         sessionAutosaveTimer?.cancel()
         sessionAutosaveTimer = nil
-        lifecycleID = UUID()
-        activeSaveID = nil
-        pendingSaveSource = nil
-        promptSaveScheduled = false
-        consecutiveDeclinedSaveRetries = 0
+        autosaveGeneration = UUID()
+        sessionAutosaveTickInFlight = false
         sessionAutosaveDeferredRetryPending = false
+        promptSaveScheduled = false
+        promptSaveWaitingForWrite = false
+        consecutiveDeclinedSaveRetries = 0
     }
 
     nonisolated static func shouldRunSessionAutosaveTick(isTerminatingApp: Bool) -> Bool {
@@ -117,10 +121,10 @@ final class SessionAutosaveCoordinator {
         guard delay.isFinite, delay > 0 else { return }
         guard !sessionAutosaveDeferredRetryPending else { return }
         sessionAutosaveDeferredRetryPending = true
-        let lifecycleID = lifecycleID
+        let generation = autosaveGeneration
         sessionPersistenceQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self, self.lifecycleID == lifecycleID else { return }
+                guard let self, self.autosaveGeneration == generation else { return }
                 self.sessionAutosaveDeferredRetryPending = false
                 self.runSessionAutosaveTick(source: "typingQuietRetry")
             }
@@ -129,10 +133,7 @@ final class SessionAutosaveCoordinator {
 
     func runSessionAutosaveTick(source: String) {
         guard Self.shouldRunSessionAutosaveTick(isTerminatingApp: isTerminating()) else { return }
-        guard activeSaveID == nil else {
-            pendingSaveSource = source
-            return
-        }
+        guard !sessionAutosaveTickInFlight else { return }
         if let remainingQuietPeriod = remainingSessionAutosaveTypingQuietPeriod() {
 #if DEBUG
             dlog(
@@ -144,8 +145,7 @@ final class SessionAutosaveCoordinator {
             return
         }
 
-        let saveID = UUID()
-        activeSaveID = saveID
+        sessionAutosaveTickInFlight = true
 #if DEBUG
         let timingStart = ProgramaTypingTiming.start()
         let phaseStart = ProcessInfo.processInfo.systemUptime
@@ -190,26 +190,27 @@ final class SessionAutosaveCoordinator {
             lastPersistedAt: lastSessionAutosavePersistedAt,
             now: now
         ) {
+            sessionAutosaveTickInFlight = false
 #if DEBUG
             dlog(
                 "session.save.skipped reason=unchanged_autosave_fingerprint includeScrollback=0 source=\(source)"
             )
 #endif
-            activeSaveID = nil
             return
         }
 
 #if DEBUG
         let saveStart = ProcessInfo.processInfo.systemUptime
 #endif
+        let generation = autosaveGeneration
         saveSnapshot(false, autosaveSnapshot) { [weak self] saved in
-            guard let self, self.activeSaveID == saveID else { return }
-            self.activeSaveID = nil
-            let pendingSaveSource = self.pendingSaveSource
-            self.pendingSaveSource = nil
+            guard let self, self.autosaveGeneration == generation else { return }
+            self.sessionAutosaveTickInFlight = false
+            guard !self.isTerminating() else { return }
             guard saved else {
-                // Declined and failed writes must not cache an identity that never reached disk.
-                // Bound prompt retries so a windowless app falls back to the periodic timer.
+                // Declined snapshots and failed disk writes must remain eligible even
+                // when their content is unchanged. Bound retries for windowless apps
+                // and persistent disk errors; the periodic timer keeps trying later.
                 if self.consecutiveDeclinedSaveRetries < Self.maxConsecutiveDeclinedSaveRetries {
                     self.consecutiveDeclinedSaveRetries += 1
                     self.scheduleDeferredSessionAutosaveRetry(after: 1.0)
@@ -222,8 +223,9 @@ final class SessionAutosaveCoordinator {
                 persistedAt: Date(),
                 fingerprint: autosaveFingerprint
             )
-            if let pendingSaveSource {
-                self.runSessionAutosaveTick(source: pendingSaveSource)
+            if self.promptSaveWaitingForWrite {
+                self.promptSaveWaitingForWrite = false
+                self.requestPromptSave(source: "writeCompleted", after: 0)
             }
         }
 #if DEBUG
@@ -241,10 +243,14 @@ final class SessionAutosaveCoordinator {
     func requestPromptSave(source: String, after delay: TimeInterval = 1.0) {
         guard !promptSaveScheduled else { return }
         promptSaveScheduled = true
-        let lifecycleID = lifecycleID
+        let generation = autosaveGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, self.lifecycleID == lifecycleID else { return }
+            guard let self, self.autosaveGeneration == generation else { return }
             self.promptSaveScheduled = false
+            if self.sessionAutosaveTickInFlight {
+                self.promptSaveWaitingForWrite = true
+                return
+            }
             self.runSessionAutosaveTick(source: source)
         }
     }

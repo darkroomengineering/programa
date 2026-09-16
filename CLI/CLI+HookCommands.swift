@@ -1,3 +1,5 @@
+import Foundation
+
 extension ProgramaCLI {
     /// Subcommand help text for Hooks commands, split out of the
     /// central `subcommandUsage` switch (programa.swift) so each domain's
@@ -122,6 +124,98 @@ extension ProgramaCLI {
                 helpLines: [],
                 execute: { ctx in
                     try self.runOpenCodeHook(commandArgs: ctx.commandArgs, client: ctx.client)
+                }
+            ),
+            CommandDescriptor(
+                names: ["agent-event"],
+                helpLines: ["agent-event --event <event_type> [--provider <p>] [--session-id <id>] [--turn-id <id>] [--item-id <id>] [--label <text>] [--resolution <r>] [--workspace <id|ref>] [--surface <id|ref>]"],
+                detailedUsage: """
+                Usage: programa agent-event --event <event_type> [flags]
+
+                Report a normalized agent lifecycle event (docs/plans/agent-events.md). One
+                fixed CLI invocation, meant for provider adapters whose installed hook command
+                needs a single command rather than a stdin-parsing subcommand (Codex hooks.json,
+                the OpenCode plugin), and as a documented, testable entry point for tests_v2.
+
+                --event must be one of:
+                  session.started, session.exited, turn.started, turn.completed, turn.aborted,
+                  request.opened, request.resolved, user-input.requested, user-input.resolved,
+                  item.started, item.completed
+
+                Flags:
+                  --event <event_type>   Required. One of the values above.
+                  --provider <p>         Provider name (e.g. claude-code, codex, opencode)
+                  --session-id <id>      Provider's own session/thread id
+                  --turn-id <id>         Turn id, when the provider gives one
+                  --item-id <id>         Tool-call/item id, for item.* events
+                  --label <text>         Human-readable summary (tool name, question text)
+                  --resolution <r>       approved, denied, or answered (request/user-input.resolved)
+                  --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
+                  --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
+
+                Example:
+                  programa agent-event --provider codex --event turn.started
+                  programa agent-event --provider codex --event session.exited
+                """,
+                grammar: CLIArgumentGrammar(
+                    valueOptions: [
+                        "event", "provider", "session-id", "turn-id", "item-id",
+                        "label", "resolution", "workspace", "surface",
+                    ],
+                    requiredOptions: ["event"],
+                    maxPositionals: 0
+                ),
+                execute: { ctx in
+                    let (providerArg, rem0) = self.parseOption(ctx.commandArgs, name: "--provider")
+                    let (eventArg, rem1) = self.parseOption(rem0, name: "--event")
+                    let (sessionIdArg, rem2) = self.parseOption(rem1, name: "--session-id")
+                    let (turnIdArg, rem3) = self.parseOption(rem2, name: "--turn-id")
+                    let (itemIdArg, rem4) = self.parseOption(rem3, name: "--item-id")
+                    let (labelArg, rem5) = self.parseOption(rem4, name: "--label")
+                    let (resolutionArg, rem6) = self.parseOption(rem5, name: "--resolution")
+                    let (wsArg, rem7) = self.parseOption(rem6, name: "--workspace")
+                    let (sfArg, rem8) = self.parseOption(rem7, name: "--surface")
+                    if !rem8.isEmpty {
+                        throw CLIError(message: "agent-event: unexpected arguments: \(rem8.joined(separator: " "))")
+                    }
+
+                    let validEventTypes: Set<String> = [
+                        "session.started", "session.exited",
+                        "turn.started", "turn.completed", "turn.aborted",
+                        "request.opened", "request.resolved",
+                        "user-input.requested", "user-input.resolved",
+                        "item.started", "item.completed",
+                    ]
+                    guard let eventArg else {
+                        throw CLIError(message: "agent-event: --event is required")
+                    }
+                    guard validEventTypes.contains(eventArg) else {
+                        throw CLIError(message: "agent-event: invalid --event '\(eventArg)' — use one of: \(validEventTypes.sorted().joined(separator: ", "))")
+                    }
+
+                    let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
+                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+
+                    var params: [String: Any] = ["event_type": eventArg]
+                    let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
+                    if let wsId { params["workspace_id"] = wsId }
+                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    if let sfId { params["surface_id"] = sfId }
+                    if let providerArg { params["provider"] = providerArg }
+                    if let sessionIdArg { params["session_id"] = sessionIdArg }
+                    if let turnIdArg { params["turn_id"] = turnIdArg }
+                    if let itemIdArg { params["item_id"] = itemIdArg }
+                    if let labelArg { params["label"] = labelArg }
+                    if let resolutionArg { params["resolution"] = resolutionArg }
+
+                    let payload = try ctx.client.sendV2(method: "agent.event", params: params)
+                    if ctx.jsonOutput {
+                        print(self.jsonString(payload))
+                    } else if let state = payload["state"] as? String {
+                        print(state)
+                    } else {
+                        print("cleared")
+                    }
                 }
             ),
         ]

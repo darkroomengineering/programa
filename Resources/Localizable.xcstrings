@@ -7246,13 +7246,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The existing Programa instance is not responding. Force closing it may lose unsaved terminal or session state."
+            "value": "The existing Programa instance did not quit. Force closing it may lose unsaved terminal or session state."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "既存のProgramaインスタンスが応答していません。強制終了すると、保存されていないターミナルまたはセッションの状態が失われる可能性があります。"
+            "value": "既存のProgramaインスタンスは終了しませんでした。強制終了すると、保存されていないターミナルやセッションの状態が失われる可能性があります。"
           }
         }
       }
@@ -7263,13 +7263,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Programa Isn’t Responding"
+            "value": "Existing Programa Is Still Open"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Programaが応答していません"
+            "value": "既存の Programa が開いたままです"
           }
         }
       }
@@ -13412,13 +13412,64 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Programa quit unexpectedly last time. Your sessions and running processes were restored."
+            "value": "Programa quit unexpectedly last time. Saved workspaces are being restored and available processes reconnected. Terminals that cannot reconnect start a new shell."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "前回、Programa は予期せず終了しました。セッションと実行中のプロセスは復元されています。"
+            "value": "前回、Programa は予期せず終了しました。保存されたワークスペースを復元し、利用可能なプロセスに再接続しています。再接続できないターミナルでは新しいシェルを起動します。"
+          }
+        }
+      }
+    },
+    "session_recovery.freshShell.notice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new shell was started because the previous process could not be reconnected."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以前のプロセスに再接続できなかったため、新しいシェルを起動しました。"
+          }
+        }
+      }
+    },
+    "dialog.quitSaveFailed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Save Sessions"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッションを保存できませんでした"
+          }
+        }
+      }
+    },
+    "dialog.quitSaveFailed.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programa stayed open because it couldn’t save your sessions. Check available disk space and try quitting again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッションを保存できなかったため、Programa は終了せずに開いたままです。ディスクの空き容量を確認して、もう一度終了してください。"
           }
         }
       }

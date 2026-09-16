@@ -196,10 +196,10 @@ extension ProgramaCLI {
 
         if subcommand == "identify" {
             let surface = try normalizeSurfaceHandle(surfaceRaw, client: client, allowFocused: true)
-            var payload = try client.sendV2(method: "system.identify")
+            var payload = try client.sendV2(method: V2MethodNames.systemIdentify)
             if let surface {
-                let urlPayload = try client.sendV2(method: "browser.url.get", params: ["surface_id": surface])
-                let titlePayload = try client.sendV2(method: "browser.get.title", params: ["surface_id": surface])
+                let urlPayload = try client.sendV2(method: V2MethodNames.browserUrlGet, params: ["surface_id": surface])
+                let titlePayload = try client.sendV2(method: V2MethodNames.browserGetTitle, params: ["surface_id": surface])
                 var browser: [String: Any] = [:]
                 browser["surface"] = surface
                 browser["url"] = urlPayload["url"] ?? ""
@@ -233,7 +233,7 @@ extension ProgramaCLI {
                 guard !url.isEmpty else {
                     throw CLIError(message: "browser <surface> open requires a URL")
                 }
-                let payload = try client.sendV2(method: "browser.navigate", params: ["surface_id": sid, "url": url])
+                let payload = try client.sendV2(method: V2MethodNames.browserNavigate, params: ["surface_id": sid, "url": url])
                 output(payload, fallback: "OK")
                 return
             }
@@ -259,7 +259,7 @@ extension ProgramaCLI {
                     params["window_id"] = window
                 }
             }
-            let payload = try client.sendV2(method: "browser.open_split", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.browserOpenSplit, params: params)
             let surfaceText = formatHandle(payload, kind: "surface", idFormat: effectiveIDFormat) ?? "unknown"
             let paneText = formatHandle(payload, kind: "pane", idFormat: effectiveIDFormat) ?? "unknown"
             let placement = ((payload["created_split"] as? Bool) == true) ? "split" : "reuse"
@@ -282,7 +282,7 @@ extension ProgramaCLI {
             if snapshotAfter {
                 params["snapshot_after"] = true
             }
-            let payload = try client.sendV2(method: "browser.navigate", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.browserNavigate, params: params)
             output(payload, fallback: "OK")
             return
         }
@@ -305,7 +305,7 @@ extension ProgramaCLI {
 
         if subcommand == "url" || subcommand == "get-url" {
             let sid = try requireSurface()
-            let payload = try client.sendV2(method: "browser.url.get", params: ["surface_id": sid])
+            let payload = try client.sendV2(method: V2MethodNames.browserUrlGet, params: ["surface_id": sid])
             if effectiveJSONOutput {
                 print(jsonString(formatIDs(payload, mode: effectiveIDFormat)))
             } else {
@@ -316,14 +316,14 @@ extension ProgramaCLI {
 
         if ["focus-webview", "focus_webview"].contains(subcommand) {
             let sid = try requireSurface()
-            let payload = try client.sendV2(method: "browser.focus_webview", params: ["surface_id": sid])
+            let payload = try client.sendV2(method: V2MethodNames.browserFocusWebview, params: ["surface_id": sid])
             output(payload, fallback: "OK")
             return
         }
 
         if ["is-webview-focused", "is_webview_focused"].contains(subcommand) {
             let sid = try requireSurface()
-            let payload = try client.sendV2(method: "browser.is_webview_focused", params: ["surface_id": sid])
+            let payload = try client.sendV2(method: V2MethodNames.browserIsWebviewFocused, params: ["surface_id": sid])
             if effectiveJSONOutput {
                 print(jsonString(formatIDs(payload, mode: effectiveIDFormat)))
             } else {
@@ -357,7 +357,7 @@ extension ProgramaCLI {
                 params["max_depth"] = depth
             }
 
-            let payload = try client.sendV2(method: "browser.snapshot", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.browserSnapshot, params: params)
             if effectiveJSONOutput {
                 print(jsonString(formatIDs(payload, mode: effectiveIDFormat)))
             } else {
@@ -373,7 +373,7 @@ extension ProgramaCLI {
             guard !trimmed.isEmpty else {
                 throw CLIError(message: "browser eval requires a script")
             }
-            let payload = try client.sendV2(method: "browser.eval", params: ["surface_id": sid, "script": trimmed])
+            let payload = try client.sendV2(method: V2MethodNames.browserEval, params: ["surface_id": sid, "script": trimmed])
             let fallback: String
             if let value = payload["value"] {
                 fallback = displayBrowserValue(value)
@@ -424,7 +424,7 @@ extension ProgramaCLI {
                 params["timeout_ms"] = max(1, Int(seconds * 1000.0))
             }
 
-            let payload = try client.sendV2(method: "browser.wait", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.browserWait, params: params)
             output(payload, fallback: "OK")
             return
         }
@@ -552,7 +552,7 @@ extension ProgramaCLI {
             if hasFlag(subArgs, name: "--snapshot-after") {
                 params["snapshot_after"] = true
             }
-            let payload = try client.sendV2(method: "browser.select", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.browserSelect, params: params)
             output(payload, fallback: "OK")
             return
         }
@@ -586,7 +586,7 @@ extension ProgramaCLI {
                 params["snapshot_after"] = true
             }
 
-            let payload = try client.sendV2(method: "browser.scroll", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.browserScroll, params: params)
             output(payload, fallback: "OK")
             return
         }
@@ -596,7 +596,7 @@ extension ProgramaCLI {
             let (outPathOpt, _) = parseOption(subArgs, name: "--out")
             let localJSONOutput = hasFlag(subArgs, name: "--json")
             let outputAsJSON = effectiveJSONOutput || localJSONOutput
-            var payload = try client.sendV2(method: "browser.screenshot", params: ["surface_id": sid])
+            var payload = try client.sendV2(method: V2MethodNames.browserScreenshot, params: ["surface_id": sid])
 
             func fileURL(fromPath rawPath: String) -> URL {
                 let resolvedPath = resolvePath(rawPath)
@@ -742,10 +742,10 @@ extension ProgramaCLI {
 
             switch getVerb {
             case "url":
-                let payload = try client.sendV2(method: "browser.url.get", params: ["surface_id": sid])
+                let payload = try client.sendV2(method: V2MethodNames.browserUrlGet, params: ["surface_id": sid])
                 output(payload, fallback: (payload["url"] as? String) ?? "")
             case "title":
-                let payload = try client.sendV2(method: "browser.get.title", params: ["surface_id": sid])
+                let payload = try client.sendV2(method: V2MethodNames.browserGetTitle, params: ["surface_id": sid])
                 output(payload, fallback: (payload["title"] as? String) ?? "")
             case "text", "html", "value", "count", "box", "styles", "attr":
                 let (selectorOpt, rem1) = parseOption(getArgs, name: "--selector")
@@ -917,7 +917,7 @@ extension ProgramaCLI {
                 throw CLIError(message: "browser frame requires <selector|main>")
             }
             if frameVerb == "main" {
-                let payload = try client.sendV2(method: "browser.frame.main", params: ["surface_id": sid])
+                let payload = try client.sendV2(method: V2MethodNames.browserFrameMain, params: ["surface_id": sid])
                 output(payload, fallback: "OK")
                 return
             }
@@ -926,7 +926,7 @@ extension ProgramaCLI {
             guard let selector else {
                 throw CLIError(message: "browser frame requires a selector or 'main'")
             }
-            let payload = try client.sendV2(method: "browser.frame.select", params: ["surface_id": sid, "selector": selector])
+            let payload = try client.sendV2(method: V2MethodNames.browserFrameSelect, params: ["surface_id": sid, "selector": selector])
             output(payload, fallback: "OK")
             return
         }
@@ -946,10 +946,10 @@ extension ProgramaCLI {
                     // the page's default" instead.
                     params["text"] = remainder.joined(separator: " ")
                 }
-                let payload = try client.sendV2(method: "browser.dialog.accept", params: params)
+                let payload = try client.sendV2(method: V2MethodNames.browserDialogAccept, params: params)
                 output(payload, fallback: "OK")
             case "dismiss":
-                let payload = try client.sendV2(method: "browser.dialog.dismiss", params: ["surface_id": sid])
+                let payload = try client.sendV2(method: V2MethodNames.browserDialogDismiss, params: ["surface_id": sid])
                 output(payload, fallback: "OK")
             default:
                 throw CLIError(message: "Unsupported browser dialog subcommand: \(dialogVerb)")
@@ -986,7 +986,7 @@ extension ProgramaCLI {
                 params["timeout_ms"] = max(1, Int(seconds * 1000.0))
             }
 
-            let payload = try client.sendV2(method: "browser.download.wait", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.browserDownloadWait, params: params)
             output(payload, fallback: "OK")
             return
         }
@@ -1024,7 +1024,7 @@ extension ProgramaCLI {
 
             switch cookieVerb {
             case "get":
-                let payload = try client.sendV2(method: "browser.cookies.get", params: params)
+                let payload = try client.sendV2(method: V2MethodNames.browserCookiesGet, params: params)
                 output(payload, fallback: "OK")
             case "set":
                 var setParams = params
@@ -1038,10 +1038,10 @@ extension ProgramaCLI {
                 guard setParams["name"] != nil, setParams["value"] != nil else {
                     throw CLIError(message: "browser cookies set requires <name> <value> (or --name/--value)")
                 }
-                let payload = try client.sendV2(method: "browser.cookies.set", params: setParams)
+                let payload = try client.sendV2(method: V2MethodNames.browserCookiesSet, params: setParams)
                 output(payload, fallback: "OK")
             case "clear":
-                let payload = try client.sendV2(method: "browser.cookies.clear", params: params)
+                let payload = try client.sendV2(method: V2MethodNames.browserCookiesClear, params: params)
                 output(payload, fallback: "OK")
             default:
                 throw CLIError(message: "Unsupported browser cookies subcommand: \(cookieVerb)")
@@ -1066,7 +1066,7 @@ extension ProgramaCLI {
                 if let key = positional.first {
                     params["key"] = key
                 }
-                let payload = try client.sendV2(method: "browser.storage.get", params: params)
+                let payload = try client.sendV2(method: V2MethodNames.browserStorageGet, params: params)
                 output(payload, fallback: "OK")
             case "set":
                 guard positional.count >= 2 else {
@@ -1074,10 +1074,10 @@ extension ProgramaCLI {
                 }
                 params["key"] = positional[0]
                 params["value"] = positional[1]
-                let payload = try client.sendV2(method: "browser.storage.set", params: params)
+                let payload = try client.sendV2(method: V2MethodNames.browserStorageSet, params: params)
                 output(payload, fallback: "OK")
             case "clear":
-                let payload = try client.sendV2(method: "browser.storage.clear", params: params)
+                let payload = try client.sendV2(method: V2MethodNames.browserStorageClear, params: params)
                 output(payload, fallback: "OK")
             default:
                 throw CLIError(message: "Unsupported browser storage subcommand: \(op)")
@@ -1103,7 +1103,7 @@ extension ProgramaCLI {
 
             switch tabVerb {
             case "list":
-                let payload = try client.sendV2(method: "browser.tab.list", params: ["surface_id": sid])
+                let payload = try client.sendV2(method: V2MethodNames.browserTabList, params: ["surface_id": sid])
                 output(payload, fallback: "OK")
             case "new":
                 var params: [String: Any] = ["surface_id": sid]
@@ -1111,7 +1111,7 @@ extension ProgramaCLI {
                 if !url.isEmpty {
                     params["url"] = url
                 }
-                let payload = try client.sendV2(method: "browser.tab.new", params: params)
+                let payload = try client.sendV2(method: V2MethodNames.browserTabNew, params: params)
                 output(payload, fallback: "OK")
             case "switch", "close":
                 let method = (tabVerb == "switch") ? "browser.tab.switch" : "browser.tab.close"
@@ -1157,7 +1157,7 @@ extension ProgramaCLI {
             } else if errorsVerb != "list" {
                 throw CLIError(message: "Unsupported browser errors subcommand: \(errorsVerb)")
             }
-            let payload = try client.sendV2(method: "browser.errors.list", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.browserErrorsList, params: params)
             if effectiveJSONOutput || errorsVerb == "clear" {
                 output(payload, fallback: "OK")
             } else {
@@ -1173,7 +1173,7 @@ extension ProgramaCLI {
             guard let selector else {
                 throw CLIError(message: "browser highlight requires a selector")
             }
-            let payload = try client.sendV2(method: "browser.highlight", params: ["surface_id": sid, "selector": selector])
+            let payload = try client.sendV2(method: V2MethodNames.browserHighlight, params: ["surface_id": sid, "selector": selector])
             output(payload, fallback: "OK")
             return
         }
@@ -1222,7 +1222,7 @@ extension ProgramaCLI {
                   let height = Int(subArgs[1]) else {
                 throw CLIError(message: "browser viewport requires: <width> <height>")
             }
-            let payload = try client.sendV2(method: "browser.viewport.set", params: ["surface_id": sid, "width": width, "height": height])
+            let payload = try client.sendV2(method: V2MethodNames.browserViewportSet, params: ["surface_id": sid, "width": width, "height": height])
             output(payload, fallback: "OK")
             return
         }
@@ -1234,7 +1234,7 @@ extension ProgramaCLI {
                   let longitude = Double(subArgs[1]) else {
                 throw CLIError(message: "browser geolocation requires: <latitude> <longitude>")
             }
-            let payload = try client.sendV2(method: "browser.geolocation.set", params: ["surface_id": sid, "latitude": latitude, "longitude": longitude])
+            let payload = try client.sendV2(method: V2MethodNames.browserGeolocationSet, params: ["surface_id": sid, "latitude": latitude, "longitude": longitude])
             output(payload, fallback: "OK")
             return
         }
@@ -1245,7 +1245,7 @@ extension ProgramaCLI {
                   let enabled = parseBoolString(raw) else {
                 throw CLIError(message: "browser offline requires true|false")
             }
-            let payload = try client.sendV2(method: "browser.offline.set", params: ["surface_id": sid, "enabled": enabled])
+            let payload = try client.sendV2(method: V2MethodNames.browserOfflineSet, params: ["surface_id": sid, "enabled": enabled])
             output(payload, fallback: "OK")
             return
         }
@@ -1292,16 +1292,16 @@ extension ProgramaCLI {
                 if let bodyOpt {
                     params["body"] = bodyOpt
                 }
-                let payload = try client.sendV2(method: "browser.network.route", params: params)
+                let payload = try client.sendV2(method: V2MethodNames.browserNetworkRoute, params: params)
                 output(payload, fallback: "OK")
             case "unroute":
                 guard let pattern = networkArgs.first else {
                     throw CLIError(message: "browser network unroute requires a URL/pattern")
                 }
-                let payload = try client.sendV2(method: "browser.network.unroute", params: ["surface_id": sid, "url": pattern])
+                let payload = try client.sendV2(method: V2MethodNames.browserNetworkUnroute, params: ["surface_id": sid, "url": pattern])
                 output(payload, fallback: "OK")
             case "requests":
-                let payload = try client.sendV2(method: "browser.network.requests", params: ["surface_id": sid])
+                let payload = try client.sendV2(method: V2MethodNames.browserNetworkRequests, params: ["surface_id": sid])
                 output(payload, fallback: "OK")
             default:
                 throw CLIError(message: "Unsupported browser network subcommand: \(networkVerb)")

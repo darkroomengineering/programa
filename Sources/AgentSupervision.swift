@@ -311,10 +311,11 @@ enum AgentSupervisionMetadata {
 
     static func aggregateTaskState(
         for workspace: Workspace,
-        records: [AgentTaskRecord]
+        records: [AgentTaskRecord],
+        core: ProgramaCoreProviding = InProcessCore.shared
     ) -> AgentTaskState? {
         var states = records.map(\.state)
-        switch workspace.aggregateAgentState {
+        switch core.agentActivity.aggregateState(for: workspace) {
         case .blocked: states.append(.blocked)
         case .working: states.append(.working)
         case .idle: states.append(.idle)

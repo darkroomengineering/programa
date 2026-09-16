@@ -751,6 +751,11 @@ class TabManager: ObservableObject {
         label: "com.cmux.initial-workspace-git-probe",
         qos: .utility
     )
+    /// The seam to core-owned concerns (git probes, port scanning). See
+    /// `docs/plans/core-seam.md`. `var` (not `let`) so tests can substitute a
+    /// fake that records calls without shelling out to `git`/`gh` or
+    /// touching `PortScanner`'s real `ps`/`lsof` scans.
+    var core: ProgramaCoreProviding = InProcessCore.shared
     var workspaceGitProbeGenerationByKey: [WorkspaceGitProbeKey: UUID] = [:]
     var workspaceGitProbeTimersByKey: [WorkspaceGitProbeKey: [DispatchSourceTimer]] = [:]
     var workspaceGitTrackedDirectoryByKey: [WorkspaceGitProbeKey: String] = [:]
@@ -1399,13 +1404,19 @@ class TabManager: ObservableObject {
         )
 #endif
 
+        // Captured once, on the main actor, so the timer's off-main event
+        // handler below never touches `self.core` from a background queue.
+        // `InProcessGitMetadataProbe` is a stateless struct, safe to call
+        // from any queue; a future core conformance must keep that same
+        // contract. See `docs/plans/core-seam.md`.
+        let core = self.core
         var timers: [DispatchSourceTimer] = []
         for (index, delay) in delays.enumerated() {
             let isLastAttempt = index == delays.count - 1
             let timer = DispatchSource.makeTimerSource(queue: initialWorkspaceGitProbeQueue)
             timer.schedule(deadline: .now() + delay, repeating: .never)
             timer.setEventHandler { [weak self] in
-                let snapshot = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: normalizedDirectory)
+                let snapshot = core.git.probeInitialWorkspaceGitMetadata(directory: normalizedDirectory)
                 Task { @MainActor [weak self] in
                     guard let self, !self.isStopped else { return }
                     self.applyWorkspaceGitMetadataSnapshot(
@@ -1931,9 +1942,15 @@ class TabManager: ObservableObject {
         branch: String?,
         repoRoot: String,
         layoutName: String? = nil,
+        parentWorkspaceId: UUID? = nil,
         select: Bool
     ) -> Workspace {
-        let parent = worktreeParentWorkspace(repoRoot: repoRoot)
+        let parent: Workspace?
+        if let parentWorkspaceId {
+            parent = tabs.first { $0.id == parentWorkspaceId }
+        } else {
+            parent = worktreeParentWorkspace(repoRoot: repoRoot)
+        }
         let insertionAnchor = parent.map { worktreeInsertionAnchor(for: $0) }
         if select, let parent, parent.isWorktreeFolderCollapsed {
             parent.isWorktreeFolderCollapsed = false
@@ -1971,6 +1988,16 @@ class TabManager: ObservableObject {
             homeDirectoryForTildeExpansion: homeDirectory
         )
         guard let repoKey else { return nil }
+        if let selectedWorkspace,
+           let selectedKey = SidebarBranchOrdering.canonicalDirectoryKey(
+               selectedWorkspace.isWorktreeFolder
+                   ? selectedWorkspace.worktreeFolderRepoRoot
+                   : selectedWorkspace.currentDirectory,
+               homeDirectoryForTildeExpansion: homeDirectory
+           ),
+           selectedKey == repoKey || selectedKey.hasPrefix(repoKey == "/" ? "/" : repoKey + "/") {
+            return selectedWorkspace
+        }
         if let folder = tabs.first(where: {
             guard $0.isWorktreeFolder, let folderRoot = $0.worktreeFolderRepoRoot else { return false }
             return SidebarBranchOrdering.canonicalDirectoryKey(
@@ -1989,13 +2016,12 @@ class TabManager: ObservableObject {
     }
 
     private func detachWorktreeFolderRelationships(for workspace: Workspace) {
-        if workspace.isWorktreeFolder {
-            for child in worktreeChildren(of: workspace) {
-                child.worktreeParentWorkspaceId = nil
-                child.worktreeFolderId = nil
-            }
-        } else {
-            workspace.worktreeParentWorkspaceId = nil
+        for child in worktreeChildren(of: workspace) {
+            child.worktreeParentWorkspaceId = nil
+            child.worktreeFolderId = nil
+        }
+        workspace.worktreeParentWorkspaceId = nil
+        if !workspace.isWorktreeFolder {
             workspace.worktreeFolderId = nil
         }
     }
@@ -2576,9 +2602,9 @@ class TabManager: ObservableObject {
             return
         }
         if tabs.count <= 1 {
-            // Last workspace in this window: close the window (Cmd+Shift+W behavior).
-            if let window {
-                window.performClose(nil)
+            // Closing the last workspace explicitly ends its sessions, unlike closing the window UI.
+            if let window, let app = AppDelegate.shared {
+                app.disposeMainWindow(window)
             } else {
                 AppDelegate.shared?.closeMainWindowContainingTabId(workspace.id)
             }

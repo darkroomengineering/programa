@@ -390,6 +390,8 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var isWorktreeFolder: Bool? = nil
     var isWorktreeFolderCollapsed: Bool? = nil
     var worktreeBranch: String? = nil
+    var id: UUID? = nil
+    var worktreeParentWorkspaceId: UUID? = nil
 }
 
 struct SessionTabManagerSnapshot: Codable, Sendable {
@@ -425,6 +427,51 @@ enum SessionPersistenceStore {
         return result
     }
     static let historyDirectoryScanLimit = 256
+
+    /// `nil` means ownership is unknown: cleanup must preserve sessions. Only a
+    /// genuinely absent file or a valid snapshot can prove a session is unowned.
+    static func ownedTerminalSessionIDs(fileURL: URL? = nil) -> Set<String>? {
+        guard let fileURL = fileURL ?? defaultSnapshotFileURL() else { return nil }
+        do {
+            _ = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        } catch let error as NSError {
+            if error.domain == NSCocoaErrorDomain,
+               error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError {
+                return []
+            }
+            return nil
+        }
+        guard let data = boundedSnapshotData(at: fileURL),
+              let snapshot = decodeSnapshot(from: data),
+              snapshot.version == SessionSnapshotSchema.currentVersion else { return nil }
+        return Set(snapshot.windows.flatMap { window in
+            window.tabManager.workspaces.flatMap { workspace in
+                workspace.panels.filter { $0.type == .terminal }.map { $0.id.uuidString }
+            }
+        })
+    }
+
+    /// WAL storage is shared by production and tagged bundles. Consult every
+    /// current snapshot before deleting its session data, with bounded scan work.
+    static func allOwnedTerminalSessionIDs(in directory: URL) -> Set<String>? {
+        var failed = false
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants],
+            errorHandler: { _, _ in failed = true; return false }
+        ) else { return nil }
+        var owned = Set<String>()
+        var inspected = 0
+        while let entry = enumerator.nextObject() as? URL {
+            inspected += 1
+            guard inspected <= historyDirectoryScanLimit else { return nil }
+            guard entry.lastPathComponent.hasPrefix("session-"), entry.pathExtension == "json" else { continue }
+            guard let ids = ownedTerminalSessionIDs(fileURL: entry) else { return nil }
+            owned.formUnion(ids)
+        }
+        return failed ? nil : owned
+    }
 
     struct HistoryScanResult {
         let entries: [URL]
@@ -1224,13 +1271,13 @@ enum SessionFreshSpawnScrollbackSeed {
         // `split(omittingEmptySubsequences: false)` + `joined` round-trips a
         // trailing newline (and any blank lines) exactly, so no separate
         // trailing-newline bookkeeping is needed here.
-        var rendition = ReplayRendition()
+        var rendition = ReplayStyle()
         return text.split(separator: "\n", omittingEmptySubsequences: false)
             .map { sanitizedLine(String($0), rendition: &rendition) }
             .joined(separator: "\n")
     }
 
-    private static func sanitizedLine(_ line: String, rendition: inout ReplayRendition) -> String {
+    private static func sanitizedLine(_ line: String, rendition: inout ReplayStyle) -> String {
         // Cheap bypass: the overwhelming majority of lines in a scrollback
         // transcript are plain text with none of the three signals below.
         guard line.contains(where: { $0 == "\u{001B}" || $0 == "\r" || $0 == "\u{8}" }) else {
@@ -1318,186 +1365,151 @@ enum SessionFreshSpawnScrollbackSeed {
         return tokens
     }
 
-    /// A single replayed grid cell: the character last written there, and
-    /// the SGR state active at the moment it was written. Overwriting a cell
-    /// replaces both fields together, so a later redraw's color correctly
-    /// wins over the frame it overwrites.
-    private struct ReplayCell {
-        var sgr: ReplayRendition
-        var char: Character
-    }
-
-    /// Stores only active attributes, never the sequence history that produced them.
-    /// Parsing follows the pinned Ghostty CSI/SGR parser, including its 24-parameter
-    /// limit, saturating UInt16 parameters, and color-component truncation.
-    private struct ReplayRendition: Equatable {
-        private enum Color: Equatable {
-            case palette(UInt8)
-            case rgb(UInt8, UInt8, UInt8)
-
-            func parameters(for target: Int) -> String {
-                switch self {
-                case .palette(let index):
-                    if target != 58, index < 16 {
-                        return String(target - 8 + Int(index) + (index >= 8 ? 52 : 0))
-                    }
-                    return "\(target);5;\(index)"
-                case .rgb(let red, let green, let blue):
-                    return "\(target);2;\(red);\(green);\(blue)"
-                }
-            }
-        }
-
-        private struct Parameter {
-            var value: UInt16
-            var colon: Bool
-        }
-
-        private var foreground: Color?
-        private var background: Color?
-        private var underlineColor: Color?
-        private var underline: UInt16 = 0
-        private var bold = false
-        private var faint = false
-        private var italic = false
-        private var blink = false
-        private var inverse = false
-        private var invisible = false
-        private var strikethrough = false
-        private var overline = false
-
-        var sequence: String {
-            var attributes: [String] = []
-            if bold { attributes.append("1") }
-            if faint { attributes.append("2") }
-            if italic { attributes.append("3") }
-            if underline != 0 { attributes.append(underline == 1 ? "4" : "4:\(underline)") }
-            if blink { attributes.append("5") }
-            if inverse { attributes.append("7") }
-            if invisible { attributes.append("8") }
-            if strikethrough { attributes.append("9") }
-            if overline { attributes.append("53") }
-            if let foreground { attributes.append(foreground.parameters(for: 38)) }
-            if let background { attributes.append(background.parameters(for: 48)) }
-            if let underlineColor { attributes.append(underlineColor.parameters(for: 58)) }
-            return ansiReset + attributes.map { "\u{001B}[\($0)m" }.joined()
-        }
+    /// Ghostty's supported SGR attributes. Keeping the
+    /// effective values, rather than every command since the last reset,
+    /// bounds both each cell's state and the text emitted for a style change.
+    private struct ReplayStyle: Equatable {
+        var bold = false
+        var faint = false
+        var italic = false
+        var underlineCode: String?
+        var blink = false
+        var inverse = false
+        var invisible = false
+        var strikethrough = false
+        var overline = false
+        var foreground: String?
+        var background: String?
+        var underlineColor: String?
 
         mutating func apply(_ sequence: String) {
-            var parameters: [Parameter] = []
-            var accumulator = 0
-            var hasDigits = false
-            for byte in sequence.utf8.dropFirst(2).dropLast() {
-                if byte == 0x3B || byte == 0x3A {
-                    guard parameters.count < 24 else { return }
-                    parameters.append(Parameter(value: UInt16(accumulator), colon: byte == 0x3A))
-                    accumulator = 0
-                    hasDigits = false
-                } else {
-                    guard (0x30...0x39).contains(byte) else { return }
-                    accumulator = min(Int(UInt16.max), accumulator * 10 + Int(byte - 0x30))
-                    hasDigits = true
-                }
-            }
-            guard parameters.count < 24 else { return }
-            if hasDigits {
-                parameters.append(Parameter(value: UInt16(accumulator), colon: false))
-            }
-            if parameters.isEmpty {
-                self = ReplayRendition()
-                return
-            }
-
+            let body = sequence.dropFirst(2).dropLast()
+            let parameters = body.split(omittingEmptySubsequences: false) { $0 == ";" || $0 == ":" }
+                .map { $0.isEmpty ? 0 : Int($0) }
+            let colonAfter = body.filter { $0 == ";" || $0 == ":" }.map { $0 == ":" }
             var index = 0
-            func consumeColonGroup() {
-                while index < parameters.count, parameters[index].colon { index += 1 }
-                if index < parameters.count { index += 1 }
-            }
             while index < parameters.count {
-                let parameter = parameters[index]
-                index += 1
-                if parameter.colon, ![4, 38, 48, 58].contains(parameter.value) {
-                    consumeColonGroup()
+                defer { index += 1 }
+                guard let code = parameters[index] else { continue }
+                let colon = index < colonAfter.count && colonAfter[index]
+                if colon && code != 4 && code != 38 && code != 48 && code != 58 {
+                    while index < colonAfter.count && colonAfter[index] { index += 1 }
                     continue
                 }
-                switch parameter.value {
-                case 0: self = ReplayRendition()
+                switch code {
+                case 0: self = ReplayStyle()
                 case 1: bold = true
                 case 2: faint = true
                 case 3: italic = true
                 case 4:
-                    if parameter.colon {
-                        guard index < parameters.count else { continue }
-                        if parameters[index].colon {
-                            consumeColonGroup()
+                    if colon {
+                        guard index + 1 < parameters.count,
+                              let variant = parameters[index + 1],
+                              !(index + 1 < colonAfter.count && colonAfter[index + 1]) else {
+                            while index < colonAfter.count && colonAfter[index] { index += 1 }
                             continue
                         }
-                        let style = parameters[index].value
-                        underline = style <= 5 ? style : 1
+                        underlineCode = variant == 0 ? nil : "4:\(variant <= 5 ? variant : 1)"
                         index += 1
                     } else {
-                        underline = 1
+                        underlineCode = "4"
                     }
+                case 21: underlineCode = "21"
                 case 5, 6: blink = true
                 case 7: inverse = true
                 case 8: invisible = true
                 case 9: strikethrough = true
-                case 21: underline = 2
-                case 22:
-                    bold = false
-                    faint = false
+                case 22: bold = false; faint = false
                 case 23: italic = false
-                case 24: underline = 0
+                case 24: underlineCode = nil
                 case 25: blink = false
                 case 27: inverse = false
                 case 28: invisible = false
                 case 29: strikethrough = false
-                case 30...37: foreground = .palette(UInt8(parameter.value - 30))
+                case 30...37, 90...97: foreground = String(code)
                 case 39: foreground = nil
-                case 40...47: background = .palette(UInt8(parameter.value - 40))
+                case 40...47, 100...107: background = String(code)
                 case 49: background = nil
                 case 53: overline = true
                 case 55: overline = false
                 case 59: underlineColor = nil
-                case 90...97: foreground = .palette(UInt8(parameter.value - 82))
-                case 100...107: background = .palette(UInt8(parameter.value - 92))
                 case 38, 48, 58:
-                    guard index < parameters.count else { continue }
-                    let color: Color
-                    if parameters[index].value == 5, index + 1 < parameters.count {
-                        color = .palette(UInt8(truncatingIfNeeded: parameters[index + 1].value))
-                        index += 2
-                    } else if parameters[index].value == 2, index + 3 < parameters.count {
-                        var componentIndex = index + 1
-                        if parameter.colon {
-                            var end = index
-                            while end < parameters.count - 1, parameters[end].colon { end += 1 }
-                            switch end - index {
-                            case 3: break
-                            case 4: componentIndex += 1
-                            default:
-                                consumeColonGroup()
-                                continue
-                            }
+                    guard index + 1 < parameters.count, let mode = parameters[index + 1] else { continue }
+                    var componentStart = index + 2
+                    if mode == 2 && colon {
+                        var colonCount = 0
+                        var position = index + 1
+                        while position < colonAfter.count && colonAfter[position] {
+                            colonCount += 1
+                            position += 1
                         }
-                        color = .rgb(
-                            UInt8(truncatingIfNeeded: parameters[componentIndex].value),
-                            UInt8(truncatingIfNeeded: parameters[componentIndex + 1].value),
-                            UInt8(truncatingIfNeeded: parameters[componentIndex + 2].value)
-                        )
-                        index = componentIndex + 3
-                    } else {
-                        continue
+                        guard colonCount == 3 || colonCount == 4 else { continue }
+                        if colonCount == 4 { componentStart += 1 } // optional colorspace
                     }
-                    switch parameter.value {
+                    let componentCount = mode == 5 ? 1 : (mode == 2 ? 3 : 0)
+                    guard componentCount > 0,
+                          componentStart + componentCount <= parameters.count else { continue }
+                    let components = parameters[componentStart..<(componentStart + componentCount)]
+                    guard components.allSatisfy({ $0 != nil }) else { continue }
+                    // Ghostty stores palette and RGB components as bytes.
+                    let color = ([code, mode] + components.compactMap { $0 }.map { $0 & 255 })
+                        .map(String.init).joined(separator: ";")
+                    switch code {
                     case 38: foreground = color
                     case 48: background = color
                     default: underlineColor = color
                     }
-                default: break
+                    index = componentStart + componentCount - 1
+                default: break // Ghostty ignores unsupported numeric SGRs.
                 }
             }
         }
+
+        var sequence: String {
+            var codes: [String] = []
+            if bold { codes.append("1") }
+            if faint { codes.append("2") }
+            if italic { codes.append("3") }
+            if let underlineCode { codes.append(underlineCode) }
+            if blink { codes.append("5") }
+            if inverse { codes.append("7") }
+            if invisible { codes.append("8") }
+            if strikethrough { codes.append("9") }
+            if overline { codes.append("53") }
+            if let foreground { codes.append(foreground) }
+            if let background { codes.append(background) }
+            if let underlineColor { codes.append(underlineColor) }
+            // Ghostty ignores a CSI with more than 24 parameters (colon subparameters
+            // count too). Keep complete color groups together when splitting a style.
+            var output = ""
+            var group: [String] = []
+            var parameterCount = 0
+            for code in codes {
+                let count = 1 + code.filter { $0 == ";" || $0 == ":" }.count
+                if parameterCount + count > 24 {
+                    output += "\u{001B}[" + group.joined(separator: ";") + "m"
+                    group.removeAll(keepingCapacity: true)
+                    parameterCount = 0
+                }
+                group.append(code)
+                parameterCount += count
+            }
+            if !group.isEmpty { output += "\u{001B}[" + group.joined(separator: ";") + "m" }
+            return output
+        }
+    }
+
+    /// A single replayed grid cell: the character last written there, and
+    /// the effective SGR state active at the moment it was written.
+    private final class ReplayStyleReference {
+        let value: ReplayStyle
+
+        init(_ value: ReplayStyle) { self.value = value }
+    }
+
+    private struct ReplayCell {
+        var style: ReplayStyleReference
+        var char: Character
     }
 
     /// Replays a line's tokens (see `replayTokens`) against a virtual
@@ -1509,15 +1521,22 @@ enum SessionFreshSpawnScrollbackSeed {
     /// and `\b` move the write column without touching cell content -- a
     /// real terminal overwrite, not a clear -- so a shorter redraw correctly
     /// leaves the tail of a longer previous one in place.
-    private static func replayedLine(from tokens: [ReplayToken], rendition: inout ReplayRendition) -> String {
+    private static func replayedLine(from tokens: [ReplayToken], rendition: inout ReplayStyle) -> String {
         var cells: [ReplayCell] = []
+        let defaultStyle = ReplayStyleReference(ReplayStyle())
         var cursor = 0
-        var currentSGR = rendition
+        var currentStyle = ReplayStyleReference(rendition)
 
         for token in tokens {
             switch token {
             case .sgr(let sequence):
-                currentSGR.apply(sequence)
+                var style = currentStyle.value
+                style.apply(sequence)
+                if style != currentStyle.value {
+                    // Cells share immutable styles; overwritten/erased cells release
+                    // obsolete styles instead of retaining a line's entire history.
+                    currentStyle = ReplayStyleReference(style)
+                }
             case .char(let char):
                 switch char {
                 case "\r":
@@ -1532,12 +1551,12 @@ enum SessionFreshSpawnScrollbackSeed {
                     cells.removeAll()
                     cursor = 0
                 default:
-                    let cell = ReplayCell(sgr: currentSGR, char: char)
+                    let cell = ReplayCell(style: currentStyle, char: char)
                     if cursor < cells.count {
                         cells[cursor] = cell
                     } else {
                         if cursor > cells.count {
-                            cells.append(contentsOf: repeatElement(ReplayCell(sgr: ReplayRendition(), char: " "), count: cursor - cells.count))
+                            cells.append(contentsOf: repeatElement(ReplayCell(style: defaultStyle, char: " "), count: cursor - cells.count))
                         }
                         cells.append(cell)
                     }
@@ -1547,18 +1566,20 @@ enum SessionFreshSpawnScrollbackSeed {
         }
 
         var output = ""
-        var lastEmittedSGR = rendition
+        var lastEmittedStyle = defaultStyle
         for cell in cells {
-            if cell.sgr != lastEmittedSGR {
-                output += cell.sgr.sequence
-                lastEmittedSGR = cell.sgr
+            if cell.style.value != lastEmittedStyle.value {
+                if lastEmittedStyle.value != defaultStyle.value { output += ansiReset }
+                output += cell.style.value.sequence
+                lastEmittedStyle = cell.style
             }
             output.append(cell.char)
         }
-        if currentSGR != lastEmittedSGR {
-            output += currentSGR.sequence
+        if currentStyle.value != lastEmittedStyle.value {
+            if lastEmittedStyle.value != defaultStyle.value { output += ansiReset }
+            output += currentStyle.value.sequence
         }
-        rendition = currentSGR
+        rendition = currentStyle.value
         return output
     }
 
@@ -1580,8 +1601,8 @@ enum SessionFreshSpawnScrollbackSeed {
         return try! NSRegularExpression(pattern: esc + #"\[[12]K"#)
     }()
 
-    /// Matches SGR (`ESC[...m`, including the bare `ESC[m` shorthand for
-    /// reset). Used by `replayTokens(in:)` to recognize SGR as a unit within
+    /// Matches SGR (`ESC[...m`, including colon subparameters and the bare
+    /// `ESC[m` shorthand for reset). Used by `replayTokens(in:)` as a unit within
     /// otherwise-plain text -- `sanitizedWorkingText` deliberately does not
     /// strip these, and `csiRegex` deliberately excludes them.
     private static let sgrRegex: NSRegularExpression = {

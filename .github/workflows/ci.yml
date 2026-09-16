@@ -15,6 +15,8 @@ on:
       - "Resources/**"
       - "Assets.xcassets/**"
       - "vendor/**"
+      - "windows/**"
+      - "core/**"
       - "scripts/**"
       - ".github/workflows/**"
       - "GhosttyTabs.xcodeproj/**"
@@ -36,6 +38,10 @@ on:
     inputs:
       notification_ui:
         description: Run the focused multi-window notification UI regression on macOS 26.
+        type: boolean
+        default: false
+      windows_only:
+        description: Run shared-core and Windows checks without the macOS test jobs
         type: boolean
         default: false
       lag_combo:
@@ -84,8 +90,16 @@ jobs:
 
       - name: Detect changed files
         id: detect
+        env:
+          WINDOWS_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_only }}
         run: |
           set -euo pipefail
+
+          if [[ "$WINDOWS_ONLY" == "true" ]]; then
+            echo "run_app_jobs=false" >> "$GITHUB_OUTPUT"
+            echo "Manual Windows verification: macOS jobs excluded." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
           # Keep full CI for push events and non-PR runs.
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
@@ -176,6 +190,59 @@ jobs:
       - name: Validate Sparkle enclosure naming and pruning
         run: node --test scripts/sparkle_enclosure.test.js
 
+      - name: Validate v2 socket API contract has no drift
+        run: ./scripts/check-v2-contract.sh
+
+  shared-core:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: Validate shared core
+        run: |
+          cargo fmt --manifest-path core/Cargo.toml --all -- --check
+          cargo test --manifest-path core/Cargo.toml --workspace --locked
+          cargo test --manifest-path core/crates/programa-terminal/Cargo.toml --locked
+          cargo test --manifest-path core/vendor/alacritty_terminal/Cargo.toml --locked --lib parses_buffered_bytes_before_returning_a_terminal_read_error
+
+  windows-build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Validate and build Windows executable
+        shell: pwsh
+        env:
+          PROGRAMA_CI_BUILD: ${{ github.run_id }}
+          PROGRAMA_CI_COMMIT: ${{ github.sha }}
+        run: |
+          ./scripts/build-windows.ps1 -Version '0.0.0' -Build $env:PROGRAMA_CI_BUILD -Commit $env:PROGRAMA_CI_COMMIT -OutputDirectory "$env:RUNNER_TEMP/programa-windows-ci"
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: programa-windows-ci
+          path: ${{ runner.temp }}/programa-windows-ci/*.exe
+          if-no-files-found: error
+
   unit-tests:
     needs: change-detection
     if: needs.change-detection.outputs.run_app_jobs == 'true'
@@ -210,6 +277,9 @@ jobs:
           export DEVELOPER_DIR="$XCODE_DIR"
           sudo xcode-select -s "$XCODE_DIR" || true
           xcodebuild -version
+
+      - name: Verify native tab-strip hit testing
+        run: swift test --package-path vendor/bonsplit --filter BonsplitTests/testTabBarDragZoneUsesSuperviewCoordinatesAndYieldsToControls
 
       - name: Validate Release reload artifact discovery
         run: ./tests/test_reloadp_programa_artifact.sh

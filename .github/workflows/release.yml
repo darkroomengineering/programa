@@ -1,6 +1,6 @@
-name: Release macOS app
+name: Release desktop apps
 
-# Single-lane release pipeline: this is the ONLY macOS release lane.
+# Single-lane release pipeline for the macOS and Windows desktop artifacts.
 # - workflow_run: every successful `main` CI run builds and seals a unique draft candidate;
 #     a serialized reconciler publishes it as a retained non-latest prerelease archive, then
 #     advances only the mutable aliases, metadata, and ref on `rolling`.
@@ -31,19 +31,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-sign-notarize:
-    # Only build for workflow_run events when the upstream CI run actually succeeded.
-    # Tag pushes and manual dispatch always run.
+  release-identity:
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.sha == github.event.workflow_run.head_sha)
-    runs-on: macos-15
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
     outputs:
       effective_build: ${{ steps.version.outputs.effective_build }}
+      effective_version: ${{ steps.version.outputs.effective_version }}
+      target_sha: ${{ steps.version.outputs.target_sha }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      payload_release_tag: ${{ steps.version.outputs.payload_release_tag }}
+      is_auto_ship: ${{ steps.version.outputs.is_auto_ship }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -52,7 +54,6 @@ jobs:
           # workflow definition, not the commit that triggered CI. Pin to the exact
           # commit CI validated.
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-          submodules: recursive
 
       - name: Validate milestone tag identity
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
@@ -168,27 +169,50 @@ jobs:
           echo "PAYLOAD_RELEASE_TAG=${PAYLOAD_RELEASE_TAG}" >> "$GITHUB_ENV"
           echo "IS_AUTO_SHIP=${IS_AUTO_SHIP}" >> "$GITHUB_ENV"
           echo "effective_build=${EFFECTIVE_BUILD}" >> "$GITHUB_OUTPUT"
+          echo "effective_version=${EFFECTIVE_MARKETING_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "payload_release_tag=${PAYLOAD_RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "is_auto_ship=${IS_AUTO_SHIP}" >> "$GITHUB_OUTPUT"
 
           echo "Marketing version: ${MARKETING_VERSION} (effective: ${EFFECTIVE_MARKETING_VERSION})"
           echo "Effective build: ${EFFECTIVE_BUILD}"
           echo "Release tag: ${RELEASE_TAG}"
           echo "Auto-ship: ${IS_AUTO_SHIP}"
 
+  restore-milestone-candidate:
+    needs: release-identity
+    runs-on: ubuntu-latest
+    outputs:
+      reuse: ${{ steps.restore_state.outputs.reuse }}
+    steps:
+      - name: Checkout release revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.release-identity.outputs.target_sha }}
+
       - name: Restore durable milestone candidate
-        id: milestone_artifact
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        id: restore_state
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.release-identity.outputs.release_tag }}
+          TARGET_SHA: ${{ needs.release-identity.outputs.target_sha }}
+          EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
+          EFFECTIVE_MARKETING_VERSION: ${{ needs.release-identity.outputs.effective_version }}
         run: |
           set -euo pipefail
+          echo "reuse=false" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_EVENT_NAME" != push || "$GITHUB_REF" != refs/tags/* ]]; then
+            exit 0
+          fi
           MILESTONE_PAYLOAD_DIR="${RUNNER_TEMP}/programa-milestone-payload"
           mkdir "$MILESTONE_PAYLOAD_DIR"
           set +e
           ./scripts/restore_release_candidate.sh \
             --candidate-prefix milestone-candidate- \
             --destination-tag "$RELEASE_TAG" \
-            --target-sha "$GITHUB_SHA" \
+            --target-sha "$TARGET_SHA" \
             --build "$EFFECTIVE_BUILD" \
             --version "$EFFECTIVE_MARKETING_VERSION" \
             --output-dir "$MILESTONE_PAYLOAD_DIR"
@@ -196,26 +220,53 @@ jobs:
           set -e
           if [[ "$restore_status" -eq 0 ]]; then
             echo "reuse=true" >> "$GITHUB_OUTPUT"
-            echo "MILESTONE_PAYLOAD_DIR=${MILESTONE_PAYLOAD_DIR}" >> "$GITHUB_ENV"
           elif [[ "$restore_status" -eq 3 ]]; then
             rmdir "$MILESTONE_PAYLOAD_DIR"
-            echo "reuse=false" >> "$GITHUB_OUTPUT"
           else
             exit "$restore_status"
           fi
 
+      - name: Upload restored milestone payload
+        if: steps.restore_state.outputs.reuse == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: programa-restored-milestone-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/programa-milestone-payload/
+          if-no-files-found: error
+
+  build-sign-notarize:
+    needs: [release-identity, restore-milestone-candidate]
+    if: >-
+      always() &&
+      needs.release-identity.result == 'success' &&
+      needs.restore-milestone-candidate.result == 'success' &&
+      needs.restore-milestone-candidate.outputs.reuse != 'true'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
+      EFFECTIVE_MARKETING_VERSION: ${{ needs.release-identity.outputs.effective_version }}
+      RELEASE_TAG: ${{ needs.release-identity.outputs.release_tag }}
+      PAYLOAD_RELEASE_TAG: ${{ needs.release-identity.outputs.payload_release_tag }}
+      TARGET_SHA: ${{ needs.release-identity.outputs.target_sha }}
+    steps:
+      - name: Checkout release revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.release-identity.outputs.target_sha }}
+          submodules: recursive
+
       - name: Require current main before milestone build
         if: >-
           github.event_name == 'push' &&
-          startsWith(github.ref, 'refs/tags/') &&
-          steps.milestone_artifact.outputs.reuse != 'true'
+          startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           MAIN_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-          [[ "$GITHUB_SHA" == "$MAIN_SHA" ]] || {
-            echo "Milestone tag commit ${GITHUB_SHA} is not current main ${MAIN_SHA}" >&2
+          [[ "$TARGET_SHA" == "$MAIN_SHA" ]] || {
+            echo "Milestone tag commit ${TARGET_SHA} is not current main ${MAIN_SHA}" >&2
             exit 1
           }
 
@@ -236,7 +287,6 @@ jobs:
             core.notice(`Sparkle build ${process.env.EFFECTIVE_BUILD} is newer than the latest release.`);
 
       - name: Select Xcode
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           # Prefer Xcode 26 (macOS 26 SDK) so NSGlassEffectView / Liquid Glass compiles;
@@ -260,13 +310,11 @@ jobs:
           xcrun --sdk macosx --show-sdk-path
 
       - name: Setup Bun
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
 
       - name: Install build deps
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           ZIG_REQUIRED="$(./scripts/required-zig-version.sh)"
           if command -v zig >/dev/null 2>&1 && [ "$(zig version 2>/dev/null)" = "$ZIG_REQUIRED" ]; then
@@ -285,7 +333,6 @@ jobs:
 
       - name: Resolve Ghostty revision
         id: ghostty-revision
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           revision="$(./scripts/ghostty_cache_revision.sh)"
@@ -293,21 +340,17 @@ jobs:
 
       - name: Cache GhosttyKit.xcframework
         id: cache-ghosttykit-release
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: GhosttyKit.xcframework
           key: ghosttykit-v3-${{ steps.ghostty-revision.outputs.revision }}
 
       - name: Download pre-built GhosttyKit.xcframework
-        if: >-
-          steps.milestone_artifact.outputs.reuse != 'true' &&
-          steps.cache-ghosttykit-release.outputs.cache-hit != 'true'
+        if: steps.cache-ghosttykit-release.outputs.cache-hit != 'true'
         run: |
           ./scripts/download-prebuilt-ghosttykit.sh
 
       - name: Cache Swift packages
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: .spm-cache
@@ -315,7 +358,6 @@ jobs:
           restore-keys: spm-
 
       - name: Derive Sparkle public key from private key
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
@@ -327,8 +369,10 @@ jobs:
           echo "Derived Sparkle public key: $DERIVED_PUBLIC_KEY"
           echo "SPARKLE_PUBLIC_KEY=$DERIVED_PUBLIC_KEY" >> "$GITHUB_ENV"
 
+      - name: Prepare Rust targets for the shared core
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - name: Build universal app (Release)
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           xcodebuild -scheme programa -configuration Release -derivedDataPath build-universal \
             -destination 'generic/platform=macOS' \
@@ -338,7 +382,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO build
 
       - name: Verify binary architectures
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           ./scripts/verify-release-architectures.sh \
             "build-universal/Build/Products/Release/Programa.app/Contents/MacOS/Programa" \
@@ -346,7 +389,6 @@ jobs:
             "build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/ghostty"
 
       - name: Archive dSYMs
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           # dwarf-with-dsym (Release config) writes each target's .dSYM next to its
@@ -365,7 +407,6 @@ jobs:
           zip -r -y "$DSYM_ZIP" "${DSYM_PATHS[@]}"
 
       - name: Stamp effective version and build number in Info.plist
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           APP_PLIST="build-universal/Build/Products/Release/Programa.app/Contents/Info.plist"
@@ -377,7 +418,6 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${EFFECTIVE_MARKETING_VERSION}" "$APP_PLIST"
 
       - name: Run CLI version memory guard regression
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           CLI_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/programa"
@@ -385,14 +425,12 @@ jobs:
           PROGRAMA_CLI_BIN="$CLI_BINARY" python3 tests/test_cli_version_memory_guard.py
 
       - name: Verify bundled Ghostty theme picker helper
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           HELPER_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/ghostty"
           [ -x "$HELPER_BINARY" ] || { echo "Ghostty theme picker helper not found at $HELPER_BINARY" >&2; exit 1; }
 
       - name: Inject Sparkle keys into Info.plist
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           APP_PLIST="build-universal/Build/Products/Release/Programa.app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Delete :SUPublicEDKey" "$APP_PLIST" >/dev/null 2>&1 || true
@@ -406,7 +444,6 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :SUFeedURL" "$APP_PLIST"
 
       - name: Import signing cert
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -430,7 +467,6 @@ jobs:
           security list-keychains -d user -s build.keychain
 
       - name: Import provisioning profile
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         env:
           APPLE_PROVISION_PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
         run: |
@@ -452,7 +488,6 @@ jobs:
           echo "PROGRAMA_PROVISION_PROFILE=/tmp/programa.provisionprofile" >> "$GITHUB_ENV"
 
       - name: Codesign app
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -469,14 +504,12 @@ jobs:
           ./scripts/verify-provision-profile.sh "$APP_PATH"
 
       - name: Verify embedded Sparkle artifact
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           ./scripts/verify_sparkle_artifact.sh \
             "build-universal/Build/Products/Release/Programa.app" \
             "2.9.6"
 
       - name: Notarize app
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -504,7 +537,6 @@ jobs:
           rm -f "$ZIP_SUBMIT"
 
       - name: Create signed DMG
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -526,7 +558,6 @@ jobs:
           mv ./Programa*.dmg "$DMG_RELEASE"
 
       - name: Notarize DMG
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -550,7 +581,6 @@ jobs:
           xcrun stapler validate "$DMG_RELEASE"
 
       - name: Create build-specific DMG alias
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         run: |
           set -euo pipefail
           DMG_RELEASE="programa-macos.dmg"
@@ -564,7 +594,6 @@ jobs:
           echo "ENCLOSURE_DMG=${ENCLOSURE_DMG}" >> "$GITHUB_ENV"
 
       - name: Generate Sparkle appcast
-        if: steps.milestone_artifact.outputs.reuse != 'true'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
@@ -574,20 +603,302 @@ jobs:
           fi
           ./scripts/sparkle_generate_appcast.sh programa-macos.dmg "$PAYLOAD_RELEASE_TAG" appcast.xml "$ENCLOSURE_DMG"
 
-      - name: Create milestone payload manifest
-        if: >-
-          github.event_name == 'push' &&
-          startsWith(github.ref, 'refs/tags/') &&
-          steps.milestone_artifact.outputs.reuse != 'true'
+      - name: Collect macOS release payload
         run: |
           set -euo pipefail
-          MILESTONE_PAYLOAD_DIR="${RUNNER_TEMP}/programa-milestone-payload"
-          mkdir "$MILESTONE_PAYLOAD_DIR"
-          cp appcast.xml "$MILESTONE_PAYLOAD_DIR/appcast.xml"
-          cp "programa-dSYMs-${EFFECTIVE_BUILD}.zip" "$MILESTONE_PAYLOAD_DIR/"
-          cp "programa-macos-${EFFECTIVE_BUILD}.dmg" "$MILESTONE_PAYLOAD_DIR/"
-          cp programa-macos.dmg "$MILESTONE_PAYLOAD_DIR/"
-          node - "$MILESTONE_PAYLOAD_DIR" "$EFFECTIVE_BUILD" <<'NODE'
+          MACOS_PAYLOAD_DIR="${RUNNER_TEMP}/programa-macos-payload"
+          mkdir "$MACOS_PAYLOAD_DIR"
+          cp appcast.xml "$MACOS_PAYLOAD_DIR/"
+          cp "programa-dSYMs-${EFFECTIVE_BUILD}.zip" "$MACOS_PAYLOAD_DIR/"
+          cp "programa-macos-${EFFECTIVE_BUILD}.dmg" "$MACOS_PAYLOAD_DIR/"
+          cp programa-macos.dmg "$MACOS_PAYLOAD_DIR/"
+          [[ "$(find "$MACOS_PAYLOAD_DIR" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == 4 ]]
+
+      - name: Upload macOS release payload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: programa-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/programa-macos-payload/
+          if-no-files-found: error
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain build.keychain >/dev/null 2>&1 || true
+          rm -f /tmp/cert.p12
+          rm -f /tmp/programa.provisionprofile
+
+  build-windows:
+    needs: [release-identity, restore-milestone-candidate]
+    if: >-
+      always() &&
+      needs.release-identity.result == 'success' &&
+      needs.restore-milestone-candidate.result == 'success' &&
+      needs.restore-milestone-candidate.outputs.reuse != 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
+      EFFECTIVE_MARKETING_VERSION: ${{ needs.release-identity.outputs.effective_version }}
+      TARGET_SHA: ${{ needs.release-identity.outputs.target_sha }}
+    steps:
+      - name: Checkout release revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.release-identity.outputs.target_sha }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $output = Join-Path $env:RUNNER_TEMP "programa-windows-payload"
+          New-Item -ItemType Directory -Path $output | Out-Null
+          & ./scripts/build-windows.ps1 `
+            -Version $env:EFFECTIVE_MARKETING_VERSION `
+            -Build $env:EFFECTIVE_BUILD `
+            -Commit $env:TARGET_SHA `
+            -OutputDirectory $output
+
+          $stableName = "programa-windows.exe"
+          $immutableName = "programa-windows-$($env:EFFECTIVE_BUILD).exe"
+          $files = @(Get-ChildItem -LiteralPath $output -File)
+          if ($files.Count -ne 2) {
+            throw "Windows payload directory must contain exactly two files"
+          }
+          foreach ($name in @($stableName, $immutableName)) {
+            if (-not (Test-Path -LiteralPath (Join-Path $output $name) -PathType Leaf)) {
+              throw "Missing Windows release payload: $name"
+            }
+          }
+          $stableHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $output $stableName)).Hash
+          $immutableHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $output $immutableName)).Hash
+          if ($stableHash -ne $immutableHash) {
+            throw "Stable and immutable Windows executables are not byte-identical"
+          }
+          # WinExe apps return to PowerShell immediately unless a pipeline forces a wait.
+          $versionOutput = & (Join-Path $output $stableName) --version | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows executable --version failed with exit code $LASTEXITCODE"
+          }
+          $versionText = $versionOutput -join "`n"
+          foreach ($value in @($env:EFFECTIVE_MARKETING_VERSION, $env:EFFECTIVE_BUILD, $env:TARGET_SHA)) {
+            if (-not $versionText.Contains($value)) {
+              throw "Windows executable --version omitted release identity $value"
+            }
+          }
+
+      - name: Attest Windows release payloads
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: |
+            ${{ runner.temp }}/programa-windows-payload/programa-windows-${{ env.EFFECTIVE_BUILD }}.exe
+            ${{ runner.temp }}/programa-windows-payload/programa-windows.exe
+
+      - name: Upload Windows release payload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: programa-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/programa-windows-payload/
+          if-no-files-found: error
+
+  assemble-release:
+    needs: [release-identity, restore-milestone-candidate, build-sign-notarize, build-windows]
+    if: >-
+      always() &&
+      needs.release-identity.result == 'success' &&
+      needs.restore-milestone-candidate.result == 'success' &&
+      (needs.restore-milestone-candidate.outputs.reuse == 'true' ||
+      (needs.build-sign-notarize.result == 'success' && needs.build-windows.result == 'success'))
+    runs-on: ubuntu-latest
+    env:
+      EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
+      EFFECTIVE_MARKETING_VERSION: ${{ needs.release-identity.outputs.effective_version }}
+      RELEASE_TAG: ${{ needs.release-identity.outputs.release_tag }}
+      PAYLOAD_RELEASE_TAG: ${{ needs.release-identity.outputs.payload_release_tag }}
+      TARGET_SHA: ${{ needs.release-identity.outputs.target_sha }}
+      REUSED_MILESTONE: ${{ needs.restore-milestone-candidate.outputs.reuse }}
+    steps:
+      - name: Checkout release revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.release-identity.outputs.target_sha }}
+
+      - name: Download restored milestone payload
+        if: env.REUSED_MILESTONE == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: programa-restored-milestone-${{ github.run_id }}-${{ github.run_attempt }}
+          path: incoming/restored
+
+      - name: Download macOS payload
+        if: env.REUSED_MILESTONE != 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: programa-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: incoming/macos
+
+      - name: Download Windows payload
+        if: env.REUSED_MILESTONE != 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: programa-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: incoming/windows
+
+      - name: Assemble exact release payload
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          PAYLOAD_DIR="${RUNNER_TEMP}/programa-release-payload"
+          mkdir "$PAYLOAD_DIR"
+          expected=(
+            appcast.xml
+            "programa-dSYMs-${EFFECTIVE_BUILD}.zip"
+            "programa-macos-${EFFECTIVE_BUILD}.dmg"
+            "programa-windows-${EFFECTIVE_BUILD}.exe"
+            programa-macos.dmg
+            programa-windows.exe
+          )
+          if [[ "$REUSED_MILESTONE" == true ]]; then
+            node - "$EFFECTIVE_BUILD" <<'NODE'
+          const path = require("node:path");
+          const { verifyMilestonePayload } = require(path.resolve("scripts/milestone_payload.js"));
+          verifyMilestonePayload({ directory: "incoming/restored", build: process.argv[2] });
+          NODE
+            source_dir="incoming/restored"
+          else
+            [[ "$(find incoming/macos -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == 4 ]]
+            [[ "$(find incoming/windows -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == 2 ]]
+            source_dir="incoming"
+          fi
+          for name in "${expected[@]}"; do
+            matches=()
+            while IFS= read -r -d '' match; do matches+=("$match"); done < <(find "$source_dir" -type f -name "$name" -print0)
+            [[ "${#matches[@]}" == 1 ]] || {
+              echo "Expected exactly one $name in the release handoff, found ${#matches[@]}" >&2
+              exit 1
+            }
+            cp "${matches[0]}" "$PAYLOAD_DIR/$name"
+          done
+          [[ "$(find "$PAYLOAD_DIR" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == 6 ]]
+          cmp -s "$PAYLOAD_DIR/programa-macos-${EFFECTIVE_BUILD}.dmg" "$PAYLOAD_DIR/programa-macos.dmg"
+          cmp -s "$PAYLOAD_DIR/programa-windows-${EFFECTIVE_BUILD}.exe" "$PAYLOAD_DIR/programa-windows.exe"
+          echo "PAYLOAD_DIR=${PAYLOAD_DIR}" >> "$GITHUB_ENV"
+
+      - name: Require current main before rolling candidate creation
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          CURRENT_MAIN="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          CHECKED_OUT_TARGET="$(git rev-parse HEAD)"
+          [[ "$CHECKED_OUT_TARGET" == "$TARGET_SHA" ]]
+          [[ "$CURRENT_MAIN" == "$TARGET_SHA" ]] || {
+            echo "CI-validated target ${TARGET_SHA} is no longer current main ${CURRENT_MAIN}" >&2
+            exit 1
+          }
+
+      - name: Prepare combined release candidate seal
+        if: env.REUSED_MILESTONE != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          CANDIDATE_SEAL="${RUNNER_TEMP}/programa-release-candidate.json"
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/tags/* ]]; then
+            ((GITHUB_RUN_ATTEMPT >= 1 && GITHUB_RUN_ATTEMPT <= 999))
+            printf -v CANDIDATE_ATTEMPT '%03d' "$GITHUB_RUN_ATTEMPT"
+            CANDIDATE_PREFIX=milestone-candidate-
+            CANDIDATE_TAG="milestone-candidate-${EFFECTIVE_BUILD}-${CANDIDATE_ATTEMPT}"
+            DESTINATION_TAG="$RELEASE_TAG"
+          else
+            CANDIDATE_PREFIX=rolling-candidate-
+            CANDIDATE_TAG="$PAYLOAD_RELEASE_TAG"
+            DESTINATION_TAG="$PAYLOAD_RELEASE_TAG"
+          fi
+          ./scripts/publish_release_candidate.sh \
+            --prepare-only \
+            --candidate-prefix "$CANDIDATE_PREFIX" \
+            --destination-tag "$DESTINATION_TAG" \
+            --candidate-tag "$CANDIDATE_TAG" \
+            --target-sha "$TARGET_SHA" \
+            --build "$EFFECTIVE_BUILD" \
+            --version "$EFFECTIVE_MARKETING_VERSION" \
+            --seal-output "$CANDIDATE_SEAL" \
+            --asset-role "immutable=${PAYLOAD_DIR}/programa-macos-${EFFECTIVE_BUILD}.dmg" \
+            --asset-role "immutable=${PAYLOAD_DIR}/programa-dSYMs-${EFFECTIVE_BUILD}.zip" \
+            --asset-role "immutable=${PAYLOAD_DIR}/programa-windows-${EFFECTIVE_BUILD}.exe" \
+            --asset-role "appcast=${PAYLOAD_DIR}/appcast.xml" \
+            --asset-role "stable-alias=${PAYLOAD_DIR}/programa-macos.dmg" \
+            --asset-role "stable-alias=${PAYLOAD_DIR}/programa-windows.exe"
+          {
+            echo "CANDIDATE_SEAL=${CANDIDATE_SEAL}"
+            echo "CANDIDATE_PREFIX=${CANDIDATE_PREFIX}"
+            echo "CANDIDATE_TAG=${CANDIDATE_TAG}"
+            echo "DESTINATION_TAG=${DESTINATION_TAG}"
+          } >> "$GITHUB_ENV"
+
+      - name: Attest combined release payloads
+        if: github.event_name != 'workflow_dispatch' && env.REUSED_MILESTONE != 'true'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: |
+            ${{ env.PAYLOAD_DIR }}/programa-macos-${{ env.EFFECTIVE_BUILD }}.dmg
+            ${{ env.PAYLOAD_DIR }}/programa-dSYMs-${{ env.EFFECTIVE_BUILD }}.zip
+            ${{ env.PAYLOAD_DIR }}/programa-windows-${{ env.EFFECTIVE_BUILD }}.exe
+            ${{ env.PAYLOAD_DIR }}/appcast.xml
+            ${{ env.PAYLOAD_DIR }}/programa-macos.dmg
+            ${{ env.PAYLOAD_DIR }}/programa-windows.exe
+
+      - name: Attest combined release candidate seal
+        if: github.event_name != 'workflow_dispatch' && env.REUSED_MILESTONE != 'true'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: ${{ env.CANDIDATE_SEAL }}
+
+      - name: Stage combined release candidate
+        if: github.event_name != 'workflow_dispatch' && env.REUSED_MILESTONE != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ./scripts/publish_release_candidate.sh \
+            --candidate-prefix "$CANDIDATE_PREFIX" \
+            --destination-tag "$DESTINATION_TAG" \
+            --candidate-tag "$CANDIDATE_TAG" \
+            --target-sha "$TARGET_SHA" \
+            --build "$EFFECTIVE_BUILD" \
+            --version "$EFFECTIVE_MARKETING_VERSION" \
+            --seal-output "$CANDIDATE_SEAL" \
+            --asset-role "immutable=${PAYLOAD_DIR}/programa-macos-${EFFECTIVE_BUILD}.dmg" \
+            --asset-role "immutable=${PAYLOAD_DIR}/programa-dSYMs-${EFFECTIVE_BUILD}.zip" \
+            --asset-role "immutable=${PAYLOAD_DIR}/programa-windows-${EFFECTIVE_BUILD}.exe" \
+            --asset-role "appcast=${PAYLOAD_DIR}/appcast.xml" \
+            --asset-role "stable-alias=${PAYLOAD_DIR}/programa-macos.dmg" \
+            --asset-role "stable-alias=${PAYLOAD_DIR}/programa-windows.exe"
+
+      - name: Create milestone payload manifest
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          node - "$PAYLOAD_DIR" "$EFFECTIVE_BUILD" <<'NODE'
           "use strict";
           const path = require("node:path");
           const {
@@ -603,195 +914,25 @@ jobs:
             version: process.env.EFFECTIVE_MARKETING_VERSION,
           });
           NODE
-          echo "MILESTONE_PAYLOAD_DIR=${MILESTONE_PAYLOAD_DIR}" >> "$GITHUB_ENV"
 
-      - name: Attest release candidate payloads
-        if: steps.milestone_artifact.outputs.reuse != 'true'
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+      - name: Upload milestone release assets
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          subject-path: |
-            programa-macos-${{ env.EFFECTIVE_BUILD }}.dmg
-            programa-dSYMs-${{ env.EFFECTIVE_BUILD }}.zip
-            appcast.xml
-            programa-macos.dmg
+          name: programa-milestone-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.PAYLOAD_DIR }}/
+          if-no-files-found: error
 
-      - name: Prepare milestone release candidate seal
-        if: >-
-          github.event_name == 'push' &&
-          startsWith(github.ref, 'refs/tags/') &&
-          steps.milestone_artifact.outputs.reuse != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          ((GITHUB_RUN_ATTEMPT >= 1 && GITHUB_RUN_ATTEMPT <= 999)) || {
-            echo "Workflow attempt must be between 1 and 999" >&2
-            exit 1
-          }
-          printf -v CANDIDATE_ATTEMPT '%03d' "$GITHUB_RUN_ATTEMPT"
-          CANDIDATE_TAG="milestone-candidate-${EFFECTIVE_BUILD}-${CANDIDATE_ATTEMPT}"
-          CANDIDATE_SEAL="${RUNNER_TEMP}/programa-release-candidate.json"
-          ./scripts/publish_release_candidate.sh \
-            --prepare-only \
-            --candidate-prefix milestone-candidate- \
-            --destination-tag "$RELEASE_TAG" \
-            --candidate-tag "$CANDIDATE_TAG" \
-            --target-sha "$GITHUB_SHA" \
-            --build "$EFFECTIVE_BUILD" \
-            --version "$EFFECTIVE_MARKETING_VERSION" \
-            --seal-output "$CANDIDATE_SEAL" \
-            --asset-role "immutable=${MILESTONE_PAYLOAD_DIR}/programa-macos-${EFFECTIVE_BUILD}.dmg" \
-            --asset-role "immutable=${MILESTONE_PAYLOAD_DIR}/programa-dSYMs-${EFFECTIVE_BUILD}.zip" \
-            --asset-role "appcast=${MILESTONE_PAYLOAD_DIR}/appcast.xml" \
-            --asset-role "stable-alias=${MILESTONE_PAYLOAD_DIR}/programa-macos.dmg"
-          echo "CANDIDATE_SEAL=${CANDIDATE_SEAL}" >> "$GITHUB_ENV"
-
-      - name: Attest milestone release candidate seal
-        if: >-
-          github.event_name == 'push' &&
-          startsWith(github.ref, 'refs/tags/') &&
-          steps.milestone_artifact.outputs.reuse != 'true'
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
-        with:
-          subject-path: ${{ env.CANDIDATE_SEAL }}
-
-      - name: Stage milestone release candidate with attested seal
-        if: >-
-          github.event_name == 'push' &&
-          startsWith(github.ref, 'refs/tags/') &&
-          steps.milestone_artifact.outputs.reuse != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          printf -v CANDIDATE_ATTEMPT '%03d' "$GITHUB_RUN_ATTEMPT"
-          ./scripts/publish_release_candidate.sh \
-            --candidate-prefix milestone-candidate- \
-            --destination-tag "$RELEASE_TAG" \
-            --candidate-tag "milestone-candidate-${EFFECTIVE_BUILD}-${CANDIDATE_ATTEMPT}" \
-            --target-sha "$GITHUB_SHA" \
-            --build "$EFFECTIVE_BUILD" \
-            --version "$EFFECTIVE_MARKETING_VERSION" \
-            --seal-output "$CANDIDATE_SEAL" \
-            --asset-role "immutable=${MILESTONE_PAYLOAD_DIR}/programa-macos-${EFFECTIVE_BUILD}.dmg" \
-            --asset-role "immutable=${MILESTONE_PAYLOAD_DIR}/programa-dSYMs-${EFFECTIVE_BUILD}.zip" \
-            --asset-role "appcast=${MILESTONE_PAYLOAD_DIR}/appcast.xml" \
-            --asset-role "stable-alias=${MILESTONE_PAYLOAD_DIR}/programa-macos.dmg"
-
-      - name: Upload build artifacts (dry-run)
+      - name: Upload combined build artifacts (dry-run)
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: programa-release-dry-run
-          path: |
-            programa-macos.dmg
-            programa-macos-*.dmg
-            programa-dSYMs-*.zip
-            appcast.xml
+          path: ${{ env.PAYLOAD_DIR }}/
           if-no-files-found: error
-
-      - name: Upload milestone release assets
-        if: >-
-          github.event_name == 'push' &&
-          startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: programa-milestone-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.MILESTONE_PAYLOAD_DIR }}/
-          if-no-files-found: error
-
-      - name: Prepare rolling release candidate seal
-        if: github.event_name == 'workflow_run'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          CURRENT_MAIN="$(gh api \
-            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
-            --jq .object.sha)"
-          EXPECTED_TARGET="${{ github.event.workflow_run.head_sha }}"
-          CHECKED_OUT_TARGET="$(git rev-parse HEAD)"
-          [[ "${CHECKED_OUT_TARGET}" == "${EXPECTED_TARGET}" ]] || {
-            echo "Checked-out revision ${CHECKED_OUT_TARGET} does not match upstream CI SHA ${EXPECTED_TARGET}" >&2
-            exit 1
-          }
-          [[ "${CURRENT_MAIN}" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "Current main did not resolve to a canonical commit SHA" >&2
-            exit 1
-          }
-          [[ "${CURRENT_MAIN}" == "${EXPECTED_TARGET}" ]] || {
-            echo "Upstream CI SHA ${EXPECTED_TARGET} is no longer current main ${CURRENT_MAIN}" >&2
-            exit 1
-          }
-          DSYM_ZIPS=()
-          for dsym_zip in programa-dSYMs-*.zip; do
-            if [[ -f "$dsym_zip" ]]; then
-              DSYM_ZIPS+=("$dsym_zip")
-            fi
-          done
-          if [[ "${#DSYM_ZIPS[@]}" -ne 1 ]]; then
-            echo "Expected exactly one generated dSYM archive, found ${#DSYM_ZIPS[@]}" >&2
-            exit 1
-          fi
-          DSYM_ZIP="${DSYM_ZIPS[0]}"
-          if [[ "$DSYM_ZIP" != "programa-dSYMs-${EFFECTIVE_BUILD}.zip" ]]; then
-            echo "Unexpected dSYM archive for build ${EFFECTIVE_BUILD}: $DSYM_ZIP" >&2
-            exit 1
-          fi
-
-          ./scripts/publish_release_candidate.sh \
-            --prepare-only \
-            --candidate-prefix rolling-candidate- \
-            --destination-tag "$PAYLOAD_RELEASE_TAG" \
-            --candidate-tag "$PAYLOAD_RELEASE_TAG" \
-            --target-sha "${{ github.event.workflow_run.head_sha }}" \
-            --seal-output programa-release-candidate.json \
-            --build "$EFFECTIVE_BUILD" \
-            --version "$EFFECTIVE_MARKETING_VERSION" \
-            --asset-role "immutable=programa-macos-${EFFECTIVE_BUILD}.dmg" \
-            --asset-role "immutable=$DSYM_ZIP" \
-            --asset-role "appcast=appcast.xml" \
-            --asset-role "stable-alias=programa-macos.dmg"
-
-      - name: Attest rolling release candidate seal
-        if: github.event_name == 'workflow_run'
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
-        with:
-          subject-path: programa-release-candidate.json
-
-      - name: Stage rolling release candidate with attested seal
-        if: github.event_name == 'workflow_run'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          DSYM_ZIP="programa-dSYMs-${EFFECTIVE_BUILD}.zip"
-          ./scripts/publish_release_candidate.sh \
-            --candidate-prefix rolling-candidate- \
-            --destination-tag "$PAYLOAD_RELEASE_TAG" \
-            --candidate-tag "$PAYLOAD_RELEASE_TAG" \
-            --target-sha "${{ github.event.workflow_run.head_sha }}" \
-            --seal-output programa-release-candidate.json \
-            --build "$EFFECTIVE_BUILD" \
-            --version "$EFFECTIVE_MARKETING_VERSION" \
-            --asset-role "immutable=programa-macos-${EFFECTIVE_BUILD}.dmg" \
-            --asset-role "immutable=$DSYM_ZIP" \
-            --asset-role "appcast=appcast.xml" \
-            --asset-role "stable-alias=programa-macos.dmg"
-
-      - name: Cleanup keychain
-        if: always()
-        run: |
-          security delete-keychain build.keychain >/dev/null 2>&1 || true
-          rm -f /tmp/cert.p12
-          rm -f /tmp/programa.provisionprofile
 
   publish-milestone:
-    needs: build-sign-notarize
+    needs: [release-identity, assemble-release]
     if: >-
       github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/')
@@ -822,7 +963,7 @@ jobs:
 
       - name: Verify milestone payload handoff
         env:
-          EFFECTIVE_BUILD: ${{ needs.build-sign-notarize.outputs.effective_build }}
+          EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
         run: |
           set -euo pipefail
           node - "$EFFECTIVE_BUILD" <<'NODE'
@@ -846,7 +987,7 @@ jobs:
         id: milestone_publication_state
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
-          EFFECTIVE_BUILD: ${{ needs.build-sign-notarize.outputs.effective_build }}
+          EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
         with:
           script: |
             core.setOutput('mode', 'strict');
@@ -867,8 +1008,10 @@ jobs:
                 const expectedNames = new Set([
                   `programa-macos-${build}.dmg`,
                   `programa-dSYMs-${build}.zip`,
+                  `programa-windows-${build}.exe`,
                   'appcast.xml',
                   'programa-macos.dmg',
+                  'programa-windows.exe',
                 ]);
                 const assets = release.data.assets;
                 if (!Array.isArray(assets)) {
@@ -881,7 +1024,7 @@ jobs:
                   new Set(names).size === expectedNames.size
                 ) {
                   // A complete interrupted draft may finalize at the existing public
-                  // high-water. The publisher still authenticates all ten exact bytes.
+                  // high-water. The publisher still authenticates all six exact bytes.
                   core.setOutput('mode', 'allow-equal');
                 }
               }
@@ -896,7 +1039,7 @@ jobs:
         if: steps.milestone_publication_state.outputs.mode != 'skip'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
-          EFFECTIVE_BUILD: ${{ needs.build-sign-notarize.outputs.effective_build }}
+          EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
           MONOTONIC_MODE: ${{ steps.milestone_publication_state.outputs.mode }}
         with:
           script: |
@@ -915,7 +1058,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          EFFECTIVE_BUILD: ${{ needs.build-sign-notarize.outputs.effective_build }}
+          EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
         run: |
           set -euo pipefail
           ./scripts/publish_milestone_release.sh \
@@ -925,7 +1068,7 @@ jobs:
             --payload-dir milestone-payload
 
   promote-rolling:
-    needs: build-sign-notarize
+    needs: [release-identity, assemble-release]
     if: >-
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&

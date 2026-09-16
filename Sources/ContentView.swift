@@ -609,9 +609,7 @@ struct ContentView: View {
         ZStack {
             // Enable window dragging from the titlebar strip without making the entire content
             // view draggable (which breaks drag gestures like tab reordering).
-            // Double-click on the strip opens a tab instead of the standard
-            // zoom/minimize titlebar action.
-            WindowDragHandleView(onDoubleClick: { tabManager.addTab() })
+            WindowDragHandleView()
 
             TitlebarLeadingInsetReader(inset: $titlebarLeadingInset)
                 .allowsHitTesting(false)
@@ -770,14 +768,8 @@ struct ContentView: View {
                 ZStack(alignment: .leading) {
                     terminalContentWithSidebarDropOverlay
                         .padding(cardInsetAmount)
-                        // Dead chrome surface: the gap ring around the content card
-                        // (window edges, and the top gap when card-layout+sidebar-visible
-                        // has no customTitlebar). Background sits behind the real
-                        // terminal content, which only occupies the inset interior, so
-                        // AppKit hit-testing falls through to this handle in the ring.
-                        // Double-click on the chrome ring opens a tab instead of the
-                        // standard zoom/minimize titlebar action.
-                        .background(WindowDragHandleView(onDoubleClick: { tabManager.addTab() }))
+                        // Empty inset chrome drags without covering the tab controls.
+                        .background(WindowDragHandleView())
                         .padding(.leading, sidebarState.isVisible ? sidebarWidth : 0)
                     if sidebarState.isVisible {
                         sidebarView
@@ -793,8 +785,7 @@ struct ContentView: View {
                     }
                     terminalContentWithSidebarDropOverlay
                         .padding(cardInsetAmount)
-                        // See comment in the useWithinWindow branch above.
-                        .background(WindowDragHandleView(onDoubleClick: { tabManager.addTab() }))
+                        .background(WindowDragHandleView())
                 }
             )
         }
@@ -1131,7 +1122,7 @@ struct ContentView: View {
                     keyWindow: NSApp.keyWindow,
                     mainWindow: NSApp.mainWindow
                 ) else { return }
-                dismissCommandPalette()
+                dismissCommandPalette(restoreFocus: notification.userInfo?["restoreFocus"] as? Bool ?? true)
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteRenameTabRequested)) { notification in
                 let requestedWindow = notification.object as? NSWindow
@@ -4287,11 +4278,7 @@ struct ContentView: View {
                 NSSound.beep()
                 return
             }
-            if let appDelegate = AppDelegate.shared {
-                appDelegate.closeWindowWithConfirmation(window)
-            } else {
-                window.performClose(nil)
-            }
+            window.close()
         }
         registry.register(commandId: "palette.toggleFullScreen") {
             guard let window = observedWindow ?? NSApp.keyWindow ?? NSApp.mainWindow else {
@@ -5162,6 +5149,12 @@ struct ContentView: View {
     private func attemptCommandPaletteFocusRestoreIfNeeded() {
         guard !commandPaletteController.isCommandPalettePresented else { return }
         guard let target = commandPaletteController.commandPalettePendingDismissFocusTarget else { return }
+        if let window = observedWindow, !window.isVisible {
+            commandPaletteController.commandPalettePendingDismissFocusTarget = nil
+            commandPaletteController.commandPaletteRestoreTimeoutWorkItem?.cancel()
+            commandPaletteController.commandPaletteRestoreTimeoutWorkItem = nil
+            return
+        }
         guard tabManager.tabs.contains(where: { $0.id == target.workspaceId }) else {
             commandPaletteController.commandPalettePendingDismissFocusTarget = nil
             commandPaletteController.commandPaletteRestoreTimeoutWorkItem?.cancel()

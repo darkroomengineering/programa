@@ -207,11 +207,22 @@ enum SessionEscrowPolicy {
     /// or a user who quits and reopens much later, can legitimately exceed
     /// 10 minutes, and a false expiry silently destroys a session someone
     /// wanted (SIGHUP to the shell; only scrollback survives via the
-    /// fallback restore). One hour keeps the leak bounded while making
-    /// false retirement implausible for real relaunch flows. The durable
-    /// fix is explicit claim/renew reconciliation between app and holder,
-    /// not a timer -- tracked separately; this TTL is a stopgap until then.
+    /// fallback restore). This limit applies only to sessions absent from
+    /// this bundle's durable snapshot. Snapshot-owned sessions survive long
+    /// absences; unreadable snapshots defer expiry conservatively.
     static let unclaimedSessionTTL: TimeInterval = 3600
+
+    static func shouldExpireSession(
+        sessionID: String,
+        isDraining: Bool,
+        drainingStartedAt: Date?,
+        now: Date,
+        ownedSessionIDs: Set<String>?
+    ) -> Bool {
+        guard isDraining, let drainingStartedAt, let ownedSessionIDs,
+              !ownedSessionIDs.contains(sessionID.uppercased()) else { return false }
+        return now.timeIntervalSince(drainingStartedAt) >= unclaimedSessionTTL
+    }
     /// 2026-08-10 mass-drain fix (retrieve-before-drain race): how long a
     /// relaunched app keeps retrying a retrieve the holder denied only
     /// because it has not yet detected the previous instance's death
@@ -1116,10 +1127,16 @@ final class SessionEscrowClient {
             .path
     }
 
-    static func escrowSocketPath() -> String {
-        let legacy = URL(fileURLWithPath: legacySocketPath()).deletingPathExtension()
-        return legacy.deletingLastPathComponent()
-            .appendingPathComponent(legacy.lastPathComponent + "-v2.sock").path
+    /// Version the holder policy so upgraded apps register with the new
+    /// snapshot-aware reaper. Retrieval still uses the socket recorded in
+    /// each session's metadata, allowing old holders to hand sessions over.
+    static func escrowSocketPath(controlSocketPath: String = SocketControlSettings.socketPath()) -> String {
+        let baseURL = URL(fileURLWithPath: controlSocketPath)
+        let name = baseURL.deletingPathExtension().lastPathComponent + "-escrow-v2"
+        return baseURL.deletingLastPathComponent()
+            .appendingPathComponent(name)
+            .appendingPathExtension("sock")
+            .path
     }
 
     private static func receiveEscrowAcknowledgement(over fd: Int32, sessionId: String) -> Bool {
@@ -2094,7 +2111,7 @@ enum SessionEscrowHolder {
 
     /// Started once from `run()`, before the accept loop, and never
     /// stops. Wakes every `SessionEscrowPolicy.reaperInterval` to (1) close
-    /// out any session that has been draining, unclaimed, past
+    /// out any session absent from the snapshot that has been draining past
     /// `SessionEscrowPolicy.unclaimedSessionTTL`, and (2) exit the holder
     /// once it has had nothing to hold and no live connection for
     /// `SessionEscrowPolicy.idleExitGrace`. Both halves of the fix for the
@@ -2158,9 +2175,9 @@ enum SessionEscrowHolder {
         Darwin.exit(0)
     }
 
-    /// Closes out every draining session whose `drainingStartedAt` is
-    /// older than `SessionEscrowPolicy.unclaimedSessionTTL` -- no app ever
-    /// came back for it. Mirrors `handleRetrieveRequest`'s drain/retrieve
+    /// Closes out draining sessions absent from this bundle's snapshot whose
+    /// `drainingStartedAt` exceeds `SessionEscrowPolicy.unclaimedSessionTTL`.
+    /// Mirrors `handleRetrieveRequest`'s drain/retrieve
     /// coordination exactly (remove-from-registry, request-stop, wait on
     /// the semaphore, then close) so an expiry can never race a drain
     /// thread's in-flight read the way a bare `close()` would. Unlike a
@@ -2168,14 +2185,29 @@ enum SessionEscrowHolder {
     /// called -- only `markClosedIfNeeded()`.
     private static func retireExpiredSessions() {
         let now = Date()
+        registryLock.lock()
+        let candidates = registry.values.filter {
+            $0.isDraining && $0.drainingStartedAt.map {
+                now.timeIntervalSince($0) >= SessionEscrowPolicy.unclaimedSessionTTL
+            } == true
+        }
+        registryLock.unlock()
+        guard !candidates.isEmpty else { return }
+        // Disk reads must never block registry operations or the drain threads.
+        let owned = SessionPersistenceStore.ownedTerminalSessionIDs()
         var expired: [HeldSession] = []
         registryLock.lock()
-        for (sessionId, session) in registry {
-            if session.isDraining,
-               let startedAt = session.drainingStartedAt,
-               now.timeIntervalSince(startedAt) >= SessionEscrowPolicy.unclaimedSessionTTL {
+        for session in candidates {
+            if registry[session.sessionId] === session,
+               SessionEscrowPolicy.shouldExpireSession(
+                   sessionID: session.sessionId,
+                   isDraining: session.isDraining,
+                   drainingStartedAt: session.drainingStartedAt,
+                   now: now,
+                   ownedSessionIDs: owned
+               ) {
                 expired.append(session)
-                registry.removeValue(forKey: sessionId)
+                registry.removeValue(forKey: session.sessionId)
                 session.stopRequested = true
             }
         }

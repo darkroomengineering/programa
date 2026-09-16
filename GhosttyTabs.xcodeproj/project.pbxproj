@@ -25,6 +25,7 @@
 			NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */; };
 			NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */; };
 			AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */; };
+			C7A3000001 /* AgentEventNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000002 /* AgentEventNormalizer.swift */; };
 			AGSV0001A1B2C3D4E5F60719 /* AgentSupervision.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */; };
 			AGSV0003A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGSV0004A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift */; };
 			AGRP0001A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGRP0002A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift */; };
@@ -53,6 +54,7 @@
 			NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */; };
 			WALS000001 /* SessionWALStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WALS000002 /* SessionWALStore.swift */; };
 			ESCH000001 /* SessionEscrow.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000002 /* SessionEscrow.swift */; };
+			C7A2000001 /* ProgramaCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A2000002 /* ProgramaCore.swift */; };
 			SMGT000001 /* SessionMachineryGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMGT000002 /* SessionMachineryGate.swift */; };
 			CESH000001 /* session_escrow_shim.c in Sources */ = {isa = PBXBuildFile; fileRef = CESH000002 /* session_escrow_shim.c */; };
 			NRSP0052A1B2C3D4E5F60719 /* TerminalCopyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */; };
@@ -102,6 +104,7 @@
 			NRGV0005 /* GhosttyTerminalView+RenderStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRGV0006 /* GhosttyTerminalView+RenderStats.swift */; };
 			A5001532 /* TerminalWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001531 /* TerminalWindowPortal.swift */; };
 			A5CC0002 /* WindowPaneChromePortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5CC0001 /* WindowPaneChromePortal.swift */; };
+			C0RE0002 /* SharedWorkspaceCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0RE0001 /* SharedWorkspaceCore.swift */; };
 			A5001534 /* BrowserWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001533 /* BrowserWindowPortal.swift */; };
 			A5FF0008 /* HostedViewPortalRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0018 /* HostedViewPortalRegistry.swift */; };
 		A5001540 /* PortScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001541 /* PortScanner.swift */; };
@@ -109,6 +112,8 @@
 			A5001006 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5001016 /* GhosttyKit.xcframework */; };
 		A5001007 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001019 /* TerminalController.swift */; };
 		H1AP0002 /* AppLifecycleCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1AP0001 /* AppLifecycleCoordinator.swift */; };
+		H1SH0002 /* AppDelegate+StartupHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1SH0001 /* AppDelegate+StartupHandoff.swift */; };
+		H1SN0002 /* AppDelegate+SessionSnapshotPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */; };
 		A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0004 /* TerminalController+BrowserAutomation.swift */; };
 		H1BR0002 /* BrowserRPCDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1BR0001 /* BrowserRPCDispatcher.swift */; };
 		NRTC0011 /* TerminalController+System.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0001 /* TerminalController+System.swift */; };
@@ -262,6 +267,7 @@
 		B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */; };
 		B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */; };
 		B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */; };
+		C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000006 /* CLI+AgentEventAdapters.swift */; };
 		H1HC0002 /* CLI+HookCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HC0001 /* CLI+HookCommands.swift */; };
 		H1CL0002 /* CLICommandDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1CL0001 /* CLICommandDispatcher.swift */; };
 		H1HK0002 /* HookInstallationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HK0001 /* HookInstallationCoordinator.swift */; };
@@ -318,6 +324,7 @@
 					B6BF3DC98DB1495E57900199 /* TabManagerUnitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */; };
 					DCC935C5F55C1DCB33E25521 /* WorkspacePullRequestSidebarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A7DC53B9CA33BE2A421711 /* WorkspacePullRequestSidebarTests.swift */; };
 				08F8EF4F188B4E255A7C813B /* AgentActivityStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B7B486518E6CD0E6F36894B /* AgentActivityStateTests.swift */; };
+				C7A3000003 /* AgentEventNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000004 /* AgentEventNormalizerTests.swift */; };
 					0F2C25F9170130F8DC09DD1B /* WorkspaceManualUnreadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D301919B10F22B8708E8883 /* WorkspaceManualUnreadTests.swift */; };
 					CA39C0304FE351A21C372429 /* SidebarWidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0171AF1F49F7547191CEE5 /* SidebarWidthPolicyTests.swift */; };
 					8C4BBF2DEF6DF93F395A9EE7 /* TerminalControllerSocketSecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */; };
@@ -329,6 +336,8 @@
 					7C10SE2A0000000000000002 /* WorkspaceCloseConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */; };
 					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */; };
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */; };
+		C7A10002 /* V2MethodNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A10001 /* V2MethodNames.swift */; };
+		C7A20002 /* V2CommandCatalogContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A20001 /* V2CommandCatalogContractTests.swift */; };
 		/* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -427,6 +436,7 @@
 			NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Surfaces.swift"; sourceTree = "<group>"; };
 			NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+SidebarTelemetry.swift"; sourceTree = "<group>"; };
 			AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AgentActivityState.swift"; sourceTree = "<group>"; };
+			C7A3000002 /* AgentEventNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizer.swift; sourceTree = "<group>"; };
 			AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSupervision.swift; sourceTree = "<group>"; };
 			AGSV0004A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+AgentSupervision.swift"; sourceTree = "<group>"; };
 			AGRP0002A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRPCDispatcher.swift; sourceTree = "<group>"; };
@@ -455,6 +465,7 @@
 			NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSurface.swift; sourceTree = "<group>"; };
 			WALS000002 /* SessionWALStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWALStore.swift; sourceTree = "<group>"; };
 			ESCH000002 /* SessionEscrow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrow.swift; sourceTree = "<group>"; };
+			C7A2000002 /* ProgramaCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaCore.swift; sourceTree = "<group>"; };
 			SMGT000002 /* SessionMachineryGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMachineryGate.swift; sourceTree = "<group>"; };
 			NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalCopyMode.swift; sourceTree = "<group>"; };
 			NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarShortcutHints.swift; sourceTree = "<group>"; };
@@ -503,6 +514,7 @@
 			NRGV0006 /* GhosttyTerminalView+RenderStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+RenderStats.swift"; sourceTree = "<group>"; };
 			A5001531 /* TerminalWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalWindowPortal.swift; sourceTree = "<group>"; };
 			A5CC0001 /* WindowPaneChromePortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPaneChromePortal.swift; sourceTree = "<group>"; };
+			C0RE0001 /* SharedWorkspaceCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedWorkspaceCore.swift; sourceTree = "<group>"; };
 			A5001533 /* BrowserWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserWindowPortal.swift; sourceTree = "<group>"; };
 			A5FF0018 /* HostedViewPortalRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedViewPortalRegistry.swift; sourceTree = "<group>"; };
 		A5001541 /* PortScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortScanner.swift; sourceTree = "<group>"; };
@@ -514,6 +526,8 @@
 		CESH000003 /* session_escrow_shim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = session_escrow_shim.h; sourceTree = "<group>"; };
 		A5001019 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
 		H1AP0001 /* AppLifecycleCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycleCoordinator.swift; sourceTree = "<group>"; };
+		H1SH0001 /* AppDelegate+StartupHandoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+StartupHandoff.swift"; sourceTree = "<group>"; };
+		H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+SessionSnapshotPersistence.swift"; sourceTree = "<group>"; };
 		A5FF0004 /* TerminalController+BrowserAutomation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+BrowserAutomation.swift"; sourceTree = "<group>"; };
 		H1BR0001 /* BrowserRPCDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserRPCDispatcher.swift; sourceTree = "<group>"; };
 		NRTC0001 /* TerminalController+System.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+System.swift"; sourceTree = "<group>"; };
@@ -668,6 +682,7 @@
 		B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+TmuxCompat.swift"; sourceTree = "<group>"; };
 		B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentWrappers.swift"; sourceTree = "<group>"; };
 		B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Hooks.swift"; sourceTree = "<group>"; };
+		C7A3000006 /* CLI+AgentEventAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentEventAdapters.swift"; sourceTree = "<group>"; };
 		H1HC0001 /* CLI+HookCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+HookCommands.swift"; sourceTree = "<group>"; };
 		H1CL0001 /* CLICommandDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLICommandDispatcher.swift; sourceTree = "<group>"; };
 		H1HK0001 /* HookInstallationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstallationCoordinator.swift; sourceTree = "<group>"; };
@@ -717,6 +732,7 @@
 				42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManagerUnitTests.swift; sourceTree = "<group>"; };
 				14A7DC53B9CA33BE2A421711 /* WorkspacePullRequestSidebarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspacePullRequestSidebarTests.swift; sourceTree = "<group>"; };
 				8B7B486518E6CD0E6F36894B /* AgentActivityStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityStateTests.swift; sourceTree = "<group>"; };
+				C7A3000004 /* AgentEventNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizerTests.swift; sourceTree = "<group>"; };
 				1D301919B10F22B8708E8883 /* WorkspaceManualUnreadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceManualUnreadTests.swift; sourceTree = "<group>"; };
 				EE0171AF1F49F7547191CEE5 /* SidebarWidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarWidthPolicyTests.swift; sourceTree = "<group>"; };
 				491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalControllerSocketSecurityTests.swift; sourceTree = "<group>"; };
@@ -728,6 +744,8 @@
 				7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCloseConfirmationTests.swift; sourceTree = "<group>"; };
 				C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfigTests.swift; sourceTree = "<group>"; };
 		3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaDirectoryTrustTests.swift; sourceTree = "<group>"; };
+		C7A10001 /* V2MethodNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2MethodNames.swift; sourceTree = "<group>"; };
+		C7A20001 /* V2CommandCatalogContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2CommandCatalogContractTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -819,6 +837,17 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		C0RE0003 /* Build Shared Core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			outputPaths = ("$(BUILT_PRODUCTS_DIR)/programa-core/libprograma_core.a",);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "bash \"${SRCROOT}/scripts/build-shared-core.sh\"";
+		};
 		A5001300A1B2C3D4E5F60719 /* Copy Ghostty Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -880,6 +909,7 @@
 					NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */,
 					NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */,
 					AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */,
+					C7A3000002 /* AgentEventNormalizer.swift */,
 					AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */,
 					AGOV0002A1B2C3D4E5F60719 /* AgentOverviewWindow.swift */,
 					AMDT000002 /* AgentManifest.swift */,
@@ -901,6 +931,7 @@
 					NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */,
 					WALS000002 /* SessionWALStore.swift */,
 					ESCH000002 /* SessionEscrow.swift */,
+					C7A2000002 /* ProgramaCore.swift */,
 					SMGT000002 /* SessionMachineryGate.swift */,
 					NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */,
 					NRSP0049A1B2C3D4E5F60719 /* SidebarShortcutHints.swift */,
@@ -958,6 +989,7 @@
 				NRGV0006 /* GhosttyTerminalView+RenderStats.swift */,
 				A5001531 /* TerminalWindowPortal.swift */,
 				A5CC0001 /* WindowPaneChromePortal.swift */,
+				C0RE0001 /* SharedWorkspaceCore.swift */,
 				A5001533 /* BrowserWindowPortal.swift */,
 				A5FF0018 /* HostedViewPortalRegistry.swift */,
 				A5001019 /* TerminalController.swift */,
@@ -985,6 +1017,8 @@
 				D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */,
 				A5001090 /* AppDelegate.swift */,
 				H1AP0001 /* AppLifecycleCoordinator.swift */,
+				H1SH0001 /* AppDelegate+StartupHandoff.swift */,
+				H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */,
 				C5E68FD3C9918B5717603304 /* SessionAutosaveCoordinator.swift */,
 				DDE5A5F043A04829779CF356 /* ShortcutRouting.swift */,
 				NRAD0001 /* MainWindowHostingView.swift */,
@@ -1083,8 +1117,10 @@
 				B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */,
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
 				B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */,
+				C7A3000006 /* CLI+AgentEventAdapters.swift */,
 				H1HC0001 /* CLI+HookCommands.swift */,
 				H1CL0001 /* CLICommandDispatcher.swift */,
+				C7A10001 /* V2MethodNames.swift */,
 				H1HK0001 /* HookInstallationCoordinator.swift */,
 				RVPN0000000000000000000F /* CLI+Review.swift */,
 				RCAP000002 /* CLI+Recap.swift */,
@@ -1221,6 +1257,7 @@
 					42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */,
 					14A7DC53B9CA33BE2A421711 /* WorkspacePullRequestSidebarTests.swift */,
 					8B7B486518E6CD0E6F36894B /* AgentActivityStateTests.swift */,
+					C7A3000004 /* AgentEventNormalizerTests.swift */,
 					AMDT000010 /* AgentManifestTests.swift */,
 					CQTT000002 /* ClaudeQuotaSnapshotParserTests.swift */,
 					1D301919B10F22B8708E8883 /* WorkspaceManualUnreadTests.swift */,
@@ -1233,6 +1270,7 @@
 					7C135CU00000000000000003 /* ClosedTerminalUndoStoreTests.swift */,
 					7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */,
 					C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */,
+					C7A20001 /* V2CommandCatalogContractTests.swift */,
 					3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */,
 					A9A8BC17CBD749D48C344001 /* MCPSocketBridgeTests.swift */,
 				);
@@ -1246,6 +1284,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A5001060 /* Build configuration list for PBXNativeTarget "GhosttyTabs" */;
 			buildPhases = (
+				C0RE0003 /* Build Shared Core */,
 				A5001051 /* Sources */,
 				A5001030 /* Frameworks */,
 				A5001102 /* Resources */,
@@ -1424,6 +1463,7 @@
 					NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */,
 					NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */,
 					AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */,
+					C7A3000001 /* AgentEventNormalizer.swift in Sources */,
 					AGSV0001A1B2C3D4E5F60719 /* AgentSupervision.swift in Sources */,
 					AGOV0001A1B2C3D4E5F60719 /* AgentOverviewWindow.swift in Sources */,
 					AMDT000001 /* AgentManifest.swift in Sources */,
@@ -1445,6 +1485,7 @@
 					NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */,
 					WALS000001 /* SessionWALStore.swift in Sources */,
 					ESCH000001 /* SessionEscrow.swift in Sources */,
+					C7A2000001 /* ProgramaCore.swift in Sources */,
 					SMGT000001 /* SessionMachineryGate.swift in Sources */,
 					CESH000001 /* session_escrow_shim.c in Sources */,
 					NRSP0052A1B2C3D4E5F60719 /* TerminalCopyMode.swift in Sources */,
@@ -1503,10 +1544,13 @@
 				NRGV0005 /* GhosttyTerminalView+RenderStats.swift in Sources */,
 				A5001532 /* TerminalWindowPortal.swift in Sources */,
 				A5CC0002 /* WindowPaneChromePortal.swift in Sources */,
+				C0RE0002 /* SharedWorkspaceCore.swift in Sources */,
 				A5001534 /* BrowserWindowPortal.swift in Sources */,
 				A5FF0008 /* HostedViewPortalRegistry.swift in Sources */,
 				A5001007 /* TerminalController.swift in Sources */,
 				H1AP0002 /* AppLifecycleCoordinator.swift in Sources */,
+				H1SH0002 /* AppDelegate+StartupHandoff.swift in Sources */,
+				H1SN0002 /* AppDelegate+SessionSnapshotPersistence.swift in Sources */,
 				A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */,
 				H1BR0002 /* BrowserRPCDispatcher.swift in Sources */,
 				NRTC0011 /* TerminalController+System.swift in Sources */,
@@ -1680,6 +1724,7 @@
 					B6BF3DC98DB1495E57900199 /* TabManagerUnitTests.swift in Sources */,
 					DCC935C5F55C1DCB33E25521 /* WorkspacePullRequestSidebarTests.swift in Sources */,
 					08F8EF4F188B4E255A7C813B /* AgentActivityStateTests.swift in Sources */,
+					C7A3000003 /* AgentEventNormalizerTests.swift in Sources */,
 					AMDT000009 /* AgentManifestTests.swift in Sources */,
 					CQTT000001 /* ClaudeQuotaSnapshotParserTests.swift in Sources */,
 					0F2C25F9170130F8DC09DD1B /* WorkspaceManualUnreadTests.swift in Sources */,
@@ -1692,6 +1737,7 @@
 					7C135CU00000000000000004 /* ClosedTerminalUndoStoreTests.swift in Sources */,
 					7C10SE2A0000000000000002 /* WorkspaceCloseConfirmationTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */,
+					C7A20002 /* V2CommandCatalogContractTests.swift in Sources */,
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */,
 					F6D8BDB710C64A444F3DE4F0 /* MCPSocketBridgeTests.swift in Sources */,
 					386AE1E1270DD8B6AA427C61 /* SocketPathResolution.swift in Sources */,
@@ -1715,8 +1761,10 @@
 				B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */,
 				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,
 				B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */,
+				C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */,
 				H1HC0002 /* CLI+HookCommands.swift in Sources */,
 				H1CL0002 /* CLICommandDispatcher.swift in Sources */,
+				C7A10002 /* V2MethodNames.swift in Sources */,
 				H1HK0002 /* HookInstallationCoordinator.swift in Sources */,
 				F796E92ACEB543370DEF3E6A /* SocketPathResolution.swift in Sources */,
 			);
@@ -1864,7 +1912,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.4.0;
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(BUILT_PRODUCTS_DIR)/programa-core",);
 				OTHER_LDFLAGS = (
+					"-lprograma_core",
 					"-lc++",
 					"-framework",
 					Metal,
@@ -1904,7 +1954,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.4.0;
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(BUILT_PRODUCTS_DIR)/programa-core",);
 				OTHER_LDFLAGS = (
+					"-lprograma_core",
 					"-lc++",
 					"-framework",
 					Metal,
