@@ -39,6 +39,10 @@ public sealed class TerminalView : UserControl, IDisposable
     private readonly object _snapshotGate = new();
     private readonly AccessibilitySettings _accessibilitySettings = new();
     private readonly UISettings _uiSettings = new();
+    private readonly CanvasTextFormat _normalFormat = CreateTextFormat(bold: false, italic: false);
+    private readonly CanvasTextFormat _boldFormat = CreateTextFormat(bold: true, italic: false);
+    private readonly CanvasTextFormat _italicFormat = CreateTextFormat(bold: false, italic: true);
+    private readonly CanvasTextFormat _boldItalicFormat = CreateTextFormat(bold: true, italic: true);
     private NativeTerminal.SafeSessionHandle? _session;
     private RegisteredWaitHandle? _registeredWait;
     private EventWaitHandle? _event;
@@ -52,7 +56,6 @@ public sealed class TerminalView : UserControl, IDisposable
     private DateTimeOffset _lastClick;
     private Point _lastClickPoint;
     private uint _clickCount;
-    private int _refreshQueued;
 
     public TerminalView(string surfaceId, string sessionId)
     {
@@ -78,10 +81,17 @@ public sealed class TerminalView : UserControl, IDisposable
         _input.VerticalAlignment = VerticalAlignment.Top;
         _input.IsSpellCheckEnabled = false;
         _input.IsTextPredictionEnabled = false;
+        _input.FontFamily = new FontFamily("Cascadia Mono, Consolas");
+        _input.FontSize = FontSize;
+        _input.Padding = new Thickness(0);
+        _input.BorderThickness = new Thickness(0);
+        _input.Background = new SolidColorBrush(Colors.Transparent);
+        _input.DesiredCandidateWindowAlignment = CandidateWindowAlignment.Default;
         AutomationProperties.SetName(_input, Localizer.Get("TerminalAccessibilityName"));
         _input.TextChanged += InputChanged;
-        _input.TextCompositionStarted += (_, _) => _composing = true;
-        _input.TextCompositionEnded += (_, _) => { _composing = false; CommitInput(); };
+        _input.TextCompositionStarted += InputCompositionStarted;
+        _input.TextCompositionChanged += InputCompositionChanged;
+        _input.TextCompositionEnded += InputCompositionEnded;
         _input.KeyDown += InputKeyDown;
         _root.Children.Add(_input);
 
@@ -99,8 +109,17 @@ public sealed class TerminalView : UserControl, IDisposable
         _root.Children.Add(_spawnFailure);
 
         Content = _root;
-        Loaded += (_, _) => { if (_session is null) StartSession(); else Refresh(); };
-        ActualThemeChanged += (_, _) => _canvas.Invalidate();
+        Loaded += (_, _) =>
+        {
+            var session = _session;
+            if (session is null) StartSession();
+            else Refresh(session);
+        };
+        ActualThemeChanged += (_, _) =>
+        {
+            if (_composing) ShowCompositionProxy();
+            _canvas.Invalidate();
+        };
     }
 
     public string SurfaceId { get; }
@@ -137,14 +156,13 @@ public sealed class TerminalView : UserControl, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _registeredWait?.Unregister(null);
-        _registeredWait = null;
-        _event?.Dispose();
-        _event = null;
-        _session?.Dispose();
-        _session = null;
+        RetireCurrentSession();
         _canvas.Draw -= DrawTerminal;
         _canvas.RemoveFromVisualTree();
+        _normalFormat.Dispose();
+        _boldFormat.Dispose();
+        _italicFormat.Dispose();
+        _boldItalicFormat.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -154,10 +172,11 @@ public sealed class TerminalView : UserControl, IDisposable
 
     private void StartSession()
     {
-        _registeredWait?.Unregister(null);
-        _event?.Dispose();
-        _session?.Dispose();
-        _session = null;
+        if (_disposed) return;
+        RetireCurrentSession();
+        _paintedGeneration = 0;
+        lock (_snapshotGate) _snapshot = null;
+        _automationValue = string.Empty;
         _spawnFailure.Visibility = Visibility.Collapsed;
 
         var config = JsonSerializer.SerializeToUtf8Bytes(new { cols = 80, rows = 24, cell_width = (ushort)CellWidth, cell_height = (ushort)CellHeight });
@@ -171,49 +190,51 @@ public sealed class TerminalView : UserControl, IDisposable
         _session = session;
         var handle = NativeTerminal.EventHandle(session);
         if (handle != nint.Zero)
-        {
             _event = new EventWaitHandle(false, EventResetMode.ManualReset) { SafeWaitHandle = new SafeWaitHandle(handle, ownsHandle: false) };
-            _registeredWait = ThreadPool.RegisterWaitForSingleObject(_event, (_, timedOut) =>
-            {
-                if (timedOut || _disposed || Interlocked.Exchange(ref _refreshQueued, 1) != 0) return;
-                if (!DispatcherQueue.TryEnqueue(() =>
-                {
-                    try { Refresh(); }
-                    finally { Volatile.Write(ref _refreshQueued, 0); }
-                }))
-                    Volatile.Write(ref _refreshQueued, 0);
-            }, null, Timeout.Infinite, executeOnlyOnce: false);
-        }
         ResizeBackend();
-        Refresh();
+        Refresh(session);
         FocusTerminal();
     }
 
-    private void Refresh()
+    private void Refresh(NativeTerminal.SafeSessionHandle session)
     {
-        if (_disposed || _session is null) return;
-        var generation = NativeTerminal.Generation(_session);
+        if (_disposed || !ReferenceEquals(_session, session)) return;
+        var generation = NativeTerminal.Generation(session);
         if (!IsLoaded || Visibility != Visibility.Visible)
         {
-            NativeTerminal.Acknowledge(_session, generation);
+            AcknowledgeAndArm(session, generation);
             return;
         }
-        if (generation == _paintedGeneration) { NativeTerminal.Acknowledge(_session, generation); return; }
-        if (!NativeTerminal.TrySnapshot(_session, out var json)) return;
+        if (generation == _paintedGeneration)
+        {
+            AcknowledgeAndArm(session, generation);
+            return;
+        }
+        if (!NativeTerminal.TrySnapshot(session, out var json))
+        {
+            AcknowledgeAndArm(session, generation);
+            return;
+        }
+        var acknowledgedGeneration = generation;
         try
         {
             var snapshot = JsonSerializer.Deserialize<TerminalSnapshot>(json, TerminalJson.Options);
             if (snapshot is null) return;
+            acknowledgedGeneration = snapshot.Generation;
             lock (_snapshotGate) _snapshot = snapshot;
             _automationValue = BuildAccessibleText(snapshot);
             _paintedGeneration = snapshot.Generation;
-            NativeTerminal.Acknowledge(_session, snapshot.Generation);
+            UpdateInputProxyLayout(snapshot.Cursor, _composing);
             _canvas.Invalidate();
             FrameworkElementAutomationPeer.FromElement(this)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
         }
         catch (JsonException error)
         {
             System.Diagnostics.Debug.WriteLine($"Terminal snapshot was invalid: {error}");
+        }
+        finally
+        {
+            AcknowledgeAndArm(session, acknowledgedGeneration);
         }
     }
 
@@ -226,6 +247,127 @@ public sealed class TerminalView : UserControl, IDisposable
         var cellWidth = (ushort)Math.Clamp((int)Math.Round(CellWidth * dpiScale), 1, ushort.MaxValue);
         var cellHeight = (ushort)Math.Clamp((int)Math.Round(CellHeight * dpiScale), 1, ushort.MaxValue);
         NativeTerminal.Resize(_session, cols, rows, cellWidth, cellHeight);
+        TerminalSnapshot? snapshot;
+        lock (_snapshotGate) snapshot = _snapshot;
+        if (snapshot is not null) UpdateInputProxyLayout(snapshot.Cursor, _composing);
+    }
+
+    private static CanvasTextFormat CreateTextFormat(bool bold, bool italic) => new()
+    {
+        FontFamily = "Cascadia Mono, Consolas",
+        FontSize = FontSize,
+        FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
+        FontStyle = italic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal,
+        Options = CanvasDrawTextOptions.EnableColorFont,
+    };
+
+    private void ShowCompositionProxy()
+    {
+        TerminalSnapshot? snapshot;
+        lock (_snapshotGate) snapshot = _snapshot;
+        var dark = ActualTheme != ElementTheme.Light;
+        var foreground = _accessibilitySettings.HighContrast
+            ? _uiSettings.GetColorValue(UIColorType.Foreground)
+            : dark ? Color.FromArgb(255, 220, 220, 220) : Color.FromArgb(255, 28, 28, 30);
+        _input.Foreground = new SolidColorBrush(foreground);
+        _input.Opacity = 1;
+        UpdateInputProxyLayout(snapshot?.Cursor ?? new TerminalCursor(0, 0, true), composing: true);
+    }
+
+    private void HideCompositionProxy()
+    {
+        TerminalSnapshot? snapshot;
+        lock (_snapshotGate) snapshot = _snapshot;
+        _input.Opacity = 0.01;
+        UpdateInputProxyLayout(snapshot?.Cursor ?? new TerminalCursor(0, 0, true), composing: false);
+    }
+
+    private void UpdateInputProxyLayout(TerminalCursor cursor, bool composing)
+    {
+        var viewportWidth = Math.Max(1, _canvas.ActualWidth);
+        var viewportHeight = Math.Max(1, _canvas.ActualHeight);
+        var minimumWidth = Math.Min(CellWidth, viewportWidth);
+        var height = composing ? Math.Min(CellHeight, viewportHeight) : 1;
+        var maximumX = composing ? viewportWidth - minimumWidth : viewportWidth - 1;
+        var x = Math.Clamp(cursor.Column * CellWidth, 0, maximumX);
+        var y = Math.Clamp(cursor.Row * CellHeight, 0, viewportHeight - height);
+
+        _input.Margin = new Thickness(x, y, 0, 0);
+        _input.Width = composing ? Math.Max(1, Math.Min(320, viewportWidth - x)) : 1;
+        _input.Height = height;
+    }
+
+    private void ArmWait(NativeTerminal.SafeSessionHandle session)
+    {
+        if (_disposed || !ReferenceEquals(_session, session) || _event is null || _registeredWait is not null) return;
+
+        RegisteredWaitHandle? registration = null;
+        registration = ThreadPool.RegisterWaitForSingleObject(
+            _event,
+            (_, timedOut) =>
+            {
+                if (timedOut) return;
+                DispatcherQueue.TryEnqueue(() => CompleteWaitOnUiThread(session, registration));
+            },
+            null,
+            Timeout.Infinite,
+            executeOnlyOnce: true);
+        _registeredWait = registration;
+    }
+
+    private void CompleteWaitOnUiThread(NativeTerminal.SafeSessionHandle session, RegisteredWaitHandle? registration)
+    {
+        if (_disposed || !ReferenceEquals(_session, session) || !ReferenceEquals(_registeredWait, registration))
+        {
+            registration?.Unregister(null);
+            return;
+        }
+
+        _registeredWait = null;
+        registration?.Unregister(null);
+        Refresh(session);
+    }
+
+    private void AcknowledgeAndArm(NativeTerminal.SafeSessionHandle session, ulong generation)
+    {
+        if (_disposed || !ReferenceEquals(_session, session)) return;
+        if (NativeTerminal.Acknowledge(session, generation) != 0) return;
+        if (_disposed || !ReferenceEquals(_session, session)) return;
+        ArmWait(session);
+    }
+
+    private void RetireCurrentSession()
+    {
+        var registration = _registeredWait;
+        var eventHandle = _event;
+        var session = _session;
+        _registeredWait = null;
+        _event = null;
+        _session = null;
+
+        if (registration is null)
+        {
+            eventHandle?.Dispose();
+            session?.Dispose();
+            return;
+        }
+
+        var callbacksComplete = new ManualResetEvent(false);
+        if (!registration.Unregister(callbacksComplete))
+        {
+            callbacksComplete.Dispose();
+            eventHandle?.Dispose();
+            session?.Dispose();
+            return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            callbacksComplete.WaitOne();
+            callbacksComplete.Dispose();
+            eventHandle?.Dispose();
+            session?.Dispose();
+        });
     }
 
     private void DrawTerminal(CanvasControl sender, CanvasDrawEventArgs args)
@@ -247,14 +389,9 @@ public sealed class TerminalView : UserControl, IDisposable
             if (cell.Selected)
                 args.DrawingSession.FillRectangle(x, y, CellWidth * Math.Max(cell.Width, 1), CellHeight, Color.FromArgb(180, 48, 105, 152));
             if (cell.Width == 0 || string.IsNullOrEmpty(cell.Text)) continue;
-            using var format = new CanvasTextFormat
-            {
-                FontFamily = "Cascadia Mono, Consolas",
-                FontSize = FontSize,
-                FontWeight = cell.Bold ? Windows.UI.Text.FontWeights.Bold : Windows.UI.Text.FontWeights.Normal,
-                FontStyle = cell.Italic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal,
-                Options = CanvasDrawTextOptions.EnableColorFont,
-            };
+            var format = cell.Bold
+                ? cell.Italic ? _boldItalicFormat : _boldFormat
+                : cell.Italic ? _italicFormat : _normalFormat;
             args.DrawingSession.DrawText(cell.Text, new Vector2(x, y), cell.ExplicitForeground ? cell.Foreground.ToColor() : defaultForeground, format);
             if (cell.Underline || cell.Undercurl)
                 args.DrawingSession.DrawLine(x, y + CellHeight - 2, x + CellWidth * Math.Max(cell.Width, 1), y + CellHeight - 2, cell.Foreground.ToColor(), 1);
@@ -268,6 +405,24 @@ public sealed class TerminalView : UserControl, IDisposable
     private void InputChanged(object sender, TextChangedEventArgs args)
     {
         if (!_resettingInput && !_composing) CommitInput();
+    }
+
+    private void InputCompositionStarted(TextBox sender, TextCompositionStartedEventArgs args)
+    {
+        _composing = true;
+        ShowCompositionProxy();
+    }
+
+    private void InputCompositionChanged(TextBox sender, TextCompositionChangedEventArgs args)
+    {
+        if (_composing) ShowCompositionProxy();
+    }
+
+    private void InputCompositionEnded(TextBox sender, TextCompositionEndedEventArgs args)
+    {
+        _composing = false;
+        CommitInput();
+        HideCompositionProxy();
     }
 
     private void CommitInput()
