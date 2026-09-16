@@ -42,8 +42,10 @@ payload_names() {
   printf '%s\n' \
     "programa-macos-${build}.dmg" \
     "programa-dSYMs-${build}.zip" \
+    "programa-windows-${build}.exe" \
     appcast.xml \
-    programa-macos.dmg
+    programa-macos.dmg \
+    programa-windows.exe
 }
 
 prepare_payload() {
@@ -54,6 +56,7 @@ prepare_payload() {
     index=$((index + 1))
   done < <(payload_names "${build}")
   cp "${directory}/programa-macos-${build}.dmg" "${directory}/programa-macos.dmg"
+  cp "${directory}/programa-windows-${build}.exe" "${directory}/programa-windows.exe"
   release_url="https://github.com/${REPOSITORY}/releases/download/${TAG}"
   enclosure_size="$(file_size "${directory}/programa-macos-${build}.dmg")"
   cat > "${directory}/appcast.xml" <<EOF
@@ -249,7 +252,7 @@ assert_converged() {
   while IFS= read -r name; do
     cmp -s "${payload_dir}/${name}" "$(asset_dir "${TAG}" "${name}")/bytes" || fail "remote bytes differ for ${name}"
   done < <(payload_names "${BUILD}")
-  [[ "$(find "$(release_dir "${TAG}")/assets" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" == 4 ]] || fail "remote asset set is not exact"
+  [[ "$(find "$(release_dir "${TAG}")/assets" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" == 6 ]] || fail "remote asset set is not exact"
 }
 
 PAYLOAD="${TMP_DIR}/payload-41"
@@ -308,8 +311,8 @@ done
 # Fresh publication converges with aliases last and authenticated verification.
 reset_state; invoke "${PAYLOAD}"; assert_converged "${PAYLOAD}"
 uploads="$(sed -n 's/^mutation upload-asset [^ ]* //p' "${STATE_DIR}/operations.log")"
-[[ "$(printf '%s\n' "${uploads}" | tail -2)" == $'appcast.xml\nprograma-macos.dmg' ]] || fail "appcast and stable alias were not uploaded last"
-[[ "$(grep -c '^authenticated-download ' "${STATE_DIR}/operations.log")" -ge 4 ]] || fail "remote payloads were not authenticated-download verified"
+[[ "$(printf '%s\n' "${uploads}" | tail -3)" == $'appcast.xml\nprograma-macos.dmg\nprograma-windows.exe' ]] || fail "appcast and stable aliases were not uploaded last"
+[[ "$(grep -c '^authenticated-download ' "${STATE_DIR}/operations.log")" -ge 6 ]] || fail "remote payloads were not authenticated-download verified"
 grep -Fq "view-release ${TAG} query=.isImmutable" "${STATE_DIR}/operations.log" || fail "publisher did not require immutable published state"
 
 # A published exact release is idempotent.
@@ -339,9 +342,9 @@ rm -f "${STATE_DIR}/mutation_count"; invoke "${PAYLOAD}"; assert_converged "${PA
 
 # Hard stop after every upload but before finalize resumes without clobber.
 reset_state
-if invoke "${PAYLOAD}" 5; then fail "pre-finalize hard stop was not propagated"; fi
+if invoke "${PAYLOAD}" 7; then fail "pre-finalize hard stop was not propagated"; fi
 [[ "$(cat "$(release_dir "${TAG}")/draft")" == true ]] || fail "complete interrupted release was published"
-[[ "$(find "$(release_dir "${TAG}")/assets" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" == 4 ]] || fail "pre-finalize stop did not occur after all uploads"
+[[ "$(find "$(release_dir "${TAG}")/assets" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" == 6 ]] || fail "pre-finalize stop did not occur after all uploads"
 : > "${STATE_DIR}/operations.log"; rm -f "${STATE_DIR}/mutation_count"; invoke "${PAYLOAD}"; assert_converged "${PAYLOAD}"
 ! grep -q '^mutation upload-asset ' "${STATE_DIR}/operations.log" || fail "complete draft retry reuploaded assets"
 

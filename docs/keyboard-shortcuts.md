@@ -1,6 +1,10 @@
 # Keyboard shortcuts
 
-Every shortcut is editable in `Settings → Keyboard Shortcuts` and in `~/.config/programa/settings.json`. `⌘ ⇧ P` opens the command palette, which lists every action.
+The reference below describes macOS. Every shortcut is editable in `Settings → Keyboard Shortcuts` and in `~/.config/programa/settings.json`. `⌘ ⇧ P` opens the command palette, which lists every action.
+
+The Windows frontend uses its own editable bindings under `windows.shortcuts`
+in the same configuration file. See [Windows shortcuts](../windows/README.md#windows-behavior)
+for defaults and [Windows testing](windows-testing.md) for validation status.
 
 ## Workspaces
 

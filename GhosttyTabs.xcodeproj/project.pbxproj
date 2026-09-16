@@ -102,6 +102,7 @@
 			NRGV0005 /* GhosttyTerminalView+RenderStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRGV0006 /* GhosttyTerminalView+RenderStats.swift */; };
 			A5001532 /* TerminalWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001531 /* TerminalWindowPortal.swift */; };
 			A5CC0002 /* WindowPaneChromePortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5CC0001 /* WindowPaneChromePortal.swift */; };
+			C0RE0002 /* SharedWorkspaceCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0RE0001 /* SharedWorkspaceCore.swift */; };
 			A5001534 /* BrowserWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001533 /* BrowserWindowPortal.swift */; };
 			A5FF0008 /* HostedViewPortalRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0018 /* HostedViewPortalRegistry.swift */; };
 		A5001540 /* PortScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001541 /* PortScanner.swift */; };
@@ -506,6 +507,7 @@
 			NRGV0006 /* GhosttyTerminalView+RenderStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+RenderStats.swift"; sourceTree = "<group>"; };
 			A5001531 /* TerminalWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalWindowPortal.swift; sourceTree = "<group>"; };
 			A5CC0001 /* WindowPaneChromePortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPaneChromePortal.swift; sourceTree = "<group>"; };
+			C0RE0001 /* SharedWorkspaceCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedWorkspaceCore.swift; sourceTree = "<group>"; };
 			A5001533 /* BrowserWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserWindowPortal.swift; sourceTree = "<group>"; };
 			A5FF0018 /* HostedViewPortalRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedViewPortalRegistry.swift; sourceTree = "<group>"; };
 		A5001541 /* PortScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortScanner.swift; sourceTree = "<group>"; };
@@ -825,6 +827,17 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		C0RE0003 /* Build Shared Core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			outputPaths = ("$(BUILT_PRODUCTS_DIR)/programa-core/libprograma_core.a",);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "bash \"${SRCROOT}/scripts/build-shared-core.sh\"";
+		};
 		A5001300A1B2C3D4E5F60719 /* Copy Ghostty Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -964,6 +977,7 @@
 				NRGV0006 /* GhosttyTerminalView+RenderStats.swift */,
 				A5001531 /* TerminalWindowPortal.swift */,
 				A5CC0001 /* WindowPaneChromePortal.swift */,
+				C0RE0001 /* SharedWorkspaceCore.swift */,
 				A5001533 /* BrowserWindowPortal.swift */,
 				A5FF0018 /* HostedViewPortalRegistry.swift */,
 				A5001019 /* TerminalController.swift */,
@@ -1255,6 +1269,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A5001060 /* Build configuration list for PBXNativeTarget "GhosttyTabs" */;
 			buildPhases = (
+				C0RE0003 /* Build Shared Core */,
 				A5001051 /* Sources */,
 				A5001030 /* Frameworks */,
 				A5001102 /* Resources */,
@@ -1512,6 +1527,7 @@
 				NRGV0005 /* GhosttyTerminalView+RenderStats.swift in Sources */,
 				A5001532 /* TerminalWindowPortal.swift in Sources */,
 				A5CC0002 /* WindowPaneChromePortal.swift in Sources */,
+				C0RE0002 /* SharedWorkspaceCore.swift in Sources */,
 				A5001534 /* BrowserWindowPortal.swift in Sources */,
 				A5FF0008 /* HostedViewPortalRegistry.swift in Sources */,
 				A5001007 /* TerminalController.swift in Sources */,
@@ -1876,7 +1892,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.4.0;
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(BUILT_PRODUCTS_DIR)/programa-core",);
 				OTHER_LDFLAGS = (
+					"-lprograma_core",
 					"-lc++",
 					"-framework",
 					Metal,
@@ -1916,7 +1934,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.4.0;
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(BUILT_PRODUCTS_DIR)/programa-core",);
 				OTHER_LDFLAGS = (
+					"-lprograma_core",
 					"-lc++",
 					"-framework",
 					Metal,
