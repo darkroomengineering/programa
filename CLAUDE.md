@@ -235,16 +235,20 @@ the run ID AND a distinct user-visible version — the committed major.minor wit
 replaced by the workflow run number (e.g. `0.4.213`) — both injected into `Info.plist` at
 build time, never committed. They publish to a single, reused `rolling` GitHub release
 (titled with the effective version) that is overwritten each ship and marked "latest" — so
-the releases page stays clean (one `rolling` entry plus permanent milestone `v*` tags) and
+the releases page stays clean (exactly one `rolling` entry, nothing else) and
 `releases/latest/download/*` always resolves to the newest green build. Every ship is
-therefore distinguishable in the about box and on the releases page; only minor/major bumps
-remain manual milestones. Each ship also promotes one sealed `rolling-candidate-<build>`
-prerelease to become that ship's permanent archive tag, then deletes older promoted
-candidates, keeping only the two newest for rollback so the releases page does not
-accumulate a growing pile of ~110 MB prereleases.
+therefore distinguishable in the about box and on the releases page.
 
-Milestone marketing-version bumps (e.g. `0.15.0` → `0.16.0`) are still done manually and can
-optionally be tagged as a `vX.Y.Z` marker, which the same `release.yml` also builds on tag push:
+Each ship also seals a `rolling-candidate-<build>` **draft** release as its build-specific
+payload (the versioned DMG/EXE and dSYMs). Candidates never leave draft state — draft releases
+are invisible on the public releases page and to `releases/latest` — so they never add a
+second entry. After promoting a candidate's assets into `rolling`, the reconciler deletes every
+older candidate draft, keeping exactly the just-promoted one around as a private rollback
+archive (retention 1); download it with `gh release download rolling-candidate-<build> --repo
+darkroomengineering/programa` (requires collaborator access, since it is a draft).
+
+Milestone marketing-version bumps (e.g. `0.15.0` → `0.16.0`) are git tags only — they do not
+create a GitHub release. Bump, tag, and let the next auto-ship pick up the new major.minor:
 
 ```bash
 ./scripts/bump-version.sh          # bump minor (0.15.0 → 0.16.0)
@@ -254,22 +258,24 @@ optionally be tagged as a `vX.Y.Z` marker, which the same `release.yml` also bui
 ```
 
 This updates both `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (build number). Then update
-`CHANGELOG.md`, which is the source of truth for the changelog, commit,
-and optionally tag:
+`CHANGELOG.md`, which is the source of truth for the changelog, commit, and optionally tag as a
+milestone marker:
 
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
-gh run watch --repo darkroomengineering/programa
 ```
 
-Tagging is now optional — it exists only to mark a milestone version in the release history; it is
-not required to ship. Regular pushes to `main` ship automatically.
+The tag is a marker in `git log`/`git tag` only; it does not trigger a build or a release. The
+next push to `main` (or the same commit, once CI goes green) ships it through the normal
+auto-ship lane.
 
 Notes:
 - Requires GitHub secrets: `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD`,
   `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
-- The release asset is `programa-macos.dmg` attached to each release.
+- The `rolling` release carries exactly three assets: `appcast.xml`, `programa-macos.dmg`,
+  `programa-windows.exe`. dSYMs and the versioned per-build DMG/EXE live only on the candidate
+  draft, never on `rolling`.
 - README download button points to `releases/latest/download/programa-macos.dmg`.
 - Versioning: bump the minor version for milestone tags unless explicitly asked otherwise.
 - Changelog: update `CHANGELOG.md`; it is the source of truth for the changelog.

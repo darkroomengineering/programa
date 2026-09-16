@@ -171,12 +171,6 @@ jobs:
       - name: Validate release build identity
         run: node --test scripts/release_build_identity.test.js
 
-      - name: Validate milestone payload handoff
-        run: node --test scripts/milestone_payload.test.js
-
-      - name: Validate milestone release publication
-        run: ./tests/test_milestone_release_publication.sh
-
       - name: Validate Sparkle monotonic release guard
         run: node --test scripts/sparkle_monotonic_guard.test.js
 
