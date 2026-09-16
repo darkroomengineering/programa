@@ -413,17 +413,27 @@ mod tests {
     #[tokio::test]
     async fn max_sendmsg_descriptors_close_without_leak() {
         let (sender, receiver) = UnixStream::pair().unwrap();
-        // Keep the fixture's pipe out of a concurrent session test's fork
-        // window. Otherwise that child can temporarily inherit the read end
-        // and make the EPIPE leak check fail even when recv_with_fds closed
-        // every descriptor it installed.
+        // Keep the fixture's pipe fds out of a concurrent session test's
+        // fork window from creation through our own `drop(read)` below.
+        // `fork(2)` copies the fd table regardless of CLOEXEC (CLOEXEC only
+        // takes effect at `exec`), so a session test that forks in that
+        // window could transiently inherit `read`, keeping a duplicate of
+        // it alive past our own `drop(read)` and making the EPIPE check
+        // below see a live reader that isn't us -- write() then returns Ok
+        // instead of EPIPE, which is exactly the false failure this guard
+        // exists to prevent.
+        //
+        // The guard must NOT still be held once we call `read_line()`
+        // below: `recv_with_fds` (the receive half, invoked from there)
+        // takes this same `SPAWN_FD_LOCK` itself for its own CLOEXEC race
+        // window, and `std::sync::Mutex` isn't reentrant -- holding it
+        // across that call would deadlock this test against itself.
         let spawn_guard = crate::pty::SPAWN_FD_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let (read, write) = nix::unistd::pipe().unwrap();
         crate::pty::set_cloexec(&read).unwrap();
         crate::pty::set_cloexec(&write).unwrap();
-        drop(spawn_guard);
 
         // MAX_FDS_PER_SENDMSG is the most descriptors a single sendmsg(2)
         // call can ever install (the kernel rejects more with EINVAL at the
@@ -441,6 +451,7 @@ mod tests {
         socket::sendmsg::<UnixAddr>(sender.as_raw_fd(), &iov, &cmsg, MsgFlags::empty(), None)
             .unwrap();
         drop(read);
+        drop(spawn_guard);
 
         let mut stream = MsgStream::new(receiver);
         assert!(matches!(
