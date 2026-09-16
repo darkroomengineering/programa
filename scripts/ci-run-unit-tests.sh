@@ -16,6 +16,12 @@ SWIFTPM_CACHE_DIR="${PROGRAMA_SWIFTPM_CACHE_DIR:-$HOME/Library/Caches/org.swift.
 DERIVED_DATA_DIR="${PROGRAMA_DERIVED_DATA_DIR:-$HOME/Library/Developer/Xcode/DerivedData}"
 TEST_SCOPE="${PROGRAMA_UNIT_TEST_SCOPE:-serial}"
 STATEFUL_TEST_CLASS="programaTests/AppDelegateShortcutRoutingTests"
+# Alphabetical-half sharding for the "Run unit tests" gate. Splitting is by
+# class (not method), same reasoning as QUARANTINED_ON_COMPAT below: stable
+# across runs, and every class still compiles in each shard since
+# -only-testing filters which tests *run*, not what the target compiles.
+SHARD="${PROGRAMA_UNIT_TEST_SHARD:-}"
+SHARD_COUNT="${PROGRAMA_UNIT_TEST_SHARD_COUNT:-1}"
 
 # Test CLASSES quarantined when PROGRAMA_UNIT_TEST_QUARANTINE is set (the
 # macos-15 compat leg). Every class here builds real NSWindows and waits on async
@@ -83,6 +89,22 @@ QUARANTINED_ON_COMPAT=(
 
 RESULT_BUNDLE_ROOT="${PROGRAMA_RESULT_BUNDLE_ROOT:-/tmp/programa-unit-xcresults}"
 
+# Deterministic alphabetical-half class list for this shard, excluding the
+# stateful class (that always runs unsharded, in shard 1, serially).
+shard_classes() {
+  "$ROOT_DIR/scripts/list-programa-unit-test-classes.sh" \
+    | grep -v '^AppDelegateShortcutRoutingTests$' \
+    | awk -v shard="$SHARD" -v count="$SHARD_COUNT" '
+        { classes[NR] = $0; total = NR }
+        END {
+          per = int((total + count - 1) / count)
+          start = (shard - 1) * per + 1
+          stop = start + per - 1
+          if (stop > total) stop = total
+          for (i = start; i <= stop; i++) print classes[i]
+        }'
+}
+
 run_unit_tests() {
   local mode="${1:-serial}"
   # Pin the result bundle to a known location so CI can upload it on failure;
@@ -114,6 +136,13 @@ run_unit_tests() {
     parallel)
       xcode_args+=("-skip-testing:${STATEFUL_TEST_CLASS}")
       xcode_args+=("-parallel-testing-enabled" "YES")
+      ;;
+    parallel-shard)
+      xcode_args+=("-parallel-testing-enabled" "YES")
+      local shard_class
+      for shard_class in $(shard_classes); do
+        xcode_args+=("-only-testing:programaTests/${shard_class}")
+      done
       ;;
     stateful)
       xcode_args+=("-only-testing:${STATEFUL_TEST_CLASS}")
@@ -195,8 +224,15 @@ run_suite() {
 }
 
 if [[ "$TEST_SCOPE" == "split-stateful" ]]; then
-  run_suite parallel "Stateful-free unit tests"
-  run_suite stateful "Stateful unit tests"
+  if [[ -n "$SHARD" && "$SHARD_COUNT" -gt 1 ]]; then
+    run_suite parallel-shard "Stateful-free unit tests (shard ${SHARD}/${SHARD_COUNT})"
+    if [[ "$SHARD" == "1" ]]; then
+      run_suite stateful "Stateful unit tests"
+    fi
+  else
+    run_suite parallel "Stateful-free unit tests"
+    run_suite stateful "Stateful unit tests"
+  fi
 else
   run_suite serial "Unit tests"
 fi
