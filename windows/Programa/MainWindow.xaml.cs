@@ -29,7 +29,7 @@ public sealed partial class MainWindow : Window
         _snapshot = _core.Snapshot();
         if (_snapshot.Workspaces.Count == 0)
             _snapshot = Dispatch(new { command = "create_workspace", workspace_id = Id("workspace"), pane_id = Id("pane"), surface_id = Id("surface"), session_id = Id("session") });
-        Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnKeyDown), true);
+        Root.PreviewKeyDown += OnKeyDown;
         Root.Loaded += OnRootLoaded;
         Closed += OnClosed;
         ProjectSnapshot();

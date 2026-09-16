@@ -281,13 +281,16 @@ public sealed class TerminalView : UserControl, IDisposable
 
     private void InputKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (_session is null || _composing) return;
+        if (args.Handled || _session is null || _composing) return;
         var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
         var alt = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu).HasFlag(CoreVirtualKeyStates.Down);
+        var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(CoreVirtualKeyStates.Down);
         var appCursor = NativeTerminal.ApplicationCursor(_session);
         byte[]? bytes = args.Key switch
         {
-            VirtualKey.Enter => [13], VirtualKey.Back => [127], VirtualKey.Tab => [9], VirtualKey.Escape => [27],
+            VirtualKey.Enter => [13], VirtualKey.Back => [127],
+            VirtualKey.Tab when !ctrl && !alt => shift ? [27, 91, 90] : [9],
+            VirtualKey.Escape => [27],
             VirtualKey.Up => Encoding.ASCII.GetBytes(appCursor ? "\x1bOA" : "\x1b[A"), VirtualKey.Down => Encoding.ASCII.GetBytes(appCursor ? "\x1bOB" : "\x1b[B"),
             VirtualKey.Right => Encoding.ASCII.GetBytes(appCursor ? "\x1bOC" : "\x1b[C"), VirtualKey.Left => Encoding.ASCII.GetBytes(appCursor ? "\x1bOD" : "\x1b[D"),
             VirtualKey.Home => Encoding.ASCII.GetBytes("\x1b[H"), VirtualKey.End => Encoding.ASCII.GetBytes("\x1b[F"),
