@@ -2,6 +2,7 @@
 
 const IMMUTABLE_RELEASE_ASSETS = [
   "programa-macos.dmg",
+  "programa-windows.exe",
   "appcast.xml",
 ];
 const RELEASE_ASSET_GUARD_STATE = Object.freeze({

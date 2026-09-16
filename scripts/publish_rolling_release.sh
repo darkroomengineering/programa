@@ -354,7 +354,7 @@ verify_selected_archive() {
   cmp -s \
     "${TEMP_DIR}/selected-archive-public-names.txt" \
     "${TEMP_DIR}/candidate-expected-names.sorted.txt" || \
-    fail "selected archive does not contain exactly ten payloads plus its seal"
+    fail "selected archive does not contain exactly six payloads plus its seal"
   while IFS=$'\t' read -r name role size sha; do
     verify_asset_strict "${SELECTED_TAG}" "${name}" "${size}" "${sha}" \
       "${metadata}" "${TEMP_DIR}/selected-archive-public-verification"
@@ -561,7 +561,7 @@ cut -f1 "${PROMOTION_ORDER}" > "${TEMP_DIR}/candidate-expected-names.txt"
 printf '%s\n' "${SEAL_NAME}" >> "${TEMP_DIR}/candidate-expected-names.txt"
 LC_ALL=C sort "${TEMP_DIR}/candidate-expected-names.txt" > "${TEMP_DIR}/candidate-expected-names.sorted.txt"
 cmp -s "${TEMP_DIR}/candidate-actual-names.txt" "${TEMP_DIR}/candidate-expected-names.sorted.txt" || \
-  fail "candidate ${SELECTED_TAG} does not contain exactly ten payloads plus its seal"
+  fail "candidate ${SELECTED_TAG} does not contain exactly six payloads plus its seal"
 
 SELECTED_PAYLOAD_DIR="${TEMP_DIR}/selected-payload"
 while IFS=$'\t' read -r name role size sha; do
