@@ -685,7 +685,8 @@ jobs:
           if ($stableHash -ne $immutableHash) {
             throw "Stable and immutable Windows executables are not byte-identical"
           }
-          $versionOutput = & (Join-Path $output $stableName) --version
+          # WinExe apps return to PowerShell immediately unless a pipeline forces a wait.
+          $versionOutput = & (Join-Path $output $stableName) --version | Out-String
           if ($LASTEXITCODE -ne 0) {
             throw "Windows executable --version failed with exit code $LASTEXITCODE"
           }
