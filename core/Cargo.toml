@@ -33,3 +33,16 @@ tempfile = "3.15"
 programa-domain = { path = "crates/programa-domain" }
 programa-proto = { path = "crates/programa-proto" }
 
+# programa_core.dll is not on the latency-sensitive keystroke path (that's
+# programa-terminal), so trade codegen speed/size for smaller output:
+# opt-level "z" minimizes size, fat LTO + one codegen unit remove cross-crate
+# dead code and duplication, strip drops symbols, and panic=abort removes the
+# unwinding tables (safe here since a panic crossing the FFI boundary is UB
+# either way, so aborting is no worse than unwinding into undefined behavior).
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
