@@ -63,16 +63,17 @@ reattaches to them live on the next launch.
 
 ### Windows preview
 
-Windows is moving from the GPUI prototype to WinUI 3 controls. macOS retains
+The Windows frontend uses WinUI 3 controls. macOS retains
 its AppKit/SwiftUI interface. Workspace, tab, split, and session behavior belongs
 in the shared core; each frontend handles its platform's rendering, input,
 window management, and accessibility.
 
 The planned Windows download is `programa-windows.exe` on the same
 [rolling release](https://github.com/darkroomengineering/programa/releases/tag/rolling)
-as `programa-macos.dmg`. The WinUI 3 frontend is not yet released or validated
-on Windows. The existing GPUI prototype is implementation reference, not a
-claim of WinUI 3 support or macOS feature parity.
+as `programa-macos.dmg`. The WinUI frontend builds and passes its automated
+checks on Windows; a [verification build](https://github.com/darkroomengineering/programa/actions/runs/35104587262)
+is available from GitHub Actions. It is not yet a published release. Desktop
+interaction testing and macOS feature parity remain incomplete.
 
 On an Apple Silicon Mac, test the Windows executable in a Windows 11 Arm VM;
 Windows can run x64 executables through emulation. See the

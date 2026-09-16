@@ -63,8 +63,8 @@ must be tested, along with version/build/commit reporting from the shipped EXE.
 
 Core tests run in CI or an isolated VM. WinUI builds require Windows tooling;
 interactive Windows validation covers tab dragging, ConPTY, IME, DPI, clipboard,
-theme changes and accessibility. No WinUI implementation, Windows build, or
-Windows interaction test has passed yet.
+theme changes and accessibility. Windows compilation and automated runtime
+checks have passed; desktop interaction tests remain outstanding.
 
 ## References
 
@@ -84,7 +84,8 @@ against the archive before removal from the shipping source tree.
 - WinUI: `windows/Programa`, managed runtime tests in `windows/Programa.Tests`.
   Native tabs, within-workspace pane moves, split resize/collapse, localized
   settings, ConPTY/Win2D viewport and native text input are implemented but
-  still need Windows compilation and interactive validation.
+  pass Windows compilation and automated runtime checks. Interactive validation
+  remains outstanding.
 - macOS: `SharedWorkspaceCore.swift` projects the existing pane through shared
   ordering commands; full macOS workspace/session lifecycle migration remains
   separate. Xcode statically links the Rust core through `build-shared-core.sh`.
@@ -95,9 +96,19 @@ against the archive before removal from the shipping source tree.
 - Tagged macOS app and test bundle compile. No macOS app or UI tests were
   launched locally. Tag: `native-core-winui`.
 - Source and verification logs are saved in `.claude/native-winui-20260916`.
+- Windows/Linux CI exposed final PTY output loss in `alacritty_terminal`
+  0.26.0 under snapshot lock contention. `core/vendor/alacritty_terminal`
+  contains the documented minimal patch and a deterministic regression. The
+  unpatched regression failed in the isolated VM; the patched regression and
+  25 consecutive immediate-shell-exit checks passed. The subsequent shared-core
+  GitHub CI job passed on Linux x64.
 - User explicitly approved a temporary verification branch as an exception to
   the pre-commit Windows build requirement. Isolated checkout:
   `/private/tmp/programa-native-winui-verify`, branch
   `verify/native-winui-shared-core-20260916`. Main and releases must remain
-  untouched. Run `CI` with `windows_only=true` on that branch, resolve failures,
-  and verify the actual `.exe` artifact before claiming Windows build success.
+  untouched. `CI` with `windows_only=true` passed in run
+  [35104587262](https://github.com/darkroomengineering/programa/actions/runs/35104587262)
+  on `f58e29d58040352d4b4a00afbd0127662e1ba2fd`: 20 Windows Rust tests,
+  three managed tests, WinUI publish, version identity and native extraction
+  checks. The packaged EXEs are unsigned. macOS CI and desktop interaction
+  checks were not run, and no release was published.

@@ -78,9 +78,21 @@ exercise that behavior itself.
 
 ## Current verification status
 
-The native frontend is not yet a validated Windows release. The shared Rust
-model, terminal model, and C# to Rust command bridge have been exercised in an
-isolated Linux VM. The macOS app and its test bundle compile with the shared
-ordering adapter. These checks do not validate WinUI XAML, ConPTY, native DLL
-extraction on Windows, GPU rendering, IME, or Narrator. Windows CI and desktop
-interaction checks remain required before claiming those behaviors pass.
+The [verification run on September 16, 2026](https://github.com/darkroomengineering/programa/actions/runs/35104587262)
+passed on commit `f58e29d58040352d4b4a00afbd0127662e1ba2fd`. Windows CI passed
+20 Rust tests (including a real ConPTY lifecycle and the focused terminal read
+regression), three managed tests, WinUI compilation and single-file publishing,
+the exact version check, and extraction/loading of both native libraries.
+The artifact contains byte-identical stable and build-numbered EXEs. The EXE
+is unsigned; no Windows publisher-signing certificate is configured.
+
+The macOS app and its test bundle compile with the shared ordering adapter.
+Mac test jobs were deliberately excluded from this Windows verification run;
+no desktop UI was launched. The dependency regression run intentionally filters
+its other upstream unit tests, and its large reference-fixture suite is not
+vendored. No test assertions were relaxed.
+
+This is a CI artifact, not a published release. GPU rendering, drag behavior,
+IME, Narrator, and clean-machine deployment still need the interactive checks
+above. Full macOS feature parity and migration of macOS workspace/session
+lifecycle into the shared core remain incomplete.
