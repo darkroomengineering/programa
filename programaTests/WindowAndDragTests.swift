@@ -7,6 +7,31 @@ import ObjectiveC.runtime
 import Bonsplit
 import UserNotifications
 
+private final class SidebarTestClipView: NSClipView {
+    var flippedForTest = false
+    override var isFlipped: Bool { flippedForTest }
+}
+
+@MainActor
+final class SidebarScrolledViewportTests: XCTestCase {
+    func testAutoscrollEdgesAreRelativeToScrolledClipBounds() {
+        let controller = SidebarDragAutoScrollController()
+        for flipped in [false, true] {
+            let clip = SidebarTestClipView(frame: NSRect(x: 0, y: 0, width: 200, height: 300))
+            clip.flippedForTest = flipped
+            for distance in [CGFloat(5), CGFloat(295), CGFloat(150)] {
+                clip.bounds = NSRect(x: 0, y: 0, width: 200, height: 300)
+                let zero = controller.planForMousePoint(CGPoint(x: 100, y: distance), in: clip)
+                clip.bounds = NSRect(x: 0, y: 400, width: 200, height: 300)
+                let scrolled = controller.planForMousePoint(CGPoint(x: 100, y: 400 + distance), in: clip)
+                XCTAssertEqual(scrolled, zero, "Scrolling must preserve edge direction and speed")
+                if distance == 150 { XCTAssertNil(scrolled) }
+                else { XCTAssertEqual(scrolled?.direction, (distance == 5) == flipped ? .up : .down) }
+            }
+        }
+    }
+}
+
 #if canImport(Programa_DEV)
 @testable import Programa_DEV
 #elseif canImport(Programa)

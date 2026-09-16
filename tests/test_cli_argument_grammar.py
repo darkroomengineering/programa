@@ -26,6 +26,7 @@ server ever accepted a connection.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -346,6 +347,75 @@ def main() -> int:
                 "unknown option" in output.lower(),
                 f"{case.name}: unknown flag output missing 'unknown option': {output!r}",
             )
+
+    for args, method in [
+        (["snapshot", "list"], "snapshot.list"),
+        (["snapshot", "restore"], "snapshot.restore"),
+        (["snapshot", "restore", "latest"], "snapshot.restore"),
+        (["worktree", "open", "--all", "--repo", str(Path(__file__).resolve().parents[1])], "worktree.list"),
+    ]:
+        with tempfile.TemporaryDirectory(prefix="pcli-subcommand-", dir="/tmp") as directory:
+            with SocketRecorder(directory) as recorder:
+                process = run_cli(recorder.path, args)
+            check(any(frame.get("method") == method for frame in recorder.frames),
+                  f"valid {args!r} never reached {method}: {merged_output(process)}")
+
+    for args in [
+        ["snapshot", "list", "extra"], ["snapshot", "restore", "one", "two"],
+        ["snapshot", "list", "--bogus"], ["snapshot", "restore", "--bogus"],
+        ["snapshot", "restore", "--json"],
+        ["worktree", "open", "--all", "--focus"],
+        ["worktree", "open", "--all", "branch"],
+        ["worktree", "open", "--all", "--force"],
+        ["worktree", "open", "--all", "--base", "main"],
+        ["worktree", "open", "--all", "--path", "/tmp/new-worktree"],
+        ["worktree", "open", "--all", "--layout", "default"],
+        ["worktree", "open", "--all", "--json"],
+    ]:
+        with tempfile.TemporaryDirectory(prefix="pcli-invalid-", dir="/tmp") as directory:
+            with SocketRecorder(directory) as recorder:
+                process = run_cli(recorder.path, args)
+            check(process.returncode != 0 and recorder.accept_count == 0,
+                  f"invalid {args!r} must fail before connection: {recorder.frames!r}; {merged_output(process)}")
+
+    with tempfile.TemporaryDirectory(prefix="pcli-snapshot-json-", dir="/tmp") as directory:
+        with SocketRecorder(directory) as recorder:
+            process = run_cli(recorder.path, ["snapshot", "list", "--json"])
+        check(process.returncode == 0, f"snapshot JSON listing failed: {merged_output(process)}")
+        try:
+            decoded = json.loads(process.stdout)
+            check(decoded == {}, f"snapshot JSON listing changed the server result: {decoded!r}")
+        except json.JSONDecodeError:
+            check(False, f"snapshot list --json emitted non-JSON output: {process.stdout!r}")
+        check([frame.get("method") for frame in recorder.frames] == ["snapshot.list"],
+              f"snapshot JSON listing dispatched unexpected operations: {recorder.frames!r}")
+
+    for operation in ("type", "fill"):
+        for suffix, text, snapshot_after in [
+            (["--selector", "#name", "--text", "hello world"], "hello world", False),
+            (["#name", "--", "--snapshot-after"], "--snapshot-after", False),
+            (["--selector", "#name", "--text", "--json"], "--json", False),
+            (["--selector", "#name", "--text", "--id-format"], "--id-format", False),
+            (["#name", "--", "--json", "--id-format", "--surface", WINDOW_ID],
+             f"--json --id-format --surface {WINDOW_ID}", False),
+            (["--selector", "#name", "--text", "--surface", "--snapshot-after"], "--surface", True),
+        ]:
+            args = ["browser", SURFACE_ID, operation, *suffix]
+            with tempfile.TemporaryDirectory(prefix="pcli-browser-text-", dir="/tmp") as directory:
+                with SocketRecorder(directory) as recorder:
+                    process = run_cli(recorder.path, args)
+                requests = [frame for frame in recorder.frames if frame.get("method") == f"browser.{operation}"]
+                check(len(requests) == 1, f"{args!r} failed to dispatch: {merged_output(process)}")
+                check(not any(frame.get("method") == "browser.snapshot" for frame in recorder.frames),
+                      f"literal input triggered a snapshot operation: {recorder.frames!r}")
+                if requests:
+                    params = requests[0].get("params", {})
+                    check(params.get("selector") == "#name" and params.get("text") == text,
+                          f"browser input changed before transmission: {params!r}")
+                    check(params.get("surface_id") == SURFACE_ID,
+                          f"browser text retargeted the operation: {params!r}")
+                    check(params.get("snapshot_after", False) == snapshot_after,
+                          f"browser action flag was confused with literal text: {params!r}")
 
     if failures:
         print(f"FAIL: {len(failures)} CLI argument grammar assertion(s) failed")

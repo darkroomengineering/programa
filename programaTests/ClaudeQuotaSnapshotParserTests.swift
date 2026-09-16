@@ -89,6 +89,25 @@ final class ClaudeQuotaSnapshotParserTests: XCTestCase {
         XCTAssertNil(ClaudeQuotaSnapshotParser.parse(data: payload(fiveHourResets: "\"soon\"")))
     }
 
+    func testRejectsResetDatesThatCannotSafelyProduceCountdowns() {
+        let invalid = ["nan", "inf", "-inf", "1e309", "1e100", "-1",
+                       String(Date.distantFuture.timeIntervalSince1970 + 1)]
+        for timestamp in invalid {
+            XCTAssertNil(ClaudeQuotaSnapshotParser.parse(data: payload(fiveHourResets: "\"\(timestamp)\"")), timestamp)
+            XCTAssertNil(ClaudeQuotaSnapshotParser.parse(data: payload(sevenDayResets: "\"\(timestamp)\"")), timestamp)
+        }
+    }
+
+    func testAcceptsSupportedResetDateBoundaries() throws {
+        for seconds in [0.0, Date.distantFuture.timeIntervalSince1970] {
+            let snapshot = try XCTUnwrap(ClaudeQuotaSnapshotParser.parse(data: payload(
+                fiveHourResets: "\"\(seconds)\"", sevenDayResets: "\"\(seconds)\""
+            )))
+            XCTAssertEqual(snapshot.fiveHour.resetsAt.timeIntervalSince1970, seconds)
+            XCTAssertEqual(snapshot.sevenDay.resetsAt.timeIntervalSince1970, seconds)
+        }
+    }
+
     func testClampsPercentagesFromTheExternalClaudeCache() throws {
         let snapshot = try XCTUnwrap(
             ClaudeQuotaSnapshotParser.parse(

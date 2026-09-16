@@ -1665,6 +1665,12 @@ final class ProgramaSettingsFileStore {
     }
 
     private static func renderShortcutKey(_ key: String, preserveDigit: Bool) -> String {
+        switch key {
+        case "\r": return "return"
+        case "\t": return "tab"
+        case " ": return "space"
+        default: break
+        }
         if preserveDigit {
             return key
         }

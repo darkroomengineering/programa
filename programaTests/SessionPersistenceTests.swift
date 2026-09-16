@@ -8,6 +8,77 @@ import XCTest
 
 final class SessionPersistenceTests: XCTestCase {
     @MainActor
+    func testAutosaveRetriesUnchangedSnapshotAfterActualBackgroundWriteFailure() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("autosave-retry-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let blockedParent = directory.appendingPathComponent("blocked")
+        try Data("not a directory".utf8).write(to: blockedParent)
+        let destination = blockedParent.appendingPathComponent("session.json")
+        let snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
+
+        let originalDelegate = AppDelegate.shared
+        let geometryKeys = ["programa.session.lastWindowGeometry.v1", "programa.session.lastWindowGeometry.v2"]
+        let savedGeometry = geometryKeys.map { UserDefaults.standard.object(forKey: $0) }
+        let delegate = AppDelegate()
+        defer {
+            AppDelegate.shared = originalDelegate
+            for (key, value) in zip(geometryKeys, savedGeometry) {
+                if let value { UserDefaults.standard.set(value, forKey: key) }
+                else { UserDefaults.standard.removeObject(forKey: key) }
+            }
+        }
+
+        let failedWrite = expectation(description: "actual filesystem write fails")
+        let repairedWrite = expectation(description: "unchanged snapshot is written after storage recovers")
+        delegate.sessionSnapshotWriter = { candidate in
+            let saved = SessionPersistenceStore.save(candidate, fileURL: destination)
+            defer {
+                if saved { repairedWrite.fulfill() }
+                else { failedWrite.fulfill() }
+            }
+            return saved
+        }
+        var finished = false
+        let coordinator = SessionAutosaveCoordinator(
+            sessionPersistenceQueue: DispatchQueue(label: "test.autosave.actual-write-retry"),
+            snapshotProvider: { _ in snapshot },
+            saveSnapshot: { includeScrollback, prebuiltSnapshot, completion in
+                delegate.saveSessionSnapshot(
+                    includeScrollback: includeScrollback,
+                    prebuiltSnapshot: prebuiltSnapshot,
+                    completion: completion
+                )
+            },
+            isTerminating: { finished },
+            isRunningUnderXCTest: { true }
+        )
+        defer {
+            finished = true
+            coordinator.stopSessionAutosaveTimer()
+        }
+
+        coordinator.runSessionAutosaveTick(source: "blocked-storage")
+        wait(for: [failedWrite], timeout: 3)
+        XCTAssertNil(SessionPersistenceStore.load(fileURL: destination))
+        try FileManager.default.removeItem(at: blockedParent)
+        try FileManager.default.createDirectory(at: blockedParent, withIntermediateDirectories: true)
+
+        // No content change and no 60-second fingerprint expiry: recovery alone must permit a retry.
+        // Pump completion callbacks as well as ticks: the first writer can finish before
+        // its main-thread completion clears the coordinator's in-flight state.
+        let deadline = Date().addingTimeInterval(3)
+        while SessionPersistenceStore.load(fileURL: destination) == nil, Date() < deadline {
+            coordinator.runSessionAutosaveTick(source: "repaired-storage")
+            _ = RunLoop.main.run(mode: .default, before: min(deadline, Date().addingTimeInterval(0.01)))
+        }
+        wait(for: [repairedWrite], timeout: 0.5)
+        let restored = try XCTUnwrap(SessionPersistenceStore.load(fileURL: destination))
+        XCTAssertEqual(SessionPersistenceStore.contentIdentity(for: restored), SessionPersistenceStore.contentIdentity(for: snapshot))
+    }
+
+    @MainActor
     func testWorkspaceSessionSnapshotRestoresPendingReviewComments() throws {
         let workspace = Workspace()
         let sourceID = try XCTUnwrap(workspace.focusedPanelId)
@@ -650,6 +721,42 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(restored?.windows.count, 1)
     }
 
+    func testAutomaticHistoryFallbackFiltersBundleBeforeApplyingLookupLimit() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let primary = try XCTUnwrap(SessionPersistenceStore.defaultSnapshotFileURL(
+            bundleIdentifier: Bundle.main.bundleIdentifier, appSupportDirectory: directory
+        ))
+        var snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
+        snapshot.windows[0].tabManager.workspaces[0].customTitle = "Owned archive"
+        XCTAssertTrue(SessionPersistenceStore.save(snapshot, fileURL: primary))
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_700_000_000)], ofItemAtPath: primary.path)
+        XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: primary))
+        let owned = try XCTUnwrap(SessionPersistenceStore.historyFileURLs(fileURL: primary).first)
+        snapshot.windows[0].tabManager.workspaces[0].customTitle = "Foreign archive"
+        XCTAssertTrue(SessionPersistenceStore.save(snapshot, fileURL: primary))
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_700_000_060)], ofItemAtPath: primary.path)
+        XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: primary))
+        let newer = try XCTUnwrap(SessionPersistenceStore.historyFileURLs(fileURL: primary).first { $0 != owned })
+        let ownerSuffix = String(primary.lastPathComponent.dropFirst("session-".count))
+        let foreign = newer.deletingLastPathComponent().appendingPathComponent(
+            String(newer.lastPathComponent.dropLast(ownerSuffix.count)) + "com.example.foreign.json"
+        )
+        try FileManager.default.moveItem(at: newer, to: foreign)
+        try Data("corrupt".utf8).write(to: primary)
+        XCTAssertEqual(SessionPersistenceStore.loadWithHistoryFallback(fileURL: primary, historyLookupLimit: 1)?
+            .windows.first?.tabManager.workspaces.first?.customTitle, "Owned archive")
+        XCTAssertTrue(SessionPersistenceStore.historyFileURLs(fileURL: primary).contains(foreign),
+                      "Manual history browsing must retain other bundle archives")
+        XCTAssertEqual(SessionPersistenceStore.load(fileURL: foreign)?.windows.first?.tabManager.workspaces.first?.customTitle,
+                       "Foreign archive", "Explicit recovery must still allow a user-selected foreign archive")
+
+        try FileManager.default.removeItem(at: owned)
+        try Data("corrupt again".utf8).write(to: primary)
+        XCTAssertNil(SessionPersistenceStore.loadWithHistoryFallback(fileURL: primary),
+                     "Automatic recovery must not restore another bundle when no owned archive remains")
+    }
+
     func testLoadWithHistoryFallbackReturnsNilWhenHistoryIsAlsoUnusable() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
@@ -694,6 +801,26 @@ final class SessionPersistenceTests: XCTestCase {
         )
 
         XCTAssertTrue(shouldRestore)
+    }
+
+    func testRestorePolicyAllowsUserDefaultsArgumentDomainPairs() {
+        let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
+            arguments: ["/Applications/cmux.app/Contents/MacOS/cmux",
+                        "-socketControlMode", "full", "-sessionPersistScrollback", "NO"],
+            environment: [:]
+        )
+
+        XCTAssertTrue(shouldRestore, "NSUserDefaults -key value pairs configure preferences; they are not an open intent")
+    }
+
+    func testRestorePolicySkipsWhenArgumentDomainPairsPrecedeAnOpenTarget() {
+        let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
+            arguments: ["/Applications/cmux.app/Contents/MacOS/cmux",
+                        "-socketControlMode", "full", "/tmp/project"],
+            environment: [:]
+        )
+
+        XCTAssertFalse(shouldRestore)
     }
 
     func testRestorePolicySkipsWhenRunningUnderXCTest() {
@@ -806,6 +933,31 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertTrue(prepared.contains("\(red)RED\(reset)"))
         XCTAssertTrue(prepared.hasPrefix(reset))
         XCTAssertTrue(prepared.hasSuffix(reset + "\n"), "Expected trailing SGR reset + newline")
+    }
+
+    func testFreshSpawnScrollbackSeedBoundsRepeatedColorOutputWithoutLosingCells() throws {
+        let source = String(repeating: "\u{001B}[31mA", count: 1024)
+        let prepared = try XCTUnwrap(SessionFreshSpawnScrollbackSeed.preparedText(for: source))
+
+        XCTAssertEqual(prepared.filter { $0 == "A" }.count, 1024, "Bounding replay must not discard saved terminal cells")
+        XCTAssertTrue(prepared.contains("\u{001B}[31m"), "The saved red rendition must survive replay")
+        XCTAssertLessThan(
+            prepared.utf8.count, 64 * 1024,
+            "A short colored transcript must not expand into megabytes of accumulated SGR history"
+        )
+    }
+
+    func testFreshSpawnScrollbackSeedBoundsChangingColorsWithoutLosingCells() throws {
+        let source = String(repeating: "\u{001B}[31mA\u{001B}[32mA", count: 512)
+        let prepared = try XCTUnwrap(SessionFreshSpawnScrollbackSeed.preparedText(for: source))
+
+        XCTAssertEqual(prepared.filter { $0 == "A" }.count, 1024, "Color changes must not truncate the saved transcript")
+        XCTAssertTrue(prepared.contains("\u{001B}[31m"))
+        XCTAssertTrue(prepared.contains("\u{001B}[32m"))
+        XCTAssertLessThan(
+            prepared.utf8.count, 64 * 1024,
+            "Replacing a foreground color must not retain every earlier foreground color in each cell"
+        )
     }
 
     /// A program killed by the relaunch never sends the DECRST that balances
@@ -1912,6 +2064,70 @@ final class SessionPersistenceTests: XCTestCase {
         )
     }
 
+    func testQueuedSnapshotStripsStaleContentAndPreservesWriteFailure() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("session.json")
+        let paths = SessionScrollbackPolicyPaths(snapshotFileURL: url)
+        let captured = try SessionScrollbackPolicyStore.transition(enabled: true, at: paths)
+        _ = try SessionScrollbackPolicyStore.transition(enabled: false, at: paths)
+        _ = try SessionScrollbackPolicyStore.transition(enabled: true, at: paths)
+        let snapshot = contentSnapshot()
+        var writes = 0
+        XCTAssertTrue(AppDelegate.writeSessionSnapshot(snapshot, policyPaths: paths, capturedGeneration: captured.generation) {
+            writes += 1
+            return SessionPersistenceStore.save($0, fileURL: url)
+        })
+        XCTAssertEqual(writes, 1)
+        let loaded = try XCTUnwrap(SessionPersistenceStore.load(fileURL: url))
+        try assertContentRemovedAndLayoutPreserved(loaded, original: snapshot)
+        XCTAssertFalse(AppDelegate.writeSessionSnapshot(snapshot, policyPaths: paths, capturedGeneration: captured.generation) { _ in false },
+                       "Stripping content must not turn a failed durable write into success")
+    }
+
+    func testHistoryWithoutScrollbackPreservesLayoutAndDoesNotCopyPrivateContent() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("session.json")
+        let snapshot = contentSnapshot()
+        XCTAssertTrue(SessionPersistenceStore.save(snapshot, fileURL: url))
+        XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: url, includeScrollback: false))
+        let archiveURL = try XCTUnwrap(SessionPersistenceStore.historyFileURLs(fileURL: url).first)
+        let archive = try XCTUnwrap(SessionPersistenceStore.load(fileURL: archiveURL))
+        try assertContentRemovedAndLayoutPreserved(archive, original: snapshot)
+        XCTAssertEqual(SessionPersistenceStore.load(fileURL: url)?.windows[0].tabManager.workspaces[0].panels[0].terminal?.scrollback,
+                       "PRIVATE-TERMINAL-CONTENT", "Archiving must not rewrite the live snapshot")
+    }
+
+    private func contentSnapshot() -> AppSessionSnapshot {
+        var snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
+        let panel = SessionPanelSnapshot(id: UUID(), type: .terminal, title: "Terminal", customTitle: nil,
+            directory: "/tmp", isPinned: false, isManuallyUnread: false, gitBranch: nil, listeningPorts: [],
+            ttyName: nil, terminal: SessionTerminalPanelSnapshot(workingDirectory: "/tmp", scrollback: "PRIVATE-TERMINAL-CONTENT"),
+            browser: nil, markdown: nil, review: nil)
+        snapshot.windows[0].tabManager.workspaces[0].panels = [panel]
+        snapshot.windows[0].tabManager.workspaces[0].focusedPanelId = panel.id
+        snapshot.windows[0].tabManager.workspaces[0].layout = .pane(SessionPaneLayoutSnapshot(panelIds: [panel.id], selectedPanelId: panel.id))
+        return snapshot
+    }
+
+    private func assertContentRemovedAndLayoutPreserved(_ snapshot: AppSessionSnapshot, original: AppSessionSnapshot) throws {
+        let workspace = try XCTUnwrap(snapshot.windows.first?.tabManager.workspaces.first)
+        let expected = original.windows[0].tabManager.workspaces[0]
+        let panel = try XCTUnwrap(workspace.panels.first)
+        XCTAssertNil(panel.terminal?.scrollback)
+        XCTAssertEqual(panel.terminal?.workingDirectory, "/tmp")
+        XCTAssertEqual(workspace.focusedPanelId, expected.focusedPanelId)
+        XCTAssertEqual(workspace.customTitle, expected.customTitle)
+        guard case .pane(let pane) = workspace.layout, case .pane(let expectedPane) = expected.layout else {
+            return XCTFail("Content stripping must preserve the pane layout")
+        }
+        XCTAssertEqual(pane.panelIds, expectedPane.panelIds)
+        XCTAssertEqual(pane.selectedPanelId, expectedPane.selectedPanelId)
+    }
+
     private func fileNumber(for fileURL: URL) throws -> Int {
         let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
         return try XCTUnwrap(attributes[.systemFileNumber] as? Int)
@@ -2097,6 +2313,75 @@ final class SocketListenerAcceptPolicyTests: XCTestCase {
 // of the retrieval token — foreclosing recovery of children that were
 // still alive in the holder. One test per fix below.
 final class SessionEscrowReattachRegressionTests: XCTestCase {
+
+    func testAcknowledgementTimeoutRetainsPartialFrameAndSkipsLateReplyForPriorSession() throws {
+        var sockets: [Int32] = [-1, -1]
+        guard socketpair(AF_UNIX, SOCK_STREAM, 0, &sockets) == 0 else {
+            return XCTFail("Could not create acknowledgement socket pair")
+        }
+        defer { close(sockets[0]); close(sockets[1]) }
+        let firstSession = UUID().uuidString
+        let secondSession = UUID().uuidString
+        var firstReply = try XCTUnwrap(EscrowWireFormat.encodeRetrieveResponseFrame(sessionId: firstSession, granted: true))
+        var secondReply = try XCTUnwrap(EscrowWireFormat.encodeRetrieveResponseFrame(sessionId: secondSession, granted: true))
+        firstReply[0] = EscrowWireFormat.escrowAcknowledgementType
+        secondReply[0] = EscrowWireFormat.escrowAcknowledgementType
+        let prefix = Data(firstReply.prefix(11))
+        XCTAssertTrue(UnixDomainFDPassing.send(fd: nil, payload: prefix, over: sockets[0]))
+        var buffered = Data()
+        XCTAssertFalse(SessionEscrowClient.receiveEscrowAcknowledgement(
+            over: sockets[1], sessionId: firstSession, buffer: &buffered, timeout: 0.05
+        ))
+        XCTAssertEqual(buffered, prefix, "Timeout must preserve frame alignment for the next registration")
+
+        var remainingReplies = Data(firstReply.dropFirst(prefix.count))
+        remainingReplies.append(secondReply)
+        XCTAssertTrue(UnixDomainFDPassing.send(fd: nil, payload: remainingReplies, over: sockets[0]))
+        XCTAssertTrue(SessionEscrowClient.receiveEscrowAcknowledgement(
+            over: sockets[1], sessionId: secondSession, buffer: &buffered, timeout: 1
+        ), "A late acknowledgement for the previous session must not reject the current session")
+        XCTAssertTrue(buffered.isEmpty)
+    }
+
+    func testSuccessfulHandoffClosesHolderCopyWithoutClosingReceivedOrReusedDescriptor() throws {
+        var transport: [Int32] = [-1, -1]
+        guard socketpair(AF_UNIX, SOCK_STREAM, 0, &transport) == 0 else {
+            return XCTFail("Could not create descriptor transfer socket pair")
+        }
+        defer { close(transport[0]); close(transport[1]) }
+        var channel: [Int32] = [-1, -1]
+        guard pipe(&channel) == 0 else { return XCTFail("Could not create session pipe") }
+        defer { close(channel[1]) }
+        let originalFD = channel[0]
+        let held = SessionEscrowHolder.HeldSession(
+            sessionId: UUID().uuidString, fd: originalFD, token: [], childPID: getpid()
+        )
+        defer { held.markClosedIfNeeded() }
+        guard UnixDomainFDPassing.send(fd: originalFD, payload: Data([1]), over: transport[0]) else {
+            return XCTFail("Could not send session descriptor")
+        }
+        guard case .data(_, let descriptor) = UnixDomainFDPassing.receiveChunk(maxBytes: 1, from: transport[1]) else {
+            return XCTFail("Expected a descriptor transfer")
+        }
+        let receivedFD = try XCTUnwrap(descriptor)
+        defer { close(receivedFD) }
+        held.markHandedOff()
+        let descriptorStatus = fcntl(originalFD, F_GETFD)
+        let descriptorError = errno
+        XCTAssertEqual(descriptorStatus, -1, "SCM_RIGHTS duplicates the fd; the holder must close its own copy")
+        XCTAssertEqual(descriptorError, EBADF)
+        var sent: UInt8 = 42
+        guard write(channel[1], &sent, 1) == 1 else { return XCTFail("Could not write session payload") }
+        var received: UInt8 = 0
+        XCTAssertEqual(read(receivedFD, &received, 1), 1)
+        XCTAssertEqual(received, sent, "The receiving app must retain the live session")
+
+        XCTAssertEqual(dup2(receivedFD, originalFD), originalFD)
+        defer { close(originalFD) }
+        held.markHandedOff()
+        held.markClosedIfNeeded()
+        XCTAssertNotEqual(fcntl(originalFD, F_GETFD), -1, "Repeated cleanup must not close a reused descriptor")
+    }
 
     override func setUp() {
         super.setUp()

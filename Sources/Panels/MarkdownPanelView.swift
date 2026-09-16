@@ -59,6 +59,21 @@ struct MarkdownPanelView: View {
     // MARK: - Content
 
     private var markdownContentView: some View {
+        ZStack {
+            formattedContentView
+                .opacity(panel.searchState == nil ? 1 : 0)
+                .allowsHitTesting(panel.searchState == nil)
+                .accessibilityHidden(panel.searchState != nil)
+
+            if let state = panel.searchState {
+                MarkdownSearchDocument(searchState: state)
+                    // The Find bar can dock in either upper or lower corner.
+                    .padding(.vertical, 64)
+            }
+        }
+    }
+
+    private var formattedContentView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 // File path breadcrumb
@@ -123,6 +138,101 @@ struct MarkdownPanelView: View {
 
     private var backgroundColor: Color {
         markdownPresentation.backgroundColor
+    }
+}
+
+/// Observes navigation directly; the panel does not forward nested state changes.
+private struct MarkdownSearchDocument: NSViewRepresentable {
+    @ObservedObject var searchState: MarkdownSearchState
+
+    func makeNSView(context: Context) -> MarkdownSearchTextView {
+        MarkdownSearchTextView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: MarkdownSearchTextView, context: Context) {
+        nsView.update(text: searchState.searchText, selectedRange: searchState.selectedRange)
+    }
+}
+
+/// Native Find document. Selection and reveal never change the first responder.
+final class MarkdownSearchTextView: NSScrollView {
+    let textView = NSTextView(frame: .zero)
+    private var matchRange: NSRange?
+    private var needsReveal = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        hasVerticalScroller = true
+        hasHorizontalScroller = false
+        autohidesScrollers = true
+        borderType = .noBorder
+        backgroundColor = .textBackgroundColor
+
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.textColor = .textColor
+        textView.backgroundColor = .textBackgroundColor
+        textView.textContainerInset = NSSize(width: 24, height: 16)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(width: contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+        textView.selectedTextAttributes = [
+            .backgroundColor: NSColor.selectedTextBackgroundColor,
+            .foregroundColor: NSColor.selectedTextColor
+        ]
+        documentView = textView
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(text: String, selectedRange: NSRange?) {
+        let length = (text as NSString).length
+        let validRange = selectedRange.flatMap { range -> NSRange? in
+            guard range.location != NSNotFound, range.location >= 0,
+                  range.length > 0, range.location <= length,
+                  range.length <= length - range.location else { return nil }
+            return range
+        }
+        let textChanged = textView.string != text
+        guard textChanged || matchRange != validRange else { return }
+
+        if textChanged {
+            textView.string = text
+            textView.textStorage?.setAttributes([
+                .font: NSFont.preferredFont(forTextStyle: .body),
+                .foregroundColor: NSColor.textColor
+            ], range: NSRange(location: 0, length: length))
+        } else if let oldRange = matchRange {
+            textView.textStorage?.removeAttribute(.backgroundColor, range: oldRange)
+            textView.textStorage?.addAttribute(.foregroundColor, value: NSColor.textColor, range: oldRange)
+        }
+        matchRange = validRange
+        if let validRange {
+            // Stored attributes keep the hit visible while the Find field owns focus.
+            textView.textStorage?.addAttributes(textView.selectedTextAttributes, range: validRange)
+        } else {
+            textView.setSelectedRange(NSRange(location: 0, length: 0))
+        }
+        needsReveal = validRange != nil
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        guard needsReveal, let matchRange, let textContainer = textView.textContainer,
+              contentSize.width > 0, contentSize.height > 0 else { return }
+        textView.layoutManager?.ensureLayout(for: textContainer)
+        textView.setSelectedRange(matchRange)
+        needsReveal = false
+        textView.scrollRangeToVisible(matchRange)
     }
 }
 

@@ -1267,6 +1267,8 @@ class TabManager: ObservableObject {
                 updatedTabs.append(newWorkspace)
             }
             tabs = updatedTabs
+            // Publish once from the canonical creation path, after model admission.
+            SocketEventBroadcaster.shared.publishWorkspaceLifecycle(kind: "created", workspaceId: newWorkspace.id, title: newWorkspace.title)
             if let terminalPanel = newWorkspace.focusedTerminalPanel {
                 scheduleInitialWorkspaceGitMetadataRefreshIfPossible(
                     workspaceId: newWorkspace.id,
@@ -1620,11 +1622,7 @@ class TabManager: ObservableObject {
     // Keep addTab as convenience alias
     @discardableResult
     func addTab(select: Bool = true, eagerLoadTerminal: Bool = false) -> Workspace {
-        let workspace = addWorkspace(select: select, eagerLoadTerminal: eagerLoadTerminal)
-        // #167 workspace_lifecycle "created" event -- single funnel point for both UI-driven
-        // (new tab button, keyboard shortcut) and socket-driven (workspace.create) creation.
-        SocketEventBroadcaster.shared.publishWorkspaceLifecycle(kind: "created", workspaceId: workspace.id, title: workspace.title)
-        return workspace
+        addWorkspace(select: select, eagerLoadTerminal: eagerLoadTerminal)
     }
 
     func terminalPanelForWorkspaceConfigInheritanceSource() -> TerminalPanel? {
@@ -1878,15 +1876,16 @@ class TabManager: ObservableObject {
     @discardableResult
     func reorderWorkspace(tabId: UUID, before beforeId: UUID? = nil, after afterId: UUID? = nil) -> Bool {
         guard tabs.contains(where: { $0.id == tabId }) else { return false }
-        if let beforeId {
-            guard let idx = tabs.firstIndex(where: { $0.id == beforeId }) else { return false }
-            return reorderWorkspace(tabId: tabId, toIndex: idx)
-        }
-        if let afterId {
-            guard let idx = tabs.firstIndex(where: { $0.id == afterId }) else { return false }
-            return reorderWorkspace(tabId: tabId, toIndex: idx + 1)
-        }
-        return false
+        guard let anchorId = beforeId ?? afterId else { return false }
+        if anchorId == tabId { return true }
+        guard let targetIndex = SidebarDropPlanner.targetIndex(
+            draggedTabId: tabId,
+            targetTabId: anchorId,
+            indicator: SidebarDropIndicator(tabId: anchorId, edge: beforeId != nil ? .top : .bottom),
+            tabIds: tabs.map(\.id),
+            pinnedTabIds: Set(tabs.filter(\.isPinned).map(\.id))
+        ) else { return false }
+        return reorderWorkspace(tabId: tabId, toIndex: targetIndex)
     }
 
     func enableWorktreeFolder(_ workspace: Workspace, repoRoot: String) {

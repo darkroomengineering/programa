@@ -736,7 +736,7 @@ enum BrowserTools {
         ProgramaTool(
             name: "browser_dialog_accept",
             socketMethod: "browser.dialog.accept",
-            description: "Accepts the oldest pending JS dialog (alert/confirm/prompt) recorded for this surface, optionally supplying prompt text.",
+            description: "Answers the currently pending native JavaScript dialog (alert/confirm/prompt) on this surface by accepting it. For a prompt(), an optional text sets the answer verbatim, including an empty string; if text is omitted, the page's default prompt text is used. Returns a not_found error if no dialog is pending.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "text": ProgramaToolSchema.string("Text to enter for a prompt() dialog. Also accepts prompt_text as an alias. Ignored for alert/confirm."),
                 "prompt_text": ProgramaToolSchema.string("Alias for text."),
@@ -748,7 +748,7 @@ enum BrowserTools {
         ProgramaTool(
             name: "browser_dialog_dismiss",
             socketMethod: "browser.dialog.dismiss",
-            description: "Dismisses (cancels) the oldest pending JS dialog (alert/confirm/prompt) recorded for this surface.",
+            description: "Answers the currently pending native JavaScript dialog (alert/confirm/prompt) on this surface by canceling it: confirm() resolves to false, prompt() resolves to null. Returns a not_found error if no dialog is pending.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": surfaceIdProperty(),
                 "window_id": ProgramaToolSchema.windowIdProperty,

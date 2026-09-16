@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Network
 import WebKit
 
 struct BrowserProfileDefinition: Codable, Hashable, Identifiable, Sendable {
@@ -126,15 +127,40 @@ final class BrowserProfileStore: ObservableObject {
     }
 
     func websiteDataStore(for profileID: UUID) -> WKWebsiteDataStore {
+        let store: WKWebsiteDataStore
         if profileID == Self.builtInDefaultProfileID {
-            return .default()
+            store = .default()
+        } else if let existing = dataStores[profileID] {
+            store = existing
+        } else {
+            store = WKWebsiteDataStore(forIdentifier: profileID)
+            dataStores[profileID] = store
         }
-        if let existing = dataStores[profileID] {
-            return existing
-        }
-        let store = WKWebsiteDataStore(forIdentifier: profileID)
-        dataStores[profileID] = store
+        applyUserProxyConfiguration(to: store)
         return store
+    }
+
+    /// Applies the `browser.proxy` user setting to the profile's data store, or clears
+    /// any proxy configuration when the setting is absent or malformed.
+    private func applyUserProxyConfiguration(to store: WKWebsiteDataStore) {
+        if let descriptor = BrowserUserProxySettings.descriptor(defaults: defaults) {
+            guard let nwPort = NWEndpoint.Port(rawValue: UInt16(descriptor.port)) else {
+                store.proxyConfigurations = []
+                return
+            }
+            let nwEndpoint = NWEndpoint.hostPort(
+                host: NWEndpoint.Host(descriptor.host),
+                port: nwPort
+            )
+            switch descriptor.proxyType {
+            case .socks5:
+                store.proxyConfigurations = [ProxyConfiguration(socksv5Proxy: nwEndpoint)]
+            case .httpConnect:
+                store.proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy: nwEndpoint)]
+            }
+        } else {
+            store.proxyConfigurations = []
+        }
     }
 
     func historyStore(for profileID: UUID) -> BrowserHistoryStore {

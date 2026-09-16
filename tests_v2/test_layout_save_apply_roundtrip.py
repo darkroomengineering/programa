@@ -15,6 +15,7 @@ import shutil
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -45,17 +46,31 @@ def _pwd_via_terminal(c: cmux, surface_id: str, timeout_s: float = 8.0) -> str:
     raise cmuxError(f"Timed out waiting for pwd marker {token!r} in surface output: {last_text!r}")
 
 
+def _shell_ack(c: cmux, surface_id: str) -> int:
+    nonce = "LIVE_" + uuid.uuid4().hex
+    # Direct RPC preserves the printf escape and sends an actual Return once.
+    c._call("surface.send_text", {"surface_id": surface_id, "text": f"printf '{nonce}:%s\\n' \"$$\"\n"})
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        for line in c.read_terminal_text(surface_id).splitlines():
+            if line.startswith(nonce + ":"):
+                pid = line.split(":", 1)[1].strip()
+                if pid.isdigit():
+                    return int(pid)
+        time.sleep(0.1)
+    raise cmuxError("Original terminal did not acknowledge fresh nonce")
+
+
 def main() -> int:
     layout_name = f"test_roundtrip_{int(time.time() * 1000)}"
     source_dir = Path(tempfile.mkdtemp(prefix="programa_layout_roundtrip_source_"))
     target_dir = Path(tempfile.mkdtemp(prefix="programa_layout_roundtrip_target_"))
     source_workspace = ""
     applied_workspace = ""
+    live_workspace = ""
 
     try:
         with cmux(SOCKET_PATH) as c:
-            baseline_workspace = c.current_workspace()
-
             created = c._call("workspace.create", {"cwd": str(source_dir)}, timeout_s=15.0) or {}
             source_workspace = str(created.get("workspace_id") or "")
             _must(bool(source_workspace), f"workspace.create returned no workspace_id: {created}")
@@ -75,6 +90,29 @@ def main() -> int:
             names = [row.get("name") for row in (listed.get("layouts") or [])]
             _must(layout_name in names, f"layout.list should include the saved layout: {names}")
 
+            # A realized single terminal must not be mistaken for an unused placeholder.
+            live = c._call("workspace.create", {"cwd": str(source_dir)}, timeout_s=15.0) or {}
+            live_workspace = str(live.get("workspace_id") or "")
+            _must(bool(live_workspace), "Expected live workspace")
+            for target in (live_workspace, source_workspace):
+                c.select_workspace(target)
+                before_rows = (c._call("surface.list", {"workspace_id": target}) or {}).get("surfaces") or []
+                _must(len(before_rows) == (1 if target == live_workspace else 2), "Expected distinct single-terminal and split-terminal fixtures")
+                surface_id = str(before_rows[0].get("id") or "")
+                before_pid = _shell_ack(c, surface_id)
+                selected_before = c.current_workspace()
+                try:
+                    c._call("layout.apply", {"name": layout_name, "workspace_id": target}, timeout_s=15.0)
+                except cmuxError as error:
+                    _must("invalid_state" in str(error), f"Expected nonpristine target rejection: {error}")
+                else:
+                    raise cmuxError("layout.apply replaced an existing live terminal")
+                after_rows = (c._call("surface.list", {"workspace_id": target}) or {}).get("surfaces") or []
+                _must([(r.get("id"), r.get("pane_id")) for r in after_rows] == [(r.get("id"), r.get("pane_id")) for r in before_rows], "Rejected apply changed terminal identity/layout")
+                _must(c.current_workspace() == selected_before, "Rejected apply changed workspace selection")
+                _must(_shell_ack(c, surface_id) == before_pid, "Rejected apply replaced the original shell process")
+
+            selected_before_apply = c.current_workspace()
             applied = c._call(
                 "layout.apply",
                 {"name": layout_name, "cwd": str(target_dir)},
@@ -84,7 +122,7 @@ def main() -> int:
             _must(bool(applied_workspace), f"layout.apply returned no workspace_id: {applied}")
 
             _must(
-                c.current_workspace() == baseline_workspace,
+                c.current_workspace() == selected_before_apply,
                 "layout.apply must not focus/select the new workspace",
             )
 
@@ -104,7 +142,7 @@ def main() -> int:
                 f"Expected applied layout's terminal cwd to be {target_dir}, got {observed_cwd!r}",
             )
     finally:
-        for workspace_id in (source_workspace, applied_workspace):
+        for workspace_id in (source_workspace, applied_workspace, live_workspace):
             if not workspace_id:
                 continue
             try:

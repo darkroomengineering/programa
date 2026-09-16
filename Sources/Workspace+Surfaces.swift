@@ -622,8 +622,15 @@ extension Workspace {
             baseBranch: baseBranch
         )
         reviewPanel.sendToSourceSurface = { [weak self, weak reviewPanel] text in
-            guard let self, let reviewPanel else { return false }
-            return self.sendReviewComments(sourceSurfaceId: reviewPanel.sourceSurfaceId, text: text)
+            guard let reviewPanel else { return false }
+            // Resolve the workspace currently holding the source terminal at send time (same
+            // lookup as `installReviewPanelSubscription`) rather than capturing the creating
+            // workspace, so comments keep delivering after either panel moves. Fall back to the
+            // creating workspace when the source can't be located.
+            guard let owningWorkspace = Workspace.workspaceOwning(surfaceId: reviewPanel.sourceSurfaceId) ?? self else {
+                return false
+            }
+            return owningWorkspace.sendReviewComments(sourceSurfaceId: reviewPanel.sourceSurfaceId, text: text)
         }
         panels[reviewPanel.id] = reviewPanel
         panelTitles[reviewPanel.id] = reviewPanel.displayTitle

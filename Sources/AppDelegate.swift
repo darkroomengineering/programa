@@ -845,7 +845,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     nonisolated static let persistedWindowGeometrySchemaVersion = 2
-    private nonisolated static let persistedWindowGeometryDefaultsKey = "programa.session.lastWindowGeometry.v2"
+    nonisolated static let persistedWindowGeometryDefaultsKey = "programa.session.lastWindowGeometry.v2"
     private nonisolated static let legacyPersistedWindowGeometryDefaultsKeys = [
         "programa.session.lastWindowGeometry.v1"
     ]
@@ -1008,18 +1008,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var startupSessionSnapshot: AppSessionSnapshot?
     private var didPrepareStartupSessionSnapshot = false
     private var didAttemptStartupSessionRestore = false
-    private var isApplyingStartupSessionRestore = false
-    private lazy var startupHandoff = StartupSessionHandoff(
+    var isApplyingStartupSessionRestore = false
+    lazy var startupHandoff = StartupSessionHandoff(
         olderProcess: StartupSessionHandoff.authenticatedOlderProcess,
         isLive: { Self.singleInstanceProcessKey(for: $0.processIdentifier) == $0 },
         onReady: { [weak self] in self?.resumeStartupSessionAfterHandoff() }
     )
     private var startupHandoffPrimaryWindowId: UUID?
     private var acknowledgedDuplicateShutdown: (target: ProgramaSingleInstanceProcessKey, generation: UUID, url: URL)?
-    private let sessionPersistenceQueue = DispatchQueue(
+    let sessionPersistenceQueue = DispatchQueue(
         label: "com.cmuxterm.app.sessionPersistence",
         qos: .utility
     )
+    var sessionSnapshotWriter: @Sendable (AppSessionSnapshot) -> Bool = {
+        SessionPersistenceStore.save($0)
+    }
     // Constructed eagerly with placeholder dependencies; `configure(...)` in `init()` rebinds
     // them to the real queue/closures immediately after `super.init()` returns. See
     // `SessionAutosaveCoordinator.configure` for why this two-step exists.
@@ -1042,7 +1045,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
     private var didHandleExplicitOpenIntentAtStartup = false
     private let appLifecycleCoordinator = AppLifecycleCoordinator()
-    private var isTerminatingApp: Bool { appLifecycleCoordinator.isTerminating }
+    var isTerminatingApp: Bool { appLifecycleCoordinator.isTerminating }
 #if DEBUG
     var debugSessionSnapshotSaverForTesting: ((AppSessionSnapshot) -> Bool)?
     var debugQuitSaveFailureAlertForTesting: (() -> Void)?
@@ -1333,7 +1336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let socketPath = TerminalController.shared.activeSocketPath(preferredPath: config.path)
         let health = TerminalController.shared.socketListenerHealth(expectedSocketPath: socketPath)
         let pingResponse = health.isHealthy
-            ? TerminalController.probeSocketCommand("ping", at: socketPath, timeout: 1.0)
+            ? TerminalController.probeSocketPing(at: socketPath, timeout: 1.0)
             : nil
         let isReady = health.isHealthy && pingResponse == "PONG"
         var failureSignals = health.failureSignals
@@ -1467,12 +1470,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     func applicationDidBecomeActive(_ notification: Notification) {
+#if DEBUG
+        dlog(
+            "app.activation active=1 frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") " +
+            "keyWindow=\(NSApp.keyWindow?.identifier?.rawValue ?? "nil") " +
+            "currentEvent=\(NSApp.currentEvent.map { String(describing: $0.type) } ?? "nil")"
+        )
+#endif
         // `willPowerOffNotification` has no matching cancellation notification. If macOS
         // becomes active again before termination, the shutdown was cancelled: resume
         // autosave/session machinery and replace the provisional snapshot with a normal one.
         if appLifecycleCoordinator.resumeAfterCancelledPowerOff() {
             SessionMachineryGate.isApplicationTerminating = false
-            _ = saveSessionSnapshot(includeScrollback: false)
+            saveSessionSnapshot(includeScrollback: false)
         }
         guard let notificationStore else { return }
         notificationStore.handleApplicationDidBecomeActive()
@@ -1582,7 +1592,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             isDiscardedDuplicate: appLifecycleCoordinator.isSingleInstanceLoser
         )
         if terminationPolicy.persistCleanShutdownSnapshot {
-            _ = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false, cleanShutdown: true)
+            saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false, cleanShutdown: true)
         }
         guard terminationPolicy.performProcessLocalTeardown else { return }
         // Finalize any terminal closes still sitting in their undo grace period so a staged close
@@ -1598,9 +1608,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     func applicationWillResignActive(_ notification: Notification) {
+#if DEBUG
+        dlog("app.activation active=0 frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")")
+#endif
         guard !isTerminatingApp else { return }
         clearConfiguredShortcutChordState()
-        _ = saveSessionSnapshot(includeScrollback: false)
+        saveSessionSnapshot(includeScrollback: false)
     }
 
     func persistSessionForUpdateRelaunch() {
@@ -1611,7 +1624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // default-config users, and if Sparkle force-kills past its timeout the
         // stale cleanShutdown=false snapshot fires the crash-recovery notice as
         // a false positive on the next launch (audit 2026-08-20, H4).
-        _ = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+        saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
     }
 
     func configure(tabManager: TabManager, notificationStore: TerminalNotificationStore, sidebarState: SidebarState) {
@@ -1659,7 +1672,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // Archive whatever the previous launch left behind before any code path below (or
         // later in startup) can overwrite it -- including a launch that skips restore entirely
         // (explicit open intent), which otherwise clobbers the file with no way back.
-        SessionPersistenceStore.rotateIntoHistory()
+        let captureEnabled = SessionWALStore.shared.currentCapturePolicy().enabled
+        let archivedWithContent = captureEnabled ? try? SessionScrollbackPolicyStore.withContentPermission(
+            at: SessionScrollbackPolicyPaths.make(), capturedGeneration: nil,
+            { SessionPersistenceStore.rotateIntoHistory() }
+        ) : nil
+        if archivedWithContent == nil {
+            SessionPersistenceStore.rotateIntoHistory(includeScrollback: false)
+        }
         guard !didHandleExplicitOpenIntentAtStartup, SessionRestorePolicy.shouldAttemptRestore() else { return }
         Self.removeLegacyPersistedWindowGeometry()
         startupSessionSnapshot = core.sessionSnapshots.loadWithHistoryFallback()
@@ -1691,7 +1711,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         defaults.set(data, forKey: Self.persistedWindowGeometryDefaultsKey)
     }
 
-    private nonisolated static func encodedPersistedWindowGeometryData(
+    nonisolated static func encodedPersistedWindowGeometryData(
         frame: SessionRectSnapshot?,
         display: SessionDisplaySnapshot?
     ) -> Data? {
@@ -1712,7 +1732,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return payload
     }
 
-    private nonisolated static func removeLegacyPersistedWindowGeometry(
+    nonisolated static func removeLegacyPersistedWindowGeometry(
         defaults: UserDefaults = .standard
     ) {
         legacyPersistedWindowGeometryDefaultsKeys.forEach { defaults.removeObject(forKey: $0) }
@@ -1820,6 +1840,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             } else {
                 completeStartupSessionRestore()
             }
+        } else {
+            completeStartupSessionRestore()
         }
     }
 
@@ -1844,8 +1866,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private func completeStartupSessionRestore() {
         startupSessionSnapshot = nil
         isApplyingStartupSessionRestore = false
-        _ = saveSessionSnapshot(includeScrollback: false)
+        saveSessionSnapshot(includeScrollback: false)
         reconcileOrphanedEscrowedSessions()
+        ScrollbackPersistenceSettings.retryLegacyMigration()
     }
 
     private func resumeStartupSessionAfterHandoff() {
@@ -1894,7 +1917,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
         }
 
-        let orphans = SessionWALStore.shared.escrowedSessionIds(excluding: known)
+        let ownedSockets = Set([SessionEscrowClient.legacySocketPath(), SessionEscrowClient.escrowSocketPath()])
+        let orphans = SessionWALStore.shared.escrowedSessionIds(excluding: known).filter {
+            $0.meta.escrowSocketPath.map(ownedSockets.contains) == true
+        }
         guard !orphans.isEmpty else {
             dilog("escrow.reconcile", "found=0")
             return
@@ -2022,7 +2048,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // `createMainWindow()` persisted the bootstrap workspace before
         // reconciliation replaced it. Persist the finalized recovery window
         // immediately so another abrupt exit cannot restore that stale shell.
-        _ = saveSessionSnapshot(includeScrollback: false)
+        saveSessionSnapshot(includeScrollback: false)
 
         return (windowId: windowId, recoveredCount: recoveredCount)
     }
@@ -2408,7 +2434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             && abs(lhsStd.size.height - rhsStd.size.height) <= tolerance
     }
 
-    private func displaySnapshot(for window: NSWindow?) -> SessionDisplaySnapshot? {
+    func displaySnapshot(for window: NSWindow?) -> SessionDisplaySnapshot? {
         guard let window else { return nil }
         let screen = window.screen
             ?? NSScreen.screens.first(where: { $0.frame.intersects(window.frame) })
@@ -2437,7 +2463,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 SessionMachineryGate.isApplicationTerminating = true
                 // `willPowerOff` can still be cancelled. Only applicationWillTerminate may
                 // label a snapshot as a clean shutdown.
-                _ = self.saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+                self.saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
             }
         }
         lifecycleSnapshotObservers.append(powerOffObserver)
@@ -2450,9 +2476,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if self.isTerminatingApp {
-                    _ = self.saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+                    self.saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
                 } else {
-                    _ = self.saveSessionSnapshot(includeScrollback: false)
+                    self.saveSessionSnapshot(includeScrollback: false)
                 }
             }
         }
@@ -2497,221 +2523,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         ProcessInfo.processInfo.enableSuddenTermination()
     }
 
-    /// A synchronous save returns the disk-write result; an asynchronous save returns queue
-    /// acceptance and reports the completed disk write through its main-queue completion.
-    @discardableResult
-    private func saveSessionSnapshot(
-        includeScrollback: Bool,
-        removeWhenEmpty: Bool = false,
-        cleanShutdown: Bool = false,
-        prebuiltSnapshot: AppSessionSnapshot? = nil,
-        completion: ((Bool) -> Void)? = nil
-    ) -> Bool {
-        if startupHandoff.shouldDefer() {
-            completion?(false)
-            return false
-        }
-        if Self.shouldSkipSessionSaveDuringStartupRestore(
-            isApplyingStartupSessionRestore: isApplyingStartupSessionRestore,
-            includeScrollback: includeScrollback
-        ) {
-#if DEBUG
-            dlog("session.save.skipped reason=startup_restore_in_progress includeScrollback=0")
-#endif
-            completion?(false)
-            return false
-        }
-
-        let writeSynchronously = SessionAutosaveCoordinator.shouldWriteSessionSnapshotSynchronously(
-            isTerminatingApp: isTerminatingApp,
-            includeScrollback: includeScrollback
-        )
-#if DEBUG
-        let timingStart = ProgramaTypingTiming.start()
-        defer {
-            ProgramaTypingTiming.logDuration(
-                path: "session.saveSnapshot",
-                startedAt: timingStart,
-                extra: "includeScrollback=\(includeScrollback ? 1 : 0) removeWhenEmpty=\(removeWhenEmpty ? 1 : 0) sync=\(writeSynchronously ? 1 : 0)"
-            )
-        }
-#endif
-
-        guard let snapshot = prebuiltSnapshot ?? buildSessionSnapshot(includeScrollback: includeScrollback, cleanShutdown: cleanShutdown) else {
-            _ = persistSessionSnapshot(
-                nil,
-                removeWhenEmpty: removeWhenEmpty,
-                persistedGeometryData: nil,
-                synchronously: writeSynchronously
-            )
-            completion?(false)
-            return false
-        }
-
-        let persistedGeometryData = snapshot.windows.first.flatMap { primaryWindow in
-            Self.encodedPersistedWindowGeometryData(
-                frame: primaryWindow.frame,
-                display: primaryWindow.display
-            )
-        }
+    // Session snapshot build/save/persist machinery lives in
+    // `AppDelegate+SessionSnapshotPersistence.swift`.
 
 #if DEBUG
-        debugLogSessionSaveSnapshot(snapshot, includeScrollback: includeScrollback)
-#endif
-        return persistSessionSnapshot(
-            snapshot,
-            removeWhenEmpty: false,
-            persistedGeometryData: persistedGeometryData,
-            synchronously: writeSynchronously,
-            completion: completion
-        )
-    }
-
-    nonisolated static func shouldPersistSnapshotOnWindowUnregister(isTerminatingApp: Bool) -> Bool {
-        !isTerminatingApp
-    }
-
-    nonisolated static func shouldRemoveSnapshotWhenNoWindowsRemainOnWindowUnregister(
-        isTerminatingApp: Bool
-    ) -> Bool {
-        !isTerminatingApp
-    }
-
-    nonisolated static func shouldSkipSessionSaveDuringStartupRestore(
-        isApplyingStartupSessionRestore: Bool,
-        includeScrollback: Bool
-    ) -> Bool {
-        isApplyingStartupSessionRestore && !includeScrollback
-    }
-
-    nonisolated static func performSessionPersistenceWrite(
-        on queue: DispatchQueue,
-        synchronously: Bool,
-        operation: @escaping () -> Void
-    ) {
-        if synchronously {
-            queue.sync(execute: operation)
-        } else {
-            queue.async(execute: DispatchWorkItem(block: operation))
-        }
-    }
-
-    private func persistSessionSnapshot(
-        _ snapshot: AppSessionSnapshot?,
-        removeWhenEmpty: Bool,
-        persistedGeometryData: Data?,
-        synchronously: Bool,
-        completion: ((Bool) -> Void)? = nil
-    ) -> Bool {
-        guard snapshot != nil || removeWhenEmpty || persistedGeometryData != nil else {
-            completion?(false)
-            return false
-        }
-
-#if DEBUG
-        let saveOverride = debugSessionSnapshotSaverForTesting
-#endif
-        // Preferences can synchronously notify main-queue observers; never write them
-        // from the disk queue while quit is synchronously waiting for that queue.
-        Self.removeLegacyPersistedWindowGeometry()
-        if let persistedGeometryData {
-            UserDefaults.standard.set(persistedGeometryData, forKey: Self.persistedWindowGeometryDefaultsKey)
-        }
-        let core = self.core // captured on the main actor; `writeBlock` runs on `sessionPersistenceQueue`
-
-        let writeBlock = { () -> Bool in
-            if let snapshot {
-#if DEBUG
-                let saved = saveOverride?(snapshot) ?? core.sessionSnapshots.save(snapshot)
-#else
-                let saved = core.sessionSnapshots.save(snapshot)
-#endif
-                if !saved { dilog("session.save", "outcome=failed") }
-                return saved
-            } else if removeWhenEmpty {
-                SessionPersistenceStore.removeSnapshot()
-            }
-            return true
-        }
-
-        if synchronously {
-            var saved = false
-            Self.performSessionPersistenceWrite(on: sessionPersistenceQueue, synchronously: true) {
-                saved = writeBlock()
-            }
-            completion?(saved)
-            return saved
-        }
-        Self.performSessionPersistenceWrite(on: sessionPersistenceQueue, synchronously: false) {
-            let saved = writeBlock()
-            if let completion {
-                DispatchQueue.main.async { completion(saved) }
-            }
-        }
-        return true
-    }
-
-    private func buildSessionSnapshot(includeScrollback: Bool, cleanShutdown: Bool = false) -> AppSessionSnapshot? {
-        let contexts = mainWindowContexts.values.sorted { lhs, rhs in
-            let lhsWindow = lhs.window ?? windowForMainWindowId(lhs.windowId)
-            let rhsWindow = rhs.window ?? windowForMainWindowId(rhs.windowId)
-            let lhsIsKey = lhsWindow?.isKeyWindow ?? false
-            let rhsIsKey = rhsWindow?.isKeyWindow ?? false
-            if lhsIsKey != rhsIsKey {
-                return lhsIsKey && !rhsIsKey
-            }
-            return lhs.windowId.uuidString < rhs.windowId.uuidString
-        }
-
-        guard !contexts.isEmpty else { return nil }
-
-        let windows: [SessionWindowSnapshot] = contexts
-            .prefix(SessionPersistencePolicy.maxWindowsPerSnapshot)
-            .map { context in
-                let window = context.window ?? windowForMainWindowId(context.windowId)
-                return SessionWindowSnapshot(
-                    frame: window.map { SessionRectSnapshot($0.frame) },
-                    display: displaySnapshot(for: window),
-                    tabManager: context.tabManager.sessionSnapshot(includeScrollback: includeScrollback),
-                    sidebar: SessionSidebarSnapshot(
-                        isVisible: context.sidebarState.isVisible,
-                        selection: SessionSidebarSelection(selection: context.sidebarSelectionState.selection),
-                        width: SessionPersistencePolicy.sanitizedSidebarWidth(Double(context.sidebarState.persistedWidth))
-                    )
-                )
-            }
-
-        guard !windows.isEmpty else { return nil }
-        return AppSessionSnapshot(
-            version: SessionSnapshotSchema.currentVersion,
-            createdAt: Date().timeIntervalSince1970,
-            windows: windows,
-            cleanShutdown: cleanShutdown
-        )
-    }
-
-#if DEBUG
-    private func debugLogSessionSaveSnapshot(
-        _ snapshot: AppSessionSnapshot,
-        includeScrollback: Bool
-    ) {
-        dlog(
-            "session.save includeScrollback=\(includeScrollback ? 1 : 0) " +
-                "windows=\(snapshot.windows.count)"
-        )
-        for (index, windowSnapshot) in snapshot.windows.enumerated() {
-            let workspaceCount = windowSnapshot.tabManager.workspaces.count
-            let selectedWorkspace = windowSnapshot.tabManager.selectedWorkspaceIndex.map(String.init) ?? "nil"
-            dlog(
-                "session.save.window idx=\(index) " +
-                    "frame={\(debugSessionRectDescription(windowSnapshot.frame))} " +
-                    "display={\(debugSessionDisplayDescription(windowSnapshot.display))} " +
-                    "workspaces=\(workspaceCount) selected=\(selectedWorkspace)"
-            )
-        }
-    }
-
-    private func debugSessionRectDescription(_ rect: SessionRectSnapshot?) -> String {
+    func debugSessionRectDescription(_ rect: SessionRectSnapshot?) -> String {
         guard let rect else { return "nil" }
         return "x=\(debugSessionNumber(rect.x)) y=\(debugSessionNumber(rect.y)) " +
             "w=\(debugSessionNumber(rect.width)) h=\(debugSessionNumber(rect.height))"
@@ -2725,7 +2541,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             "h=\(debugSessionNumber(Double(rect.size.height)))"
     }
 
-    private func debugSessionDisplayDescription(_ display: SessionDisplaySnapshot?) -> String {
+    func debugSessionDisplayDescription(_ display: SessionDisplaySnapshot?) -> String {
         guard let display else { return "nil" }
         let displayIdText = display.displayID.map(String.init) ?? "nil"
         return "id=\(displayIdText) " +
@@ -2733,7 +2549,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             "visible={\(debugSessionRectDescription(display.visibleFrame))}"
     }
 
-    private func debugSessionNumber(_ value: Double) -> String {
+    func debugSessionNumber(_ value: Double) -> String {
         String(format: "%.1f", value)
     }
 #endif
@@ -2846,7 +2662,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         attemptStartupSessionRestoreIfNeeded(primaryWindow: window)
         if !isTerminatingApp {
-            _ = saveSessionSnapshot(includeScrollback: false)
+            saveSessionSnapshot(includeScrollback: false)
         }
     }
 
@@ -4026,7 +3842,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16, execute: reassert)
     }
 
-    private func windowForMainWindowId(_ windowId: UUID) -> NSWindow? {
+    func windowForMainWindowId(_ windowId: UUID) -> NSWindow? {
         if let ctx = mainWindowContexts.values.first(where: { $0.windowId == windowId }),
            let window = ctx.window {
             return window
@@ -4680,6 +4496,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             startupSessionSnapshot = nil
             didAttemptStartupSessionRestore = true
         }
+        ScrollbackPersistenceSettings.retryLegacyMigration()
     }
 
     private func externalOpenDirectories(from urls: [URL]) -> [String] {
@@ -10420,7 +10237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // in applicationShouldTerminate/applicationWillTerminate. Saving again here would
         // overwrite it as windows tear down one-by-one, dropping closed windows and replay.
         if Self.shouldPersistSnapshotOnWindowUnregister(isTerminatingApp: isTerminatingApp) {
-            _ = saveSessionSnapshot(
+            saveSessionSnapshot(
                 includeScrollback: false,
                 removeWhenEmpty: Self.shouldRemoveSnapshotWhenNoWindowsRemainOnWindowUnregister(
                     isTerminatingApp: isTerminatingApp

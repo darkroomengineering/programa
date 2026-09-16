@@ -11,10 +11,11 @@ import Bonsplit
 final class SessionAutosaveCoordinator {
     typealias SnapshotProvider = (_ includeScrollback: Bool) -> AppSessionSnapshot?
     /// Completion runs on main and reports the completed disk write, not queue acceptance.
+    typealias SaveCompletion = (_ saved: Bool) -> Void
     typealias SnapshotSaver = (
         _ includeScrollback: Bool,
         _ prebuiltSnapshot: AppSessionSnapshot?,
-        _ completion: @escaping (Bool) -> Void
+        _ completion: @escaping SaveCompletion
     ) -> Void
     typealias TerminatingProvider = () -> Bool
     typealias XCTestRunningProvider = () -> Bool
