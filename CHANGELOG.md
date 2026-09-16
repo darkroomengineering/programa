@@ -28,9 +28,10 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Claude Code, Codex, and OpenCode hooks now report normalized agent lifecycle events (session start/exit, turn start/complete/abort, permission requests, input requests, item progress) through one `agent.event` method, feeding the same sidebar working/blocked/idle state Programa already showed (#340).
 
 ### Changed
+- The Windows download is 90 MB instead of 221 MB: the single-file bundle is compressed, only English and Japanese resources ship, and the native libraries are built size-optimized and stripped. Startup-critical terminal code keeps full optimization (#348).
 - Removed unused UI helpers, speculative agent lookup state, impossible internal worktree outcomes, and orphan SSH fixtures. Development setup reuses the existing Zig validation; E2E and Depot workflows reuse the checksum-verified GhosttyKit downloader, and Depot preserves failing test exit codes.
 - Tagged development builds automatically retain the current build and two recent inactive builds, preserving running apps and concurrent builds during cleanup.
-- Each ship now deletes promoted release candidates older than the two most recent, so the releases page stops accumulating 110 MB prereleases.
+- The releases page now holds one entry, the rolling release. Candidates stay private drafts (one kept for rollback) and milestone tags no longer publish a separate release (#349).
 - Added `ProgramaCore`, one seam between the app and git-metadata probes, port scanning, session snapshots, and agent activity. Today's code sits behind it unchanged; later, an out-of-process core can replace it without scattering remote/local branches through the workspace model. Behavior is unchanged (#339).
 - The release pipeline now builds, verifies, and publishes the macOS and Windows builds together from one rolling GitHub release, with matching build-specific archives kept for rollback.
 - README now leads with what Programa actually is against tmux and cmux, with a refreshed hero screenshot (#343).
@@ -42,6 +43,8 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Autosave acknowledges completed disk writes, retries failures, and preserves prompt-save requests during an ongoing write. Saved sessions no longer expire solely because they remained unclaimed for an hour; fresh-shell recovery is labeled explicitly.
 - Scrollback restoration tracks effective terminal colors without growing style history. Fully hidden windows can release all idle terminal graphics while retaining their sessions.
 - Worktrees keep their requested workspace parent across session restore, and selected Solid Fill rows retain their workspace color rail.
+- Terminals no longer break after the Mac sleeps. The session holder measured heartbeat silence on the wall clock, so any sleep longer than six seconds made it declare every terminal dead on wake and start reading the same PTYs the app was using; it now counts awake time only, and the app re-checks its sessions and redraws on wake (#351).
+- Fixes from the September 11 audit: browser dialog and element-reference handling, review probes that surfaced git failures instead of empty diffs, update-check timeouts, scrollback privacy across session persistence, CLI authentication for alternate clients, hook installation edge cases, and several test harness races (#334).
 - Idle CPU with an open window dropped from roughly 12 to 20 percent of a core to about 1 percent. The workspace pane overlay kept a display-rate animation timeline running for the life of every window; it now mounts one only while an attention flash is animating (#335).
 - The dock icon no longer costs 32 MB of resident memory. The light and dark icon assets are declared as 512pt @2x, so AppKit decodes them at 1024 pixels instead of rasterizing a 2048 pixel copy (#335).
 - Closing a workspace no longer leaves its Workspace object alive through the sidebar row's hover closure (#335).
