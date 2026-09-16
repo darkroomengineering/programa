@@ -232,7 +232,7 @@ extension TabManager {
                     tab.agentPIDs.removeValue(forKey: key)
                 }
                 let remainingAgentPIDs = Set(tab.agentPIDs.values.compactMap { $0 > 0 ? Int($0) : nil })
-                PortScanner.shared.refreshAgentPorts(workspaceId: tab.id, agentPIDs: remainingAgentPIDs)
+                core.ports.refreshAgentPorts(workspaceId: tab.id, agentPIDs: remainingAgentPIDs)
                 // Also clear stale notifications (e.g. "Doing well, thanks!")
                 // left behind when Claude was killed without SessionEnd firing.
                 AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id)

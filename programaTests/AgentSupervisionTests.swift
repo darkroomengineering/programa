@@ -224,6 +224,82 @@ final class AgentSupervisionRegistryTests: XCTestCase {
         workspace.updatePanelAgentState(panelId: panelId, state: .blocked)
         XCTAssertEqual(aggregate(), .blocked)
     }
+
+    /// Verifies `aggregateTaskState` reads agent activity state through the
+    /// `ProgramaCore` seam (`docs/plans/core-seam.md`) rather than reading
+    /// `Workspace.aggregateAgentState` directly: a fake core reports a state
+    /// the real workspace does not have, and that fake's answer -- not the
+    /// workspace's real (empty) state -- must be what wins the worst-first
+    /// aggregation.
+    func testAggregateTaskStateReadsAgentActivityThroughCoreSeam() throws {
+        let registry = AgentSupervisionRegistry(capacity: 8)
+        let workspace = Workspace()
+        // The real workspace has no hook-managed agent state at all.
+        XCTAssertNil(workspace.aggregateAgentState)
+
+        let fakeAgentActivity = FakeAgentActivityReporting(stubbedState: .blocked)
+        let fakeCore = FakeProgramaCore(agentActivity: fakeAgentActivity)
+        let result = AgentSupervisionMetadata.aggregateTaskState(
+            for: workspace,
+            records: registry.records(workspaceIds: [workspace.id]),
+            core: fakeCore
+        )
+
+        XCTAssertEqual(result, .blocked)
+        XCTAssertEqual(fakeAgentActivity.recordedWorkspaceIds, [workspace.id])
+    }
+}
+
+/// Records every seam call it receives instead of touching real
+/// subprocesses/sockets/AppKit state -- see `docs/plans/core-seam.md`.
+private final class FakeProgramaCore: ProgramaCoreProviding {
+    let git: ProgramaCore.GitMetadataProbing = FakeGitMetadataProbe()
+    let ports: ProgramaCore.PortScanning = FakePortScanning()
+    let sessionSnapshots: ProgramaCore.SessionSnapshotting = FakeSessionSnapshotting()
+    let agentActivity: ProgramaCore.AgentActivityReporting
+
+    init(agentActivity: ProgramaCore.AgentActivityReporting) {
+        self.agentActivity = agentActivity
+    }
+}
+
+private final class FakeAgentActivityReporting: ProgramaCore.AgentActivityReporting {
+    let stubbedState: AgentActivityState?
+    private(set) var recordedWorkspaceIds: [UUID] = []
+
+    init(stubbedState: AgentActivityState?) {
+        self.stubbedState = stubbedState
+    }
+
+    @MainActor
+    func aggregateState(for workspace: Workspace) -> AgentActivityState? {
+        recordedWorkspaceIds.append(workspace.id)
+        return stubbedState
+    }
+}
+
+private struct FakeGitMetadataProbe: ProgramaCore.GitMetadataProbing {
+    func probeInitialWorkspaceGitMetadata(
+        directory: String
+    ) -> GitMetadataProber.InitialWorkspaceGitMetadataSnapshot {
+        GitMetadataProber.InitialWorkspaceGitMetadataSnapshot(
+            branch: nil,
+            isDirty: false,
+            pullRequest: .notFound
+        )
+    }
+}
+
+private struct FakePortScanning: ProgramaCore.PortScanning {
+    func registerTTY(workspaceId: UUID, panelId: UUID, ttyName: String) {}
+    func unregisterPanel(workspaceId: UUID, panelId: UUID) {}
+    func kick(workspaceId: UUID, panelId: UUID) {}
+    @MainActor func refreshAgentPorts(workspaceId: UUID, agentPIDs: Set<Int>) {}
+}
+
+private struct FakeSessionSnapshotting: ProgramaCore.SessionSnapshotting {
+    func loadWithHistoryFallback() -> AppSessionSnapshot? { nil }
+    func save(_ snapshot: AppSessionSnapshot) -> Bool { true }
 }
 
 @MainActor

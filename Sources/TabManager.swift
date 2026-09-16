@@ -751,6 +751,11 @@ class TabManager: ObservableObject {
         label: "com.cmux.initial-workspace-git-probe",
         qos: .utility
     )
+    /// The seam to core-owned concerns (git probes, port scanning). See
+    /// `docs/plans/core-seam.md`. `var` (not `let`) so tests can substitute a
+    /// fake that records calls without shelling out to `git`/`gh` or
+    /// touching `PortScanner`'s real `ps`/`lsof` scans.
+    var core: ProgramaCoreProviding = InProcessCore.shared
     var workspaceGitProbeGenerationByKey: [WorkspaceGitProbeKey: UUID] = [:]
     var workspaceGitProbeTimersByKey: [WorkspaceGitProbeKey: [DispatchSourceTimer]] = [:]
     var workspaceGitTrackedDirectoryByKey: [WorkspaceGitProbeKey: String] = [:]
@@ -1397,13 +1402,19 @@ class TabManager: ObservableObject {
         )
 #endif
 
+        // Captured once, on the main actor, so the timer's off-main event
+        // handler below never touches `self.core` from a background queue.
+        // `InProcessGitMetadataProbe` is a stateless struct, safe to call
+        // from any queue; a future core conformance must keep that same
+        // contract. See `docs/plans/core-seam.md`.
+        let core = self.core
         var timers: [DispatchSourceTimer] = []
         for (index, delay) in delays.enumerated() {
             let isLastAttempt = index == delays.count - 1
             let timer = DispatchSource.makeTimerSource(queue: initialWorkspaceGitProbeQueue)
             timer.schedule(deadline: .now() + delay, repeating: .never)
             timer.setEventHandler { [weak self] in
-                let snapshot = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: normalizedDirectory)
+                let snapshot = core.git.probeInitialWorkspaceGitMetadata(directory: normalizedDirectory)
                 Task { @MainActor [weak self] in
                     guard let self, !self.isStopped else { return }
                     self.applyWorkspaceGitMetadataSnapshot(

@@ -756,6 +756,8 @@ struct ProgramaSingleInstanceProcessKey: Equatable, Sendable {
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuItemValidation {
     nonisolated(unsafe) static var shared: AppDelegate?
 
+    var core: ProgramaCoreProviding = InProcessCore.shared
+
     private static let cachedIsRunningUnderXCTest = detectRunningUnderXCTest(ProcessInfo.processInfo.environment)
 
     private var isRunningUnderXCTestCached: Bool {
@@ -1660,7 +1662,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         SessionPersistenceStore.rotateIntoHistory()
         guard !didHandleExplicitOpenIntentAtStartup, SessionRestorePolicy.shouldAttemptRestore() else { return }
         Self.removeLegacyPersistedWindowGeometry()
-        startupSessionSnapshot = SessionPersistenceStore.loadWithHistoryFallback()
+        startupSessionSnapshot = core.sessionSnapshots.loadWithHistoryFallback()
     }
 
     private func persistedWindowGeometry(
@@ -2615,12 +2617,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if let persistedGeometryData {
             UserDefaults.standard.set(persistedGeometryData, forKey: Self.persistedWindowGeometryDefaultsKey)
         }
+        let core = self.core // captured on the main actor; `writeBlock` runs on `sessionPersistenceQueue`
+
         let writeBlock = { () -> Bool in
             if let snapshot {
 #if DEBUG
-                let saved = saveOverride?(snapshot) ?? SessionPersistenceStore.save(snapshot)
+                let saved = saveOverride?(snapshot) ?? core.sessionSnapshots.save(snapshot)
 #else
-                let saved = SessionPersistenceStore.save(snapshot)
+                let saved = core.sessionSnapshots.save(snapshot)
 #endif
                 if !saved { dilog("session.save", "outcome=failed") }
                 return saved
