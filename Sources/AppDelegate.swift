@@ -756,9 +756,7 @@ struct ProgramaSingleInstanceProcessKey: Equatable, Sendable {
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuItemValidation {
     nonisolated(unsafe) static var shared: AppDelegate?
 
-    /// The seam to core-owned concerns (session snapshot persistence today;
-    /// see `docs/plans/core-seam.md`). `var` so tests can substitute a fake
-    /// that records calls without touching disk.
+    /// Seam to core-owned concerns; `var` so tests can substitute a fake. See `docs/plans/core-seam.md`.
     var core: ProgramaCoreProviding = InProcessCore.shared
 
     private static let cachedIsRunningUnderXCTest = detectRunningUnderXCTest(ProcessInfo.processInfo.environment)
@@ -2620,10 +2618,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if let persistedGeometryData {
             UserDefaults.standard.set(persistedGeometryData, forKey: Self.persistedWindowGeometryDefaultsKey)
         }
-        // Captured once here (main actor) rather than read as `self.core`
-        // inside `writeBlock`, which runs on `sessionPersistenceQueue`. See
-        // the equivalent note in `TabManager.scheduleWorkspaceGitMetadataRefresh`.
-        let core = self.core
+        let core = self.core // captured on the main actor; `writeBlock` runs on `sessionPersistenceQueue`
+
         let writeBlock = { () -> Bool in
             if let snapshot {
 #if DEBUG
