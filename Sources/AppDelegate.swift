@@ -756,7 +756,6 @@ struct ProgramaSingleInstanceProcessKey: Equatable, Sendable {
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuItemValidation {
     nonisolated(unsafe) static var shared: AppDelegate?
 
-    /// Seam to core-owned concerns; `var` so tests can substitute a fake. See `docs/plans/core-seam.md`.
     var core: ProgramaCoreProviding = InProcessCore.shared
 
     private static let cachedIsRunningUnderXCTest = detectRunningUnderXCTest(ProcessInfo.processInfo.environment)
