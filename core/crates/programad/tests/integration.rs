@@ -5,6 +5,11 @@
 //! `session.rs`/README), detach, kill the client side, re-attach, and
 //! replay from the WAL to prove the session (and its output) survived the
 //! first client's death.
+//!
+//! Unix-only (SCM_RIGHTS, PTYs): skipped entirely on Windows, where the
+//! `programad` crate itself is a `#[cfg(not(unix))]` stub (see
+//! `src/main.rs`).
+#![cfg(unix)]
 
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::Mutex;
