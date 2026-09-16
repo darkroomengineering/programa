@@ -74,7 +74,14 @@ import Bonsplit
 /// treated as app death immediately; a run of timeouts past
 /// `SessionEscrowPolicy.heartbeatStaleAfter` since the last successfully
 /// read frame is the backstop for the (harder to hit) case where the
-/// process is wedged rather than exited. Both bounds are small constants,
+/// process is wedged rather than exited. That backstop measures elapsed
+/// time with `ProcessInfo.systemUptime` (pauses across system sleep), not
+/// `Date()` (wall clock, keeps advancing through sleep) -- see `serve`'s
+/// death-detection loop for why: with wall clock, any sleep/wake cycle
+/// longer than `heartbeatStaleAfter` false-positived every escrowed
+/// session as dead the moment the app woke back up, because neither side
+/// could have sent/received a heartbeat while the machine was asleep
+/// either. Both bounds are small constants,
 /// satisfying "bound the detection". On death, every session escrowed on
 /// that connection starts being drained on its own dedicated thread doing
 /// blocking `read()` calls straight onto that session's `wal.log`, reusing
@@ -150,6 +157,20 @@ enum SessionEscrowPolicy {
     static let heartbeatInterval: TimeInterval = 2.0
     static let heartbeatStaleAfter: TimeInterval = 6.0
     static let recvTimeoutSeconds: Int = 3
+
+    /// Whether a gap since the last successfully-read frame counts as a dead
+    /// connection. Takes both timestamps as `ProcessInfo.systemUptime`
+    /// values (mach-uptime based, pauses across system sleep) rather than
+    /// `Date()`/wall-clock -- a factored-out, unit-testable seam so this
+    /// math (the fix for the sleep/wake false-positive-death bug) has a
+    /// regression test independent of the real socket read loop in `serve`.
+    static func isConnectionStale(
+        lastActivitySystemUptime: TimeInterval,
+        nowSystemUptime: TimeInterval,
+        staleAfter: TimeInterval = heartbeatStaleAfter
+    ) -> Bool {
+        (nowSystemUptime - lastActivitySystemUptime) >= staleAfter
+    }
     /// The holder is a cold-launched copy of the full app binary (AppKit +
     /// SwiftUI + GhosttyKit all linked in), so dyld/Swift-runtime startup
     /// before it reaches `accept()` can comfortably take longer than a
@@ -1109,6 +1130,31 @@ final class SessionEscrowClient {
         acknowledgementBuffer.removeAll(keepingCapacity: true)
     }
 
+    /// Called from `AppDelegate`'s `NSWorkspace.didWakeNotification` handler.
+    /// Sends a heartbeat immediately instead of waiting for the next
+    /// `heartbeatInterval` tick, so the holder's `lastActivity` (now measured
+    /// with `ProcessInfo.systemUptime`, see `serve`) is refreshed as soon as
+    /// possible after wake rather than up to `heartbeatInterval` seconds
+    /// later. A dead/closed connection is torn down here so the next
+    /// `escrow`/`release` call reconnects rather than repeatedly failing to
+    /// write to a stale fd. Never blocks the caller (main actor): the send
+    /// itself is dispatched onto `queue`.
+    func notifySystemDidWake() {
+        guard !SessionMachineryGate.isUnitTesting else { return }
+        queue.async { [weak self] in
+            guard let self, let fd = self.connectionFD else {
+                dilog("escrow.client", "wake reconnect=skipped reason=no_connection")
+                return
+            }
+            if UnixDomainFDPassing.send(fd: nil, payload: EscrowWireFormat.heartbeatFrame(), over: fd) {
+                dilog("escrow.client", "wake heartbeat=sent connFD=\(fd)")
+            } else {
+                dilog("escrow.client", "wake heartbeat=failed connFD=\(fd) errno=\(errno) -- tearing down for reconnect")
+                self.teardownConnection()
+            }
+        }
+    }
+
     /// Derived from the app's own control-socket path
     /// (`SocketControlSettings.socketPath()`), which is already
     /// bundle-id/tag-scoped and already lives under `/tmp` specifically to
@@ -1771,7 +1817,21 @@ enum SessionEscrowHolder {
         setsockopt(connectionFD, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
 
         var registeredSessionIds: Set<String> = []
-        var lastActivity = Date()
+        // `ProcessInfo.systemUptime` is backed by the non-continuous mach clock: it
+        // stops advancing while the machine is asleep and jumps back in at the same
+        // value it had when sleep began. `Date()`/wall-clock elapsed time, by
+        // contrast, includes however long the Mac was asleep -- which is routinely
+        // far more than `heartbeatStaleAfter` (6s). Using wall-clock here meant every
+        // sleep/wake cycle longer than 6s made the holder declare EVERY escrowed
+        // session on this connection dead the instant the recv() timeout next fired
+        // after wake (the app was suspended too, so no heartbeat could have arrived
+        // during sleep either) and start draining -- reading from the same dup'd PTY
+        // master the still-alive app was also reading from, racing it for bytes and
+        // corrupting/freezing every terminal until the app was force-quit and
+        // relaunched. `systemUptime` measures only time the machine was actually
+        // awake, so a heartbeat sent right before sleep and the next one sent right
+        // after wake are correctly seen as adjacent, not six-hours-apart.
+        var lastActivity = ProcessInfo.processInfo.systemUptime
 
         readLoop: while true {
             switch readFrame(connectionFD: connectionFD) {
@@ -1779,12 +1839,14 @@ enum SessionEscrowHolder {
                 dilog("escrow.conn", "death connFD=\(connectionFD) reason=eof drainedCount=\(registeredSessionIds.count)")
                 break readLoop
             case .timeout:
-                if Date().timeIntervalSince(lastActivity) >= SessionEscrowPolicy.heartbeatStaleAfter {
-                    dilog("escrow.conn", "death connFD=\(connectionFD) reason=heartbeat_stale drainedCount=\(registeredSessionIds.count)")
+                let now = ProcessInfo.processInfo.systemUptime
+                if SessionEscrowPolicy.isConnectionStale(lastActivitySystemUptime: lastActivity, nowSystemUptime: now) {
+                    let elapsed = now - lastActivity
+                    dilog("escrow.conn", "death connFD=\(connectionFD) reason=heartbeat_stale awakeElapsed=\(String(format: "%.1f", elapsed)) drainedCount=\(registeredSessionIds.count)")
                     break readLoop
                 }
             case .data(let payload, let fd):
-                lastActivity = Date()
+                lastActivity = ProcessInfo.processInfo.systemUptime
                 guard let decoded = EscrowWireFormat.decode(payload) else {
                     #if DEBUG
                     dlog("session.escrow.holder.frame.decode_failed connFD=\(connectionFD) bytes=\(payload.count) hasFD=\(fd != nil)")

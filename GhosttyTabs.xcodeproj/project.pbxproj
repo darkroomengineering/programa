@@ -299,6 +299,7 @@
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */; };
 				3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */; };
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */; };
+					C7A4000001A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A4000002A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift */; };
 					F6000000A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6000001A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift */; };
 				E57B23C339CE9F1226BC4478 /* ShortcutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C838E51ABC8DBDCC2040D56 /* ShortcutRoutingTests.swift */; };
 					F7000000A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7000001A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift */; };
@@ -707,6 +708,7 @@
 				RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RendererRealizationPlannerTests.swift; sourceTree = "<group>"; };
 				D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAutosaveCoordinatorTests.swift; sourceTree = "<group>"; };
 				SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWALCoreTests.swift; sourceTree = "<group>"; };
+				C7A4000002A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrowWakeRecoveryTests.swift; sourceTree = "<group>"; };
 				F6000001A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegateShortcutRoutingTests.swift; sourceTree = "<group>"; };
 				6C838E51ABC8DBDCC2040D56 /* ShortcutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRoutingTests.swift; sourceTree = "<group>"; };
 				F7000001A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceContentViewVisibilityTests.swift; sourceTree = "<group>"; };
@@ -1233,6 +1235,7 @@
 					RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */,
 					D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */,
 					SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */,
+					C7A4000002A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift */,
 					F6000001A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift */,
 					6C838E51ABC8DBDCC2040D56 /* ShortcutRoutingTests.swift */,
 					F7000001A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift */,
@@ -1700,6 +1703,7 @@
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */,
 					3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */,
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */,
+					C7A4000001A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift in Sources */,
 					F6000000A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift in Sources */,
 					E57B23C339CE9F1226BC4478 /* ShortcutRoutingTests.swift in Sources */,
 					F7000000A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift in Sources */,
