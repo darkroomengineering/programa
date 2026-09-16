@@ -45,14 +45,14 @@ App path:
 **Claude Code** outputs:
 ```markdown
 =======================================================
-[Programa DEV my-tag.app](file:///Users/someone/Library/Developer/Xcode/DerivedData/programa-my-tag/Build/Products/Debug/Programa%20DEV%20my-tag.app)
+[Programa DEV my-tag.app](file:///Users/someone/Library/Developer/Xcode/DerivedData/programa-shared/Build/Products/Debug/Programa%20DEV%20my-tag.app)
 =======================================================
 ```
 
 **Codex** outputs:
 ```
 =======================================================
-[my-tag: file:///Users/someone/Library/Developer/Xcode/DerivedData/programa-my-tag/Build/Products/Debug/Programa%20DEV%20my-tag.app](file:///Users/someone/Library/Developer/Xcode/DerivedData/programa-my-tag/Build/Products/Debug/Programa%20DEV%20my-tag.app)
+[my-tag: file:///Users/someone/Library/Developer/Xcode/DerivedData/programa-shared/Build/Products/Debug/Programa%20DEV%20my-tag.app](file:///Users/someone/Library/Developer/Xcode/DerivedData/programa-shared/Build/Products/Debug/Programa%20DEV%20my-tag.app)
 =======================================================
 ```
 
