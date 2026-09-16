@@ -561,6 +561,32 @@ Result: `{"requested_agent", "recognized_via" ("explicit"|"screen_pattern"|null)
 null when nothing was recognized/classified). Errors: `not_found` (unknown `agent`), plus
 whatever `surface.read_text` can return for the target surface.
 
+## `agent.event` (docs/plans/agent-events.md)
+
+A normalized alternative to `surface.report_agent_state` for providers whose hooks carry more
+structure than a bare `working|blocked|idle` string. Both methods write through the exact same
+`updatePanelAgentState(source: .hooks)` path (`Sources/Workspace+SidebarTelemetry.swift`), so
+hooks-always-win precedence and the `agent_state`/`agent_state_source` shape on `surface.list`,
+`surface.wait`, and `subscribe` are unchanged — `agent.event` is a richer *input* to the same
+tri-state model, not a new wire value.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `workspace_id` / `surface_id` | uuid | yes | Same resolution as other `surface.*` telemetry calls. |
+| `event_type` | string | yes | One of: `session.started`, `session.exited`, `turn.started`, `turn.completed`, `turn.aborted`, `request.opened`, `request.resolved`, `user-input.requested`, `user-input.resolved`, `item.started`, `item.completed`. Case/whitespace-insensitive. Unrecognized values return `invalid_params`. |
+| `provider` / `session_id` / `turn_id` / `item_id` / `label` / `resolution` | string | no | Passed through for future richer consumers (e.g. a turn-progress UI); not used for state classification in this pass. |
+
+`event_type` maps to a tri-state write via `AgentEventNormalizer.classify` — see
+docs/plans/agent-events.md's mapping table for the full list, and its "Provider coverage" table
+for which providers' hooks (Claude Code, Codex, OpenCode) currently emit which event types.
+`session.exited` clears the surface's agent state (same effect as `surface.clear_agent_state`);
+every other recognized `event_type` applies a state and echoes `state`/`source: "hooks"`
+alongside the same `workspace_id`/`workspace_ref`/`surface_id`/`surface_ref`/`event_type` fields
+every other telemetry report echoes. Errors: `invalid_params` (missing/invalid
+`workspace_id`/`surface_id`/`event_type`).
+
+CLI: `programa agent-event --event <event_type> [--provider <p>] [--session-id <id>] [--turn-id <id>] [--item-id <id>] [--label <text>] [--resolution <r>] [--workspace <id|ref>] [--surface <id|ref>]`.
+
 ## Browser Availability (`app.browsers`, `PROGRAMA_DEFAULT_BROWSER*`)
 
 Two ways a terminal or agent can check which browsers are available, so scripts don't have

@@ -70,6 +70,36 @@ class ProgramaV2Client:
         params.update(extra_params)
         return self._client._call("agent.detection.list", params)
 
+    def agent_event(self, event_type: Optional[Any] = None, item_id: Optional[Any] = None, label: Optional[Any] = None, provider: Optional[Any] = None, resolution: Optional[Any] = None, session_id: Optional[Any] = None, surface_id: Optional[Any] = None, turn_id: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
+        """Normalized agent lifecycle event from a provider hook (docs/plans/agent-events.md)."""
+        params: Dict[str, Any] = {}
+        if event_type is not None:
+            params["event_type"] = event_type
+        if item_id is not None:
+            params["item_id"] = item_id
+        if label is not None:
+            params["label"] = label
+        if provider is not None:
+            params["provider"] = provider
+        if resolution is not None:
+            params["resolution"] = resolution
+        if session_id is not None:
+            params["session_id"] = session_id
+        if surface_id is not None:
+            params["surface_id"] = surface_id
+        if turn_id is not None:
+            params["turn_id"] = turn_id
+        if workspace_id is not None:
+            params["workspace_id"] = workspace_id
+        params.update(extra_params)
+        if params.get("workspace_id") is None:
+            raise ProgramaV2Error("agent.event requires 'workspace_id'")
+        if params.get("surface_id") is None:
+            raise ProgramaV2Error("agent.event requires 'surface_id'")
+        if params.get("event_type") is None:
+            raise ProgramaV2Error("agent.event requires 'event_type'")
+        return self._client._call("agent.event", params)
+
     def agent_prompt(self, surface_id: Optional[Any] = None, tab_id: Optional[Any] = None, text: Optional[Any] = None, timeout: Optional[Any] = None, timeout_ms: Optional[Any] = None, window_id: Optional[Any] = None, working_grace_ms: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
         """Agent task lifecycle, spawning, and prompt delivery. (prompt)."""
         params: Dict[str, Any] = {}

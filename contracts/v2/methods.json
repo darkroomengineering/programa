@@ -73,6 +73,73 @@
       },
       "threading": "off_main"
     },
+    "agent.event": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Normalized agent lifecycle event from a provider hook (docs/plans/agent-events.md).",
+      "errors": [
+        "invalid_params"
+      ],
+      "focus_intent": false,
+      "handler": "v2AgentEvent",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "format": "workspace:N"
+          },
+          "surface_id": {
+            "type": "string",
+            "format": "surface:N"
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "session.started",
+              "session.exited",
+              "turn.started",
+              "turn.completed",
+              "turn.aborted",
+              "request.opened",
+              "request.resolved",
+              "user-input.requested",
+              "user-input.resolved",
+              "item.started",
+              "item.completed"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "turn_id": {
+            "type": "string"
+          },
+          "item_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "surface_id",
+          "event_type"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "off_main"
+    },
     "agent.prompt": {
       "auth_required": true,
       "debug_only": false,

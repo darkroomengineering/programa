@@ -15,6 +15,7 @@ enum V2CommandCatalog {
     static let baseMethods: [String] = [
         "agent.detection.classify",
         "agent.detection.list",
+        "agent.event",
         "agent.prompt",
         "agent.spawn",
         "agent.task.finish",
