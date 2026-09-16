@@ -111,14 +111,30 @@ fn owned_fd_from_raw_checked(raw: RawFd) -> io::Result<OwnedFd> {
     Ok(unsafe { std::os::fd::FromRawFd::from_raw_fd(raw) })
 }
 
-fn recv_with_fds(
-    socket_fd: RawFd,
-    bytes: &mut [u8],
-    accept_fds: bool,
-) -> io::Result<(usize, bool, Vec<OwnedFd>)> {
+/// `recv_with_fds`'s result, `fd_guard` included: any descriptors in `fds`
+/// were installed in our fd table while `SPAWN_FD_LOCK` was held (see the
+/// lock's doc comment on `recv_with_fds` below), and they stay only
+/// conditionally ours -- a caller that decides to reject this batch (too
+/// many queued, a truncated control message) must close every descriptor
+/// in `fds` *before* dropping `fd_guard`, not after. Returning the guard
+/// as part of this struct, instead of letting `recv_with_fds` drop it on
+/// return, is what makes that possible: it keeps the fork-inheritance
+/// window closed for the caller's own rejection handling, not just for
+/// `recv_with_fds`'s internal parsing.
+struct RecvWithFds {
+    received: usize,
+    truncated: bool,
+    fds: Vec<OwnedFd>,
+    fd_guard: Option<std::sync::MutexGuard<'static, ()>>,
+}
+
+fn recv_with_fds(socket_fd: RawFd, bytes: &mut [u8], accept_fds: bool) -> io::Result<RecvWithFds> {
     // macOS lacks MSG_CMSG_CLOEXEC. Serialize the recvmsg-to-fcntl window
-    // with every daemon fork and other non-atomic CLOEXEC allocation.
-    let _fd_guard = accept_fds.then(|| {
+    // with every daemon fork and other non-atomic CLOEXEC allocation. Held
+    // past this function's own return (see `RecvWithFds` above) so a
+    // caller that rejects this batch can close it before any fork can
+    // observe the still-open descriptors.
+    let fd_guard = accept_fds.then(|| {
         crate::pty::SPAWN_FD_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -156,7 +172,12 @@ fn recv_with_fds(
     if !accept_fds {
         // With no control buffer, the kernel discards and closes any incoming
         // SCM_RIGHTS descriptors. MSG_CTRUNC is expected in that case.
-        return Ok((received as usize, false, Vec::new()));
+        return Ok(RecvWithFds {
+            received: received as usize,
+            truncated: false,
+            fds: Vec::new(),
+            fd_guard,
+        });
     }
 
     let mut fds = Vec::new();
@@ -219,7 +240,12 @@ fn recv_with_fds(
     }
 
     let truncated = message.msg_flags & libc::MSG_CTRUNC != 0;
-    Ok((received as usize, truncated, fds))
+    Ok(RecvWithFds {
+        received: received as usize,
+        truncated,
+        fds,
+        fd_guard,
+    })
 }
 
 /// A `tokio::net::UnixStream` wrapper whose every read goes through
@@ -334,20 +360,33 @@ impl MsgStream {
                 recv_with_fds(stream.as_raw_fd(), &mut chunk, self.accept_fds)
             });
             match result {
-                Ok((n, truncated, received_fds)) => {
+                Ok(RecvWithFds {
+                    received: n,
+                    truncated,
+                    fds: received_fds,
+                    fd_guard,
+                }) => {
                     if truncated {
+                        // Close every installed descriptor while fd_guard is
+                        // still held, so a concurrent fork can't inherit one
+                        // between recv_with_fds's own return and ours (the
+                        // bug this struct exists to close -- see its doc
+                        // comment).
+                        drop(received_fds);
+                        drop(fd_guard);
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidData,
                             "truncated SCM_RIGHTS control message",
                         ));
                     }
                     if self.fds.len() + received_fds.len() > MAX_QUEUED_FDS {
+                        drop(received_fds);
+                        drop(fd_guard);
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidData,
                             "too many queued file descriptors",
                         ));
                     }
-
                     let mut markers_to_remove = received_fds.len();
                     for byte in &chunk[..n] {
                         if *byte == FD_MARKER[0] && markers_to_remove > 0 {
@@ -357,11 +396,21 @@ impl MsgStream {
                         }
                     }
                     if markers_to_remove != 0 {
+                        // Same reasoning as the two rejections above: this
+                        // batch is being closed (received_fds's Drop runs
+                        // here, at the return), not kept, so fd_guard must
+                        // still be held when it happens.
+                        drop(received_fds);
+                        drop(fd_guard);
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidData,
                             "SCM_RIGHTS message did not include its marker byte",
                         ));
                     }
+                    // Every remaining path keeps received_fds (queued into
+                    // self.fds next), so there's nothing left for fd_guard
+                    // to protect.
+                    drop(fd_guard);
                     self.fds.extend(received_fds);
                     return Ok(n);
                 }
@@ -412,24 +461,18 @@ mod tests {
 
     // Isolated from the default `cargo test` run and re-run alone (see the
     // shared-core CI step: `cargo test -p programad --locked --lib --
-    // --ignored --test-threads=1`). The EPIPE assertion below only proves
-    // what it claims to prove -- that recv_with_fds closed every descriptor
-    // it installed -- when nothing else in this process can fork while the
-    // fixture's pipe is alive. `fork(2)` copies the fd table regardless of
-    // CLOEXEC (CLOEXEC only takes effect at `exec`), and the daemon's own
-    // fd-close-on-reject path (`MsgStream::fill_more`, right after
-    // `recv_with_fds` returns) runs a hair outside `SPAWN_FD_LOCK`'s cover:
-    // the lock is scoped to `recv_with_fds` itself, but the actual
-    // `drop(received_fds)` that closes a rejected batch happens one stack
-    // frame up, after that guard has already been released. A concurrent
-    // `session::tests` PTY spawn landing its `fork()` in that specific gap
-    // (Linux-only tests, `#[cfg(all(test, target_os = "linux"))]`, so this
-    // never reproduced locally on macOS) can transiently inherit a
-    // not-yet-closed duplicate, making `write()` below see a live reader
-    // that isn't us and return `Ok` instead of `EPIPE` -- a false failure
-    // of this test, not evidence of an actual leak. Running this test
-    // completely alone removes every other test's fork as a source of that
-    // false failure; it doesn't change what's being asserted.
+    // --ignored --test-threads=1`). `RecvWithFds` (above `recv_with_fds`)
+    // fixed the production bug this test's EPIPE check used to be exposed
+    // to: `MsgStream::fill_more` now closes a rejected batch while
+    // `recv_with_fds`'s `SPAWN_FD_LOCK` guard is still held, instead of
+    // after it, so a concurrent fork can no longer inherit a not-yet-closed
+    // duplicate from *this* rejection path. Kept isolated anyway as
+    // defense in depth: the EPIPE assertion below is still, structurally,
+    // sensitive to *any* process anywhere holding the pipe's read end, not
+    // just this one -- see `too_many_descriptors_are_closed_before_the_reject_returns`
+    // below for a regression test that instead counts this process's own
+    // fd table, which is robust against other processes by construction
+    // and is the one that would have caught the fixed bug directly.
     #[tokio::test]
     #[ignore = "must run alone: see the shared-core CI step for why"]
     async fn max_sendmsg_descriptors_close_without_leak() {
@@ -485,6 +528,73 @@ mod tests {
             nix::unistd::write(&write, b"x").unwrap_err(),
             nix::errno::Errno::EPIPE,
             "a received SCM_RIGHTS descriptor leaked after the too-many-fds rejection"
+        );
+    }
+
+    /// This process's own open descriptor count, via `/proc/self/fd` on
+    /// Linux and `/dev/fd` on macOS (both list one entry per open fd,
+    /// including the directory handle this call itself briefly opens --
+    /// consistent overhead on both sides of a before/after comparison, so
+    /// it cancels out).
+    fn open_fd_count() -> usize {
+        let dir = if cfg!(target_os = "linux") {
+            "/proc/self/fd"
+        } else {
+            "/dev/fd"
+        };
+        std::fs::read_dir(dir)
+            .map(|entries| entries.filter_map(Result::ok).count())
+            .unwrap_or(0)
+    }
+
+    /// Regression test for the production bug fixed alongside this test:
+    /// `recv_with_fds` used to drop its `SPAWN_FD_LOCK` guard on its own
+    /// return, before `MsgStream::fill_more` (the caller) actually closed
+    /// a rejected batch -- see `RecvWithFds`'s doc comment. Unlike
+    /// `max_sendmsg_descriptors_close_without_leak` above, this doesn't
+    /// infer leak-freedom from a side effect (a write returning EPIPE)
+    /// that's sensitive to what *any* process holds open; it counts this
+    /// process's own fd table directly, which only reflects what we
+    /// ourselves have open. Isolated (`#[ignore]`, see the shared-core CI
+    /// step) purely so a concurrent test's own fd churn can't produce a
+    /// false failure -- this assertion doesn't depend on isolation for
+    /// correctness the way the EPIPE test above does, only for precision.
+    #[tokio::test]
+    #[ignore = "must run alone: see the shared-core CI step for why"]
+    async fn too_many_descriptors_are_closed_before_the_reject_returns() {
+        let before = open_fd_count();
+
+        let (sender, receiver) = UnixStream::pair().unwrap();
+        let (read, write) = nix::unistd::pipe().unwrap();
+        crate::pty::set_cloexec(&read).unwrap();
+        crate::pty::set_cloexec(&write).unwrap();
+
+        // Same fixture shape as max_sendmsg_descriptors_close_without_leak
+        // above: exceed MAX_QUEUED_FDS (not MAX_FDS_PER_SENDMSG, so this
+        // never trips MSG_CTRUNC) to exercise the "too many queued file
+        // descriptors" rejection specifically.
+        let raw_fds = vec![read.as_raw_fd(); MAX_FDS_PER_SENDMSG];
+        let payload = [FD_MARKER[0]];
+        let iov = [io::IoSlice::new(&payload)];
+        let cmsg = [ControlMessage::ScmRights(&raw_fds)];
+        socket::sendmsg::<UnixAddr>(sender.as_raw_fd(), &iov, &cmsg, MsgFlags::empty(), None)
+            .unwrap();
+        drop(read);
+
+        let mut stream = MsgStream::new(receiver);
+        assert!(matches!(
+            stream.read_line().await,
+            Err(ReadFrameError::Io(error)) if error.kind() == io::ErrorKind::InvalidData
+        ));
+        drop(stream);
+        drop(write);
+        drop(sender);
+
+        let after = open_fd_count();
+        assert_eq!(
+            after, before,
+            "process fd count changed across a too-many-fds rejection (before={before}, \
+             after={after}): a received SCM_RIGHTS descriptor leaked"
         );
     }
 }
