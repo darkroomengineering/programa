@@ -264,6 +264,7 @@
 		B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */; };
 		B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */; };
 		B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */; };
+		C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000006 /* CLI+AgentEventAdapters.swift */; };
 		H1HC0002 /* CLI+HookCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HC0001 /* CLI+HookCommands.swift */; };
 		H1CL0002 /* CLICommandDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1CL0001 /* CLICommandDispatcher.swift */; };
 		H1HK0002 /* HookInstallationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HK0001 /* HookInstallationCoordinator.swift */; };
@@ -673,6 +674,7 @@
 		B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+TmuxCompat.swift"; sourceTree = "<group>"; };
 		B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentWrappers.swift"; sourceTree = "<group>"; };
 		B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Hooks.swift"; sourceTree = "<group>"; };
+		C7A3000006 /* CLI+AgentEventAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentEventAdapters.swift"; sourceTree = "<group>"; };
 		H1HC0001 /* CLI+HookCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+HookCommands.swift"; sourceTree = "<group>"; };
 		H1CL0001 /* CLICommandDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLICommandDispatcher.swift; sourceTree = "<group>"; };
 		H1HK0001 /* HookInstallationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstallationCoordinator.swift; sourceTree = "<group>"; };
@@ -1091,6 +1093,7 @@
 				B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */,
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
 				B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */,
+				C7A3000006 /* CLI+AgentEventAdapters.swift */,
 				H1HC0001 /* CLI+HookCommands.swift */,
 				H1CL0001 /* CLICommandDispatcher.swift */,
 				H1HK0001 /* HookInstallationCoordinator.swift */,
@@ -1727,6 +1730,7 @@
 				B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */,
 				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,
 				B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */,
+				C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */,
 				H1HC0002 /* CLI+HookCommands.swift in Sources */,
 				H1CL0002 /* CLICommandDispatcher.swift in Sources */,
 				H1HK0002 /* HookInstallationCoordinator.swift in Sources */,
