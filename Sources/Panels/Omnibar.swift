@@ -46,14 +46,6 @@ struct OmnibarAddressButtonStyleBody: View {
     }
 }
 
-extension View {
-    func programaFlatSymbolColorRendering() -> some View {
-        // `symbolColorRenderingMode(.flat)` is not available in the current SDK
-        // used by CI/local builds. Keep this modifier as a compatibility no-op.
-        self
-    }
-}
-
 enum OmnibarInputIntent: Equatable {
     case urlLike
     case queryLike
@@ -857,10 +849,6 @@ func omnibarReduce(state: inout OmnibarState, event: OmnibarEvent) -> OmnibarEff
             // Popup reopened: start keyboard focus from the first row.
             state.selectedSuggestionIndex = 0
             state.selectedSuggestionID = items[0].id
-        } else if let previousSelectedID,
-                  let idx = items.firstIndex(where: { $0.id == previousSelectedID }) {
-            state.selectedSuggestionIndex = idx
-            state.selectedSuggestionID = items[idx].id
         } else {
             state.selectedSuggestionIndex = min(max(0, state.selectedSuggestionIndex), items.count - 1)
             state.selectedSuggestionID = items[state.selectedSuggestionIndex].id

@@ -78,28 +78,28 @@ def main():
         if result.returncode != 0:
             return result.returncode
         current = root / f"programa-{tag}"
-        if safe_root and Path(derived) == current and not current.is_symlink():
+        # Custom build locations still hold the shared lock, but do not manage
+        # retention or mark an unrelated canonical tag as recently built.
+        if not (safe_root and Path(derived) == current and not current.is_symlink()):
+            return 0
+        try:
+            marker = os.open(current / ".programa-last-success", os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
             try:
-                marker = os.open(current / ".programa-last-success", os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
-                try:
-                    os.utime(marker, None)
-                finally:
-                    os.close(marker)
-            except OSError as error:
-                print(f"Build cache: could not record successful build: {error}", file=sys.stderr)
+                os.utime(marker, None)
+            finally:
+                os.close(marker)
+        except OSError as error:
+            print(f"Build cache: could not record successful build: {error}", file=sys.stderr)
         fcntl.flock(lock, fcntl.LOCK_UN)
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print("Build cache: cleanup deferred while another tagged build is active.")
             return 0
-        if safe_root:
-            try:
-                prune(root, current)
-            except (OSError, subprocess.SubprocessError) as error:
-                print(f"Build cache: cleanup stopped safely: {error}", file=sys.stderr)
-        else:
-            print("Build cache: cleanup skipped for symlinked DerivedData location.")
+        try:
+            prune(root, current)
+        except (OSError, subprocess.SubprocessError) as error:
+            print(f"Build cache: cleanup stopped safely: {error}", file=sys.stderr)
     return 0
 
 

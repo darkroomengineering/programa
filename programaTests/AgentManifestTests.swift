@@ -33,9 +33,10 @@ final class AgentManifestTests: XCTestCase {
         XCTAssertEqual(manifest?.displayName, "Claude Code")
     }
 
-    func testManifestLookupByProcessName() {
-        let manifest = AgentManifestLoader.shared.manifest(forProcessName: "claude")
-        XCTAssertEqual(manifest?.agent, "claude-code")
+    func testManifestPreservesProcessNames() throws {
+        let manifest = try XCTUnwrap(AgentManifestLoader.shared.manifest(forAgent: "claude-code"))
+        XCTAssertEqual(manifest.agent, "claude-code")
+        XCTAssertTrue(manifest.recognize.processNames.contains("claude"))
     }
 
     func testAllManifestEntriesReportBundledSourceByDefault() throws {

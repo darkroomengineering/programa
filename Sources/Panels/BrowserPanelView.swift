@@ -644,7 +644,6 @@ struct BrowserPanelView: View {
         }) {
             Image(systemName: devToolsIconOption.rawValue)
                 .symbolRenderingMode(.monochrome)
-                .programaFlatSymbolColorRendering()
                 .font(.system(size: devToolsButtonIconSize, weight: .medium))
                 .foregroundStyle(devToolsColorOption.color)
                 .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
