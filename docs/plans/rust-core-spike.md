@@ -161,6 +161,8 @@ Commits `ac23cdf900` through `d4c0a7bcd8` added a native Windows frontend and a 
 
 Sequence, updated: contract (#338) and seam (#339) land first; agent events (#340) next; then `programad` joins `core/` and takes PTY ownership on macOS behind the seam; then the remote transport per `programa-core/docs/remote-transport.md`; org mode remains a product decision.
 
+**Done:** `programad` and `programa-proto` moved into `core/crates/` from `darkroomengineering/programa-core` and now link `programa-domain` directly, so the daemon's `workspace.*` socket methods and the macOS app's in-process `programa-ffi` adapter share one state model and command/snapshot JSON. See `core/ABI.md` "Process layer" for what each side owns, `core/docs/programad.md` for the daemon's wire contract, and `core/crates/programad/tests/integration.rs`'s `workspace_dispatch_links_domain_surfaces_to_sessions_and_reconciles_on_close` for the session/surface lifecycle rule. Not done yet: the macOS app still talks to `programa-ffi` in-process rather than to `programad`'s socket (still two live links to one model, not one), so step 3 above ("macOS app attaches over the Unix socket and receives PTY fds") remains open. Steps 4 (remote transport) and 6 (org mode) are unchanged.
+
 ## Known losses with a GPUI core (now moot for Windows, kept for a Linux client)
 
 - GPUI draws everything itself: no native macOS menus, sheets, glass, or accessibility tree for free.

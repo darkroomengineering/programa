@@ -201,9 +201,40 @@ jobs:
       - name: Validate shared core
         run: |
           cargo fmt --manifest-path core/Cargo.toml --all -- --check
+          # Runs the whole core/ workspace, including programad's unit and
+          # integration tests (Unix socket + PTY, both available on
+          # ubuntu-latest) now that it lives at core/crates/programad.
           cargo test --manifest-path core/Cargo.toml --workspace --locked
+          # max_sendmsg_descriptors_close_without_leak and
+          # too_many_descriptors_are_closed_before_the_reject_returns are
+          # both #[ignore]d in the run above (see their doc comments in
+          # fdpass.rs): the first's EPIPE assertion, and the precision of
+          # the second's fd-count assertion, both want nothing else in the
+          # process able to fork() while their fixture pipe is alive, which
+          # the default parallel run can't guarantee against the
+          # Linux-only session::tests that spawn real PTYs. --test-threads=1
+          # with no other ignored tests in this binary runs both completely
+          # alone.
+          cargo test --manifest-path core/Cargo.toml -p programad --locked --lib -- --ignored --test-threads=1
           cargo test --manifest-path core/crates/programa-terminal/Cargo.toml --locked
           cargo test --manifest-path core/vendor/alacritty_terminal/Cargo.toml --locked --lib parses_buffered_bytes_before_returning_a_terminal_read_error
+
+      - name: Smoke test programad
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path core/Cargo.toml -p programad --locked
+          socket_dir="$(mktemp -d)"
+          export XDG_RUNTIME_DIR="$socket_dir"
+          export XDG_STATE_HOME="$socket_dir/state"
+          socket_path="$socket_dir/programad.sock"
+          ./core/target/debug/programad --socket "$socket_path" &
+          daemon_pid=$!
+          trap 'kill "$daemon_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            [ -S "$socket_path" ] && break
+            sleep 0.1
+          done
+          python3 core/crates/programad/tests/smoke.py --socket "$socket_path"
 
   windows-build:
     runs-on: windows-latest
