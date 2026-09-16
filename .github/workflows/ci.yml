@@ -200,6 +200,7 @@ jobs:
           cargo fmt --manifest-path core/Cargo.toml --all -- --check
           cargo test --manifest-path core/Cargo.toml --workspace --locked
           cargo test --manifest-path core/crates/programa-terminal/Cargo.toml --locked
+          cargo test --manifest-path core/vendor/alacritty_terminal/Cargo.toml --locked --lib parses_buffered_bytes_before_returning_a_terminal_read_error
 
   windows-build:
     runs-on: windows-latest
