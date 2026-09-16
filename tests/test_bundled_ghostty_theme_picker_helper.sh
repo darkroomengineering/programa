@@ -18,20 +18,26 @@ case "$CONFIGURATION" in
     ;;
 esac
 
-mkdir -p "$SOURCE_PACKAGES_DIR"
-rm -rf "$DERIVED_DATA_PATH"
+# CI already builds this exact app once in the build-app job; pass its path
+# here instead of paying for a second full build of the same scheme.
+if [[ -n "${PROGRAMA_PREBUILT_APP_PATH:-}" ]]; then
+  APP_PATH="$PROGRAMA_PREBUILT_APP_PATH"
+else
+  mkdir -p "$SOURCE_PACKAGES_DIR"
+  rm -rf "$DERIVED_DATA_PATH"
 
-xcodebuild \
-  -project GhosttyTabs.xcodeproj \
-  -scheme programa \
-  -configuration "$CONFIGURATION" \
-  -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
-  -disableAutomaticPackageResolution \
-  -derivedDataPath "$DERIVED_DATA_PATH" \
-  -destination "platform=macOS" \
-  build
+  xcodebuild \
+    -project GhosttyTabs.xcodeproj \
+    -scheme programa \
+    -configuration "$CONFIGURATION" \
+    -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+    -disableAutomaticPackageResolution \
+    -derivedDataPath "$DERIVED_DATA_PATH" \
+    -destination "platform=macOS" \
+    build
 
-APP_PATH="$DERIVED_DATA_PATH/Build/Products/$CONFIGURATION/$APP_NAME"
+  APP_PATH="$DERIVED_DATA_PATH/Build/Products/$CONFIGURATION/$APP_NAME"
+fi
 HELPER_PATH="$APP_PATH/Contents/Resources/bin/ghostty"
 
 if [ ! -x "$HELPER_PATH" ]; then

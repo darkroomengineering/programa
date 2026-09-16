@@ -268,13 +268,171 @@ jobs:
           path: ${{ runner.temp }}/programa-windows-ci/*.exe
           if-no-files-found: error
 
-  unit-tests:
+  # Build the Debug app + UI test bundle once and share it with every job that
+  # only needs to *run* it (socket-integration-tests, tests-build-and-lag,
+  # ui-regressions). Those three jobs used to each pay their own ~7 min
+  # "Build app" step for an identical build; this collapses that to one.
+  # unit-tests keeps building its own artifacts: it uses the programa-unit
+  # scheme/test host, a different target from the programa app scheme built
+  # here, so its output isn't the same product.
+  build-app:
     needs: change-detection
     if: needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
-      PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-unit
+      PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -z "$XCODE_APP" ] && [ -d "/Applications/Xcode.app" ]; then
+            XCODE_APP="/Applications/Xcode.app"
+          fi
+          if [ -z "$XCODE_APP" ]; then
+            XCODE_APP="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort | tail -n 1 || true)"
+          fi
+          if [ -z "$XCODE_APP" ]; then
+            echo "No Xcode.app found under /Applications" >&2
+            exit 1
+          fi
+          XCODE_DIR="$XCODE_APP/Contents/Developer"
+          echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
+          export DEVELOPER_DIR="$XCODE_DIR"
+          sudo xcode-select -s "$XCODE_DIR" || true
+          xcodebuild -version
+
+      - name: Resolve Ghostty revision
+        id: ghostty-revision
+        run: |
+          set -euo pipefail
+          revision="$(./scripts/ghostty_cache_revision.sh)"
+          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Cache GhosttyKit.xcframework
+        id: cache-ghosttykit-app
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: GhosttyKit.xcframework
+          key: ghosttykit-v3-${{ steps.ghostty-revision.outputs.revision }}
+
+      - name: Download pre-built GhosttyKit.xcframework
+        if: steps.cache-ghosttykit-app.outputs.cache-hit != 'true'
+        run: |
+          ./scripts/download-prebuilt-ghosttykit.sh
+
+      - name: Install zig
+        run: |
+          ZIG_REQUIRED="$(./scripts/required-zig-version.sh)"
+          if command -v zig >/dev/null 2>&1 && [ "$(zig version 2>/dev/null)" = "$ZIG_REQUIRED" ]; then
+            echo "zig ${ZIG_REQUIRED} already installed"
+          else
+            echo "Installing zig ${ZIG_REQUIRED} from tarball"
+            curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-aarch64-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
+            tar xf /tmp/zig.tar.xz -C /tmp
+            sudo mkdir -p /usr/local/bin /usr/local/lib
+            sudo cp -f /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/zig /usr/local/bin/zig
+            sudo cp -rf /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/lib /usr/local/lib/zig
+            export PATH="/usr/local/bin:$PATH"
+            zig version
+          fi
+
+      - name: Cache Zig packages
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ~/.cache/zig
+          key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}
+          restore-keys: zig-packages-
+
+      - name: Cache DerivedData
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ${{ env.PROGRAMA_DERIVED_DATA_DIR }}
+          key: deriveddata-build-app-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            deriveddata-build-app-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
+            deriveddata-build-app-macos26-
+
+      - name: Cache Swift packages
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: .ci-source-packages
+          key: spm-build-app-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-build-app-
+
+      - name: Resolve Swift packages
+        run: |
+          set -euo pipefail
+          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
+          mkdir -p "$SOURCE_PACKAGES_DIR"
+
+          for attempt in 1 2 3; do
+            if xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
+              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+              -resolvePackageDependencies; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Failed to resolve Swift packages after 3 attempts" >&2
+              exit 1
+            fi
+            echo "Package resolution failed on attempt $attempt, retrying..."
+            sleep $((attempt * 5))
+          done
+
+      # build-for-testing (not plain build) so the same artifact also covers
+      # ui-regressions, which needs the programaUITests bundle + .xctestrun,
+      # not just the app binary.
+      - name: Build app and UI test bundle
+        run: |
+          set -euo pipefail
+          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
+          xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+            -disableAutomaticPackageResolution \
+            -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
+            -destination "platform=macOS" \
+            build-for-testing
+
+      - name: Package build artifact
+        run: |
+          set -euo pipefail
+          tar -czf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR" Build/Products
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: programa-app-build
+          path: app-build.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  # Sharded by test class (see scripts/list-programa-unit-test-classes.sh),
+  # alphabetical halves, so the ~11 min "Run unit tests" step runs as two
+  # parallel matrix jobs instead of serially. The stateful class
+  # (AppDelegateShortcutRoutingTests) always runs unsharded in shard 1 --
+  # splitting it would risk cross-shard focus/window-state interference.
+  # `unit-tests` below is the aggregate gate; downstream jobs still depend on
+  # that name, not on this one.
+  unit-tests-shard:
+    needs: change-detection
+    if: needs.change-detection.outputs.run_app_jobs == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-unit-${{ matrix.shard }}
+      PROGRAMA_UNIT_TEST_SHARD: ${{ matrix.shard }}
+      PROGRAMA_UNIT_TEST_SHARD_COUNT: 2
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -364,17 +522,17 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: ${{ env.PROGRAMA_DERIVED_DATA_DIR }}
-          key: deriveddata-tests-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.pbxproj') }}
+          key: deriveddata-tests-macos26-shard${{ matrix.shard }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.pbxproj') }}
           restore-keys: |
-            deriveddata-tests-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
-            deriveddata-tests-macos26-
+            deriveddata-tests-macos26-shard${{ matrix.shard }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
+            deriveddata-tests-macos26-shard${{ matrix.shard }}-
 
       - name: Cache Swift packages
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: .ci-source-packages
-          key: spm-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: spm-
+          key: spm-shard${{ matrix.shard }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-shard${{ matrix.shard }}-
 
       - name: Resolve Swift packages
         run: |
@@ -503,16 +661,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: unit-test-xcresults-${{ github.run_attempt }}
+          name: unit-test-xcresults-shard${{ matrix.shard }}-${{ github.run_attempt }}
           path: /tmp/programa-unit-xcresults/
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Run bundled Ghostty theme picker helper regression
-        run: |
-          set -euo pipefail
-          PROGRAMA_SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages" \
-            ./tests/test_bundled_ghostty_theme_picker_helper.sh
 
       - name: Run CLI version memory guard regression
         run: |
@@ -526,10 +678,65 @@ jobs:
 
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_version_memory_guard.py
 
-  socket-integration-tests:
-    needs: change-detection
+  # Aggregate gate: downstream jobs and branch protection depend on the name
+  # "unit-tests", not on the matrix job above, so sharding stays invisible to
+  # everything that isn't ci.yml itself.
+  unit-tests:
+    needs: unit-tests-shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check shard results
+        run: |
+          if [[ "${{ needs.unit-tests-shard.result }}" != "success" ]]; then
+            echo "unit-tests-shard: ${{ needs.unit-tests-shard.result }}" >&2
+            exit 1
+          fi
+
+  # Independent of unit-tests: same "programa" scheme app build-app already
+  # produces, so this reuses that artifact instead of paying for its own
+  # ~3 min build. Split out so it no longer serializes behind the unit-test
+  # shards either.
+  theme-picker-helper-regression:
+    needs:
+      - build-app
+      - change-detection
     if: needs.change-detection.outputs.run_app_jobs == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-theme-picker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: programa-app-build
+          path: .
+
+      - name: Extract build artifact
+        run: |
+          set -euo pipefail
+          mkdir -p "$PROGRAMA_DERIVED_DATA_DIR"
+          tar -xzf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR"
+
+      - name: Run bundled Ghostty theme picker helper regression
+        run: |
+          set -euo pipefail
+          PROGRAMA_PREBUILT_APP_PATH="$PROGRAMA_DERIVED_DATA_DIR/Build/Products/Debug/Programa DEV.app" \
+            ./tests/test_bundled_ghostty_theme_picker_helper.sh
+
+  socket-integration-tests:
+    needs:
+      - build-app
+      - change-detection
+    if: needs.change-detection.outputs.run_app_jobs == 'true'
+    # Matches build-app's runner OS: the artifact is a Debug binary built
+    # against the macOS 26 SDK (Liquid Glass), so it must run on the same
+    # OS version it was built for.
+    runs-on: macos-26
     timeout-minutes: 40
     env:
       PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-socket-integration
@@ -539,115 +746,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Select Xcode
+      - name: Download build artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: programa-app-build
+          path: .
+
+      - name: Extract build artifact
         run: |
           set -euo pipefail
-          # Prefer Xcode 26 (macOS 26 SDK) so NSGlassEffectView / Liquid Glass compiles;
-          # fall back to the image default when no Xcode 26 install exists.
-          XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
-          if [ -z "$XCODE_APP" ] && [ -d "/Applications/Xcode.app" ]; then
-            XCODE_APP="/Applications/Xcode.app"
-          fi
-          if [ -z "$XCODE_APP" ]; then
-            XCODE_APP="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort | tail -n 1 || true)"
-          fi
-          if [ -z "$XCODE_APP" ]; then
-            echo "No Xcode.app found under /Applications" >&2
-            exit 1
-          fi
-          XCODE_DIR="$XCODE_APP/Contents/Developer"
-          echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
-          export DEVELOPER_DIR="$XCODE_DIR"
-          sudo xcode-select -s "$XCODE_DIR" || true
-          xcodebuild -version
-
-      - name: Resolve Ghostty revision
-        id: ghostty-revision
-        run: |
-          set -euo pipefail
-          revision="$(./scripts/ghostty_cache_revision.sh)"
-          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
-
-      - name: Cache GhosttyKit.xcframework
-        id: cache-ghosttykit-tests-v2
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: GhosttyKit.xcframework
-          key: ghosttykit-v3-${{ steps.ghostty-revision.outputs.revision }}
-
-      - name: Download pre-built GhosttyKit.xcframework
-        if: steps.cache-ghosttykit-tests-v2.outputs.cache-hit != 'true'
-        run: |
-          ./scripts/download-prebuilt-ghosttykit.sh
-
-      - name: Install zig
-        run: |
-          ZIG_REQUIRED="$(./scripts/required-zig-version.sh)"
-          if command -v zig >/dev/null 2>&1 && [ "$(zig version 2>/dev/null)" = "$ZIG_REQUIRED" ]; then
-            echo "zig ${ZIG_REQUIRED} already installed"
-          else
-            echo "Installing zig ${ZIG_REQUIRED} from tarball"
-            curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-aarch64-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
-            tar xf /tmp/zig.tar.xz -C /tmp
-            sudo mkdir -p /usr/local/bin /usr/local/lib
-            sudo cp -f /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/zig /usr/local/bin/zig
-            sudo cp -rf /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/lib /usr/local/lib/zig
-            export PATH="/usr/local/bin:$PATH"
-            zig version
-          fi
-
-      - name: Cache Zig packages
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ~/.cache/zig
-          key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}
-          restore-keys: zig-packages-
-
-      - name: Cache DerivedData
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ${{ env.PROGRAMA_DERIVED_DATA_DIR }}
-          key: deriveddata-tests-v2-path2-macos15-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.pbxproj') }}
-          restore-keys: |
-            deriveddata-tests-v2-path2-macos15-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
-            deriveddata-tests-v2-path2-macos15-
-
-      - name: Cache Swift packages
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: .ci-source-packages
-          key: spm-tests-v2-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: spm-tests-v2-
-
-      - name: Resolve Swift packages
-        run: |
-          set -euo pipefail
-          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
-          mkdir -p "$SOURCE_PACKAGES_DIR"
-
-          for attempt in 1 2 3; do
-            if xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
-              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
-              -resolvePackageDependencies; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "Failed to resolve Swift packages after 3 attempts" >&2
-              exit 1
-            fi
-            echo "Package resolution failed on attempt $attempt, retrying..."
-            sleep $((attempt * 5))
-          done
-
-      - name: Build app
-        run: |
-          set -euo pipefail
-          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
-          xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
-            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
-            -disableAutomaticPackageResolution \
-            -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
-            -destination "platform=macOS" build
+          mkdir -p "$PROGRAMA_DERIVED_DATA_DIR"
+          tar -xzf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR"
 
       - name: Create virtual display
         run: |
@@ -680,13 +789,15 @@ jobs:
 
   tests-build-and-lag:
     needs:
+      - build-app
       - unit-tests
       - change-detection
     if: (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && needs.change-detection.outputs.run_app_jobs == 'true'
-    # Build the full cmux scheme and run the lag regression on GitHub-hosted runners.
-    # Keep lag validation separate from UI regressions so functional UI failures
-    # and performance regressions stay isolated. Broader interactive UI suites
-    # still run via test-e2e.yml on GitHub-hosted runners.
+    # Run the lag regression on GitHub-hosted runners, against the app built
+    # once in build-app. Keep lag validation separate from UI regressions so
+    # functional UI failures and performance regressions stay isolated.
+    # Broader interactive UI suites still run via test-e2e.yml on
+    # GitHub-hosted runners.
     runs-on: macos-26
     timeout-minutes: 90
     env:
@@ -697,115 +808,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Select Xcode
+      - name: Download build artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: programa-app-build
+          path: .
+
+      - name: Extract build artifact
         run: |
           set -euo pipefail
-          # Prefer Xcode 26 (macOS 26 SDK) so NSGlassEffectView / Liquid Glass compiles;
-          # fall back to the image default when no Xcode 26 install exists.
-          XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
-          if [ -z "$XCODE_APP" ] && [ -d "/Applications/Xcode.app" ]; then
-            XCODE_APP="/Applications/Xcode.app"
-          fi
-          if [ -z "$XCODE_APP" ]; then
-            XCODE_APP="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort | tail -n 1 || true)"
-          fi
-          if [ -z "$XCODE_APP" ]; then
-            echo "No Xcode.app found under /Applications" >&2
-            exit 1
-          fi
-          XCODE_DIR="$XCODE_APP/Contents/Developer"
-          echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
-          export DEVELOPER_DIR="$XCODE_DIR"
-          sudo xcode-select -s "$XCODE_DIR" || true
-          xcodebuild -version
-
-      - name: Resolve Ghostty revision
-        id: ghostty-revision
-        run: |
-          set -euo pipefail
-          revision="$(./scripts/ghostty_cache_revision.sh)"
-          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
-
-      - name: Cache GhosttyKit.xcframework
-        id: cache-ghosttykit-lag
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: GhosttyKit.xcframework
-          key: ghosttykit-v3-${{ steps.ghostty-revision.outputs.revision }}
-
-      - name: Download pre-built GhosttyKit.xcframework
-        if: steps.cache-ghosttykit-lag.outputs.cache-hit != 'true'
-        run: |
-          ./scripts/download-prebuilt-ghosttykit.sh
-
-      - name: Install zig
-        run: |
-          ZIG_REQUIRED="$(./scripts/required-zig-version.sh)"
-          if command -v zig >/dev/null 2>&1 && [ "$(zig version 2>/dev/null)" = "$ZIG_REQUIRED" ]; then
-            echo "zig ${ZIG_REQUIRED} already installed"
-          else
-            echo "Installing zig ${ZIG_REQUIRED} from tarball"
-            curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-aarch64-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
-            tar xf /tmp/zig.tar.xz -C /tmp
-            sudo mkdir -p /usr/local/bin /usr/local/lib
-            sudo cp -f /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/zig /usr/local/bin/zig
-            sudo cp -rf /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/lib /usr/local/lib/zig
-            export PATH="/usr/local/bin:$PATH"
-            zig version
-          fi
-
-      - name: Cache Zig packages
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ~/.cache/zig
-          key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}
-          restore-keys: zig-packages-
-
-      - name: Cache DerivedData
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ${{ env.PROGRAMA_DERIVED_DATA_DIR }}
-          key: deriveddata-build-path2-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.pbxproj') }}
-          restore-keys: |
-            deriveddata-build-path2-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
-            deriveddata-build-path2-macos26-
-
-      - name: Cache Swift packages
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: .ci-source-packages
-          key: spm-build-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: spm-build-
-
-      - name: Resolve Swift packages
-        run: |
-          set -euo pipefail
-          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
-          mkdir -p "$SOURCE_PACKAGES_DIR"
-
-          for attempt in 1 2 3; do
-            if xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
-              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
-              -resolvePackageDependencies; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "Failed to resolve Swift packages after 3 attempts" >&2
-              exit 1
-            fi
-            echo "Package resolution failed on attempt $attempt, retrying..."
-            sleep $((attempt * 5))
-          done
-
-      - name: Build app
-        run: |
-          set -euo pipefail
-          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
-          xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
-            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
-            -disableAutomaticPackageResolution \
-            -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
-            -destination "platform=macOS" build
+          mkdir -p "$PROGRAMA_DERIVED_DATA_DIR"
+          tar -xzf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR"
 
       - name: Create virtual display
         run: |
@@ -942,6 +955,7 @@ jobs:
 
   ui-regressions:
     needs:
+      - build-app
       - unit-tests
       - change-detection
     if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.notification_ui)) && needs.change-detection.outputs.run_app_jobs == 'true'
@@ -978,32 +992,9 @@ jobs:
           xcodebuild -version
           xcrun --sdk macosx --show-sdk-path
 
-      - name: Download pre-built GhosttyKit.xcframework
-        run: ./scripts/download-prebuilt-ghosttykit.sh
-
-      - name: Install zig
-        run: |
-          ZIG_REQUIRED="$(./scripts/required-zig-version.sh)"
-          if command -v zig >/dev/null 2>&1 && [ "$(zig version 2>/dev/null)" = "$ZIG_REQUIRED" ]; then
-            echo "zig ${ZIG_REQUIRED} already installed"
-          else
-            echo "Installing zig ${ZIG_REQUIRED} from tarball"
-            curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-aarch64-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
-            tar xf /tmp/zig.tar.xz -C /tmp
-            sudo mkdir -p /usr/local/bin /usr/local/lib
-            sudo cp -f /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/zig /usr/local/bin/zig
-            sudo cp -rf /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/lib /usr/local/lib/zig
-            export PATH="/usr/local/bin:$PATH"
-            zig version
-          fi
-
-      - name: Cache Zig packages
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ~/.cache/zig
-          key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}
-          restore-keys: zig-packages-
-
+      # test-without-building still passes -clonedSourcePackagesDirPath /
+      # -disableAutomaticPackageResolution, so it needs the resolved SPM
+      # checkouts present even though build-app already compiled everything.
       - name: Cache Swift packages
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
@@ -1031,16 +1022,17 @@ jobs:
             sleep $((attempt * 5))
           done
 
-      - name: Build for testing (display resolution)
+      - name: Download build artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: programa-app-build
+          path: .
+
+      - name: Extract build artifact
         run: |
           set -euo pipefail
-          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
-          xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
-            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
-            -disableAutomaticPackageResolution \
-            -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
-            -destination "platform=macOS" \
-            build-for-testing
+          mkdir -p "$PROGRAMA_DERIVED_DATA_DIR"
+          tar -xzf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR"
 
       - name: Create persistent virtual display
         run: |

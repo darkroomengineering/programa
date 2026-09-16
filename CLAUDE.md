@@ -22,16 +22,24 @@ By default, `reload.sh` builds but does **not** launch the app. The script print
 ./scripts/reload.sh --tag fix-zsh-autosuggestions --launch
 ```
 
+By default, every `--tag` shares one DerivedData directory (`programa-shared`), so switching tags or re-running the same tag is a warm incremental build instead of a cold one. Tags still get their own bundle id, app name, socket, and log — only the build directory is shared. Pass `--isolated` to give a tag its own DerivedData directory again (today's old default), e.g. when you need two tags to build fully independently:
+
+```bash
+./scripts/reload.sh --tag fix-zsh-autosuggestions --isolated
+```
+
+Command-line builds via `reload.sh` also pass `COMPILER_INDEX_STORE_ENABLE=NO` to xcodebuild, since a CLI build doesn't need Xcode's editor indexing. This doesn't affect indexing when the project is opened in Xcode.app directly.
+
 `reload.sh` prints an `App path:` line with the absolute path to the built `.app`. Use that path to build a cmd-clickable `file://` URL. Steps:
 
 1. Grab the path from the `App path:` line in `reload.sh` output.
 2. Prepend `file://` and URL-encode spaces as `%20`. Do not hardcode any part of the path.
 3. Format it as a markdown link using the template for your agent type.
 
-Example. If `reload.sh` output contains:
+Example (shared DerivedData, the default). If `reload.sh` output contains:
 ```
 App path:
-  /Users/someone/Library/Developer/Xcode/DerivedData/programa-my-tag/Build/Products/Debug/Programa DEV my-tag.app
+  /Users/someone/Library/Developer/Xcode/DerivedData/programa-shared/Build/Products/Debug/Programa DEV my-tag.app
 ```
 
 **Claude Code** outputs:

@@ -852,17 +852,24 @@
 		};
 		A5001300A1B2C3D4E5F60719 /* Copy Ghostty Resources */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/ghostty/zig-out/share",
+				"$(SRCROOT)/Resources/ghostty",
+				"$(SRCROOT)/Resources/terminfo-overlay",
+				"$(SRCROOT)/Resources/shell-integration",
+				"$(SRCROOT)/ghostty/src/shell-integration/zsh/ghostty-integration",
+				"$(SRCROOT)/scripts/build-ghostty-cli-helper.sh",
 			);
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ghostty",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/bin/ghostty",
 			);
 			name = "Copy Ghostty Resources";
 			runOnlyForDeploymentPostprocessing = 0;
