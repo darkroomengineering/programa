@@ -407,7 +407,6 @@ final class AgentOverviewViewModel: ObservableObject {
     private func rebuildSnapshot() {
         let liveWindows = liveWindowStates()
         var nextWindows: [AgentOverviewWindowSnapshot] = []
-        var availableSelections: Set<AgentOverviewSelection> = []
 
         for (windowIndex, state) in liveWindows.enumerated() {
             let manager = state.tabManager
@@ -440,7 +439,6 @@ final class AgentOverviewViewModel: ObservableObject {
                 let orderedPanelIds = workspace.sidebarOrderedPanelIds()
                 let terminals = orderedPanelIds.compactMap { panelId -> AgentOverviewTerminalSnapshot? in
                     guard let panel = workspace.panels[panelId] as? TerminalPanel else { return nil }
-                    availableSelections.insert(.terminal(workspaceId: workspace.id, panelId: panel.id))
                     return AgentOverviewTerminalSnapshot(
                         id: panel.id,
                         title: workspace.panelTitle(panelId: panel.id) ?? panel.displayTitle,
@@ -448,13 +446,6 @@ final class AgentOverviewViewModel: ObservableObject {
                     )
                 }
                 let helpers = records.map { record in
-                    let selection = AgentOverviewSelection.helper(
-                        workspaceId: workspace.id,
-                        helperId: record.id,
-                        surfaceId: record.surfaceId,
-                        hasIndependentOutput: record.hasIndependentOutput
-                    )
-                    availableSelections.insert(selection)
                     return AgentOverviewHelperSnapshot(
                         id: record.id,
                         title: helperTitle(record),
@@ -465,7 +456,6 @@ final class AgentOverviewViewModel: ObservableObject {
                         depth: helperDepth(record, recordsById: recordsById)
                     )
                 }
-                availableSelections.insert(.workspace(workspace.id))
                 workspaceSnapshots.append(
                     AgentOverviewWorkspaceSnapshot(
                         id: workspace.id,
@@ -498,9 +488,7 @@ final class AgentOverviewViewModel: ObservableObject {
         }
 
         windows = nextWindows
-        outputGate.reconcile(availableSelections: availableSelections)
         reconcileVisibleSelection()
-        if outputGate.selection == nil { output = "" }
     }
 
     private func scopedWorkspaceIds(

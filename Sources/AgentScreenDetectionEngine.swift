@@ -50,7 +50,6 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
     private static let demotionGracePeriod: TimeInterval = 30.0
 
     private struct CandidateState {
-        let workspaceId: UUID
         let manifest: AgentManifest
         var lastSampledText: String?
         /// Cached result of classifying `lastSampledText`, reused (instead of re-running regex)
@@ -108,11 +107,10 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func promoteCandidate(surfaceId: UUID, workspaceId: UUID, manifest: AgentManifest) {
+    private func promoteCandidate(surfaceId: UUID, manifest: AgentManifest) {
         lock.lock()
         if candidates[surfaceId] == nil {
             candidates[surfaceId] = CandidateState(
-                workspaceId: workspaceId,
                 manifest: manifest,
                 lastSampledText: nil,
                 lastClassification: nil,
@@ -158,7 +156,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
         // once inside via `MainActor.assumeIsolated` -- the same idiom already used in this
         // codebase for genuinely-off-main-thread-but-runtime-on-main-thread callbacks (see
         // `TerminalWindowPortal.swift`'s NotificationCenter `queue: .main` observers).
-        var samples: [(surfaceId: UUID, workspaceId: UUID, text: String)] = []
+        var samples: [(surfaceId: UUID, text: String)] = []
         DispatchQueue.main.sync {
             MainActor.assumeIsolated {
                 guard let contexts = AppDelegate.shared?.mainWindowContexts.values else { return }
@@ -172,7 +170,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                                 terminalPanel: terminalPanel,
                                 lineLimit: Self.recognitionTailLineLimit
                             ) else { continue }
-                            samples.append((panelId, workspace.id, text))
+                            samples.append((panelId, text))
                         }
                     }
                 }
@@ -187,7 +185,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                     return regex.firstMatch(in: sample.text, options: [], range: range) != nil
                 }
                 guard matched else { continue }
-                promoteCandidate(surfaceId: sample.surfaceId, workspaceId: sample.workspaceId, manifest: manifest)
+                promoteCandidate(surfaceId: sample.surfaceId, manifest: manifest)
                 break
             }
         }

@@ -12,6 +12,8 @@ Entry points: the `programa ssh` CLI subcommand (plus the internal `programa ssh
 
 ## Files removed and files edited
 
+Follow-up cleanup on 2026-09-04 removed the orphaned `tests/fixtures/ssh-remote/` Dockerfile, launcher, sshd configuration, and WebSocket echo server. No remaining test or workflow called them. These four files remain recoverable from commit `a0dbcc8826`.
+
 Deleted: `Sources/Workspace+Remote.swift`, `Sources/WorkspaceRemoteCLIRelayServer.swift`, `Sources/WorkspaceRemoteDaemonPendingCallRegistry.swift`, `Sources/WorkspaceRemoteDaemonRPCClient.swift`, `Sources/WorkspaceRemoteLoopbackHTTPRewriting.swift`, `Sources/WorkspaceRemoteModels.swift`, `Sources/WorkspaceRemoteProxyBroker.swift`, `Sources/WorkspaceRemoteSession.swift`, `Sources/WorkspaceRemoteSessionController+ConnectionOrchestration.swift`, `+DaemonInstall.swift`, `+PortScanning.swift`, `+ProcessExecution.swift`, `+ScriptBuilders.swift`, `Sources/WorkspaceRemoteSSHBatchCommandBuilder.swift`, `Sources/RemoteRelayZshBootstrap.swift`, `Sources/RemoteSCPUpload.swift`, `Sources/RemoteSSHConnectionPolicy.swift`, `Sources/SidebarRemoteErrorCopy.swift`, `Sources/TerminalSSHSessionDetector.swift`, `CLI/CLI+SSH.swift`, all of `daemon/`, `docs/remote-daemon-spec.md`, `scripts/build_remote_daemon_release_assets.sh`, `programaTests/WorkspaceRemoteConnectionTests.swift`, `tests/test_remote_daemon_release_assets.sh`, and the sixteen `tests_v2/test_ssh_remote_*.py` suites.
 
 Edited:

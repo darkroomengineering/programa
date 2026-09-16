@@ -22,6 +22,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - New setting, off by default: open a browser split beside the terminal whenever a new agent workspace is created (⌘⇧C, `programa` helper agents, and `race`). Also `automation.openBrowserWithAgentSplits` in settings.json.
 
 ### Changed
+- Removed unused UI helpers, speculative agent lookup state, impossible internal worktree outcomes, and orphan SSH fixtures. Development setup reuses the existing Zig validation; E2E and Depot workflows reuse the checksum-verified GhosttyKit downloader, and Depot preserves failing test exit codes.
 - Tagged development builds automatically retain the current build and two recent inactive builds, preserving running apps and concurrent builds during cleanup.
 - Each ship now deletes promoted release candidates older than the two most recent, so the releases page stops accumulating 110 MB prereleases.
 

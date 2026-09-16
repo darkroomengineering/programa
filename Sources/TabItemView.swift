@@ -1790,12 +1790,8 @@ struct TabItemView: View, Equatable {
                 ) {
                 case .success(let entry):
                     return .success(path: entry.path, branch: entry.branch ?? branch)
-                case .branchCheckedOut(let existing):
-                    return .branchCheckedOut(path: existing.path)
                 case .worktreePathExists:
                     return .pathExists(path: path)
-                case .notAGitRepo:
-                    return .failure(message: "not_a_git_repo")
                 case .gitCommandFailed(let message):
                     return .failure(message: message)
                 }

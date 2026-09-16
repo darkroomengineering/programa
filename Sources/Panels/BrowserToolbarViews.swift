@@ -318,7 +318,6 @@ struct BrowserProfileMenuView: View {
         }) {
             Image(systemName: "person.crop.circle")
                 .symbolRenderingMode(.monochrome)
-                .programaFlatSymbolColorRendering()
                 .font(.system(size: devToolsButtonIconSize, weight: .medium))
                 .foregroundStyle(iconColor)
                 .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
@@ -416,7 +415,6 @@ struct BrowserThemeModeMenuView: View {
         }) {
             Image(systemName: currentMode.iconName)
                 .symbolRenderingMode(.monochrome)
-                .programaFlatSymbolColorRendering()
                 .font(.system(size: devToolsButtonIconSize, weight: .medium))
                 .foregroundStyle(iconColor)
                 .frame(width: addressBarButtonSize, height: addressBarButtonSize, alignment: .center)
@@ -470,4 +468,3 @@ struct BrowserThemeModeMenuView: View {
         .frame(minWidth: 128)
     }
 }
-
