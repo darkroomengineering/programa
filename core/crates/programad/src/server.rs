@@ -2,9 +2,10 @@
 
 use std::collections::HashSet;
 use std::os::fd::OwnedFd;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use base64::Engine;
+use programa_domain::{Command as DomainCommand, Core as DomainCore, Snapshot as DomainSnapshot};
 use programa_proto::{
     ErrorBody, ErrorCode, Request, Response, IMPLEMENTATION_NAME, IMPLEMENTATION_VERSION,
     IMPLEMENTED_METHODS,
@@ -24,6 +25,16 @@ pub struct AppState {
     /// the app's password mode (`docs/v2-api-migration.md`, `auth_required`
     /// / `auth_unconfigured` codes).
     pub password: Option<String>,
+    /// The shared state model from `programa-domain`, the same crate the
+    /// in-process macOS core links via `programa-ffi` (`core/ABI.md`). PTYs
+    /// stay in `sessions` above; this only tracks workspaces, panes,
+    /// surfaces, layout, and selection. A domain surface that is a terminal
+    /// carries a `session_id` that names a session in `sessions`, but the
+    /// two are otherwise independent: closing this lock never blocks on
+    /// session I/O and vice versa. See `workspace_dispatch` below and
+    /// `core/docs/programad.md` "Process layer" for the reconciliation rule
+    /// applied on `session.close`.
+    pub domain: Mutex<DomainCore>,
 }
 
 impl AppState {
@@ -31,6 +42,7 @@ impl AppState {
         AppState {
             sessions: SessionManager::new(),
             password,
+            domain: Mutex::new(DomainCore::default()),
         }
     }
 }
@@ -214,6 +226,8 @@ fn dispatch(
         "session.read" => session_read(req, state).map(Into::into),
         "session.detach" => session_detach(req, state, attachments).map(Into::into),
         "session.attach" => attach(req, state),
+        "workspace.snapshot" => workspace_snapshot(state).map(Into::into),
+        "workspace.dispatch" => workspace_dispatch(req, state).map(Into::into),
         _ => Err(ErrorBody::new(ErrorCode::MethodNotFound, "Unknown method")),
     }
 }
@@ -457,7 +471,57 @@ fn session_close(req: &Request, state: &Arc<AppState>) -> Result<Value, ErrorBod
     if !closed {
         return Err(ErrorBody::new(ErrorCode::NotFound, "session not found"));
     }
+    reconcile_closed_session(state, id);
     Ok(json!({"closed": true}))
+}
+
+/// Closing semantics (documented in `core/docs/programad.md` "Process
+/// layer"): a domain surface whose `session_id` names a session that just
+/// closed is removed via `close_surface`, the same command a client would
+/// send. We chose "gone" over a `terminated` surface flag because
+/// `programa-domain` has no such flag today (`core/ABI.md`) and closing
+/// mirrors what a client does when a terminal exits. Best-effort: a
+/// surface a concurrent `workspace.dispatch` already removed is silently
+/// skipped.
+fn reconcile_closed_session(state: &Arc<AppState>, session_id: &str) {
+    let Ok(mut domain) = state.domain.lock() else {
+        return;
+    };
+    loop {
+        let Some((workspace_id, pane_id, surface_id)) =
+            find_surface_by_session(domain.snapshot(), session_id)
+        else {
+            return;
+        };
+        if domain
+            .dispatch(DomainCommand::CloseSurface {
+                workspace_id,
+                pane_id,
+                surface_id,
+            })
+            .is_err()
+        {
+            // State moved out from under us (shouldn't happen while we hold
+            // the lock, but never spin forever on an error).
+            return;
+        }
+    }
+}
+
+fn find_surface_by_session(
+    snapshot: &DomainSnapshot,
+    session_id: &str,
+) -> Option<(String, String, String)> {
+    for workspace in &snapshot.workspaces {
+        for pane in &workspace.panes {
+            for surface in &pane.surfaces {
+                if surface.session_id == session_id {
+                    return Some((workspace.id.clone(), pane.id.clone(), surface.id.clone()));
+                }
+            }
+        }
+    }
+    None
 }
 
 fn session_write(req: &Request, state: &Arc<AppState>) -> Result<Value, ErrorBody> {
@@ -560,4 +624,81 @@ fn attach(req: &Request, state: &Arc<AppState>) -> Result<Dispatched, ErrorBody>
         fd: Some(input_fd),
         attachment: Some((id, attach_id)),
     })
+}
+
+/// `workspace.snapshot` takes no params and returns the bare snapshot,
+/// matching `programa_core_snapshot` over the C ABI (`core/ABI.md`
+/// "Snapshot").
+fn workspace_snapshot(state: &Arc<AppState>) -> Result<Value, ErrorBody> {
+    let domain = state
+        .domain
+        .lock()
+        .map_err(|_| ErrorBody::new(ErrorCode::InternalError, "domain lock is poisoned"))?;
+    serde_json::to_value(domain.snapshot())
+        .map_err(|e| ErrorBody::new(ErrorCode::InternalError, format!("serialize failed: {e}")))
+}
+
+/// `workspace.dispatch` carries one `programa-domain::Command` verbatim as
+/// `params` (the same request JSON `programa_core_dispatch` accepts over
+/// the C ABI, `core/ABI.md` "Commands"), and returns `{"snapshot":...}` on
+/// success, matching the ABI's `DispatchSuccess` shape.
+///
+/// Every command that attaches a *new* surface to a session
+/// (`create_workspace`, `create_surface`, `split_pane`) must name a session
+/// this daemon actually owns, so a client can't point a domain surface at a
+/// PTY that doesn't exist. `seed_snapshot` validates every surface in the
+/// snapshot it carries for the same reason. The other commands only
+/// rearrange existing surfaces and need no session lookup.
+fn workspace_dispatch(req: &Request, state: &Arc<AppState>) -> Result<Value, ErrorBody> {
+    let command: DomainCommand = serde_json::from_value(req.params.clone())
+        .map_err(|e| ErrorBody::new(ErrorCode::InvalidParams, format!("invalid command: {e}")))?;
+    validate_command_sessions(&command, state)?;
+
+    let mut domain = state
+        .domain
+        .lock()
+        .map_err(|_| ErrorBody::new(ErrorCode::InternalError, "domain lock is poisoned"))?;
+    match domain.dispatch(command) {
+        Ok(snapshot) => serde_json::to_value(json!({ "snapshot": snapshot })).map_err(|e| {
+            ErrorBody::new(ErrorCode::InternalError, format!("serialize failed: {e}"))
+        }),
+        Err(error) => Err(
+            ErrorBody::new(ErrorCode::Domain, error.message().to_string())
+                .with_data(json!({"code": error.code(), "message": error.message()})),
+        ),
+    }
+}
+
+fn validate_command_sessions(
+    command: &DomainCommand,
+    state: &Arc<AppState>,
+) -> Result<(), ErrorBody> {
+    let session_ids: Vec<&str> = match command {
+        DomainCommand::CreateWorkspace { session_id, .. }
+        | DomainCommand::CreateSurface { session_id, .. }
+        | DomainCommand::SplitPane { session_id, .. } => vec![session_id.as_str()],
+        DomainCommand::SeedSnapshot { snapshot } => snapshot
+            .workspaces
+            .iter()
+            .flat_map(|w| w.panes.iter())
+            .flat_map(|p| p.surfaces.iter())
+            .map(|s| s.session_id.as_str())
+            .collect(),
+        DomainCommand::SelectWorkspace { .. }
+        | DomainCommand::CloseWorkspace { .. }
+        | DomainCommand::SelectSurface { .. }
+        | DomainCommand::CloseSurface { .. }
+        | DomainCommand::ReorderSurface { .. }
+        | DomainCommand::MoveSurface { .. }
+        | DomainCommand::ResizeSplit { .. } => Vec::new(),
+    };
+    for session_id in session_ids {
+        if state.sessions.get(session_id).is_none() {
+            return Err(ErrorBody::new(
+                ErrorCode::NotFound,
+                format!("session '{session_id}' was not found"),
+            ));
+        }
+    }
+    Ok(())
 }

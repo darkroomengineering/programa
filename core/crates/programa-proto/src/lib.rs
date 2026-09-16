@@ -160,6 +160,12 @@ pub enum ErrorCode {
     Timeout,
     InternalError,
     Unsupported,
+    /// A `workspace.dispatch` command was rejected by `programa-domain`'s
+    /// `Core::dispatch`. The domain's own stable code and message (see
+    /// `core/ABI.md` "Errors") ride in `ErrorBody.data` as
+    /// `{"code":"...","message":"..."}` so callers that already handle the
+    /// ABI's domain error codes need no translation layer.
+    Domain,
 }
 
 impl ErrorCode {
@@ -179,6 +185,7 @@ impl ErrorCode {
             ErrorCode::Timeout => "timeout",
             ErrorCode::InternalError => "internal_error",
             ErrorCode::Unsupported => "unsupported",
+            ErrorCode::Domain => "domain_error",
         }
     }
 }
@@ -202,6 +209,8 @@ pub const IMPLEMENTED_METHODS: &[&str] = &[
     "session.read",
     "session.attach",
     "session.detach",
+    "workspace.snapshot",
+    "workspace.dispatch",
 ];
 
 pub const IMPLEMENTATION_NAME: &str = "programad";

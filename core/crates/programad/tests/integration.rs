@@ -7,6 +7,7 @@
 //! first client's death.
 
 use std::os::fd::{AsRawFd, OwnedFd};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use base64::Engine;
@@ -16,6 +17,14 @@ use tokio::net::UnixStream;
 
 const B64: base64::engine::general_purpose::GeneralPurpose =
     base64::engine::general_purpose::STANDARD;
+
+/// `paths::state_root` reads the process-global `XDG_STATE_HOME` env var,
+/// and every test below sets it to its own tempdir so WAL files don't
+/// collide with a real user's state or with each other. `cargo test` runs
+/// tests in this binary on separate threads by default, so two tests
+/// mutating that global concurrently would race and read each other's
+/// tempdir. This lock serializes the env-mutating section of each test.
+static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 struct Client {
     stream: MsgStream,
@@ -97,6 +106,7 @@ fn spawn_daemon(
 
 #[tokio::test]
 async fn full_session_lifecycle_survives_client_disconnect() {
+    let _env_guard = ENV_LOCK.lock().unwrap();
     let dir = tempfile::tempdir().unwrap();
     let socket_path = dir.path().join("programad.sock");
     // Point the WAL under our own temp dir too, so the test doesn't touch
@@ -392,6 +402,110 @@ async fn full_session_lifecycle_survives_client_disconnect() {
         .unwrap();
     let invalid_utf8: Value = serde_json::from_str(&invalid_utf8).unwrap();
     assert_eq!(invalid_utf8["error"]["code"], "invalid_utf8");
+
+    let _ = shutdown_tx.send(());
+    let _ = tokio::time::timeout(Duration::from_secs(5), daemon_handle).await;
+}
+
+/// `workspace.*` links `programa-domain`'s state model into the daemon
+/// socket (core/docs/programad.md "Process layer"): a client opens a
+/// session (a PTY), creates a workspace whose one pane holds a surface
+/// referencing that session, confirms `workspace.snapshot` reflects it, then
+/// closes the session and confirms the surface is gone. "Gone" (not a
+/// `terminated` flag) is the documented choice: `programa-domain` has no
+/// terminated state today, and this matches what a client does when a
+/// terminal exits.
+#[tokio::test]
+async fn workspace_dispatch_links_domain_surfaces_to_sessions_and_reconciles_on_close() {
+    let _env_guard = ENV_LOCK.lock().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("programad.sock");
+    std::env::set_var("XDG_STATE_HOME", dir.path());
+
+    let (daemon_handle, shutdown_tx) = spawn_daemon(socket_path.clone());
+    let mut client = Client::connect(&socket_path).await;
+    client.call("auth.login", json!({})).await;
+
+    // workspace.* is advertised in system.capabilities alongside the
+    // session.* methods.
+    let capabilities = client.call("system.capabilities", json!({})).await;
+    let methods: Vec<&str> = capabilities["methods"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m.as_str().unwrap())
+        .collect();
+    assert!(methods.contains(&"workspace.snapshot"));
+    assert!(methods.contains(&"workspace.dispatch"));
+
+    // A command that names a session this daemon does not own is rejected
+    // before it ever reaches programa-domain.
+    let unknown_session = client
+        .call_response(
+            "workspace.dispatch",
+            json!({
+                "command": "create_workspace",
+                "workspace_id": "w1",
+                "pane_id": "p1",
+                "surface_id": "s1",
+                "session_id": "does-not-exist",
+            }),
+        )
+        .await;
+    assert_eq!(unknown_session["ok"], false);
+    assert_eq!(unknown_session["error"]["code"], "not_found");
+
+    // Open a real session (a PTY) to back the domain surface.
+    let opened = client
+        .call(
+            "session.open",
+            json!({"command": "cat", "cols": 80, "rows": 24}),
+        )
+        .await;
+    let session_id = opened["id"].as_str().unwrap().to_string();
+
+    // Create a workspace with one pane whose one surface references the
+    // session, exactly the shape core/ABI.md documents for create_workspace.
+    let dispatch_result = client
+        .call(
+            "workspace.dispatch",
+            json!({
+                "command": "create_workspace",
+                "workspace_id": "w1",
+                "pane_id": "p1",
+                "surface_id": "s1",
+                "session_id": session_id,
+            }),
+        )
+        .await;
+    assert_eq!(dispatch_result["snapshot"]["revision"], 1);
+    assert_eq!(
+        dispatch_result["snapshot"]["workspaces"][0]["panes"][0]["surfaces"][0]["session_id"],
+        session_id
+    );
+
+    // workspace.snapshot reflects the same state a second call would.
+    let snapshot = client.call("workspace.snapshot", json!({})).await;
+    assert_eq!(snapshot["revision"], 1);
+    let surfaces = snapshot["workspaces"][0]["panes"][0]["surfaces"]
+        .as_array()
+        .unwrap();
+    assert_eq!(surfaces.len(), 1);
+    assert_eq!(surfaces[0]["id"], "s1");
+    assert_eq!(surfaces[0]["session_id"], session_id);
+
+    // Closing the session removes the surface that referenced it.
+    client
+        .call("session.close", json!({"id": session_id, "kill": true}))
+        .await;
+    let after_close = client.call("workspace.snapshot", json!({})).await;
+    assert_eq!(
+        after_close["workspaces"].as_array().unwrap().len(),
+        0,
+        "closing the session's only surface should collapse its pane and \
+         workspace, leaving the domain state empty: {after_close}"
+    );
+    assert_eq!(after_close["selected_workspace_id"], Value::Null);
 
     let _ = shutdown_tx.send(());
     let _ = tokio::time::timeout(Duration::from_secs(5), daemon_handle).await;
