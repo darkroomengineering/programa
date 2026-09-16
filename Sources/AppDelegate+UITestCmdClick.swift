@@ -680,7 +680,7 @@ extension AppDelegate {
             let expectedPath = TerminalController.shared.activeSocketPath(preferredPath: config.path)
             let health = TerminalController.shared.socketListenerHealth(expectedSocketPath: expectedPath)
             let pingResponse = health.isHealthy
-                ? TerminalController.probeSocketCommand("ping", at: expectedPath, timeout: 1.0)
+                ? TerminalController.probeSocketPing(at: expectedPath, timeout: 1.0)
                 : nil
             let isReady = health.isHealthy && pingResponse == "PONG"
             if isReady {

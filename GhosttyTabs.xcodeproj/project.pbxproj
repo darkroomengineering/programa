@@ -113,6 +113,7 @@
 		A5001007 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001019 /* TerminalController.swift */; };
 		H1AP0002 /* AppLifecycleCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1AP0001 /* AppLifecycleCoordinator.swift */; };
 		H1SH0002 /* AppDelegate+StartupHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1SH0001 /* AppDelegate+StartupHandoff.swift */; };
+		H1SN0002 /* AppDelegate+SessionSnapshotPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */; };
 		A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0004 /* TerminalController+BrowserAutomation.swift */; };
 		H1BR0002 /* BrowserRPCDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1BR0001 /* BrowserRPCDispatcher.swift */; };
 		NRTC0011 /* TerminalController+System.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0001 /* TerminalController+System.swift */; };
@@ -298,6 +299,7 @@
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */; };
 				3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */; };
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */; };
+					C7A4000001A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A4000002A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift */; };
 					F6000000A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6000001A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift */; };
 				E57B23C339CE9F1226BC4478 /* ShortcutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C838E51ABC8DBDCC2040D56 /* ShortcutRoutingTests.swift */; };
 					F7000000A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7000001A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift */; };
@@ -526,6 +528,7 @@
 		A5001019 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
 		H1AP0001 /* AppLifecycleCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycleCoordinator.swift; sourceTree = "<group>"; };
 		H1SH0001 /* AppDelegate+StartupHandoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+StartupHandoff.swift"; sourceTree = "<group>"; };
+		H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+SessionSnapshotPersistence.swift"; sourceTree = "<group>"; };
 		A5FF0004 /* TerminalController+BrowserAutomation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+BrowserAutomation.swift"; sourceTree = "<group>"; };
 		H1BR0001 /* BrowserRPCDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserRPCDispatcher.swift; sourceTree = "<group>"; };
 		NRTC0001 /* TerminalController+System.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+System.swift"; sourceTree = "<group>"; };
@@ -705,6 +708,7 @@
 				RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RendererRealizationPlannerTests.swift; sourceTree = "<group>"; };
 				D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAutosaveCoordinatorTests.swift; sourceTree = "<group>"; };
 				SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWALCoreTests.swift; sourceTree = "<group>"; };
+				C7A4000002A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrowWakeRecoveryTests.swift; sourceTree = "<group>"; };
 				F6000001A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegateShortcutRoutingTests.swift; sourceTree = "<group>"; };
 				6C838E51ABC8DBDCC2040D56 /* ShortcutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRoutingTests.swift; sourceTree = "<group>"; };
 				F7000001A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceContentViewVisibilityTests.swift; sourceTree = "<group>"; };
@@ -1016,6 +1020,7 @@
 				A5001090 /* AppDelegate.swift */,
 				H1AP0001 /* AppLifecycleCoordinator.swift */,
 				H1SH0001 /* AppDelegate+StartupHandoff.swift */,
+				H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */,
 				C5E68FD3C9918B5717603304 /* SessionAutosaveCoordinator.swift */,
 				DDE5A5F043A04829779CF356 /* ShortcutRouting.swift */,
 				NRAD0001 /* MainWindowHostingView.swift */,
@@ -1230,6 +1235,7 @@
 					RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */,
 					D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */,
 					SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */,
+					C7A4000002A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift */,
 					F6000001A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift */,
 					6C838E51ABC8DBDCC2040D56 /* ShortcutRoutingTests.swift */,
 					F7000001A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift */,
@@ -1547,6 +1553,7 @@
 				A5001007 /* TerminalController.swift in Sources */,
 				H1AP0002 /* AppLifecycleCoordinator.swift in Sources */,
 				H1SH0002 /* AppDelegate+StartupHandoff.swift in Sources */,
+				H1SN0002 /* AppDelegate+SessionSnapshotPersistence.swift in Sources */,
 				A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */,
 				H1BR0002 /* BrowserRPCDispatcher.swift in Sources */,
 				NRTC0011 /* TerminalController+System.swift in Sources */,
@@ -1696,6 +1703,7 @@
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */,
 					3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */,
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */,
+					C7A4000001A1B2C3D4E5F607 /* SessionEscrowWakeRecoveryTests.swift in Sources */,
 					F6000000A1B2C3D4E5F60718 /* AppDelegateShortcutRoutingTests.swift in Sources */,
 					E57B23C339CE9F1226BC4478 /* ShortcutRoutingTests.swift in Sources */,
 					F7000000A1B2C3D4E5F60718 /* WorkspaceContentViewVisibilityTests.swift in Sources */,

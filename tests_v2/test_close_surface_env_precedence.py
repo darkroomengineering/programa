@@ -123,11 +123,24 @@ def main() -> int:
                 len(stale_after) == 1 and stale_after[0][1] == stale_surface_id,
                 f"stale workspace's surface must be untouched, got {stale_after!r}",
             )
+
+            # A valid inherited origin is different from the foreign stale ID above:
+            # changing focus must not redirect a command issued by the original shell.
+            origin = after[0][1]
+            focused = c.new_surface()
+            c.focus_surface(focused)
+            _run_cli(cli, ["close-surface"], env_overrides={
+                "PROGRAMA_WORKSPACE_ID": target_ws,
+                "PROGRAMA_SURFACE_ID": origin,
+            })
+            remaining = {row[1] for row in c.list_surfaces(target_ws)}
+            _must(origin not in remaining and focused in remaining,
+                  f"close-surface followed focus instead of its valid origin: {remaining!r}")
         finally:
             c.close_workspace(target_ws)
             c.close_workspace(stale_ws)
 
-    print("PASS: close-surface ignores stale PROGRAMA_SURFACE_ID once PROGRAMA_WORKSPACE_ID resolved a target")
+    print("PASS: close-surface preserves a valid origin and ignores a foreign stale surface")
     return 0
 
 

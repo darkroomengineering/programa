@@ -1,0 +1,36 @@
+[package]
+name = "programad"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Headless daemon that owns PTYs, sessions, and a WAL for Programa, speaking the v2 socket protocol, backed by programa-domain's state model."
+
+[[bin]]
+name = "programad"
+path = "src/main.rs"
+
+[dependencies]
+programa-proto.workspace = true
+programa-domain.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+base64.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+
+# nix and libc back PTYs, SCM_RIGHTS fd handoff, and file-mode/flock calls
+# that only exist on Unix (src/pty.rs, src/fdpass.rs, src/session.rs,
+# src/main.rs's unix module). Target-gated so a Windows build of this
+# workspace never needs to compile or link them; on Windows the whole
+# programad binary is a `#[cfg(not(unix))]` stub (src/main.rs).
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

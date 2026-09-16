@@ -70,7 +70,11 @@ private struct MermaidFallbackCodeView: View {
 /// document flow. The web view's own background is made transparent (both at
 /// the WKWebView layer and in the loaded HTML) so the diagram sits directly
 /// on the panel's native surface instead of a white/dark card.
-private struct MermaidWebView: NSViewRepresentable {
+// Not `private`: `html(source:isDark:scriptFileName:)` below is `static`
+// (internal) so a test can render it directly, and a private type would cap
+// that member's effective access back down to file-private regardless of its
+// own declared access level.
+struct MermaidWebView: NSViewRepresentable {
     let source: String
     let isDark: Bool
     let scriptURL: URL
@@ -93,6 +97,12 @@ private struct MermaidWebView: NSViewRepresentable {
         if #available(macOS 12.3, *) {
             webView.underPageBackgroundColor = .clear
         }
+        // The coordinator is the navigation delegate for the view's lifetime:
+        // it allows only the single `loadHTMLString` document we construct
+        // below and cancels every other navigation (link clicks, form
+        // submits, script-driven `window.location` changes), so a Mermaid
+        // source that escapes into markup cannot navigate the view anywhere.
+        webView.navigationDelegate = context.coordinator
         load(into: webView, context: context)
         return webView
     }
@@ -109,11 +119,19 @@ private struct MermaidWebView: NSViewRepresentable {
         webView.loadHTMLString(html, baseURL: scriptURL.deletingLastPathComponent())
     }
 
-    private static func html(source: String, isDark: Bool, scriptFileName: String) -> String {
-        let escapedSource = source
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "`", with: "\\`")
-            .replacingOccurrences(of: "${", with: "\\${")
+    /// Builds the HTML document loaded into the web view. `internal` (not
+    /// `private`) so tests can render it directly.
+    ///
+    /// The Mermaid source is never interpolated into the page as executable
+    /// markup or script text: it is base64-encoded and embedded only as a
+    /// quoted string literal built from the base64 alphabet (`A-Za-z0-9+/=`),
+    /// which cannot contain `<`, `>`, a backtick, or `${`. The inline script
+    /// decodes it back to UTF-8 with `atob`/`TextDecoder` before handing it to
+    /// `mermaid.render`, so a source containing `</script><script>...` (or any
+    /// other HTML/script delimiter) can never terminate or extend the
+    /// surrounding `<script>` tag.
+    static func html(source: String, isDark: Bool, scriptFileName: String) -> String {
+        let base64Source = Data(source.utf8).base64EncodedString()
         let theme = isDark ? "dark" : "default"
         let fontFamily = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
         return """
@@ -136,6 +154,14 @@ private struct MermaidWebView: NSViewRepresentable {
             var h = Math.ceil(el.scrollHeight || document.body.scrollHeight || 0);
             window.webkit.messageHandlers.mermaidHeight.postMessage(h);
           }
+          function decodeBase64Utf8(b64) {
+            var binary = atob(b64);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            return new TextDecoder('utf-8').decode(bytes);
+          }
           try {
             mermaid.initialize({
               startOnLoad: false,
@@ -143,7 +169,7 @@ private struct MermaidWebView: NSViewRepresentable {
               securityLevel: 'strict',
               themeVariables: { fontFamily: "\(fontFamily)" }
             });
-            var source = `\(escapedSource)`;
+            var source = decodeBase64Utf8('\(base64Source)');
             mermaid.render('mermaid-diagram', source).then(function (result) {
               document.getElementById('diagram').innerHTML = result.svg;
               reportHeight();
@@ -159,7 +185,7 @@ private struct MermaidWebView: NSViewRepresentable {
         """
     }
 
-    final class Coordinator: NSObject, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         private let height: Binding<CGFloat>
         private let didFail: Binding<Bool>
         var lastLoadedKey: String = ""
@@ -180,6 +206,25 @@ private struct MermaidWebView: NSViewRepresentable {
             default:
                 break
             }
+        }
+
+        /// The only navigation this view is ever supposed to perform is the
+        /// single `loadHTMLString` document built by `MermaidWebView.html`,
+        /// whose main-frame navigation carries type `.other` and a `nil` or
+        /// `about:blank` URL (or the local `baseURL` we pass alongside it).
+        /// Everything else — a link click, a form submit, or a script-driven
+        /// `window.location` change reachable if a Mermaid source ever
+        /// escapes into executable markup — is cancelled, so the web view can
+        /// never navigate away from the diagram it was given.
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            let url = navigationAction.request.url
+            let isInitialDocumentLoad = navigationAction.navigationType == .other
+                && (url == nil || url?.absoluteString == "about:blank" || url?.isFileURL == true)
+            decisionHandler(isInitialDocumentLoad ? .allow : .cancel)
         }
     }
 }

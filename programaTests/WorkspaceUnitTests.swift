@@ -8,6 +8,54 @@ import Bonsplit
 import UserNotifications
 import Combine
 
+@MainActor
+final class ProgramaLayoutFileIdentityTests: XCTestCase {
+    private let layout = ProgramaLayoutNode.pane(ProgramaPaneDefinition(surfaces: [
+        ProgramaSurfaceDefinition(type: .terminal, name: nil, command: nil, cwd: nil, env: nil, url: nil, focus: nil)
+    ]))
+
+    func testCopiedAndRenamedLayoutsUseDistinctFilenameIdentities() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let writer = ProgramaLayoutStore(directoryURL: directory, startWatching: false)
+        let original = URL(fileURLWithPath: try writer.save(name: "original", layout: layout, force: false))
+        let copied = directory.appendingPathComponent("copied layout.json")
+        try FileManager.default.copyItem(at: original, to: copied)
+        try FileManager.default.moveItem(at: original, to: directory.appendingPathComponent("renamed.json"))
+        let reader = ProgramaLayoutStore(directoryURL: directory, startWatching: false)
+        XCTAssertEqual(Set(reader.list().map(\.name)), ["copied layout", "renamed"])
+        XCTAssertEqual(reader.load(name: "copied layout")?.name, "copied layout")
+        XCTAssertEqual(reader.load(name: "renamed")?.name, "renamed")
+        XCTAssertEqual(reader.load(name: "copied layout")?.layout, layout)
+        try reader.remove(name: "copied layout")
+        XCTAssertNil(reader.load(name: "copied layout"))
+        XCTAssertNotNil(reader.load(name: "renamed"))
+    }
+
+    func testInvalidLayoutNamesCannotReadWriteOrRemoveOtherFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("layouts")
+        let store = ProgramaLayoutStore(directoryURL: directory, startWatching: false)
+        let valid = URL(fileURLWithPath: try store.save(name: "valid layout", layout: layout, force: false))
+        let bytes = try Data(contentsOf: valid)
+        let outside = root.appendingPathComponent("outside.json")
+        try bytes.write(to: outside)
+        for name in ["", ".", "..", "../outside", "nested/name", "valid layout\0suffix"] {
+            XCTAssertThrowsError(try store.save(name: name, layout: layout, force: true), name) {
+                guard case ProgramaLayoutStoreError.invalidName = $0 else { return XCTFail("Expected invalidName for \(name)") }
+            }
+            XCTAssertNil(store.load(name: name), name)
+            XCTAssertThrowsError(try store.remove(name: name), name) {
+                guard case ProgramaLayoutStoreError.invalidName = $0 else { return XCTFail("Expected invalidName for \(name)") }
+            }
+            XCTAssertEqual(try Data(contentsOf: valid), bytes)
+            XCTAssertEqual(try Data(contentsOf: outside), bytes)
+        }
+        XCTAssertEqual(store.load(name: "valid layout")?.layout, layout, "Spaces are valid layout names")
+    }
+}
+
 #if canImport(Programa_DEV)
 @testable import Programa_DEV
 #elseif canImport(Programa)
@@ -374,6 +422,32 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
             StoredShortcut(key: "b", command: false, shift: false, option: false, control: true, chordKey: "1")
         )
         XCTAssertEqual(store.activeSourcePath, settingsFileURL.path)
+    }
+
+    func testUncommentedTemplatePreservesDefaultReturnShortcut() throws {
+        let directoryURL = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
+        var inShortcuts = false
+        var shortcutsIndent: Int?
+        let template = ProgramaSettingsFileStore.defaultTemplate().components(separatedBy: "\n").map { line in
+            if line.contains("\"shortcuts\"") && line.contains("{") { inShortcuts = true }
+            guard inShortcuts, let marker = line.range(of: "// ") else { return line }
+            let uncommented = String(line[..<marker.lowerBound]) + String(line[marker.upperBound...])
+            let indent = uncommented.prefix(while: { $0.isWhitespace }).count
+            if shortcutsIndent == nil { shortcutsIndent = indent }
+            if indent == shortcutsIndent && uncommented.trimmingCharacters(in: .whitespaces) == "}," {
+                inShortcuts = false
+            }
+            return uncommented
+        }.joined(separator: "\n")
+        XCTAssertNotNil(shortcutsIndent, "The fixture must activate the generated shortcuts section before loading it")
+        try writeSettingsFile(template, to: settingsFileURL)
+        let store = KeyboardShortcutSettingsFileStore(
+            primaryPath: settingsFileURL.path, fallbackPath: nil, startWatching: false
+        )
+        XCTAssertEqual(store.override(for: .toggleSplitZoom), KeyboardShortcutSettings.Action.toggleSplitZoom.defaultShortcut,
+                       "Uncommenting the supplied template must retain the default Return shortcut")
     }
 
     func testSettingsFileStoreRejectsModifierFreeFirstStroke() throws {
@@ -2527,6 +2601,36 @@ final class WorkspaceAutoReorderSettingsTests: XCTestCase {
 
 
 final class WorkspaceReorderTests: XCTestCase {
+    @MainActor
+    func testRelativeWorkspaceMovesUseIndicesAfterRemovingTheMovingWorkspace() {
+        for (moving, anchor, before, expected) in [
+            (0, 2, true, [1, 0, 2]), (0, 1, false, [1, 0, 2]),
+            (2, 1, true, [0, 2, 1]), (2, 0, false, [0, 2, 1]),
+            (1, 1, true, [0, 1, 2]), (1, 1, false, [0, 1, 2])
+        ] {
+            let manager = TabManager()
+            _ = manager.addWorkspace()
+            _ = manager.addWorkspace()
+            let ids = manager.tabs.map(\.id)
+            let selected = manager.selectedTabId
+            XCTAssertTrue(manager.reorderWorkspace(tabId: ids[moving], before: before ? ids[anchor] : nil, after: before ? nil : ids[anchor]))
+            XCTAssertEqual(manager.tabs.map(\.id), expected.map { ids[$0] })
+            XCTAssertEqual(manager.selectedTabId, selected)
+        }
+    }
+
+    @MainActor
+    func testRelativeWorkspaceMovesRespectPinnedBoundary() {
+        let manager = TabManager()
+        let pinned = manager.tabs[0]
+        manager.setPinned(pinned, pinned: true)
+        let first = manager.addWorkspace()
+        let second = manager.addWorkspace()
+        XCTAssertTrue(manager.reorderWorkspace(tabId: second.id, before: pinned.id))
+        XCTAssertEqual(manager.tabs.map(\.id), [pinned.id, second.id, first.id])
+        XCTAssertTrue(manager.reorderWorkspace(tabId: pinned.id, after: first.id))
+        XCTAssertEqual(manager.tabs.map(\.id), [pinned.id, second.id, first.id])
+    }
     @MainActor
     func testReorderWorkspaceMovesWorkspaceToRequestedIndex() {
         let manager = TabManager()
@@ -5033,6 +5137,138 @@ final class WorkspaceMountPolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(next, [b, a])
+    }
+}
+
+/// Regression coverage for docs/audits/codebase-audit-2026-09-11.md M13: moving a review or
+/// markdown panel between workspaces must reinstall its workspace binding and lifecycle
+/// subscription, and a review panel's auto-refresh trigger must keep tracking whichever
+/// workspace actually holds its source terminal, even after the two panels are split across
+/// different workspaces.
+@MainActor
+final class ReviewPanelWorkspaceTransferTests: XCTestCase {
+    private var originalSharedAppDelegate: AppDelegate?
+
+    override func setUp() {
+        super.setUp()
+        originalSharedAppDelegate = AppDelegate.shared
+    }
+
+    override func tearDown() {
+        AppDelegate.shared = originalSharedAppDelegate
+        super.tearDown()
+    }
+
+    /// Registers `workspaces` on a single `TabManager` inside a fresh `AppDelegate`, installed
+    /// as `AppDelegate.shared`, so `Workspace.workspaceOwning(surfaceId:)` (used by
+    /// `installReviewPanelSubscription` and `ReviewPanel.sendToSourceSurface`) can locate them
+    /// the same way production code does via `AppDelegate.locateSurface`.
+    private func registerWorkspaces(_ workspaces: [Workspace]) -> (app: AppDelegate, window: NSWindow) {
+        _ = NSApplication.shared
+        let app = AppDelegate()
+        AppDelegate.shared = app
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 280),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.identifier = NSUserInterfaceItemIdentifier("cmux.main.\(UUID().uuidString)")
+
+        let manager = TabManager()
+        manager.tabs = workspaces
+        app.registerMainWindow(
+            window,
+            windowId: UUID(),
+            tabManager: manager,
+            sidebarState: SidebarState(),
+            sidebarSelectionState: SidebarSelectionState()
+        )
+        return (app, window)
+    }
+
+    private func waitForCondition(
+        timeout: TimeInterval = 2,
+        pollInterval: TimeInterval = 0.01,
+        _ condition: () -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
+        }
+        return condition()
+    }
+
+    func testMovingReviewPanelReinstallsSubscriptionAndTracksSourceInItsOriginalWorkspace() throws {
+        let workspaceA = Workspace()
+        let workspaceB = Workspace()
+        let (_, window) = registerWorkspaces([workspaceA, workspaceB])
+        defer { window.orderOut(nil) }
+
+        let sourceId = try XCTUnwrap(workspaceA.focusedPanelId)
+        let reviewPanel = try XCTUnwrap(workspaceA.newReviewSplit(from: sourceId, orientation: .horizontal))
+        XCTAssertNotNil(workspaceA.panelSubscriptions[reviewPanel.id], "Sanity: creation installs a subscription on the source workspace")
+
+        let detached = try XCTUnwrap(workspaceA.detachSurface(panelId: reviewPanel.id))
+        let destinationPane = try XCTUnwrap(workspaceB.bonsplitController.allPaneIds.first)
+        XCTAssertEqual(
+            workspaceB.attachDetachedSurface(detached, inPane: destinationPane, focus: false),
+            reviewPanel.id
+        )
+
+        XCTAssertEqual(reviewPanel.workspaceId, workspaceB.id, "Moved review panel must adopt the destination workspace id")
+        XCTAssertNotNil(
+            workspaceB.panelSubscriptions[reviewPanel.id],
+            "Moved review panel must get a fresh lifecycle subscription reinstalled on its new workspace"
+        )
+
+        // The source terminal stayed behind in workspace A. The reinstalled subscription must
+        // keep watching A's `$panelAgentStates`, not B's -- otherwise the review panel would
+        // never auto-refresh again after the move (M13).
+        workspaceA.panelAgentStates[sourceId] = .working
+        XCTAssertTrue(waitForCondition { workspaceA.panelAgentStates[sourceId] == .working })
+        let previousRefreshedAt = reviewPanel.lastRefreshedAt
+        workspaceA.panelAgentStates[sourceId] = .idle
+        XCTAssertTrue(
+            waitForCondition {
+                reviewPanel.isRefreshing || reviewPanel.lastRefreshedAt != previousRefreshedAt
+            },
+            "Expected the review panel to start refreshing once its source terminal (still in workspace A) goes idle"
+        )
+    }
+
+    func testMovingMarkdownPanelUpdatesItsWorkspaceId() throws {
+        let workspaceA = Workspace()
+        let workspaceB = Workspace()
+        _ = registerWorkspaces([workspaceA, workspaceB])
+
+        let sourceId = try XCTUnwrap(workspaceA.focusedPanelId)
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("m13-markdown-transfer-\(UUID().uuidString).md")
+        try Data("# M13 regression".utf8).write(to: tempFile)
+        defer { try? FileManager.default.removeItem(at: tempFile) }
+
+        let markdownPanel = try XCTUnwrap(
+            workspaceA.newMarkdownSplit(from: sourceId, orientation: .horizontal, filePath: tempFile.path)
+        )
+        XCTAssertEqual(markdownPanel.workspaceId, workspaceA.id)
+
+        let detached = try XCTUnwrap(workspaceA.detachSurface(panelId: markdownPanel.id))
+        let destinationPane = try XCTUnwrap(workspaceB.bonsplitController.allPaneIds.first)
+        XCTAssertEqual(
+            workspaceB.attachDetachedSurface(detached, inPane: destinationPane, focus: false),
+            markdownPanel.id
+        )
+
+        XCTAssertEqual(markdownPanel.workspaceId, workspaceB.id, "Moved markdown panel must adopt the destination workspace id")
+        XCTAssertNotNil(
+            workspaceB.panelSubscriptions[markdownPanel.id],
+            "Moved markdown panel must get its title subscription reinstalled on its new workspace"
+        )
     }
 }
 

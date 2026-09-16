@@ -144,11 +144,24 @@ enum SessionRestorePolicy {
             return false
         }
 
-        let extraArgs = arguments
-            .dropFirst()
-            .filter { !$0.hasPrefix("-psn_") }
-
-        // Any explicit launch argument is treated as an explicit open intent.
+        // Any explicit launch argument is treated as an explicit open intent, except
+        // launch-services process serial numbers and NSUserDefaults argument-domain
+        // pairs (single-dash `-key value`), which configure preferences rather than
+        // open anything. Double-dash options remain explicit intents.
+        var extraArgs: [String] = []
+        var skipValue = false
+        for argument in arguments.dropFirst() {
+            if skipValue {
+                skipValue = false
+                continue
+            }
+            if argument.hasPrefix("-psn_") { continue }
+            if argument.hasPrefix("-"), !argument.hasPrefix("--"), argument.count > 1 {
+                skipValue = true
+                continue
+            }
+            extraArgs.append(argument)
+        }
         return extraArgs.isEmpty
     }
 }
@@ -402,6 +415,17 @@ struct AppSessionSnapshot: Codable, Sendable {
 }
 
 enum SessionPersistenceStore {
+    static func withoutScrollback(_ snapshot: AppSessionSnapshot) -> AppSessionSnapshot {
+        var result = snapshot
+        for window in result.windows.indices {
+            for workspace in result.windows[window].tabManager.workspaces.indices {
+                for panel in result.windows[window].tabManager.workspaces[workspace].panels.indices {
+                    result.windows[window].tabManager.workspaces[workspace].panels[panel].terminal?.scrollback = nil
+                }
+            }
+        }
+        return result
+    }
     static let historyDirectoryScanLimit = 256
 
     /// `nil` means ownership is unknown: cleanup must preserve sessions. Only a
@@ -520,7 +544,7 @@ enum SessionPersistenceStore {
         return fallback.snapshot
     }
 
-    /// Scans the newest `limit` archives (newest-first, per `historyFileURLs`) for the first one
+    /// Scans the newest `limit` archives belonging to this bundle (newest-first, per `historyFileURLs`) for the first one
     /// that decodes at the current schema version with at least one window. Capped rather than
     /// unbounded: a long-neglected `session-history/` directory should not turn a startup restore
     /// into an unbounded disk scan.
@@ -528,7 +552,10 @@ enum SessionPersistenceStore {
         fileURL: URL,
         limit: Int
     ) -> (snapshot: AppSessionSnapshot, filename: String)? {
-        let candidates = historyFileURLs(fileURL: fileURL).prefix(max(0, limit))
+        let archiveSuffix = "\(sanitizedBundleIdentifier(Bundle.main.bundleIdentifier)).json"
+        let candidates = historyFileURLs(fileURL: fileURL)
+            .filter { $0.lastPathComponent.split(separator: "-", maxSplits: 2).last == Substring(archiveSuffix) }
+            .prefix(max(0, limit))
         for entry in candidates {
             guard let data = boundedSnapshotData(at: entry),
                   let snapshot = decodeSnapshot(from: data),
@@ -655,12 +682,18 @@ enum SessionPersistenceStore {
         fileURL: URL? = nil,
         now: Date = Date(),
         maxHistoryEntries: Int = SessionPersistencePolicy.maxSnapshotHistoryEntries,
-        historyScanObserver: ((HistoryScanResult) -> Void)? = nil
+        historyScanObserver: ((HistoryScanResult) -> Void)? = nil,
+        includeScrollback: Bool = true
     ) -> Bool {
         guard let fileURL = fileURL ?? defaultSnapshotFileURL(),
               let historyDirectory = historyDirectoryURL(fileURL: fileURL),
-              let data = boundedSnapshotData(at: fileURL) else {
+              var data = boundedSnapshotData(at: fileURL) else {
             return false
+        }
+        if !includeScrollback {
+            guard let snapshot = decodeSnapshot(from: data),
+                  let metadata = try? encodedSnapshotData(withoutScrollback(snapshot)) else { return false }
+            data = metadata
         }
 
         do {
@@ -693,7 +726,7 @@ enum SessionPersistenceStore {
             isDirectory: false
         )
         do {
-            try FileManager.default.copyItem(at: fileURL, to: staging)
+            try data.write(to: staging)
         } catch {
             try? FileManager.default.removeItem(at: staging)
             return false
@@ -1238,12 +1271,13 @@ enum SessionFreshSpawnScrollbackSeed {
         // `split(omittingEmptySubsequences: false)` + `joined` round-trips a
         // trailing newline (and any blank lines) exactly, so no separate
         // trailing-newline bookkeeping is needed here.
-        text.split(separator: "\n", omittingEmptySubsequences: false)
-            .map { sanitizedLine(String($0)) }
+        var rendition = ReplayStyle()
+        return text.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { sanitizedLine(String($0), rendition: &rendition) }
             .joined(separator: "\n")
     }
 
-    private static func sanitizedLine(_ line: String) -> String {
+    private static func sanitizedLine(_ line: String, rendition: inout ReplayStyle) -> String {
         // Cheap bypass: the overwhelming majority of lines in a scrollback
         // transcript are plain text with none of the three signals below.
         guard line.contains(where: { $0 == "\u{001B}" || $0 == "\r" || $0 == "\u{8}" }) else {
@@ -1264,7 +1298,7 @@ enum SessionFreshSpawnScrollbackSeed {
         }
 
         let working = sanitizedWorkingText(line)
-        return replayedLine(from: replayTokens(in: working))
+        return replayedLine(from: replayTokens(in: working), rendition: &rendition)
     }
 
     /// Produces a working string safe to tokenize for the cell walk:
@@ -1487,11 +1521,11 @@ enum SessionFreshSpawnScrollbackSeed {
     /// and `\b` move the write column without touching cell content -- a
     /// real terminal overwrite, not a clear -- so a shorter redraw correctly
     /// leaves the tail of a longer previous one in place.
-    private static func replayedLine(from tokens: [ReplayToken]) -> String {
+    private static func replayedLine(from tokens: [ReplayToken], rendition: inout ReplayStyle) -> String {
         var cells: [ReplayCell] = []
         let defaultStyle = ReplayStyleReference(ReplayStyle())
         var cursor = 0
-        var currentStyle = defaultStyle
+        var currentStyle = ReplayStyleReference(rendition)
 
         for token in tokens {
             switch token {
@@ -1545,6 +1579,7 @@ enum SessionFreshSpawnScrollbackSeed {
             if lastEmittedStyle.value != defaultStyle.value { output += ansiReset }
             output += currentStyle.value.sequence
         }
+        rendition = currentStyle.value
         return output
     }
 

@@ -118,7 +118,7 @@ enum ProgramaTypingTiming {
     /// So the instrumentation crashed the app it was measuring, and only when
     /// switched on -- which is why nothing caught it until someone tried to use it.
     /// Read the key-only fields only when the event actually is a key event.
-    private static func eventFields(_ event: NSEvent) -> String {
+    fileprivate static func eventFields(_ event: NSEvent) -> String {
         switch event.type {
         case .keyDown, .keyUp:
             return "eventType=\(event.type.rawValue) keyCode=\(event.keyCode) " +
@@ -209,9 +209,7 @@ final class ProgramaMainRunLoopStallMonitor {
 
         let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain()).map { String(describing: $0) } ?? "nil"
         let firstResponder = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let currentEvent = NSApp.currentEvent.map {
-            "eventType=\($0.type.rawValue) keyCode=\($0.keyCode) mods=\($0.modifierFlags.rawValue)"
-        } ?? "event=nil"
+        let currentEvent = NSApp.currentEvent.map(ProgramaTypingTiming.eventFields) ?? "event=nil"
         dlog(
             "runloop.stall gapMs=\(String(format: "%.2f", elapsedMs)) prev=\(label(for: lastActivity)) " +
             "next=\(label(for: activity)) mode=\(mode) firstResponder=\(firstResponder) \(currentEvent)"
@@ -333,9 +331,7 @@ final class ProgramaMainThreadTurnProfiler {
 
         let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain()).map { String(describing: $0) } ?? "nil"
         let firstResponder = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let eventSummary = NSApp.currentEvent.map {
-            "eventType=\($0.type.rawValue) keyCode=\($0.keyCode) mods=\($0.modifierFlags.rawValue)"
-        } ?? "event=nil"
+        let eventSummary = NSApp.currentEvent.map(ProgramaTypingTiming.eventFields) ?? "event=nil"
         let bucketSummary = buckets
             .sorted {
                 if abs($0.value.totalMs - $1.value.totalMs) > 0.01 {

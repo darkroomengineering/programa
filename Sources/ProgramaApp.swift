@@ -156,6 +156,7 @@ struct programaApp: App {
             defaults: defaults,
             nativeGlassAvailable: WindowGlassEffect.isAvailable
         )
+        ScrollbackPersistenceSettings.configureAtStartup()
 
         // UI tests depend on AppDelegate wiring happening even if SwiftUI view appearance
         // callbacks (e.g. `.onAppear`) are delayed or skipped.

@@ -232,6 +232,115 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         XCTAssertEqual(secondRevision.map(\.id), firstIDs, "Snapshot refreshes should preserve row identity for unchanged files")
     }
 
+    // MARK: - M12: stale probe generations / unborn HEAD
+
+    func testUncommittedProbeSeesStagedFileBeforeFirstCommit() throws {
+        let repoRoot = try makeTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+        let filePath = (repoRoot as NSString).appendingPathComponent("staged.txt")
+        try "hello".write(toFile: filePath, atomically: true, encoding: .utf8)
+        try runGit(["add", "staged.txt"], in: repoRoot)
+
+        let snapshot = ReviewDiffProber.diffSnapshot(directory: repoRoot, mode: .uncommitted, baseBranch: "main")
+
+        XCTAssertNil(snapshot.error)
+        XCTAssertEqual(snapshot.files.count, 1)
+        XCTAssertEqual(snapshot.files.first?.newPath, "staged.txt")
+        XCTAssertEqual(snapshot.files.first?.status, .added)
+    }
+
+    func testNonGitDirectoryReportsNotGitRepository() throws {
+        let directory = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+
+        let snapshot = ReviewDiffProber.diffSnapshot(directory: directory, mode: .uncommitted, baseBranch: "main")
+
+        XCTAssertEqual(snapshot.error, .notGitRepository)
+    }
+
+    func testUnresolvableBaseBranchReportsUnknownBaseBranch() throws {
+        let repoRoot = try makeTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+        let filePath = (repoRoot as NSString).appendingPathComponent("committed.txt")
+        try "hello".write(toFile: filePath, atomically: true, encoding: .utf8)
+        try runGit(["add", "committed.txt"], in: repoRoot)
+        try runGit(["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "initial"], in: repoRoot)
+
+        let snapshot = ReviewDiffProber.diffSnapshot(directory: repoRoot, mode: .branch, baseBranch: "no-such-branch-zzz")
+
+        XCTAssertEqual(snapshot.error, .unknownBaseBranch("no-such-branch-zzz"))
+    }
+
+    func testOutOfOrderRefreshCompletionsDoNotOverwriteNewerState() throws {
+        let repoRoot = try makeTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+        let panel = ReviewPanel(workspaceId: UUID(), sourceSurfaceId: UUID(), directory: repoRoot, mode: .uncommitted, baseBranch: "main")
+
+        panel.refresh()
+        panel.refresh()
+
+        let deadline = Date().addingTimeInterval(10)
+        while panel.isRefreshing, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        XCTAssertFalse(panel.isRefreshing)
+        XCTAssertEqual(panel.refreshGeneration, 2)
+    }
+
+    func testStaleGenerationApplyIsDiscardedWithoutMutatingState() throws {
+        let panel = ReviewPanel(workspaceId: UUID(), sourceSurfaceId: UUID(), directory: "/tmp", mode: .uncommitted, baseBranch: "main")
+        let currentFile = makeFile(path: "Sources/Current.swift", lineText: "current")
+        let staleFile = makeFile(path: "Sources/Stale.swift", lineText: "stale")
+
+        // Bumps refreshGeneration to 1 and applies.
+        panel.apply(snapshot: ReviewDiffSnapshot(files: [currentFile], generatedAt: Date()))
+        XCTAssertEqual(panel.refreshGeneration, 1)
+        XCTAssertEqual(panel.files, [currentFile])
+        let revisionAfterCurrent = panel.filesRevision
+
+        // A completion issued under a stale (already-superseded) generation must be dropped.
+        panel.apply(snapshot: ReviewDiffSnapshot(files: [staleFile], generatedAt: Date()), generation: 0)
+
+        XCTAssertEqual(panel.files, [currentFile])
+        XCTAssertEqual(panel.filesRevision, revisionAfterCurrent)
+    }
+
+    private func makeTempDirectory() throws -> String {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("review-panel-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url.path
+    }
+
+    private func makeTempGitRepo() throws -> String {
+        let directory = try makeTempDirectory()
+        // A unique initial branch so the base-branch fallback chain (main, master) has nothing
+        // to resolve against unless a test creates those refs explicitly.
+        try runGit(["init", "-q", "-b", "review-test-initial"], in: directory)
+        return directory
+    }
+
+    @discardableResult
+    private func runGit(_ arguments: [String], in directory: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git"] + arguments
+        process.currentDirectoryURL = URL(fileURLWithPath: directory)
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+        try process.run()
+        process.waitUntilExit()
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        guard process.terminationStatus == 0 else {
+            let message = String(data: stderrData, encoding: .utf8) ?? "unknown error"
+            throw NSError(domain: "ReviewPanelViewTests", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "git \(arguments.joined(separator: " ")) failed: \(message)"])
+        }
+        return String(data: stdoutData, encoding: .utf8) ?? ""
+    }
+
     func testApplyingSnapshotsAdvancesFilesRevision() {
         let panel = ReviewPanel(
             workspaceId: UUID(),

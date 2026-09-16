@@ -241,6 +241,119 @@ class GhosttyApp {
         return URL(fileURLWithPath: "/tmp/programa-bg.log")
     }
 
+    @MainActor
+    private static var clipboardConfirmations: [UInt: ClipboardConfirmation] = [:]
+
+    @MainActor
+    private final class ClipboardConfirmation {
+        let contents: String
+        let kind: ghostty_clipboard_request_e
+        let surfaceIdentity: UInt?
+        weak var window: NSWindow?
+        var completion: ((String) -> Void)?
+        var alert: NSAlert?
+        var closeObserver: NSObjectProtocol?
+
+        init(
+            contents: String,
+            kind: ghostty_clipboard_request_e,
+            window: NSWindow,
+            surfaceIdentity: UInt?,
+            completion: @escaping (String) -> Void
+        ) {
+            self.contents = contents
+            self.kind = kind
+            self.window = window
+            self.surfaceIdentity = surfaceIdentity
+            self.completion = completion
+        }
+
+        func finish(allow: Bool) {
+            guard let completion else { return }
+            self.completion = nil
+            if let surfaceIdentity,
+               GhosttyApp.clipboardConfirmations[surfaceIdentity] === self {
+                GhosttyApp.clipboardConfirmations.removeValue(forKey: surfaceIdentity)
+            }
+            if let closeObserver {
+                NotificationCenter.default.removeObserver(closeObserver)
+                self.closeObserver = nil
+            }
+            if let alert, let parent = alert.window.sheetParent {
+                parent.endSheet(alert.window, returnCode: .cancel)
+            }
+            alert = nil
+            // confirmed=false re-enters Ghostty's confirmation callback. An empty
+            // confirmed completion denies the content and releases the request state.
+            completion(allow ? contents : "")
+        }
+
+        func present() {
+            guard completion != nil else { return }
+            guard let window, window.isVisible, window.attachedSheet == nil else {
+                finish(allow: false)
+                return
+            }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            if kind == GHOSTTY_CLIPBOARD_REQUEST_PASTE {
+                alert.messageText = String(localized: "dialog.clipboardConfirmation.paste.title", defaultValue: "Allow Unsafe Paste?")
+                alert.informativeText = String(localized: "dialog.clipboardConfirmation.paste.message", defaultValue: "This clipboard text may execute commands when pasted into the terminal. Allow this paste?")
+            } else {
+                alert.messageText = String(localized: "dialog.clipboardConfirmation.read.title", defaultValue: "Allow Clipboard Access?")
+                alert.informativeText = String(localized: "dialog.clipboardConfirmation.read.message", defaultValue: "A program running in this terminal requested your clipboard contents. Allow it to read the clipboard?")
+            }
+            let cancel = alert.addButton(withTitle: String(localized: "dialog.clipboardConfirmation.cancel", defaultValue: "Cancel"))
+            cancel.keyEquivalent = "\r"
+            let allow = alert.addButton(withTitle: String(localized: "dialog.clipboardConfirmation.allow", defaultValue: "Allow"))
+            allow.keyEquivalent = ""
+            self.alert = alert
+            alert.beginSheetModal(for: window) { [self] response in
+                finish(allow: response == .alertSecondButtonReturn)
+            }
+        }
+    }
+
+    @MainActor
+    static func handleClipboardConfirmation(
+        contents: String,
+        kind: ghostty_clipboard_request_e? = nil,
+        window: NSWindow? = nil,
+        surface: ghostty_surface_t? = nil,
+        completion: @escaping (String) -> Void
+    ) {
+        let identity = surface.map { UInt(bitPattern: $0) }
+        if let identity {
+            clipboardConfirmations[identity]?.finish(allow: false)
+        }
+        guard let window, let kind,
+              kind == GHOSTTY_CLIPBOARD_REQUEST_PASTE || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ else {
+            completion("")
+            return
+        }
+        let request = ClipboardConfirmation(
+            contents: contents,
+            kind: kind,
+            window: window,
+            surfaceIdentity: identity,
+            completion: completion
+        )
+        if let identity { clipboardConfirmations[identity] = request }
+        request.closeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak request] _ in
+            MainActor.assumeIsolated { request?.finish(allow: false) }
+        }
+        DispatchQueue.main.async { request.present() }
+    }
+
+    @MainActor
+    static func cancelConfirmationsBeforeFree(_ surface: ghostty_surface_t) {
+        clipboardConfirmations[UInt(bitPattern: surface)]?.finish(allow: false)
+    }
+
     fileprivate static func runtimeReadClipboardCallback(
         _ userdata: UnsafeMutableRawPointer?,
         _ location: ghostty_clipboard_e,
@@ -428,7 +541,7 @@ class GhosttyApp {
             return GhosttyApp.shared.handleAction(target: target, action: action)
         }
         runtimeConfig.read_clipboard_cb = programaRuntimeReadClipboardCallback
-        runtimeConfig.confirm_read_clipboard_cb = { userdata, content, state, _ in
+        runtimeConfig.confirm_read_clipboard_cb = { userdata, content, state, kind in
             guard let content else { return }
             guard let state else { return }
             let requestState = GhosttyClipboardRequestState(pointer: state)
@@ -438,22 +551,26 @@ class GhosttyApp {
             guard let originatingSurfaceIdentity = GhosttyClipboardRequestIdentityRegistry.identity(
                 for: requestState
             ) else { return }
-            // Snapshot the C string now -- `content` is only valid for the duration of
-            // this callback invocation, and resolving the live surface requires a
-            // main-thread hop (see GhosttySurfaceCallbackContext's doc comment).
+            // Snapshot the C string while it is valid. Recognized provenance comes
+            // only from our main-actor completion above: pinned Ghostty invokes
+            // confirmation synchronously before that completion returns.
             let contentString = String(cString: content)
 
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { () -> Void in
-                    guard let surface = GhosttyApp.resolveLiveSurface(
-                        tabId: callbackTabId,
-                        surfaceId: callbackSurfaceId,
-                        reason: "clipboard.confirm"
-                    ) else { return }
-                    guard GhosttyRuntimeSurfaceIdentity(surface) == originatingSurfaceIdentity else {
-                        return
-                    }
-                    contentString.withCString { ptr in
+            MainActor.assumeIsolated { () -> Void in
+                guard let terminalSurface = GhosttyApp.resolveTerminalSurface(
+                    tabId: callbackTabId,
+                    surfaceId: callbackSurfaceId
+                ), let surface = terminalSurface.liveSurfaceForGhosttyAccess(reason: "clipboard.confirm") else { return }
+                guard GhosttyRuntimeSurfaceIdentity(surface) == originatingSurfaceIdentity else { return }
+                // Register ownership before the presentation hop, so teardown can
+                // complete this request while the native surface is still alive.
+                GhosttyApp.handleClipboardConfirmation(
+                    contents: contentString,
+                    kind: kind,
+                    window: terminalSurface.hostedView.window,
+                    surface: surface
+                ) { confirmedContent in
+                    confirmedContent.withCString { ptr in
                         ghostty_surface_complete_clipboard_request(
                             surface,
                             ptr,

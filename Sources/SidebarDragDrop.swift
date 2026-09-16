@@ -669,11 +669,15 @@ final class SidebarDragAutoScrollController: ObservableObject {
         return (top: viewportHeight - mousePoint.y, bottom: mousePoint.y)
     }
 
-    private func planForMousePoint(_ mousePoint: CGPoint, in clipView: NSClipView) -> SidebarAutoScrollPlan? {
+    func planForMousePoint(_ mousePoint: CGPoint, in clipView: NSClipView) -> SidebarAutoScrollPlan? {
         let viewportHeight = clipView.bounds.height
         guard viewportHeight > 0 else { return nil }
 
-        let distances = distancesToEdges(mousePoint: mousePoint, viewportHeight: viewportHeight, isFlipped: clipView.isFlipped)
+        let viewportPoint = CGPoint(
+            x: mousePoint.x - clipView.bounds.origin.x,
+            y: mousePoint.y - clipView.bounds.origin.y
+        )
+        let distances = distancesToEdges(mousePoint: viewportPoint, viewportHeight: viewportHeight, isFlipped: clipView.isFlipped)
         return SidebarDragAutoScrollPlanner.plan(distanceToTop: distances.top, distanceToBottom: distances.bottom)
     }
 
@@ -973,4 +977,3 @@ struct SidebarTabDropDelegate: DropDelegate {
         return "\(tabText):\(indicator.edge == .top ? "top" : "bottom")"
     }
 }
-

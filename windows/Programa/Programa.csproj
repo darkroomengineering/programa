@@ -21,6 +21,8 @@
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <SatelliteResourceLanguages>en-US;ja-JP</SatelliteResourceLanguages>
     <PublishTrimmed>false</PublishTrimmed>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <ProgramaVersion Condition="'$(ProgramaVersion)' == ''">0.0.0-dev</ProgramaVersion>

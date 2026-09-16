@@ -280,7 +280,11 @@ final class SocketClient {
     ///   larger than it, for commands that legitimately hold the connection open longer than
     ///   `CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC`'s default (e.g. `surface.wait` with a caller-chosen
     ///   `--timeout`). Ignored (falls back to the default) when `nil` or smaller.
-    func send(command: String, minimumReceiveTimeout: TimeInterval? = nil) throws -> String {
+    func send(
+        command: String,
+        minimumReceiveTimeout: TimeInterval? = nil,
+        singleLine: Bool = false
+    ) throws -> String {
         guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
 
         let payload = command + "\n"
@@ -298,11 +302,19 @@ final class SocketClient {
             }
             return minimumReceiveTimeout
         }()
+        let responseDeadline = ProcessInfo.processInfo.systemUptime + (
+            initialReceiveTimeout.isFinite ? initialReceiveTimeout : Self.defaultResponseTimeoutSeconds
+        )
 
         while true {
-            try configureReceiveTimeout(
-                sawNewline ? Self.multilineResponseIdleTimeoutSeconds : initialReceiveTimeout
-            )
+            let receiveTimeout: TimeInterval
+            if singleLine {
+                receiveTimeout = responseDeadline - ProcessInfo.processInfo.systemUptime
+                guard receiveTimeout > 0 else { throw CLIError(message: "Command timed out") }
+            } else {
+                receiveTimeout = sawNewline ? Self.multilineResponseIdleTimeoutSeconds : initialReceiveTimeout
+            }
+            try configureReceiveTimeout(receiveTimeout)
 
             var buffer = [UInt8](repeating: 0, count: 8192)
             let count = Darwin.read(socketFD, &buffer, buffer.count)
@@ -311,6 +323,7 @@ final class SocketClient {
                     continue
                 }
                 if errno == EAGAIN || errno == EWOULDBLOCK {
+                    if singleLine { continue }
                     if sawNewline {
                         break
                     }
@@ -319,10 +332,20 @@ final class SocketClient {
                 throw CLIError(message: "Socket read error")
             }
             if count == 0 {
+                if singleLine { throw CLIError(message: "Socket closed before terminating response newline") }
                 break
             }
             data.append(buffer, count: count)
-            if data.contains(UInt8(0x0A)) {
+            if singleLine, ProcessInfo.processInfo.systemUptime >= responseDeadline {
+                throw CLIError(message: "Command timed out")
+            }
+            if let newline = data.firstIndex(of: UInt8(0x0A)) {
+                if singleLine {
+                    guard data.index(after: newline) == data.endIndex else {
+                        throw CLIError(message: "Unexpected trailing bytes after v2 response")
+                    }
+                    break
+                }
                 sawNewline = true
             }
         }
@@ -606,7 +629,7 @@ final class SocketClient {
             throw CLIError(message: "Failed to encode v2 request")
         }
 
-        let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout)
+        let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout, singleLine: true)
 
         // The server may return plain-text errors (e.g., "ERROR: Access denied ...")
         // before the JSON protocol starts. Surface these directly instead of letting
@@ -637,8 +660,8 @@ final class SocketClient {
 
     /// Writes a v2 JSON-RPC request line without reading a response. Used by `watch-events`
     /// (#167 `subscribe`), which reads the subscribe ack and every subsequently pushed event
-    /// frame one at a time via `readEventLine` -- `send`/`sendV2`'s "read until an idle gap"
-    /// model isn't a good fit for a connection that keeps receiving lines indefinitely.
+    /// frame one at a time via `readEventLine`, which retains additional buffered
+    /// frames for a connection that keeps receiving events indefinitely.
     func sendV2RequestOnly(method: String, params: [String: Any] = [:]) throws {
         guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
         let request: [String: Any] = [
@@ -1862,14 +1885,16 @@ struct ProgramaCLI {
                     let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
                     let (sfArg, rem2) = self.parseOption(rem1, name: "--surface")
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceRaw = sfArg ?? panelArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
                     guard let direction = rem2.first else {
                         throw CLIError(message: "new-split requires a direction")
                     }
                     var params: [String: Any] = ["direction": direction]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let sfId = try self.normalizeSurfaceHandle(surfaceRaw, client: ctx.client, workspaceHandle: wsId)
+                    let sfId = try self.resolveCommandSurface(
+                        explicitSurface: sfArg ?? panelArg, explicitWorkspace: wsArg,
+                        windowId: ctx.windowId, workspaceHandle: wsId, client: ctx.client
+                    )
                     if let sfId { params["surface_id"] = sfId }
                     let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceSplit, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
@@ -2089,11 +2114,14 @@ struct ProgramaCLI {
                 execute: { ctx in
                     let csWsFlag = self.optionValue(ctx.commandArgs, name: "--workspace")
                     let workspaceArg = csWsFlag ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceRaw = self.optionValue(ctx.commandArgs, name: "--surface") ?? self.optionValue(ctx.commandArgs, name: "--panel") ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
+                    let surfaceRaw = self.optionValue(ctx.commandArgs, name: "--surface") ?? self.optionValue(ctx.commandArgs, name: "--panel")
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let sfId = try self.normalizeSurfaceHandle(surfaceRaw, client: ctx.client, workspaceHandle: wsId)
+                    let sfId = try self.resolveCommandSurface(
+                        explicitSurface: surfaceRaw, explicitWorkspace: csWsFlag,
+                        windowId: ctx.windowId, workspaceHandle: wsId, client: ctx.client
+                    )
                     if let sfId { params["surface_id"] = sfId }
                     let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceClose, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
@@ -2640,12 +2668,14 @@ struct ProgramaCLI {
                     }
 
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
 
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    let sfId = try self.resolveCommandSurface(
+                        explicitSurface: sfArg, explicitWorkspace: wsArg,
+                        windowId: ctx.windowId, workspaceHandle: wsId, client: ctx.client
+                    )
                     if let sfId { params["surface_id"] = sfId }
 
                     let includeScrollback = rem2.contains("--scrollback")
@@ -2712,12 +2742,14 @@ struct ProgramaCLI {
                     }
 
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
 
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    let sfId = try self.resolveCommandSurface(
+                        explicitSurface: sfArg, explicitWorkspace: wsArg,
+                        windowId: ctx.windowId, workspaceHandle: wsId, client: ctx.client
+                    )
                     if let sfId { params["surface_id"] = sfId }
 
                     if let patternArg {
@@ -2798,14 +2830,16 @@ struct ProgramaCLI {
                     let (timeoutArg, rem2) = self.parseOption(rem1, name: "--timeout")
                     let (graceArg, rem3) = self.parseOption(rem2, name: "--working-grace")
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
                     let rawText = rem3.dropFirst(rem3.first == "--" ? 1 : 0).joined(separator: " ")
                     guard !rawText.isEmpty else { throw CLIError(message: "prompt-agent requires text") }
 
                     var params: [String: Any] = ["text": rawText]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    let sfId = try self.resolveCommandSurface(
+                        explicitSurface: sfArg, explicitWorkspace: wsArg,
+                        windowId: ctx.windowId, workspaceHandle: wsId, client: ctx.client
+                    )
                     if let sfId { params["surface_id"] = sfId }
 
                     var timeoutSeconds = 120.0
@@ -3052,14 +3086,16 @@ struct ProgramaCLI {
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
                     let rawText = rem1.dropFirst(rem1.first == "--" ? 1 : 0).joined(separator: " ")
                     guard !rawText.isEmpty else { throw CLIError(message: "send requires text") }
                     let text = self.unescapeSendText(rawText)
                     var params: [String: Any] = ["text": text]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    let sfId = try self.resolveCommandSurface(
+                        explicitSurface: sfArg, explicitWorkspace: wsArg,
+                        windowId: ctx.windowId, workspaceHandle: wsId, client: ctx.client
+                    )
                     if let sfId { params["surface_id"] = sfId }
                     let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
@@ -3087,13 +3123,15 @@ struct ProgramaCLI {
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let surfaceArg = sfArg ?? (workspaceArg == nil && ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
                     let keyArgs = rem1.first == "--" ? Array(rem1.dropFirst()) : rem1
                     guard let key = keyArgs.first else { throw CLIError(message: "send-key requires a key") }
                     var params: [String: Any] = ["key": key]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
-                    let sfId = try self.normalizeSurfaceHandle(surfaceArg, client: ctx.client, workspaceHandle: wsId)
+                    let sfId = try self.resolveCommandSurface(
+                        explicitSurface: sfArg, explicitWorkspace: wsArg,
+                        windowId: ctx.windowId, workspaceHandle: wsId, client: ctx.client
+                    )
                     if let sfId { params["surface_id"] = sfId }
                     let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceSendKey, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat))
@@ -3888,7 +3926,7 @@ struct ProgramaCLI {
 
     /// Open a path in programa by creating a new workspace with the given directory.
     /// Launches the app if it isn't already running.
-    func openPath(_ path: String, socketPath: String) throws {
+    func openPath(_ path: String, socketPath: String, explicitPassword: String?) throws {
         let resolved = resolvePath(path)
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: resolved, isDirectory: &isDir)
@@ -3903,22 +3941,11 @@ struct ProgramaCLI {
             throw CLIError(message: "Path does not exist: \(resolved)")
         }
 
-        // Try connecting to the socket. If it fails, launch the app and retry.
-        let client = SocketClient(path: socketPath)
-        if (try? client.connect()) == nil {
-            client.close()
-            try launchApp()
-            let launchedClient = try SocketClient.waitForConnectableSocket(path: socketPath, timeout: 10)
-            defer { launchedClient.close() }
-            let params: [String: Any] = ["cwd": directory]
-            let response = try launchedClient.sendV2(method: V2MethodNames.workspaceCreate, params: params)
-            let wsRef = (response["workspace_ref"] as? String) ?? (response["workspace_id"] as? String) ?? ""
-            if !wsRef.isEmpty {
-                print("OK \(wsRef)")
-            }
-            try activateApp()
-            return
-        }
+        let client = try connectClient(
+            socketPath: socketPath,
+            explicitPassword: explicitPassword,
+            launchIfNeeded: true
+        )
         defer { client.close() }
 
         let params: [String: Any] = ["cwd": directory]
@@ -4280,6 +4307,56 @@ struct ProgramaCLI {
             let focused = ident["focused"] as? [String: Any] ?? [:]
             return (focused["surface_ref"] as? String) ?? (focused["surface_id"] as? String)
         }
+    }
+
+    private func resolveCommandSurface(
+        explicitSurface: String?,
+        explicitWorkspace: String?,
+        windowId: String?,
+        workspaceHandle: String?,
+        client: SocketClient
+    ) throws -> String? {
+        if let explicitSurface {
+            return try normalizeSurfaceHandle(explicitSurface, client: client, workspaceHandle: workspaceHandle)
+        }
+        guard explicitWorkspace == nil, windowId == nil,
+              let rawOrigin = ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] else { return nil }
+        if workspaceHandle == nil {
+            return try normalizeSurfaceHandle(rawOrigin, client: client, workspaceHandle: nil)
+        }
+        let origin = rawOrigin.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isUUID(origin) || isHandleRef(origin) else { return nil }
+
+        let params: [String: Any] = workspaceHandle.map { ["workspace_id": $0] } ?? [:]
+        let listed = try client.sendV2(method: "surface.list", params: params)
+        guard let surfaces = listed["surfaces"] as? [[String: Any]] else {
+            throw CLIError(message: "Invalid surface.list response: missing surfaces")
+        }
+        if let expectedWorkspace = workspaceHandle.flatMap(UUID.init(uuidString:)),
+           let returnedWorkspace = listed["workspace_id"] as? String,
+           UUID(uuidString: returnedWorkspace) != expectedWorkspace {
+            throw CLIError(message: "Invalid surface.list response: workspace mismatch")
+        }
+        let originUUID = UUID(uuidString: origin)
+        var resolvedOrigin: String?
+        for surface in surfaces {
+            guard let id = surface["id"] as? String, let uuid = UUID(uuidString: id) else {
+                throw CLIError(message: "Invalid surface.list response: missing surface UUID")
+            }
+            let reference = (surface["ref"] as? String)?.lowercased()
+            if originUUID == nil {
+                guard let reference, reference.hasPrefix("surface:"), isHandleRef(reference) else {
+                    throw CLIError(message: "Invalid surface.list response: missing surface reference")
+                }
+            }
+            if uuid == originUUID || reference == origin.lowercased() {
+                resolvedOrigin = id
+            }
+        }
+        // Only a missing/foreign origin falls back to the workspace's focused
+        // surface. A validated origin is pinned to its UUID for this command;
+        // a later server error must never retry against a different panel.
+        return resolvedOrigin
     }
 
     private func canonicalSurfaceHandleFromTabInput(_ value: String) -> String {
@@ -5106,12 +5183,14 @@ struct ProgramaCLI {
         }
 
         let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-        let surfaceArg = sfArg ?? (workspaceArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
 
         var readParams: [String: Any] = [:]
         let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
         if let wsId { readParams["workspace_id"] = wsId }
-        let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId)
+        let sfId = try resolveCommandSurface(
+            explicitSurface: sfArg, explicitWorkspace: wsArg,
+            windowId: windowId, workspaceHandle: wsId, client: client
+        )
         if let sfId { readParams["surface_id"] = sfId }
 
         // Capture the currently visible screen only (no --scrollback/--lines), same socket
@@ -5169,12 +5248,14 @@ struct ProgramaCLI {
         }
 
         let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-        let surfaceArg = sfArg ?? (workspaceArg == nil && windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
 
         var params: [String: Any] = [:]
         let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
         if let wsId { params["workspace_id"] = wsId }
-        let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId)
+        let sfId = try resolveCommandSurface(
+            explicitSurface: sfArg, explicitWorkspace: wsArg,
+            windowId: windowId, workspaceHandle: wsId, client: client
+        )
         if let sfId { params["surface_id"] = sfId }
         if let agentId { params["agent"] = agentId }
 
@@ -5673,7 +5754,7 @@ struct ProgramaCLI {
         }
 
         let payload = try client.sendV2(method: V2MethodNames.snapshotList, params: [:])
-        if jsonOutput {
+        if jsonOutput || args.contains("--json") {
             print(jsonString(formatIDs(payload, mode: idFormat)))
             return
         }
@@ -6351,16 +6432,45 @@ struct ProgramaCLI {
                 throw CLIError(message: "recap list: unexpected argument \(parsed.positional[1])")
             }
 
+        case "snapshot":
+            let parsed = try parse(booleans: ["json"], minPositionals: 1, maxPositionals: 2)
+            switch parsed.positional[0].lowercased() {
+            case "list":
+                guard parsed.positional.count == 1 else {
+                    throw CLIError(message: "snapshot list does not take a target")
+                }
+            case "restore":
+                guard parsed.options["json"] == nil else {
+                    throw CLIError(message: "snapshot restore: unknown flag '--json'")
+                }
+            default:
+                throw CLIError(message: "snapshot: unknown subcommand \(parsed.positional[0])")
+            }
+
         case "worktree":
             let parsed = try parse(
                 values: ["repo", "base", "path", "layout"],
-                booleans: ["focus", "force", "json"],
+                booleans: ["focus", "force", "json", "all"],
                 minPositionals: 1,
                 maxPositionals: nil,
                 allowEquals: true
             )
             guard ["create", "open", "remove", "list"].contains(parsed.positional[0].lowercased()) else {
                 throw CLIError(message: "worktree: unknown subcommand \(parsed.positional[0])")
+            }
+            if parsed.options["all"] != nil {
+                guard parsed.positional[0].lowercased() == "open" else {
+                    throw CLIError(message: "worktree: --all is only valid for open")
+                }
+                guard parsed.options["focus"] == nil else {
+                    throw CLIError(message: "worktree open: --focus cannot be combined with --all")
+                }
+                guard parsed.positional.count == 1 else {
+                    throw CLIError(message: "worktree open --all does not take a <path-or-branch> argument")
+                }
+                if let unsupported = parsed.options.keys.first(where: { !["all", "repo"].contains($0) }) {
+                    throw CLIError(message: "worktree open --all: unexpected option --\(unsupported)")
+                }
             }
 
         case "agent-detection":

@@ -614,9 +614,15 @@ def _local_test_server() -> str:
       });
       highlightObserver.observe(highlightTarget, { attributes: true, attributeFilter: ['style'] });
       window.triggerDialogs = function () {
-        confirm('confirm-message');
-        prompt('prompt-message', 'prompt-default');
-        alert('alert-message');
+        window.dialogResults = [];
+        window.dialogsFinished = false;
+        setTimeout(function () {
+          window.dialogResults.push(confirm('confirm-message'));
+          window.dialogResults.push(prompt('prompt-message', 'prompt-default'));
+          alert('alert-message');
+          window.dialogResults.push('alert-complete');
+          window.dialogsFinished = true;
+        }, 50);
         return true;
       };
       window.emitConsoleAndError = function () {
@@ -653,6 +659,61 @@ def _local_test_server() -> str:
             server.shutdown()
             server.server_close()
             thread.join(timeout=1.0)
+
+
+def _respond_to_pending_dialog(c: cmux, sid: str, accept: bool, **extra) -> dict:
+    deadline = time.monotonic() + 8.0
+    method = "browser.dialog.accept" if accept else "browser.dialog.dismiss"
+    while True:
+        try:
+            return c._call(method, {"surface_id": sid, **extra}) or {}
+        except cmuxError as exc:
+            # Never probe JavaScript while the native dialog blocks the page.
+            if not str(exc).startswith("not_found:") or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.05)
+
+
+def _test_find_reference_targets(c: cmux, sid: str) -> None:
+    # Same fixture works in the main document and the selected same-origin frame.
+    c._call("browser.eval", {"surface_id": sid, "script": """
+      (() => {
+        const fixture = document.createElement('section');
+        fixture.id = 'find-regression';
+        fixture.innerHTML = `
+          <div id="duplicate-parent"><button id="duplicate-target" class="find-target" data-hit="first">first target</button></div>
+          <div id="duplicate-parent"><button>nonmatching sibling</button><button id="duplicate-target" class="find-target" data-hit="second">second target</button></div>
+          <div><button>another nonmatch</button><button id="unique:target[final]" class="find-final" data-hit="last">last target</button></div>`;
+        fixture.addEventListener('click', event => { window.findRegressionHit = event.target.dataset.hit || 'wrong'; });
+        document.body.appendChild(fixture);
+        return true;
+      })()
+    """})
+    try:
+        selector = "#find-regression .find-target, #find-regression .find-final"
+        cases = [
+            ("browser.find.nth", {"index": 1}, "second", "second target", 1),
+            ("browser.find.nth", {"index": -1}, "last", "last target", 2),
+            ("browser.find.last", {}, "last", "last target", None),
+            ("browser.find.last", {"selector": "#find-regression .find-target"}, "second", "second target", None),
+        ]
+        for method, extra, marker, text, index in cases:
+            params = {"surface_id": sid, "selector": selector}
+            params.update(extra)
+            found = c._call(method, params) or {}
+            ref = str(found.get("element_ref") or "")
+            _must(ref.startswith("@e"), f"Expected usable reference: {found}")
+            _must(found.get("text") == text, f"Finder must report selected target text: {found}")
+            if index is not None:
+                _must(found.get("index") == index, f"Expected normalized collection index {index}: {found}")
+            c._call("browser.eval", {"surface_id": sid, "script": "window.findRegressionHit = null"})
+            c._call("browser.click", {"surface_id": sid, "selector": ref})
+            clicked = c._call("browser.eval", {"surface_id": sid, "script": "window.findRegressionHit"}) or {}
+            _must(clicked.get("value") == marker, f"{method} reference clicked wrong collection member: {clicked}, {found}")
+            actual_text = c._call("browser.get.text", {"surface_id": sid, "selector": ref}) or {}
+            _must(actual_text.get("value") == text, f"Reference must retain selected element identity: {actual_text}")
+    finally:
+        c._call("browser.eval", {"surface_id": sid, "script": "document.querySelector('#find-regression').remove(); true"})
 
 
 def main() -> int:
@@ -695,6 +756,8 @@ def main() -> int:
                 ref = str(payload.get("element_ref") or "")
                 _must(ref.startswith("@e"), f"Expected element_ref from {method}: {payload}")
 
+            _test_find_reference_targets(c, sid)
+
             missing_role = "dialog"
             missing_name = "programa-missing-exact-dialog"
             missing_role_data = _expect_error_data(
@@ -730,6 +793,7 @@ def main() -> int:
             )
             c._call("browser.frame.select", {"surface_id": sid, "selector": "#frame-a"})
             _wait_function(c, sid, "document.querySelector('#frame-text') !== null", timeout_s=7.0)
+            _test_find_reference_targets(c, sid)
             frame_text = c._call("browser.get.text", {"surface_id": sid, "selector": "#frame-text"}) or {}
             _must(str(frame_text.get("value") or "") == "frame-ready", f"Expected frame text: {frame_text}")
             c._call("browser.click", {"surface_id": sid, "selector": "#frame-btn"})
@@ -739,12 +803,16 @@ def main() -> int:
 
             c._call("browser.console.list", {"surface_id": sid})
             c._call("browser.addscript", {"surface_id": sid, "script": "window.triggerDialogs(); true;"})
-            d1 = c._call("browser.dialog.accept", {"surface_id": sid, "text": "agent-text"}) or {}
-            d2 = c._call("browser.dialog.dismiss", {"surface_id": sid}) or {}
-            d3 = c._call("browser.dialog.accept", {"surface_id": sid}) or {}
+            d1 = _respond_to_pending_dialog(c, sid, True, text="agent-text")
+            d2 = _respond_to_pending_dialog(c, sid, False)
+            d3 = _respond_to_pending_dialog(c, sid, True)
             _must(bool(d1.get("accepted")) is True, f"Expected first dialog accepted: {d1}")
             _must(bool(d2.get("accepted")) is False, f"Expected second dialog dismissed: {d2}")
             _must(bool(d3.get("accepted")) is True, f"Expected third dialog accepted: {d3}")
+            _wait_function(c, sid, "window.dialogsFinished === true", timeout_s=7.0)
+            dialog_results = c._call("browser.eval", {"surface_id": sid, "script": "window.dialogResults"}) or {}
+            _must(dialog_results.get("value") == [True, None, "alert-complete"],
+                  f"Dialog responses must reach the original JavaScript calls: {dialog_results}")
             _expect_error_contains(
                 "dialog queue empty",
                 lambda: c._call("browser.dialog.dismiss", {"surface_id": sid}),

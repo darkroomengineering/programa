@@ -19,3 +19,14 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 
 [patch.crates-io]
 alacritty_terminal = { path = "../../vendor/alacritty_terminal" }
+
+# programa_terminal.dll is latency-sensitive (owns ConPTY read/write on every
+# keystroke), so keep opt-level 3 here -- only shrink what doesn't cost
+# runtime speed: strip debug symbols, and thin LTO (not fat, to keep codegen
+# fast and avoid the whole-program inlining fat LTO does, since that can
+# shift instruction-cache behavior on a hot path). codegen-units is left at
+# its default (16) for the same reason. panic stays "unwind": a panic inside
+# one pane's terminal session should not abort the whole process.
+[profile.release]
+strip = true
+lto = "thin"

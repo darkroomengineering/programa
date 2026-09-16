@@ -37,6 +37,7 @@ struct TerminalSurfaceReviveDescriptor {
     /// creation, so the user sees prior output above the now-live session.
     /// Nil if no usable scrollback was available.
     let scrollbackText: String?
+    var retainedDescriptor: SessionEscrowRetainedDescriptor? = nil
 }
 
 final class GhosttyMetalLayer: CAMetalLayer {
@@ -270,6 +271,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private let workingDirectory: String?
     private let initialCommand: String?
     private let initialEnvironmentOverrides: [String: String]
+    private let initializedForSessionRestore: Bool
     var requestedWorkingDirectory: String? { workingDirectory }
     private var additionalEnvironment: [String: String]
     let hostedView: GhosttySurfaceScrollView
@@ -301,10 +303,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// async send even begins.
     private var hasAttemptedSessionEscrow = false
 
-    /// Token the holder issued for this surface's escrowed session, kept so a
-    /// genuine close can authenticate its release frame. Nil until escrow
-    /// succeeds, and for surfaces that were never escrowed.
-    private var escrowTokenHex: String?
     /// Issue #182 slice 2: set from `init`, consumed (cleared) the moment
     /// `createSurface` copies it into `surfaceConfig` -- see
     /// `TerminalSurfaceReviveDescriptor`'s doc comment.
@@ -467,6 +465,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let trimmedCommand = initialCommand?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.initialCommand = (trimmedCommand?.isEmpty == false) ? trimmedCommand : nil
         self.initialEnvironmentOverrides = Self.mergedNormalizedEnvironment(base: [:], overrides: initialEnvironmentOverrides)
+        self.initializedForSessionRestore = reviveDescriptor != nil || pendingScrollbackSeedText != nil
         self.additionalEnvironment = Self.mergedNormalizedEnvironment(base: [:], overrides: additionalEnvironment)
         self.reviveDescriptor = reviveDescriptor
         self.pendingFreshSeedText = pendingScrollbackSeedText
@@ -684,6 +683,28 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
     func portalBindingStateLabel() -> String {
         portalLifecycleState.rawValue
+    }
+
+    @MainActor
+    var isPristineForCustomLayout: Bool {
+        guard portalLifecycleState == .live,
+              surface == nil,
+              initialCommand == nil,
+              initialEnvironmentOverrides.isEmpty,
+              additionalEnvironment.isEmpty,
+              configTemplate?.command?.isEmpty ?? true,
+              configTemplate?.initialInput?.isEmpty ?? true,
+              configTemplate?.environmentVariables.isEmpty ?? true,
+              !backgroundSurfaceStartQueued,
+              !initializedForSessionRestore,
+              pendingSocketInputQueue.isEmpty,
+              reviveDescriptor == nil,
+              pendingFreshSeedText == nil,
+              pendingReviveSeed == nil,
+              !hasAttemptedSessionEscrow else { return false }
+        return withDebugMetadataLock {
+            runtimeSurfaceCreatedAt == nil && teardownRequestedAt == nil
+        }
     }
 
     private func withDebugMetadataLock<T>(_ body: () -> T) -> T {
@@ -997,6 +1018,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         reviveReplayCanceled.withLock { $0 = true }
 
         if let leftoverReviveDescriptor = reviveDescriptor {
+            leftoverReviveDescriptor.retainedDescriptor?.markRecoveryPending()
             close(leftoverReviveDescriptor.masterFD)
             reviveDescriptor = nil
         }
@@ -1070,6 +1092,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 // genuine normal-close path, so delete its WAL directory now that
                 // it's torn down.
                 SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: surfaceIdForTap, deleteDirectory: true)
+                GhosttyApp.cancelConfirmationsBeforeFree(surfaceToFree)
                 ghostty_surface_free(surfaceToFree)
                 GhosttySurfaceUserdataRegistry.release(callbackContext)
                 tapContext?.release()
@@ -1581,6 +1604,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             // or hasn't consumed the descriptor at all yet (early returns
             // above, which leave `reviveDescriptor` set for a later retry).
             if let consumedReviveDescriptor {
+                consumedReviveDescriptor.retainedDescriptor?.markRecoveryPending()
                 close(consumedReviveDescriptor.masterFD)
             }
             // A retry of `createSurface` reuses this same TerminalSurface
@@ -1615,6 +1639,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             return
         }
         guard let createdSurface = surface else { return }
+        consumedReviveDescriptor?.retainedDescriptor?.releaseAfterOwnershipTransfer()
         TerminalSurfaceRegistry.shared.registerRuntimeSurface(createdSurface, ownerId: id)
         rendererRealized = true
         recordRuntimeSurfaceCreation()
@@ -1915,9 +1940,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             reason: reason,
             isApplicationTerminating: SessionMachineryGate.isApplicationTerminating
         ) else { return }
-        guard let tokenHex = escrowTokenHex else { return }
-        escrowTokenHex = nil
-        SessionEscrowClient.shared.release(surfaceId: id.uuidString, tokenHex: tokenHex)
+        SessionEscrowClient.shared.release(surfaceId: id.uuidString)
     }
 
     /// Escrows a revive descriptor's master fd at panel construction, before any
@@ -1937,12 +1960,14 @@ final class TerminalSurface: Identifiable, ObservableObject {
         SessionEscrowClient.shared.escrow(
             surfaceId: surfaceId,
             dupedMasterFD: dupedFD,
-            childPID: childPID
-        ) { [weak self] result in
+            childPID: childPID,
+            retainedDescriptor: descriptor.retainedDescriptor
+        ) { result in
             guard let result else {
                 dilog("escrow.reattach", "early_reescrow session=\(surfaceId.prefix(8)) outcome=failed")
                 return
             }
+            descriptor.retainedDescriptor?.releaseAfterOwnershipTransfer()
             dilog("escrow.reattach", "early_reescrow session=\(surfaceId.prefix(8)) outcome=ok")
             SessionWALStore.shared.stampDeferredReviveEscrow(
                 surfaceId: surfaceId,
@@ -1951,9 +1976,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 childPID: childPID,
                 workingDirectory: walWorkingDirectory
             )
-            // Kept in memory so a genuine close can authenticate the release
-            // frame — same contract as the realization-path escrow below.
-            DispatchQueue.main.async { self?.escrowTokenHex = result.tokenHex }
         }
     }
 
@@ -1968,17 +1990,14 @@ final class TerminalSurface: Identifiable, ObservableObject {
             surfaceId: surfaceId,
             dupedMasterFD: dupedFD,
             childPID: childPID
-        ) { [weak self] result in
+        ) { result in
             guard let result else { return }
             SessionWALStore.shared.markEscrowed(
                 surfaceId: surfaceId,
                 socketPath: result.socketPath,
                 token: result.tokenHex
             )
-            // Kept in memory so a genuine close can authenticate the release
-            // frame without going back to the WAL for the token.
             DispatchQueue.main.async {
-                self?.escrowTokenHex = result.tokenHex
                 // Escrowed must imply snapshotted: the periodic autosave leaves an
                 // 8-60s gap where this session is held by the escrow holder but
                 // missing from the persisted snapshot, so a crash in that gap
@@ -2808,6 +2827,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         surface = nil
         // Test-only teardown, not a real close: keep the WAL directory.
         SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString)
+        GhosttyApp.cancelConfirmationsBeforeFree(surfaceToFree)
         ghostty_surface_free(surfaceToFree)
         GhosttySurfaceUserdataRegistry.release(callbackContext)
         tapContext?.release()
@@ -2833,6 +2853,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         TerminalSurfaceRegistry.shared.unregisterRuntimeSurface(surfaceToFree, ownerId: id)
         // Test-only teardown, not a real close: keep the WAL directory.
         SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: id.uuidString)
+        GhosttyApp.cancelConfirmationsBeforeFree(surfaceToFree)
         ghostty_surface_free(surfaceToFree)
         runtimeSurfaceFreedOutOfBandForTesting = true
         GhosttySurfaceUserdataRegistry.release(callbackContext)
