@@ -88,6 +88,7 @@ final class WindowGlassEffectTests: XCTestCase {
             let bridge = WindowPaneChromePortalRegistry.bridge(for: window)
             let paneID = PaneID()
             var accessibilitySelection: TabID?
+            var receivedDropIndex: Int?
             let tabs = ["One", "Two"].map { title in
                 BonsplitPaneChromeTabDescriptor(
                     id: TabID(), title: title, icon: "terminal", iconImageData: nil,
@@ -100,9 +101,31 @@ final class WindowGlassEffectTests: XCTestCase {
                 isVisible: true, leadingInset: 0, showsSplitButtons: false,
                 onSelect: { accessibilitySelection = $0 }, onClose: { _ in }, onContextAction: { _, _ in },
                 dragPasteboardData: { _ in nil }, onDragStateChanged: { _, _ in },
+                validatedDropIndex: { (0...tabs.count).contains($0) ? $0 : nil },
+                onDropTab: { receivedDropIndex = $0; return true },
                 onNewTab: {}, onNewBrowserTab: {}, onSplitRight: {}, onSplitDown: {}
             ))
             root.layoutSubtreeIfNeeded()
+
+            let tabFrames = bridge.nativeTabFramesForTesting(in: paneID)
+            XCTAssertEqual(tabFrames.count, 2)
+            XCTAssertEqual(
+                bridge.nativeTabInsertionIndexForTesting(
+                    in: paneID,
+                    documentX: try XCTUnwrap(tabFrames.first).midX - 1
+                ),
+                0
+            )
+            XCTAssertEqual(
+                bridge.nativeTabInsertionIndexForTesting(
+                    in: paneID,
+                    documentX: try XCTUnwrap(tabFrames.last).maxX + 1
+                ),
+                2
+            )
+            XCTAssertTrue(bridge.performNativeTabDropForTesting(in: paneID, requestedIndex: 2))
+            XCTAssertEqual(receivedDropIndex, 2)
+            XCTAssertFalse(bridge.performNativeTabDropForTesting(in: paneID, requestedIndex: 3))
 
             let glassViews = bridge.nativeGlassViewsForTesting()
             // Two tab pills own NSControls; the workspace-level new-tab and
@@ -132,6 +155,31 @@ final class WindowGlassEffectTests: XCTestCase {
         #endif
 
         throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK and runtime")
+    }
+
+    func testNativePaneTabInsertionIndicatorStaysInsideDocumentBounds() throws {
+        #if compiler(>=6.2)
+        let bounds = NSRect(x: 0, y: 0, width: 240, height: 28)
+        let frames = [
+            NSRect(x: 0, y: 0, width: 100, height: 28),
+            NSRect(x: 108, y: 0, width: 132, height: 28),
+        ]
+
+        XCTAssertEqual(NativePaneTabInsertionPolicy.insertionIndex(atX: 49, tabFrames: frames), 0)
+        XCTAssertEqual(NativePaneTabInsertionPolicy.insertionIndex(atX: 104, tabFrames: frames), 1)
+        XCTAssertEqual(NativePaneTabInsertionPolicy.insertionIndex(atX: 200, tabFrames: frames), 2)
+
+        let first = try XCTUnwrap(
+            NativePaneTabInsertionPolicy.indicatorFrame(at: 0, tabFrames: frames, in: bounds)
+        )
+        let trailing = try XCTUnwrap(
+            NativePaneTabInsertionPolicy.indicatorFrame(at: 2, tabFrames: frames, in: bounds)
+        )
+        XCTAssertGreaterThanOrEqual(first.minX, bounds.minX)
+        XCTAssertLessThanOrEqual(trailing.maxX, bounds.maxX)
+        #else
+        throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK")
+        #endif
     }
 
     func testNativePaneChromeBackgroundDragsWithoutTakingControlHits() throws {
@@ -1966,5 +2014,111 @@ final class HostingViewSafeAreaRegionsTests: XCTestCase {
             coordinator.hostingView.safeAreaRegions.isEmpty,
             "glass overlay hosts (search overlays, omnibar, browser toolbar) must not observe safe-area changes (#307)"
         )
+    }
+}
+
+@MainActor
+final class SharedWorkspaceCoreTests: XCTestCase {
+    private let workspaceID = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
+    private let paneID = PaneID(id: UUID(uuidString: "20000000-0000-0000-0000-000000000001")!)
+
+    private func surface(
+        _ uuid: String,
+        session: String,
+        pinned: Bool = false
+    ) -> SharedWorkspaceCore.Surface {
+        SharedWorkspaceCore.Surface(
+            id: UUID(uuidString: uuid)!.uuidString,
+            session_id: session,
+            is_pinned: pinned
+        )
+    }
+
+    private func tabID(_ surface: SharedWorkspaceCore.Surface) -> TabID {
+        TabID(uuid: UUID(uuidString: surface.id)!)
+    }
+
+    func testReorderBeforeAndEndPreserveSelectedSessionMappingAndIDs() throws {
+        let core = SharedWorkspaceCore()
+        let first = surface("30000000-0000-0000-0000-000000000001", session: "session-first")
+        let selected = surface("30000000-0000-0000-0000-000000000002", session: "session-selected")
+        let last = surface("30000000-0000-0000-0000-000000000003", session: "session-last")
+        let surfaces = [first, selected, last]
+
+        let movedBeforeLast = try XCTUnwrap(core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(selected),
+            draggedID: tabID(first),
+            destination: 2
+        ))
+        XCTAssertEqual(movedBeforeLast, [tabID(selected), tabID(first), tabID(last)])
+
+        let movedToEnd = try XCTUnwrap(core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(selected),
+            draggedID: tabID(first),
+            destination: surfaces.count
+        ))
+        XCTAssertEqual(movedToEnd, [tabID(selected), tabID(last), tabID(first)])
+        XCTAssertEqual(Set(movedToEnd), Set(surfaces.map(tabID)))
+    }
+
+    func testUnknownSourceIsRejectedWithoutChangingInput() {
+        let core = SharedWorkspaceCore()
+        let first = surface("40000000-0000-0000-0000-000000000001", session: "session-first")
+        let second = surface("40000000-0000-0000-0000-000000000002", session: "session-second")
+        let surfaces = [first, second]
+        let before = surfaces
+
+        let result = core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(first),
+            draggedID: TabID(uuid: UUID(uuidString: "40000000-0000-0000-0000-000000000099")!),
+            destination: 1
+        )
+
+        XCTAssertNil(result)
+        XCTAssertEqual(surfaces, before)
+    }
+
+    func testPinnedBoundaryClampsPinnedAndUnpinnedMoves() throws {
+        let core = SharedWorkspaceCore()
+        let pinned = surface(
+            "50000000-0000-0000-0000-000000000001",
+            session: "session-pinned",
+            pinned: true
+        )
+        let first = surface("50000000-0000-0000-0000-000000000002", session: "session-first")
+        let last = surface("50000000-0000-0000-0000-000000000003", session: "session-last")
+        let surfaces = [pinned, first, last]
+
+        let unpinnedClampedAfterPinned = try XCTUnwrap(core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(pinned),
+            draggedID: tabID(last),
+            destination: 0
+        ))
+        XCTAssertEqual(
+            unpinnedClampedAfterPinned,
+            [tabID(pinned), tabID(last), tabID(first)]
+        )
+
+        let pinnedClampedToPrefix = try XCTUnwrap(core.reorder(
+            workspaceID: workspaceID,
+            paneID: paneID,
+            surfaces: surfaces,
+            selectedID: tabID(pinned),
+            draggedID: tabID(pinned),
+            destination: surfaces.count
+        ))
+        XCTAssertEqual(pinnedClampedToPrefix, surfaces.map(tabID))
     }
 }

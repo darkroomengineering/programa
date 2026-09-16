@@ -491,6 +491,18 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
     }
 
     var hostViewForTesting: NSView { hostView }
+
+    func nativeTabFramesForTesting(in paneID: PaneID) -> [NSRect] {
+        bars[paneID]?.tabFramesForTesting ?? []
+    }
+
+    func nativeTabInsertionIndexForTesting(in paneID: PaneID, documentX: CGFloat) -> Int? {
+        bars[paneID]?.validatedDropIndex(atDocumentX: documentX)
+    }
+
+    func performNativeTabDropForTesting(in paneID: PaneID, requestedIndex: Int) -> Bool {
+        bars[paneID]?.performDrop(at: requestedIndex) ?? false
+    }
 }
 
 private final class PaneChromePortalHostView: NSView {
@@ -526,9 +538,40 @@ class PaneChromeDragBackgroundView: NSView {
     }
 }
 
+enum NativePaneTabInsertionPolicy {
+    static func insertionIndex(atX x: CGFloat, tabFrames: [NSRect]) -> Int {
+        tabFrames.firstIndex(where: { x < $0.midX }) ?? tabFrames.count
+    }
+
+    static func indicatorFrame(at index: Int, tabFrames: [NSRect], in bounds: NSRect) -> NSRect? {
+        guard index >= 0, index <= tabFrames.count, bounds.width >= 2, bounds.height > 0 else {
+            return nil
+        }
+        let insertionX: CGFloat
+        if tabFrames.isEmpty {
+            insertionX = bounds.minX
+        } else if index == 0 {
+            insertionX = tabFrames[0].minX
+        } else if index == tabFrames.count {
+            insertionX = tabFrames[tabFrames.count - 1].maxX
+        } else {
+            insertionX = (tabFrames[index - 1].maxX + tabFrames[index].minX) / 2
+        }
+        let originX = min(max(insertionX - 1, bounds.minX), bounds.maxX - 2)
+        return NSRect(
+            x: originX,
+            y: bounds.minY + 4,
+            width: 2,
+            height: max(0, bounds.height - 8)
+        )
+    }
+}
+
 @MainActor
 @available(macOS 26.0, *)
 private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
+    private static let tabTransferPasteboardType =
+        NSPasteboard.PasteboardType("com.splittabbar.tabtransfer")
     private let scrollView = NSScrollView(frame: .zero)
     // Unflipped on purpose: a flipped document view mirrors the glass pills'
     // built-in shadow upward (layer geometry flip flips shadowOffset), while
@@ -537,6 +580,15 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
     private let documentView = PaneChromeDragBackgroundView(frame: .zero)
     private var pillViews: [TabID: NativeGlassTabPillView] = [:]
     private var descriptor: BonsplitPaneChromeDescriptor?
+    private let dropIndicator: NSView = {
+        let view = NSView(frame: .zero)
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        view.layer?.cornerRadius = 1
+        view.isHidden = true
+        return view
+    }()
+    private var dropIndicatorIndex: Int?
     /// Safari-style "+" after the last pill; scrolls with the tabs. Bare glyph,
     /// no capsule — it's an affordance, not a peer of the tab pills.
     private let newTabButton: NSButton = {
@@ -572,6 +624,8 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         scrollView.verticalScrollElasticity = .none
         scrollView.documentView = documentView
         addSubview(scrollView)
+        documentView.addSubview(dropIndicator, positioned: .above, relativeTo: nil)
+        registerForDraggedTypes([Self.tabTransferPasteboardType])
         newTabButton.target = self
         newTabButton.action = #selector(newTabPressed)
         documentView.addSubview(newTabButton)
@@ -620,6 +674,10 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
             )
         }
         newTabAction = descriptor.onNewTab
+        if let dropIndicatorIndex,
+           descriptor.validatedDropIndex(dropIndicatorIndex) == nil {
+            clearDropIndicator()
+        }
         // Title changes arrive outside AppKit's layout cadence; needsLayout
         // reruns layoutPills() in the next pass (widths track intrinsic size).
         needsLayout = true
@@ -655,6 +713,98 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         newTabButton.frame = NSRect(x: x, y: 0, width: plusWidth, height: height)
         x += plusWidth + gap
         documentView.frame = NSRect(x: 0, y: 0, width: max(x, scrollView.contentSize.width), height: height)
+        if let dropIndicatorIndex {
+            positionDropIndicator(at: dropIndicatorIndex)
+        }
+    }
+
+    fileprivate var tabFramesForTesting: [NSRect] {
+        guard let descriptor else { return [] }
+        return descriptor.tabs.compactMap { pillViews[$0.id]?.frame }
+    }
+
+    fileprivate func validatedDropIndex(atDocumentX x: CGFloat) -> Int? {
+        guard let descriptor else { return nil }
+        let requested = NativePaneTabInsertionPolicy.insertionIndex(
+            atX: x,
+            tabFrames: tabFramesForTesting
+        )
+        return descriptor.validatedDropIndex(requested)
+    }
+
+    fileprivate func performDrop(at requestedIndex: Int) -> Bool {
+        guard let descriptor,
+              let targetIndex = descriptor.validatedDropIndex(requestedIndex) else { return false }
+        return descriptor.onDropTab(targetIndex)
+    }
+
+    private func validatedDropIndex(for sender: NSDraggingInfo) -> Int? {
+        guard sender.draggingSource is NativeTabPillControl,
+              sender.draggingPasteboard.types?.contains(Self.tabTransferPasteboardType) == true else {
+            return nil
+        }
+        let point = documentView.convert(sender.draggingLocation, from: nil)
+        return validatedDropIndex(atDocumentX: point.x)
+    }
+
+    private func updateDropIndicator(for sender: NSDraggingInfo) -> NSDragOperation {
+        guard let index = validatedDropIndex(for: sender) else {
+            clearDropIndicator()
+            return []
+        }
+        dropIndicatorIndex = index
+        positionDropIndicator(at: index)
+        return .move
+    }
+
+    private func positionDropIndicator(at index: Int) {
+        let frames = tabFramesForTesting
+        guard let frame = NativePaneTabInsertionPolicy.indicatorFrame(
+            at: index,
+            tabFrames: frames,
+            in: documentView.bounds
+        ) else {
+            clearDropIndicator()
+            return
+        }
+        dropIndicator.frame = frame
+        documentView.addSubview(dropIndicator, positioned: .above, relativeTo: nil)
+        dropIndicator.isHidden = false
+    }
+
+    private func clearDropIndicator() {
+        dropIndicatorIndex = nil
+        dropIndicator.isHidden = true
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        updateDropIndicator(for: sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        updateDropIndicator(for: sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        clearDropIndicator()
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        validatedDropIndex(for: sender) != nil
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        defer { clearDropIndicator() }
+        guard let index = validatedDropIndex(for: sender), let descriptor else { return false }
+        return descriptor.onDropTab(index)
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        clearDropIndicator()
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        clearDropIndicator()
     }
 }
 

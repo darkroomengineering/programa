@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly SEAL_NAME="programa-release-candidate.json"
-readonly EXPECTED_ASSET_COUNT=4
+readonly EXPECTED_ASSET_COUNT=6
 
 die() {
   echo "publish_release_candidate: $*" >&2
@@ -260,7 +260,7 @@ const assets = fs.readFileSync(inputPath, "utf8").trimEnd().split("\n").map((lin
 });
 
 const manifest = createCandidateManifest({
-  schemaVersion: 1,
+  schemaVersion: 2,
   sealed: true,
   targetSha,
   version,
@@ -462,8 +462,10 @@ done
 # Keep retry progress deterministic. Runtime payloads precede symbols and aliases.
 upload_payload_named "programa-macos-${build}.dmg"
 upload_payload_named "programa-dSYMs-${build}.zip"
+upload_payload_named "programa-windows-${build}.exe"
 upload_payload_named "appcast.xml"
 upload_payload_named "programa-macos.dmg"
+upload_payload_named "programa-windows.exe"
 
 verify_release_metadata
 refresh_asset_listing

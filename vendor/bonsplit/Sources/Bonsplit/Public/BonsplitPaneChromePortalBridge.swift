@@ -59,6 +59,8 @@ public final class BonsplitPaneChromeDescriptor {
     public let onContextAction: (TabID, TabContextAction) -> Void
     public let dragPasteboardData: (TabID) -> Data?
     public let onDragStateChanged: (TabID, Bool) -> Void
+    public let validatedDropIndex: (Int) -> Int?
+    public let onDropTab: (Int) -> Bool
     public let onNewTab: () -> Void
     public let onNewBrowserTab: () -> Void
     public let onSplitRight: () -> Void
@@ -77,6 +79,8 @@ public final class BonsplitPaneChromeDescriptor {
         onContextAction: @escaping (TabID, TabContextAction) -> Void,
         dragPasteboardData: @escaping (TabID) -> Data?,
         onDragStateChanged: @escaping (TabID, Bool) -> Void,
+        validatedDropIndex: @escaping (Int) -> Int?,
+        onDropTab: @escaping (Int) -> Bool,
         onNewTab: @escaping () -> Void,
         onNewBrowserTab: @escaping () -> Void,
         onSplitRight: @escaping () -> Void,
@@ -94,6 +98,8 @@ public final class BonsplitPaneChromeDescriptor {
         self.onContextAction = onContextAction
         self.dragPasteboardData = dragPasteboardData
         self.onDragStateChanged = onDragStateChanged
+        self.validatedDropIndex = validatedDropIndex
+        self.onDropTab = onDropTab
         self.onNewTab = onNewTab
         self.onNewBrowserTab = onNewBrowserTab
         self.onSplitRight = onSplitRight
