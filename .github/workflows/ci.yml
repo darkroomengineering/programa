@@ -205,6 +205,14 @@ jobs:
           # integration tests (Unix socket + PTY, both available on
           # ubuntu-latest) now that it lives at core/crates/programad.
           cargo test --manifest-path core/Cargo.toml --workspace --locked
+          # max_sendmsg_descriptors_close_without_leak is #[ignore]d in the
+          # run above: its EPIPE assertion only proves what it claims when
+          # nothing else in the process can fork() while its fixture pipe
+          # is alive (see the test's doc comment in fdpass.rs), which the
+          # default parallel run can't guarantee against the Linux-only
+          # session::tests that spawn real PTYs. --test-threads=1 with no
+          # other ignored tests in this binary runs it completely alone.
+          cargo test --manifest-path core/Cargo.toml -p programad --locked --lib -- --ignored --test-threads=1
           cargo test --manifest-path core/crates/programa-terminal/Cargo.toml --locked
           cargo test --manifest-path core/vendor/alacritty_terminal/Cargo.toml --locked --lib parses_buffered_bytes_before_returning_a_terminal_read_error
 

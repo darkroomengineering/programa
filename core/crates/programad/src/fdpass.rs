@@ -410,7 +410,28 @@ mod tests {
         assert_eq!(stream.read_line().await.unwrap().unwrap(), r#"{"id":1}"#);
     }
 
+    // Isolated from the default `cargo test` run and re-run alone (see the
+    // shared-core CI step: `cargo test -p programad --locked --lib --
+    // --ignored --test-threads=1`). The EPIPE assertion below only proves
+    // what it claims to prove -- that recv_with_fds closed every descriptor
+    // it installed -- when nothing else in this process can fork while the
+    // fixture's pipe is alive. `fork(2)` copies the fd table regardless of
+    // CLOEXEC (CLOEXEC only takes effect at `exec`), and the daemon's own
+    // fd-close-on-reject path (`MsgStream::fill_more`, right after
+    // `recv_with_fds` returns) runs a hair outside `SPAWN_FD_LOCK`'s cover:
+    // the lock is scoped to `recv_with_fds` itself, but the actual
+    // `drop(received_fds)` that closes a rejected batch happens one stack
+    // frame up, after that guard has already been released. A concurrent
+    // `session::tests` PTY spawn landing its `fork()` in that specific gap
+    // (Linux-only tests, `#[cfg(all(test, target_os = "linux"))]`, so this
+    // never reproduced locally on macOS) can transiently inherit a
+    // not-yet-closed duplicate, making `write()` below see a live reader
+    // that isn't us and return `Ok` instead of `EPIPE` -- a false failure
+    // of this test, not evidence of an actual leak. Running this test
+    // completely alone removes every other test's fork as a source of that
+    // false failure; it doesn't change what's being asserted.
     #[tokio::test]
+    #[ignore = "must run alone: see the shared-core CI step for why"]
     async fn max_sendmsg_descriptors_close_without_leak() {
         let (sender, receiver) = UnixStream::pair().unwrap();
         // Keep the fixture's pipe fds out of a concurrent session test's
