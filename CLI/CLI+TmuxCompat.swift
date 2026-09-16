@@ -189,7 +189,7 @@ extension ProgramaCLI {
     }
 
     private func tmuxWorkspaceItems(client: SocketClient) throws -> [[String: Any]] {
-        let payload = try client.sendV2(method: "workspace.list")
+        let payload = try client.sendV2(method: V2MethodNames.workspaceList)
         return payload["workspaces"] as? [[String: Any]] ?? []
     }
 
@@ -280,7 +280,7 @@ extension ProgramaCLI {
     }
 
     private func tmuxFinishLiveAgents(workspaceId: String, client: SocketClient) {
-        guard let payload = try? client.sendV2(method: "agent.task.list", params: [
+        guard let payload = try? client.sendV2(method: V2MethodNames.agentTaskList, params: [
             "workspace_id": workspaceId,
             "include_finished": false,
         ]), let agents = payload["agents"] as? [[String: Any]] else {
@@ -288,7 +288,7 @@ extension ProgramaCLI {
         }
         for agent in agents {
             guard let agentId = agent["id"] as? String else { continue }
-            _ = try? client.sendV2(method: "agent.task.finish", params: [
+            _ = try? client.sendV2(method: V2MethodNames.agentTaskFinish, params: [
                 "agent_id": agentId,
                 "state": "cancelled",
             ])
@@ -297,7 +297,7 @@ extension ProgramaCLI {
 
     private func tmuxCloseHelperWorkspace(workspaceId: String, client: SocketClient) throws {
         tmuxFinishLiveAgents(workspaceId: workspaceId, client: client)
-        _ = try client.sendV2(method: "workspace.close", params: ["workspace_id": workspaceId])
+        _ = try client.sendV2(method: V2MethodNames.workspaceClose, params: ["workspace_id": workspaceId])
     }
 
     private func tmuxCallerWorkspaceHandle() -> String? {
@@ -332,7 +332,7 @@ extension ProgramaCLI {
             return handle
         }
 
-        let payload = try client.sendV2(method: "pane.list", params: ["workspace_id": workspaceId])
+        let payload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": workspaceId])
         let panes = payload["panes"] as? [[String: Any]] ?? []
         for pane in panes {
             if (pane["ref"] as? String) == handle || (pane["id"] as? String) == handle {
@@ -358,7 +358,7 @@ extension ProgramaCLI {
         workspaceId: String,
         client: SocketClient
     ) throws -> String {
-        let payload = try client.sendV2(method: "surface.list", params: ["workspace_id": workspaceId])
+        let payload = try client.sendV2(method: V2MethodNames.surfaceList, params: ["workspace_id": workspaceId])
         let surfaces = payload["surfaces"] as? [[String: Any]] ?? []
         for surface in surfaces {
             if (surface["ref"] as? String) == handle || (surface["id"] as? String) == handle {
@@ -387,7 +387,7 @@ extension ProgramaCLI {
         let workspaces = try tmuxWorkspaceItems(client: client)
         for workspace in workspaces {
             guard let workspaceId = workspace["id"] as? String else { continue }
-            let payload = try client.sendV2(method: "pane.list", params: ["workspace_id": workspaceId])
+            let payload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": workspaceId])
             let panes = payload["panes"] as? [[String: Any]] ?? []
             if panes.contains(where: { ($0["id"] as? String) == handle || ($0["ref"] as? String) == handle }) {
                 return workspaceId
@@ -398,7 +398,7 @@ extension ProgramaCLI {
     }
 
     private func tmuxFocusedPaneId(workspaceId: String, client: SocketClient) throws -> String {
-        let payload = try client.sendV2(method: "surface.current", params: ["workspace_id": workspaceId])
+        let payload = try client.sendV2(method: V2MethodNames.surfaceCurrent, params: ["workspace_id": workspaceId])
         if let paneId = payload["pane_id"] as? String {
             return paneId
         }
@@ -417,7 +417,7 @@ extension ProgramaCLI {
         }
 
         if token == "!" || token == "^" || token == "-" {
-            let payload = try client.sendV2(method: "workspace.last")
+            let payload = try client.sendV2(method: V2MethodNames.workspaceLast)
             if let workspaceId = payload["workspace_id"] as? String {
                 return workspaceId
             }
@@ -514,7 +514,7 @@ extension ProgramaCLI {
         client: SocketClient
     ) throws -> String {
         let payload = try client.sendV2(
-            method: "pane.surfaces",
+            method: V2MethodNames.paneSurfaces,
             params: ["workspace_id": workspaceId, "pane_id": paneId]
         )
         let surfaces = payload["surfaces"] as? [[String: Any]] ?? []
@@ -619,7 +619,7 @@ extension ProgramaCLI {
             }
         }
 
-        let currentPayload = try client.sendV2(method: "surface.current", params: ["workspace_id": canonicalWorkspaceId])
+        let currentPayload = try client.sendV2(method: V2MethodNames.surfaceCurrent, params: ["workspace_id": canonicalWorkspaceId])
         let resolvedPaneId: String? = try {
             if let paneId {
                 return try tmuxCanonicalPaneId(paneId, workspaceId: canonicalWorkspaceId, client: client)
@@ -649,7 +649,7 @@ extension ProgramaCLI {
         if let resolvedPaneId {
             context["pane_id"] = "%\(resolvedPaneId)"
             context["pane_uuid"] = resolvedPaneId
-            let panePayload = try client.sendV2(method: "pane.list", params: ["workspace_id": canonicalWorkspaceId])
+            let panePayload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": canonicalWorkspaceId])
             let panes = panePayload["panes"] as? [[String: Any]] ?? []
             if let pane = panes.first(where: { ($0["id"] as? String) == resolvedPaneId }),
                let index = intFromAny(pane["index"]) {
@@ -659,7 +659,7 @@ extension ProgramaCLI {
 
         if let resolvedSurfaceId {
             context["surface_id"] = resolvedSurfaceId
-            let surfacePayload = try client.sendV2(method: "surface.list", params: ["workspace_id": canonicalWorkspaceId])
+            let surfacePayload = try client.sendV2(method: V2MethodNames.surfaceList, params: ["workspace_id": canonicalWorkspaceId])
             let surfaces = surfacePayload["surfaces"] as? [[String: Any]] ?? []
             if let surface = surfaces.first(where: { ($0["id"] as? String) == resolvedSurfaceId }) {
                 let title = ((surface["title"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -842,7 +842,7 @@ extension ProgramaCLI {
             )
             defer { client.close() }
 
-            let payload = try client.sendV2(method: "system.identify")
+            let payload = try client.sendV2(method: V2MethodNames.systemIdentify)
             let focused = payload["focused"] as? [String: Any] ?? [:]
 
             let workspaceId = (focused["workspace_id"] as? String)
@@ -966,20 +966,20 @@ extension ProgramaCLI {
             if let cwd = parsed.value("-c") {
                 params["cwd"] = resolvePath(cwd)
             }
-            let created = try client.sendV2(method: "workspace.create", params: params)
+            let created = try client.sendV2(method: V2MethodNames.workspaceCreate, params: params)
             guard let workspaceId = created["workspace_id"] as? String else {
                 throw CLIError(message: "workspace.create did not return workspace_id")
             }
             if let title = parsed.value("-n") ?? parsed.value("-s"),
                !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                _ = try client.sendV2(method: "workspace.rename", params: [
+                _ = try client.sendV2(method: V2MethodNames.workspaceRename, params: [
                     "workspace_id": workspaceId,
                     "title": title
                 ])
             }
             if let text = tmuxShellCommandText(commandTokens: parsed.positional, cwd: parsed.value("-c")) {
                 let surfaceId = try resolveSurfaceId(nil, workspaceId: workspaceId, client: client)
-                _ = try client.sendV2(method: "surface.send_text", params: [
+                _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: [
                     "workspace_id": workspaceId,
                     "surface_id": surfaceId,
                     "text": text
@@ -1019,7 +1019,7 @@ extension ProgramaCLI {
             ) {
                 params["initial_command"] = initialCommand
             }
-            let created = try client.sendV2(method: "agent.spawn", params: params)
+            let created = try client.sendV2(method: V2MethodNames.agentSpawn, params: params)
             guard let workspaceId = created["workspace_id"] as? String else {
                 throw CLIError(message: "agent.spawn did not return workspace_id")
             }
@@ -1055,7 +1055,7 @@ extension ProgramaCLI {
             ) {
                 createParams["initial_command"] = initialCommand
             }
-            let created = try client.sendV2(method: "agent.spawn", params: createParams)
+            let created = try client.sendV2(method: V2MethodNames.agentSpawn, params: createParams)
             guard let workspaceId = created["workspace_id"] as? String else {
                 throw CLIError(message: "agent.spawn did not return workspace_id")
             }
@@ -1075,7 +1075,7 @@ extension ProgramaCLI {
         case "select-window", "selectw":
             let parsed = try parseTmuxArguments(rawArgs, valueFlags: ["-t"], boolFlags: [])
             let workspaceId = try tmuxResolveWorkspaceTarget(parsed.value("-t"), client: client)
-            _ = try client.sendV2(method: "workspace.select", params: ["workspace_id": workspaceId])
+            _ = try client.sendV2(method: V2MethodNames.workspaceSelect, params: ["workspace_id": workspaceId])
 
         case "select-pane", "selectp":
             let parsed = try parseTmuxArguments(rawArgs, valueFlags: ["-P", "-T", "-t"], boolFlags: [])
@@ -1083,7 +1083,7 @@ extension ProgramaCLI {
                 return
             }
             let target = try tmuxResolvePaneTarget(parsed.value("-t"), client: client)
-            _ = try client.sendV2(method: "pane.focus", params: [
+            _ = try client.sendV2(method: V2MethodNames.paneFocus, params: [
                 "workspace_id": target.workspaceId,
                 "pane_id": target.paneId
             ])
@@ -1102,13 +1102,13 @@ extension ProgramaCLI {
             if (workspaceItem?["agent_parent_workspace_id"] as? String) != nil {
                 try tmuxCloseHelperWorkspace(workspaceId: workspaceId, client: client)
             } else {
-                _ = try client.sendV2(method: "workspace.close", params: ["workspace_id": workspaceId])
+                _ = try client.sendV2(method: V2MethodNames.workspaceClose, params: ["workspace_id": workspaceId])
             }
 
         case "kill-pane", "killp":
             let parsed = try parseTmuxArguments(rawArgs, valueFlags: ["-t"], boolFlags: [])
             let target = try tmuxResolveSurfaceTarget(parsed.value("-t"), client: client)
-            let panePayload = try client.sendV2(method: "pane.list", params: [
+            let panePayload = try client.sendV2(method: V2MethodNames.paneList, params: [
                 "workspace_id": target.workspaceId,
             ])
             let panes = panePayload["panes"] as? [[String: Any]] ?? []
@@ -1126,12 +1126,12 @@ extension ProgramaCLI {
                 try tmuxCloseHelperWorkspace(workspaceId: target.workspaceId, client: client)
             }
             if !closedTeamWorkspace {
-                _ = try client.sendV2(method: "surface.close", params: [
+                _ = try client.sendV2(method: V2MethodNames.surfaceClose, params: [
                     "workspace_id": target.workspaceId,
                     "surface_id": target.surfaceId
                 ])
                 // Re-equalize ordinary multi-pane workspaces after removing a pane.
-                _ = try? client.sendV2(method: "workspace.equalize_splits", params: [
+                _ = try? client.sendV2(method: V2MethodNames.workspaceEqualizeSplits, params: [
                     "workspace_id": target.workspaceId,
                     "orientation": "vertical"
                 ])
@@ -1142,7 +1142,7 @@ extension ProgramaCLI {
             let target = try tmuxResolveSurfaceTarget(parsed.value("-t"), client: client)
             let text = tmuxSendKeysText(from: parsed.positional, literal: parsed.hasFlag("-l"))
             if !text.isEmpty {
-                _ = try client.sendV2(method: "surface.send_text", params: [
+                _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: [
                     "workspace_id": target.workspaceId,
                     "surface_id": target.surfaceId,
                     "text": text
@@ -1164,7 +1164,7 @@ extension ProgramaCLI {
             if let start = parsed.value("-S"), let lines = Int(start), lines < 0 {
                 params["lines"] = abs(lines)
             }
-            let payload = try client.sendV2(method: "surface.read_text", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.surfaceReadText, params: params)
             let text = (payload["text"] as? String) ?? ""
             if parsed.hasFlag("-p") {
                 print(text)
@@ -1184,7 +1184,7 @@ extension ProgramaCLI {
                 client: client
             )
             // Enrich with geometry for format strings like #{pane_width},#{window_width}
-            let panePayload = try client.sendV2(method: "pane.list", params: ["workspace_id": target.workspaceId])
+            let panePayload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": target.workspaceId])
             let panesList = panePayload["panes"] as? [[String: Any]] ?? []
             let containerFrame = panePayload["container_frame"] as? [String: Any]
             if let targetPaneId = target.paneId,
@@ -1229,7 +1229,7 @@ extension ProgramaCLI {
                 workspaceItems: workspaceItems
             )
             for listedWorkspaceId in workspaceIds {
-                let payload = try client.sendV2(method: "pane.list", params: ["workspace_id": listedWorkspaceId])
+                let payload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": listedWorkspaceId])
                 let panes = payload["panes"] as? [[String: Any]] ?? []
                 let containerFrame = payload["container_frame"] as? [String: Any]
                 for pane in panes {
@@ -1252,7 +1252,7 @@ extension ProgramaCLI {
                 throw CLIError(message: "rename-window requires a title")
             }
             let workspaceId = try tmuxResolveWorkspaceTarget(parsed.value("-t"), client: client)
-            _ = try client.sendV2(method: "workspace.rename", params: [
+            _ = try client.sendV2(method: V2MethodNames.workspaceRename, params: [
                 "workspace_id": workspaceId,
                 "title": title
             ])
@@ -1272,14 +1272,14 @@ extension ProgramaCLI {
             if !hasDirectionalFlags, let absWidth = parsed.value("-x").flatMap({ Int($0.replacingOccurrences(of: "%", with: "")) }) {
                 // Absolute width: resize-pane -t <pane> -x <columns>
                 // Compute pixel delta from current width to desired width.
-                let panePayload = try client.sendV2(method: "pane.list", params: ["workspace_id": target.workspaceId])
+                let panePayload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": target.workspaceId])
                 let panes = panePayload["panes"] as? [[String: Any]] ?? []
                 if let matchingPane = panes.first(where: { ($0["id"] as? String) == target.paneId }),
                    let cellW = matchingPane["cell_width_px"] as? Int, cellW > 0,
                    let currentCols = matchingPane["columns"] as? Int {
                     let delta = absWidth - currentCols
                     if delta != 0 {
-                        _ = try? client.sendV2(method: "pane.resize", params: [
+                        _ = try? client.sendV2(method: V2MethodNames.paneResize, params: [
                             "workspace_id": target.workspaceId,
                             "pane_id": target.paneId,
                             "direction": delta > 0 ? "right" : "left",
@@ -1301,7 +1301,7 @@ extension ProgramaCLI {
                 let rawAmount = (parsed.value("-x") ?? parsed.value("-y") ?? "5")
                     .replacingOccurrences(of: "%", with: "")
                 let amount = Int(rawAmount) ?? 5
-                _ = try client.sendV2(method: "pane.resize", params: [
+                _ = try client.sendV2(method: V2MethodNames.paneResize, params: [
                     "workspace_id": target.workspaceId,
                     "pane_id": target.paneId,
                     "direction": direction,
@@ -1322,7 +1322,7 @@ extension ProgramaCLI {
         case "last-pane":
             let parsed = try parseTmuxArguments(rawArgs, valueFlags: ["-t"], boolFlags: [])
             let workspaceId = try tmuxResolveWorkspaceTarget(parsed.value("-t"), client: client)
-            _ = try client.sendV2(method: "pane.last", params: ["workspace_id": workspaceId])
+            _ = try client.sendV2(method: V2MethodNames.paneLast, params: ["workspace_id": workspaceId])
 
         case "show-buffer", "showb":
             let parsed = try parseTmuxArguments(rawArgs, valueFlags: ["-b"], boolFlags: [])
@@ -1382,13 +1382,13 @@ extension ProgramaCLI {
             if layoutName == "main-vertical" || layoutName == "main-horizontal" {
                 // Preserve tmux's requested main-axis layout when equalizing the workspace.
                 let orientation = layoutName == "main-vertical" ? "vertical" : "horizontal"
-                _ = try? client.sendV2(method: "workspace.equalize_splits", params: [
+                _ = try? client.sendV2(method: V2MethodNames.workspaceEqualizeSplits, params: [
                     "workspace_id": workspaceId,
                     "orientation": orientation
                 ])
             } else {
                 // Tiled and even layouts equalize every split.
-                _ = try? client.sendV2(method: "workspace.equalize_splits", params: ["workspace_id": workspaceId])
+                _ = try? client.sendV2(method: V2MethodNames.workspaceEqualizeSplits, params: ["workspace_id": workspaceId])
             }
 
         case "set-option", "set", "set-window-option", "setw", "source-file", "refresh-client", "attach-session", "detach-client":
@@ -1630,7 +1630,7 @@ extension ProgramaCLI {
                 params["scrollback"] = true
             }
 
-            let payload = try client.sendV2(method: "surface.read_text", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.surfaceReadText, params: params)
             if jsonOutput {
                 print(jsonString(payload))
             } else {
@@ -1659,7 +1659,7 @@ extension ProgramaCLI {
             if let wsId { params["workspace_id"] = wsId }
             let paneId = try normalizePaneHandle(paneArg, client: client, workspaceHandle: wsId, allowFocused: true)
             if let paneId { params["pane_id"] = paneId }
-            let payload = try client.sendV2(method: "pane.resize", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.paneResize, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["pane"]))
 
         case "pipe-pane":
@@ -1680,7 +1680,7 @@ extension ProgramaCLI {
             if let wsId { params["workspace_id"] = wsId }
             let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId, allowFocused: true)
             if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.read_text", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.surfaceReadText, params: params)
             let text = (payload["text"] as? String) ?? ""
             let shell = try runShellCommand(commandText, stdinText: text)
             if shell.status != 0 {
@@ -1747,7 +1747,7 @@ extension ProgramaCLI {
             let targetPane = try normalizePaneHandle(targetPaneRaw, client: client, workspaceHandle: wsId)
             if let sourcePane { params["pane_id"] = sourcePane }
             if let targetPane { params["target_pane_id"] = targetPane }
-            let payload = try client.sendV2(method: "pane.swap", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.paneSwap, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK")
 
         case "break-pane":
@@ -1761,7 +1761,7 @@ extension ProgramaCLI {
             if let paneId { params["pane_id"] = paneId }
             let surfaceId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId)
             if let surfaceId { params["surface_id"] = surfaceId }
-            let payload = try client.sendV2(method: "pane.break", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.paneBreak, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK")
 
         case "join-pane":
@@ -1780,19 +1780,19 @@ extension ProgramaCLI {
             if let targetPaneId { params["target_pane_id"] = targetPaneId }
             let surfaceId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId)
             if let surfaceId { params["surface_id"] = surfaceId }
-            let payload = try client.sendV2(method: "pane.join", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.paneJoin, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK")
 
         case "last-window":
-            let payload = try client.sendV2(method: "workspace.last")
+            let payload = try client.sendV2(method: V2MethodNames.workspaceLast)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["workspace"]))
 
         case "next-window":
-            let payload = try client.sendV2(method: "workspace.next")
+            let payload = try client.sendV2(method: V2MethodNames.workspaceNext)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["workspace"]))
 
         case "previous-window":
-            let payload = try client.sendV2(method: "workspace.previous")
+            let payload = try client.sendV2(method: V2MethodNames.workspacePrevious)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["workspace"]))
 
         case "last-pane":
@@ -1800,7 +1800,7 @@ extension ProgramaCLI {
             var params: [String: Any] = [:]
             let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
             if let wsId { params["workspace_id"] = wsId }
-            let payload = try client.sendV2(method: "pane.last", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.paneLast, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["pane"]))
 
         case "find-window":
@@ -1811,7 +1811,7 @@ extension ProgramaCLI {
                 .joined(separator: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
-            let listPayload = try client.sendV2(method: "workspace.list")
+            let listPayload = try client.sendV2(method: V2MethodNames.workspaceList)
             let workspaces = listPayload["workspaces"] as? [[String: Any]] ?? []
 
             var matches: [[String: Any]] = []
@@ -1820,7 +1820,7 @@ extension ProgramaCLI {
                 let titleMatch = query.isEmpty || title.localizedCaseInsensitiveContains(query)
                 var contentMatch = false
                 if includeContent && !query.isEmpty, let wsId = ws["id"] as? String {
-                    let textPayload = try? client.sendV2(method: "surface.read_text", params: ["workspace_id": wsId])
+                    let textPayload = try? client.sendV2(method: V2MethodNames.surfaceReadText, params: ["workspace_id": wsId])
                     let text = (textPayload?["text"] as? String) ?? ""
                     contentMatch = text.localizedCaseInsensitiveContains(query)
                 }
@@ -1830,7 +1830,7 @@ extension ProgramaCLI {
             }
 
             if shouldSelect, let first = matches.first, let wsId = first["id"] as? String {
-                _ = try client.sendV2(method: "workspace.select", params: ["workspace_id": wsId])
+                _ = try client.sendV2(method: V2MethodNames.workspaceSelect, params: ["workspace_id": wsId])
             }
 
             if jsonOutput {
@@ -1854,7 +1854,7 @@ extension ProgramaCLI {
             if let wsId { params["workspace_id"] = wsId }
             let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId, allowFocused: true)
             if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.clear_history", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.surfaceClearHistory, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat))
 
         case "set-hook":
@@ -1938,7 +1938,7 @@ extension ProgramaCLI {
             if let wsId { params["workspace_id"] = wsId }
             let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId, allowFocused: true)
             if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.send_text", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK")
 
         case "respawn-pane":
@@ -1952,7 +1952,7 @@ extension ProgramaCLI {
             if let wsId { params["workspace_id"] = wsId }
             let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId, allowFocused: true)
             if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: "surface.send_text", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK")
 
         case "display-message":
@@ -1968,7 +1968,7 @@ extension ProgramaCLI {
                 print(message)
                 return
             }
-            let payload = try client.sendV2(method: "notification.create", params: ["title": "Programa", "body": message])
+            let payload = try client.sendV2(method: V2MethodNames.notificationCreate, params: ["title": "Programa", "body": message])
             if jsonOutput {
                 print(jsonString(payload))
             } else {

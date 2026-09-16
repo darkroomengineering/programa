@@ -186,6 +186,9 @@ jobs:
       - name: Validate Sparkle enclosure naming and pruning
         run: node --test scripts/sparkle_enclosure.test.js
 
+      - name: Validate v2 socket API contract has no drift
+        run: ./scripts/check-v2-contract.sh
+
   shared-core:
     runs-on: ubuntu-latest
     permissions:

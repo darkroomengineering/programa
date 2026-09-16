@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": 1,
+  "description": "Wire framing and auth handshake for the Programa v2 socket protocol. See docs/v2-api-migration.md and Sources/TerminalController.swift (processV2Command).",
+  "transport": {
+    "kind": "unix_domain_socket",
+    "framing": "One JSON object per line (newline-delimited). Multi-line JSON is not supported; the server collapses embedded newlines in its own responses. The v1 line-based protocol has been removed: any line not starting with '{' gets a terse 'v1_removed' error instead of a parse failure."
+  },
+  "request": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "description": "Client-chosen correlation id, echoed back verbatim (any JSON value, or omitted/null).",
+        "additionalProperties": true
+      },
+      "method": {
+        "type": "string",
+        "description": "One of the method names in methods.json. Required, non-empty."
+      },
+      "params": {
+        "type": "object",
+        "description": "Method-specific parameters. Omitted params default to an empty object."
+      }
+    },
+    "required": ["method"]
+  },
+  "response": {
+    "oneOf": [
+      {
+        "type": "object",
+        "description": "Success envelope.",
+        "properties": {
+          "id": {},
+          "ok": { "const": true },
+          "result": { "description": "Method-specific result payload." }
+        },
+        "required": ["id", "ok", "result"]
+      },
+      {
+        "type": "object",
+        "description": "Error envelope.",
+        "properties": {
+          "id": {},
+          "ok": { "const": false },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "data": { "description": "Optional structured detail." }
+            },
+            "required": ["code", "message"]
+          }
+        },
+        "required": ["id", "ok", "error"]
+      }
+    ]
+  },
+  "common_error_codes": {
+    "v1_removed": "Line did not start with '{' — the removed v1 protocol was used.",
+    "invalid_utf8": "Request bytes were not valid UTF-8.",
+    "parse_error": "Request line was not valid JSON.",
+    "invalid_request": "Top-level JSON was not an object, or params was present but not an object, or method was missing/empty.",
+    "auth_required": "Socket is in password-auth mode and this connection has not authenticated yet. Send auth.login first.",
+    "auth_failed": "auth.login was called with an incorrect password.",
+    "invalid_params": "Method-specific: a required param was missing or the wrong type.",
+    "not_found": "Method-specific: a referenced window/workspace/pane/surface/etc. does not exist.",
+    "unavailable": "Method-specific: the app or a required subsystem is not in a state to handle the request.",
+    "internal_error": "Unexpected server-side failure.",
+    "encode_error": "Server failed to encode its own JSON response (should not happen)."
+  },
+  "auth_handshake": {
+    "description": "Auth is a socket-wide, connection-scoped gate, not per-method. When the listening socket's access mode requires a password (SocketRequestPolicy.requiresPasswordAuthentication), every method except auth.login returns error code 'auth_required' until that connection sends a successful auth.login. Unauthenticated connections are otherwise indistinguishable from authenticated ones at the framing level.",
+    "steps": [
+      "Connect to the unix socket at the app-reported socket path.",
+      "If the socket is not in password mode, send any method directly — no handshake needed.",
+      "If the socket is in password mode, send {\"method\":\"auth.login\",\"params\":{\"password\":\"...\"}} first.",
+      "A successful auth.login returns {\"ok\":true,\"result\":{\"authenticated\":true}}; the connection is now authenticated for its lifetime (or until the server's authCredentialEpoch changes, e.g. the password was rotated in Settings, which forces re-auth).",
+      "auth.login with a missing password returns invalid_params; with a wrong password returns auth_failed; any other method sent before a successful login returns auth_required."
+    ]
+  },
+  "handle_refs": {
+    "description": "Most id-shaped params (window_id, workspace_id, pane_id, surface_id, tab_id) accept either a raw UUID or a short opaque handle-ref of the form '<kind>:<N>' (e.g. 'workspace:3'), minted by the server the first time an object is returned to a client and stable for that object's lifetime. Refs are never reissued for a new object even after the original is pruned.",
+    "kinds": ["window", "workspace", "pane", "surface", "tab"]
+  },
+  "capabilities": {
+    "description": "system.capabilities returns the method set advertised for the current build configuration (base methods always; debug methods only in DEBUG builds). It must equal the contract's method set filtered the same way — see tests_v2/test_v2_contract_matches_capabilities.py."
+  }
+}
