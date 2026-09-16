@@ -1134,41 +1134,16 @@ for stop_after in $(seq 1 "${mutation_total}"); do
 done
 [[ "${ref_moved_retry_observed}" == true ]] || fail "hard-stop matrix never exercised retry after the rolling ref moved"
 
-# A milestone that advances after archive publication is a second high-water gate.
-# It must stop aliases, metadata, and the ref while retaining the candidate.
-reset_state
-seed_sealed_candidate 103; seed_rolling 102; seed_milestone 101; : > "${STATE_DIR}/operations.log"
-FAKE_GH_EXPOSE_MILESTONE_APPCAST="${FIXTURE_DIR}/104/appcast.xml" invoke_rolling || race_status=$?
-[[ "${race_status:-0}" -ne 0 ]] || fail "higher milestone race did not stop reconciliation"
-grep -Fq 'milestone-appcast-advanced' "${STATE_DIR}/operations.log" || fail "milestone race hook was not reached"
-assert_asset_equals rolling appcast.xml "${FIXTURE_DIR}/102/appcast.xml"
-assert_asset_equals rolling programa-macos.dmg "${FIXTURE_DIR}/102/programa-macos.dmg"
-assert_file_equals "$(release_dir rolling)/title" 'Rolling 0.64.73'
-assert_file_equals "$(release_dir rolling)/body" 'notes-102'
-assert_file_equals "$(release_dir rolling)/target_sha" "$(target_sha_for 102)"
-assert_release_exists rolling-candidate-103
-hook_line="$(grep -n 'milestone-appcast-advanced' "${STATE_DIR}/operations.log" | tail -1 | cut -d: -f1)"
-if tail -n "+${hook_line}" "${STATE_DIR}/operations.log" | grep -Eq '^mutation (delete-asset|upload-asset) rolling (appcast.xml|programa-macos.dmg|programa-windows.exe)$|^mutation (edit-release|move-ref) rolling'; then
-  fail "milestone race mutated aliases, metadata, or ref"
-fi
-
-# Main can advance after the initial provenance gate. A recheck after
-# archive publication must stop before appcast or stable-alias mutation.
-reset_state
-seed_sealed_candidate 103; seed_rolling 102; : > "${STATE_DIR}/operations.log"
-unset archive_main_race_status
-FAKE_GH_ADVANCE_MAIN_AFTER_ARCHIVE="$(target_sha_for 104)" invoke_rolling || archive_main_race_status=$?
-[[ "${archive_main_race_status:-0}" -ne 0 ]] || fail "post-archive main advancement did not stop reconciliation"
-grep -Fq "main-advanced-after-archive $(target_sha_for 104)" "${STATE_DIR}/operations.log" || fail "post-archive main race hook was not reached"
-assert_asset_equals rolling appcast.xml "${FIXTURE_DIR}/102/appcast.xml"
-assert_asset_equals rolling programa-macos.dmg "${FIXTURE_DIR}/102/programa-macos.dmg"
-assert_file_equals "$(release_dir rolling)/title" 'Rolling 0.64.73'
-assert_file_equals "$(release_dir rolling)/target_sha" "$(target_sha_for 102)"
-assert_release_exists rolling-candidate-103
-archive_main_hook_line="$(grep -n 'main-advanced-after-archive' "${STATE_DIR}/operations.log" | tail -1 | cut -d: -f1)"
-if tail -n "+${archive_main_hook_line}" "${STATE_DIR}/operations.log" | grep -Eq '^mutation (delete-asset|upload-asset) rolling (appcast.xml|programa-macos.dmg|programa-windows.exe)$|^mutation (edit-release|move-ref) rolling'; then
-  fail "post-archive main race mutated aliases, metadata, or ref"
-fi
+# There used to be two race scenarios here, keyed to a fake-gh hook fired when
+# the selected candidate flipped from draft to a published prerelease (a
+# milestone advancing right after that publish, and main advancing right
+# after it). Candidates no longer publish — nothing mutates or queries
+# GitHub between the initial high-water snapshot and the alias-publication
+# gate below, so that specific race window no longer exists; see the comment
+# above the removed RACE_HIGH_WATER check in publish_rolling_release.sh. The
+# pre-publication race gate below (FAKE_GH_EXPOSE_MILESTONE_BEFORE_METADATA /
+# FAKE_GH_ADVANCE_MAIN_BEFORE_METADATA / FAKE_GH_ADVANCE_MAIN_DURING_NOTES),
+# tied to the still-real appcast/alias uploads and ref move, remains covered.
 
 # A final high-water check immediately before publication prevents metadata,
 # latest status, and the ref from advancing after aliases were reconciled.

@@ -547,13 +547,14 @@ fi
 [[ "${ROLLING_IMMUTABLE_AT_START}" == "false" ]] || \
   fail "rolling must remain a legacy mutable release"
 
-RACE_HIGH_WATER="$(snapshot_public_high_water post-candidate-verification)"
-RACE_ACTION="$(promotion_action_for "${RACE_HIGH_WATER}")"
-if [[ "${RACE_ACTION}" == "reject" ]]; then
-  fail "public high-water advanced to ${RACE_HIGH_WATER} during candidate verification"
-fi
-[[ "${RACE_ACTION}" == "repair" || "${RACE_ACTION}" == "promote" ]] || \
-  fail "state module returned an unknown post-candidate-verification promotion action"
+# There used to be a second high-water snapshot here, taken after the
+# selected candidate was published as a non-latest prerelease archive (a real
+# gh mutation with real latency, and therefore a real race window). Candidates
+# no longer publish (see the promotion path below), so nothing mutates or
+# queries GitHub between the initial snapshot above and this point — a second
+# snapshot here would be redundant with it. The pre-publication snapshot below,
+# taken after the appcast/alias uploads and immediately before rolling's
+# metadata and ref change, remains the meaningful race gate.
 require_selected_target_is_current_main "alias publication gate"
 reconcile_role appcast
 reconcile_role stable-alias
