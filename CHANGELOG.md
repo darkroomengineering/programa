@@ -6,6 +6,8 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-16
+
 ### Removed
 - SSH remote workspaces and the `programa ssh` command. The remote daemon, its release assets, and the browser proxy routing that went with it are gone; workspaces are local only. See `docs/removed/ssh-remote-workspaces.md`.
 - The mobile bridge and the iOS companion app, including the Phone tab in Settings and the iroh transport that shipped inside the app.
@@ -20,22 +22,31 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - A local Git workspace can now become a persistent worktree folder from its right-click menu. Worktree workspaces created from that menu nest beneath it, can be collapsed, and restore in the same hierarchy without changing or deleting their Git branches.
 - Workspace colors are now remembered by local folder and automatically reused when that folder opens in a new workspace.
 - New setting, off by default: open a browser split beside the terminal whenever a new agent workspace is created (⌘⇧C, `programa` helper agents, and `race`). Also `automation.openBrowserWithAgentSplits` in settings.json.
+- Programa now runs natively on Windows (WinUI 3), sharing workspace, tab, split, and session semantics with the macOS app through a new Rust core. It's a preview: the download is unsigned (no Windows publisher-signing certificate yet), and interactive validation on real Windows hardware (pointer, IME, theme, accessibility) is still pending. Every rolling release now carries both `programa-macos.dmg` and `programa-windows.exe`.
+- A shared Rust workspace core (`core/`) now carries the `programad` daemon — PTYs, a session write-ahead log, and socket-based state handoff — as groundwork for a single process that owns sessions across platforms. The daemon can hold the same workspace/pane/surface state the macOS app already keeps in-process, over its own socket. Nothing in the shipping macOS app talks to it yet (#345).
+- The socket API's v2 method list now lives in one machine-readable contract; the Swift command catalog, CLI method names, and a typed Python test client are generated from it, and CI fails on any drift between them instead of surfacing it at runtime (#338).
+- Claude Code, Codex, and OpenCode hooks now report normalized agent lifecycle events (session start/exit, turn start/complete/abort, permission requests, input requests, item progress) through one `agent.event` method, feeding the same sidebar working/blocked/idle state Programa already showed (#340).
 
 ### Changed
 - Removed unused UI helpers, speculative agent lookup state, impossible internal worktree outcomes, and orphan SSH fixtures. Development setup reuses the existing Zig validation; E2E and Depot workflows reuse the checksum-verified GhosttyKit downloader, and Depot preserves failing test exit codes.
 - Tagged development builds automatically retain the current build and two recent inactive builds, preserving running apps and concurrent builds during cleanup.
 - Each ship now deletes promoted release candidates older than the two most recent, so the releases page stops accumulating 110 MB prereleases.
+- Added `ProgramaCore`, one seam between the app and git-metadata probes, port scanning, session snapshots, and agent activity. Today's code sits behind it unchanged; later, an out-of-process core can replace it without scattering remote/local branches through the workspace model. Behavior is unchanged (#339).
+- The release pipeline now builds, verifies, and publishes the macOS and Windows builds together from one rolling GitHub release, with matching build-specific archives kept for rollback.
+- README now leads with what Programa actually is against tmux and cmux, with a refreshed hero screenshot (#343).
 
 ### Fixed
-- Closing a window keeps its sessions available for reopening from the Dock or New Window. Explicitly closing a workspace still ends its sessions.
-- Failed session saves cancel quitting, and replacement instances wait for the previous instance to finish saving before restoring sessions.
+- Closing a window keeps its sessions available for reopening from the Dock or New Window. Explicitly closing a workspace still ends its sessions (#336).
+- Failed session saves cancel quitting, and replacement instances wait for the previous instance to finish saving before restoring sessions (#336).
 - Provider usage uses a compact layout with consistent remaining-capacity bars. Empty window chrome and tab strips support native dragging and the system titlebar double-click action.
 - Autosave acknowledges completed disk writes, retries failures, and preserves prompt-save requests during an ongoing write. Saved sessions no longer expire solely because they remained unclaimed for an hour; fresh-shell recovery is labeled explicitly.
 - Scrollback restoration tracks effective terminal colors without growing style history. Fully hidden windows can release all idle terminal graphics while retaining their sessions.
 - Worktrees keep their requested workspace parent across session restore, and selected Solid Fill rows retain their workspace color rail.
-- Idle CPU with an open window dropped from roughly 12 to 20 percent of a core to about 1 percent. The workspace pane overlay kept a display-rate animation timeline running for the life of every window; it now mounts one only while an attention flash is animating.
-- The dock icon no longer costs 32 MB of resident memory. The light and dark icon assets are declared as 512pt @2x, so AppKit decodes them at 1024 pixels instead of rasterizing a 2048 pixel copy.
-- Closing a workspace no longer leaves its Workspace object alive through the sidebar row's hover closure.
+- Idle CPU with an open window dropped from roughly 12 to 20 percent of a core to about 1 percent. The workspace pane overlay kept a display-rate animation timeline running for the life of every window; it now mounts one only while an attention flash is animating (#335).
+- The dock icon no longer costs 32 MB of resident memory. The light and dark icon assets are declared as 512pt @2x, so AppKit decodes them at 1024 pixels instead of rasterizing a 2048 pixel copy (#335).
+- Closing a workspace no longer leaves its Workspace object alive through the sidebar row's hover closure (#335).
+- Windows terminal output could be lost right as a shell process exited: ConPTY output now drains through a bounded retry after the child exits instead of stopping early (#341).
+- The release step that checks the Windows executable's version and identity now waits for the file to finish writing instead of racing it (#342).
 - Pending review comments survive session restore and remain available for retry or copying when the source terminal cannot accept them.
 - Incoming notifications no longer reset a valid keyboard selection in the Notifications page.
 - Socket and typing-lag CI jobs cache the DerivedData paths they actually build into.
