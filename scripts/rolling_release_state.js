@@ -47,14 +47,14 @@ function requiredImmutableNames(build) {
   return [
     `programa-macos-${build}.dmg`,
     `programa-dSYMs-${build}.zip`,
+    `programa-windows-${build}.exe`,
   ];
 }
 
-// The remote daemon (programad-remote) was removed in PR #329, which narrowed
-// requiredImmutableNames to just the two current build artifacts. The already-published
-// prerelease that the live appcast points at was sealed before that change and still
-// carries these six legacy daemon immutables. It cannot be deleted, so the validator
-// must keep accepting its sealed manifest as-is instead of rejecting it as corrupt.
+// The remote daemon (programad-remote) was removed in PR #329. Historical schema 1
+// prereleases may still carry its six immutable artifacts in addition to the original
+// macOS payload. They cannot be rewritten, so validation keeps accepting those sealed
+// manifests for inspection while the promotion path requires the current schema 2.
 function legacyImmutableNames(build) {
   return [
     `programad-remote-checksums-${build}.txt`,
@@ -99,7 +99,9 @@ function validateCandidateManifest(manifest) {
   assertPlainObject(manifest, "manifest");
   assertExactFields(manifest, ROOT_FIELDS, "manifest");
 
-  if (manifest.schemaVersion !== 1) throw new TypeError("manifest schemaVersion must be 1");
+  if (manifest.schemaVersion !== 1 && manifest.schemaVersion !== 2) {
+    throw new TypeError("manifest schemaVersion must be 1 or 2");
+  }
   if (typeof manifest.sealed !== "boolean") throw new TypeError("manifest sealed must be boolean");
   if (typeof manifest.targetSha !== "string" || !TARGET_SHA.test(manifest.targetSha)) {
     throw new TypeError("manifest targetSha must be 40 lowercase hexadecimal characters");
@@ -124,21 +126,34 @@ function validateCandidateManifest(manifest) {
   const appcast = assets.filter((asset) => asset.role === "appcast");
   const stableAliases = assets.filter((asset) => asset.role === "stable-alias");
   const immutable = assets.filter((asset) => asset.role === "immutable");
-  const requiredNames = new Set(requiredImmutableNames(manifest.build));
+  const currentRequiredNames = requiredImmutableNames(manifest.build);
+  const historicalRequiredNames = currentRequiredNames.slice(0, 2);
+  const requiredNames = new Set(
+    manifest.schemaVersion === 2 ? currentRequiredNames : historicalRequiredNames,
+  );
   const legacyNames = new Set(legacyImmutableNames(manifest.build));
 
   for (const asset of assets) {
     if (asset.name === "appcast.xml" && asset.role !== "appcast") {
       throw new TypeError("appcast.xml must have the appcast role");
     }
-    if (asset.name === "programa-macos.dmg" && asset.role !== "stable-alias") {
-      throw new TypeError("programa-macos.dmg must have the stable-alias role");
+    if (
+      (asset.name === "programa-macos.dmg" || asset.name === "programa-windows.exe") &&
+      asset.role !== "stable-alias"
+    ) {
+      throw new TypeError(`${asset.name} must have the stable-alias role`);
     }
     if (asset.role === "appcast" && asset.name !== "appcast.xml") {
       throw new TypeError("the appcast role is reserved for appcast.xml");
     }
-    if (asset.role === "stable-alias" && asset.name !== "programa-macos.dmg") {
-      throw new TypeError("the stable-alias role is reserved for programa-macos.dmg");
+    if (
+      asset.role === "stable-alias" &&
+      asset.name !== "programa-macos.dmg" &&
+      asset.name !== "programa-windows.exe"
+    ) {
+      throw new TypeError(
+        "the stable-alias role is reserved for programa-macos.dmg and programa-windows.exe",
+      );
     }
     if (asset.role === "immutable" && !requiredNames.has(asset.name) && !legacyNames.has(asset.name)) {
       throw new TypeError(`manifest has an unexpected immutable asset or build suffix: ${asset.name}`);
@@ -151,12 +166,18 @@ function validateCandidateManifest(manifest) {
     if (isLegacyManifest && presentLegacyNames.length !== legacyNames.size) {
       throw new TypeError("sealed manifest has a partial legacy daemon asset set");
     }
-    const expectedAssetCount = isLegacyManifest ? 10 : 4;
+    if (manifest.schemaVersion === 2 && isLegacyManifest) {
+      throw new TypeError("schema 2 manifest must not contain legacy daemon assets");
+    }
+    const expectedAssetCount = isLegacyManifest ? 10 : manifest.schemaVersion === 2 ? 6 : 4;
     if (assets.length !== expectedAssetCount) {
       throw new TypeError(`sealed manifest must contain exactly ${expectedAssetCount} assets`);
     }
-    if (appcast.length !== 1 || stableAliases.length !== 1) {
-      throw new TypeError("sealed manifest must contain exactly one appcast and one stable alias");
+    const expectedStableAliasCount = manifest.schemaVersion === 2 ? 2 : 1;
+    if (appcast.length !== 1 || stableAliases.length !== expectedStableAliasCount) {
+      throw new TypeError(
+        `sealed manifest must contain exactly one appcast and ${expectedStableAliasCount} stable aliases`,
+      );
     }
 
     for (const asset of immutable) {
@@ -168,7 +189,7 @@ function validateCandidateManifest(manifest) {
       );
     }
 
-    const stableDMG = stableAliases[0];
+    const stableDMG = assets.find((asset) => asset.name === "programa-macos.dmg");
     const immutableDMG = assets.find(
       (asset) => asset.name === `programa-macos-${manifest.build}.dmg`,
     );
@@ -179,10 +200,25 @@ function validateCandidateManifest(manifest) {
     ) {
       throw new TypeError("stable DMG must be byte-identical to the immutable build DMG");
     }
+
+    if (manifest.schemaVersion === 2) {
+      const stableEXE = assets.find((asset) => asset.name === "programa-windows.exe");
+      const immutableEXE = assets.find(
+        (asset) => asset.name === `programa-windows-${manifest.build}.exe`,
+      );
+      if (
+        !stableEXE ||
+        !immutableEXE ||
+        stableEXE.size !== immutableEXE.size ||
+        stableEXE.sha256 !== immutableEXE.sha256
+      ) {
+        throw new TypeError("stable EXE must be byte-identical to the immutable build EXE");
+      }
+    }
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: manifest.schemaVersion,
     sealed: manifest.sealed,
     targetSha: manifest.targetSha,
     version: manifest.version,
@@ -211,6 +247,7 @@ function selectPromotionCandidate(candidates) {
 const VERSIONED_ASSET_PATTERNS = [
   /^programa-macos-([1-9][0-9]*)\.dmg$/,
   /^programa-dSYMs-([1-9][0-9]*)\.zip$/,
+  /^programa-windows-([1-9][0-9]*)\.exe$/,
 ];
 
 function buildFromAssetName(name) {
@@ -610,6 +647,9 @@ function validateReleasePayloadReferences({ appcastXml, repository, tag, manifes
 function assertCandidateMayPromote(candidate, highWater) {
   const validated = validateCandidateManifest(candidate);
   if (!validated.sealed) throw new TypeError("promotion candidate must be sealed");
+  if (validated.schemaVersion !== 2) {
+    throw new TypeError("promotion candidate must use the current schema version 2");
+  }
   if (highWater === null || highWater === undefined) return "promote";
   assertCanonicalBuild(highWater, "public high-water build");
 
@@ -635,6 +675,9 @@ function compareAssets(left, right) {
 function getPromotionOrder(manifest) {
   const validated = validateCandidateManifest(manifest);
   if (!validated.sealed) throw new TypeError("promotion manifest must be sealed");
+  if (validated.schemaVersion !== 2) {
+    throw new TypeError("promotion manifest must use the current schema version 2");
+  }
   return [...validated.assets].sort(compareAssets);
 }
 
@@ -646,9 +689,12 @@ function createCandidateManifest(input) {
       throw new TypeError(`candidate manifest input has an unknown field: ${String(key)}`);
     }
   }
+  if (Object.hasOwn(input, "schemaVersion") && input.schemaVersion !== 2) {
+    throw new TypeError("new candidate manifests must use schemaVersion 2");
+  }
 
   const candidate = validateCandidateManifest({
-    schemaVersion: 1,
+    schemaVersion: 2,
     sealed: true,
     targetSha: input.targetSha,
     version: input.version,

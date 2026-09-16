@@ -22,7 +22,7 @@ set -euo pipefail
 # existing name with different state/size/digest, and uploads the generated
 # programa-release-candidate.json manifest last. That manifest is the seal and
 # must also be written byte-for-byte to the requested local output path. It
-# has the authoritative state-module shape `{schemaVersion:1,sealed:true,
+# has the authoritative state-module shape `{schemaVersion:2,sealed:true,
 # targetSha,version,build,assets:[{name,role,size,sha256}]}`. Manifest sha256
 # values are bare lowercase hex; GitHub asset metadata uses `sha256:<hex>`.
 # Payload appcast URLs bind to the requested destination
@@ -47,7 +47,7 @@ set -euo pipefail
 # a non-latest prerelease archive before rolling changes. Repository release
 # immutability must remain disabled because rolling is intentionally reused;
 # archive integrity comes from its sealed bytes and attestations instead.
-# Rolling reconciles only appcast.xml and programa-macos.dmg; build-specific
+# Rolling reconciles appcast.xml and the stable macOS and Windows aliases; build-specific
 # payloads remain in their permanent archive and are never copied into rolling.
 # Metadata and latest status change before the rolling ref moves. Stale drafts
 # may be deleted after final verification, but the selected archive remains.
@@ -169,7 +169,9 @@ make_fixture() {
   mkdir -p "${dir}"
   printf 'enclosure-%s\n' "${build}" > "${dir}/programa-macos-${build}.dmg"
   printf 'dsym-%s\n' "${build}" > "${dir}/programa-dSYMs-${build}.zip"
+  printf 'windows-%s\n' "${build}" > "${dir}/programa-windows-${build}.exe"
   cp "${dir}/programa-macos-${build}.dmg" "${dir}/programa-macos.dmg"
+  cp "${dir}/programa-windows-${build}.exe" "${dir}/programa-windows.exe"
   local enclosure_size
   enclosure_size="$(file_size "${dir}/programa-macos-${build}.dmg")"
   cat > "${dir}/appcast.xml" <<EOF
@@ -213,8 +215,10 @@ fixture_roles() {
   printf '%s\n' \
     "immutable=${dir}/programa-macos-${build}.dmg" \
     "immutable=${dir}/programa-dSYMs-${build}.zip" \
+    "immutable=${dir}/programa-windows-${build}.exe" \
     "appcast=${dir}/appcast.xml" \
-    "stable-alias=${dir}/programa-macos.dmg"
+    "stable-alias=${dir}/programa-macos.dmg" \
+    "stable-alias=${dir}/programa-windows.exe"
 }
 
 seal_output_for() { printf '%s/candidate-seal-%s.json' "${TMP_DIR}" "$1"; }
@@ -400,7 +404,7 @@ release_upload() {
       printf '%s\n' "$(digest_file "${FAKE_GH_EXPOSE_MILESTONE_APPCAST}")" > "${milestone_asset}/digest"
       log "milestone-appcast-advanced"
     fi
-    if [[ "${tag}" == rolling && "${name}" == programa-macos.dmg && -n "${FAKE_GH_EXPOSE_MILESTONE_BEFORE_METADATA:-}" ]]; then
+    if [[ "${tag}" == rolling && "${name}" == programa-windows.exe && -n "${FAKE_GH_EXPOSE_MILESTONE_BEFORE_METADATA:-}" ]]; then
       milestone_asset="$(asset_dir v0.63.0 appcast.xml)"
       cp "${FAKE_GH_EXPOSE_MILESTONE_BEFORE_METADATA}" "${milestone_asset}/bytes"
       file_size "${FAKE_GH_EXPOSE_MILESTONE_BEFORE_METADATA}" > "${milestone_asset}/size"
@@ -417,9 +421,9 @@ release_download() {
   maybe_fail "download:${tag}:${pattern}"; mkdir -p "${destination}"
   cp "$(asset_dir "${tag}" "${pattern}")/bytes" "${destination}/${pattern}"
   log "authenticated-download ${tag} ${pattern}"
-  if [[ "${tag}" == rolling && "${pattern}" == programa-macos.dmg && -n "${FAKE_GH_ADVANCE_MAIN_BEFORE_METADATA:-}" && \
+  if [[ "${tag}" == rolling && "${pattern}" == programa-windows.exe && -n "${FAKE_GH_ADVANCE_MAIN_BEFORE_METADATA:-}" && \
     ! -f "${STATE_DIR}/main_advanced_before_metadata" ]] && \
-    grep -Fq 'mutation upload-asset rolling programa-macos.dmg' "${LOG}"; then
+    grep -Fq 'mutation upload-asset rolling programa-windows.exe' "${LOG}"; then
     printf '%s\n' "${FAKE_GH_ADVANCE_MAIN_BEFORE_METADATA}" > "${STATE_DIR}/main_sha"
     : > "${STATE_DIR}/main_advanced_before_metadata"
     log "main-advanced-before-metadata ${FAKE_GH_ADVANCE_MAIN_BEFORE_METADATA}"
@@ -614,7 +618,7 @@ seed_sealed_candidate() {
     entries+="{\"name\":\"${name}\",\"role\":\"${role}\",\"size\":${size},\"sha256\":\"${digest}\"}"
   done < <(fixture_roles "${build}")
   dir="${TMP_DIR}/seal-${build}.json"
-  printf '{"schemaVersion":1,"sealed":true,"targetSha":"%s","version":"%s","build":"%s","assets":[%s]}\n' \
+  printf '{"schemaVersion":2,"sealed":true,"targetSha":"%s","version":"%s","build":"%s","assets":[%s]}\n' \
     "$(target_sha_for "${build}")" "${version}" "${build}" "${entries}" > "${dir}"
   write_asset "${tag}" "${SEAL_NAME}" "${dir}"
   printf '%s\n' "$((build * 10 + 9))" > "$(asset_dir "${tag}" "${SEAL_NAME}")/id"
@@ -674,11 +678,12 @@ assert_candidate_sealed() {
     const value = JSON.parse(fs.readFileSync(seal, "utf8"));
     if (Object.keys(value).sort().join(",") !== "assets,build,schemaVersion,sealed,targetSha,version") process.exit(1);
     const expectedSha = BigInt(build).toString(16).padStart(40, "0");
-    if (value.schemaVersion !== 1 || value.sealed !== true || value.build !== build || value.version !== version || value.targetSha !== expectedSha) process.exit(1);
-    if (!Array.isArray(value.assets) || value.assets.length !== 4) process.exit(1);
+    if (value.schemaVersion !== 2 || value.sealed !== true || value.build !== build || value.version !== version || value.targetSha !== expectedSha) process.exit(1);
+    if (!Array.isArray(value.assets) || value.assets.length !== 6) process.exit(1);
     const expected = new Map([
       [`programa-macos-${build}.dmg`, "immutable"], [`programa-dSYMs-${build}.zip`, "immutable"],
-      ["appcast.xml", "appcast"], ["programa-macos.dmg", "stable-alias"],
+      [`programa-windows-${build}.exe`, "immutable"], ["appcast.xml", "appcast"],
+      ["programa-macos.dmg", "stable-alias"], ["programa-windows.exe", "stable-alias"],
     ]);
     for (const a of value.assets) {
       if (Object.keys(a).sort().join(",") !== "name,role,sha256,size") process.exit(1);
@@ -696,6 +701,7 @@ assert_rolling_converged() {
   assert_file_equals "$(release_dir rolling)/draft" false; assert_file_equals "$(release_dir rolling)/latest" true
   assert_asset_equals rolling appcast.xml "${FIXTURE_DIR}/${build}/appcast.xml"
   assert_asset_equals rolling programa-macos.dmg "${FIXTURE_DIR}/${build}/programa-macos.dmg"
+  assert_asset_equals rolling programa-windows.exe "${FIXTURE_DIR}/${build}/programa-windows.exe"
 }
 
 assert_published_archive() {
@@ -706,7 +712,7 @@ assert_published_archive() {
   assert_file_equals "$(release_dir "${tag}")/latest" false
   assert_file_equals "$(release_dir "${tag}")/prerelease" true
   assert_file_equals "$(release_dir "${tag}")/immutable" false
-  assert_asset_count "${tag}" 5
+  assert_asset_count "${tag}" 7
 }
 
 # A prepared seal is a durable handoff between build and staging. Preparation
@@ -724,8 +730,8 @@ stage_prepared_candidate 104 0.64.73
 assert_candidate_sealed 104 0.64.73
 cmp -s "${TMP_DIR}/rolling-prepared-seal.snapshot" "${rolling_prepared_seal}" || fail "rolling staging rewrote the prepared seal"
 grep '^mutation upload-asset rolling-candidate-104 ' "${STATE_DIR}/operations.log" > "${TMP_DIR}/rolling-prepared-uploads"
-[[ "$(wc -l < "${TMP_DIR}/rolling-prepared-uploads" | tr -d ' ')" == 5 ]] || fail "rolling prepared staging did not upload the exact payload set plus seal"
-! sed -n '1,4p' "${TMP_DIR}/rolling-prepared-uploads" | grep -Fq " ${SEAL_NAME}" || fail "rolling prepared seal was uploaded before all payloads"
+[[ "$(wc -l < "${TMP_DIR}/rolling-prepared-uploads" | tr -d ' ')" == 7 ]] || fail "rolling prepared staging did not upload the exact payload set plus seal"
+! sed -n '1,6p' "${TMP_DIR}/rolling-prepared-uploads" | grep -Fq " ${SEAL_NAME}" || fail "rolling prepared seal was uploaded before all payloads"
 [[ "$(tail -1 "${TMP_DIR}/rolling-prepared-uploads")" == *" ${SEAL_NAME}" ]] || fail "rolling prepared seal was not uploaded last"
 
 reset_state
@@ -740,8 +746,8 @@ stage_prepared_candidate 201 1.2.3 milestone-candidate- v1.2.3 009
 assert_candidate_sealed 201 1.2.3 milestone-candidate-201-009
 cmp -s "${TMP_DIR}/milestone-prepared-seal.snapshot" "${milestone_prepared_seal}" || fail "milestone staging rewrote the prepared seal"
 grep '^mutation upload-asset milestone-candidate-201-009 ' "${STATE_DIR}/operations.log" > "${TMP_DIR}/milestone-prepared-uploads"
-[[ "$(wc -l < "${TMP_DIR}/milestone-prepared-uploads" | tr -d ' ')" == 5 ]] || fail "milestone prepared staging did not upload the exact payload set plus seal"
-! sed -n '1,4p' "${TMP_DIR}/milestone-prepared-uploads" | grep -Fq " ${SEAL_NAME}" || fail "milestone prepared seal was uploaded before all payloads"
+[[ "$(wc -l < "${TMP_DIR}/milestone-prepared-uploads" | tr -d ' ')" == 7 ]] || fail "milestone prepared staging did not upload the exact payload set plus seal"
+! sed -n '1,6p' "${TMP_DIR}/milestone-prepared-uploads" | grep -Fq " ${SEAL_NAME}" || fail "milestone prepared seal was uploaded before all payloads"
 [[ "$(tail -1 "${TMP_DIR}/milestone-prepared-uploads")" == *" ${SEAL_NAME}" ]] || fail "milestone prepared seal was not uploaded last"
 
 # Both kinds of stale handoff fail before candidate mutation: altered seal
@@ -778,13 +784,13 @@ printf '%s\n' "$(target_sha_for 201)" > "${STATE_DIR}/main_sha"
 RESTORED="${TMP_DIR}/restored-milestone"; mkdir -p "${RESTORED}"
 : > "${STATE_DIR}/operations.log"; invoke_restore "${RESTORED}"
 ! grep -q '^mutation ' "${STATE_DIR}/operations.log" || fail "candidate restore mutated GitHub"
-[[ "$(find "${RESTORED}" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" == 5 ]] || fail "restore did not write the exact payload set plus manifest"
+[[ "$(find "${RESTORED}" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" == 7 ]] || fail "restore did not write the exact payload set plus manifest"
 node - "${MILESTONE_MODULE}" "${RESTORED}" <<'NODE'
 const [modulePath, directory] = process.argv.slice(2);
 require(modulePath).verifyMilestonePayload({ directory, build: "201" });
 NODE
 grep -Fxq "attestation-verify ${SEAL_NAME} source=$(target_sha_for 201)" "${STATE_DIR}/operations.log" || fail "restore did not attest the seal"
-[[ "$(grep -c '^attestation-verify ' "${STATE_DIR}/operations.log")" == 5 ]] || fail "restore did not attest the exact payload set plus seal"
+[[ "$(grep -c '^attestation-verify ' "${STATE_DIR}/operations.log")" == 7 ]] || fail "restore did not attest the exact payload set plus seal"
 
 # Stored-byte tampering and failed provenance never reach the output directory.
 printf 'tampered\n' >> "$(asset_dir milestone-candidate-201-002 programa-macos-201.dmg)/bytes"
@@ -852,7 +858,7 @@ make_fixture 105 0.64.73
 reset_state
 if invoke_candidate 101 0.64.73 'upload:rolling-candidate-101:appcast.xml'; then fail "candidate interruption was not propagated"; fi
 : > "${STATE_DIR}/operations.log"; invoke_candidate 101 0.64.73; assert_candidate_sealed 101 0.64.73
-for present in programa-dSYMs-101.zip programa-macos-101.dmg; do
+for present in programa-dSYMs-101.zip programa-macos-101.dmg programa-windows-101.exe; do
   ! grep -Eq "(delete-asset|upload-asset) rolling-candidate-101 ${present}$" "${STATE_DIR}/operations.log" || fail "retry clobbered ${present}"
 done
 
@@ -1131,7 +1137,7 @@ write_release archive-without-feed "$(target_sha_for 99)" false false archive ar
 assert_rolling_converged 103; assert_published_archive 103
 
 # A promotion seals its build-specific payload in-place before either mutable
-# rolling alias changes. Repeated promotions replace only those two aliases, so
+# rolling alias changes. Repeated promotions replace only the feed and two aliases, so
 # the rolling release's asset count remains bounded while both archives retain
 # the exact bytes that older clients may still download.
 reset_state
@@ -1161,7 +1167,7 @@ first_rolling_mutation="$(grep -n -E '^mutation (delete-asset|upload-asset|edit-
 ! grep -Eq '^mutation (upload-asset|delete-asset) rolling-candidate-103 ' "${STATE_DIR}/operations.log" || \
   fail "promotion rewrote selected archive assets"
 if grep -E '^mutation (upload-asset|delete-asset) rolling ' "${STATE_DIR}/operations.log" | \
-  grep -Ev ' rolling (appcast.xml|programa-macos.dmg)$'; then
+  grep -Ev ' rolling (appcast.xml|programa-macos.dmg|programa-windows.exe)$'; then
   fail "promotion copied build-specific assets into rolling"
 fi
 
@@ -1179,7 +1185,7 @@ assert_asset_count rolling "${initial_rolling_asset_count}"
 ! grep -Eq '^mutation (upload-asset|delete-asset) rolling-candidate-104 ' "${STATE_DIR}/operations.log" || \
   fail "repeated promotion rewrote selected archive assets"
 if grep -E '^mutation (upload-asset|delete-asset) rolling ' "${STATE_DIR}/operations.log" | \
-  grep -Ev ' rolling (appcast.xml|programa-macos.dmg)$'; then
+  grep -Ev ' rolling (appcast.xml|programa-macos.dmg|programa-windows.exe)$'; then
   fail "repeated promotion grew rolling with build-specific assets"
 fi
 
@@ -1265,7 +1271,7 @@ assert_file_equals "$(release_dir rolling)/body" 'notes-102'
 assert_file_equals "$(release_dir rolling)/target_sha" "$(target_sha_for 102)"
 assert_release_exists rolling-candidate-103
 hook_line="$(grep -n 'milestone-appcast-advanced' "${STATE_DIR}/operations.log" | tail -1 | cut -d: -f1)"
-if tail -n "+${hook_line}" "${STATE_DIR}/operations.log" | grep -Eq '^mutation (delete-asset|upload-asset) rolling (appcast.xml|programa-macos.dmg)$|^mutation (edit-release|move-ref) rolling'; then
+if tail -n "+${hook_line}" "${STATE_DIR}/operations.log" | grep -Eq '^mutation (delete-asset|upload-asset) rolling (appcast.xml|programa-macos.dmg|programa-windows.exe)$|^mutation (edit-release|move-ref) rolling'; then
   fail "milestone race mutated aliases, metadata, or ref"
 fi
 
@@ -1283,7 +1289,7 @@ assert_file_equals "$(release_dir rolling)/title" 'Rolling 0.64.73'
 assert_file_equals "$(release_dir rolling)/target_sha" "$(target_sha_for 102)"
 assert_release_exists rolling-candidate-103
 archive_main_hook_line="$(grep -n 'main-advanced-after-archive' "${STATE_DIR}/operations.log" | tail -1 | cut -d: -f1)"
-if tail -n "+${archive_main_hook_line}" "${STATE_DIR}/operations.log" | grep -Eq '^mutation (delete-asset|upload-asset) rolling (appcast.xml|programa-macos.dmg)$|^mutation (edit-release|move-ref) rolling'; then
+if tail -n "+${archive_main_hook_line}" "${STATE_DIR}/operations.log" | grep -Eq '^mutation (delete-asset|upload-asset) rolling (appcast.xml|programa-macos.dmg|programa-windows.exe)$|^mutation (edit-release|move-ref) rolling'; then
   fail "post-archive main race mutated aliases, metadata, or ref"
 fi
 

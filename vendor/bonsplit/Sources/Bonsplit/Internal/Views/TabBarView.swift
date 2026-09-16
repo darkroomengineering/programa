@@ -1174,7 +1174,9 @@ struct TabDropDelegate: DropDelegate {
                     if targetIndex == sourceIndex || targetIndex == sourceIndex + 1 {
                         return
                     }
-                    pane.moveTab(from: sourceIndex, to: targetIndex)
+                    _ = bonsplitController.reorderTab(
+                        TabID(id: draggedTab.id), toIndex: targetIndex, selectMovedTab: false
+                    )
                 } else {
                     _ = bonsplitController.moveTab(
                         TabID(id: draggedTab.id),

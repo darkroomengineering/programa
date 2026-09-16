@@ -23,7 +23,9 @@ function payloadNames(build) {
     "appcast.xml",
     `programa-dSYMs-${build}.zip`,
     `programa-macos-${build}.dmg`,
+    `programa-windows-${build}.exe`,
     "programa-macos.dmg",
+    "programa-windows.exe",
   ];
 }
 
@@ -89,7 +91,7 @@ function createMilestoneManifest({ directory, build }) {
   const resolved = resolveDirectory(directory);
   assertExactDirectory(resolved, names);
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     build,
     files: names.map((name) => inspectFile(resolved, name)),
   };
@@ -118,10 +120,10 @@ function verifyMilestonePayload({ directory, build }) {
     throw new TypeError("milestone payload manifest is not valid JSON", { cause: error });
   }
   assertExactFields(manifest, ["schemaVersion", "build", "files"], "milestone manifest");
-  if (manifest.schemaVersion !== 1) throw new TypeError("milestone manifest schemaVersion must be 1");
+  if (manifest.schemaVersion !== 2) throw new TypeError("milestone manifest schemaVersion must be 2");
   if (manifest.build !== build) throw new TypeError("milestone manifest build does not match");
   if (!Array.isArray(manifest.files) || manifest.files.length !== names.length) {
-    throw new TypeError("milestone manifest must contain exactly ten files");
+    throw new TypeError("milestone manifest must contain exactly six files");
   }
 
   const normalizedFiles = manifest.files.map((file, index) => {
@@ -142,7 +144,7 @@ function verifyMilestonePayload({ directory, build }) {
     return observed;
   });
 
-  return { schemaVersion: 1, build, files: normalizedFiles };
+  return { schemaVersion: 2, build, files: normalizedFiles };
 }
 
 function validateMilestonePayloadReferences({ directory, build, repository, tag, version }) {
@@ -155,7 +157,7 @@ function validateMilestonePayloadReferences({ directory, build, repository, tag,
     role:
       file.name === "appcast.xml"
         ? "appcast"
-        : file.name === "programa-macos.dmg"
+        : file.name === "programa-macos.dmg" || file.name === "programa-windows.exe"
           ? "stable-alias"
           : "immutable",
   }));
@@ -164,7 +166,7 @@ function validateMilestonePayloadReferences({ directory, build, repository, tag,
     repository,
     tag,
     manifest: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       sealed: true,
       targetSha: "0".repeat(40),
       version,

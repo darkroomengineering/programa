@@ -61,7 +61,7 @@ extension ProgramaCLI {
                 params["base_branch"] = baseBranchOpt
             }
 
-            let payload = try client.sendV2(method: "review.open", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.reviewOpen, params: params)
             if jsonOutput {
                 print(jsonString(formatIDs(payload, mode: idFormat)))
             } else {
@@ -76,7 +76,7 @@ extension ProgramaCLI {
                 throw CLIError(message: "review refresh: unexpected argument '\(rest[0])'. Usage: programa review refresh [--surface <id|ref|index>]")
             }
             let params = try workspaceRoutingParams()
-            let payload = try client.sendV2(method: "review.refresh", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.reviewRefresh, params: params)
             if jsonOutput {
                 print(jsonString(formatIDs(payload, mode: idFormat)))
             } else {
@@ -102,7 +102,7 @@ extension ProgramaCLI {
             if let preambleOpt {
                 params["preamble"] = preambleOpt
             }
-            let payload = try client.sendV2(method: "review.send_comments", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.reviewSendComments, params: params)
             if jsonOutput {
                 print(jsonString(formatIDs(payload, mode: idFormat)))
             } else {
@@ -145,7 +145,7 @@ extension ProgramaCLI {
             params["end_line"] = endLine
             params["text"] = text
 
-            let payload = try client.sendV2(method: "review.comment.add", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.reviewCommentAdd, params: params)
             if jsonOutput {
                 print(jsonString(formatIDs(payload, mode: idFormat)))
             } else {
@@ -159,7 +159,7 @@ extension ProgramaCLI {
             var params = try workspaceRoutingParams()
             params["comment_id"] = commentId
 
-            let payload = try client.sendV2(method: "review.comment.remove", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.reviewCommentRemove, params: params)
             if jsonOutput {
                 print(jsonString(formatIDs(payload, mode: idFormat)))
             } else {
@@ -171,7 +171,7 @@ extension ProgramaCLI {
                 throw CLIError(message: "review comment list: unexpected argument '\(commentRest[0])'. Usage: programa review comment list [--surface <id|ref|index>]")
             }
             let params = try workspaceRoutingParams()
-            let payload = try client.sendV2(method: "review.comment.list", params: params)
+            let payload = try client.sendV2(method: V2MethodNames.reviewCommentList, params: params)
             if jsonOutput {
                 print(jsonString(formatIDs(payload, mode: idFormat)))
             } else {
