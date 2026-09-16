@@ -1,0 +1,14 @@
+[workspace]
+members = ["crates/programa-domain", "crates/programa-ffi"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.20"
+

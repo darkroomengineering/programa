@@ -1,0 +1,21 @@
+[package]
+name = "programa-terminal"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+alacritty_terminal = "0.26.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
+# Keep this crate buildable while the repository-level Rust workspace is
+# assembled by the shared-core integration work.
+[workspace]
+
