@@ -1038,9 +1038,10 @@ write_release archive-without-feed "$(target_sha_for 99)" false false archive ar
 assert_rolling_converged 103; assert_published_archive 103
 
 # A promotion seals its build-specific payload in-place before either mutable
-# rolling alias changes. Repeated promotions replace only the feed and two aliases, so
-# the rolling release's asset count remains bounded while both archives retain
-# the exact bytes that older clients may still download.
+# rolling alias changes. Repeated promotions replace only the feed and two
+# aliases, so the rolling release's asset count remains bounded, and each
+# promotion deletes the previous candidate draft (retention 1) once the new
+# one is in place.
 reset_state
 seed_rolling 100
 seed_release_decoys 1005
@@ -1073,7 +1074,7 @@ fi
 stage_archive_candidate 104
 : > "${STATE_DIR}/operations.log"
 invoke_rolling
-assert_published_archive 103
+assert_release_absent rolling-candidate-103
 assert_published_archive 104
 assert_rolling_converged 104
 assert_asset_count rolling "${initial_rolling_asset_count}"
