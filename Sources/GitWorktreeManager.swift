@@ -19,15 +19,12 @@ struct GitWorktreeManager {
 
     enum AddOutcome {
         case success(WorktreeEntry)
-        case notAGitRepo
-        case branchCheckedOut(existing: WorktreeEntry)
         case worktreePathExists
         case gitCommandFailed(message: String)
     }
 
     enum RemoveOutcome {
         case success
-        case notAGitRepo
         case worktreeNotFound
         case worktreeDirty(message: String)
         case gitCommandFailed(message: String)

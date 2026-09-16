@@ -59,7 +59,7 @@ extension TerminalController {
                 switch GitWorktreeManager.remove(repoRoot: repoRoot, path: entry.path, force: false) {
                 case .success:
                     break
-                case .notAGitRepo, .worktreeNotFound, .worktreeDirty, .gitCommandFailed:
+                case .worktreeNotFound, .worktreeDirty, .gitCommandFailed:
                     return .err(
                         code: "cleanup_failed",
                         message: "\(originalMessage). The unused worktree could not be removed.",
@@ -71,12 +71,6 @@ extension TerminalController {
                 }
             }
             return completion
-        case .notAGitRepo:
-            return .err(code: "not_a_git_repo", message: "'\(repoRoot)' is not a git repository", data: nil)
-        case .branchCheckedOut(let existing):
-            return .err(code: "branch_checked_out", message: "Branch '\(branch)' is already checked out at \(existing.path)", data: [
-                "existing_path": existing.path
-            ])
         case .worktreePathExists:
             return .err(code: "worktree_path_exists", message: "Path already exists: \(path)", data: nil)
         case .gitCommandFailed(let message):
@@ -225,8 +219,6 @@ extension TerminalController {
                 result["closed_workspace_id"] = closedWorkspaceId.uuidString
             }
             return .ok(result)
-        case .notAGitRepo:
-            return .err(code: "not_a_git_repo", message: "'\(repoRoot)' is not a git repository", data: nil)
         case .worktreeNotFound:
             return .err(code: "worktree_not_found", message: "No matching worktree found", data: nil)
         case .worktreeDirty(let message):

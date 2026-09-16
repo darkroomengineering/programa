@@ -24,11 +24,8 @@ enum WorkspaceMountPolicy {
         }
 
         if isCycleHot, let selected {
-            let warmIds = cycleWarmIds(selected: selected, orderedTabIds: orderedTabIds)
-            for id in warmIds.reversed() {
-                ordered.removeAll { $0 == id }
-                ordered.insert(id, at: 0)
-            }
+            ordered.removeAll { $0 == selected }
+            ordered.insert(selected, at: 0)
         }
 
         if isCycleHot,
@@ -65,12 +62,6 @@ enum WorkspaceMountPolicy {
         return ordered
     }
 
-    private static func cycleWarmIds(selected: UUID, orderedTabIds: [UUID]) -> [UUID] {
-        guard orderedTabIds.contains(selected) else { return [selected] }
-        // Keep warming focused to the selected workspace. Retiring/target workspaces are
-        // pinned by handoff logic, so warming adjacent neighbors here just adds layout work.
-        return [selected]
-    }
 }
 
 struct MountedWorkspacePresentation: Equatable {

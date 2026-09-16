@@ -44,7 +44,6 @@ final class AgentManifestLoader: @unchecked Sendable {
 
     private let lock = NSLock()
     private var manifestsByAgent: [String: AgentManifest] = [:]
-    private var manifestsByProcessName: [String: AgentManifest] = [:]
     private var sourceByAgent: [String: ManifestSource] = [:]
     private var isLoaded = false
 
@@ -101,13 +100,6 @@ final class AgentManifestLoader: @unchecked Sendable {
 
         manifestsByAgent = byAgent
         sourceByAgent = bySource
-        var byProcessName: [String: AgentManifest] = [:]
-        for manifest in byAgent.values {
-            for processName in manifest.recognize.processNames {
-                byProcessName[processName] = manifest
-            }
-        }
-        manifestsByProcessName = byProcessName
     }
 
     /// Looks up a manifest by its stable agent id (e.g. "claude-code").
@@ -116,17 +108,6 @@ final class AgentManifestLoader: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return manifestsByAgent[agent]
-    }
-
-    /// Looks up a manifest by a recognized foreground-command process name (e.g. "claude"). Used
-    /// by the Phase A recognition path if/when a foreground-command signal becomes available on
-    /// the wire (see AgentScreenDetectionEngine.swift's header for why v1 uses a screen-pattern
-    /// fallback instead).
-    func manifest(forProcessName processName: String) -> AgentManifest? {
-        loadIfNeeded()
-        lock.lock()
-        defer { lock.unlock() }
-        return manifestsByProcessName[processName]
     }
 
     /// All loaded manifests (bundled + user overrides), used by `AgentScreenDetectionEngine`'s
@@ -166,7 +147,6 @@ final class AgentManifestLoader: @unchecked Sendable {
         lock.lock()
         isLoaded = false
         manifestsByAgent = [:]
-        manifestsByProcessName = [:]
         sourceByAgent = [:]
         lock.unlock()
         loadIfNeeded()
@@ -179,7 +159,6 @@ final class AgentManifestLoader: @unchecked Sendable {
         lock.lock()
         isLoaded = false
         manifestsByAgent = [:]
-        manifestsByProcessName = [:]
         sourceByAgent = [:]
         lock.unlock()
     }

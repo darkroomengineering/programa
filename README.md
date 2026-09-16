@@ -18,10 +18,6 @@
   <img src="./docs/assets/main-first-image.png" alt="Programa: workspace sidebar with agent status, a Claude Code session waiting for input, and a browser split" width="900" />
 </p>
 
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=i-WxO5YUTOs">▶ Demo video</a>
-</p>
-
 Run many coding agents in parallel and always know which one needs you.
 
 The features below describe the macOS app. A native Windows frontend using
