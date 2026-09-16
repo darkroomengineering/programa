@@ -1,6 +1,6 @@
 # Rust core spike: decide with numbers, not a rewrite
 
-Status: spike complete, decision recorded (2026-09-15)
+Status: spike complete, decision recorded (2026-09-15); reconciled with the Windows frontend that landed on main (2026-09-16)
 
 ## Question
 
@@ -148,7 +148,20 @@ Steps 1 and 2 are weeks and are worth doing regardless. Step 3 is the real inves
   - Shell panels use node-pty on the server (ConPTY on Windows) and render client-side with `libghostty-vt`, Ghostty's VT parser as a C ABI, compiled to WASM for web and native for Android.
   - Features worth porting, ranked by the inventory: structured provider events instead of terminal scraping for agent turns; capability-flag negotiation between client and server instead of version lock; the DPoP relay bootstrap for pairing; hidden-git-ref checkpoints per turn; running native telemetry as an isolated child. Avoid: their five-way Linux screenshot backends, a five-provider PR API matrix, and the dual-backend WSL design on Windows.
 
-## Known losses with a GPUI core
+## What landed on main on 2026-09-16, and how the plan changes
+
+Commits `ac23cdf900` through `d4c0a7bcd8` added a native Windows frontend and a shared core in-tree, in parallel with the workstreams below. Reconciliation:
+
+| Piece | What main has | What this plan proposed | Resolution |
+|---|---|---|---|
+| Windows UI | WinUI 3 in C# on .NET 10 (`windows/`), native tabs, splits, settings, en and ja resources, CI-built unsigned EXE | GPUI client (spike) | WinUI is the Windows product. The GPUI spike stays as a measured reference and a possible Linux client; no further investment unless Linux is wanted. |
+| Portable state | `core/crates/programa-domain` and `programa-ffi`: workspace, pane, surface, layout, selection, tab order as a C ABI library (`core/ABI.md`), in-process on both platforms; macOS adapter `Sources/SharedWorkspaceCore.swift` seeds one pane and projects reorders | a headless daemon owning PTYs, sessions, and the socket API | Complementary, not competing. The in-tree core is the model layer; `programad` (`~/Developer/@darkroom/programa-core`) is the process layer: PTY ownership, WAL, attach and detach, fd handoff, the remote transport. Next step is to make `programad` link `programa-domain` so there is one state model, and to move `programa-core` into `core/crates/programad` in this repo. |
+| Terminal engine on Windows | `core/crates/programa-terminal`: vendored, patched `alacritty_terminal` 0.26.0 over ConPTY (patch: final PTY output loss under snapshot lock contention, with a regression test) | `libghostty-vt` for every non-macOS client | alacritty_terminal is shipping and patched; keep it. `libghostty-vt` remains an option if parser parity with the macOS fork (OSC 99, DECRPM 2031) becomes a requirement; the spike proves it builds and links. |
+| Contract, seam, agent events (this session's PRs #338, #339, #340) | not present | steps 1 to 3 of the sequence | Unchanged. The seam (`ProgramaCore` in #339) and `SharedWorkspaceCore` are two adapters on the same side of the boundary and should merge into one once workspace lifecycle moves into the shared core. |
+
+Sequence, updated: contract (#338) and seam (#339) land first; agent events (#340) next; then `programad` joins `core/` and takes PTY ownership on macOS behind the seam; then the remote transport per `programa-core/docs/remote-transport.md`; org mode remains a product decision.
+
+## Known losses with a GPUI core (now moot for Windows, kept for a Linux client)
 
 - GPUI draws everything itself: no native macOS menus, sheets, glass, or accessibility tree for free.
 - No webview: the browser panel does not carry over.
