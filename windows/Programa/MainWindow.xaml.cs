@@ -21,6 +21,7 @@ public sealed partial class MainWindow : Window
     private string? _startupSettingsError;
     private bool _dialogOpen;
     private bool _projecting;
+    private bool _activationLogged;
 
     public MainWindow()
     {
@@ -32,7 +33,15 @@ public sealed partial class MainWindow : Window
         Root.PreviewKeyDown += OnKeyDown;
         Root.Loaded += OnRootLoaded;
         Closed += OnClosed;
+        Activated += OnActivated;
         ProjectSnapshot();
+    }
+
+    private void OnActivated(object sender, WindowActivatedEventArgs args)
+    {
+        if (_activationLogged) return;
+        _activationLogged = true;
+        LaunchLog.Write("launch ok: window shown");
     }
 
     private static string Id(string prefix) => $"{prefix}-{Guid.NewGuid():N}";

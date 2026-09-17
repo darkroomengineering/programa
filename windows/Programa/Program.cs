@@ -25,13 +25,28 @@ public static class Program
             return;
         }
 
-        ComWrappersSupport.InitializeComWrappers();
-        Application.Start(_ =>
+        AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
         {
-            var dispatcher = DispatcherQueue.GetForCurrentThread();
-            SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(dispatcher));
-            new App();
-        });
+            var error = eventArgs.ExceptionObject as Exception ?? new Exception($"Non-Exception unhandled object: {eventArgs.ExceptionObject}");
+            LaunchLog.ReportFatal("Programa failed to start", error);
+        };
+
+        try
+        {
+            LaunchLog.Write("launch: starting");
+            ComWrappersSupport.InitializeComWrappers();
+            Application.Start(_ =>
+            {
+                var dispatcher = DispatcherQueue.GetForCurrentThread();
+                SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(dispatcher));
+                _ = new App();
+            });
+        }
+        catch (Exception error)
+        {
+            LaunchLog.ReportFatal("Programa failed to start", error);
+            Environment.Exit(1);
+        }
     }
 }
 
