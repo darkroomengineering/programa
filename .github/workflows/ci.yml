@@ -1205,6 +1205,17 @@ jobs:
             echo "App started. Diagnostics:"
             cat "$DIAG_PATH"
 
+            # Activate the app so ghostty_app_set_focus(true) fires. The app is
+            # launched here as a bare Process (not via XCUIApplication.launch(),
+            # which blocks ~60s trying to foreground-activate on headless CI), so
+            # its own in-process NSRunningApplication.current.activate() call
+            # silently fails without a real WindowServer frontmost app. Driving
+            # activation externally via System Events, targeted by PID, is a
+            # different code path and works even when the in-process call doesn't.
+            osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $APP_PID) to true" \
+              >/tmp/programa-ui-test-activate.log 2>&1 \
+              || echo "WARNING: External activation via System Events failed (see /tmp/programa-ui-test-activate.log)"
+
             # Wait for render stats (terminal surface initialization)
             echo "Waiting for render stats..."
             RENDER_READY=false
