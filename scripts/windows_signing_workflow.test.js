@@ -88,6 +88,23 @@ test("build-windows.ps1 exposes the signing hook release.yml relies on", () => {
   assert.match(script, /Unsigned build: no signing script configured/);
   assert.match(script, /Unsigned build: skipping Authenticode verification/);
   assert.match(script, /Get-AuthenticodeSignature/);
+
+  // Regression: Invoke-ProgramaWindowsSigning's body must not use Write-Output. In
+  // PowerShell, unsuppressed pipeline output inside a function is appended to that
+  // function's return value, so a Write-Output call before `return $false` turns
+  // `$SigningPerformed = Invoke-ProgramaWindowsSigning ...` into a truthy 2-element array
+  // even on the unsigned path — this broke ci.yml's windows-build job, which always
+  // takes the unsigned path, by running (and failing) the post-copy signature check.
+  const functionStart = script.indexOf("function Invoke-ProgramaWindowsSigning");
+  const functionEnd = script.indexOf("\ntry {", functionStart);
+  assert.notEqual(functionStart, -1);
+  assert.notEqual(functionEnd, -1);
+  const functionBody = script.slice(functionStart, functionEnd);
+  const functionCodeLines = functionBody.split("\n").filter((line) => !line.trim().startsWith("#"));
+  assert.ok(
+    !functionCodeLines.some((line) => line.includes("Write-Output")),
+    "Invoke-ProgramaWindowsSigning must use Write-Host, not Write-Output, for its messages",
+  );
 });
 
 test("ci.yml windows-build job does not sign (PR builds must not sign)", () => {

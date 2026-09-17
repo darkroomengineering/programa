@@ -49,7 +49,11 @@ function Invoke-Checked([string]$Description, [scriptblock]$Command) {
 # signing call, so signing two already-duplicated files separately would make them diverge.
 function Invoke-ProgramaWindowsSigning([string]$ExecutablePath, [string]$SignScript) {
     if ([string]::IsNullOrWhiteSpace($SignScript)) {
-        Write-Output "Unsigned build: no signing script configured (pass -SignScript or set PROGRAMA_WINDOWS_SIGN_SCRIPT). Shipping $([System.IO.Path]::GetFileName($ExecutablePath)) unsigned."
+        # Write-Host, not Write-Output: anything written to the success stream inside a
+        # PowerShell function is appended to its return value, which would make the caller's
+        # `$SigningPerformed = Invoke-ProgramaWindowsSigning ...` capture an array containing
+        # this message alongside $false — and a non-empty array is truthy in an `if`.
+        Write-Host "Unsigned build: no signing script configured (pass -SignScript or set PROGRAMA_WINDOWS_SIGN_SCRIPT). Shipping $([System.IO.Path]::GetFileName($ExecutablePath)) unsigned."
         return $false
     }
 
@@ -59,7 +63,7 @@ function Invoke-ProgramaWindowsSigning([string]$ExecutablePath, [string]$SignScr
     if ($Signature.Status -ne 'Valid') {
         throw "Signing was requested via -SignScript but Get-AuthenticodeSignature reports '$($Signature.Status)' for $ExecutablePath, not Valid: $($Signature.StatusMessage)"
     }
-    Write-Output "Signed $([System.IO.Path]::GetFileName($ExecutablePath)): Authenticode signature Valid (signer: $($Signature.SignerCertificate.Subject))."
+    Write-Host "Signed $([System.IO.Path]::GetFileName($ExecutablePath)): Authenticode signature Valid (signer: $($Signature.SignerCertificate.Subject))."
     return $true
 }
 
