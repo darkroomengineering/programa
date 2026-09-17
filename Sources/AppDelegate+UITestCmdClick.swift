@@ -727,25 +727,7 @@ extension AppDelegate {
         // display ID and scale in sync; without this observer, this diagnostics file never
         // reflects the presents that notification triggers, so the churn test always sees a
         // flat presentCount no matter how much real rendering happens underneath it.
-        //
-        // Mode churn can also bump the window off the target display entirely: when the
-        // virtual display's global bounds move (arrangement recalculates on each
-        // CGDisplaySetDisplayMode), AppKit can reassign the window's .screen to whatever
-        // display its now-stale absolute frame overlaps, typically the real primary
-        // display. moveUITestWindowToTargetDisplayIfNeeded() only ran once at launch, so
-        // once that happens the window never comes back — re-run it on every screen
-        // parameters change to re-home the window before writing diagnostics.
-        let screenParamsObserver = center.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.moveUITestWindowToTargetDisplayIfNeeded()
-                self?.writeUITestDiagnosticsIfNeeded(stage: "displayUITest.screenParametersDidChange")
-            }
-        }
-        displayResolutionUITestObservers.append(screenParamsObserver)
+        observe(NSApplication.didChangeScreenParametersNotification, "displayUITest.screenParametersDidChange")
 
         writeUITestDiagnosticsIfNeeded(stage: "displayUITest.setup")
     }
