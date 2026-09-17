@@ -958,10 +958,7 @@ jobs:
       - build-app
       - unit-tests
       - change-detection
-    # TEMP(fix/ci-churn-reuse-persistent-display): also allow push on this
-    # branch so the churn step (skipped under workflow_dispatch) actually
-    # runs pre-merge. Revert this line before merging.
-    if: ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/ci-churn-reuse-persistent-display')) || (github.event_name == 'workflow_dispatch' && inputs.notification_ui)) && needs.change-detection.outputs.run_app_jobs == 'true'
+    if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.notification_ui)) && needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     env:
@@ -1072,7 +1069,10 @@ jobs:
           echo "Persistent virtual display ready: ID=$(cat "$VDISPLAY_ID_PATH")"
 
       - name: Run display resolution churn UI regression
-        if: github.event_name != 'workflow_dispatch'
+        # TEMP(fix/ci-churn-reuse-persistent-display): dropped the
+        # `github.event_name != 'workflow_dispatch'` guard so this step runs
+        # on a manual dispatch, letting the fix be verified pre-merge (the
+        # workflow only runs its push trigger on main). Revert before merge.
         run: |
           set -euo pipefail
           SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
