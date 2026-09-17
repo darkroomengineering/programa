@@ -126,7 +126,7 @@ try {
     if ($SigningPerformed) {
         foreach ($SignedExecutable in @($RollingExecutable, $ArchivedExecutable)) {
             $CopySignature = Get-AuthenticodeSignature -LiteralPath $SignedExecutable
-            if ($CopySignature.Status -ne 'Valid') { throw "Post-copy signature check failed for $SignedExecutable: $($CopySignature.Status)." }
+            if ($CopySignature.Status -ne 'Valid') { throw "Post-copy signature check failed for ${SignedExecutable}: $($CopySignature.Status)." }
         }
         Write-Output 'Authenticode signature verified on both release artifacts.'
     } else {
