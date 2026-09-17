@@ -72,7 +72,7 @@ try {
     # resources.pri, a native DLL that didn't get copied in, or an unexpectedly large
     # loose file riding along next to the bundled exe.
     Write-Output "Publish directory ($PublishRoot):"
-    Get-ChildItem -LiteralPath $PublishRoot -Recurse | ForEach-Object {
+    Get-ChildItem -LiteralPath $PublishRoot -Recurse -File | ForEach-Object {
         Write-Output "  $($_.FullName.Substring($PublishRoot.Length + 1)) ($($_.Length) bytes)"
     }
 

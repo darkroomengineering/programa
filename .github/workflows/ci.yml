@@ -262,6 +262,7 @@ jobs:
           ./scripts/build-windows.ps1 -Version '0.0.0' -Build $env:PROGRAMA_CI_BUILD -Commit $env:PROGRAMA_CI_COMMIT -OutputDirectory "$env:RUNNER_TEMP/programa-windows-ci"
 
       - name: Run WinUI launch smoke test
+        timeout-minutes: 3
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -276,8 +277,21 @@ jobs:
           # show a window here, this still exercises Application.Start and the exception
           # handlers added for exactly that case report the real error below instead of
           # the process just disappearing.
-          $proc = Start-Process -FilePath $exe -ArgumentList '--smoke' -PassThru -Wait -NoNewWindow
-          $exitCode = $proc.ExitCode
+          #
+          # programa.exe --smoke has its own internal watchdog (25s) that force-exits the
+          # process even if Application.Start itself never returns. This step-level
+          # timeout-minutes plus the explicit kill below is defense in depth on top of
+          # that, not a substitute for it -- a first attempt at this smoke test hung for
+          # the full 30-minute job timeout because nothing forced the process to exit.
+          $proc = Start-Process -FilePath $exe -ArgumentList '--smoke' -PassThru -NoNewWindow
+          $finished = $proc.WaitForExit(60000)
+          if (-not $finished) {
+            Write-Output 'Smoke test process did not exit within 60s; killing it.'
+            try { $proc.Kill($true) } catch { Write-Output "Kill failed: $_" }
+            $exitCode = -1
+          } else {
+            $exitCode = $proc.ExitCode
+          }
 
           $logContent = if (Test-Path -LiteralPath $logPath) { Get-Content -LiteralPath $logPath -Raw } else { '' }
           $ok = ($exitCode -eq 0) -and ($logContent -match 'launch ok: window shown')
