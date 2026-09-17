@@ -8,7 +8,7 @@ namespace Programa;
 /// Writes to <c>%LOCALAPPDATA%\Programa\launch.log</c> and shows a native message box so a
 /// failed launch always leaves visible evidence, on machine and on screen.
 /// </summary>
-internal static class LaunchLog
+internal static partial class LaunchLog
 {
     internal static string LogPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
