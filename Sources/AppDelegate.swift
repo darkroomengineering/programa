@@ -1419,7 +1419,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         )
     }
 
-    private func moveUITestWindowToTargetDisplayIfNeeded(attempt: Int = 0) {
+    // Not private: the display-churn UI test's diagnostics observer
+    // (AppDelegate+UITestCmdClick.swift) re-invokes this on every
+    // NSApplication.didChangeScreenParametersNotification to pull the window
+    // back onto the target display if a mode change bumped it off (#see call site).
+    func moveUITestWindowToTargetDisplayIfNeeded(attempt: Int = 0) {
         let env = ProcessInfo.processInfo.environment
         guard let rawDisplayID = env["PROGRAMA_UI_TEST_TARGET_DISPLAY_ID"],
               let targetDisplayID = UInt32(rawDisplayID) else {
