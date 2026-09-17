@@ -3,7 +3,12 @@ param(
     [Parameter(Mandatory = $true)][string]$Version,
     [Parameter(Mandatory = $true)][string]$Build,
     [Parameter(Mandatory = $true)][string]$Commit,
-    [Parameter(Mandatory = $true)][string]$OutputDirectory
+    [Parameter(Mandatory = $true)][string]$OutputDirectory,
+    # Path to a script or executable that Authenticode-signs one file passed as its only
+    # argument (for example a wrapper around `dotnet sign code artifact-signing`). Optional:
+    # falls back to $env:PROGRAMA_WINDOWS_SIGN_SCRIPT, and the build ships unsigned when
+    # neither is set. See docs/windows-signing.md.
+    [string]$SignScript = $env:PROGRAMA_WINDOWS_SIGN_SCRIPT
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +41,30 @@ $env:RUSTFLAGS = if ([string]::IsNullOrWhiteSpace($PreviousRustFlags)) { '-C tar
 function Invoke-Checked([string]$Description, [scriptblock]$Command) {
     & $Command
     if ($LASTEXITCODE -ne 0) { throw "$Description failed with exit code $LASTEXITCODE." }
+}
+
+# Signs $ExecutablePath in place when $SignScript is set, and otherwise prints an unsigned-build
+# notice and returns $false. Must run on the single published exe before any byte-identical copy
+# of it is made: Authenticode signing embeds a certificate and timestamp fetched fresh per
+# signing call, so signing two already-duplicated files separately would make them diverge.
+function Invoke-ProgramaWindowsSigning([string]$ExecutablePath, [string]$SignScript) {
+    if ([string]::IsNullOrWhiteSpace($SignScript)) {
+        # Write-Host, not Write-Output: anything written to the success stream inside a
+        # PowerShell function is appended to its return value, which would make the caller's
+        # `$SigningPerformed = Invoke-ProgramaWindowsSigning ...` capture an array containing
+        # this message alongside $false — and a non-empty array is truthy in an `if`.
+        Write-Host "Unsigned build: no signing script configured (pass -SignScript or set PROGRAMA_WINDOWS_SIGN_SCRIPT). Shipping $([System.IO.Path]::GetFileName($ExecutablePath)) unsigned."
+        return $false
+    }
+
+    Invoke-Checked 'Windows executable signing' { & $SignScript $ExecutablePath }
+
+    $Signature = Get-AuthenticodeSignature -LiteralPath $ExecutablePath
+    if ($Signature.Status -ne 'Valid') {
+        throw "Signing was requested via -SignScript but Get-AuthenticodeSignature reports '$($Signature.Status)' for $ExecutablePath, not Valid: $($Signature.StatusMessage)"
+    }
+    Write-Host "Signed $([System.IO.Path]::GetFileName($ExecutablePath)): Authenticode signature Valid (signer: $($Signature.SignerCertificate.Subject))."
+    return $true
 }
 
 try {
@@ -85,6 +114,10 @@ try {
         if ($Reader.ReadUInt16() -ne 0x8664) { throw 'The built artifact is not an x86-64 Windows executable.' }
     } finally { $Reader.Dispose(); $Stream.Dispose() }
 
+    # Must run before the two byte-identical copies below are written; see
+    # Invoke-ProgramaWindowsSigning for why.
+    $SigningPerformed = Invoke-ProgramaWindowsSigning -ExecutablePath $BuiltExecutable -SignScript $SignScript
+
     $RollingExecutable = Join-Path $ResolvedOutput 'programa-windows.exe'
     $ArchivedExecutable = Join-Path $ResolvedOutput "programa-windows-$Build.exe"
     Copy-Item -LiteralPath $BuiltExecutable -Destination $RollingExecutable
@@ -93,6 +126,17 @@ try {
     $ArchivedHash = (Get-FileHash -LiteralPath $ArchivedExecutable -Algorithm SHA256).Hash
     if ($RollingHash -cne $ArchivedHash) { throw 'The rolling and build-numbered executables are not byte-identical.' }
     if ((Get-ChildItem -LiteralPath $ResolvedOutput -File | Measure-Object).Count -ne 2) { throw 'The output directory must contain exactly two files.' }
+
+    if ($SigningPerformed) {
+        foreach ($SignedExecutable in @($RollingExecutable, $ArchivedExecutable)) {
+            $CopySignature = Get-AuthenticodeSignature -LiteralPath $SignedExecutable
+            if ($CopySignature.Status -ne 'Valid') { throw "Post-copy signature check failed for ${SignedExecutable}: $($CopySignature.Status)." }
+        }
+        Write-Output 'Authenticode signature verified on both release artifacts.'
+    } else {
+        Write-Output 'Unsigned build: skipping Authenticode verification.'
+    }
+
     Write-Output "Windows executable: $RollingExecutable"
     Write-Output "Archived executable: $ArchivedExecutable"
     Write-Output "SHA-256: $RollingHash"

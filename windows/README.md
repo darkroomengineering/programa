@@ -19,6 +19,8 @@ The output directory must be new or empty. The script formats and tests both Rus
 
 Windows App SDK single-file publishing extracts its bundled managed, WinUI, `programa_core.dll`, and `programa_terminal.dll` dependencies into the .NET single-file extraction area on first launch. It does not download code or require a separately installed Windows App SDK runtime.
 
+Release builds are signed via Azure Trusted Signing once the account is configured (see `docs/windows-signing.md`). Until then, `programa-windows.exe` ships unsigned and SmartScreen shows "Run anyway" the first time someone launches it.
+
 For an ordinary development build after the native DLLs exist:
 
 ```powershell

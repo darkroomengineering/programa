@@ -534,6 +534,10 @@ jobs:
       needs.release-identity.result == 'success'
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
     env:
       EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
       EFFECTIVE_MARKETING_VERSION: ${{ needs.release-identity.outputs.effective_version }}
@@ -553,6 +557,53 @@ jobs:
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: x86_64-pc-windows-msvc
+
+      # Azure Trusted Signing (Azure Artifact Signing as of January 2026) auth, via OIDC
+      # federated credentials so no client secret is stored. Stays a no-op until the Azure
+      # setup in docs/windows-signing.md is done and TRUSTED_SIGNING_ACCOUNT is set.
+      - name: Azure login for Windows executable signing
+        if: ${{ vars.TRUSTED_SIGNING_ACCOUNT != '' }}
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # See docs/windows-signing.md "What we sign with, and why not the marketplace GitHub
+      # Action": build-windows.ps1 must sign the published exe once, before it makes the two
+      # byte-identical release copies, so signing runs as a script the build script invokes
+      # rather than as a separate post-build step.
+      - name: Prepare Windows executable signing script
+        if: ${{ vars.TRUSTED_SIGNING_ACCOUNT != '' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet tool install --global --prerelease sign
+          if ($LASTEXITCODE -ne 0) { throw "dotnet tool install sign failed with exit code $LASTEXITCODE." }
+
+          $signScript = Join-Path $env:RUNNER_TEMP "sign-programa-windows-exe.ps1"
+          @'
+          param([Parameter(Mandatory = $true)][string]$ExecutablePath)
+          $ErrorActionPreference = "Stop"
+          & sign code artifact-signing `
+            --artifact-signing-endpoint $env:TRUSTED_SIGNING_ENDPOINT `
+            --artifact-signing-account $env:TRUSTED_SIGNING_ACCOUNT `
+            --artifact-signing-certificate-profile $env:TRUSTED_SIGNING_PROFILE `
+            --azure-credential-type azure-cli `
+            --file-digest sha256 `
+            --timestamp-url http://timestamp.acs.microsoft.com `
+            --timestamp-digest sha256 `
+            --publisher-name "Darkroom Engineering" `
+            --description "Programa" `
+            $ExecutablePath
+          if ($LASTEXITCODE -ne 0) { throw "sign code artifact-signing failed with exit code $LASTEXITCODE." }
+          '@ | Set-Content -LiteralPath $signScript -Encoding utf8
+
+          "PROGRAMA_WINDOWS_SIGN_SCRIPT=$signScript" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        env:
+          TRUSTED_SIGNING_ENDPOINT: ${{ vars.TRUSTED_SIGNING_ENDPOINT }}
+          TRUSTED_SIGNING_ACCOUNT: ${{ vars.TRUSTED_SIGNING_ACCOUNT }}
+          TRUSTED_SIGNING_PROFILE: ${{ vars.TRUSTED_SIGNING_PROFILE }}
 
       - name: Build Windows executable
         shell: pwsh
