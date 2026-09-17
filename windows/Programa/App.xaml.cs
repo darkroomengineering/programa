@@ -4,17 +4,19 @@ namespace Programa;
 
 public partial class App : Application
 {
+    private readonly bool _smoke;
     private Window? _window;
 
-    public App()
+    public App(bool smoke = false)
     {
+        _smoke = smoke;
         InitializeComponent();
         UnhandledException += OnUnhandledException;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow();
+        _window = new MainWindow(_smoke);
         _window.Activate();
     }
 

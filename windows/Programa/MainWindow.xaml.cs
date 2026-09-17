@@ -22,9 +22,11 @@ public sealed partial class MainWindow : Window
     private bool _dialogOpen;
     private bool _projecting;
     private bool _activationLogged;
+    private readonly bool _smoke;
 
-    public MainWindow()
+    public MainWindow(bool smoke = false)
     {
+        _smoke = smoke;
         InitializeComponent();
         _shortcuts = LoadSettingsOrDefaults();
         _snapshot = _core.Snapshot();
@@ -42,6 +44,42 @@ public sealed partial class MainWindow : Window
         if (_activationLogged) return;
         _activationLogged = true;
         LaunchLog.Write("launch ok: window shown");
+        if (_smoke) _ = RunSmokeTestAsync();
+    }
+
+    /// <summary>
+    /// CI-only path exercised by `programa.exe --smoke`: by the time this fires,
+    /// Application.Start has run, MainWindow exists and is activated, and the
+    /// create_workspace fallback in the constructor above has already spawned one
+    /// terminal. This waits for that terminal to report its first snapshot -- proof
+    /// the native ConPTY session and the WinUI rendering path both actually worked,
+    /// not just that the window opened -- then exits the process with a definitive
+    /// pass/fail code for the CI step to check.
+    /// </summary>
+    private async Task RunSmokeTestAsync()
+    {
+        var terminal = _terminals.Values.FirstOrDefault();
+        if (terminal is null)
+        {
+            LaunchLog.Write("smoke: no terminal was spawned");
+            Environment.Exit(1);
+            return;
+        }
+        if (!terminal.HasSnapshot)
+        {
+            var ready = new TaskCompletionSource();
+            terminal.FirstSnapshotReady += () => ready.TrySetResult();
+            if (terminal.HasSnapshot) ready.TrySetResult();
+            var completed = await Task.WhenAny(ready.Task, Task.Delay(TimeSpan.FromSeconds(20)));
+            if (completed != ready.Task)
+            {
+                LaunchLog.Write("smoke: timed out waiting for the first terminal snapshot");
+                Environment.Exit(1);
+                return;
+            }
+        }
+        LaunchLog.Write("smoke: first terminal snapshot received");
+        Environment.Exit(0);
     }
 
     private static string Id(string prefix) => $"{prefix}-{Guid.NewGuid():N}";

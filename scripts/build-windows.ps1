@@ -66,12 +66,35 @@ try {
 
     $BuiltExecutable = Join-Path $PublishRoot 'programa.exe'
     if (-not (Test-Path -LiteralPath $BuiltExecutable -PathType Leaf)) { throw "dotnet publish did not produce $BuiltExecutable" }
+
+    # Single-file publish emits directly into $PublishRoot -- there is no separate
+    # pre-bundle output to diff against. Listing it here still catches a missing
+    # resources.pri, a native DLL that didn't get copied in, or an unexpectedly large
+    # loose file riding along next to the bundled exe.
+    Write-Output "Publish directory ($PublishRoot):"
+    Get-ChildItem -LiteralPath $PublishRoot -Recurse | ForEach-Object {
+        Write-Output "  $($_.FullName.Substring($PublishRoot.Length + 1)) ($($_.Length) bytes)"
+    }
+
     $ActualVersion = (& $BuiltExecutable --version | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'The published executable could not report its version.' }
     $ExpectedVersion = "programa $Version (build $Build, commit $Commit)"
     if ($ActualVersion -cne $ExpectedVersion) { throw "Version mismatch. Expected '$ExpectedVersion', got '$ActualVersion'." }
     $NativeProbe = (& $BuiltExecutable --verify-native-libraries | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $NativeProbe -cne 'ok') { throw "The single-file executable could not extract and load both native libraries. Output: '$NativeProbe'." }
+
+    # .NET single-file apps extract their bundled payload to a per-app, per-build-hash
+    # temp directory on first launch (DOTNET_BUNDLE_EXTRACT_BASE_DIR, default %TEMP%\.net).
+    # The --version and --verify-native-libraries calls above already triggered that
+    # extraction once; list it so a missing WinUI/XAML resource shows up here instead of
+    # only as a silent launch failure later.
+    $ExtractionRoot = Join-Path $env:TEMP '.net\programa'
+    if (Test-Path -LiteralPath $ExtractionRoot) {
+        Write-Output "Single-file extraction directory ($ExtractionRoot):"
+        Get-ChildItem -LiteralPath $ExtractionRoot -Recurse | ForEach-Object { Write-Output "  $($_.FullName)" }
+    } else {
+        Write-Output "No single-file extraction directory found at $ExtractionRoot."
+    }
 
     $Stream = [System.IO.File]::OpenRead($BuiltExecutable)
     $Reader = [System.IO.BinaryReader]::new($Stream)

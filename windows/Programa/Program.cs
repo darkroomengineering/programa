@@ -25,6 +25,8 @@ public static class Program
             return;
         }
 
+        var smoke = args.Contains("--smoke", StringComparer.Ordinal);
+
         AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
         {
             var error = eventArgs.ExceptionObject as Exception ?? new Exception($"Non-Exception unhandled object: {eventArgs.ExceptionObject}");
@@ -33,13 +35,13 @@ public static class Program
 
         try
         {
-            LaunchLog.Write("launch: starting");
+            LaunchLog.Write($"launch: starting (smoke={smoke})");
             ComWrappersSupport.InitializeComWrappers();
             Application.Start(_ =>
             {
                 var dispatcher = DispatcherQueue.GetForCurrentThread();
                 SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(dispatcher));
-                _ = new App();
+                _ = new App(smoke);
             });
         }
         catch (Exception error)
