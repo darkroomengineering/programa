@@ -37,7 +37,7 @@ public static class Program
         {
             LaunchLog.Write($"launch: starting (smoke={smoke})");
             ComWrappersSupport.InitializeComWrappers();
-            Application.Start(_ =>
+            Application.Start(_1 =>
             {
                 var dispatcher = DispatcherQueue.GetForCurrentThread();
                 SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(dispatcher));
