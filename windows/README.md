@@ -47,3 +47,11 @@ Every Programa-owned shortcut is editable in Settings and stored under `windows.
 ## Validation
 
 The Windows CI job is the reproducible compiler and test environment. Interactive validation must use Windows 11 and cover real shell startup, input, IME composition, copy and paste, tab drag in both directions, nested splits and divider resizing, 100/150/200% scaling, light/dark/high-contrast themes, keyboard-only navigation, and Narrator. macOS cannot validate WinUI XAML compilation, ConPTY, native UI Automation peers, or single-file extraction.
+
+The `windows-build` CI job also runs `programa.exe --smoke`, which drives the real startup path (`Application.Start`, `MainWindow` created and activated, one terminal spawned) and fails the build if the window never shows or the first terminal snapshot never arrives.
+
+## Troubleshooting
+
+**Windows SmartScreen blocks the exe with a warning screen.** This is expected until the exe is code-signed; there is no signing certificate configured yet (see `docs/windows-testing.md`). Click **More info**, then **Run anyway**.
+
+**Nothing appears after "Run anyway": no window, no error.** Programa writes a log of every launch to `%LOCALAPPDATA%\Programa\launch.log`, including a "launch ok: window shown" line on success and the full exception and stack trace on failure. If the app doesn't start, open that file (or run `type %LOCALAPPDATA%\Programa\launch.log` from a command prompt) and send its contents when reporting the issue. A native error dialog should also have appeared naming this same path.
