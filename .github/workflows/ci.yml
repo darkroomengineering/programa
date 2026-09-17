@@ -1045,8 +1045,12 @@ jobs:
           VDISPLAY_ID_PATH="/tmp/programa-vdisplay-persistent.id"
           rm -f "$VDISPLAY_READY" "$VDISPLAY_ID_PATH"
 
+          # Declare every mode the later display-resolution churn step will
+          # switch between (see that step's comment for why it reuses this
+          # display instead of creating its own): a CGVirtualDisplay can only
+          # be driven to a mode it was created with.
           "$HELPER_PATH" \
-            --modes "1920x1080" \
+            --modes "1920x1080,1728x1117,1600x900,1440x810" \
             --ready-path "$VDISPLAY_READY" \
             --display-id-path "$VDISPLAY_ID_PATH" \
             > /tmp/programa-vdisplay-persistent.log 2>&1 &
@@ -1078,6 +1082,21 @@ jobs:
           DISPLAY_DONE="/tmp/programa-ui-test-display-${TOKEN}.done"
           HELPER_LOG="/tmp/programa-ui-test-display-${TOKEN}-helper.log"
 
+          # This churn test used to spin up its own second CGVirtualDisplay
+          # alongside the persistent one from the previous step. A headless CI
+          # session only reliably holds one live CGVirtualDisplay at a time —
+          # the second instantiation was reproducibly failing with "Failed to
+          # create CGVirtualDisplay" on both retry attempts (a masked bug: an
+          # earlier version of this step didn't fail the job when that
+          # happened, so it silently never ran the regression test at all).
+          # Reuse the persistent display's ID instead of creating a second one.
+          PERSISTENT_ID_PATH="/tmp/programa-vdisplay-persistent.id"
+          if [ ! -f "$PERSISTENT_ID_PATH" ]; then
+            echo "ERROR: Persistent virtual display ID file missing at $PERSISTENT_ID_PATH" >&2
+            exit 1
+          fi
+          PERSISTENT_DISPLAY_ID="$(cat "$PERSISTENT_ID_PATH")"
+
           cleanup() {
             pkill -x "Programa DEV" 2>/dev/null || true
             rm -f "$DIAG_PATH" "$DISPLAY_READY" "$DISPLAY_ID_PATH" "$DISPLAY_START" "$DISPLAY_DONE" "$HELPER_LOG"
@@ -1099,11 +1118,13 @@ jobs:
           for attempt in 1 2; do
             cleanup 2>/dev/null || true
 
-            # Launch display helper from shell (non-sandboxed).
+            # Attach to the persistent display and churn its modes, rather than
+            # creating a second CGVirtualDisplay (see comment above).
             # Use --start-delay-ms instead of --start-path because the XCTest
             # runner is sandboxed and can't write to /tmp/ for the start signal.
             # 10s delay gives the test time to capture baseline render stats.
             "$HELPER_PATH" \
+              --attach-id "$PERSISTENT_DISPLAY_ID" \
               --modes "1920x1080,1728x1117,1600x900,1440x810" \
               --ready-path "$DISPLAY_READY" \
               --display-id-path "$DISPLAY_ID_PATH" \
@@ -1114,7 +1135,9 @@ jobs:
               > "$HELPER_LOG" 2>&1 &
             HELPER_PID=$!
 
-            # Wait for display ready
+            # Wait for display ready (attaching is effectively instant, but
+            # keep the same bounded wait for consistency with the harness
+            # manifest contract the UI test reads).
             echo "Waiting for virtual display..."
             for i in $(seq 1 24); do
               if [ -f "$DISPLAY_READY" ]; then break; fi
