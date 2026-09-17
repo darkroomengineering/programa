@@ -261,6 +261,55 @@ jobs:
         run: |
           ./scripts/build-windows.ps1 -Version '0.0.0' -Build $env:PROGRAMA_CI_BUILD -Commit $env:PROGRAMA_CI_COMMIT -OutputDirectory "$env:RUNNER_TEMP/programa-windows-ci"
 
+      - name: Run WinUI launch smoke test
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = "$env:RUNNER_TEMP/programa-windows-ci/programa-windows.exe"
+          $logPath = "$env:LOCALAPPDATA\Programa\launch.log"
+          if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force }
+
+          # Runs the full WinUI startup path -- Application.Start, MainWindow created and
+          # activated, one terminal spawned -- unlike --version/--verify-native-libraries,
+          # which both return before Application.Start is ever called. windows-latest
+          # runners have an interactive-capable session for UI; if WinUI still refuses to
+          # show a window here, this still exercises Application.Start and the exception
+          # handlers added for exactly that case report the real error below instead of
+          # the process just disappearing.
+          #
+          # programa.exe --smoke has its own internal watchdog (25s) that force-exits the
+          # process even if Application.Start itself never returns. This step-level
+          # timeout-minutes plus the explicit kill below is defense in depth on top of
+          # that, not a substitute for it -- a first attempt at this smoke test hung for
+          # the full 30-minute job timeout because nothing forced the process to exit.
+          $proc = Start-Process -FilePath $exe -ArgumentList '--smoke' -PassThru -NoNewWindow
+          $finished = $proc.WaitForExit(60000)
+          if (-not $finished) {
+            Write-Output 'Smoke test process did not exit within 60s; killing it.'
+            try { $proc.Kill($true) } catch { Write-Output "Kill failed: $_" }
+            $exitCode = -1
+          } else {
+            $exitCode = $proc.ExitCode
+          }
+
+          $logContent = if (Test-Path -LiteralPath $logPath) { Get-Content -LiteralPath $logPath -Raw } else { '' }
+          $ok = ($exitCode -eq 0) -and ($logContent -match 'launch ok: window shown')
+
+          if (-not $ok) {
+            Write-Output "Smoke test FAILED. Exit code: $exitCode"
+            if ($logContent) {
+              Write-Output '--- launch.log ---'
+              Write-Output $logContent
+            } else {
+              Write-Output "No launch.log was written at $logPath."
+            }
+            throw "WinUI launch smoke test failed (exit code $exitCode, log at $logPath)."
+          }
+          Write-Output "Smoke test passed. Exit code: $exitCode"
+          Write-Output '--- launch.log ---'
+          Write-Output $logContent
+
       - name: Upload Windows executable
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

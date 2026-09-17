@@ -125,6 +125,14 @@ public sealed class TerminalView : UserControl, IDisposable
     public string SurfaceId { get; }
     public string SessionId { get; }
 
+    /// <summary>True once at least one terminal snapshot has been painted. Used by the
+    /// `--smoke` CI launch check to confirm the native terminal session actually produced
+    /// output, not just that the window opened.</summary>
+    internal bool HasSnapshot { get; private set; }
+
+    /// <summary>Raised exactly once, the first time a terminal snapshot is painted.</summary>
+    internal event Action? FirstSnapshotReady;
+
     public void FocusTerminal() => _input.Focus(FocusState.Programmatic);
 
     public void Copy()
@@ -227,6 +235,11 @@ public sealed class TerminalView : UserControl, IDisposable
             UpdateInputProxyLayout(snapshot.Cursor, _composing);
             _canvas.Invalidate();
             FrameworkElementAutomationPeer.FromElement(this)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+            if (!HasSnapshot)
+            {
+                HasSnapshot = true;
+                FirstSnapshotReady?.Invoke();
+            }
         }
         catch (JsonException error)
         {

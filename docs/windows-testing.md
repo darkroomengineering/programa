@@ -39,6 +39,14 @@ The WinUI build bundles the Windows App SDK, .NET runtime, and Rust libraries.
 Test the single downloaded EXE in a fresh folder on a clean Windows VM, with
 no developer runtime or adjacent DLLs. Check first-launch extraction, a second
 launch, and `--version`/`--verify-native-libraries` before testing the UI.
+Also run `programa-windows.exe --smoke`, which drives the real WinUI startup
+(window creation, resource loading, one terminal spawn) the same way CI's
+`windows-build` job does and exits non-zero on failure -- this is the
+closest automated proxy to "does a window actually appear," and it is worth
+running on a clean machine even though CI already runs it on windows-latest.
+If any of these fail, or if the app produces no window with no error, read
+`%LOCALAPPDATA%\Programa\launch.log`, which records every launch attempt and
+its outcome, success or failure.
 
 The rolling aliases are `programa-macos.dmg` and `programa-windows.exe`.
 Retained candidate releases contain the build-specific filenames, allowing
