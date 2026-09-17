@@ -197,6 +197,11 @@ temporary = fixture / "tmp"
 for directory in (bin_dir, scripts, temporary):
     directory.mkdir(parents=True)
 
+# The step now attaches to the job's persistent virtual display instead of
+# creating a second one, so it requires that display's ID file to already
+# exist (written by the earlier "Create persistent virtual display" step).
+(temporary / "programa-vdisplay-persistent.id").write_text("1\n")
+
 def executable(path, body):
     path.write_text("#!/bin/bash\nset -euo pipefail\n" + body)
     path.chmod(0o755)

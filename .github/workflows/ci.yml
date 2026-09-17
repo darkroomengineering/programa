@@ -1202,6 +1202,31 @@ jobs:
             echo "App started. Diagnostics:"
             cat "$DIAG_PATH"
 
+            # This runner cannot reliably place the app's window on the virtual
+            # display being churned (see docs/testing-layout.md). When that
+            # happens the regression can't be exercised at all: skip rather than
+            # fail so a harness limitation doesn't block CI, but only when the
+            # placement itself failed — a working harness must still fail on a
+            # real regression. The app's own placement logic retries for ~5s
+            # after launch (20 attempts, 0.25s apart), so poll rather than
+            # reading this once, to avoid skipping on a healthy runner that
+            # just hasn't finished its first placement attempt yet.
+            echo "Checking whether the window landed on the virtual display..."
+            TARGET_DISPLAY_PLACED=false
+            for i in $(seq 1 16); do
+              if python3 -c "import json; d=json.load(open('$DIAG_PATH')); assert d.get('targetDisplayMoveSucceeded') == '1'" 2>/dev/null; then
+                TARGET_DISPLAY_PLACED=true
+                break
+              fi
+              sleep 0.5
+            done
+            if [ "$TARGET_DISPLAY_PLACED" != "true" ]; then
+              echo "SKIPPED: the runner could not place the app window on the virtual display; the display churn regression cannot be exercised here (see docs/testing-layout.md)"
+              echo "--- Diagnostics ---"
+              cat "$DIAG_PATH" 2>/dev/null || true
+              exit 0
+            fi
+
             # Activate the app so ghostty_app_set_focus(true) fires. The app is
             # launched here as a bare Process (not via XCUIApplication.launch(),
             # which blocks ~60s trying to foreground-activate on headless CI), so
