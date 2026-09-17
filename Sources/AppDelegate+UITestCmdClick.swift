@@ -719,6 +719,15 @@ extension AppDelegate {
         observe(NSWindow.didChangeBackingPropertiesNotification, "displayUITest.windowDidChangeBacking")
         observe(.terminalSurfaceDidBecomeReady, "displayUITest.terminalSurfaceDidBecomeReady")
         observe(.terminalPortalVisibilityDidChange, "displayUITest.terminalPortalVisibilityDidChange")
+        // A virtual display's mode churning under a stationary window never fires any
+        // NSWindow-scoped notification above (the window doesn't move, resize, or
+        // change screen/backing) — only NSApplication.didChangeScreenParametersNotification
+        // fires system-wide when display config settles. GhosttyNSView already listens for
+        // exactly this (see its screenParametersObserver) to keep the terminal surface's
+        // display ID and scale in sync; without this observer, this diagnostics file never
+        // reflects the presents that notification triggers, so the churn test always sees a
+        // flat presentCount no matter how much real rendering happens underneath it.
+        observe(NSApplication.didChangeScreenParametersNotification, "displayUITest.screenParametersDidChange")
 
         writeUITestDiagnosticsIfNeeded(stage: "displayUITest.setup")
     }

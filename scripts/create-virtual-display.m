@@ -3,6 +3,14 @@
 // The display stays alive as long as this process runs and can optionally churn
 // through multiple display modes after a start signal file appears.
 //
+// Pass --attach-id <displayID> to skip creating a new CGVirtualDisplay entirely
+// and instead churn modes on an already-existing display (e.g. one created by a
+// separate, still-running instance of this helper). A macOS headless/CI session
+// only reliably supports a single live CGVirtualDisplay at a time; a second
+// concurrent instantiation reproducibly fails with "Failed to create
+// CGVirtualDisplay" even though the first is healthy. --attach-id avoids ever
+// holding two CGVirtualDisplay objects at once by reusing the caller's display.
+//
 // Build: clang -framework Foundation -framework CoreGraphics -o create-virtual-display create-virtual-display.m
 // Usage: ./create-virtual-display &
 
@@ -168,6 +176,8 @@ int main(int argc, const char *argv[]) {
         useconds_t intervalMicros = (useconds_t)(MAX(1, intervalMs) * 1000);
         NSString *startDelayArgument = argumentValue(arguments, @"--start-delay-ms");
         NSInteger startDelayMs = startDelayArgument.length > 0 ? startDelayArgument.integerValue : 0;
+        NSString *attachIDArgument = argumentValue(arguments, @"--attach-id");
+        BOOL attaching = attachIDArgument.length > 0;
 
         unsigned int width = 0;
         unsigned int height = 0;
@@ -176,57 +186,77 @@ int main(int argc, const char *argv[]) {
             height = MAX(height, spec[@"height"].unsignedIntValue);
         }
 
-        // Verify the private classes exist
-        if (!NSClassFromString(@"CGVirtualDisplay")) {
-            fprintf(stderr, "ERROR: CGVirtualDisplay API not available on this system\n");
-            return 1;
-        }
+        // Retain a strong reference so it isn't torn down once we fall out of
+        // this scope; only populated when we actually create a display below.
+        CGVirtualDisplay *display = nil;
+        CGDirectDisplayID targetDisplayID = 0;
 
-        NSMutableArray *modes = [NSMutableArray array];
-        for (NSDictionary<NSString *, NSNumber *> *spec in modeSpecs) {
-            CGVirtualDisplayMode *mode = [[CGVirtualDisplayMode alloc] initWithWidth:spec[@"width"].unsignedIntValue
-                                                                               height:spec[@"height"].unsignedIntValue
-                                                                          refreshRate:60.0];
-            if (!mode) {
-                fprintf(stderr, "ERROR: Failed to create CGVirtualDisplayMode\n");
+        if (attaching) {
+            // Attach to a display someone else already created instead of
+            // allocating a second CGVirtualDisplay (see file header comment).
+            targetDisplayID = (CGDirectDisplayID)attachIDArgument.integerValue;
+            if (targetDisplayID == 0) {
+                fprintf(stderr, "ERROR: Invalid --attach-id value: %s\n", attachIDArgument.UTF8String);
                 return 1;
             }
-            [modes addObject:mode];
+            printf("Attached to virtual display: displayID: %u\n", targetDisplayID);
+            printf("PID: %d\n", getpid());
+            fflush(stdout);
+        } else {
+            // Verify the private classes exist
+            if (!NSClassFromString(@"CGVirtualDisplay")) {
+                fprintf(stderr, "ERROR: CGVirtualDisplay API not available on this system\n");
+                return 1;
+            }
+
+            NSMutableArray *modes = [NSMutableArray array];
+            for (NSDictionary<NSString *, NSNumber *> *spec in modeSpecs) {
+                CGVirtualDisplayMode *mode = [[CGVirtualDisplayMode alloc] initWithWidth:spec[@"width"].unsignedIntValue
+                                                                                   height:spec[@"height"].unsignedIntValue
+                                                                              refreshRate:60.0];
+                if (!mode) {
+                    fprintf(stderr, "ERROR: Failed to create CGVirtualDisplayMode\n");
+                    return 1;
+                }
+                [modes addObject:mode];
+            }
+
+            // Configure descriptor
+            CGVirtualDisplayDescriptor *descriptor = [[CGVirtualDisplayDescriptor alloc] init];
+            descriptor.name = @"CI Virtual Display";
+            descriptor.maxPixelsWide = width;
+            descriptor.maxPixelsHigh = height;
+            descriptor.sizeInMillimeters = CGSizeMake(530, 300);
+            descriptor.vendorID = 0x1234;
+            descriptor.productID = 0x5678;
+            descriptor.serialNum = 0x0001;
+            descriptor.queue = dispatch_get_main_queue();
+
+            // Create virtual display
+            display = [[CGVirtualDisplay alloc] initWithDescriptor:descriptor];
+            if (!display) {
+                fprintf(stderr, "ERROR: Failed to create CGVirtualDisplay\n");
+                return 1;
+            }
+
+            // Apply settings with display mode
+            CGVirtualDisplaySettings *settings = [[CGVirtualDisplaySettings alloc] init];
+            settings.hiDPI = 0;
+            settings.modes = modes;
+
+            BOOL ok = [display applySettings:settings];
+            if (!ok) {
+                fprintf(stderr, "ERROR: Failed to apply display settings\n");
+                return 1;
+            }
+
+            targetDisplayID = display.displayID;
+            printf("Virtual display created: %ux%u@60Hz (displayID: %u)\n", width, height, targetDisplayID);
+            printf("PID: %d\n", getpid());
+            fflush(stdout);
         }
 
-        // Configure descriptor
-        CGVirtualDisplayDescriptor *descriptor = [[CGVirtualDisplayDescriptor alloc] init];
-        descriptor.name = @"CI Virtual Display";
-        descriptor.maxPixelsWide = width;
-        descriptor.maxPixelsHigh = height;
-        descriptor.sizeInMillimeters = CGSizeMake(530, 300);
-        descriptor.vendorID = 0x1234;
-        descriptor.productID = 0x5678;
-        descriptor.serialNum = 0x0001;
-        descriptor.queue = dispatch_get_main_queue();
-
-        // Create virtual display
-        CGVirtualDisplay *display = [[CGVirtualDisplay alloc] initWithDescriptor:descriptor];
-        if (!display) {
-            fprintf(stderr, "ERROR: Failed to create CGVirtualDisplay\n");
-            return 1;
-        }
-
-        // Apply settings with display mode
-        CGVirtualDisplaySettings *settings = [[CGVirtualDisplaySettings alloc] init];
-        settings.hiDPI = 0;
-        settings.modes = modes;
-
-        BOOL ok = [display applySettings:settings];
-        if (!ok) {
-            fprintf(stderr, "ERROR: Failed to apply display settings\n");
-            return 1;
-        }
-
-        printf("Virtual display created: %ux%u@60Hz (displayID: %u)\n", width, height, display.displayID);
-        printf("PID: %d\n", getpid());
-        fflush(stdout);
-        writeString([NSString stringWithFormat:@"%u\n", display.displayID], displayIDPath);
+        writeString([NSString stringWithFormat:@"%u\n", targetDisplayID], displayIDPath);
         writeString(@"ready\n", readyPath);
 
         if (iterations > 0 && modeSpecs.count > 1) {
@@ -239,13 +269,13 @@ int main(int argc, const char *argv[]) {
                     }
                 }
 
-                NSArray *resolvedModes = resolveRequestedModes(display.displayID, modeSpecs);
+                NSArray *resolvedModes = resolveRequestedModes(targetDisplayID, modeSpecs);
                 if (resolvedModes.count < 2) {
                     writeString(@"error:no_modes\n", donePath);
                     return;
                 }
 
-                CGError setError = CGDisplaySetDisplayMode(display.displayID, (__bridge CGDisplayModeRef)resolvedModes.firstObject, NULL);
+                CGError setError = CGDisplaySetDisplayMode(targetDisplayID, (__bridge CGDisplayModeRef)resolvedModes.firstObject, NULL);
                 if (setError != kCGErrorSuccess) {
                     fprintf(stderr, "ERROR: Failed to set initial display mode (%d)\n", setError);
                     writeString([NSString stringWithFormat:@"error:%d\n", setError], donePath);
@@ -255,7 +285,7 @@ int main(int argc, const char *argv[]) {
                 for (NSInteger i = 0; i < iterations; i += 1) {
                     NSUInteger targetIndex = (NSUInteger)((i + 1) % resolvedModes.count);
                     id targetMode = resolvedModes[targetIndex];
-                    CGError churnError = CGDisplaySetDisplayMode(display.displayID, (__bridge CGDisplayModeRef)targetMode, NULL);
+                    CGError churnError = CGDisplaySetDisplayMode(targetDisplayID, (__bridge CGDisplayModeRef)targetMode, NULL);
                     if (churnError != kCGErrorSuccess) {
                         fprintf(stderr, "ERROR: Failed to switch display mode at iteration %ld (%d)\n", (long)i, churnError);
                         writeString([NSString stringWithFormat:@"error:%d\n", churnError], donePath);
