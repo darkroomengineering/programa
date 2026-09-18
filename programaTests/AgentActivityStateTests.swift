@@ -304,12 +304,18 @@ final class AgentActivityStateTests: XCTestCase {
             AppFocusState.overrideIsFocused = originalAppFocusOverride
         }
 
-        guard let workspace = manager.selectedWorkspace, let panelId = workspace.focusedPanelId else {
+        // Notify the pane that is NOT focused: for the focused pane the store suppresses
+        // external delivery and sets the focused-read indicator instead, which is a different
+        // path from the "agent asks in a background pane" case these tests model.
+        guard let workspace = manager.selectedWorkspace,
+              let focusedPanelId = workspace.focusedPanelId,
+              let rightPanel = workspace.newTerminalSplit(from: focusedPanelId, orientation: .horizontal) else {
             cleanup()
-            XCTFail("Expected selected workspace with focused panel")
+            XCTFail("Expected split terminal panels")
             throw XCTSkip("fixture setup failed")
         }
-        return (manager, workspace, panelId, cleanup)
+        workspace.focusPanel(rightPanel.id)
+        return (manager, workspace, focusedPanelId, cleanup)
     }
 
     /// Models what `agent.needs_input` does in one hop (docs/plans/agent-state-unification.md
@@ -329,7 +335,6 @@ final class AgentActivityStateTests: XCTestCase {
             subtitle: "",
             body: "Approve this tool call?"
         )
-        drainMainQueue()
 
         XCTAssertEqual(fixture.workspace.panelAgentPresence[fixture.panelId]?.state, .blocked)
         XCTAssertEqual(fixture.workspace.panelAgentPresence[fixture.panelId]?.source, .hooks)
@@ -361,7 +366,6 @@ final class AgentActivityStateTests: XCTestCase {
             subtitle: "",
             body: "Approve this tool call?"
         )
-        drainMainQueue()
         XCTAssertEqual(TerminalNotificationStore.shared.unreadCount(forTabId: fixture.workspace.id), 1)
 
         let dismissed = fixture.manager.dismissNotificationOnDirectInteraction(tabId: fixture.workspace.id, surfaceId: fixture.panelId)
