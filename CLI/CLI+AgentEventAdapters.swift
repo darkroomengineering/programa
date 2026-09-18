@@ -120,4 +120,55 @@ extension ProgramaCLI {
             break
         }
     }
+
+    /// One call per classified provider notification (Claude Code and Codex share the
+    /// "Permission"/"Waiting" classifier): a blocking subtitle becomes a single
+    /// `agent.needs_input` (state + notification + supervision in one hop); anything else
+    /// stays a plain notification with an idle state report. The matching `agent.event`
+    /// follows in both cases.
+    func reportClassifiedAgentNotification(
+        client: SocketClient,
+        provider: String,
+        workspaceId: String,
+        surfaceId: String,
+        title: String,
+        subtitle: String,
+        body: String,
+        classifiedSubtitle: String,
+        sessionId: String?,
+        pid: Int?
+    ) {
+        if agentStateForClassifiedNotificationSubtitle(classifiedSubtitle) == .blocked {
+            reportAgentNeedsInput(
+                client: client,
+                provider: provider,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                title: title,
+                subtitle: subtitle,
+                body: body,
+                sessionId: sessionId,
+                pid: pid,
+                kind: classifiedSubtitle == "Permission" ? "permission" : "question"
+            )
+        } else {
+            _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
+                "workspace_id": workspaceId,
+                "surface_id": surfaceId,
+                "title": title,
+                "subtitle": subtitle,
+                "body": body,
+            ])
+            reportAgentState(
+                client: client,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                state: .idle,
+                provider: provider,
+                sessionId: sessionId,
+                pid: pid
+            )
+        }
+        reportAgentEventForClassifiedNotificationSubtitle(client: client, provider: provider, subtitle: classifiedSubtitle, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: sessionId)
+    }
 }

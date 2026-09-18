@@ -413,38 +413,18 @@ extension ProgramaCLI {
                 )
             }
 
-            if agentStateForClassifiedNotificationSubtitle(summary.subtitle) == .blocked {
-                reportAgentNeedsInput(
-                    client: client,
-                    provider: "claude-code",
-                    workspaceId: workspaceId,
-                    surfaceId: surfaceId,
-                    title: title,
-                    subtitle: subtitle,
-                    body: body,
-                    sessionId: parsedInput.sessionId,
-                    pid: mappedSession?.pid,
-                    kind: agentNeedsInputKindForClassifiedNotificationSubtitle(summary.subtitle)
-                )
-            } else {
-                _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
-                    "workspace_id": workspaceId,
-                    "surface_id": surfaceId,
-                    "title": title,
-                    "subtitle": subtitle,
-                    "body": body,
-                ])
-                reportAgentState(
-                    client: client,
-                    workspaceId: workspaceId,
-                    surfaceId: surfaceId,
-                    state: .idle,
-                    provider: "claude-code",
-                    sessionId: parsedInput.sessionId,
-                    pid: mappedSession?.pid
-                )
-            }
-            reportAgentEventForClassifiedNotificationSubtitle(client: client, provider: "claude-code", subtitle: summary.subtitle, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: parsedInput.sessionId)
+            reportClassifiedAgentNotification(
+                client: client,
+                provider: "claude-code",
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                title: title,
+                subtitle: subtitle,
+                body: body,
+                classifiedSubtitle: summary.subtitle,
+                sessionId: parsedInput.sessionId,
+                pid: mappedSession?.pid
+            )
             print("OK")
 
         case "subagent-start":
@@ -736,25 +716,12 @@ extension ProgramaCLI {
     /// Maps a hook notification's classified subtitle (see classifyClaudeNotification /
     /// classifyCodexNotification) to an agent activity state. Only "Permission" (approval
     /// prompt) and "Waiting" (AskUserQuestion / idle-prompt) are genuine blocking signals.
-    private func agentStateForClassifiedNotificationSubtitle(_ subtitle: String) -> CLIAgentActivityState {
+    func agentStateForClassifiedNotificationSubtitle(_ subtitle: String) -> CLIAgentActivityState {
         switch subtitle {
         case "Permission", "Waiting":
             return .blocked
         default:
             return .idle
-        }
-    }
-
-    /// Maps a classified notification subtitle to the `agent.needs_input` `kind` wire value.
-    /// Only called when `agentStateForClassifiedNotificationSubtitle` returned `.blocked`, so
-    /// "Waiting" is the only remaining non-"Permission" case; the default only guards
-    /// exhaustiveness and is unreachable in practice.
-    private func agentNeedsInputKindForClassifiedNotificationSubtitle(_ subtitle: String) -> String {
-        switch subtitle {
-        case "Permission":
-            return "permission"
-        default:
-            return "question"
         }
     }
 
@@ -3532,38 +3499,18 @@ extension ProgramaCLI {
                 ])
             }
 
-            if agentStateForClassifiedNotificationSubtitle(summary.subtitle) == .blocked {
-                reportAgentNeedsInput(
-                    client: client,
-                    provider: "codex",
-                    workspaceId: workspaceId,
-                    surfaceId: surfaceId,
-                    title: title,
-                    subtitle: subtitle,
-                    body: body,
-                    sessionId: parsedInput.sessionId,
-                    pid: codexPid,
-                    kind: agentNeedsInputKindForClassifiedNotificationSubtitle(summary.subtitle)
-                )
-            } else {
-                _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
-                    "workspace_id": workspaceId,
-                    "surface_id": surfaceId,
-                    "title": title,
-                    "subtitle": subtitle,
-                    "body": body,
-                ])
-                reportAgentState(
-                    client: client,
-                    workspaceId: workspaceId,
-                    surfaceId: surfaceId,
-                    state: .idle,
-                    provider: "codex",
-                    sessionId: parsedInput.sessionId,
-                    pid: codexPid
-                )
-            }
-            reportAgentEventForClassifiedNotificationSubtitle(client: client, provider: "codex", subtitle: summary.subtitle, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: parsedInput.sessionId)
+            reportClassifiedAgentNotification(
+                client: client,
+                provider: "codex",
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                title: title,
+                subtitle: subtitle,
+                body: body,
+                classifiedSubtitle: summary.subtitle,
+                sessionId: parsedInput.sessionId,
+                pid: codexPid
+            )
             print("{}")
 
         case "session-end":
