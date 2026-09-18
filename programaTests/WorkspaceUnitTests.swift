@@ -5203,12 +5203,12 @@ final class ReviewPanelWorkspaceTransferTests: XCTestCase {
         )
 
         // The source terminal stayed behind in workspace A. The reinstalled subscription must
-        // keep watching A's `$panelAgentStates`, not B's -- otherwise the review panel would
+        // keep watching A's `$panelAgentPresence`, not B's -- otherwise the review panel would
         // never auto-refresh again after the move (M13).
-        workspaceA.panelAgentStates[sourceId] = .working
+        workspaceA.updatePanelAgentState(panelId: sourceId, state: .working)
         XCTAssertTrue(waitForCondition { workspaceA.panelAgentStates[sourceId] == .working })
         let previousRefreshedAt = reviewPanel.lastRefreshedAt
-        workspaceA.panelAgentStates[sourceId] = .idle
+        workspaceA.updatePanelAgentState(panelId: sourceId, state: .idle)
         XCTAssertTrue(
             waitForCondition {
                 reviewPanel.isRefreshing || reviewPanel.lastRefreshedAt != previousRefreshedAt

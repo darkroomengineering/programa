@@ -165,14 +165,21 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var panelGitBranches: [UUID: SidebarGitBranchState] = [:]
     @Published var pullRequest: SidebarPullRequestState?
     @Published var panelPullRequests: [UUID: SidebarPullRequestState] = [:]
-    /// Per-surface agent activity state (working/blocked/idle), reported exclusively by
-    /// installed lifecycle hooks (issue #164, v1 hook tier). See AgentActivityState.swift.
-    @Published var panelAgentStates: [UUID: AgentActivityState] = [:]
-    /// Which tier (`.hooks` vs `.inferred`) reported each surface's current `panelAgentStates`
-    /// entry (screen-manifest detection v2). Always kept in lockstep with `panelAgentStates` by
-    /// `updatePanelAgentState`/`clearPanelAgentState` — never mutated directly. See
-    /// `AgentStateSource`'s doc comment (AgentActivityState.swift) for the hooks-always-win rule.
-    @Published var panelAgentStateSources: [UUID: AgentStateSource] = [:]
+    /// Per-surface agent presence (state, source, timestamp, session key), reported exclusively
+    /// through `updatePanelAgentState`/`clearPanelAgentState` (issue #164 v1 hook tier, extended
+    /// by the agent-state-unification plan). This is the stored source of truth; `panelAgentStates`
+    /// and `panelAgentStateSources` below are derived, read-only mirrors kept for the existing
+    /// wire shapes (`agent_state`/`agent_state_source`) and call sites. See AgentActivityState.swift.
+    @Published var panelAgentPresence: [UUID: AgentPresence] = [:]
+    /// Read-only mirror of `panelAgentPresence.state`, kept for existing wire serialization and
+    /// read call sites. Never write to this directly -- go through `updatePanelAgentState`.
+    var panelAgentStates: [UUID: AgentActivityState] {
+        panelAgentPresence.mapValues(\.state)
+    }
+    /// Read-only mirror of `panelAgentPresence.source`. See `panelAgentStates`'s doc comment.
+    var panelAgentStateSources: [UUID: AgentStateSource] {
+        panelAgentPresence.mapValues(\.source)
+    }
     @Published var surfaceListeningPorts: [UUID: [Int]] = [:]
     var agentListeningPorts: [Int] = []
     @Published var listeningPorts: [Int] = []
@@ -223,8 +230,7 @@ final class Workspace: Identifiable, ObservableObject {
             sidebarObservationSignal($metadataBlocks),
             sidebarObservationSignal($logEntries),
             sidebarObservationSignal($progress),
-            sidebarObservationSignal($panelAgentStates),
-            sidebarObservationSignal($panelAgentStateSources),
+            sidebarObservationSignal($panelAgentPresence),
             sidebarObservationSignal($listeningPorts),
         ]
 
@@ -825,7 +831,7 @@ final class Workspace: Identifiable, ObservableObject {
         panelSubscriptions[markdownPanel.id] = subscription
     }
 
-    /// Auto-refresh trigger for a review panel: subscribes to `$panelAgentStates` filtered to
+    /// Auto-refresh trigger for a review panel: subscribes to `$panelAgentPresence` filtered to
     /// the *reviewed* (source) terminal surface's id, and refreshes the diff on a
     /// `.working -> .idle` (or "state clears") edge -- deliberately not on every state change,
     /// to avoid thrashing `git diff` on a fast-moving CLI session. See
@@ -835,12 +841,12 @@ final class Workspace: Identifiable, ObservableObject {
         // workspaces after a move (see `reattachPanelToWorkspace`): only the review panel
         // itself is guaranteed to be `self` here. Resolve the workspace currently holding
         // `sourceSurfaceId` at install time so the refresh trigger keeps watching the right
-        // `$panelAgentStates` stream; fall back to `self` when the source can't be located
+        // `$panelAgentPresence` stream; fall back to `self` when the source can't be located
         // (e.g. detached, or running in a test harness with no `AppDelegate.shared`).
         let sourceWorkspace = Workspace.workspaceOwning(surfaceId: reviewPanel.sourceSurfaceId) ?? self
         var previousState: AgentActivityState? = sourceWorkspace.panelAgentStates[reviewPanel.sourceSurfaceId]
-        let subscription = sourceWorkspace.$panelAgentStates
-            .map { [sourceSurfaceId = reviewPanel.sourceSurfaceId] states in states[sourceSurfaceId] }
+        let subscription = sourceWorkspace.$panelAgentPresence
+            .map { [sourceSurfaceId = reviewPanel.sourceSurfaceId] presence in presence[sourceSurfaceId]?.state }
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak reviewPanel] newState in
@@ -1843,7 +1849,7 @@ final class Workspace: Identifiable, ObservableObject {
     /// attached to this workspace via a detach/attach transfer (drag between workspaces, split
     /// moves, `AppDelegate.moveSurface`). Centralizing this keeps every panel kind in sync:
     /// previously only `TerminalPanel`/`BrowserPanel` were handled here, so `MarkdownPanel` never
-    /// got its `workspaceId` updated and `ReviewPanel` never got its `$panelAgentStates`
+    /// got its `workspaceId` updated and `ReviewPanel` never got its `$panelAgentPresence`
     /// subscription reinstalled after a move (losing auto-refresh-on-idle). See
     /// docs/audits/codebase-audit-2026-09-11.md M13.
     private func reattachPanelToWorkspace(_ panel: any Panel) {
