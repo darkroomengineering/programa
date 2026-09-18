@@ -794,6 +794,9 @@ class TabManager: ObservableObject {
         let inheritedTerminalFontPoints: Float?
     }
     var agentPIDSweepTimer: DispatchSourceTimer?
+    /// Panel ids whose `AgentPresence` was already reported stale by the last sweep, so the
+    /// watchdog only nudges the publisher once per stale transition instead of every 30s tick.
+    var staleAgentPanelIds: Set<UUID> = []
     var workspaceGitMetadataPollTimer: DispatchSourceTimer?
     var selectedWorkspaceGitMetadataPollTimer: DispatchSourceTimer?
 #if DEBUG
@@ -3028,6 +3031,8 @@ class TabManager: ObservableObject {
         _ = dismissNotificationOnDirectInteraction(tabId: tabId, surfaceId: panelId)
     }
 
+    // Must never touch `panelAgentPresence`: needs-input clears only on a real resume signal
+    // (a hook reports working/idle, or the session exits), never on the user focusing the workspace.
     @discardableResult
     func dismissNotificationOnDirectInteraction(tabId: UUID, surfaceId: UUID?) -> Bool {
         guard selectedTabId == tabId else { return false }
