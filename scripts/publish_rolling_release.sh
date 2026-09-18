@@ -173,7 +173,10 @@ query_releases_paginated() {
 # are never on the public releases page. This is the sole candidate cleanup:
 # every draft candidate at or below the finalized build is deleted except
 # skip_tag (the just-promoted one), which keeps exactly one candidate draft
-# around as the rollback archive for the next build.
+# around as the rollback archive for the next build. A draft has no git tag
+# (GitHub creates the tag on publish), so the delete must not ask for tag
+# cleanup: --cleanup-tag fails with 422 "Reference does not exist" after the
+# release is already gone and turns every promotion red.
 prune_candidates() {
   local finalized_build="$1" skip_tag="${2:-}"
   local tag is_draft is_prerelease is_immutable target suffix
@@ -184,7 +187,7 @@ prune_candidates() {
     [[ "${suffix}" =~ ^[0-9]+$ ]] || continue
     suffix="$((10#${suffix}))"
     if build_is_at_most "${suffix}" "${finalized_build}"; then
-      "${GH_BIN}" release delete "${tag}" --repo "${REPOSITORY}" --yes --cleanup-tag
+      "${GH_BIN}" release delete "${tag}" --repo "${REPOSITORY}" --yes
     fi
   done < "${RELEASE_LIST}"
 }

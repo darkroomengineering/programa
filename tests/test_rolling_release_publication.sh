@@ -917,8 +917,9 @@ assert_release_absent rolling-candidate-101; assert_published_archive 103; asser
 # Promotion deletes every draft candidate at or below the finalized build
 # except the one just selected: retention is always exactly one candidate
 # draft (the private rollback archive), regardless of how many stale drafts
-# accumulated. A candidate strictly above the finalized build survives, and
-# deletion goes through --cleanup-tag so the tag is removed too.
+# accumulated. A candidate strictly above the finalized build survives. Drafts
+# have no git tag, so deletion must not request tag cleanup (GitHub answers
+# 422 for the missing ref and the job goes red after the release is gone).
 reset_state
 seed_sealed_candidate 103
 write_release rolling-candidate-050 "$(target_sha_for 50)" true false 'Candidate 50' candidate
@@ -933,12 +934,12 @@ assert_release_absent rolling-candidate-050
 assert_release_absent rolling-candidate-060
 assert_release_absent rolling-candidate-070
 assert_release_exists rolling-candidate-104
-grep -Fq 'mutation delete-release rolling-candidate-050 cleanup-tag=true' "${STATE_DIR}/operations.log" || \
-  fail "retention did not delete an older candidate draft with --cleanup-tag"
-grep -Fq 'mutation delete-release rolling-candidate-060 cleanup-tag=true' "${STATE_DIR}/operations.log" || \
-  fail "retention did not delete an older candidate draft with --cleanup-tag"
-grep -Fq 'mutation delete-release rolling-candidate-070 cleanup-tag=true' "${STATE_DIR}/operations.log" || \
-  fail "retention did not delete the candidate draft just below the finalized build"
+grep -Fq 'mutation delete-release rolling-candidate-050 cleanup-tag=false' "${STATE_DIR}/operations.log" || \
+  fail "retention did not delete an older candidate draft, or asked for tag cleanup"
+grep -Fq 'mutation delete-release rolling-candidate-060 cleanup-tag=false' "${STATE_DIR}/operations.log" || \
+  fail "retention did not delete an older candidate draft, or asked for tag cleanup"
+grep -Fq 'mutation delete-release rolling-candidate-070 cleanup-tag=false' "${STATE_DIR}/operations.log" || \
+  fail "retention did not delete the candidate draft just below the finalized build, or asked for tag cleanup"
 ! grep -Fq 'mutation delete-release rolling-candidate-104' "${STATE_DIR}/operations.log" || \
   fail "retention deleted a candidate draft above the finalized build"
 ! grep -Fq 'mutation delete-release rolling-candidate-103' "${STATE_DIR}/operations.log" || \
