@@ -273,4 +273,285 @@ final class AgentActivityStateTests: XCTestCase {
         let applied = manager.updateSurfaceAgentState(tabId: UUID(), surfaceId: UUID(), state: .working)
         XCTAssertFalse(applied)
     }
+
+    // MARK: - T8: AgentPresence / SidebarAgentIndicator (agent-state-unification)
+
+    /// Fixture mirroring `testFocusPanelDismissesUnreadNotificationWithDismissFlash`
+    /// (TabManagerUnitTests.swift): wires a fresh `TabManager` and `TerminalNotificationStore.shared`
+    /// through `AppDelegate.shared` and marks the app focused, since
+    /// `dismissNotificationOnDirectInteraction` requires both a selected workspace and an
+    /// active app to do anything.
+    private func makeNotificationFixture() throws -> (manager: TabManager, workspace: Workspace, panelId: UUID, cleanup: () -> Void) {
+        let appDelegate = AppDelegate.shared ?? AppDelegate()
+        let manager = TabManager()
+        let store = TerminalNotificationStore.shared
+
+        let originalTabManager = appDelegate.tabManager
+        let originalNotificationStore = appDelegate.notificationStore
+        let originalAppFocusOverride = AppFocusState.overrideIsFocused
+
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
+        appDelegate.tabManager = manager
+        appDelegate.notificationStore = store
+        AppFocusState.overrideIsFocused = true
+
+        let cleanup = {
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            appDelegate.tabManager = originalTabManager
+            appDelegate.notificationStore = originalNotificationStore
+            AppFocusState.overrideIsFocused = originalAppFocusOverride
+        }
+
+        guard let workspace = manager.selectedWorkspace, let panelId = workspace.focusedPanelId else {
+            cleanup()
+            XCTFail("Expected selected workspace with focused panel")
+            throw XCTSkip("fixture setup failed")
+        }
+        return (manager, workspace, panelId, cleanup)
+    }
+
+    /// Models what `agent.needs_input` does in one hop (docs/plans/agent-state-unification.md
+    /// T2/T8 item 1): write blocked presence with `.hooks` source and a session key, then post
+    /// exactly one unread notification for the same surface. Exercised directly against the
+    /// presence/notification seams since the socket handler itself has no unit-test harness.
+    func testAgentNeedsInputWritesBlockedPresenceAndSingleNotification() throws {
+        let fixture = try makeNotificationFixture()
+        defer { fixture.cleanup() }
+        let sessionKey = AgentSessionKey(provider: "claude-code", sessionId: "sess-1", pid: nil)
+
+        fixture.workspace.updatePanelAgentState(panelId: fixture.panelId, state: .blocked, source: .hooks, sessionKey: sessionKey)
+        TerminalNotificationStore.shared.addNotification(
+            tabId: fixture.workspace.id,
+            surfaceId: fixture.panelId,
+            title: "Needs input",
+            subtitle: "",
+            body: "Approve this tool call?"
+        )
+        drainMainQueue()
+
+        XCTAssertEqual(fixture.workspace.panelAgentPresence[fixture.panelId]?.state, .blocked)
+        XCTAssertEqual(fixture.workspace.panelAgentPresence[fixture.panelId]?.source, .hooks)
+        XCTAssertEqual(fixture.workspace.panelAgentPresence[fixture.panelId]?.sessionKey, sessionKey)
+        XCTAssertEqual(TerminalNotificationStore.shared.unreadCount(forTabId: fixture.workspace.id), 1)
+        XCTAssertTrue(TerminalNotificationStore.shared.hasUnreadNotification(forTabId: fixture.workspace.id, surfaceId: fixture.panelId))
+
+        let indicator = SidebarAgentIndicator.make(for: fixture.workspace, now: Date())
+        XCTAssertEqual(indicator?.systemImage, "exclamationmark.circle.fill")
+        XCTAssertEqual(indicator?.tint, .blocked)
+        XCTAssertEqual(indicator?.label, String(localized: "sidebar.agentIndicator.needsInput", defaultValue: "Needs input"))
+        XCTAssertFalse(indicator?.isStale ?? true)
+
+        XCTAssertNil(fixture.workspace.statusEntries["claude_code"])
+    }
+
+    /// TabItemView.swift's row-click path and `dismissNotificationOnDirectInteraction` both
+    /// carry a comment saying focus must never clear `panelAgentPresence` -- verify the
+    /// behavior the comment promises, not just its presence.
+    func testDismissNotificationOnDirectInteractionClearsUnreadButKeepsBlockedPresence() throws {
+        let fixture = try makeNotificationFixture()
+        defer { fixture.cleanup() }
+        let sessionKey = AgentSessionKey(provider: "claude-code", sessionId: "sess-1", pid: nil)
+        fixture.workspace.updatePanelAgentState(panelId: fixture.panelId, state: .blocked, source: .hooks, sessionKey: sessionKey)
+        TerminalNotificationStore.shared.addNotification(
+            tabId: fixture.workspace.id,
+            surfaceId: fixture.panelId,
+            title: "Needs input",
+            subtitle: "",
+            body: "Approve this tool call?"
+        )
+        drainMainQueue()
+        XCTAssertEqual(TerminalNotificationStore.shared.unreadCount(forTabId: fixture.workspace.id), 1)
+
+        let dismissed = fixture.manager.dismissNotificationOnDirectInteraction(tabId: fixture.workspace.id, surfaceId: fixture.panelId)
+        XCTAssertTrue(dismissed)
+        XCTAssertEqual(TerminalNotificationStore.shared.unreadCount(forTabId: fixture.workspace.id), 0)
+
+        XCTAssertEqual(fixture.workspace.panelAgentPresence[fixture.panelId]?.state, .blocked)
+        XCTAssertEqual(fixture.workspace.panelAgentPresence[fixture.panelId]?.source, .hooks)
+        let indicator = SidebarAgentIndicator.make(for: fixture.workspace, now: Date())
+        XCTAssertEqual(indicator?.label, String(localized: "sidebar.agentIndicator.needsInput", defaultValue: "Needs input"))
+    }
+
+    /// A hook reporting `working` after `blocked` (the pre-tool-use / Stop / turn.completed
+    /// resume path) must clear blocked while keeping the `.hooks` source, per the clearing
+    /// rules in section 3 of the plan.
+    func testWorkingReportAfterBlockedClearsBlockedKeepsHooksSource() {
+        let workspace = Workspace(title: "Test")
+        let panelId = UUID()
+        let sessionKey = AgentSessionKey(provider: "claude-code", sessionId: "sess-2", pid: nil)
+
+        workspace.updatePanelAgentState(panelId: panelId, state: .blocked, source: .hooks, sessionKey: sessionKey)
+        workspace.updatePanelAgentState(panelId: panelId, state: .working, source: .hooks)
+
+        XCTAssertEqual(workspace.panelAgentPresence[panelId]?.state, .working)
+        XCTAssertEqual(workspace.panelAgentPresence[panelId]?.source, .hooks)
+        let indicator = SidebarAgentIndicator.make(for: workspace, now: Date())
+        XCTAssertEqual(indicator?.tint, .working)
+        XCTAssertEqual(indicator?.label, String(localized: "sidebar.agentIndicator.working", defaultValue: "Working"))
+    }
+
+    /// `agent.event` `session.exited` calls `clearPanelAgentState` -- the indicator must
+    /// disappear entirely (no badge), not degrade to idle.
+    func testClearPanelAgentStateRemovesIndicatorEntirely() {
+        let workspace = Workspace(title: "Test")
+        let panelId = UUID()
+
+        workspace.updatePanelAgentState(panelId: panelId, state: .blocked, source: .hooks)
+        XCTAssertNotNil(SidebarAgentIndicator.make(for: workspace, now: Date()))
+
+        workspace.clearPanelAgentState(panelId: panelId)
+
+        XCTAssertNil(workspace.panelAgentPresence[panelId])
+        XCTAssertNil(SidebarAgentIndicator.make(for: workspace, now: Date()))
+    }
+
+    /// Staleness (plan section 1's `isStale`, threshold 600s): a presence untouched for 11
+    /// minutes reads stale with a suffixed label for both non-idle states; idle never goes
+    /// stale, since it's already the resting value.
+    func testStalePresenceReportsStaleAndSuffixesLabelForNonIdleStates() {
+        let workspace = Workspace(title: "Test")
+        let blockedPanelId = UUID()
+        let workingPanelId = UUID()
+        let idlePanelId = UUID()
+        let now = Date()
+        let elevenMinutesAgo = now.addingTimeInterval(-660)
+
+        workspace.updatePanelAgentState(panelId: blockedPanelId, state: .blocked, source: .hooks, at: elevenMinutesAgo)
+        XCTAssertTrue(workspace.panelAgentPresence[blockedPanelId]!.isStale(now: now))
+        let blockedIndicator = SidebarAgentIndicator.make(for: workspace, now: now)
+        XCTAssertTrue(blockedIndicator?.isStale ?? false)
+        XCTAssertEqual(
+            blockedIndicator?.label,
+            String(localized: "sidebar.agentIndicator.needsInputStale", defaultValue: "Needs input (stale)")
+        )
+        workspace.clearPanelAgentState(panelId: blockedPanelId)
+
+        workspace.updatePanelAgentState(panelId: workingPanelId, state: .working, source: .hooks, at: elevenMinutesAgo)
+        let workingIndicator = SidebarAgentIndicator.make(for: workspace, now: now)
+        XCTAssertTrue(workingIndicator?.isStale ?? false)
+        XCTAssertEqual(
+            workingIndicator?.label,
+            String(localized: "sidebar.agentIndicator.workingStale", defaultValue: "Working (stale)")
+        )
+        workspace.clearPanelAgentState(panelId: workingPanelId)
+
+        workspace.updatePanelAgentState(panelId: idlePanelId, state: .idle, source: .hooks, at: elevenMinutesAgo)
+        XCTAssertFalse(workspace.panelAgentPresence[idlePanelId]!.isStale(now: now))
+        let idleIndicator = SidebarAgentIndicator.make(for: workspace, now: now)
+        XCTAssertFalse(idleIndicator?.isStale ?? true)
+        XCTAssertEqual(idleIndicator?.label, String(localized: "sidebar.agentIndicator.idle", defaultValue: "Idle"))
+    }
+
+    /// A repeated identical (state, source) write only refreshes `lastEventAt` (see the
+    /// "same state from the same writer" branch in `updatePanelAgentState`) -- a long-running
+    /// agent that keeps reporting the same state must not read as stale at the threshold.
+    func testRepeatedIdenticalWriteRefreshesStalenessClock() {
+        let workspace = Workspace(title: "Test")
+        let panelId = UUID()
+        let now = Date()
+        let elevenMinutesAgo = now.addingTimeInterval(-660)
+
+        workspace.updatePanelAgentState(panelId: panelId, state: .blocked, source: .hooks, at: elevenMinutesAgo)
+        XCTAssertTrue(workspace.panelAgentPresence[panelId]!.isStale(now: now))
+
+        workspace.updatePanelAgentState(panelId: panelId, state: .blocked, source: .hooks, at: now)
+        XCTAssertFalse(workspace.panelAgentPresence[panelId]!.isStale(now: now))
+    }
+
+    /// Watchdog (plan section 4): `sweepStaleAgentPIDsForTesting` (test seam added to
+    /// TabManager+GitMetadataPolling.swift) clears presence whose reported pid has exited,
+    /// and leaves presence whose pid is still alive untouched.
+    func testWatchdogClearsPresenceForDeadPidAndKeepsAlivePresence() throws {
+        let manager = TabManager()
+        guard let workspace = manager.selectedWorkspace else {
+            XCTFail("Expected selected workspace")
+            return
+        }
+
+        let deadProcess = Process()
+        deadProcess.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try deadProcess.run()
+        deadProcess.waitUntilExit()
+        let deadPid = deadProcess.processIdentifier
+        errno = 0
+        XCTAssertEqual(kill(deadPid, 0), -1)
+        XCTAssertEqual(errno, ESRCH, "fixture precondition: deadPid must already be gone, or this test proves nothing")
+
+        let deadPanelId = UUID()
+        let alivePanelId = UUID()
+        workspace.updatePanelAgentState(
+            panelId: deadPanelId,
+            state: .working,
+            source: .hooks,
+            sessionKey: AgentSessionKey(provider: "claude-code", sessionId: nil, pid: deadPid)
+        )
+        workspace.updatePanelAgentState(
+            panelId: alivePanelId,
+            state: .working,
+            source: .hooks,
+            sessionKey: AgentSessionKey(provider: "claude-code", sessionId: nil, pid: getpid())
+        )
+
+        manager.sweepStaleAgentPIDsForTesting()
+
+        XCTAssertNil(workspace.panelAgentPresence[deadPanelId])
+        XCTAssertEqual(workspace.panelAgentPresence[alivePanelId]?.state, .working)
+        XCTAssertEqual(workspace.panelAgentPresence[alivePanelId]?.sessionKey?.pid, getpid())
+    }
+
+    /// Hooks-win guard: an `.inferred` write against a `.hooks`-owned surface is dropped
+    /// outright, and critically does not even move `lastEventAt` -- the staleness clock keeps
+    /// ticking from the last real hook event. `.inferred` writes also never carry a session key,
+    /// even on a fresh (non-hooks) surface, since there is no session to key on.
+    func testInferredWriteAgainstHooksPresenceIsDroppedAndNeverCarriesSessionKey() {
+        let workspace = Workspace(title: "Test")
+        let hooksPanelId = UUID()
+        let now = Date()
+        let sessionKey = AgentSessionKey(provider: "claude-code", sessionId: "sess-3", pid: nil)
+
+        workspace.updatePanelAgentState(panelId: hooksPanelId, state: .working, source: .hooks, sessionKey: sessionKey, at: now)
+        let originalLastEventAt = workspace.panelAgentPresence[hooksPanelId]!.lastEventAt
+
+        workspace.updatePanelAgentState(panelId: hooksPanelId, state: .blocked, source: .inferred, at: now.addingTimeInterval(5))
+
+        XCTAssertEqual(workspace.panelAgentPresence[hooksPanelId]?.state, .working)
+        XCTAssertEqual(workspace.panelAgentPresence[hooksPanelId]?.source, .hooks)
+        XCTAssertEqual(workspace.panelAgentPresence[hooksPanelId]?.lastEventAt, originalLastEventAt)
+        XCTAssertEqual(workspace.panelAgentPresence[hooksPanelId]?.sessionKey, sessionKey)
+
+        let freshPanelId = UUID()
+        workspace.updatePanelAgentState(panelId: freshPanelId, state: .working, source: .inferred, sessionKey: sessionKey, at: now)
+        XCTAssertNil(workspace.panelAgentPresence[freshPanelId]?.sessionKey)
+    }
+
+    /// Aggregation (worst-first): a blocked surface wins the workspace-level indicator over an
+    /// idle one, and the stale flag reflects only the winning surface's own staleness, not any
+    /// other surface's.
+    func testAggregationPicksBlockedOverIdleAndStaleFlagFollowsWinnerOnly() {
+        let workspace = Workspace(title: "Test")
+        let idlePanelId = UUID()
+        let blockedPanelId = UUID()
+        let now = Date()
+        let elevenMinutesAgo = now.addingTimeInterval(-660)
+
+        workspace.updatePanelAgentState(panelId: idlePanelId, state: .idle, source: .hooks, at: now)
+        workspace.updatePanelAgentState(panelId: blockedPanelId, state: .blocked, source: .hooks, at: elevenMinutesAgo)
+
+        let staleIndicator = SidebarAgentIndicator.make(for: workspace, now: now)
+        XCTAssertEqual(staleIndicator?.tint, .blocked)
+        XCTAssertTrue(staleIndicator?.isStale ?? false)
+        XCTAssertEqual(
+            staleIndicator?.label,
+            String(localized: "sidebar.agentIndicator.needsInputStale", defaultValue: "Needs input (stale)")
+        )
+
+        // Refresh the winning (blocked) surface only; the idle surface stays untouched (idle
+        // never goes stale regardless). The indicator must flip back to non-stale.
+        workspace.updatePanelAgentState(panelId: blockedPanelId, state: .blocked, source: .hooks, at: now)
+        let freshIndicator = SidebarAgentIndicator.make(for: workspace, now: now)
+        XCTAssertEqual(freshIndicator?.tint, .blocked)
+        XCTAssertFalse(freshIndicator?.isStale ?? true)
+    }
 }
