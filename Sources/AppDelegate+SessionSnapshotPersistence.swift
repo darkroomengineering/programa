@@ -187,7 +187,16 @@ extension AppDelegate {
     }
 
     func buildSessionSnapshot(includeScrollback: Bool, cleanShutdown: Bool = false) -> AppSessionSnapshot? {
+        // Hidden windows (closed by the user, kept alive by `preserveMainWindowOnClose`) sort
+        // last so `windows.first` -- the entry restore applies to the launch window -- is
+        // always one the user could see. They are still written, flagged `isHidden`, so the
+        // next launch knows which escrowed shells to end instead of reviving.
         let contexts = mainWindowContexts.values.sorted { lhs, rhs in
+            let lhsIsHidden = lhs.hiddenWindow != nil
+            let rhsIsHidden = rhs.hiddenWindow != nil
+            if lhsIsHidden != rhsIsHidden {
+                return !lhsIsHidden
+            }
             let lhsWindow = lhs.window ?? windowForMainWindowId(lhs.windowId)
             let rhsWindow = rhs.window ?? windowForMainWindowId(rhs.windowId)
             let lhsIsKey = lhsWindow?.isKeyWindow ?? false
@@ -204,15 +213,18 @@ extension AppDelegate {
             .prefix(SessionPersistencePolicy.maxWindowsPerSnapshot)
             .map { context in
                 let window = context.window ?? windowForMainWindowId(context.windowId)
+                let isHidden = context.hiddenWindow != nil
                 return SessionWindowSnapshot(
                     frame: window.map { SessionRectSnapshot($0.frame) },
                     display: displaySnapshot(for: window),
-                    tabManager: context.tabManager.sessionSnapshot(includeScrollback: includeScrollback),
+                    // A hidden window is never shown again, so its scrollback is dead weight.
+                    tabManager: context.tabManager.sessionSnapshot(includeScrollback: includeScrollback && !isHidden),
                     sidebar: SessionSidebarSnapshot(
                         isVisible: context.sidebarState.isVisible,
                         selection: SessionSidebarSelection(selection: context.sidebarSelectionState.selection),
                         width: SessionPersistencePolicy.sanitizedSidebarWidth(Double(context.sidebarState.persistedWidth))
-                    )
+                    ),
+                    isHidden: isHidden ? true : nil
                 )
             }
 
@@ -241,7 +253,7 @@ extension AppDelegate {
                 "session.save.window idx=\(index) " +
                     "frame={\(debugSessionRectDescription(windowSnapshot.frame))} " +
                     "display={\(debugSessionDisplayDescription(windowSnapshot.display))} " +
-                    "workspaces=\(workspaceCount) selected=\(selectedWorkspace)"
+                    "workspaces=\(workspaceCount) selected=\(selectedWorkspace) hidden=\(windowSnapshot.isHiddenWindow ? 1 : 0)"
             )
         }
     }

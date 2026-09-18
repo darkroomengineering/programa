@@ -1008,6 +1008,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var startupSessionSnapshot: AppSessionSnapshot?
     private var didPrepareStartupSessionSnapshot = false
     private var didAttemptStartupSessionRestore = false
+    /// Session ids whose shells `endShellsOfHiddenWindows` ended (or tried to) this launch.
+    /// `reconcileOrphanedEscrowedSessions` skips them: their WAL directory removal is
+    /// asynchronous, and a session the holder refused to hand over must not be revived either.
+    private var startupEndedHiddenSessionIds = Set<String>()
     var isApplyingStartupSessionRestore = false
     lazy var startupHandoff = StartupSessionHandoff(
         olderProcess: StartupSessionHandoff.authenticatedOlderProcess,
@@ -1786,12 +1790,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // sessions silently. Say what happened.
             notifyUncleanShutdownRecovery()
         }
-        let primaryWindowSnapshot = startupSnapshot?.windows.first
+        // Windows the user had closed before quitting are not shown again: their escrowed
+        // shells are ended here, before the orphan reconciler below could revive them into a
+        // recovery window. Until 2026-09-18 they were restored as ordinary visible windows,
+        // so every window ever closed with the red button came back on the next launch.
+        let windowsToRestore = startupSnapshot.map { SessionPersistenceStore.windowsToRestore(from: $0) } ?? []
+        if let startupSnapshot {
+            endShellsOfHiddenWindows(SessionPersistenceStore.hiddenWindows(from: startupSnapshot))
+        }
+        let primaryWindowSnapshot = windowsToRestore.first
         if let primaryWindowSnapshot {
             isApplyingStartupSessionRestore = true
 #if DEBUG
             dlog(
-                "session.restore.start windows=\(startupSnapshot?.windows.count ?? 0) " +
+                "session.restore.start windows=\(windowsToRestore.count) " +
                     "primaryFrame={\(debugSessionRectDescription(primaryWindowSnapshot.frame))} " +
                     "primaryDisplay={\(debugSessionDisplayDescription(primaryWindowSnapshot.display))}"
             )
@@ -1815,11 +1827,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
         }
 
-        if let startupSnapshot {
-            let additionalWindows = Array(startupSnapshot
-                .windows
-                .dropFirst()
-                .prefix(max(0, SessionPersistencePolicy.maxWindowsPerSnapshot - 1)))
+        if startupSnapshot != nil {
+            let additionalWindows = Array(windowsToRestore.dropFirst())
 #if DEBUG
             for (index, windowSnapshot) in additionalWindows.enumerated() {
                 dlog(
@@ -1882,6 +1891,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
     }
 
+    /// Ends the shells of windows the user had closed before the previous run ended.
+    /// `preserveMainWindowOnClose` keeps a closed window's PTYs alive so the Dock can reopen
+    /// it in the same run, and quit escrows them like any other session -- but a closed
+    /// window must not come back on relaunch, and without this the orphan reconciler would
+    /// revive those shells into a recovery window instead. Each session is retrieved from the
+    /// holder exactly like a reattach, then hung up (SIGHUP to the child, master fd closed)
+    /// and its WAL directory removed. Runs synchronously on the main actor at launch, before
+    /// any window restore, with the same per-session retrieve timeout a reattach pays.
+    private func endShellsOfHiddenWindows(_ hiddenWindows: [SessionWindowSnapshot]) {
+        guard !hiddenWindows.isEmpty, !SessionMachineryGate.isUnitTesting else { return }
+        var ended = 0
+        var sessionIds: [String] = []
+        for window in hiddenWindows {
+            for workspace in window.tabManager.workspaces {
+                for panel in workspace.panels where panel.type == .terminal {
+                    sessionIds.append(panel.id.uuidString)
+                }
+            }
+        }
+        for sessionId in sessionIds {
+            startupEndedHiddenSessionIds.insert(sessionId)
+            if let meta = SessionWALStore.shared.readMeta(sessionId: sessionId),
+               meta.escrowed == true,
+               let socketPath = meta.escrowSocketPath,
+               let tokenHex = meta.escrowToken,
+               let masterFD = SessionEscrowClient.retrieve(
+                   sessionId: sessionId,
+                   tokenHex: tokenHex,
+                   socketPath: socketPath
+               ) {
+                if let childPID = meta.childPID, childPID > 0 {
+                    kill(childPID, SIGHUP)
+                }
+                close(masterFD)
+                ended += 1
+            }
+            SessionWALStore.shared.discardOrphanedSession(sessionId: sessionId, force: true)
+        }
+        dilog(
+            "session.restore",
+            "hiddenWindows=\(hiddenWindows.count) sessions=\(sessionIds.count) ended=\(ended)"
+        )
+    }
+
     /// Issue #307 orphan-reconciliation fix: the coarse-snapshot restore
     /// that just completed above is keyed entirely by the panel UUIDs
     /// already present in `session-<bundleId>.json` -- if that snapshot was
@@ -1908,7 +1961,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// closed immediately once the revived panel has taken its place in the
     /// same pane, so no tab is ever left showing two panels or an empty one.
     private func reconcileOrphanedEscrowedSessions() {
-        var known = Set<String>()
+        var known = startupEndedHiddenSessionIds
         for context in mainWindowContexts.values {
             for workspace in context.tabManager.tabs {
                 for panelId in workspace.panels.keys {
