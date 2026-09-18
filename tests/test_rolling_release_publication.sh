@@ -25,9 +25,9 @@ set -euo pipefail
 # has the authoritative state-module shape `{schemaVersion:2,sealed:true,
 # targetSha,version,build,assets:[{name,role,size,sha256}]}`. Manifest sha256
 # values are bare lowercase hex; GitHub asset metadata uses `sha256:<hex>`.
-# Payload appcast URLs bind to the requested destination
-# tag. Archive candidates use their permanent build tag; legacy rolling
-# candidate coverage still verifies an explicitly requested `rolling` target.
+# Payload appcast URLs bind to the requested destination tag, which for the
+# rolling lane is always `rolling`: candidates are drafts and GitHub serves no
+# assets from a draft, so an enclosure at the candidate tag would 404.
 #
 #   GH_BIN=/path/to/gh GITHUB_REPOSITORY=owner/repo \
 #     scripts/publish_rolling_release.sh \
@@ -46,9 +46,11 @@ set -euo pipefail
 # retry-safe. Candidates never leave draft state and are never published to the
 # releases page. Repository release immutability must remain disabled because
 # rolling is intentionally reused; candidate integrity comes from its sealed
-# bytes and attestations instead. Rolling reconciles appcast.xml and the stable
-# macOS and Windows aliases; build-specific payloads remain on the draft
-# candidate and are never copied into rolling. Metadata and latest status
+# bytes and attestations instead. Rolling reconciles the Sparkle enclosure
+# (programa-macos-<build>.dmg, uploaded before the feed that points at it),
+# appcast.xml, and the stable macOS and Windows aliases; dSYMs and the
+# versioned EXE remain on the draft candidate. Enclosures older than the keep
+# window are pruned from rolling after convergence. Metadata and latest status
 # change before the rolling ref moves. Rolling must already exist as the
 # legacy mutable release; missing or immutable state fails. After promotion,
 # every other draft candidate at or below the finalized build is deleted,
@@ -262,6 +264,7 @@ invoke_rolling() {
   FAKE_GH_ADVANCE_MAIN_DURING_NOTES="${FAKE_GH_ADVANCE_MAIN_DURING_NOTES:-}" \
   FAKE_GH_SWAP_SEAL_ON_PUBLISH="${FAKE_GH_SWAP_SEAL_ON_PUBLISH:-}" \
   FAKE_GH_FAIL_ATTESTATION="${FAKE_GH_FAIL_ATTESTATION:-}" FAKE_GH_CI_RESULT="${FAKE_GH_CI_RESULT:-success}" \
+  ROLLING_ENCLOSURE_KEEP_BUILDS="${ROLLING_ENCLOSURE_KEEP_BUILDS:-}" \
     "${ROLLING_HELPER}" --candidate-prefix rolling-candidate- --rolling-tag rolling \
       --reconciler-target-sha "${reconciler_target}" > "${RUN_OUTPUT}" 2>&1
 }
@@ -591,9 +594,8 @@ for build in 100 101 102 103 104 105 200 201; do make_fixture "${build}" "0.64.7
 seed_sealed_candidate() {
   local build="$1" version="${2:-0.64.73}" refresh_fixture="${3:-true}" dir role path name size digest entries=""
   local tag="rolling-candidate-${build}"
-  # Archived payload URLs are self-contained at the candidate's permanent tag;
-  # rolling contains only the mutable feed and stable DMG alias.
-  [[ "${refresh_fixture}" != true ]] || make_fixture "${build}" "${version}" "${tag}"
+  # The sealed appcast points at rolling: the enclosure is promoted there.
+  [[ "${refresh_fixture}" != true ]] || make_fixture "${build}" "${version}" rolling
   write_release "${tag}" "$(target_sha_for "${build}")" true false "Candidate ${build}" candidate
   printf '%s\n' "$((build + 500))" > "$(release_dir "${tag}")/id"
   while IFS='=' read -r role path; do
@@ -613,8 +615,8 @@ seed_sealed_candidate() {
 stage_archive_candidate() {
   local build="$1" version="${2:-0.64.73}"
   local tag="rolling-candidate-${build}"
-  make_fixture "${build}" "${version}" "${tag}"
-  invoke_candidate "${build}" "${version}" "" rolling-candidate- "${tag}"
+  make_fixture "${build}" "${version}" rolling
+  invoke_candidate "${build}" "${version}" "" rolling-candidate- rolling
   printf '%s\n' "$(target_sha_for "${build}")" > "${STATE_DIR}/main_sha"
 }
 
@@ -687,6 +689,7 @@ assert_rolling_converged() {
   assert_asset_equals rolling appcast.xml "${FIXTURE_DIR}/${build}/appcast.xml"
   assert_asset_equals rolling programa-macos.dmg "${FIXTURE_DIR}/${build}/programa-macos.dmg"
   assert_asset_equals rolling programa-windows.exe "${FIXTURE_DIR}/${build}/programa-windows.exe"
+  assert_asset_equals rolling "programa-macos-${build}.dmg" "${FIXTURE_DIR}/${build}/programa-macos-${build}.dmg"
 }
 
 # Candidates are never published: the just-promoted one is retained only as a
@@ -793,7 +796,7 @@ done
 
 # Reconciliation validates operative URLs again instead of trusting a sealed decoy.
 for poisoned_payload in appcast; do
-  reset_state; make_fixture 105 0.64.73 rolling-candidate-105
+  reset_state; make_fixture 105 0.64.73 rolling
   case "${poisoned_payload}" in appcast) poison_appcast_url 105 ;; esac
   seed_sealed_candidate 105 0.64.73 false; seed_rolling 104
   : > "${STATE_DIR}/operations.log"
@@ -914,8 +917,9 @@ assert_release_absent rolling-candidate-101; assert_published_archive 103; asser
 # Promotion deletes every draft candidate at or below the finalized build
 # except the one just selected: retention is always exactly one candidate
 # draft (the private rollback archive), regardless of how many stale drafts
-# accumulated. A candidate strictly above the finalized build survives, and
-# deletion goes through --cleanup-tag so the tag is removed too.
+# accumulated. A candidate strictly above the finalized build survives. Drafts
+# have no git tag, so deletion must not request tag cleanup (GitHub answers
+# 422 for the missing ref and the job goes red after the release is gone).
 reset_state
 seed_sealed_candidate 103
 write_release rolling-candidate-050 "$(target_sha_for 50)" true false 'Candidate 50' candidate
@@ -930,12 +934,12 @@ assert_release_absent rolling-candidate-050
 assert_release_absent rolling-candidate-060
 assert_release_absent rolling-candidate-070
 assert_release_exists rolling-candidate-104
-grep -Fq 'mutation delete-release rolling-candidate-050 cleanup-tag=true' "${STATE_DIR}/operations.log" || \
-  fail "retention did not delete an older candidate draft with --cleanup-tag"
-grep -Fq 'mutation delete-release rolling-candidate-060 cleanup-tag=true' "${STATE_DIR}/operations.log" || \
-  fail "retention did not delete an older candidate draft with --cleanup-tag"
-grep -Fq 'mutation delete-release rolling-candidate-070 cleanup-tag=true' "${STATE_DIR}/operations.log" || \
-  fail "retention did not delete the candidate draft just below the finalized build"
+grep -Fq 'mutation delete-release rolling-candidate-050 cleanup-tag=false' "${STATE_DIR}/operations.log" || \
+  fail "retention did not delete an older candidate draft, or asked for tag cleanup"
+grep -Fq 'mutation delete-release rolling-candidate-060 cleanup-tag=false' "${STATE_DIR}/operations.log" || \
+  fail "retention did not delete an older candidate draft, or asked for tag cleanup"
+grep -Fq 'mutation delete-release rolling-candidate-070 cleanup-tag=false' "${STATE_DIR}/operations.log" || \
+  fail "retention did not delete the candidate draft just below the finalized build, or asked for tag cleanup"
 ! grep -Fq 'mutation delete-release rolling-candidate-104' "${STATE_DIR}/operations.log" || \
   fail "retention deleted a candidate draft above the finalized build"
 ! grep -Fq 'mutation delete-release rolling-candidate-103' "${STATE_DIR}/operations.log" || \
@@ -1038,10 +1042,10 @@ write_release archive-without-feed "$(target_sha_for 99)" false false archive ar
 assert_rolling_converged 103; assert_published_archive 103
 
 # A promotion seals its build-specific payload in-place before either mutable
-# rolling alias changes. Repeated promotions replace only the feed and two
-# aliases, so the rolling release's asset count remains bounded, and each
-# promotion deletes the previous candidate draft (retention 1) once the new
-# one is in place.
+# rolling alias changes. Repeated promotions replace the feed and two aliases
+# and add exactly one per-build enclosure (dSYMs and the versioned EXE stay on
+# the candidate), and each promotion deletes the previous candidate draft
+# (retention 1) once the new one is in place.
 reset_state
 seed_rolling 100
 seed_release_decoys 1005
@@ -1055,7 +1059,7 @@ invoke_rolling
 assert_published_archive 103
 assert_release_absent rolling-candidate-101
 assert_rolling_converged 103
-assert_asset_count rolling "${initial_rolling_asset_count}"
+assert_asset_count rolling "$((initial_rolling_asset_count + 1))"
 cmp -s "${prepublication_seal_103}" "$(asset_dir rolling-candidate-103 "${SEAL_NAME}")/bytes" || \
   fail "published archive seal differs from the selected pre-publication seal"
 ! grep -Fq 'forbidden-immutable-releases-endpoint' "${STATE_DIR}/operations.log" || \
@@ -1067,9 +1071,13 @@ cmp -s "${prepublication_seal_103}" "$(asset_dir rolling-candidate-103 "${SEAL_N
 ! grep -Eq '^mutation (upload-asset|delete-asset) rolling-candidate-103 ' "${STATE_DIR}/operations.log" || \
   fail "promotion rewrote selected archive assets"
 if grep -E '^mutation (upload-asset|delete-asset) rolling ' "${STATE_DIR}/operations.log" | \
-  grep -Ev ' rolling (appcast.xml|programa-macos.dmg|programa-windows.exe)$'; then
-  fail "promotion copied build-specific assets into rolling"
+  grep -Ev ' rolling (appcast.xml|programa-macos.dmg|programa-windows.exe|programa-macos-103.dmg)$'; then
+  fail "promotion copied build-specific assets other than the enclosure into rolling"
 fi
+enclosure_line="$(grep -n '^mutation upload-asset rolling programa-macos-103.dmg$' "${STATE_DIR}/operations.log" | head -1 | cut -d: -f1)"
+feed_line="$(grep -n '^mutation upload-asset rolling appcast.xml$' "${STATE_DIR}/operations.log" | head -1 | cut -d: -f1)"
+[[ -n "${enclosure_line}" && -n "${feed_line}" ]] || fail "promotion did not upload both the enclosure and the feed"
+(( enclosure_line < feed_line )) || fail "feed was published before the enclosure it points at"
 
 stage_archive_candidate 104
 : > "${STATE_DIR}/operations.log"
@@ -1077,7 +1085,7 @@ invoke_rolling
 assert_release_absent rolling-candidate-103
 assert_published_archive 104
 assert_rolling_converged 104
-assert_asset_count rolling "${initial_rolling_asset_count}"
+assert_asset_count rolling "$((initial_rolling_asset_count + 2))"
 ! grep -Fq 'forbidden-immutable-releases-endpoint' "${STATE_DIR}/operations.log" || \
   fail "repeated publisher called the Administration-only immutable-releases endpoint"
 ! grep -Eq '^view-release archive-decoy-' "${STATE_DIR}/operations.log" || \
@@ -1085,13 +1093,35 @@ assert_asset_count rolling "${initial_rolling_asset_count}"
 ! grep -Eq '^mutation (upload-asset|delete-asset) rolling-candidate-104 ' "${STATE_DIR}/operations.log" || \
   fail "repeated promotion rewrote selected archive assets"
 if grep -E '^mutation (upload-asset|delete-asset) rolling ' "${STATE_DIR}/operations.log" | \
-  grep -Ev ' rolling (appcast.xml|programa-macos.dmg|programa-windows.exe)$'; then
-  fail "repeated promotion grew rolling with build-specific assets"
+  grep -Ev ' rolling (appcast.xml|programa-macos.dmg|programa-windows.exe|programa-macos-104.dmg)$'; then
+  fail "repeated promotion grew rolling with build-specific assets other than the enclosure"
 fi
 
-# Equal build repairs only the mutable feed and stable DMG alias. Existing
-# build-specific rolling assets are legacy compatibility state and are neither
-# added nor rewritten by new promotions.
+# Enclosures past the keep window are pruned from rolling only after the new
+# feed and enclosure converged, and the just-promoted build is never a
+# candidate for deletion. Stale versioned dSYM/EXE names are not enclosures and
+# are left alone.
+reset_state
+seed_sealed_candidate 103; seed_rolling 100
+for stale_build in 090 095; do
+  printf 'enclosure-%s\n' "${stale_build}" > "${TMP_DIR}/stale-${stale_build}.dmg"
+  write_asset rolling "programa-macos-${stale_build}.dmg" "${TMP_DIR}/stale-${stale_build}.dmg"
+done
+: > "${STATE_DIR}/operations.log"
+ROLLING_ENCLOSURE_KEEP_BUILDS=2 invoke_rolling
+assert_rolling_converged 103
+[[ ! -d "$(asset_dir rolling programa-macos-090.dmg)" ]] || fail "stale enclosure 090 survived pruning"
+[[ ! -d "$(asset_dir rolling programa-macos-095.dmg)" ]] || fail "stale enclosure 095 survived pruning"
+[[ -d "$(asset_dir rolling programa-macos-100.dmg)" ]] || fail "pruning removed an enclosure inside the keep window"
+[[ -d "$(asset_dir rolling programa-dSYMs-100.zip)" ]] || fail "pruning removed a non-enclosure rolling asset"
+first_prune_line="$(grep -n '^mutation delete-asset rolling programa-macos-0' "${STATE_DIR}/operations.log" | head -1 | cut -d: -f1)"
+final_verify_line="$(grep -n 'verify-rolling rolling 103' "${STATE_DIR}/operations.log" | tail -1 | cut -d: -f1)"
+[[ -n "${first_prune_line}" && -n "${final_verify_line}" ]] || fail "prune ordering evidence is incomplete"
+(( final_verify_line < first_prune_line )) || fail "enclosures were pruned before rolling converged"
+
+# Equal build repairs the mutable feed, the stable DMG alias, and the enclosure
+# it points at. Other build-specific rolling assets (versioned dSYMs from older
+# lanes) are legacy state and are neither added nor rewritten.
 reset_state
 seed_sealed_candidate 103; seed_rolling 103
 rm -rf "$(asset_dir rolling appcast.xml)"

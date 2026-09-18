@@ -485,9 +485,11 @@ jobs:
           DMG_RELEASE="programa-macos.dmg"
           # Publish the same bytes twice: programa-macos.dmg is the stable README
           # download button, and programa-macos-<build>.dmg is what Sparkle's appcast
-          # points at. The publisher retains each build archive and never overwrites its
-          # payload assets, so the EdDSA signature always matches that URL. See
-          # scripts/sparkle_enclosure.js for why (SUSparkleErrorDomain 4005, 2026-07-24).
+          # points at. The reconciler copies the per-build DMG onto the public rolling
+          # release under that name and never rewrites it, so the EdDSA signature always
+          # matches its URL. Candidate drafts are not publicly downloadable, so the
+          # enclosure cannot live there. See scripts/sparkle_enclosure.js for why the
+          # name must be per-build (SUSparkleErrorDomain 4005, 2026-07-24).
           ENCLOSURE_DMG="$(node scripts/sparkle_enclosure.js name "$EFFECTIVE_BUILD")"
           cp "$DMG_RELEASE" "$ENCLOSURE_DMG"
           echo "ENCLOSURE_DMG=${ENCLOSURE_DMG}" >> "$GITHUB_ENV"
@@ -500,7 +502,9 @@ jobs:
             echo "Missing SPARKLE_PRIVATE_KEY secret" >&2
             exit 1
           fi
-          ./scripts/sparkle_generate_appcast.sh programa-macos.dmg "$PAYLOAD_RELEASE_TAG" appcast.xml "$ENCLOSURE_DMG"
+          # Enclosure and release-notes URLs bind to the public rolling release, not the
+          # draft candidate: GitHub serves no assets from a draft.
+          ./scripts/sparkle_generate_appcast.sh programa-macos.dmg "$RELEASE_TAG" appcast.xml "$ENCLOSURE_DMG"
 
       - name: Collect macOS release payload
         run: |
@@ -748,7 +752,7 @@ jobs:
           CANDIDATE_SEAL="${RUNNER_TEMP}/programa-release-candidate.json"
           CANDIDATE_PREFIX=rolling-candidate-
           CANDIDATE_TAG="$PAYLOAD_RELEASE_TAG"
-          DESTINATION_TAG="$PAYLOAD_RELEASE_TAG"
+          DESTINATION_TAG="$RELEASE_TAG"
           ./scripts/publish_release_candidate.sh \
             --prepare-only \
             --candidate-prefix "$CANDIDATE_PREFIX" \
