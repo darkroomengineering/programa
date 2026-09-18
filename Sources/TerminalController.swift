@@ -2142,6 +2142,8 @@ class TerminalController {
             return v2Result(id: id, self.v2SurfaceClearAgentState(params: params))
         case "agent.event":
             return v2Result(id: id, self.v2AgentEvent(params: params))
+        case "agent.needs_input":
+            return v2Result(id: id, self.v2AgentNeedsInput(params: params))
 
         // Agent detection (screen manifests)
         case "agent.detection.list":

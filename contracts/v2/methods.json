@@ -115,6 +115,9 @@
           "session_id": {
             "type": "string"
           },
+          "pid": {
+            "type": "integer"
+          },
           "turn_id": {
             "type": "string"
           },
@@ -132,6 +135,64 @@
           "workspace_id",
           "surface_id",
           "event_type"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "off_main"
+    },
+    "agent.needs_input": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Atomically reports a surface as blocked on user input and posts the matching notification (docs/plans/agent-state-unification.md).",
+      "errors": [
+        "invalid_params",
+        "not_found"
+      ],
+      "focus_intent": false,
+      "handler": "v2AgentNeedsInput",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "format": "workspace:N"
+          },
+          "surface_id": {
+            "type": "string",
+            "format": "surface:N"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "permission",
+              "question"
+            ]
+          }
+        },
+        "required": [
+          "workspace_id",
+          "surface_id"
         ],
         "type": "object"
       },
@@ -6402,6 +6463,15 @@
           "workspace_id": {
             "format": "workspace:N",
             "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "integer"
           }
         },
         "required": [

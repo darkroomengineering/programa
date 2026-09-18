@@ -16,6 +16,7 @@ enum V2CommandCatalog {
         "agent.detection.classify",
         "agent.detection.list",
         "agent.event",
+        "agent.needs_input",
         "agent.prompt",
         "agent.spawn",
         "agent.task.finish",

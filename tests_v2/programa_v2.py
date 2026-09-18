@@ -70,7 +70,7 @@ class ProgramaV2Client:
         params.update(extra_params)
         return self._client._call("agent.detection.list", params)
 
-    def agent_event(self, event_type: Optional[Any] = None, item_id: Optional[Any] = None, label: Optional[Any] = None, provider: Optional[Any] = None, resolution: Optional[Any] = None, session_id: Optional[Any] = None, surface_id: Optional[Any] = None, turn_id: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
+    def agent_event(self, event_type: Optional[Any] = None, item_id: Optional[Any] = None, label: Optional[Any] = None, pid: Optional[Any] = None, provider: Optional[Any] = None, resolution: Optional[Any] = None, session_id: Optional[Any] = None, surface_id: Optional[Any] = None, turn_id: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
         """Normalized agent lifecycle event from a provider hook (docs/plans/agent-events.md)."""
         params: Dict[str, Any] = {}
         if event_type is not None:
@@ -79,6 +79,8 @@ class ProgramaV2Client:
             params["item_id"] = item_id
         if label is not None:
             params["label"] = label
+        if pid is not None:
+            params["pid"] = pid
         if provider is not None:
             params["provider"] = provider
         if resolution is not None:
@@ -99,6 +101,34 @@ class ProgramaV2Client:
         if params.get("event_type") is None:
             raise ProgramaV2Error("agent.event requires 'event_type'")
         return self._client._call("agent.event", params)
+
+    def agent_needs_input(self, body: Optional[Any] = None, kind: Optional[Any] = None, pid: Optional[Any] = None, provider: Optional[Any] = None, session_id: Optional[Any] = None, subtitle: Optional[Any] = None, surface_id: Optional[Any] = None, title: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
+        """Atomically reports a surface as blocked on user input and posts the matching notification (docs/plans/agent-state-unification.md)."""
+        params: Dict[str, Any] = {}
+        if body is not None:
+            params["body"] = body
+        if kind is not None:
+            params["kind"] = kind
+        if pid is not None:
+            params["pid"] = pid
+        if provider is not None:
+            params["provider"] = provider
+        if session_id is not None:
+            params["session_id"] = session_id
+        if subtitle is not None:
+            params["subtitle"] = subtitle
+        if surface_id is not None:
+            params["surface_id"] = surface_id
+        if title is not None:
+            params["title"] = title
+        if workspace_id is not None:
+            params["workspace_id"] = workspace_id
+        params.update(extra_params)
+        if params.get("workspace_id") is None:
+            raise ProgramaV2Error("agent.needs_input requires 'workspace_id'")
+        if params.get("surface_id") is None:
+            raise ProgramaV2Error("agent.needs_input requires 'surface_id'")
+        return self._client._call("agent.needs_input", params)
 
     def agent_prompt(self, surface_id: Optional[Any] = None, tab_id: Optional[Any] = None, text: Optional[Any] = None, timeout: Optional[Any] = None, timeout_ms: Optional[Any] = None, window_id: Optional[Any] = None, working_grace_ms: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
         """Agent task lifecycle, spawning, and prompt delivery. (prompt)."""
@@ -2346,9 +2376,15 @@ class ProgramaV2Client:
             raise ProgramaV2Error("surface.reorder requires 'surface_id'")
         return self._client._call("surface.reorder", params)
 
-    def surface_report_agent_state(self, source: Optional[Any] = None, state: Optional[Any] = None, surface_id: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
+    def surface_report_agent_state(self, pid: Optional[Any] = None, provider: Optional[Any] = None, session_id: Optional[Any] = None, source: Optional[Any] = None, state: Optional[Any] = None, surface_id: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
         """Terminal surface (pane content) lifecycle and IO. (report agent state)."""
         params: Dict[str, Any] = {}
+        if pid is not None:
+            params["pid"] = pid
+        if provider is not None:
+            params["provider"] = provider
+        if session_id is not None:
+            params["session_id"] = session_id
         if source is not None:
             params["source"] = source
         if state is not None:
