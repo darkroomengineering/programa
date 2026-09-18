@@ -29,6 +29,10 @@ enum AgentOverviewFriendlyState: Equatable, Sendable {
         }
     }
 
+    static func from(presence: AgentPresence?) -> Self {
+        from(activityState: presence?.state)
+    }
+
     var label: String {
         switch self {
         case .idle:
@@ -161,6 +165,14 @@ struct AgentOverviewTerminalSnapshot: Identifiable, Equatable, Sendable {
     let id: UUID
     let title: String
     let state: AgentOverviewFriendlyState
+    let isStale: Bool
+
+    init(id: UUID, title: String, state: AgentOverviewFriendlyState, isStale: Bool = false) {
+        self.id = id
+        self.title = title
+        self.state = state
+        self.isStale = isStale
+    }
 }
 
 struct AgentOverviewHelperSnapshot: Identifiable, Equatable, Sendable {
@@ -439,10 +451,12 @@ final class AgentOverviewViewModel: ObservableObject {
                 let orderedPanelIds = workspace.sidebarOrderedPanelIds()
                 let terminals = orderedPanelIds.compactMap { panelId -> AgentOverviewTerminalSnapshot? in
                     guard let panel = workspace.panels[panelId] as? TerminalPanel else { return nil }
+                    let presence = workspace.panelAgentPresence[panel.id]
                     return AgentOverviewTerminalSnapshot(
                         id: panel.id,
                         title: workspace.panelTitle(panelId: panel.id) ?? panel.displayTitle,
-                        state: AgentOverviewFriendlyState.from(activityState: workspace.panelAgentStates[panel.id])
+                        state: AgentOverviewFriendlyState.from(presence: presence),
+                        isStale: presence?.isStale(now: Date()) ?? false
                     )
                 }
                 let helpers = records.map { record in
@@ -754,7 +768,8 @@ private struct AgentOverviewRootView: View {
                     subtitle: String(localized: "agentOverview.terminal", defaultValue: "Terminal"),
                     state: terminal.state,
                     icon: "terminal",
-                    selected: viewModel.selection == selection
+                    selected: viewModel.selection == selection,
+                    isStale: terminal.isStale
                 )
                 .padding(.leading, CGFloat(workspace.depth) * 14 + 22)
             }
@@ -791,7 +806,8 @@ private struct AgentOverviewRootView: View {
         subtitle: String,
         state: AgentOverviewFriendlyState,
         icon: String,
-        selected: Bool
+        selected: Bool,
+        isStale: Bool = false
     ) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
@@ -811,6 +827,7 @@ private struct AgentOverviewRootView: View {
             Text(state.label)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(stateColor(state))
+                .opacity(isStale ? 0.55 : 1)
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 7)
