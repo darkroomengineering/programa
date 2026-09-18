@@ -1242,21 +1242,18 @@ final class TabManagerNotificationFocusTests: XCTestCase {
         let appDelegate = AppDelegate.shared ?? AppDelegate()
         let manager = TabManager()
         let store = TerminalNotificationStore.shared
-        let defaults = UserDefaults.standard
 
         let originalTabManager = appDelegate.tabManager
         let originalNotificationStore = appDelegate.notificationStore
         let originalAppFocusOverride = AppFocusState.overrideIsFocused
-        let originalExperimentEnabled = defaults.object(forKey: TmuxOverlayExperimentSettings.enabledKey)
-        let originalExperimentTarget = defaults.object(forKey: TmuxOverlayExperimentSettings.targetKey)
+        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
 
         store.replaceNotificationsForTesting([])
         store.configureNotificationDeliveryHandlerForTesting { _, _ in }
         appDelegate.tabManager = manager
         appDelegate.notificationStore = store
         AppFocusState.overrideIsFocused = true
-        defaults.set(true, forKey: TmuxOverlayExperimentSettings.enabledKey)
-        defaults.set(TmuxOverlayExperimentTarget.bonsplitPane.rawValue, forKey: TmuxOverlayExperimentSettings.targetKey)
+        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
 
         defer {
             store.replaceNotificationsForTesting([])
@@ -1264,16 +1261,7 @@ final class TabManagerNotificationFocusTests: XCTestCase {
             appDelegate.tabManager = originalTabManager
             appDelegate.notificationStore = originalNotificationStore
             AppFocusState.overrideIsFocused = originalAppFocusOverride
-            if let originalExperimentEnabled {
-                defaults.set(originalExperimentEnabled, forKey: TmuxOverlayExperimentSettings.enabledKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.enabledKey)
-            }
-            if let originalExperimentTarget {
-                defaults.set(originalExperimentTarget, forKey: TmuxOverlayExperimentSettings.targetKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.targetKey)
-            }
+            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
         }
 
         guard let workspace = manager.selectedWorkspace,
@@ -1843,21 +1831,18 @@ final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
         let appDelegate = AppDelegate.shared ?? AppDelegate()
         let manager = TabManager()
         let store = TerminalNotificationStore.shared
-        let defaults = UserDefaults.standard
 
         let originalTabManager = appDelegate.tabManager
         let originalNotificationStore = appDelegate.notificationStore
         let originalAppFocusOverride = AppFocusState.overrideIsFocused
-        let originalExperimentEnabled = defaults.object(forKey: TmuxOverlayExperimentSettings.enabledKey)
-        let originalExperimentTarget = defaults.object(forKey: TmuxOverlayExperimentSettings.targetKey)
+        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
 
         store.replaceNotificationsForTesting([])
         store.configureNotificationDeliveryHandlerForTesting { _, _ in }
         appDelegate.tabManager = manager
         appDelegate.notificationStore = store
         AppFocusState.overrideIsFocused = true
-        defaults.set(true, forKey: TmuxOverlayExperimentSettings.enabledKey)
-        defaults.set(TmuxOverlayExperimentTarget.bonsplitPane.rawValue, forKey: TmuxOverlayExperimentSettings.targetKey)
+        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
 
         defer {
             store.replaceNotificationsForTesting([])
@@ -1865,16 +1850,7 @@ final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
             appDelegate.tabManager = originalTabManager
             appDelegate.notificationStore = originalNotificationStore
             AppFocusState.overrideIsFocused = originalAppFocusOverride
-            if let originalExperimentEnabled {
-                defaults.set(originalExperimentEnabled, forKey: TmuxOverlayExperimentSettings.enabledKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.enabledKey)
-            }
-            if let originalExperimentTarget {
-                defaults.set(originalExperimentTarget, forKey: TmuxOverlayExperimentSettings.targetKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.targetKey)
-            }
+            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
         }
 
         guard let workspace = manager.selectedWorkspace,
@@ -1949,21 +1925,18 @@ final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
         let appDelegate = AppDelegate.shared ?? AppDelegate()
         let manager = TabManager()
         let store = TerminalNotificationStore.shared
-        let defaults = UserDefaults.standard
 
         let originalTabManager = appDelegate.tabManager
         let originalNotificationStore = appDelegate.notificationStore
         let originalAppFocusOverride = AppFocusState.overrideIsFocused
-        let originalExperimentEnabled = defaults.object(forKey: TmuxOverlayExperimentSettings.enabledKey)
-        let originalExperimentTarget = defaults.object(forKey: TmuxOverlayExperimentSettings.targetKey)
+        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
 
         store.replaceNotificationsForTesting([])
         store.configureNotificationDeliveryHandlerForTesting { _, _ in }
         appDelegate.tabManager = manager
         appDelegate.notificationStore = store
         AppFocusState.overrideIsFocused = true
-        defaults.set(true, forKey: TmuxOverlayExperimentSettings.enabledKey)
-        defaults.set(TmuxOverlayExperimentTarget.bonsplitPane.rawValue, forKey: TmuxOverlayExperimentSettings.targetKey)
+        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
 
         defer {
             store.replaceNotificationsForTesting([])
@@ -1971,16 +1944,7 @@ final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
             appDelegate.tabManager = originalTabManager
             appDelegate.notificationStore = originalNotificationStore
             AppFocusState.overrideIsFocused = originalAppFocusOverride
-            if let originalExperimentEnabled {
-                defaults.set(originalExperimentEnabled, forKey: TmuxOverlayExperimentSettings.enabledKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.enabledKey)
-            }
-            if let originalExperimentTarget {
-                defaults.set(originalExperimentTarget, forKey: TmuxOverlayExperimentSettings.targetKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.targetKey)
-            }
+            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
         }
 
         guard let workspace = manager.selectedWorkspace,

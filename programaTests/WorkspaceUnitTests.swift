@@ -3430,25 +3430,13 @@ final class WorkspaceTerminalConfigInheritanceSelectionTests: XCTestCase {
 @MainActor
 final class WorkspaceAttentionFlashTests: XCTestCase {
     func testMoveFocusDoesNotTriggerWholePaneFlashTokenWhenWholePaneModeEnabled() {
-        let defaults = UserDefaults.standard
-        let originalExperimentEnabled = defaults.object(forKey: TmuxOverlayExperimentSettings.enabledKey)
-        let originalExperimentTarget = defaults.object(forKey: TmuxOverlayExperimentSettings.targetKey)
+        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
 
         defer {
-            if let originalExperimentEnabled {
-                defaults.set(originalExperimentEnabled, forKey: TmuxOverlayExperimentSettings.enabledKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.enabledKey)
-            }
-            if let originalExperimentTarget {
-                defaults.set(originalExperimentTarget, forKey: TmuxOverlayExperimentSettings.targetKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.targetKey)
-            }
+            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
         }
 
-        defaults.set(true, forKey: TmuxOverlayExperimentSettings.enabledKey)
-        defaults.set(TmuxOverlayExperimentTarget.bonsplitPane.rawValue, forKey: TmuxOverlayExperimentSettings.targetKey)
+        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
 
         let manager = TabManager()
         guard let workspace = manager.selectedWorkspace,
@@ -3487,11 +3475,9 @@ final class WorkspaceAttentionFlashTests: XCTestCase {
         let appDelegate = AppDelegate.shared ?? AppDelegate()
         let manager = TabManager()
         let notificationStore = TerminalNotificationStore.shared
-        let defaults = UserDefaults.standard
         let originalTabManager = appDelegate.tabManager
         let originalNotificationStore = appDelegate.notificationStore
-        let originalExperimentEnabled = defaults.object(forKey: TmuxOverlayExperimentSettings.enabledKey)
-        let originalExperimentTarget = defaults.object(forKey: TmuxOverlayExperimentSettings.targetKey)
+        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
         let originalAppFocusOverride = AppFocusState.overrideIsFocused
         defer {
             notificationStore.replaceNotificationsForTesting([])
@@ -3499,16 +3485,7 @@ final class WorkspaceAttentionFlashTests: XCTestCase {
             appDelegate.tabManager = originalTabManager
             appDelegate.notificationStore = originalNotificationStore
             AppFocusState.overrideIsFocused = originalAppFocusOverride
-            if let originalExperimentEnabled {
-                defaults.set(originalExperimentEnabled, forKey: TmuxOverlayExperimentSettings.enabledKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.enabledKey)
-            }
-            if let originalExperimentTarget {
-                defaults.set(originalExperimentTarget, forKey: TmuxOverlayExperimentSettings.targetKey)
-            } else {
-                defaults.removeObject(forKey: TmuxOverlayExperimentSettings.targetKey)
-            }
+            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
         }
 
         notificationStore.replaceNotificationsForTesting([])
@@ -3516,8 +3493,7 @@ final class WorkspaceAttentionFlashTests: XCTestCase {
         appDelegate.tabManager = manager
         appDelegate.notificationStore = notificationStore
         AppFocusState.overrideIsFocused = true
-        defaults.set(true, forKey: TmuxOverlayExperimentSettings.enabledKey)
-        defaults.set(TmuxOverlayExperimentTarget.bonsplitPane.rawValue, forKey: TmuxOverlayExperimentSettings.targetKey)
+        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
 
         guard let workspace = manager.selectedWorkspace,
               let leftPanelId = workspace.focusedPanelId,

@@ -27,8 +27,21 @@ struct TmuxOverlayExperimentSettings {
         defaults.object(forKey: enabledKey) as? Bool ?? defaultEnabled
     }
 
+#if DEBUG
+    /// In-process override for unit tests. `UserDefaults.standard` is shared by
+    /// every parallel test-runner process (same bundle id, same cfprefsd
+    /// domain), so tests that wrote the experiment keys there raced with each
+    /// other across processes and read back a target they never set.
+    static var targetOverrideForTesting: TmuxOverlayExperimentTarget?
+#endif
+
     static func target(defaults: UserDefaults = .standard) -> TmuxOverlayExperimentTarget {
-        target(
+#if DEBUG
+        if let targetOverrideForTesting {
+            return targetOverrideForTesting
+        }
+#endif
+        return target(
             enabled: isEnabled(defaults: defaults),
             rawValue: defaults.string(forKey: targetKey)
         )
