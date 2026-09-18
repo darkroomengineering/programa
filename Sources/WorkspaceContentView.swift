@@ -284,6 +284,11 @@ struct WorkspaceContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @EnvironmentObject var notificationStore: TerminalNotificationStore
+    #if DEBUG
+    // Makes the content card's clip radius re-render live when the Density
+    // Debug window's sliders change (see WindowChrome.swift ChromeDensity).
+    @ObservedObject private var densityStore = ChromeDensityStore.shared
+    #endif
 
     private var isMinimalMode: Bool {
         WorkspacePresentationModeSettings.mode(for: workspacePresentationMode) == .minimal

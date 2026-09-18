@@ -187,7 +187,14 @@ struct VerticalTabsSidebar: View {
     private var usesBackdropSidebar: Bool {
         WindowGlassEffect.isAvailable && !accessibilityReduceTransparency
     }
-    private let tabRowSpacing: CGFloat = 2
+    /// Resolved from `ChromeDensity.sidebarRowSpacing` -- was a fixed `2pt`
+    /// constant before density tokens (see `WindowChrome.swift`).
+    private var tabRowSpacing: CGFloat { ChromeDensity.sidebarRowSpacing }
+    #if DEBUG
+    // Subscribing here makes the whole sidebar (rows, spacing, header/panel
+    // insets) re-render live when the Density Debug window's sliders change.
+    @ObservedObject private var densityStore = ChromeDensityStore.shared
+    #endif
 
     private var isMinimalMode: Bool {
         WorkspacePresentationModeSettings.mode(for: workspacePresentationMode) == .minimal
@@ -225,6 +232,7 @@ struct VerticalTabsSidebar: View {
         })
         let orderedSelectedTabs = tabs.filter { selectedTabIds.contains($0.id) }
         let selectedContextTargetIds = orderedSelectedTabs.map(\.id)
+        let rowMetrics = SidebarRowMetrics.current
         let sidebarContent = VStack(spacing: 0) {
             // Single header row shared with the traffic lights (Maps-style): the
             // lights float over its leading side, controls sit trailing, and the
@@ -304,7 +312,8 @@ struct VerticalTabsSidebar: View {
                                     showsWorktreeBadge: showsWorktreeBadge,
                                     isWorktreeFolder: tab.isWorktreeFolder,
                                     isWorktreeFolderCollapsed: tab.isWorktreeFolderCollapsed,
-                                    worktreeChildCount: worktreeChildCount
+                                    worktreeChildCount: worktreeChildCount,
+                                    rowMetrics: rowMetrics
                                 )
                                 .equatable()
                                 .padding(

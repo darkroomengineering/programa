@@ -1369,8 +1369,13 @@ struct SidebarSurface<Content: View>: View {
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @Environment(\.colorScheme) private var colorScheme
     @State private var terminalScheme: ColorScheme = SidebarTerminalAppearance.colorScheme()
+    #if DEBUG
+    // Makes the sidebar panel's corner radius re-render live when the Density
+    // Debug window's sliders change (see WindowChrome.swift ChromeDensity).
+    @ObservedObject private var densityStore = ChromeDensityStore.shared
+    #endif
 
-    private let standaloneCornerRadius: CGFloat = WindowGlassEffect.sidebarPanelCornerRadius
+    private var standaloneCornerRadius: CGFloat { WindowGlassEffect.sidebarPanelCornerRadius }
 
     var body: some View {
         Group {

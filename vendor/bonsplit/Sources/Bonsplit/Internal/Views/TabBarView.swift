@@ -75,6 +75,20 @@ struct TabBarView: View {
     @State private var containerWidth: CGFloat = 0
     @State private var selectedTabFrameInBar: CGRect?
     @StateObject private var controlKeyMonitor = TabControlShortcutKeyMonitor()
+    // DEBUG-only: subscribing to the same "chromeDensity.*" UserDefaults keys
+    // TabBarMetrics resolves from makes the Density Debug window's sliders
+    // (Programa target, Sources/DebugWindows.swift) re-render this tab strip
+    // live. See TabBarMetrics.swift for why Bonsplit reads UserDefaults
+    // directly instead of importing Programa's ChromeDensity type.
+    #if DEBUG
+    @AppStorage("chromeDensity.tabBarHeight") private var densityTabBarHeight = 26.0
+    @AppStorage("chromeDensity.tabHorizontalPadding") private var densityTabHorizontalPadding = 8.0
+    @AppStorage("chromeDensity.tabIconSize") private var densityTabIconSize = 13.0
+    @AppStorage("chromeDensity.tabTitleFontSize") private var densityTabTitleFontSize = 12.0
+    @AppStorage("chromeDensity.tabCloseButtonSize") private var densityTabCloseButtonSize = 14.0
+    @AppStorage("chromeDensity.tabCloseIconSize") private var densityTabCloseIconSize = 8.0
+    @AppStorage("chromeDensity.tabContentSpacing") private var densityTabContentSpacing = 5.0
+    #endif
 
     private var canScrollLeft: Bool {
         scrollOffset > 1
@@ -105,6 +119,14 @@ struct TabBarView: View {
     }
 
     var body: some View {
+        #if DEBUG
+        // Reading these forces this body to re-evaluate whenever the Density
+        // Debug window changes a tab-strip slider; TabBarMetrics below then
+        // resolves the same UserDefaults keys to their fresh values.
+        let _ = (densityTabBarHeight, densityTabHorizontalPadding, densityTabIconSize,
+                 densityTabTitleFontSize, densityTabCloseButtonSize, densityTabCloseIconSize,
+                 densityTabContentSpacing)
+        #endif
         HStack(spacing: 0) {
             if appearance.tabBarLeadingInset > 0 && controller.internalController.rootNode.allPaneIds.first == pane.id {
                 TabBarDragZoneView()

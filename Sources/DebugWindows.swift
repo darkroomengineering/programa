@@ -1688,4 +1688,156 @@ private struct BackgroundDebugView: View {
     }
 }
 
+final class DensityDebugWindowController: NSWindowController, NSWindowDelegate {
+    static let shared = DensityDebugWindowController()
+
+    private init() {
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 640),
+            styleMask: [.titled, .closable, .utilityWindow],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = localizedDebugLabel("Density Debug")
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
+        window.isMovableByWindowBackground = true
+        window.isReleasedWhenClosed = false
+        window.identifier = NSUserInterfaceItemIdentifier("programa.densityDebug")
+        window.center()
+        window.contentView = NSHostingView(rootView: DensityDebugView())
+        super.init(window: window)
+        window.delegate = self
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func show() {
+        window?.center()
+        window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// One slider per `ChromeDensity` token (see `WindowChrome.swift`). Each
+/// slider is bound to the same `"chromeDensity.<name>"` UserDefaults key
+/// `ChromeDensity.resolved` and Bonsplit's `TabBarMetrics.resolved` read, so
+/// changes apply live with no rebuild. Bumping `ChromeDensityStore.shared.revision`
+/// after every change re-renders the SwiftUI views that observe that store
+/// (sidebar, content card, window panel); the Bonsplit tab strip re-renders on
+/// its own via its `@AppStorage` subscriptions to the same keys.
+private struct DensityDebugView: View {
+    private struct Token: Identifiable {
+        let id: String
+        let label: String
+        let defaultValue: Double
+        let range: ClosedRange<Double>
+
+        var key: String { "chromeDensity.\(id)" }
+    }
+
+    private static let sidebarRowTokens: [Token] = [
+        Token(id: "sidebarRowVerticalPadding", label: "Row Vertical Padding", defaultValue: Double(ChromeDensity.sidebarRowVerticalPaddingDefault), range: 0...16),
+        Token(id: "sidebarRowHorizontalPadding", label: "Row Horizontal Padding", defaultValue: Double(ChromeDensity.sidebarRowHorizontalPaddingDefault), range: 0...16),
+        Token(id: "sidebarRowCornerRadius", label: "Row Corner Radius", defaultValue: Double(ChromeDensity.sidebarRowCornerRadiusDefault), range: 0...30),
+        Token(id: "sidebarRowSpacing", label: "Row Spacing", defaultValue: Double(ChromeDensity.sidebarRowSpacingDefault), range: 0...16),
+        Token(id: "sidebarTitleFontSize", label: "Row Title Font Size", defaultValue: Double(ChromeDensity.sidebarTitleFontSizeDefault), range: 9...16),
+    ]
+
+    private static let windowTokens: [Token] = [
+        Token(id: "windowCornerRadius", label: "Window Corner Radius", defaultValue: Double(ChromeDensity.windowCornerRadiusDefault), range: 0...30),
+        Token(id: "sidebarPanelInset", label: "Sidebar Panel Inset", defaultValue: Double(ChromeDensity.sidebarPanelInsetDefault), range: 0...16),
+        Token(id: "contentCardInset", label: "Content Card Inset", defaultValue: Double(ChromeDensity.contentCardInsetDefault), range: 0...16),
+        Token(id: "controlCornerRadius", label: "Control Corner Radius", defaultValue: Double(ChromeDensity.controlCornerRadiusDefault), range: 0...30),
+    ]
+
+    private static let tabBarTokens: [Token] = [
+        Token(id: "tabBarHeight", label: "Tab Bar Height", defaultValue: Double(ChromeDensity.tabBarHeightDefault), range: 20...36),
+        Token(id: "tabHorizontalPadding", label: "Tab Horizontal Padding", defaultValue: Double(ChromeDensity.tabHorizontalPaddingDefault), range: 0...16),
+        Token(id: "tabIconSize", label: "Tab Icon Size", defaultValue: Double(ChromeDensity.tabIconSizeDefault), range: 9...16),
+        Token(id: "tabTitleFontSize", label: "Tab Title Font Size", defaultValue: Double(ChromeDensity.tabTitleFontSizeDefault), range: 9...16),
+        Token(id: "tabCloseButtonSize", label: "Tab Close Button Size", defaultValue: Double(ChromeDensity.tabCloseButtonSizeDefault), range: 0...30),
+        Token(id: "tabCloseIconSize", label: "Tab Close Icon Size", defaultValue: Double(ChromeDensity.tabCloseIconSizeDefault), range: 0...16),
+        Token(id: "tabContentSpacing", label: "Tab Content Spacing", defaultValue: Double(ChromeDensity.tabContentSpacingDefault), range: 0...16),
+    ]
+
+    private static let allTokens = sidebarRowTokens + windowTokens + tabBarTokens
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(localizedDebugLabel("Chrome Density"))
+                    .font(.headline)
+
+                GroupBox(localizedDebugLabel("Sidebar Rows")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Self.sidebarRowTokens) { token in
+                            DensitySliderRow(token: token)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+
+                GroupBox(localizedDebugLabel("Window Card / Insets / Radii")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Self.windowTokens) { token in
+                            DensitySliderRow(token: token)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+
+                GroupBox(localizedDebugLabel("Tab Strip")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Self.tabBarTokens) { token in
+                            DensitySliderRow(token: token)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+
+                Button(localizedDebugLabel("Reset to Defaults")) {
+                    let defaults = UserDefaults.standard
+                    for token in Self.allTokens {
+                        defaults.removeObject(forKey: token.key)
+                    }
+                    ChromeDensityStore.shared.revision &+= 1
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private struct DensitySliderRow: View {
+        let token: Token
+
+        @AppStorage private var value: Double
+
+        init(token: Token) {
+            self.token = token
+            _value = AppStorage(wrappedValue: token.defaultValue, token.key)
+        }
+
+        var body: some View {
+            HStack(spacing: 8) {
+                Text(localizedDebugLabel(token.label))
+                    .frame(width: 150, alignment: .leading)
+                Slider(value: $value, in: token.range)
+                    .onChange(of: value) {
+                        ChromeDensityStore.shared.revision &+= 1
+                    }
+                Text(String(format: "%.1f", value))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .frame(width: 36, alignment: .trailing)
+            }
+        }
+    }
+}
+
 #endif

@@ -2,6 +2,97 @@ import AppKit
 import ObjectiveC
 import SwiftUI
 
+/// Density tokens for the everyday chrome (sidebar rows, tab strip, window
+/// card/insets/radii). Release builds resolve to the constants below
+/// unconditionally. DEBUG builds resolve live overrides from
+/// `UserDefaults.standard` under `"chromeDensity.<name>"` keys so the Density
+/// Debug window (see `DebugWindows.swift`) can tune every value without a
+/// rebuild. The vendored Bonsplit package cannot import this Programa type
+/// (dependency runs the other way), so its tab-strip metrics
+/// (`vendor/bonsplit/.../TabBarMetrics.swift`) resolve the *same* UserDefaults
+/// keys directly and stay live via their own `@AppStorage` properties -- no
+/// cross-module bridge needed. `ChromeDensityStore.revision` bumps whenever a
+/// slider changes so any SwiftUI view that observes it re-renders.
+enum ChromeDensity {
+    // MARK: - Sidebar rows
+
+    static let sidebarRowVerticalPaddingDefault: CGFloat = 4
+    static var sidebarRowVerticalPadding: CGFloat { resolved("sidebarRowVerticalPadding", default: sidebarRowVerticalPaddingDefault) }
+
+    static let sidebarRowHorizontalPaddingDefault: CGFloat = 8
+    static var sidebarRowHorizontalPadding: CGFloat { resolved("sidebarRowHorizontalPadding", default: sidebarRowHorizontalPaddingDefault) }
+
+    static let sidebarRowCornerRadiusDefault: CGFloat = 6
+    static var sidebarRowCornerRadius: CGFloat { resolved("sidebarRowCornerRadius", default: sidebarRowCornerRadiusDefault) }
+
+    static let sidebarRowSpacingDefault: CGFloat = 1
+    static var sidebarRowSpacing: CGFloat { resolved("sidebarRowSpacing", default: sidebarRowSpacingDefault) }
+
+    static let sidebarTitleFontSizeDefault: CGFloat = 12
+    static var sidebarTitleFontSize: CGFloat { resolved("sidebarTitleFontSize", default: sidebarTitleFontSizeDefault) }
+
+    // MARK: - Window card / insets / radii
+
+    static let windowCornerRadiusDefault: CGFloat = 12
+    static var windowCornerRadius: CGFloat { resolved("windowCornerRadius", default: windowCornerRadiusDefault) }
+
+    static let sidebarPanelInsetDefault: CGFloat = 6
+    static var sidebarPanelInset: CGFloat { resolved("sidebarPanelInset", default: sidebarPanelInsetDefault) }
+
+    static let contentCardInsetDefault: CGFloat = 4
+    static var contentCardInset: CGFloat { resolved("contentCardInset", default: contentCardInsetDefault) }
+
+    static let controlCornerRadiusDefault: CGFloat = 6
+    static var controlCornerRadius: CGFloat { resolved("controlCornerRadius", default: controlCornerRadiusDefault) }
+
+    // MARK: - Tab strip (mirrored by Bonsplit's TabBarMetrics via the same UserDefaults keys)
+
+    static let tabBarHeightDefault: CGFloat = 26
+    static var tabBarHeight: CGFloat { resolved("tabBarHeight", default: tabBarHeightDefault) }
+
+    static let tabHorizontalPaddingDefault: CGFloat = 8
+    static var tabHorizontalPadding: CGFloat { resolved("tabHorizontalPadding", default: tabHorizontalPaddingDefault) }
+
+    static let tabIconSizeDefault: CGFloat = 13
+    static var tabIconSize: CGFloat { resolved("tabIconSize", default: tabIconSizeDefault) }
+
+    static let tabTitleFontSizeDefault: CGFloat = 12
+    static var tabTitleFontSize: CGFloat { resolved("tabTitleFontSize", default: tabTitleFontSizeDefault) }
+
+    static let tabCloseButtonSizeDefault: CGFloat = 14
+    static var tabCloseButtonSize: CGFloat { resolved("tabCloseButtonSize", default: tabCloseButtonSizeDefault) }
+
+    static let tabCloseIconSizeDefault: CGFloat = 8
+    static var tabCloseIconSize: CGFloat { resolved("tabCloseIconSize", default: tabCloseIconSizeDefault) }
+
+    static let tabContentSpacingDefault: CGFloat = 5
+    static var tabContentSpacing: CGFloat { resolved("tabContentSpacing", default: tabContentSpacingDefault) }
+
+    #if DEBUG
+    static func resolved(_ name: String, default defaultValue: CGFloat) -> CGFloat {
+        guard let value = UserDefaults.standard.object(forKey: "chromeDensity.\(name)") as? Double else {
+            return defaultValue
+        }
+        return CGFloat(value)
+    }
+    #else
+    static func resolved(_ name: String, default defaultValue: CGFloat) -> CGFloat {
+        defaultValue
+    }
+    #endif
+}
+
+#if DEBUG
+/// Bumped by the Density Debug window on every slider change so SwiftUI views
+/// that observe `ChromeDensityStore.shared` re-render with the new values.
+/// Release builds never reference this type.
+final class ChromeDensityStore: ObservableObject {
+    static let shared = ChromeDensityStore()
+    @Published var revision = 0
+    private init() {}
+}
+#endif
+
 /// Applies NSGlassEffectView (macOS 26+) to a window, falling back to NSVisualEffectView.
 /// The glass path requires both a macOS 26 SDK at build time and macOS 26 at runtime.
 enum WindowGlassEffect {
@@ -42,9 +133,11 @@ enum WindowGlassEffect {
 
     /// The Maps-style large window radius; the sidebar panel derives its own
     /// radius from this minus its inset so the two curves stay concentric.
-    static let windowCornerRadius: CGFloat = 26
+    /// Resolves to `ChromeDensity.windowCornerRadius` -- see that type's doc
+    /// comment for the DEBUG live-override mechanism.
+    static var windowCornerRadius: CGFloat { ChromeDensity.windowCornerRadius }
     /// Uniform inset of the sidebar glass panel from the window edges.
-    static let sidebarPanelInset: CGFloat = 6
+    static var sidebarPanelInset: CGFloat { ChromeDensity.sidebarPanelInset }
     /// Concentric with the window corner at the panel inset.
     static var sidebarPanelCornerRadius: CGFloat { windowCornerRadius - sidebarPanelInset }
     /// Height of the sidebar header row shared by the traffic lights and controls.
@@ -89,7 +182,7 @@ enum WindowGlassEffect {
     /// curve visibly diverge from the window's inside the corner gap.
     static var contentCardCornerRadius: CGFloat { windowCornerRadius - contentCardInset }
     /// Radius for floating glass controls: tab pills, icon capsule clusters.
-    static let controlCornerRadius: CGFloat = 10
+    static var controlCornerRadius: CGFloat { ChromeDensity.controlCornerRadius }
     /// Shared "lit surface" tint for selected pills and control capsules.
     /// A white lift reads as selection in dark mode, but the equivalent black
     /// wash in light mode is muddy and drags the glass edge lensing into
@@ -101,7 +194,7 @@ enum WindowGlassEffect {
         return NSColor.white.withAlphaComponent(hover ? 0.3 : 0.55)
     }
     /// Gap between the content card and the window edges / sidebar.
-    static let contentCardInset: CGFloat = 8
+    static var contentCardInset: CGFloat { ChromeDensity.contentCardInset }
     /// Inverted (Aside-style) backdrop. The window stays a completely standard
     /// opaque AppKit window — system corner radius, system shadow, system frame.
     /// The sidebar material is an NSVisualEffectView underlay that AppKit rounds
