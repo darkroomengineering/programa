@@ -35,6 +35,26 @@ struct SidebarTrailingAccessorySlot<Content: View>: View {
     }
 }
 
+/// Density-tunable geometry for a single sidebar row. Built once per
+/// `VerticalTabsSidebar.body` evaluation from `ChromeDensity` (see
+/// `WindowChrome.swift`) and passed down so every row shares one snapshot
+/// instead of re-reading `ChromeDensity` per row.
+struct SidebarRowMetrics: Equatable {
+    let verticalPadding: CGFloat
+    let horizontalPadding: CGFloat
+    let cornerRadius: CGFloat
+    let titleFontSize: CGFloat
+
+    static var current: SidebarRowMetrics {
+        SidebarRowMetrics(
+            verticalPadding: ChromeDensity.sidebarRowVerticalPadding,
+            horizontalPadding: ChromeDensity.sidebarRowHorizontalPadding,
+            cornerRadius: ChromeDensity.sidebarRowCornerRadius,
+            titleFontSize: ChromeDensity.sidebarTitleFontSize
+        )
+    }
+}
+
 private enum SidebarWorktreeCreationResult: Sendable {
     case success(path: String, branch: String)
     case branchCheckedOut(path: String)
@@ -77,6 +97,7 @@ struct TabItemView: View, Equatable {
         lhs.isWorktreeFolder == rhs.isWorktreeFolder &&
         lhs.isWorktreeFolderCollapsed == rhs.isWorktreeFolderCollapsed &&
         lhs.worktreeChildCount == rhs.worktreeChildCount &&
+        lhs.rowMetrics == rhs.rowMetrics &&
         // Keep these immutable render snapshots last so `==` and body consume
         // the same drag state without reading Binding storage during typing.
         lhs.draggedTabIdSnapshot == rhs.draggedTabIdSnapshot &&
@@ -119,6 +140,10 @@ struct TabItemView: View, Equatable {
     let isWorktreeFolder: Bool
     let isWorktreeFolderCollapsed: Bool
     let worktreeChildCount: Int
+    /// Precomputed by the caller (VerticalTabsSidebar) from `ChromeDensity` and
+    /// included in `==` -- see the Equatable typing-latency contract at the
+    /// top of this file.
+    let rowMetrics: SidebarRowMetrics
     @State private var workspaceObservationGeneration: UInt64 = 0
     @State private var isHovering = false
     @State private var rowHeight: CGFloat = 1
@@ -423,7 +448,7 @@ struct TabItemView: View, Equatable {
                 }
 
                 Text(tab.title)
-                    .font(.system(size: 12.5, weight: titleFontWeight))
+                    .font(.system(size: rowMetrics.titleFontSize, weight: titleFontWeight))
                     .foregroundColor(activePrimaryTextColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -665,13 +690,13 @@ struct TabItemView: View, Equatable {
         .animation(.easeInOut(duration: 0.2), value: tab.progress != nil)
         .animation(.easeInOut(duration: 0.2), value: tab.metadataBlocks.count)
         .padding(.leading, showsWorktreeBadge ? 14 : 0)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, rowMetrics.horizontalPadding)
+        .padding(.vertical, rowMetrics.verticalPadding)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: rowMetrics.cornerRadius, style: .continuous)
                 .fill(backgroundColor)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: rowMetrics.cornerRadius, style: .continuous)
                         .strokeBorder(activeBorderColor, lineWidth: activeBorderLineWidth)
                 }
                 .overlay(alignment: .leading) {

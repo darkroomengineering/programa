@@ -38,6 +38,11 @@ struct ContentView: View {
     @State var sidebarResizerCursorReleaseWorkItem: DispatchWorkItem?
     @State var sidebarResizerPointerMonitor: Any?
     @State var isResizerBandActive = false
+    #if DEBUG
+    // Makes the content card's inset/radius re-render live when the Density
+    // Debug window's sliders change (see WindowChrome.swift ChromeDensity).
+    @ObservedObject private var densityStore = ChromeDensityStore.shared
+    #endif
     @State var isSidebarResizerCursorActive = false
     @State var sidebarResizerCursorStabilizer: DispatchSourceTimer?
     @StateObject private var commandPaletteController = CommandPaletteController()

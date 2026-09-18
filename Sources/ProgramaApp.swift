@@ -434,6 +434,9 @@ struct programaApp: App {
                     Button(String(localized: "debug.menu.windowControls", defaultValue: "Debug Window Controls…")) {
                         DebugWindowControlsWindowController.shared.show()
                     }
+                    Button(String(localized: "debug.menu.density", defaultValue: "Density Debug…")) {
+                        DensityDebugWindowController.shared.show()
+                    }
                     Button(String(localized: "debug.menu.menuBarExtra", defaultValue: "Menu Bar Extra Debug…")) {
                         MenuBarExtraDebugWindowController.shared.show()
                     }
@@ -1102,6 +1105,7 @@ struct programaApp: App {
         MenuBarExtraDebugWindowController.shared.show()
         OverlayGlassDebugWindowController.shared.show()
         TabBarGlassDebugWindowController.shared.show()
+        DensityDebugWindowController.shared.show()
     }
 #endif
 }
@@ -1117,6 +1121,7 @@ private let programaAuxiliaryWindowIdentifiers: Set<String> = [
     "programa.menubarDebug",
     "programa.backgroundDebug",
     "programa.tabBarGlassDebug",
+    "programa.densityDebug",
 ]
 
 /// Returns whether the given window should handle the standard close shortcut

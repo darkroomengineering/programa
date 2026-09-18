@@ -6338,6 +6338,23 @@
         }
       }
     },
+    "debug.menu.density": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Density Debug…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "密度デバッグ…"
+          }
+        }
+      }
+    },
     "debug.menu.sidebar": {
       "extractionState": "manual",
       "localizations": {
