@@ -12,6 +12,9 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ### Changed
 - Each workspace row now shows one agent indicator (Needs input, Working, or Idle) instead of the badge, status row, and notification text sometimes disagreeing with each other. It dims and shows "(stale)" after ten minutes with no update from the agent, and only clears when the agent itself reports it's resumed, not just from opening the workspace.
 
+### Fixed
+- A window closed with the red button no longer comes back on the next launch. Since 0.5.0 a closed window was kept alive for Dock reopen and then saved and restored like a visible one, so every restart opened an extra window of stale workspaces. Closed windows now stay closed across a relaunch and their shells are ended at startup.
+
 ## [0.5.0] - 2026-09-16
 
 ### Removed

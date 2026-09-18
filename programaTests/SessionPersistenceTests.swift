@@ -462,6 +462,34 @@ final class SessionPersistenceTests: XCTestCase {
         )
     }
 
+    func testWindowsToRestoreSkipsHiddenWindowsAndOlderSnapshotsStayVisible() throws {
+        let base = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
+        var hidden = try XCTUnwrap(base.windows.first)
+        hidden.isHidden = true
+        let mixed = AppSessionSnapshot(
+            version: base.version,
+            createdAt: base.createdAt,
+            windows: base.windows + [hidden, hidden],
+            cleanShutdown: true
+        )
+
+        XCTAssertEqual(
+            SessionPersistenceStore.windowsToRestore(from: mixed).count, 1,
+            "A window the user closed before quitting must not be restored"
+        )
+        XCTAssertEqual(SessionPersistenceStore.hiddenWindows(from: mixed).count, 2)
+
+        // Snapshots written before `isHidden` existed carry no key at all.
+        let encoded = try JSONEncoder().encode(base)
+        XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("isHidden"))
+        let decoded = try XCTUnwrap(SessionPersistenceStore.decodeSnapshot(from: encoded))
+        XCTAssertEqual(SessionPersistenceStore.windowsToRestore(from: decoded).count, 1)
+        XCTAssertTrue(SessionPersistenceStore.hiddenWindows(from: decoded).isEmpty)
+
+        let roundTripped = try XCTUnwrap(SessionPersistenceStore.decodeSnapshot(from: JSONEncoder().encode(mixed)))
+        XCTAssertEqual(SessionPersistenceStore.hiddenWindows(from: roundTripped).count, 2)
+    }
+
     func testDecodeSnapshotDetectsVersionMismatchWithoutRequiringAppKit() throws {
         let mismatched = makeSnapshot(version: SessionSnapshotSchema.currentVersion + 1)
         let data = try JSONEncoder().encode(mismatched)
