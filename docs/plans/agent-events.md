@@ -151,6 +151,23 @@ agent.event {
 
 A tiny CLI verb, `programa agent-event --provider <p> --event <event_type> [--session-id <id>] [--turn-id <id>] [--item-id <id>] [--label <text>] [--resolution <r>] [--workspace <id|ref>] [--surface <id|ref>]`, is the one thing every provider hook shells out to — no interpreter required, matching Claude/Codex/OpenCode's existing `command`-type hook wiring. Internally, the existing `runClaudeHook`/`runCodexHook`/`runOpenCodeHook` handlers (which already parse each provider's native hook JSON in-process) are extended to build the same normalized params and call the socket directly — they do not need to spawn `programa agent-event` as a second process, since they already are `programa`. `programa agent-event` itself exists for: (a) provider adapters we install fresh (Codex `hooks.json`, OpenCode plugin) where the installed hook command needs a single fixed CLI invocation rather than a stdin-parsing subcommand, and (b) a documented, testable entry point that `tests_v2` and future adapters can call directly.
 
+### `agent.needs_input` (docs/plans/agent-state-unification.md)
+
+Sits alongside `agent.event` for the one case that used to need three separate calls: a hook
+reporting the agent is blocked on the user. Before, a blocking notification meant
+`notification.create_for_target`, `workspace.set_status`, and `surface.report_agent_state` as
+three independent socket sends — any one could fail on its own, leaving the sidebar badge, the
+status row, and the notification panel disagreeing with each other. `agent.needs_input` does the
+same three things (write blocked presence, post the notification, update supervision) as one
+atomic write, so a hook only has to make one call, and there's nothing left to fall out of sync.
+
+Params: `workspace_id`, `surface_id` (required); `provider`, `title`, `subtitle`, `body`,
+`session_id`, `pid`, `kind` (`"permission"` | `"question"`) (optional). It replaces the
+`notification.create_for_target` + `workspace.set_status` + `surface.report_agent_state` trio at
+every hook call site that reports a blocking prompt (Claude's `Notification` handler, Codex's
+notify path, OpenCode's `permission.asked`); non-blocking notifications keep using
+`notification.create_for_target` plus a plain `.idle` `surface.report_agent_state` call as before.
+
 ## Threading and dedupe
 
 `agent.event`'s handler follows the same shape as `v2SurfaceReportAgentState`

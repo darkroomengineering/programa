@@ -2,6 +2,14 @@
 
 Programa provides a notification panel for AI agents like Claude Code, Codex, and OpenCode. Notifications appear in a dedicated panel and trigger macOS system notifications.
 
+## Sidebar agent indicator
+
+Each workspace row in the sidebar shows one agent indicator: a glyph plus a short label, "Needs input", "Working", or "Idle". Earlier builds showed this same state in up to three places at once (a badge, a "Running"/"Waiting"/"Needs input" status row, and the notification text); it's now just the one indicator, so there's nothing to double-check or fall out of sync. Verbose per-tool status text still appears in its own row when the Claude Code verbose status setting is on, but it no longer duplicates the working/idle state itself.
+
+"Needs input" appears only when a hook actually reports the agent is blocked on you (a permission prompt or a question), and it clears only when the agent resumes: a hook reports it's working or idle again, or the session ends. Opening or focusing the workspace does not clear it. It marks the notification read, but the agent still shows as needing input until the agent itself says otherwise. This is deliberate: closing the tab shouldn't silently answer a question that's still open.
+
+If ten minutes pass with no hook update while an agent is marked "Working" or "Needs input", the indicator dims and its label grows a "(stale)" suffix ("Needs input (stale)", "Working (stale)"). Stale never clears itself; it's a signal that programa hasn't heard from the agent in a while, not a claim that the agent has actually stopped. A background watchdog also clears the indicator outright if the underlying agent process has died. Idle never goes stale, since it's already the resting state. Relaunching the app always starts with no agent indicators; the next hook event from a running agent restores it within one turn.
+
 ## Quick Start
 
 ```bash
