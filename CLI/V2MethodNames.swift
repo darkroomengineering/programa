@@ -13,6 +13,7 @@ enum V2MethodNames {
     static let agentDetectionClassify = "agent.detection.classify"
     static let agentDetectionList = "agent.detection.list"
     static let agentEvent = "agent.event"
+    static let agentNeedsInput = "agent.needs_input"
     static let agentPrompt = "agent.prompt"
     static let agentSpawn = "agent.spawn"
     static let agentTaskFinish = "agent.task.finish"

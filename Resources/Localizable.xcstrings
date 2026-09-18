@@ -11011,53 +11011,87 @@
         }
       }
     },
-    "sidebar.agentState.blocked": {
+    "sidebar.agentIndicator.idle": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent blocked, needs your input"
+            "value": "Idle"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "エージェントがブロックされています。入力が必要です"
+            "value": "アイドル"
           }
         }
       }
     },
-    "sidebar.agentState.idle": {
+    "sidebar.agentIndicator.needsInput": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent idle"
+            "value": "Needs input"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "エージェントは待機中です"
+            "value": "入力待ち"
           }
         }
       }
     },
-    "sidebar.agentState.working": {
+    "sidebar.agentIndicator.needsInputStale": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent working"
+            "value": "Needs input (stale)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "エージェントが作業中です"
+            "value": "入力待ち（古い）"
+          }
+        }
+      }
+    },
+    "sidebar.agentIndicator.working": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作業中"
+          }
+        }
+      }
+    },
+    "sidebar.agentIndicator.workingStale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working (stale)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作業中（古い）"
           }
         }
       }

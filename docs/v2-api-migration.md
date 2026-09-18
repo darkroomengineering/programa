@@ -587,6 +587,34 @@ every other telemetry report echoes. Errors: `invalid_params` (missing/invalid
 
 CLI: `programa agent-event --event <event_type> [--provider <p>] [--session-id <id>] [--turn-id <id>] [--item-id <id>] [--label <text>] [--resolution <r>] [--workspace <id|ref>] [--surface <id|ref>]`.
 
+`surface.report_agent_state` and `agent.event` both also accept optional `provider`, `session_id`,
+and `pid` params now. They key the report to a hook session and register the pid for the stale-PID
+watchdog and port scanning; older CLI builds that omit them still work, they just leave the report
+unkeyed.
+
+## `agent.needs_input` (docs/plans/agent-state-unification.md)
+
+Atomically reports a surface as blocked on user input and posts the matching notification, in one
+socket round trip instead of the three separate calls (`notification.create_for_target`,
+`workspace.set_status`, `surface.report_agent_state`) a blocking-prompt hook used to make. Any one
+of those three could fail independently; `agent.needs_input` can't leave the sidebar badge, the
+notification panel, and agent supervision disagreeing with each other, because it's a single write.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `workspace_id` / `surface_id` | uuid | yes | Same resolution as other `surface.*` telemetry calls. |
+| `provider` / `title` / `subtitle` / `body` | string | no | Notification content; same fields `notification.create_for_target` took. |
+| `session_id` / `pid` | string / integer | no | Same as `agent.event`'s and `surface.report_agent_state`'s new optional fields — keys the report to a hook session and registers the pid for the watchdog. |
+| `kind` | string | no | `"permission"` or `"question"`, for a future richer UI; not required for the tri-state write itself. |
+
+Writes presence `state: "blocked"`, `source: "hooks"` through the same
+`updatePanelAgentState` funnel every other agent-state write uses, then posts the notification and
+updates `AgentSupervisionRegistry` in the same handler call. Existing methods
+(`surface.report_agent_state`, `agent.event`, `notification.create_for_target`,
+`workspace.set_status`) all keep working unchanged; `agent.needs_input` is additive, and installed
+hook configuration on user machines doesn't need reinstalling to pick it up. Errors:
+`invalid_params`, `not_found`.
+
 ## Browser Availability (`app.browsers`, `PROGRAMA_DEFAULT_BROWSER*`)
 
 Two ways a terminal or agent can check which browsers are available, so scripts don't have

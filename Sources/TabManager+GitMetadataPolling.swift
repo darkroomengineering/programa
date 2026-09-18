@@ -210,6 +210,13 @@ extension TabManager {
         return candidatePanelIds
     }
 
+    /// Test-only seam: `sweepStaleAgentPIDs` is private and otherwise reachable only via the
+    /// 30s `agentPIDSweepTimer`. Runs the exact same sweep synchronously on the calling
+    /// (main) thread so T8 tests can assert watchdog behavior without waiting on a timer.
+    func sweepStaleAgentPIDsForTesting() {
+        sweepStaleAgentPIDs()
+    }
+
     private func sweepStaleAgentPIDs() {
         for tab in tabs {
             var keysToRemove: [String] = []
@@ -236,6 +243,28 @@ extension TabManager {
                 // Also clear stale notifications (e.g. "Doing well, thanks!")
                 // left behind when Claude was killed without SessionEnd firing.
                 AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id)
+            }
+
+            sweepAgentPresence(for: tab)
+        }
+    }
+
+    /// Extends the same sweep to `panelAgentPresence`: clears presence whose reported pid has
+    /// exited, and marks a presence stale once when it crosses the threshold so the sidebar
+    /// row redraws (an identical-value write would be swallowed by the publisher's
+    /// `removeDuplicates`). Runs on main, same as the rest of `sweepStaleAgentPIDs`.
+    private func sweepAgentPresence(for tab: Workspace) {
+        let now = Date()
+        for (panelId, presence) in tab.panelAgentPresence {
+            if let pid = presence.sessionKey?.pid, pid > 0 {
+                errno = 0
+                if kill(pid, 0) == -1, POSIXErrorCode(rawValue: errno) == .ESRCH {
+                    tab.clearPanelAgentState(panelId: panelId)
+                    continue
+                }
+            }
+            if presence.isStale(now: now), !presence.staleObserved {
+                tab.panelAgentPresence[panelId]?.staleObserved = true
             }
         }
     }

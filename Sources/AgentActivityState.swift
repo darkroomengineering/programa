@@ -53,6 +53,101 @@ enum AgentStateSource: String, Codable, CaseIterable, Sendable {
     case inferred
 }
 
+/// Identifies the process/session behind a reported `AgentPresence`, when known. Hook reports
+/// (source `.hooks`) may carry a session id and/or pid; screen-inferred reports (source
+/// `.inferred`) never carry one, since there is no session to key on. Used for liveness
+/// sweeping (`sweepStaleAgentPIDs`) and future per-session disambiguation.
+struct AgentSessionKey: Equatable, Hashable, Sendable, Codable {
+    let provider: String
+    let sessionId: String?
+    let pid: pid_t?
+}
+
+/// One surface's agent activity, with the provenance and timestamp needed to unify the
+/// three ad hoc "needs-input" signals (issue: agent-state-unification) into a single write
+/// path. `Workspace.panelAgentPresence` is the stored source of truth;
+/// `panelAgentStates`/`panelAgentStateSources` are derived, read-only mirrors kept for the
+/// existing wire shapes and call sites.
+struct AgentPresence: Equatable, Sendable {
+    var state: AgentActivityState
+    var source: AgentStateSource
+    var lastEventAt: Date
+    var sessionKey: AgentSessionKey?
+    /// Set by the watchdog sweep once `isStale` first turns true, and reset by every write.
+    /// Staleness itself is computed from `lastEventAt`; this stored flag only makes the
+    /// transition a real value change, so the `removeDuplicates` sidebar publisher fires.
+    var staleObserved: Bool = false
+
+    /// 10 minutes: a hook-managed agent is expected to report at least once in this window
+    /// while non-idle (tool calls, turn boundaries). Idle is the resting value and never
+    /// goes stale -- there is nothing pending to time out.
+    static let staleThreshold: TimeInterval = 600
+
+    /// True when this presence is non-idle and hasn't been refreshed within `threshold`.
+    /// Staleness never clears presence on its own; it only dims/suffixes the indicator.
+    func isStale(now: Date, threshold: TimeInterval = AgentPresence.staleThreshold) -> Bool {
+        state != .idle && now.timeIntervalSince(lastEventAt) > threshold
+    }
+}
+
+/// The single derived glyph/label/tint for a workspace's aggregate agent state, replacing the
+/// three independent renderings that used to read `panelAgentStates`, `statusEntries["claude_code"]`,
+/// and the notification subtitle separately. `TabItemView` is the only consumer.
+struct SidebarAgentIndicator: Equatable {
+    enum Tint: Equatable {
+        case blocked
+        case working
+        case idle
+    }
+
+    let systemImage: String
+    let label: String
+    let tint: Tint
+    let isStale: Bool
+
+    /// Aggregates every surface's presence worst-first (blocked > working > idle), exactly as
+    /// `Workspace.aggregateAgentState` does today, and returns `nil` when the workspace has no
+    /// presence at all (no badge should render). The stale flag reflects only the presence that
+    /// won the aggregation, not every surface.
+    @MainActor
+    static func make(for workspace: Workspace, now: Date = Date()) -> SidebarAgentIndicator? {
+        let winner = workspace.panelAgentPresence.values.reduce(nil as AgentPresence?) { partial, presence in
+            guard let partial else { return presence }
+            return presence.state.severity >= partial.state.severity ? presence : partial
+        }
+        guard let winner else { return nil }
+
+        let isStale = winner.isStale(now: now)
+        switch winner.state {
+        case .blocked:
+            return SidebarAgentIndicator(
+                systemImage: "exclamationmark.circle.fill",
+                label: isStale
+                    ? String(localized: "sidebar.agentIndicator.needsInputStale", defaultValue: "Needs input (stale)")
+                    : String(localized: "sidebar.agentIndicator.needsInput", defaultValue: "Needs input"),
+                tint: .blocked,
+                isStale: isStale
+            )
+        case .working:
+            return SidebarAgentIndicator(
+                systemImage: "bolt.fill",
+                label: isStale
+                    ? String(localized: "sidebar.agentIndicator.workingStale", defaultValue: "Working (stale)")
+                    : String(localized: "sidebar.agentIndicator.working", defaultValue: "Working"),
+                tint: .working,
+                isStale: isStale
+            )
+        case .idle:
+            return SidebarAgentIndicator(
+                systemImage: "moon.fill",
+                label: String(localized: "sidebar.agentIndicator.idle", defaultValue: "Idle"),
+                tint: .idle,
+                isStale: false
+            )
+        }
+    }
+}
+
 extension Workspace {
     /// Worst-of aggregate agent state across every surface in this workspace, or `nil` if
     /// no surface has a hook-managed agent state at all (no badge should render).

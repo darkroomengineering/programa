@@ -2167,10 +2167,11 @@ class TabManager: ObservableObject {
         tabId: UUID,
         surfaceId: UUID,
         state: AgentActivityState,
-        source: AgentStateSource = .hooks
+        source: AgentStateSource = .hooks,
+        sessionKey: AgentSessionKey? = nil
     ) -> Bool {
         guard let tab = workspace(withId: tabId), tab.panels[surfaceId] != nil else { return false }
-        tab.updatePanelAgentState(panelId: surfaceId, state: state, source: source)
+        tab.updatePanelAgentState(panelId: surfaceId, state: state, source: source, sessionKey: sessionKey)
         return true
     }
 
@@ -3028,6 +3029,8 @@ class TabManager: ObservableObject {
         _ = dismissNotificationOnDirectInteraction(tabId: tabId, surfaceId: panelId)
     }
 
+    // Must never touch `panelAgentPresence`: needs-input clears only on a real resume signal
+    // (a hook reports working/idle, or the session exits), never on the user focusing the workspace.
     @discardableResult
     func dismissNotificationOnDirectInteraction(tabId: UUID, surfaceId: UUID?) -> Bool {
         guard selectedTabId == tabId else { return false }

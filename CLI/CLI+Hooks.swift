@@ -366,13 +366,6 @@ extension ProgramaCLI {
                     client: client
                 )
                 _ = try client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                try setClaudeStatus(
-                    client: client,
-                    workspaceId: workspaceId,
-                    value: "Running",
-                    icon: "bolt.fill",
-                    color: "#4C8DFF"
-                )
                 reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "turn.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: parsedInput.sessionId)
                 print("OK")
             } catch {
@@ -420,27 +413,18 @@ extension ProgramaCLI {
                 )
             }
 
-            _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
-                "workspace_id": workspaceId,
-                "surface_id": surfaceId,
-                "title": title,
-                "subtitle": subtitle,
-                "body": body,
-            ])
-            _ = try? setClaudeStatus(
+            reportClassifiedAgentNotification(
                 client: client,
-                workspaceId: workspaceId,
-                value: "Needs input",
-                icon: "bell.fill",
-                color: "#4C8DFF"
-            )
-            reportAgentState(
-                client: client,
+                provider: "claude-code",
                 workspaceId: workspaceId,
                 surfaceId: surfaceId,
-                state: agentStateForClassifiedNotificationSubtitle(summary.subtitle)
+                title: title,
+                subtitle: subtitle,
+                body: body,
+                classifiedSubtitle: summary.subtitle,
+                sessionId: parsedInput.sessionId,
+                pid: mappedSession?.pid
             )
-            reportAgentEventForClassifiedNotificationSubtitle(client: client, provider: "claude-code", subtitle: summary.subtitle, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: parsedInput.sessionId)
             print("OK")
 
         case "subagent-start":
@@ -651,27 +635,26 @@ extension ProgramaCLI {
             // Clear the badge first: it is the indicator a user reads as "Claude is stuck",
             // and it is the only one of the three that can't be re-derived from anything else.
             if let surfaceId {
-                reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "item.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: parsedInput.sessionId)
+                reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "item.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: parsedInput.sessionId, pid: claudePid)
             }
 
             _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
 
-            let statusValue: String
+            // The sidebar badge (SidebarAgentIndicator) now carries "Working" on its own;
+            // the metadata-row status entry is opt-in verbose detail only, and only when
+            // there's actual tool text to show -- no more generic "Running" row.
             if UserDefaults.standard.bool(forKey: "claudeCodeVerboseStatus"),
                let toolStatus = describeToolUse(parsedInput.object) {
-                statusValue = toolStatus
-            } else {
-                statusValue = "Running"
+                // Best-effort: benign if TabManager is already torn down.
+                try? setClaudeStatus(
+                    client: client,
+                    workspaceId: workspaceId,
+                    value: toolStatus,
+                    icon: "bolt.fill",
+                    color: "#4C8DFF",
+                    pid: claudePid
+                )
             }
-            // Best-effort: benign if TabManager is already torn down.
-            try? setClaudeStatus(
-                client: client,
-                workspaceId: workspaceId,
-                value: statusValue,
-                icon: "bolt.fill",
-                color: "#4C8DFF",
-                pid: claudePid
-            )
             print("OK")
 
         case "help", "--help", "-h":
@@ -733,7 +716,7 @@ extension ProgramaCLI {
     /// Maps a hook notification's classified subtitle (see classifyClaudeNotification /
     /// classifyCodexNotification) to an agent activity state. Only "Permission" (approval
     /// prompt) and "Waiting" (AskUserQuestion / idle-prompt) are genuine blocking signals.
-    private func agentStateForClassifiedNotificationSubtitle(_ subtitle: String) -> CLIAgentActivityState {
+    func agentStateForClassifiedNotificationSubtitle(_ subtitle: String) -> CLIAgentActivityState {
         switch subtitle {
         case "Permission", "Waiting":
             return .blocked
@@ -745,17 +728,26 @@ extension ProgramaCLI {
     /// Reports a surface's agent activity state via the socket. Best-effort: benign if the
     /// surface/workspace can't be resolved (e.g. TabManager already torn down). Not
     /// `private`: CLI+AgentEventAdapters.swift's reportAgentStateAndEvent calls it.
+    /// `sessionId`/`pid`, when present, let the app key this report to a session and
+    /// register the pid for stale-session detection/port scanning (agent-state-unification T2).
     func reportAgentState(
         client: SocketClient,
         workspaceId: String,
         surfaceId: String,
-        state: CLIAgentActivityState
+        state: CLIAgentActivityState,
+        provider: String? = nil,
+        sessionId: String? = nil,
+        pid: Int? = nil
     ) {
-        _ = try? client.sendV2(method: V2MethodNames.surfaceReportAgentState, params: [
+        var params: [String: Any] = [
             "workspace_id": workspaceId,
             "surface_id": surfaceId,
             "state": state.rawValue,
-        ])
+        ]
+        if let provider { params["provider"] = provider }
+        if let sessionId, !sessionId.isEmpty { params["session_id"] = sessionId }
+        if let pid { params["pid"] = pid }
+        _ = try? client.sendV2(method: V2MethodNames.surfaceReportAgentState, params: params)
     }
 
     /// Clears a surface's reported agent activity state (hook session-end / process exit).
@@ -3365,13 +3357,6 @@ extension ProgramaCLI {
                     ])
                 }
                 _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                try setCodexStatus(
-                    client: client,
-                    workspaceId: workspaceId,
-                    value: "Running",
-                    icon: "bolt.fill",
-                    color: "#4C8DFF"
-                )
                 let promptSubmitSurfaceId = try resolvePreferredSurfaceIdForClaudeHook(
                     preferred: mappedSession?.surfaceId,
                     fallback: surfaceArg,
@@ -3514,27 +3499,18 @@ extension ProgramaCLI {
                 ])
             }
 
-            _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
-                "workspace_id": workspaceId,
-                "surface_id": surfaceId,
-                "title": title,
-                "subtitle": subtitle,
-                "body": body,
-            ])
-            _ = try? setCodexStatus(
+            reportClassifiedAgentNotification(
                 client: client,
-                workspaceId: workspaceId,
-                value: "Needs input",
-                icon: "bell.fill",
-                color: "#4C8DFF"
-            )
-            reportAgentState(
-                client: client,
+                provider: "codex",
                 workspaceId: workspaceId,
                 surfaceId: surfaceId,
-                state: agentStateForClassifiedNotificationSubtitle(summary.subtitle)
+                title: title,
+                subtitle: subtitle,
+                body: body,
+                classifiedSubtitle: summary.subtitle,
+                sessionId: parsedInput.sessionId,
+                pid: codexPid
             )
-            reportAgentEventForClassifiedNotificationSubtitle(client: client, provider: "codex", subtitle: summary.subtitle, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: parsedInput.sessionId)
             print("{}")
 
         case "session-end":
@@ -3844,13 +3820,6 @@ extension ProgramaCLI {
                     ])
                 }
                 _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                try setOpenCodeStatus(
-                    client: client,
-                    workspaceId: workspaceId,
-                    value: "Running",
-                    icon: "bolt.fill",
-                    color: "#4C8DFF"
-                )
                 let promptSubmitSurfaceId = try resolvePreferredSurfaceIdForClaudeHook(
                     preferred: mappedSession?.surfaceId,
                     fallback: surfaceArg,
@@ -3990,24 +3959,22 @@ extension ProgramaCLI {
                 ])
             }
 
-            _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
-                "workspace_id": workspaceId,
-                "surface_id": surfaceId,
-                "title": "OpenCode",
-                "subtitle": sanitizeNotificationField(subtitle),
-                "body": sanitizeNotificationField(body),
-            ])
-            _ = try? setOpenCodeStatus(
-                client: client,
-                workspaceId: workspaceId,
-                value: "Needs input",
-                icon: "bell.fill",
-                color: "#4C8DFF"
-            )
             // OpenCode's notification hook is only ever invoked for permission.asked (see
             // openCodePluginJS below) — unlike Claude/Codex, there's no ambiguous "Attention"
             // catch-all to classify, so this is unconditionally a blocking approval prompt.
-            reportAgentStateAndEvent(client: client, provider: "opencode", eventType: "request.opened", workspaceId: workspaceId, surfaceId: surfaceId, state: .blocked, sessionId: parsedInput.sessionId)
+            reportAgentNeedsInput(
+                client: client,
+                provider: "opencode",
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                title: "OpenCode",
+                subtitle: sanitizeNotificationField(subtitle),
+                body: sanitizeNotificationField(body),
+                sessionId: parsedInput.sessionId,
+                pid: opencodePid,
+                kind: "permission"
+            )
+            reportAgentEvent(client: client, provider: "opencode", eventType: "request.opened", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: parsedInput.sessionId)
             print("{}")
 
         case "session-end":

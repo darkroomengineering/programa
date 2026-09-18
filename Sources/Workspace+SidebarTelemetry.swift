@@ -252,17 +252,47 @@ extension Workspace {
     ///   (never reported) or already `.inferred`. If it's `.hooks`, the write is silently
     ///   dropped — belt-and-suspenders: the screen-manifest engine's Phase A should already skip
     ///   sampling a hooks-owned surface, but this is the authoritative guard regardless.
-    func updatePanelAgentState(panelId: UUID, state: AgentActivityState, source: AgentStateSource = .hooks) {
-        let currentState = panelAgentStates[panelId]
-        let currentSource = panelAgentStateSources[panelId]
+    func updatePanelAgentState(
+        panelId: UUID,
+        state: AgentActivityState,
+        source: AgentStateSource = .hooks,
+        sessionKey: AgentSessionKey? = nil,
+        at now: Date = Date()
+    ) {
+        let current = panelAgentPresence[panelId]
 
-        if source == .inferred, let currentSource, currentSource == .hooks {
+        if source == .inferred, let current, current.source == .hooks {
+            // Hooks always win: dropped write must not move lastEventAt either, so a
+            // hooks-owned surface's staleness clock keeps ticking from its last real hook
+            // event, not from an inferred sample that never took effect.
             return
         }
 
-        guard currentState != state || currentSource != source else { return }
-        panelAgentStates[panelId] = state
-        panelAgentStateSources[panelId] = source
+        // `.inferred` writes never carry a session key -- there is no session to key on.
+        // A hook report that omits its session key (agent.event without pid, an older CLI)
+        // keeps the key an earlier report established, so the liveness sweep never loses
+        // the pid it needs to clear this surface when the process dies.
+        let resolvedSessionKey: AgentSessionKey?
+        if source == .inferred {
+            resolvedSessionKey = nil
+        } else {
+            resolvedSessionKey = sessionKey ?? current?.sessionKey
+        }
+
+        guard current?.state != state || current?.source != source || current?.sessionKey != resolvedSessionKey else {
+            // Same state from the same writer: only the liveness clock moves. Without this a
+            // long-running agent that keeps reporting `working` would read as stale at the
+            // threshold. No wait-registry or socket fan-out, since nothing observable changed.
+            panelAgentPresence[panelId]?.lastEventAt = now
+            panelAgentPresence[panelId]?.staleObserved = false
+            return
+        }
+        panelAgentPresence[panelId] = AgentPresence(
+            state: state,
+            source: source,
+            lastEventAt: now,
+            sessionKey: resolvedSessionKey
+        )
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
         // AgentStateWaitRegistry's doc comment in TerminalController+SurfaceWait.swift for why
@@ -278,9 +308,8 @@ extension Workspace {
     }
 
     func clearPanelAgentState(panelId: UUID) {
-        guard panelAgentStates[panelId] != nil else { return }
-        panelAgentStates.removeValue(forKey: panelId)
-        panelAgentStateSources.removeValue(forKey: panelId)
+        guard panelAgentPresence[panelId] != nil else { return }
+        panelAgentPresence.removeValue(forKey: panelId)
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
         SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: nil, source: nil)
 #if DEBUG
@@ -310,9 +339,8 @@ extension Workspace {
         // it out here too -- otherwise a surface.wait `agent_state` (or a subscribed client)
         // watching a surface whose state got wiped by a sidebar reset would hang until timeout
         // instead of observing the transition to "no state".
-        let clearedAgentSurfaceIds = Array(panelAgentStates.keys)
-        panelAgentStates.removeAll()
-        panelAgentStateSources.removeAll()
+        let clearedAgentSurfaceIds = Array(panelAgentPresence.keys)
+        panelAgentPresence.removeAll()
         for surfaceId in clearedAgentSurfaceIds {
             AgentStateWaitRegistry.shared.notify(surfaceId: surfaceId, newState: nil, source: nil)
             SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: surfaceId, state: nil, source: nil)
@@ -446,11 +474,8 @@ extension Workspace {
         if panelPullRequests.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             panelPullRequests = panelPullRequests.filter { validSurfaceIds.contains($0.key) }
         }
-        if panelAgentStates.keys.contains(where: { !validSurfaceIds.contains($0) }) {
-            panelAgentStates = panelAgentStates.filter { validSurfaceIds.contains($0.key) }
-        }
-        if panelAgentStateSources.keys.contains(where: { !validSurfaceIds.contains($0) }) {
-            panelAgentStateSources = panelAgentStateSources.filter { validSurfaceIds.contains($0.key) }
+        if panelAgentPresence.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            panelAgentPresence = panelAgentPresence.filter { validSurfaceIds.contains($0.key) }
         }
         if didPruneListeningPorts {
             recomputeListeningPorts()

@@ -18,7 +18,8 @@ extension ProgramaCLI {
         eventType: String,
         workspaceId: String,
         surfaceId: String,
-        sessionId: String? = nil
+        sessionId: String? = nil,
+        pid: Int? = nil
     ) {
         var params: [String: Any] = [
             "provider": provider,
@@ -28,6 +29,9 @@ extension ProgramaCLI {
         ]
         if let sessionId, !sessionId.isEmpty {
             params["session_id"] = sessionId
+        }
+        if let pid {
+            params["pid"] = pid
         }
         _ = try? client.sendV2(method: "agent.event", params: params)
     }
@@ -43,10 +47,41 @@ extension ProgramaCLI {
         workspaceId: String,
         surfaceId: String,
         state: CLIAgentActivityState,
-        sessionId: String? = nil
+        sessionId: String? = nil,
+        pid: Int? = nil
     ) {
-        reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: state)
-        reportAgentEvent(client: client, provider: provider, eventType: eventType, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: sessionId)
+        reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: state, provider: provider, sessionId: sessionId, pid: pid)
+        reportAgentEvent(client: client, provider: provider, eventType: eventType, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: sessionId, pid: pid)
+    }
+
+    /// Sends `agent.needs_input` (docs/plans/agent-state-unification.md T2): one atomic
+    /// socket call replacing the `notification.create_for_target` +
+    /// `workspace.set_status` "Needs input" + `surface.report_agent_state` trio a hook
+    /// used to send independently for the same "needs input" moment.
+    func reportAgentNeedsInput(
+        client: SocketClient,
+        provider: String,
+        workspaceId: String,
+        surfaceId: String,
+        title: String,
+        subtitle: String,
+        body: String,
+        sessionId: String? = nil,
+        pid: Int? = nil,
+        kind: String
+    ) {
+        var params: [String: Any] = [
+            "workspace_id": workspaceId,
+            "surface_id": surfaceId,
+            "provider": provider,
+            "title": title,
+            "subtitle": subtitle,
+            "body": body,
+            "kind": kind,
+        ]
+        if let sessionId, !sessionId.isEmpty { params["session_id"] = sessionId }
+        if let pid { params["pid"] = pid }
+        _ = try? client.sendV2(method: "agent.needs_input", params: params)
     }
 
     /// Clears a surface's reported agent activity state, then reports a matching
@@ -84,5 +119,56 @@ extension ProgramaCLI {
         default:
             break
         }
+    }
+
+    /// One call per classified provider notification (Claude Code and Codex share the
+    /// "Permission"/"Waiting" classifier): a blocking subtitle becomes a single
+    /// `agent.needs_input` (state + notification + supervision in one hop); anything else
+    /// stays a plain notification with an idle state report. The matching `agent.event`
+    /// follows in both cases.
+    func reportClassifiedAgentNotification(
+        client: SocketClient,
+        provider: String,
+        workspaceId: String,
+        surfaceId: String,
+        title: String,
+        subtitle: String,
+        body: String,
+        classifiedSubtitle: String,
+        sessionId: String?,
+        pid: Int?
+    ) {
+        if agentStateForClassifiedNotificationSubtitle(classifiedSubtitle) == .blocked {
+            reportAgentNeedsInput(
+                client: client,
+                provider: provider,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                title: title,
+                subtitle: subtitle,
+                body: body,
+                sessionId: sessionId,
+                pid: pid,
+                kind: classifiedSubtitle == "Permission" ? "permission" : "question"
+            )
+        } else {
+            _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
+                "workspace_id": workspaceId,
+                "surface_id": surfaceId,
+                "title": title,
+                "subtitle": subtitle,
+                "body": body,
+            ])
+            reportAgentState(
+                client: client,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                state: .idle,
+                provider: provider,
+                sessionId: sessionId,
+                pid: pid
+            )
+        }
+        reportAgentEventForClassifiedNotificationSubtitle(client: client, provider: provider, subtitle: classifiedSubtitle, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: sessionId)
     }
 }

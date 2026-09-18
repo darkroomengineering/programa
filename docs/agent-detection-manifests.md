@@ -11,6 +11,12 @@ Wire-level behavior (report source tagging, hooks-always-win precedence) is docu
 `docs/v2-api-migration.md`'s `agent_state` sections; this doc is only about the manifest file
 format itself.
 
+Since docs/plans/agent-state-unification.md, a manifest classification writes the same
+`AgentPresence` record (state, source, and a timestamp) that hook reports write, so an inferred
+`blocked`/`working` state goes stale and dims in the sidebar on the same 10-minute rule described
+in `docs/notifications.md`, instead of sitting fixed once written. It still loses outright to any
+surface that has ever received a hook report — hooks-always-win precedence is unchanged.
+
 ## Location and precedence
 
 - **Bundled**: `Resources/AgentDetection/<agent>.json`, shipped inside the app bundle. Programa

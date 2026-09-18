@@ -302,8 +302,25 @@ extension TerminalController {
             source = .hooks
         }
 
-        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
-            tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source)
+        // Optional session/pid identity, additive per docs/plans/agent-state-unification.md T2:
+        // older CLI builds omit these and get `sessionKey == nil`, unchanged from today.
+        let provider = v2RawString(params, "provider")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sessionId = v2RawString(params, "session_id")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reportedPid: pid_t?
+        if v2HasNonNullParam(params, "pid") {
+            guard let rawPid = v2Int(params, "pid"), (1...Int(pid_t.max)).contains(rawPid) else {
+                return .err(code: "invalid_params", message: "pid must be an integer from 1 through \(Int(pid_t.max))", data: nil)
+            }
+            reportedPid = pid_t(rawPid)
+        } else {
+            reportedPid = nil
+        }
+        let sessionKey: AgentSessionKey? = (sessionId != nil || reportedPid != nil)
+            ? AgentSessionKey(provider: provider ?? "unknown", sessionId: sessionId, pid: reportedPid)
+            : nil
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
+            tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey)
             let taskState: AgentTaskState
             switch state {
             case .idle: taskState = .idle
@@ -315,6 +332,11 @@ extension TerminalController {
                 surfaceId: sid,
                 state: taskState
             )
+            if let reportedPid, let provider, let pidKey = Self.agentPIDKey(forProvider: provider) {
+                if tab.setSidebarAgentPID(key: pidKey, pid: reportedPid) {
+                    self?.refreshTrackedAgentPorts(for: tab)
+                }
+            }
         }
 
         return .ok([
@@ -325,6 +347,20 @@ extension TerminalController {
             "state": state.rawValue,
             "source": source.rawValue,
         ])
+    }
+
+    /// Maps a hook-reported `provider` string to the flat status/PID key
+    /// `workspace.set_agent_pid` already uses for that provider (CLI/CLI+Hooks.swift's
+    /// `setClaudeStatus`/`setCodexStatus`/`setOpenCodeStatus` keys), so `agent.needs_input`
+    /// and `surface.report_agent_state` can register liveness/port-scanning PIDs without a
+    /// second round trip. Unknown providers are skipped -- there is no key to write to.
+    private static func agentPIDKey(forProvider provider: String) -> String? {
+        switch provider {
+        case "claude-code": return "claude_code"
+        case "codex": return "codex"
+        case "opencode": return "opencode"
+        default: return nil
+        }
     }
 
     /// Normalized agent lifecycle event (docs/plans/agent-events.md, "Wire path").
@@ -351,6 +387,23 @@ extension TerminalController {
         }
         let eventType = rawEventType.lowercased()
 
+        // Optional session/pid identity, additive per docs/plans/agent-state-unification.md T2:
+        // older CLI builds omit these and get `sessionKey == nil`, unchanged from today.
+        let provider = v2RawString(params, "provider")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sessionId = v2RawString(params, "session_id")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reportedPid: pid_t?
+        if v2HasNonNullParam(params, "pid") {
+            guard let rawPid = v2Int(params, "pid"), (1...Int(pid_t.max)).contains(rawPid) else {
+                return .err(code: "invalid_params", message: "pid must be an integer from 1 through \(Int(pid_t.max))", data: nil)
+            }
+            reportedPid = pid_t(rawPid)
+        } else {
+            reportedPid = nil
+        }
+        let sessionKey: AgentSessionKey? = (sessionId != nil || reportedPid != nil)
+            ? AgentSessionKey(provider: provider ?? "unknown", sessionId: sessionId, pid: reportedPid)
+            : nil
+
         var response: [String: Any] = [
             "workspace_id": workspaceId.uuidString,
             "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
@@ -361,8 +414,8 @@ extension TerminalController {
 
         switch outcome {
         case .applyState(let state):
-            v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
-                tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: .hooks)
+            v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
+                tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: .hooks, sessionKey: sessionKey)
                 let taskState: AgentTaskState
                 switch state {
                 case .idle: taskState = .idle
@@ -374,6 +427,11 @@ extension TerminalController {
                     surfaceId: sid,
                     state: taskState
                 )
+                if let reportedPid, let provider, let pidKey = Self.agentPIDKey(forProvider: provider) {
+                    if tab.setSidebarAgentPID(key: pidKey, pid: reportedPid) {
+                        self?.refreshTrackedAgentPorts(for: tab)
+                    }
+                }
             }
             response["state"] = state.rawValue
             response["source"] = AgentStateSource.hooks.rawValue
@@ -389,6 +447,86 @@ extension TerminalController {
         }
 
         return .ok(response)
+    }
+
+    /// Atomically reports a surface as blocked on user input and posts the matching
+    /// notification (docs/plans/agent-state-unification.md T2): replaces the three
+    /// independent socket calls (`notification.create_for_target` +
+    /// `workspace.set_status` "Needs input" + `surface.report_agent_state`) a hook used to
+    /// make for the same "needs input" moment, any one of which could fail alone. Parses
+    /// and validates off-main; hops to main once via `v2ScheduleSurfaceTelemetryMutation`
+    /// (notification creation must run on main -- it drives AppKit) and performs the state
+    /// write, notification, and supervision update in that single hop.
+    nonisolated func v2AgentNeedsInput(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2CachedUUID(params, "workspace_id") else {
+            return v2InvalidParam("workspace_id")
+        }
+        guard let surfaceId = v2CachedUUID(params, "surface_id") else {
+            return v2InvalidParam("surface_id")
+        }
+        let rawProvider = v2RawString(params, "provider")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let provider = (rawProvider?.isEmpty == false) ? rawProvider! : "unknown"
+        let title = (params["title"] as? String) ?? ""
+        let subtitle = (params["subtitle"] as? String) ?? ""
+        let body = (params["body"] as? String) ?? ""
+        let rawSessionId = v2RawString(params, "session_id")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sessionId = (rawSessionId?.isEmpty == false) ? rawSessionId : nil
+
+        let reportedPid: pid_t?
+        if v2HasNonNullParam(params, "pid") {
+            guard let rawPid = v2Int(params, "pid"), (1...Int(pid_t.max)).contains(rawPid) else {
+                return .err(code: "invalid_params", message: "pid must be an integer from 1 through \(Int(pid_t.max))", data: nil)
+            }
+            reportedPid = pid_t(rawPid)
+        } else {
+            reportedPid = nil
+        }
+
+        var kind: String?
+        if v2HasNonNullParam(params, "kind") {
+            guard let rawKind = v2RawString(params, "kind"),
+                  ["permission", "question"].contains(rawKind) else {
+                return .err(code: "invalid_params", message: "kind must be permission or question", data: nil)
+            }
+            kind = rawKind
+        }
+
+        let sessionKey = AgentSessionKey(provider: provider, sessionId: sessionId, pid: reportedPid)
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
+            tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: .blocked, source: .hooks, sessionKey: sessionKey)
+
+            let resolvedTitle = TerminalController.v2ResolveNotificationTitle(title: title, workspace: tab, surfaceId: sid)
+            TerminalNotificationStore.shared.addNotification(
+                tabId: tab.id,
+                surfaceId: sid,
+                title: resolvedTitle,
+                subtitle: subtitle,
+                body: body
+            )
+
+            _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
+                workspaceId: workspaceId,
+                surfaceId: sid,
+                state: .blocked
+            )
+
+            if let reportedPid, let pidKey = Self.agentPIDKey(forProvider: provider) {
+                if tab.setSidebarAgentPID(key: pidKey, pid: reportedPid) {
+                    self?.refreshTrackedAgentPorts(for: tab)
+                }
+            }
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "state": AgentActivityState.blocked.rawValue,
+            "source": AgentStateSource.hooks.rawValue,
+            "kind": v2OrNull(kind),
+        ])
     }
 
     nonisolated func v2SurfaceClearAgentState(params: [String: Any]) -> V2CallResult {

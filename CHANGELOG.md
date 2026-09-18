@@ -6,6 +6,12 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ## [Unreleased]
 
+### Added
+- New `agent.needs_input` socket method reports a surface as blocked on the user and posts its notification in one call, instead of three separate calls that could fail independently.
+
+### Changed
+- Each workspace row now shows one agent indicator (Needs input, Working, or Idle) instead of the badge, status row, and notification text sometimes disagreeing with each other. It dims and shows "(stale)" after ten minutes with no update from the agent, and only clears when the agent itself reports it's resumed, not just from opening the workspace.
+
 ## [0.5.0] - 2026-09-16
 
 ### Removed

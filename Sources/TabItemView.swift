@@ -245,37 +245,21 @@ struct TabItemView: View, Equatable {
     // below already triggers the re-render this relies on. No change to
     // TabItemView's Equatable conformance or precomputed `let` parameters is
     // needed or should be made — see CLAUDE.md typing-latency-sensitive paths.
-    private var agentActivityState: AgentActivityState? {
-        tab.aggregateAgentState
+    private var agentIndicator: SidebarAgentIndicator? {
+        SidebarAgentIndicator.make(for: tab)
     }
 
-    private var agentStateBadgeSystemImage: String? {
-        switch agentActivityState {
-        case .blocked: return "exclamationmark.circle.fill"
-        case .working: return "bolt.fill"
-        case .idle: return "moon.fill"
-        case nil: return nil
-        }
-    }
+    /// Status entry keys/values that used to duplicate agent state in the metadata rows.
+    /// Filtered out at render time so older CLI builds that still send them don't double up
+    /// with the badge above.
+    private static let agentStateStatusKeys: Set<String> = ["claude_code", "codex", "opencode"]
+    private static let agentStateStatusValues: Set<String> = ["Running", "Waiting", "Needs input"]
 
-    private var agentStateBadgeColor: Color {
-        switch agentActivityState {
+    private func agentIndicatorTintColor(_ indicator: SidebarAgentIndicator) -> Color {
+        switch indicator.tint {
         case .blocked: return .red
         case .working: return programaAccentColor()
-        case .idle, nil: return activeSecondaryColor(0.6)
-        }
-    }
-
-    private var agentStateBadgeAccessibilityLabel: String {
-        switch agentActivityState {
-        case .blocked:
-            return String(localized: "sidebar.agentState.blocked", defaultValue: "Agent blocked, needs your input")
-        case .working:
-            return String(localized: "sidebar.agentState.working", defaultValue: "Agent working")
-        case .idle:
-            return String(localized: "sidebar.agentState.idle", defaultValue: "Agent idle")
-        case nil:
-            return ""
+        case .idle: return activeSecondaryColor(0.6)
         }
     }
 
@@ -422,12 +406,20 @@ struct TabItemView: View, Equatable {
                         .safeHelp(protectedWorkspaceTooltip)
                 }
 
-                if let agentStateBadgeSystemImage {
-                    Image(systemName: agentStateBadgeSystemImage)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(agentStateBadgeColor)
-                        .safeHelp(agentStateBadgeAccessibilityLabel)
-                        .accessibilityLabel(Text(agentStateBadgeAccessibilityLabel))
+                if let agentIndicator {
+                    HStack(spacing: 3) {
+                        Image(systemName: agentIndicator.systemImage)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(agentIndicatorTintColor(agentIndicator))
+                            .opacity(agentIndicator.isStale ? 0.55 : 1)
+                        Text(agentIndicator.label)
+                            .font(.system(size: 10))
+                            .foregroundColor(agentIndicatorTintColor(agentIndicator))
+                            .opacity(agentIndicator.isStale ? 0.55 : 1)
+                            .lineLimit(1)
+                    }
+                    .safeHelp(agentIndicator.label)
+                    .accessibilityLabel(Text(agentIndicator.label))
                 }
 
                 Text(tab.title)
@@ -501,7 +493,13 @@ struct TabItemView: View, Equatable {
             }
 
             if detailVisibility.showsMetadata {
-                let metadataEntries = tab.sidebarStatusEntriesInDisplayOrder()
+                // The agent badge above is the single source for agent state now; drop any
+                // status entry that's still carrying the old duplicate phrasing (older CLI
+                // builds may still send it). Other status entries (verbose tool descriptions,
+                // progress, ports, PR) render unchanged.
+                let metadataEntries = tab.sidebarStatusEntriesInDisplayOrder().filter { entry in
+                    !(Self.agentStateStatusKeys.contains(entry.key) && Self.agentStateStatusValues.contains(entry.value))
+                }
                 let metadataBlocks = tab.sidebarMetadataBlocksInDisplayOrder()
                 if !metadataEntries.isEmpty {
                     SidebarMetadataRows(
@@ -1239,6 +1237,7 @@ struct TabItemView: View, Equatable {
 
         lastSidebarSelectionIndex = index
         tabManager.selectTab(tab)
+        // Must never touch `panelAgentPresence`: focusing the workspace never clears needs-input.
         if wasSelected, !isCommand, !isShift {
             tabManager.dismissNotificationOnDirectInteraction(
                 tabId: tab.id,
