@@ -281,9 +281,12 @@ auto-ship lane.
 Notes:
 - Requires GitHub secrets: `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD`,
   `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
-- The `rolling` release carries exactly three assets: `appcast.xml`, `programa-macos.dmg`,
-  `programa-windows.exe`. dSYMs and the versioned per-build DMG/EXE live only on the candidate
-  draft, never on `rolling`.
+- The `rolling` release carries `appcast.xml`, `programa-macos.dmg`, `programa-windows.exe`,
+  and the Sparkle enclosures `programa-macos-<build>.dmg` for the newest builds (keep window in
+  `scripts/sparkle_enclosure.js`; older ones are pruned after each promotion). The appcast must
+  point at `rolling`, not the candidate: GitHub serves no assets from a draft, and a candidate
+  URL 404s for every auto-updating client. dSYMs and the versioned EXE live only on the
+  candidate draft.
 - README download button points to `releases/latest/download/programa-macos.dmg`.
 - Versioning: bump the minor version for milestone tags unless explicitly asked otherwise.
 - Changelog: update `CHANGELOG.md`; it is the source of truth for the changelog.

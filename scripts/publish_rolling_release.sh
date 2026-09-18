@@ -5,6 +5,9 @@ umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATE_MODULE="${SCRIPT_DIR}/rolling_release_state.js"
+ENCLOSURE_MODULE="${SCRIPT_DIR}/sparkle_enclosure.js"
+# Versioned enclosures kept on rolling after promotion; empty uses the module default.
+ENCLOSURE_KEEP_BUILDS="${ROLLING_ENCLOSURE_KEEP_BUILDS:-}"
 GH_BIN="${GH_BIN:-gh}"
 REPOSITORY="${GITHUB_REPOSITORY:-}"
 CANDIDATE_PREFIX=""
@@ -265,10 +268,13 @@ try {
 NODE
 }
 
+# Uploads every sealed asset of one role to rolling (or only the asset named by the
+# optional second argument), skipping any whose bytes already match.
 reconcile_role() {
-  local expected_role="$1" name role size sha current_metadata
+  local expected_role="$1" only_name="${2:-}" name role size sha current_metadata
   while IFS=$'\t' read -r name role size sha; do
     [[ "${role}" == "${expected_role}" ]] || continue
+    [[ -z "${only_name}" || "${name}" == "${only_name}" ]] || continue
     current_metadata="${TEMP_DIR}/rolling-current-${name}.tsv"
     query_assets "${ROLLING_TAG}" "${current_metadata}"
     if asset_matches "${ROLLING_TAG}" "${name}" "${size}" "${sha}" \
@@ -286,13 +292,30 @@ reconcile_role() {
   done < "${PROMOTION_ORDER}"
 }
 
+# Verifies the public rolling surface: feed, stable aliases, and the Sparkle
+# enclosure the feed points at.
 verify_rolling_aliases() {
   local metadata="$1" destination="$2" name role size sha
   while IFS=$'\t' read -r name role size sha; do
-    [[ "${role}" == "appcast" || "${role}" == "stable-alias" ]] || continue
+    [[ "${role}" == "appcast" || "${role}" == "stable-alias" || "${name}" == "${ENCLOSURE_NAME}" ]] || continue
     verify_asset_strict "${ROLLING_TAG}" "${name}" "${size}" "${sha}" \
       "${metadata}" "${destination}-${name}"
   done < "${PROMOTION_ORDER}"
+}
+
+# Every promotion adds one programa-macos-<build>.dmg to rolling, so older ones are
+# deleted past the keep window. Runs only after the new enclosure and feed have
+# verified, and never touches the build just promoted.
+prune_rolling_enclosures() {
+  local metadata="$1" stale name
+  local -a prune_args=(prune --current "${SELECTED_BUILD}")
+  [[ -z "${ENCLOSURE_KEEP_BUILDS}" ]] || prune_args+=(--keep "${ENCLOSURE_KEEP_BUILDS}")
+  stale="$(cut -f2 "${metadata}" | node "${ENCLOSURE_MODULE}" "${prune_args[@]}")" || \
+    fail "could not select stale rolling enclosures"
+  while IFS= read -r name; do
+    [[ -n "${name}" && "${name}" != "${ENCLOSURE_NAME}" ]] || continue
+    "${GH_BIN}" release delete-asset "${ROLLING_TAG}" "${name}" --repo "${REPOSITORY}" --yes
+  done <<< "${stale}"
 }
 
 while (($#)); do
@@ -332,6 +355,7 @@ done
 [[ "${CANDIDATE_PREFIX}" =~ ^[A-Za-z0-9._-]+$ ]] || fail "candidate prefix contains unsafe characters"
 [[ "${ROLLING_TAG}" =~ ^[A-Za-z0-9._-]+$ ]] || fail "rolling tag contains unsafe characters"
 [[ -r "${STATE_MODULE}" ]] || fail "missing state module: ${STATE_MODULE}"
+[[ -r "${ENCLOSURE_MODULE}" ]] || fail "missing enclosure module: ${ENCLOSURE_MODULE}"
 GH_BIN="$(command -v "${GH_BIN}")" || fail "GH_BIN is not executable"
 command -v node >/dev/null || fail "node is required"
 
@@ -439,6 +463,8 @@ IFS=$'\t' read -r SELECTED_BUILD SELECTED_TARGET SELECTED_VERSION < <(
   ' "${SELECTED_MANIFEST}"
 )
 SELECTED_TAG="${CANDIDATE_PREFIX}${SELECTED_BUILD}"
+ENCLOSURE_NAME="$(node "${ENCLOSURE_MODULE}" name "${SELECTED_BUILD}")" || \
+  fail "could not derive the Sparkle enclosure name for build ${SELECTED_BUILD}"
 [[ "${SELECTED_TARGET}" == "${RECONCILER_TARGET_SHA}" ]] || \
   fail "selected candidate target ${SELECTED_TARGET} does not match reconciler target ${RECONCILER_TARGET_SHA}"
 SELECTED_STATE_ROW="$(awk -F '\t' -v expected="${SELECTED_TAG}" '
@@ -485,12 +511,15 @@ SELECTED_SEAL_PATH="${TEMP_DIR}/selected-seal-verification/${SEAL_NAME}"
 SELECTED_SEAL_SIZE="$(file_size "${SELECTED_SEAL_PATH}")"
 SELECTED_SEAL_SHA="$(sha256_file "${SELECTED_SEAL_PATH}")"
 
+# The appcast must reference the enclosure at its public rolling URL. Candidates are
+# drafts, and GitHub serves no assets from a draft, so a candidate URL is a 404 for
+# every auto-updating client.
 node - \
   "${STATE_MODULE}" \
   "${SELECTED_MANIFEST}" \
   "${SELECTED_PAYLOAD_DIR}/appcast.xml" \
   "${REPOSITORY}" \
-  "${SELECTED_TAG}" <<'NODE'
+  "${ROLLING_TAG}" <<'NODE'
 const fs = require("node:fs");
 const [modulePath, manifestPath, appcastPath, repository, tag] = process.argv.slice(2);
 const { validateReleasePayloadReferences } = require(modulePath);
@@ -556,6 +585,9 @@ fi
 # taken after the appcast/alias uploads and immediately before rolling's
 # metadata and ref change, remains the meaningful race gate.
 require_selected_target_is_current_main "alias publication gate"
+# The enclosure lands before the feed that points at it, so a client never reads
+# an appcast whose DMG is not yet downloadable.
+reconcile_role immutable "${ENCLOSURE_NAME}"
 reconcile_role appcast
 reconcile_role stable-alias
 
@@ -705,4 +737,5 @@ FINAL_REF="$("${GH_BIN}" api "repos/${REPOSITORY}/git/ref/tags/${ROLLING_TAG}" -
 cmp -s "${FINAL_BODY}" "${NOTES_FILE}" || fail "rolling release notes did not converge"
 [[ "${FINAL_REF}" == "${SELECTED_TARGET}" ]] || fail "rolling ref did not converge"
 
+prune_rolling_enclosures "${FINAL_METADATA}"
 prune_candidates "${SELECTED_BUILD}" "${SELECTED_TAG}"
