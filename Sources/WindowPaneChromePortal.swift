@@ -122,7 +122,8 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
             for bar in bars.values { bar.trailingReservedWidth = 0 }
             return
         }
-        let barHeight: CGFloat = 28
+        // Matches the tab strip's own height so the capsules never outgrow the tabs.
+        let barHeight: CGFloat = ChromeDensity.tabBarHeight
         // Chrome spacing grid: 4pt base, edges on 8.
         let gap: CGFloat = 8
         let strip = hostView.convert(anchor.bounds, from: anchor)
