@@ -218,7 +218,6 @@ extension TabManager {
     }
 
     private func sweepStaleAgentPIDs() {
-        var allStalePanelIds: Set<UUID> = []
         for tab in tabs {
             var keysToRemove: [String] = []
             for (key, pid) in tab.agentPIDs {
@@ -246,22 +245,16 @@ extension TabManager {
                 AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id)
             }
 
-            allStalePanelIds.formUnion(sweepAgentPresence(for: tab))
+            sweepAgentPresence(for: tab)
         }
-        // `sweepAgentPresence` already consulted the previous `staleAgentPanelIds` to decide
-        // whether to nudge the publisher, so this tick's stale set becomes the new tracked set.
-        staleAgentPanelIds = allStalePanelIds
     }
 
     /// Extends the same sweep to `panelAgentPresence`: clears presence whose reported pid has
-    /// exited, and nudges the publisher once per stale transition so the sidebar row redraws
-    /// without a new timer. Runs on main, same as the rest of `sweepStaleAgentPIDs`. Returns this
-    /// tab's currently-stale panel ids so the caller can reconcile `staleAgentPanelIds` across
-    /// every tab in one pass.
-    @discardableResult
-    private func sweepAgentPresence(for tab: Workspace) -> Set<UUID> {
+    /// exited, and marks a presence stale once when it crosses the threshold so the sidebar
+    /// row redraws (an identical-value write would be swallowed by the publisher's
+    /// `removeDuplicates`). Runs on main, same as the rest of `sweepStaleAgentPIDs`.
+    private func sweepAgentPresence(for tab: Workspace) {
         let now = Date()
-        var currentlyStalePanelIds: Set<UUID> = []
         for (panelId, presence) in tab.panelAgentPresence {
             if let pid = presence.sessionKey?.pid, pid > 0 {
                 errno = 0
@@ -270,16 +263,10 @@ extension TabManager {
                     continue
                 }
             }
-            if presence.isStale(now: now) {
-                currentlyStalePanelIds.insert(panelId)
-                if !staleAgentPanelIds.contains(panelId) {
-                    // No-op write: republishes `panelAgentPresence` so the sidebar row picks up
-                    // the newly-stale indicator without writing new data.
-                    tab.panelAgentPresence[panelId] = presence
-                }
+            if presence.isStale(now: now), !presence.staleObserved {
+                tab.panelAgentPresence[panelId]?.staleObserved = true
             }
         }
-        return currentlyStalePanelIds
     }
 
     func gitProbeDirectory(for workspace: Workspace, panelId: UUID) -> String? {

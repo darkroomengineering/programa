@@ -73,6 +73,10 @@ struct AgentPresence: Equatable, Sendable {
     var source: AgentStateSource
     var lastEventAt: Date
     var sessionKey: AgentSessionKey?
+    /// Set by the watchdog sweep once `isStale` first turns true, and reset by every write.
+    /// Staleness itself is computed from `lastEventAt`; this stored flag only makes the
+    /// transition a real value change, so the `removeDuplicates` sidebar publisher fires.
+    var staleObserved: Bool = false
 
     /// 10 minutes: a hook-managed agent is expected to report at least once in this window
     /// while non-idle (tool calls, turn boundaries). Idle is the resting value and never

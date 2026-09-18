@@ -269,13 +269,22 @@ extension Workspace {
         }
 
         // `.inferred` writes never carry a session key -- there is no session to key on.
-        let resolvedSessionKey = source == .inferred ? nil : sessionKey
+        // A hook report that omits its session key (agent.event without pid, an older CLI)
+        // keeps the key an earlier report established, so the liveness sweep never loses
+        // the pid it needs to clear this surface when the process dies.
+        let resolvedSessionKey: AgentSessionKey?
+        if source == .inferred {
+            resolvedSessionKey = nil
+        } else {
+            resolvedSessionKey = sessionKey ?? current?.sessionKey
+        }
 
         guard current?.state != state || current?.source != source || current?.sessionKey != resolvedSessionKey else {
             // Same state from the same writer: only the liveness clock moves. Without this a
             // long-running agent that keeps reporting `working` would read as stale at the
             // threshold. No wait-registry or socket fan-out, since nothing observable changed.
             panelAgentPresence[panelId]?.lastEventAt = now
+            panelAgentPresence[panelId]?.staleObserved = false
             return
         }
         panelAgentPresence[panelId] = AgentPresence(

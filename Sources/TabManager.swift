@@ -794,9 +794,6 @@ class TabManager: ObservableObject {
         let inheritedTerminalFontPoints: Float?
     }
     var agentPIDSweepTimer: DispatchSourceTimer?
-    /// Panel ids whose `AgentPresence` was already reported stale by the last sweep, so the
-    /// watchdog only nudges the publisher once per stale transition instead of every 30s tick.
-    var staleAgentPanelIds: Set<UUID> = []
     var workspaceGitMetadataPollTimer: DispatchSourceTimer?
     var selectedWorkspaceGitMetadataPollTimer: DispatchSourceTimer?
 #if DEBUG

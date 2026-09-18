@@ -366,9 +366,6 @@ extension ProgramaCLI {
                     client: client
                 )
                 _ = try client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                // The sidebar badge carries "Working" now; a turn start only drops any
-                // leftover verbose tool text from the previous turn.
-                _ = try? clearClaudeStatus(client: client, workspaceId: workspaceId)
                 reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "turn.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: parsedInput.sessionId)
                 print("OK")
             } catch {
@@ -3393,9 +3390,6 @@ extension ProgramaCLI {
                     ])
                 }
                 _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                // The sidebar badge carries "Working" now; a turn start only drops any
-                // leftover verbose tool text from the previous turn.
-                _ = try? clearCodexStatus(client: client, workspaceId: workspaceId)
                 let promptSubmitSurfaceId = try resolvePreferredSurfaceIdForClaudeHook(
                     preferred: mappedSession?.surfaceId,
                     fallback: surfaceArg,
@@ -3879,9 +3873,6 @@ extension ProgramaCLI {
                     ])
                 }
                 _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                // The sidebar badge carries "Working" now; a turn start only drops any
-                // leftover verbose tool text from the previous turn.
-                _ = try? clearOpenCodeStatus(client: client, workspaceId: workspaceId)
                 let promptSubmitSurfaceId = try resolvePreferredSurfaceIdForClaudeHook(
                     preferred: mappedSession?.surfaceId,
                     fallback: surfaceArg,
