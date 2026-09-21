@@ -48,6 +48,8 @@ struct SettingsView: View {
     private var customClaudePath = ""
     @AppStorage(AgentScreenDetectionSettings.enabledKey)
     private var agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
+    @AppStorage(TypeSafeCredentialStore.environmentDiscoveryEnabledKey)
+    private var typeSafeEnvironmentDiscoveryEnabled = TypeSafeCredentialStore.defaultEnvironmentDiscoveryEnabled
     @AppStorage(PreferredEditorSettings.key) private var preferredEditorCommand = ""
     @AppStorage(ProgramaPortRangePolicy.baseDefaultsKey)
     private var programaPortBase = ProgramaPortRangePolicy.defaultBase
@@ -107,6 +109,14 @@ struct SettingsView: View {
     @State private var socketPasswordDraft = ""
     @State private var socketPasswordStatusMessage: String?
     @State private var socketPasswordStatusIsError = false
+    @State private var typeSafeCredentialDraft = ""
+    @State private var typeSafeCredentialStatus: TypeSafeCredentialUIStatus = .unchecked
+    @State private var typeSafeCredentialStatusMessage: String?
+    @State private var typeSafeCredentialStatusIsError = false
+    @State private var typeSafeCredentialStatusRequestID = UUID()
+    @State private var typeSafeCredentialOperationID = UUID()
+    @State private var typeSafeCredentialOperationInFlight = false
+    @State private var typeSafeCredentialStatusCheckInFlight = false
     @State private var trustedDirectoriesDraft: String = ProgramaDirectoryTrust.shared.allTrustedPaths.joined(separator: "\n")
     @State private var installedExternalBrowsers: [(bundleIdentifier: String, name: String)] = []
 
@@ -326,6 +336,126 @@ struct SettingsView: View {
         } catch {
             socketPasswordStatusMessage = String(localized: "settings.automation.socketPassword.clearFailed", defaultValue: "Failed to clear password (\(error.localizedDescription)).")
             socketPasswordStatusIsError = true
+        }
+    }
+
+    private func refreshTypeSafeCredentialStatus() {
+        let requestID = UUID()
+        let discoverEnvironment = typeSafeEnvironmentDiscoveryEnabled
+        typeSafeCredentialStatusRequestID = requestID
+        typeSafeCredentialStatusCheckInFlight = true
+        Task { @MainActor in
+            let lookup = await TypeSafeCredentialExecutor.shared.credential(
+                discoverEnvironment: discoverEnvironment
+            )
+            guard typeSafeCredentialStatusRequestID == requestID else {
+                return
+            }
+            typeSafeCredentialStatusCheckInFlight = false
+            applyTypeSafeCredentialStatus(lookup)
+        }
+    }
+
+    private func applyTypeSafeCredentialStatus(_ lookup: TypeSafeCredentialLookup) {
+        switch lookup {
+        case .available(let credential):
+            typeSafeCredentialStatus = credential.source == .saved ? .saved : .environment
+        case .missing:
+            typeSafeCredentialStatus = .missing
+        case .unavailable:
+            typeSafeCredentialStatus = .unavailable
+        }
+    }
+
+    private func saveTypeSafeCredential() {
+        guard !typeSafeCredentialOperationInFlight else {
+            return
+        }
+        let operationID = UUID()
+        let candidate = typeSafeCredentialDraft
+        typeSafeCredentialOperationID = operationID
+        typeSafeCredentialOperationInFlight = true
+        Task { @MainActor in
+            let result = await TypeSafeCredentialExecutor.shared.save(candidate)
+            guard typeSafeCredentialOperationID == operationID else {
+                return
+            }
+            typeSafeCredentialOperationInFlight = false
+            switch result {
+            case .success:
+                typeSafeCredentialDraft = ""
+                typeSafeCredentialStatusMessage = String(
+                    localized: "settings.automation.typeSafe.saved",
+                    defaultValue: "Jev API key saved."
+                )
+                typeSafeCredentialStatusIsError = false
+            case .blank:
+                typeSafeCredentialStatusMessage = String(
+                    localized: "settings.automation.typeSafe.blank",
+                    defaultValue: "Enter an API key first."
+                )
+                typeSafeCredentialStatusIsError = true
+            case .invalidCharacters:
+                typeSafeCredentialStatusMessage = String(
+                    localized: "settings.automation.typeSafe.invalid",
+                    defaultValue: "API keys cannot contain spaces or control characters."
+                )
+                typeSafeCredentialStatusIsError = true
+            case .unavailable:
+                typeSafeCredentialStatusMessage = String(
+                    localized: "settings.automation.typeSafe.saveFailed",
+                    defaultValue: "The API key could not be saved securely."
+                )
+                typeSafeCredentialStatusIsError = true
+            }
+            refreshTypeSafeCredentialStatus()
+        }
+    }
+
+    private func removeTypeSafeCredential() {
+        guard !typeSafeCredentialOperationInFlight else {
+            return
+        }
+        let operationID = UUID()
+        typeSafeCredentialOperationID = operationID
+        typeSafeCredentialOperationInFlight = true
+        Task { @MainActor in
+            let result = await TypeSafeCredentialExecutor.shared.remove()
+            guard typeSafeCredentialOperationID == operationID else {
+                return
+            }
+            typeSafeCredentialOperationInFlight = false
+            switch result {
+            case .success:
+                typeSafeCredentialDraft = ""
+                typeSafeCredentialStatusMessage = String(
+                    localized: "settings.automation.typeSafe.removed",
+                    defaultValue: "Saved API key removed."
+                )
+                typeSafeCredentialStatusIsError = false
+            case .blank, .invalidCharacters, .unavailable:
+                typeSafeCredentialStatusMessage = String(
+                    localized: "settings.automation.typeSafe.removeFailed",
+                    defaultValue: "The saved API key could not be removed."
+                )
+                typeSafeCredentialStatusIsError = true
+            }
+            refreshTypeSafeCredentialStatus()
+        }
+    }
+
+    private var typeSafeCredentialStatusText: String {
+        switch typeSafeCredentialStatus {
+        case .unchecked:
+            return String(localized: "settings.automation.typeSafe.status.unchecked", defaultValue: "Not checked")
+        case .saved:
+            return String(localized: "settings.automation.typeSafe.status.saved", defaultValue: "Saved")
+        case .environment:
+            return String(localized: "settings.automation.typeSafe.status.environment", defaultValue: "Using TYPESAFE_API_KEY")
+        case .missing:
+            return String(localized: "settings.automation.typeSafe.status.missing", defaultValue: "Not configured")
+        case .unavailable:
+            return String(localized: "settings.automation.typeSafe.status.unavailable", defaultValue: "Storage unavailable")
         }
     }
 
@@ -1004,6 +1134,108 @@ struct SettingsView: View {
         SettingsSectionHeader(title: String(localized: "settings.section.agents", defaultValue: "Agents"))
         SettingsCard {
             SettingsCardRow(
+                String(localized: "settings.automation.typeSafe.credential", defaultValue: "Jev API Key"),
+                subtitle: nil
+            ) {
+                HStack(spacing: 8) {
+                    SecureField(
+                        String(localized: "settings.automation.typeSafe.placeholder", defaultValue: "API key"),
+                        text: $typeSafeCredentialDraft
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 170)
+                    .accessibilityLabel(
+                        String(localized: "settings.automation.typeSafe.credential", defaultValue: "Jev API Key")
+                    )
+
+                    Button(
+                        typeSafeCredentialStatus == .saved
+                            ? String(localized: "settings.automation.typeSafe.change", defaultValue: "Change")
+                            : String(localized: "settings.automation.typeSafe.save", defaultValue: "Save")
+                    ) {
+                        saveTypeSafeCredential()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(
+                        typeSafeCredentialOperationInFlight
+                            || typeSafeCredentialStatusCheckInFlight
+                            || typeSafeCredentialDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+
+                    if typeSafeCredentialStatus == .saved {
+                        Button(String(localized: "settings.automation.typeSafe.remove", defaultValue: "Remove")) {
+                            removeTypeSafeCredential()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(typeSafeCredentialOperationInFlight || typeSafeCredentialStatusCheckInFlight)
+                    }
+                }
+            }
+
+            SettingsCardDivider()
+
+            SettingsCardRow(
+                String(localized: "settings.automation.typeSafe.source", defaultValue: "Credential Source"),
+                subtitle: typeSafeCredentialStatusText
+            ) {
+                Button(String(localized: "settings.automation.typeSafe.check", defaultValue: "Check Credential Source")) {
+                    refreshTypeSafeCredentialStatus()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(typeSafeCredentialOperationInFlight || typeSafeCredentialStatusCheckInFlight)
+            }
+
+            SettingsCardDivider()
+
+            SettingsCardRow(
+                String(localized: "settings.automation.typeSafe.environmentDiscovery", defaultValue: "Discover from Environment"),
+                subtitle: String(localized: "settings.automation.typeSafe.environmentDiscovery.subtitle", defaultValue: "Use TYPESAFE_API_KEY when no saved key is available.")
+            ) {
+                Toggle("", isOn: Binding(
+                    get: { typeSafeEnvironmentDiscoveryEnabled },
+                    set: { enabled in
+                        typeSafeEnvironmentDiscoveryEnabled = enabled
+                        refreshTypeSafeCredentialStatus()
+                    }
+                ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(typeSafeCredentialOperationInFlight || typeSafeCredentialStatusCheckInFlight)
+                    .accessibilityLabel(
+                        String(localized: "settings.automation.typeSafe.environmentDiscovery", defaultValue: "Discover from Environment")
+                    )
+            }
+
+            SettingsCardDivider()
+
+            SettingsCardNote(
+                String(localized: "settings.automation.typeSafe.checkNote", defaultValue: "Checking the credential source may ask for Keychain access.")
+            )
+
+            SettingsCardNote(
+                String(localized: "settings.automation.typeSafe.removeNote", defaultValue: "Removing a saved key may reactivate TYPESAFE_API_KEY when environment discovery is enabled.")
+            )
+
+            if let message = typeSafeCredentialStatusMessage {
+                SettingsCardDivider()
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(typeSafeCredentialStatusIsError ? Color.red : Color.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+            }
+        }
+        .onDisappear {
+            typeSafeCredentialStatusRequestID = UUID()
+            typeSafeCredentialStatusCheckInFlight = false
+        }
+
+        SettingsCard {
+            SettingsCardRow(
                 String(localized: "settings.automation.claudeCode", defaultValue: "Claude Code Integration"),
                 subtitle: claudeCodeHooksEnabled
                     ? String(localized: "settings.automation.claudeCode.subtitleOn", defaultValue: "Sidebar shows Claude session status and notifications.")
@@ -1458,6 +1690,7 @@ struct SettingsView: View {
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
         customClaudePath = ""
         agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
+        typeSafeEnvironmentDiscoveryEnabled = TypeSafeCredentialStore.defaultEnvironmentDiscoveryEnabled
         preferredEditorCommand = ""
         browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
         browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled
@@ -1497,6 +1730,12 @@ struct SettingsView: View {
         socketPasswordDraft = ""
         socketPasswordStatusMessage = nil
         socketPasswordStatusIsError = false
+        typeSafeCredentialDraft = ""
+        typeSafeCredentialStatusMessage = nil
+        typeSafeCredentialStatusIsError = false
+        typeSafeCredentialStatusRequestID = UUID()
+        typeSafeCredentialStatusCheckInFlight = false
+        typeSafeCredentialStatus = .unchecked
         KeyboardShortcutSettings.resetAll()
         WorkspaceTabColorSettings.reset()
         WorkspaceTabColorSettings.resetRememberedFolderColors()
@@ -1507,6 +1746,14 @@ struct SettingsView: View {
         browserInsecureHTTPAllowlist = browserInsecureHTTPAllowlistDraft
     }
 
+}
+
+private enum TypeSafeCredentialUIStatus {
+    case unchecked
+    case saved
+    case environment
+    case missing
+    case unavailable
 }
 
 @MainActor

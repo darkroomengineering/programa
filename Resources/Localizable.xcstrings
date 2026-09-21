@@ -9227,6 +9227,160 @@
         }
       }
     },
+    "settings.automation.typeSafe.blank": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enter an API key first." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "API キーを入力してください。" } }
+      }
+    },
+    "settings.automation.typeSafe.check": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Check Credential Source" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "認証情報の取得元を確認" } }
+      }
+    },
+    "settings.automation.typeSafe.checkNote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Checking the credential source may ask for Keychain access." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "認証情報の取得元を確認すると、キーチェーンへのアクセスを求められる場合があります。" } }
+      }
+    },
+    "settings.automation.typeSafe.change": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Change" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "変更" } }
+      }
+    },
+    "settings.automation.typeSafe.credential": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Jev API Key" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Jev API キー" } }
+      }
+    },
+    "settings.automation.typeSafe.environmentDiscovery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Discover from Environment" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "環境変数から検出" } }
+      }
+    },
+    "settings.automation.typeSafe.environmentDiscovery.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Use TYPESAFE_API_KEY when no saved key is available." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "保存済みのキーがない場合に TYPESAFE_API_KEY を使用します。" } }
+      }
+    },
+    "settings.automation.typeSafe.invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "API keys cannot contain spaces or control characters." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "API キーに空白や制御文字は使用できません。" } }
+      }
+    },
+    "settings.automation.typeSafe.placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "API key" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "API キー" } }
+      }
+    },
+    "settings.automation.typeSafe.remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remove" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "削除" } }
+      }
+    },
+    "settings.automation.typeSafe.removeFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The saved API key could not be removed." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "保存済みの API キーを削除できませんでした。" } }
+      }
+    },
+    "settings.automation.typeSafe.removed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Saved API key removed." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "保存済みの API キーを削除しました。" } }
+      }
+    },
+    "settings.automation.typeSafe.removeNote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Removing a saved key may reactivate TYPESAFE_API_KEY when environment discovery is enabled." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "環境変数からの検出が有効な場合、保存済みのキーを削除すると TYPESAFE_API_KEY が再び使用されることがあります。" } }
+      }
+    },
+    "settings.automation.typeSafe.save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Save" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "保存" } }
+      }
+    },
+    "settings.automation.typeSafe.saveFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The API key could not be saved securely." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "API キーを安全に保存できませんでした。" } }
+      }
+    },
+    "settings.automation.typeSafe.saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Jev API key saved." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Jev API キーを保存しました。" } }
+      }
+    },
+    "settings.automation.typeSafe.status.environment": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Using TYPESAFE_API_KEY" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "TYPESAFE_API_KEY を使用中" } }
+      }
+    },
+    "settings.automation.typeSafe.status.missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Not configured" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "未設定" } }
+      }
+    },
+    "settings.automation.typeSafe.status.saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Saved" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "保存済み" } }
+      }
+    },
+    "settings.automation.typeSafe.source": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Credential Source" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "認証情報の取得元" } }
+      }
+    },
+    "settings.automation.typeSafe.status.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Storage unavailable" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ストレージを利用できません" } }
+      }
+    },
+    "settings.automation.typeSafe.status.unchecked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Not checked" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "未確認" } }
+      }
+    },
     "settings.blendMode.behindWindow": {
       "extractionState": "manual",
       "localizations": {

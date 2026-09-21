@@ -5,4 +5,25 @@
   <data name="OK" xml:space="preserve"><value>OK</value></data>
   <data name="Shortcut_open_settings" xml:space="preserve"><value>Open Settings</value></data><data name="Shortcut_new_tab" xml:space="preserve"><value>New tab</value></data><data name="Shortcut_close_tab" xml:space="preserve"><value>Close tab</value></data><data name="Shortcut_split_vertical" xml:space="preserve"><value>Split vertically</value></data><data name="Shortcut_split_horizontal" xml:space="preserve"><value>Split horizontally</value></data><data name="Shortcut_select_tab_1" xml:space="preserve"><value>Select tab 1</value></data><data name="Shortcut_select_tab_2" xml:space="preserve"><value>Select tab 2</value></data><data name="Shortcut_select_tab_3" xml:space="preserve"><value>Select tab 3</value></data><data name="Shortcut_select_tab_4" xml:space="preserve"><value>Select tab 4</value></data><data name="Shortcut_select_tab_5" xml:space="preserve"><value>Select tab 5</value></data><data name="Shortcut_select_tab_6" xml:space="preserve"><value>Select tab 6</value></data><data name="Shortcut_select_tab_7" xml:space="preserve"><value>Select tab 7</value></data><data name="Shortcut_select_tab_8" xml:space="preserve"><value>Select tab 8</value></data><data name="Shortcut_select_tab_9" xml:space="preserve"><value>Select tab 9</value></data><data name="Shortcut_copy" xml:space="preserve"><value>Copy</value></data><data name="Shortcut_paste" xml:space="preserve"><value>Paste</value></data><data name="Shortcut_paste_alternate" xml:space="preserve"><value>Paste (alternate)</value></data>
   <data name="TerminalSpawnFailed" xml:space="preserve"><value>The terminal could not start.</value></data><data name="TerminalRetry" xml:space="preserve"><value>Retry</value></data><data name="TerminalCopy" xml:space="preserve"><value>Copy</value></data><data name="TerminalPaste" xml:space="preserve"><value>Paste</value></data><data name="TerminalAccessibilityName" xml:space="preserve"><value>Terminal</value></data>
+  <data name="TypeSafeJev" xml:space="preserve"><value>TypeSafe Jev</value></data>
+  <data name="TypeSafeCredential" xml:space="preserve"><value>Jev API key</value></data>
+  <data name="TypeSafeCredentialPlaceholder" xml:space="preserve"><value>API key</value></data>
+  <data name="TypeSafeCredentialStatus" xml:space="preserve"><value>Jev API key status</value></data>
+  <data name="TypeSafeSave" xml:space="preserve"><value>Save</value></data>
+  <data name="TypeSafeChange" xml:space="preserve"><value>Change</value></data>
+  <data name="TypeSafeRemove" xml:space="preserve"><value>Remove</value></data>
+  <data name="TypeSafeEnvironmentDiscovery" xml:space="preserve"><value>Discover from environment</value></data>
+  <data name="TypeSafeEnvironmentDiscoveryDescription" xml:space="preserve"><value>Use TYPESAFE_API_KEY when no saved key is available.</value></data>
+  <data name="TypeSafeRemoveNote" xml:space="preserve"><value>Removing a saved key may reactivate TYPESAFE_API_KEY when environment discovery is enabled.</value></data>
+  <data name="TypeSafeStatusSaved" xml:space="preserve"><value>Saved</value></data>
+  <data name="TypeSafeStatusEnvironment" xml:space="preserve"><value>Using TYPESAFE_API_KEY</value></data>
+  <data name="TypeSafeStatusMissing" xml:space="preserve"><value>Not configured</value></data>
+  <data name="TypeSafeStatusUnavailable" xml:space="preserve"><value>Storage unavailable</value></data>
+  <data name="TypeSafeSaved" xml:space="preserve"><value>Jev API key saved.</value></data>
+  <data name="TypeSafeRemoved" xml:space="preserve"><value>Saved API key removed.</value></data>
+  <data name="TypeSafeBlank" xml:space="preserve"><value>Enter an API key first.</value></data>
+  <data name="TypeSafeInvalid" xml:space="preserve"><value>API keys cannot contain spaces or control characters.</value></data>
+  <data name="TypeSafeSaveFailed" xml:space="preserve"><value>The API key could not be saved securely.</value></data>
+  <data name="TypeSafeRemoveFailed" xml:space="preserve"><value>The saved API key could not be removed.</value></data>
+  <data name="TypeSafePreferenceFailed" xml:space="preserve"><value>The environment discovery preference could not be saved.</value></data>
 </root>

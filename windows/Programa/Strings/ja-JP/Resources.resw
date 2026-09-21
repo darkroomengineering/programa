@@ -5,4 +5,25 @@
   <data name="OK" xml:space="preserve"><value>OK</value></data>
   <data name="Shortcut_open_settings" xml:space="preserve"><value>設定を開く</value></data><data name="Shortcut_new_tab" xml:space="preserve"><value>新しいタブ</value></data><data name="Shortcut_close_tab" xml:space="preserve"><value>タブを閉じる</value></data><data name="Shortcut_split_vertical" xml:space="preserve"><value>縦に分割</value></data><data name="Shortcut_split_horizontal" xml:space="preserve"><value>横に分割</value></data><data name="Shortcut_select_tab_1" xml:space="preserve"><value>タブ1を選択</value></data><data name="Shortcut_select_tab_2" xml:space="preserve"><value>タブ2を選択</value></data><data name="Shortcut_select_tab_3" xml:space="preserve"><value>タブ3を選択</value></data><data name="Shortcut_select_tab_4" xml:space="preserve"><value>タブ4を選択</value></data><data name="Shortcut_select_tab_5" xml:space="preserve"><value>タブ5を選択</value></data><data name="Shortcut_select_tab_6" xml:space="preserve"><value>タブ6を選択</value></data><data name="Shortcut_select_tab_7" xml:space="preserve"><value>タブ7を選択</value></data><data name="Shortcut_select_tab_8" xml:space="preserve"><value>タブ8を選択</value></data><data name="Shortcut_select_tab_9" xml:space="preserve"><value>タブ9を選択</value></data><data name="Shortcut_copy" xml:space="preserve"><value>コピー</value></data><data name="Shortcut_paste" xml:space="preserve"><value>貼り付け</value></data><data name="Shortcut_paste_alternate" xml:space="preserve"><value>貼り付け（代替）</value></data>
   <data name="TerminalSpawnFailed" xml:space="preserve"><value>ターミナルを起動できませんでした。</value></data><data name="TerminalRetry" xml:space="preserve"><value>再試行</value></data><data name="TerminalCopy" xml:space="preserve"><value>コピー</value></data><data name="TerminalPaste" xml:space="preserve"><value>貼り付け</value></data><data name="TerminalAccessibilityName" xml:space="preserve"><value>ターミナル</value></data>
+  <data name="TypeSafeJev" xml:space="preserve"><value>TypeSafe Jev</value></data>
+  <data name="TypeSafeCredential" xml:space="preserve"><value>Jev API キー</value></data>
+  <data name="TypeSafeCredentialPlaceholder" xml:space="preserve"><value>API キー</value></data>
+  <data name="TypeSafeCredentialStatus" xml:space="preserve"><value>Jev API キーの状態</value></data>
+  <data name="TypeSafeSave" xml:space="preserve"><value>保存</value></data>
+  <data name="TypeSafeChange" xml:space="preserve"><value>変更</value></data>
+  <data name="TypeSafeRemove" xml:space="preserve"><value>削除</value></data>
+  <data name="TypeSafeEnvironmentDiscovery" xml:space="preserve"><value>環境変数から検出</value></data>
+  <data name="TypeSafeEnvironmentDiscoveryDescription" xml:space="preserve"><value>保存済みのキーがない場合に TYPESAFE_API_KEY を使用します。</value></data>
+  <data name="TypeSafeRemoveNote" xml:space="preserve"><value>環境変数からの検出が有効な場合、保存済みのキーを削除すると TYPESAFE_API_KEY が再び使用されることがあります。</value></data>
+  <data name="TypeSafeStatusSaved" xml:space="preserve"><value>保存済み</value></data>
+  <data name="TypeSafeStatusEnvironment" xml:space="preserve"><value>TYPESAFE_API_KEY を使用中</value></data>
+  <data name="TypeSafeStatusMissing" xml:space="preserve"><value>未設定</value></data>
+  <data name="TypeSafeStatusUnavailable" xml:space="preserve"><value>ストレージを利用できません</value></data>
+  <data name="TypeSafeSaved" xml:space="preserve"><value>Jev API キーを保存しました。</value></data>
+  <data name="TypeSafeRemoved" xml:space="preserve"><value>保存済みの API キーを削除しました。</value></data>
+  <data name="TypeSafeBlank" xml:space="preserve"><value>API キーを入力してください。</value></data>
+  <data name="TypeSafeInvalid" xml:space="preserve"><value>API キーに空白や制御文字は使用できません。</value></data>
+  <data name="TypeSafeSaveFailed" xml:space="preserve"><value>API キーを安全に保存できませんでした。</value></data>
+  <data name="TypeSafeRemoveFailed" xml:space="preserve"><value>保存済みの API キーを削除できませんでした。</value></data>
+  <data name="TypeSafePreferenceFailed" xml:space="preserve"><value>環境変数からの検出設定を保存できませんでした。</value></data>
 </root>

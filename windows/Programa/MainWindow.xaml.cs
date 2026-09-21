@@ -464,6 +464,115 @@ public sealed partial class MainWindow : Window
     {
         if (_dialogOpen || Root.XamlRoot is null) return;
         var panel = new StackPanel { Spacing = 8, MinWidth = 420 };
+        var typeSafeStore = new TypeSafeCredentialStore();
+        var typeSafeHeading = new TextBlock { Text = Localizer.Get("TypeSafeJev") };
+        AutomationProperties.SetName(typeSafeHeading, Localizer.Get("TypeSafeJev"));
+        panel.Children.Add(typeSafeHeading);
+
+        var typeSafeCredential = new PasswordBox
+        {
+            Header = Localizer.Get("TypeSafeCredential"),
+            PlaceholderText = Localizer.Get("TypeSafeCredentialPlaceholder"),
+            PasswordRevealMode = PasswordRevealMode.Hidden,
+        };
+        AutomationProperties.SetName(typeSafeCredential, Localizer.Get("TypeSafeCredential"));
+        panel.Children.Add(typeSafeCredential);
+
+        var typeSafeSource = new TextBlock();
+        AutomationProperties.SetName(typeSafeSource, Localizer.Get("TypeSafeCredentialStatus"));
+        panel.Children.Add(typeSafeSource);
+
+        var typeSafeMessage = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        panel.Children.Add(typeSafeMessage);
+
+        var typeSafeSave = new Button();
+        var typeSafeRemove = new Button { Content = Localizer.Get("TypeSafeRemove") };
+        AutomationProperties.SetName(typeSafeRemove, Localizer.Get("TypeSafeRemove"));
+        var typeSafeActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        typeSafeActions.Children.Add(typeSafeSave);
+        typeSafeActions.Children.Add(typeSafeRemove);
+        panel.Children.Add(typeSafeActions);
+
+        var typeSafeEnvironmentDiscovery = new CheckBox
+        {
+            Content = Localizer.Get("TypeSafeEnvironmentDiscovery"),
+            IsChecked = typeSafeStore.EnvironmentDiscoveryEnabled,
+        };
+        AutomationProperties.SetName(typeSafeEnvironmentDiscovery, Localizer.Get("TypeSafeEnvironmentDiscovery"));
+        panel.Children.Add(typeSafeEnvironmentDiscovery);
+        panel.Children.Add(new TextBlock
+        {
+            Text = Localizer.Get("TypeSafeEnvironmentDiscoveryDescription"),
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = Localizer.Get("TypeSafeRemoveNote"),
+            TextWrapping = TextWrapping.Wrap,
+        });
+
+        void RefreshTypeSafeStatus()
+        {
+            var lookup = typeSafeStore.Credential();
+            var saved = lookup.Kind == TypeSafeCredentialLookupKind.Available
+                && lookup.Credential?.Source == TypeSafeCredentialSource.Saved;
+            typeSafeSource.Text = lookup.Kind switch
+            {
+                TypeSafeCredentialLookupKind.Available when saved => Localizer.Get("TypeSafeStatusSaved"),
+                TypeSafeCredentialLookupKind.Available => Localizer.Get("TypeSafeStatusEnvironment"),
+                TypeSafeCredentialLookupKind.Unavailable => Localizer.Get("TypeSafeStatusUnavailable"),
+                _ => Localizer.Get("TypeSafeStatusMissing"),
+            };
+            typeSafeSave.Content = saved ? Localizer.Get("TypeSafeChange") : Localizer.Get("TypeSafeSave");
+            AutomationProperties.SetName(typeSafeSave, (string)typeSafeSave.Content);
+            typeSafeRemove.Visibility = saved ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        typeSafeSave.Click += (_, _) =>
+        {
+            switch (typeSafeStore.Save(typeSafeCredential.Password))
+            {
+                case TypeSafeCredentialOperation.Success:
+                    typeSafeCredential.Password = "";
+                    typeSafeMessage.Text = Localizer.Get("TypeSafeSaved");
+                    break;
+                case TypeSafeCredentialOperation.Blank:
+                    typeSafeMessage.Text = Localizer.Get("TypeSafeBlank");
+                    break;
+                case TypeSafeCredentialOperation.InvalidCharacters:
+                    typeSafeMessage.Text = Localizer.Get("TypeSafeInvalid");
+                    break;
+                case TypeSafeCredentialOperation.Unavailable:
+                    typeSafeMessage.Text = Localizer.Get("TypeSafeSaveFailed");
+                    break;
+            }
+            RefreshTypeSafeStatus();
+        };
+        typeSafeRemove.Click += (_, _) =>
+        {
+            if (typeSafeStore.Remove() == TypeSafeCredentialOperation.Success)
+            {
+                typeSafeCredential.Password = "";
+                typeSafeMessage.Text = Localizer.Get("TypeSafeRemoved");
+            }
+            else
+            {
+                typeSafeMessage.Text = Localizer.Get("TypeSafeRemoveFailed");
+            }
+            RefreshTypeSafeStatus();
+        };
+        typeSafeEnvironmentDiscovery.Click += (_, _) =>
+        {
+            var enabled = typeSafeEnvironmentDiscovery.IsChecked == true;
+            if (!typeSafeStore.SetEnvironmentDiscoveryEnabled(enabled))
+            {
+                typeSafeEnvironmentDiscovery.IsChecked = typeSafeStore.EnvironmentDiscoveryEnabled;
+                typeSafeMessage.Text = Localizer.Get("TypeSafePreferenceFailed");
+            }
+            RefreshTypeSafeStatus();
+        };
+        RefreshTypeSafeStatus();
+
         var editors = new Dictionary<string, TextBox>(StringComparer.Ordinal);
         foreach (var pair in _shortcuts.Values)
         {
