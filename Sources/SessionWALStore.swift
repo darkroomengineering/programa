@@ -1127,12 +1127,18 @@ final class SessionWALStore {
     /// flushes any remaining buffered bytes, and forgets the writer.
     /// `deleteDirectory` should be `true` only at a surface's genuine final
     /// teardown (normal close) — see the file-level "Cleanup" doc comment.
-    func unregister(surface: ghostty_surface_t?, surfaceId: String, deleteDirectory: Bool = false) {
+    func unregister(
+        surface: ghostty_surface_t?,
+        surfaceId: String,
+        deleteDirectory: Bool = false,
+        completion: (@Sendable () -> Void)? = nil
+    ) {
         if let surface {
             ghostty_surface_set_pty_tee_cb(surface, nil, nil)
         }
         writeQueue.async { [weak self] in
             self?.stopWriter(surfaceId: surfaceId, deleteDirectory: deleteDirectory)
+            completion?()
         }
     }
 

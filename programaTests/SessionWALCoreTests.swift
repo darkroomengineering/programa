@@ -447,6 +447,89 @@ final class SessionWALDeferredReviveEscrowTests: XCTestCase {
     }
 }
 
+final class SessionWALTeardownRetentionTests: XCTestCase {
+    func testShutdownAndDeinitPreserveEscrowMetadataForRelaunch() throws {
+        let shutdownSession = try makeEscrowedSession()
+        let deinitSession = try makeEscrowedSession()
+        defer {
+            try? FileManager.default.removeItem(at: shutdownSession.paths.sessionDirectory)
+            try? FileManager.default.removeItem(at: deinitSession.paths.sessionDirectory)
+        }
+
+        let shutdownCompleted = expectation(description: "shutdown teardown completed")
+        TerminalSurface.unregisterSessionWALForTeardown(
+            surface: nil,
+            surfaceId: shutdownSession.id,
+            reason: "teardown",
+            isApplicationTerminating: true,
+            completion: { shutdownCompleted.fulfill() }
+        )
+        let deinitCompleted = expectation(description: "deinit teardown completed")
+        TerminalSurface.unregisterSessionWALForTeardown(
+            surface: nil,
+            surfaceId: deinitSession.id,
+            reason: "deinit",
+            isApplicationTerminating: false,
+            completion: { deinitCompleted.fulfill() }
+        )
+        wait(for: [shutdownCompleted, deinitCompleted], timeout: 5.0)
+
+        XCTAssertEqual(
+            SessionWALStore.shared.readMeta(sessionId: shutdownSession.id)?.escrowToken,
+            shutdownSession.token,
+            "an update restart must retain the claim token needed to reconnect the running terminal"
+        )
+        XCTAssertEqual(
+            SessionWALStore.shared.readMeta(sessionId: deinitSession.id)?.escrowToken,
+            deinitSession.token,
+            "deallocation without a finalized close must leave the terminal recoverable"
+        )
+    }
+
+    func testFinalizedUserCloseRemovesEscrowMetadata() throws {
+        let session = try makeEscrowedSession()
+        defer { try? FileManager.default.removeItem(at: session.paths.sessionDirectory) }
+
+        let teardownCompleted = expectation(description: "final close teardown completed")
+        TerminalSurface.unregisterSessionWALForTeardown(
+            surface: nil,
+            surfaceId: session.id,
+            reason: "teardown",
+            isApplicationTerminating: false,
+            completion: { teardownCompleted.fulfill() }
+        )
+        wait(for: [teardownCompleted], timeout: 5.0)
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: session.paths.sessionDirectory.path),
+            "a finalized user close must remove recovery state so the closed terminal does not return on relaunch"
+        )
+    }
+
+    private func makeEscrowedSession() throws -> (id: String, token: String, paths: SessionWALPaths) {
+        let id = UUID().uuidString
+        let token = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let paths = try XCTUnwrap(SessionWALPaths.make(sessionId: id))
+        SessionWALStore.shared.stampDeferredReviveEscrow(
+            surfaceId: id,
+            socketPath: "/tmp/programa-test-escrow.sock",
+            token: token,
+            childPID: 4242,
+            workingDirectory: "/tmp"
+        )
+
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            if SessionWALStore.shared.readMeta(sessionId: id)?.escrowToken == token {
+                return (id, token, paths)
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTFail("escrow fixture metadata was not persisted before teardown")
+        return (id, token, paths)
+    }
+}
+
 // Issue #307 orphan-reconciliation fix: `escrowedSessionIds(excluding:)` is the
 // enumeration primitive `AppDelegate.reconcileOrphanedEscrowedSessions` uses to
 // find escrow-claimed session directories the coarse-snapshot restore never

@@ -1088,10 +1088,13 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 // Keep free behavior aligned across teardown sites: perform the runtime
                 // teardown on the next main-actor turn so SIGHUP delivery is
                 // deterministic but non-reentrant. Clear the PTY tee right before
-                // free, per the C API contract. Both call sites are the surface's
-                // genuine normal-close path, so delete its WAL directory now that
-                // it's torn down.
-                SessionWALStore.shared.unregister(surface: surfaceToFree, surfaceId: surfaceIdForTap, deleteDirectory: true)
+                // free, per the C API contract.
+                Self.unregisterSessionWALForTeardown(
+                    surface: surfaceToFree,
+                    surfaceId: surfaceIdForTap,
+                    reason: reason,
+                    isApplicationTerminating: SessionMachineryGate.isApplicationTerminating
+                )
                 GhosttyApp.cancelConfirmationsBeforeFree(surfaceToFree)
                 ghostty_surface_free(surfaceToFree)
                 GhosttySurfaceUserdataRegistry.release(callbackContext)
@@ -1933,6 +1936,21 @@ final class TerminalSurface: Identifiable, ObservableObject {
         isApplicationTerminating: Bool
     ) -> Bool {
         reason == "teardown" && !isApplicationTerminating
+    }
+
+    nonisolated static func unregisterSessionWALForTeardown(
+        surface: ghostty_surface_t?,
+        surfaceId: String,
+        reason: String,
+        isApplicationTerminating: Bool,
+        completion: (@Sendable () -> Void)? = nil
+    ) {
+        SessionWALStore.shared.unregister(
+            surface: surface,
+            surfaceId: surfaceId,
+            deleteDirectory: true,
+            completion: completion
+        )
     }
 
     private func releaseEscrowedSessionIfClosedForGood(reason: String) {
