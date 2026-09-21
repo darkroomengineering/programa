@@ -126,9 +126,9 @@ import Bonsplit
 /// text, not a parallel restore path.
 ///
 /// ## Cleanup
-/// - A surface that tears down for real (`TerminalSurface.teardownSurface()`
-///   or `deinit`, whichever actually runs the free — the other is a no-op
-///   guarded by `surface == nil`) deletes its session directory.
+/// - A finalized user close deletes its session directory. Shutdown and
+///   deallocation preserve the directory because it contains the token needed
+///   to reconnect any process retained by the escrow holder.
 /// - Once restore has consumed (or found empty) an old session's WAL as
 ///   fallback, `Workspace+Persistence.swift` calls
 ///   `SessionWALStore.shared.discardOrphanedSession(sessionId:)` to delete
@@ -1127,12 +1127,18 @@ final class SessionWALStore {
     /// flushes any remaining buffered bytes, and forgets the writer.
     /// `deleteDirectory` should be `true` only at a surface's genuine final
     /// teardown (normal close) — see the file-level "Cleanup" doc comment.
-    func unregister(surface: ghostty_surface_t?, surfaceId: String, deleteDirectory: Bool = false) {
+    func unregister(
+        surface: ghostty_surface_t?,
+        surfaceId: String,
+        deleteDirectory: Bool = false,
+        completion: (@Sendable () -> Void)? = nil
+    ) {
         if let surface {
             ghostty_surface_set_pty_tee_cb(surface, nil, nil)
         }
         writeQueue.async { [weak self] in
             self?.stopWriter(surfaceId: surfaceId, deleteDirectory: deleteDirectory)
+            completion?()
         }
     }
 
