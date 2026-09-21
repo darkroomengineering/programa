@@ -92,6 +92,33 @@ final class WindowGlassEffectTests: XCTestCase {
         XCTAssertFalse(themeFrame.subviews.contains(where: { $0 === backdrop }))
     }
 
+    func testMainWindowSpacerToolbarHidesInFullScreenAndReturnsAfter() {
+        _ = NSApplication.shared
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        let toolbar = NSToolbar(identifier: mainWindowToolbarIdentifier)
+        window.toolbar = toolbar
+        XCTAssertTrue(toolbar.isVisible)
+
+        // Native full screen draws a visible toolbar as an opaque strip over
+        // the sidebar header and tab strip; the spacer must go away for the
+        // duration and come back for the windowed traffic-light centering.
+        AppDelegate.syncMainWindowToolbarVisibility(window, inFullScreen: true)
+        XCTAssertFalse(toolbar.isVisible)
+        AppDelegate.syncMainWindowToolbarVisibility(window, inFullScreen: false)
+        XCTAssertTrue(toolbar.isVisible)
+
+        // Only the main-window spacer toolbar is managed.
+        let foreign = NSToolbar(identifier: NSToolbar.Identifier("test.other"))
+        window.toolbar = foreign
+        AppDelegate.syncMainWindowToolbarVisibility(window, inFullScreen: true)
+        XCTAssertTrue(foreign.isVisible)
+    }
+
     func testNativePaneChromePillsOwnAppKitControlsAboveTerminalPortal() throws {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
