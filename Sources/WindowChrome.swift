@@ -33,7 +33,10 @@ enum ChromeDensity {
 
     // MARK: - Window card / insets / radii
 
-    static let windowCornerRadiusDefault: CGFloat = 12
+    /// Measured against the system window corner on macOS 26 (circle fit of the
+    /// bottom-right alpha edge: 33px at 2x); the content card and sidebar panel
+    /// derive from it so their curves stay concentric with the window.
+    static let windowCornerRadiusDefault: CGFloat = 16
     static var windowCornerRadius: CGFloat { resolved("windowCornerRadius", default: windowCornerRadiusDefault) }
 
     static let sidebarPanelInsetDefault: CGFloat = 6

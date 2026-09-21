@@ -30,17 +30,17 @@ struct SidebarFooter: View {
     }
 }
 
+/// Footer icon buttons sit on the sidebar row grid: the glyph occupies the same
+/// 16pt column as a row's leading icon (pin, worktree badge), padded out to a
+/// 24pt click box. The buttons are laid out flush, so consecutive glyph columns
+/// sit 24pt apart.
 enum SidebarFooterControlLayout {
-    static let buttonSize: CGFloat = 44
-    /// Traffic lights sit on a 20pt pitch; the thinner outline glyphs need one
-    /// extra grid step to read as evenly spaced next to them.
-    static let visualPitch: CGFloat = 24
-
-    static func helpIconOffset(clustersWithUsage: Bool) -> CGFloat {
-        clustersWithUsage ? (buttonSize - visualPitch) / 2 : 0
-    }
-
-    static let usageIconOffset = -(buttonSize - visualPitch) / 2
+    static let glyphSlot: CGFloat = SidebarRowMetrics.leadingIconSlotWidth
+    static let hitInset: CGFloat = 4
+    static var buttonSize: CGFloat { glyphSlot + hitInset * 2 }
+    /// Leading padding inside the footer's 8pt edge that puts the first glyph on
+    /// the row icon column (edge 8 + row padding 8).
+    static var leadingInset: CGFloat { ChromeDensity.sidebarRowHorizontalPadding - hitInset }
 }
 
 private struct SidebarFooterButtons: View {
@@ -49,18 +49,15 @@ private struct SidebarFooterButtons: View {
     let onSendFeedback: () -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
-            HStack(spacing: 0) {
-                SidebarHelpMenuButton(
-                    clustersWithUsage: showProviderUsage,
-                    onSendFeedback: onSendFeedback
-                )
-                if showProviderUsage {
-                    SidebarUsageButton()
-                }
+        HStack(spacing: 0) {
+            SidebarHelpMenuButton(onSendFeedback: onSendFeedback)
+            if showProviderUsage {
+                SidebarUsageButton()
             }
             UpdatePill(model: updateViewModel)
+                .padding(.leading, SidebarFooterControlLayout.hitInset)
         }
+        .padding(.leading, SidebarFooterControlLayout.leadingInset)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -88,7 +85,7 @@ private struct SidebarUsageButton: View {
                 .symbolRasterSize(iconSize, weight: .medium)
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                 .frame(width: buttonSize, height: buttonSize, alignment: .center)
-                .offset(x: SidebarFooterControlLayout.usageIconOffset)
+                .contentShape(Rectangle())
         }
         .buttonStyle(SidebarFooterIconButtonStyle())
         .frame(width: buttonSize, height: buttonSize, alignment: .center)
@@ -138,7 +135,6 @@ private struct SidebarHelpMenuButton: View {
     private let iconSize: CGFloat = 11
     @ObservedObject private var keyboardShortcutSettingsObserver = KeyboardShortcutSettingsObserver.shared
 
-    let clustersWithUsage: Bool
     let onSendFeedback: () -> Void
 
     @State private var isPopoverPresented = false
@@ -157,7 +153,7 @@ private struct SidebarHelpMenuButton: View {
                 .symbolRasterSize(iconSize, weight: .medium)
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                 .frame(width: buttonSize, height: buttonSize, alignment: .center)
-                .offset(x: SidebarFooterControlLayout.helpIconOffset(clustersWithUsage: clustersWithUsage))
+                .contentShape(Rectangle())
         }
         .buttonStyle(SidebarFooterIconButtonStyle())
         .frame(width: buttonSize, height: buttonSize, alignment: .center)
@@ -257,7 +253,7 @@ private struct SidebarHelpMenuButton: View {
     #if DEBUG
     @MainActor
     static func popoverFittingSizeForTesting() -> NSSize {
-        let button = Self(clustersWithUsage: false, onSendFeedback: {})
+        let button = Self(onSendFeedback: {})
         let coordinator = ArrowlessPopoverAnchor<AnyView>.Coordinator(
             isPresented: .constant(true)
         )

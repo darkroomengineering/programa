@@ -45,6 +45,17 @@ struct SidebarRowMetrics: Equatable {
     let cornerRadius: CGFloat
     let titleFontSize: CGFloat
 
+    /// Fixed leading column for the row's status glyphs (pin, worktree, unread), so
+    /// every title starts at the same x whether or not a glyph is present. The
+    /// footer's icon buttons share this column.
+    static let leadingIconSlotWidth: CGFloat = 16
+    static let leadingIconGap: CGFloat = 6
+    /// Center of the leading icon column from the sidebar edge (8pt list edge +
+    /// 8pt row padding + half the slot); the header controls mirror it trailing.
+    static var trailingIconColumnCenter: CGFloat {
+        8 + ChromeDensity.sidebarRowHorizontalPadding + leadingIconSlotWidth / 2
+    }
+
     static var current: SidebarRowMetrics {
         SidebarRowMetrics(
             verticalPadding: ChromeDensity.sidebarRowVerticalPadding,
@@ -278,7 +289,7 @@ struct TabItemView: View, Equatable {
     /// Filtered out at render time so older CLI builds that still send them don't double up
     /// with the badge above.
     private static let agentStateStatusKeys: Set<String> = ["claude_code", "codex", "opencode"]
-    private static let agentStateStatusValues: Set<String> = ["Running", "Waiting", "Needs input"]
+    private static let agentStateStatusValues: Set<String> = ["Running", "Waiting", "Needs input", "Idle"]
 
     private func agentIndicatorTintColor(_ indicator: SidebarAgentIndicator) -> Color {
         switch indicator.tint {
@@ -374,7 +385,8 @@ struct TabItemView: View, Equatable {
         let branchLinesContainBranch = sidebarShowGitBranch && branchDirectoryLines.contains { $0.branch != nil }
 
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
+            HStack(spacing: SidebarRowMetrics.leadingIconGap) {
+                HStack(spacing: 4) {
                 if isWorktreeFolder {
                     if worktreeChildCount > 0 {
                         Button {
@@ -413,24 +425,25 @@ struct TabItemView: View, Equatable {
                         .accessibilityLabel(Text(worktreeBadgeAccessibilityLabel))
                 }
 
-                if unreadCount > 0 {
-                    ZStack {
-                        Circle()
-                            .fill(activeUnreadBadgeFillColor)
-                        Text("\(unreadCount)")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                    .frame(width: 16, height: 16)
-                }
-
                 if tab.isPinned {
                     Image(systemName: "pin.fill")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundColor(activeSecondaryColor(0.8))
                         .safeHelp(protectedWorkspaceTooltip)
                 }
+                }
+                .frame(minWidth: SidebarRowMetrics.leadingIconSlotWidth, alignment: .center)
 
+                Text(tab.title)
+                    .font(.system(size: rowMetrics.titleFontSize, weight: titleFontWeight))
+                    .foregroundColor(activePrimaryTextColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+
+                Spacer(minLength: 0)
+
+                // Dynamic state sits trailing so the static titles share one left edge.
                 if let agentIndicator {
                     HStack(spacing: 3) {
                         Image(systemName: agentIndicator.systemImage)
@@ -447,14 +460,16 @@ struct TabItemView: View, Equatable {
                     .accessibilityLabel(Text(agentIndicator.label))
                 }
 
-                Text(tab.title)
-                    .font(.system(size: rowMetrics.titleFontSize, weight: titleFontWeight))
-                    .foregroundColor(activePrimaryTextColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-
-                Spacer(minLength: 0)
+                if unreadCount > 0 {
+                    ZStack {
+                        Circle()
+                            .fill(activeUnreadBadgeFillColor)
+                        Text("\(unreadCount)")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 16, height: 16)
+                }
 
                 SidebarTrailingAccessorySlot(
                     minimumWidth: trailingAccessoryWidth,
@@ -710,7 +725,6 @@ struct TabItemView: View, Equatable {
                     }
                 }
         )
-        .padding(.horizontal, 6)
         .background {
             GeometryReader { proxy in
                 Color.clear
