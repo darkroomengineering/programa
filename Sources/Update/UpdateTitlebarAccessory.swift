@@ -375,7 +375,7 @@ struct TitlebarControlsView: View {
             // gap between the last traffic light and the first titlebar icon matches the gap
             // between the icons themselves — one rhythm, not two.
             .padding(.leading, config.spacing)
-            .padding(.trailing, titlebarHintTrailingInset)
+            .padding(.trailing, titlebarHintTrailingInset(for: config))
             .contentShape(Rectangle())
             .opacity(shouldShowControls ? 1 : 0)
             .allowsHitTesting(shouldShowControls)
@@ -406,9 +406,10 @@ struct TitlebarControlsView: View {
             }
     }
 
-    private var titlebarHintTrailingInset: CGFloat {
-        // Keep room for blur + shadow so the rightmost hint never clips.
-        max(0, ShortcutHintDebugSettings.clamped(titlebarShortcutHintXOffset)) + titlebarHintRightSafetyShift + 8
+    /// Puts the last icon's center 24pt from the sidebar edge, the same column
+    /// as the row close buttons and the row icon column mirrored from the left.
+    private func titlebarHintTrailingInset(for config: TitlebarControlsStyleConfig) -> CGFloat {
+        max(0, SidebarRowMetrics.trailingIconColumnCenter - config.buttonSize / 2)
     }
 
     private func titlebarHintVerticalBaseOffset(for config: TitlebarControlsStyleConfig) -> CGFloat {

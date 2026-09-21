@@ -1075,16 +1075,16 @@ final class SidebarQuotaPresentationTests: XCTestCase {
         )
     }
 
-    func testFooterControlsKeepAccessibleTargetsOnATrafficLightVisualPitch() {
-        let buttonSize = SidebarFooterControlLayout.buttonSize
-        let helpCenter = buttonSize / 2
-            + SidebarFooterControlLayout.helpIconOffset(clustersWithUsage: true)
-        let usageCenter = buttonSize + buttonSize / 2
-            + SidebarFooterControlLayout.usageIconOffset
-
-        XCTAssertGreaterThanOrEqual(buttonSize, 44)
-        XCTAssertEqual(usageCenter - helpCenter, SidebarFooterControlLayout.visualPitch)
-        XCTAssertEqual(SidebarFooterControlLayout.helpIconOffset(clustersWithUsage: false), 0)
+    func testFooterGlyphsShareTheSidebarRowIconColumn() {
+        // Footer sits inside the same 8pt sidebar edge as the row list; the first
+        // glyph must start where a row's leading icon starts (edge + row padding).
+        let firstGlyphLeading = SidebarFooterControlLayout.leadingInset + SidebarFooterControlLayout.hitInset
+        XCTAssertEqual(firstGlyphLeading, ChromeDensity.sidebarRowHorizontalPadding)
+        XCTAssertEqual(SidebarFooterControlLayout.glyphSlot, SidebarRowMetrics.leadingIconSlotWidth)
+        XCTAssertEqual(
+            SidebarFooterControlLayout.buttonSize,
+            SidebarFooterControlLayout.glyphSlot + SidebarFooterControlLayout.hitInset * 2
+        )
     }
 
     private func fittingHeight(results: [ProviderUsageResult]) async -> CGFloat {
