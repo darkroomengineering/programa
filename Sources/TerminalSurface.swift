@@ -1012,6 +1012,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// synchronously, so this stays a plain nonisolated method callable from
     /// both `deinit` and the `@MainActor`-isolated `teardownSurface()`.
     private func performSurfaceTeardown(reason: String) {
+        let isApplicationTerminating = SessionMachineryGate.isApplicationTerminating
         // Stop any in-flight revive-replay chunk loop for this surface
         // promptly, before the free below can enqueue behind it. Harmless
         // (and cheap) to set even when no replay is running.
@@ -1028,7 +1029,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
             TerminalController.unregisterRevivedRoot(authorizedRoot)
             authorizedRevivedRootPID = nil
         }
-        releaseEscrowedSessionIfClosedForGood(reason: reason)
+        if Self.shouldReleaseEscrowOnTeardown(reason: reason, isApplicationTerminating: isApplicationTerminating) {
+            SessionEscrowClient.shared.release(surfaceId: id.uuidString)
+        }
         markPortalLifecycleClosed(reason: reason)
 
         let callbackContext = surfaceCallbackContext
@@ -1088,12 +1091,14 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 // Keep free behavior aligned across teardown sites: perform the runtime
                 // teardown on the next main-actor turn so SIGHUP delivery is
                 // deterministic but non-reentrant. Clear the PTY tee right before
-                // free, per the C API contract.
+                // free, per the C API contract. Retain recovery metadata whenever
+                // the holder retains the session, using the disposition captured
+                // before this asynchronous teardown was scheduled.
                 Self.unregisterSessionWALForTeardown(
                     surface: surfaceToFree,
                     surfaceId: surfaceIdForTap,
                     reason: reason,
-                    isApplicationTerminating: SessionMachineryGate.isApplicationTerminating
+                    isApplicationTerminating: isApplicationTerminating
                 )
                 GhosttyApp.cancelConfirmationsBeforeFree(surfaceToFree)
                 ghostty_surface_free(surfaceToFree)
@@ -1948,17 +1953,12 @@ final class TerminalSurface: Identifiable, ObservableObject {
         SessionWALStore.shared.unregister(
             surface: surface,
             surfaceId: surfaceId,
-            deleteDirectory: true,
+            deleteDirectory: shouldReleaseEscrowOnTeardown(
+                reason: reason,
+                isApplicationTerminating: isApplicationTerminating
+            ),
             completion: completion
         )
-    }
-
-    private func releaseEscrowedSessionIfClosedForGood(reason: String) {
-        guard Self.shouldReleaseEscrowOnTeardown(
-            reason: reason,
-            isApplicationTerminating: SessionMachineryGate.isApplicationTerminating
-        ) else { return }
-        SessionEscrowClient.shared.release(surfaceId: id.uuidString)
     }
 
     /// Escrows a revive descriptor's master fd at panel construction, before any
