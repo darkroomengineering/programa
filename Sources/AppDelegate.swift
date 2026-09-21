@@ -20,6 +20,7 @@ private enum ProgramaThemeNotifications {
 /// `NSToolbar.delegate` is weak, so without this the delegate is deallocated
 /// immediately and the toolbar silently loses its item provider.
 private var mainWindowToolbarDelegateAssociationKey: UInt8 = 0
+let mainWindowToolbarIdentifier = NSToolbar.Identifier("programa.main.titlebar")
 
 /// Supplies a single invisible spacer item so the main window's otherwise-empty
 /// unified toolbar reports a non-zero height, growing the titlebar so AppKit
@@ -859,6 +860,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var workspaceObserver: NSObjectProtocol?
     private var lifecycleSnapshotObservers: [NSObjectProtocol] = []
     private var windowKeyObserver: NSObjectProtocol?
+    private var mainWindowFullScreenToolbarObservers: [NSObjectProtocol] = []
     private var shortcutMonitor: Any?
     private var shortcutDefaultsObserver: NSObjectProtocol?
     private var menuBarVisibilityObserver: NSObjectProtocol?
@@ -1218,6 +1220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         titlebarAccessoryController.start()
         installMainWindowKeyObserver()
+        installMainWindowFullScreenToolbarObservers()
         refreshGhosttyGotoSplitShortcuts()
         installGhosttyConfigObserver()
         installWindowResponderSwizzles()
@@ -10065,6 +10068,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
     }
 
+    /// The spacer toolbar exists only to grow the windowed titlebar so the
+    /// traffic lights center on the sidebar header. Native full screen has no
+    /// traffic lights, and AppKit renders a visible toolbar there as an opaque
+    /// strip that covers the sidebar header and the tab strip. Hide the toolbar
+    /// for the duration of full screen and restore it on the way out, so the
+    /// content keeps the windowed layout edge to edge.
+    static func syncMainWindowToolbarVisibility(_ window: NSWindow, inFullScreen: Bool) {
+        guard let toolbar = window.toolbar,
+              toolbar.identifier == mainWindowToolbarIdentifier else { return }
+        let shouldBeVisible = !inFullScreen
+        if toolbar.isVisible != shouldBeVisible {
+            toolbar.isVisible = shouldBeVisible
+        }
+    }
+
+    private func installMainWindowFullScreenToolbarObservers() {
+        guard mainWindowFullScreenToolbarObservers.isEmpty else { return }
+        // `willEnter` fires before the style mask gains `.fullScreen` and
+        // `willExit` before it loses it, so pass the target state explicitly
+        // instead of reading the mask.
+        let transitions: [(Notification.Name, Bool)] = [
+            (NSWindow.willEnterFullScreenNotification, true),
+            (NSWindow.willExitFullScreenNotification, false),
+        ]
+        mainWindowFullScreenToolbarObservers = transitions.map { name, inFullScreen in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { note in
+                MainActor.assumeIsolated {
+                    guard let window = note.object as? NSWindow else { return }
+                    Self.syncMainWindowToolbarVisibility(window, inFullScreen: inFullScreen)
+                }
+            }
+        }
+    }
+
     private func installMainWindowKeyObserver() {
         guard windowKeyObserver == nil else { return }
         windowKeyObserver = NotificationCenter.default.addObserver(
@@ -10687,7 +10724,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // WindowGlassEffect.sidebarHeaderCenterFromWindowTop. Guarded on
             // `window.toolbar == nil` because this function runs on every
             // WindowAccessor update, not just once per window.
-            let toolbar = NSToolbar(identifier: "programa.main.titlebar")
+            let toolbar = NSToolbar(identifier: mainWindowToolbarIdentifier)
             let toolbarDelegate = MainWindowToolbarDelegate()
             objc_setAssociatedObject(
                 window,
@@ -10702,6 +10739,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             window.toolbar = toolbar
             window.toolbarStyle = .unified
             window.titlebarSeparatorStyle = .none
+            // A window can be configured while already in native full screen
+            // (session restore); apply the same visibility rule the
+            // will-enter/exit observers enforce.
+            Self.syncMainWindowToolbarVisibility(window, inFullScreen: window.styleMask.contains(.fullScreen))
         }
 
         // Keep content below the titlebar so drags on Bonsplit's tab bar don't
