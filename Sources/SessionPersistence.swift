@@ -406,6 +406,13 @@ struct SessionWindowSnapshot: Codable, Sendable {
     var display: SessionDisplaySnapshot?
     var tabManager: SessionTabManagerSnapshot
     var sidebar: SessionSidebarSnapshot
+    /// `true` when the user had closed this window (`preserveMainWindowOnClose` keeps it
+    /// registered but ordered out). Restore never shows a hidden window again: it ends the
+    /// window's escrowed shells instead, so a closed window stays closed across a relaunch.
+    /// `nil` for snapshots written before this field existed -- treat as visible.
+    var isHidden: Bool?
+
+    var isHiddenWindow: Bool { isHidden == true }
 }
 
 struct AppSessionSnapshot: Codable, Sendable {
@@ -670,7 +677,15 @@ enum SessionPersistenceStore {
         from snapshot: AppSessionSnapshot,
         limit: Int = SessionPersistencePolicy.maxWindowsPerSnapshot
     ) -> [SessionWindowSnapshot] {
-        Array(snapshot.windows.prefix(max(0, limit)))
+        // A window the user closed before the snapshot was written is never shown again;
+        // its shells are ended instead (`hiddenWindows(from:)`).
+        Array(snapshot.windows.filter { !$0.isHiddenWindow }.prefix(max(0, limit)))
+    }
+
+    /// Windows the user had closed (kept alive in-process by `preserveMainWindowOnClose`)
+    /// at the time the snapshot was written. Restore skips them and ends their shells.
+    static func hiddenWindows(from snapshot: AppSessionSnapshot) -> [SessionWindowSnapshot] {
+        snapshot.windows.filter(\.isHiddenWindow)
     }
 
     /// Archives the current snapshot file into `session-history/` before anything else can

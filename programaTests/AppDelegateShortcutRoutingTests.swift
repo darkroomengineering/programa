@@ -2763,6 +2763,48 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
     }
 
+    func testSessionSnapshotFlagsClosedWindowHiddenAndOrdersItLast() throws {
+        let appDelegate = try XCTUnwrap(AppDelegate.shared)
+        closeAllMainWindows()
+        let visibleWindowId = appDelegate.createMainWindow()
+        defer { closeWindow(withId: visibleWindowId) }
+        let closedWindowId = appDelegate.createMainWindow()
+        defer { closeWindow(withId: closedWindowId) }
+        let closedWindow = try XCTUnwrap(window(withId: closedWindowId))
+        let closedManager = try XCTUnwrap(appDelegate.tabManagerFor(windowId: closedWindowId))
+        _ = closedManager.addWorkspace()
+        let closedWorkspaceCount = closedManager.tabs.count
+
+        XCTAssertTrue(appDelegate.focusMainWindow(windowId: closedWindowId))
+        closedWindow.performClose(nil)
+        XCTAssertFalse(closedWindow.isVisible)
+        XCTAssertTrue(
+            appDelegate.tabManagerFor(windowId: closedWindowId) === closedManager,
+            "An ordinary close keeps the window registered for Dock reopen"
+        )
+
+        let snapshot = try XCTUnwrap(appDelegate.buildSessionSnapshot(includeScrollback: false))
+        XCTAssertEqual(snapshot.windows.count, 2)
+        let visible = try XCTUnwrap(snapshot.windows.first)
+        let hidden = try XCTUnwrap(snapshot.windows.last)
+        XCTAssertFalse(visible.isHiddenWindow, "The window the user can see must stay the primary restore entry")
+        XCTAssertTrue(hidden.isHiddenWindow, "A closed window is written flagged hidden, never as a visible one")
+        XCTAssertEqual(hidden.tabManager.workspaces.count, closedWorkspaceCount)
+        XCTAssertEqual(
+            SessionPersistenceStore.windowsToRestore(from: snapshot).count, 1,
+            "Restore must not bring a closed window back on the next launch"
+        )
+        XCTAssertEqual(SessionPersistenceStore.hiddenWindows(from: snapshot).count, 1)
+
+        XCTAssertTrue(appDelegate.reopenMostRecentlyHiddenMainWindow(onlyIfNoVisibleMainWindows: false))
+        XCTAssertTrue(closedWindow.isVisible)
+        let reopened = try XCTUnwrap(appDelegate.buildSessionSnapshot(includeScrollback: false))
+        XCTAssertTrue(
+            reopened.windows.allSatisfy { !$0.isHiddenWindow },
+            "Reopening from the Dock makes the window an ordinary restore entry again"
+        )
+    }
+
     func testHiddenPrimaryWindowRetainsItsWindowAndWorkspaceUntilExplicitDisposal() throws {
         let appDelegate = try XCTUnwrap(AppDelegate.shared)
         AppDelegate.installWindowResponderSwizzlesForTesting()
