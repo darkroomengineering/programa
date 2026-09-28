@@ -212,10 +212,13 @@ final class TerminalPanel: Panel, ObservableObject {
     }
 
     func shouldPersistScrollbackForSessionSnapshot() -> Bool {
-        guard ScrollbackPersistenceSettings.isEnabled() else { return false }
-        // Session restore only replays terminal output into a fresh shell. If Ghostty
-        // says we are not safely at a prompt, replaying that state later is misleading.
-        return !surface.needsConfirmClose()
+        // A running process at quit is the normal case here (the escrow holder keeps
+        // panes alive across quit), not a reason to skip saving. At restore, escrow
+        // reattach is tried first and always takes precedence over this saved text;
+        // it is used only as the fallback when reattach fails and a fresh shell has
+        // to start, and the recovery notice seeded alongside it labels that case to
+        // the user. So this only needs the user's own setting, not the process state.
+        ScrollbackPersistenceSettings.isEnabled()
     }
 
     func triggerFlash(reason: WorkspaceAttentionFlashReason) {

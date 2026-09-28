@@ -309,22 +309,25 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private var reviveDescriptor: TerminalSurfaceReviveDescriptor?
     /// restore-replay-residuals (fresh-spawn scrollback collapse): prepared
     /// fallback-restore scrollback text for a FRESH (non-revived) spawn --
-    /// e.g. session restore when no escrowed child could be reattached.
-    /// Routed through the exact same deferred `pendingReviveSeed` /
-    /// settle-gate machinery as the revive path below (see `createSurface`),
-    /// rather than the old temp-file + shell-rc `cat` mechanism
-    /// (`SessionScrollbackReplayStore`, removed). Set from `init`; consumed
-    /// (cleared) the moment `createSurface` arms `pendingReviveSeed` from
-    /// it, same one-shot discipline as `reviveDescriptor` above. Nil (not
-    /// just empty) means "nothing to seed" -- the overwhelming majority of
-    /// surface creations never touch the deferred-seed machinery at all.
+    /// e.g. session restore when no escrowed child could be reattached. Fed
+    /// straight into `replayRevivedScrollback` from `createSurface`, with no
+    /// settle gate and no fallback timer -- see `createSurface`'s fresh-seed
+    /// arm. Set from `init`; consumed (cleared) the moment `createSurface`
+    /// reads it, same one-shot discipline as `reviveDescriptor` above. Nil
+    /// (not just empty) means "nothing to seed" -- the overwhelming
+    /// majority of surface creations never touch the deferred-seed
+    /// machinery at all.
     private var pendingFreshSeedText: String?
     /// restore-replay-residuals: pre-crash scrollback text (and whether the
     /// revived shell owns the terminal, so mouse-mode reset should run) that
-    /// `createSurface` has captured but not yet replayed, because it must
-    /// wait for the surface to reach a settled size. Set at most once per
-    /// surface (in `createSurface`); consumed exactly once by
-    /// `seedRevivedScrollbackIfPending()`, whichever trigger (the first
+    /// `createSurface` has captured but not yet replayed, because a REVIVE
+    /// must wait for the surface to reach a settled size (the raw WAL bytes
+    /// it replays are width-sensitive -- see PR #242). A fresh spawn's
+    /// prepared seed text (`pendingFreshSeedText`) does not go through this
+    /// field; it is sanitized, reflowable text and is fed to
+    /// `replayRevivedScrollback` directly from `createSurface` instead. Set
+    /// at most once per surface (in `createSurface`); consumed exactly once
+    /// by `seedRevivedScrollbackIfPending()`, whichever trigger (the first
     /// post-creation `updateSize` call, or a bounded fallback timer) runs
     /// first. `text` may be empty -- a revive with no scrollback to seed
     /// still needs this set so the post-seed SIGWINCH nudge below still
@@ -1710,8 +1713,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
             // Register the PTY tee now that the runtime surface
             // definitely exists, wiring it into the session WAL writer. See
             // SessionOutputTapSpike.swift (SessionWALStore). The revive case
-            // and the fresh-spawn-with-seed-text case both register this
-            // later, inside `seedRevivedScrollbackIfPending()`.
+            // registers this later, inside `seedRevivedScrollbackIfPending()`;
+            // the fresh-spawn-with-seed-text case registers it later too,
+            // inside `replayRevivedScrollback`'s finish work.
             outputTapContext?.release()
             outputTapContext = SessionWALStore.shared.register(
                 surface: createdSurface,
@@ -1763,7 +1767,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         view.forceRefreshSurface()
         ghostty_surface_refresh(createdSurface)
 
-        // restore-replay-residuals: arm the deferred revive seed LAST, after
+        // restore-replay-residuals: arm the deferred REVIVE seed LAST, after
         // every other piece of post-creation setup above (WAL identity
         // resolution, font/focus reconciliation, pending socket input
         // flush, initial redraw kick). This closes a structural reentrancy
@@ -1771,7 +1775,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
         // `createSurface` (unproven but untraced), it must find
         // `pendingReviveSeed` still nil and no-op -- only the first
         // `updateSize` call landing strictly after `createSurface` returns
-        // (or the fallback timer below) is allowed to trigger the seed.
+        // (or the fallback timer below) is allowed to trigger the seed. The
+        // FRESH-spawn arm below does not use `pendingReviveSeed` at all --
+        // see that arm for why it dispatches its own replay directly
+        // instead.
         //
         // Accepted tradeoff, stated honestly: the pty is live from the
         // moment `ghostty_surface_new` succeeds, so live output can render
@@ -1821,30 +1828,41 @@ final class TerminalSurface: Identifiable, ObservableObject {
             scheduleReviveSeedFallbackTimer()
         } else if let consumedFreshSeedText, !consumedFreshSeedText.isEmpty {
             // restore-replay-residuals (fresh-spawn scrollback collapse):
-            // same deferred settle-gated seed path as a revived surface
-            // above, minus the revive-specific bits -- there is no live
-            // child to nudge with SIGWINCH (the fresh shell hasn't even
-            // spawned yet at this point; see the ordering note above), and
-            // `resetModes: false` because `consumedFreshSeedText` already
-            // has `TerminalReplayModeReset.disableSequence` baked in by
-            // `SessionFreshSpawnScrollbackSeed.preparedText` -- applying it
-            // a second time here would be redundant. A fresh shell always
-            // "owns" the terminal it is about to start in (there is never a
-            // surviving TUI to leave modes armed for), which is exactly the
-            // condition under which the revive path above also resets
-            // modes -- so the reset itself is correct here, just already
-            // applied once, upstream.
-            pendingReviveSeed = (
-                text: consumedFreshSeedText,
-                resetModes: false,
-                workingDirectory: resolvedWorkingDirectory
+            // the revive path above defers because its raw WAL bytes are
+            // width-sensitive (PR #242); `consumedFreshSeedText` is
+            // sanitized, reflowable plain text
+            // (`SessionFreshSpawnScrollbackSeed.preparedText`), with no
+            // width dependency to protect, so it replays immediately here,
+            // before the fresh shell this surface just spawned has a
+            // chance to print its own prompt -- the seed lands first,
+            // ahead of the shell's first output in practice, though not
+            // guaranteed -- the child is spawned on ghostty's IO thread at
+            // `ghostty_surface_new` and can in principle win the race to
+            // print before this call's queue dispatch lands; if it does,
+            // the seed still appends at the cursor rather than overwriting
+            // a prompt. `resetModes: false` because
+            // the mode-disable sequence is already baked into
+            // `consumedFreshSeedText` upstream; applying it twice would be
+            // redundant. `pendingReviveWinchPGID`/`pendingReviveWinchChildPID`
+            // are never set on this path, so `replayRevivedScrollback`'s
+            // post-seed SIGWINCH nudge is a no-op here -- there is no
+            // pre-crash TUI to repaint. Called directly, not through
+            // `seedRevivedScrollbackIfPending`: this text needs neither the
+            // settle gate (nothing width-sensitive to protect) nor a
+            // main-queue hop -- that function's hop exists to keep
+            // `ghostty_surface_process_output` off the caller's AppKit
+            // layout pass (#285), and that call already runs on
+            // `reviveReplayQueue`, not on this synchronous call's
+            // main-thread portion (a `surface` read, two field reads, and a
+            // queue dispatch).
+            replayRevivedScrollback(
+                pending: (
+                    text: consumedFreshSeedText,
+                    resetModes: false,
+                    workingDirectory: resolvedWorkingDirectory
+                ),
+                trigger: "fresh-seed-immediate"
             )
-            if TerminalSurface.isSessionRestoreSettling {
-                isGatedForSessionRestoreSettle = true
-                gatedRestoreGeneration = TerminalSurface.currentSessionRestoreGeneration
-                TerminalSurface.surfacesAwaitingRestoreSettle.add(self)
-            }
-            scheduleReviveSeedFallbackTimer()
         }
 
         NotificationCenter.default.post(
