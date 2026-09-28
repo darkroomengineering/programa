@@ -14,7 +14,7 @@ use std::io;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 use nix::unistd::Pid;
@@ -268,18 +268,21 @@ impl Session {
             ));
         }
         if kill && exit.is_none() {
-            exit = signal_child(&self.inner, nix::sys::signal::Signal::SIGHUP)?;
-            for _ in 0..20 {
-                if exit.is_some() {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(25));
-                exit = try_reap(&self.inner)?;
+            exit = signal_child(&self.inner, nix::sys::signal::Signal::SIGHUP, false)?;
+            exit = wait_for_exit(&self.inner, exit, Duration::from_millis(500))?;
+            if exit.is_none() {
+                // The child ignored SIGHUP (or a descendant it spawned is
+                // still alive). Escalate to an unblockable SIGKILL sent to
+                // the whole process group: the child called setsid() at
+                // spawn (pty.rs), so its pgid equals its own pid and this
+                // can never reach the daemon's own group.
+                exit = signal_child(&self.inner, nix::sys::signal::Signal::SIGKILL, true)?;
+                exit = wait_for_exit(&self.inner, exit, Duration::from_millis(500))?;
             }
             if exit.is_none() {
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
-                    "child did not exit within 500ms of SIGHUP",
+                    "child did not exit within 500ms of SIGKILL",
                 ));
             }
         }
@@ -561,7 +564,7 @@ fn finish_on_exit(inner: &Arc<Inner>, wake_raw: RawFd) {
 
 fn fail_session(inner: &Arc<Inner>, error: String) {
     *inner.status.lock().unwrap() = SessionStatus::Failed { error };
-    let _ = signal_child(inner, nix::sys::signal::Signal::SIGHUP);
+    let _ = signal_child(inner, nix::sys::signal::Signal::SIGHUP, false);
 }
 
 fn try_reap(inner: &Inner) -> io::Result<Option<(Option<i32>, Option<i32>)>> {
@@ -579,9 +582,33 @@ fn try_reap(inner: &Inner) -> io::Result<Option<(Option<i32>, Option<i32>)>> {
     }
 }
 
+/// Poll `try_reap` at a fixed interval until the child exits or `timeout`
+/// elapses. Runs on whatever thread calls `Session::close`; callers on an
+/// async runtime must offload that call (e.g. `spawn_blocking`) so this
+/// sleep never blocks a tokio worker.
+fn wait_for_exit(
+    inner: &Inner,
+    mut exit: Option<(Option<i32>, Option<i32>)>,
+    timeout: Duration,
+) -> io::Result<Option<(Option<i32>, Option<i32>)>> {
+    let deadline = Instant::now() + timeout;
+    while exit.is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(25));
+        exit = try_reap(inner)?;
+    }
+    Ok(exit)
+}
+
+/// Signal the child, or (for the SIGKILL escalation once a plain SIGHUP has
+/// been given a grace period and ignored) its whole process group —
+/// `whole_group: true` uses `killpg` instead of `kill`. Signaling the group
+/// is safe because the child calls `setsid()` at spawn (see `pty.rs`), so
+/// its pgid equals its own pid and this can never reach the daemon's own
+/// process group.
 fn signal_child(
     inner: &Inner,
     signal: nix::sys::signal::Signal,
+    whole_group: bool,
 ) -> io::Result<Option<(Option<i32>, Option<i32>)>> {
     let mut child = inner.child.lock().unwrap();
     if let Some(exit) = child.exit {
@@ -596,7 +623,19 @@ fn signal_child(
     // The child lock stays held across the liveness check and signal. No
     // reader can reap it in between, so its PID cannot be recycled here.
     let pid = Pid::from_raw(child.child.id() as i32);
-    match nix::sys::signal::kill(pid, signal) {
+    let result = if whole_group {
+        nix::sys::signal::killpg(pid, signal)
+    } else {
+        nix::sys::signal::kill(pid, signal)
+    };
+    let result = match result {
+        // The child already left its own group (e.g. called setpgid), so
+        // the group no longer exists even though the pid might still be
+        // alive. Fall back to signaling the pid directly before giving up.
+        Err(nix::errno::Errno::ESRCH) if whole_group => nix::sys::signal::kill(pid, signal),
+        other => other,
+    };
+    match result {
         Ok(()) => Ok(None),
         Err(nix::errno::Errno::ESRCH) => {
             if let Some(status) = child.child.try_wait()? {
