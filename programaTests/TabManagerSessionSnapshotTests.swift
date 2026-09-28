@@ -189,11 +189,13 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         )
         grandchild.setCustomTitle("Grandchild")
 
-        // Select a folder child so the collapsed-parent selection remap has something to prove.
-        manager.selectWorkspace(folderChildA)
-
         let encoded = try JSONEncoder().encode(manager.sessionSnapshot(includeScrollback: false))
-        let snapshot = try JSONDecoder().decode(SessionTabManagerSnapshot.self, from: encoded)
+        var snapshot = try JSONDecoder().decode(SessionTabManagerSnapshot.self, from: encoded)
+        // Selecting a child in the live app expands its folder, so a saved session with a
+        // collapsed folder and a selected child is built directly to exercise the restore remap.
+        snapshot.selectedWorkspaceIndex = try XCTUnwrap(
+            snapshot.workspaces.firstIndex { $0.customTitle == "FolderChildA" }
+        )
         let restored = TabManager()
         restored.restoreSessionSnapshot(snapshot)
 
