@@ -1056,6 +1056,11 @@ final class TitlebarControlsAccessoryViewController: NSTitlebarAccessoryViewCont
                 }
             )
         )
+        // Popover content must not observe safe-area changes: SwiftUI's observation
+        // recurses through invalidateSafeAreaInsets on ambient display events until
+        // AppKit's layout-loop guard kills the app (issue #307/#308 — the opt-out does
+        // not cascade to sibling hosts, so every new hosting controller needs its own).
+        hostingController.safeAreaRegions = []
         hostingController.view.wantsLayer = true
         hostingController.view.layer?.backgroundColor = .clear
         notificationsPopover.contentViewController = hostingController
@@ -1295,17 +1300,18 @@ private struct NotificationPopoverRow: View {
             // XCUITest's `.click()` is not always reliable for SwiftUI `Button`s hosted in an `NSPopover`.
             // Provide an explicit accessibility action so AXPress always routes to `onOpen`.
             .accessibilityAction { onOpen() }
-            .contextMenu {
-                if notification.isRead {
-                    Button(String(localized: "notificationsPopover.markUnread", defaultValue: "Mark as Unread")) {
-                        onMarkUnread()
-                    }
-                } else {
-                    Button(String(localized: "notificationsPopover.markRead", defaultValue: "Mark as Read")) {
-                        onMarkRead()
-                    }
-                }
-            }
+            // A SwiftUI `.contextMenu` here hangs off `isRowHovering`/`isRowFocused`
+            // state: `onHover(false)` fires as the pointer moves from the row onto the
+            // open menu, re-evaluating this view's body and rebuilding the menu, which
+            // macOS then closes out from under the click. A native NSMenu shown from a
+            // right-mouse-down/ctrl-click catcher is immune to that re-evaluation.
+            .background(
+                NotificationRowContextMenuCatcher(
+                    isRead: notification.isRead,
+                    onMarkRead: onMarkRead,
+                    onMarkUnread: onMarkUnread
+                )
+            )
 
             Button(action: onClear) {
                 Image(systemName: "xmark.circle.fill")
@@ -1331,6 +1337,81 @@ private struct NotificationPopoverRow: View {
                 )
         )
     }
+}
+
+/// Right-click catcher backing `NotificationPopoverRow`'s context menu. Sized to match
+/// the row via `.background(...)`; only intercepts right-click / ctrl-click — every
+/// other event falls through to the SwiftUI button/hover handling underneath.
+private struct NotificationRowContextMenuCatcher: NSViewRepresentable {
+    let isRead: Bool
+    let onMarkRead: () -> Void
+    let onMarkUnread: () -> Void
+
+    func makeNSView(context: Context) -> NotificationRowContextMenuNSView {
+        NotificationRowContextMenuNSView()
+    }
+
+    func updateNSView(_ nsView: NotificationRowContextMenuNSView, context: Context) {
+        nsView.isRead = isRead
+        nsView.onMarkRead = onMarkRead
+        nsView.onMarkUnread = onMarkUnread
+    }
+}
+
+private final class NotificationRowContextMenuNSView: NSView {
+    var isRead = false
+    var onMarkRead: (() -> Void)?
+    var onMarkUnread: (() -> Void)?
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Only intercept right-click and ctrl-click (left-click with the control key
+        // held, which AppKit does not always redirect to rightMouseDown on its own) so
+        // plain left-click, hover, and keyboard focus continue to hit-test through to
+        // the SwiftUI button underneath.
+        guard let event = NSApp.currentEvent else { return nil }
+        let isCtrlClick = event.type == .leftMouseDown && event.modifierFlags.contains(.control)
+        guard event.type == .rightMouseDown || isCtrlClick else { return nil }
+        return super.hitTest(point)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.modifierFlags.contains(.control) else {
+            super.mouseDown(with: event)
+            return
+        }
+        showContextMenu(for: event)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        showContextMenu(for: event)
+    }
+
+    private func showContextMenu(for event: NSEvent) {
+        let menu = NSMenu()
+        if isRead {
+            let item = NSMenuItem(
+                title: String(localized: "notificationsPopover.markUnread", defaultValue: "Mark as Unread"),
+                action: #selector(markUnreadAction),
+                keyEquivalent: ""
+            )
+            item.target = self
+            menu.addItem(item)
+        } else {
+            let item = NSMenuItem(
+                title: String(localized: "notificationsPopover.markRead", defaultValue: "Mark as Read"),
+                action: #selector(markReadAction),
+                keyEquivalent: ""
+            )
+            item.target = self
+            menu.addItem(item)
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func markReadAction() { onMarkRead?() }
+    @objc private func markUnreadAction() { onMarkUnread?() }
 }
 
 @MainActor
