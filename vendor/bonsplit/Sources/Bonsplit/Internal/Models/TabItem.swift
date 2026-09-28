@@ -25,6 +25,7 @@ struct TabItem: Identifiable, Hashable, Codable {
     var showsNotificationBadge: Bool
     var isLoading: Bool
     var isPinned: Bool
+    var customColorHex: String?
 
     init(
         id: UUID = UUID(),
@@ -36,7 +37,8 @@ struct TabItem: Identifiable, Hashable, Codable {
         isDirty: Bool = false,
         showsNotificationBadge: Bool = false,
         isLoading: Bool = false,
-        isPinned: Bool = false
+        isPinned: Bool = false,
+        customColorHex: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -48,6 +50,7 @@ struct TabItem: Identifiable, Hashable, Codable {
         self.showsNotificationBadge = showsNotificationBadge
         self.isLoading = isLoading
         self.isPinned = isPinned
+        self.customColorHex = customColorHex
     }
 
     func hash(into hasher: inout Hasher) {
@@ -69,6 +72,7 @@ struct TabItem: Identifiable, Hashable, Codable {
         case showsNotificationBadge
         case isLoading
         case isPinned
+        case customColorHex
     }
 
     init(from decoder: Decoder) throws {
@@ -83,6 +87,7 @@ struct TabItem: Identifiable, Hashable, Codable {
         self.showsNotificationBadge = try c.decodeIfPresent(Bool.self, forKey: .showsNotificationBadge) ?? false
         self.isLoading = try c.decodeIfPresent(Bool.self, forKey: .isLoading) ?? false
         self.isPinned = try c.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        self.customColorHex = try c.decodeIfPresent(String.self, forKey: .customColorHex)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -97,6 +102,7 @@ struct TabItem: Identifiable, Hashable, Codable {
         try c.encode(showsNotificationBadge, forKey: .showsNotificationBadge)
         try c.encode(isLoading, forKey: .isLoading)
         try c.encode(isPinned, forKey: .isPinned)
+        try c.encodeIfPresent(customColorHex, forKey: .customColorHex)
     }
 }
 

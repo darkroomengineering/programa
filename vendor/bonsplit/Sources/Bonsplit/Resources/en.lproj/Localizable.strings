@@ -1,2 +1,5 @@
 "command.moveTabToLeftPane.title" = "Move to Left Pane";
 "command.moveTabToRightPane.title" = "Move to Right Pane";
+"contextMenu.tabColor" = "Tab Color";
+"contextMenu.clearColor" = "Clear Color";
+"contextMenu.chooseCustomColor" = "Choose Custom Color…";

@@ -38,6 +38,15 @@ in [docs/windows-testing.md](docs/windows-testing.md).
    ```
    The script prints the `.app` path. Cmd-click to open, or pass `--launch` to open automatically.
 
+   If your local Zig doesn't match the version the ghostty submodule needs
+   (`scripts/required-zig-version.sh`), skip the Zig steps and build against the
+   existing GhosttyKit.xcframework:
+   ```bash
+   PROGRAMA_SKIP_ZIG_BUILD=1 ./scripts/reload.sh --tag my-feature
+   ```
+   If the xcframework is missing, `./scripts/download-prebuilt-ghosttykit.sh`
+   fetches a prebuilt copy.
+
 ## Development Scripts
 
 | Script | Description |

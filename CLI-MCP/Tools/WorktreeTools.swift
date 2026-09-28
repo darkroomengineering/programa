@@ -6,7 +6,7 @@ enum WorktreeTools {
     static let tools: [ProgramaTool] = [
         ProgramaTool(
             name: "worktree_create",
-            socketMethod: "worktree.create",
+            socketMethod: V2MethodNames.worktreeCreate,
             description: "Creates a new git worktree for a branch and opens it as a new workspace. Never focuses the app -- worktree.create's underlying `focus` param is intentionally not exposed here, so this tool can never raise/activate the Programa window even if asked; use focus_worktree_open afterward if you need the window brought forward.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -38,7 +38,7 @@ enum WorktreeTools {
         ),
         ProgramaTool(
             name: "worktree_remove",
-            socketMethod: "worktree.remove",
+            socketMethod: V2MethodNames.worktreeRemove,
             description: "Removes a git worktree by path or branch, closing its workspace if open. Fails if the worktree has uncommitted changes unless force is set.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -52,7 +52,7 @@ enum WorktreeTools {
         ),
         ProgramaTool(
             name: "worktree_list",
-            socketMethod: "worktree.list",
+            socketMethod: V2MethodNames.worktreeList,
             description: "Lists all git worktrees for a repository, with which ones are currently open as workspaces.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [

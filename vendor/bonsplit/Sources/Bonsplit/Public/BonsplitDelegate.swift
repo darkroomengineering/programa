@@ -58,6 +58,9 @@ public protocol BonsplitDelegate: AnyObject {
     /// Called when the user triggers an action from a tab's context menu.
     func splitTabBar(_ controller: BonsplitController, didRequestTabContextAction action: TabContextAction, for tab: Tab, inPane pane: PaneID)
 
+    /// Called when the user picks a palette color for a tab from its context menu.
+    func splitTabBar(_ controller: BonsplitController, didRequestTabColor hex: String, for tab: Tab, inPane pane: PaneID)
+
     // MARK: - Geometry
 
     /// Called when any pane geometry changes (resize, split, close)
@@ -83,6 +86,7 @@ public extension BonsplitDelegate {
     func splitTabBar(_ controller: BonsplitController, didFocusPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didRequestNewTab kind: String, inPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didRequestTabContextAction action: TabContextAction, for tab: Tab, inPane pane: PaneID) {}
+    func splitTabBar(_ controller: BonsplitController, didRequestTabColor hex: String, for tab: Tab, inPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didChangeGeometry snapshot: LayoutSnapshot) {}
     func splitTabBar(_ controller: BonsplitController, shouldNotifyDuringDrag: Bool) -> Bool { false }
 }

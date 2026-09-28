@@ -7,7 +7,7 @@ enum PaneTools {
     static let tools: [ProgramaTool] = [
         ProgramaTool(
             name: "pane_list",
-            socketMethod: "pane.list",
+            socketMethod: V2MethodNames.paneList,
             description: "Lists every pane in a workspace's split tree, with pixel geometry and terminal grid size.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -17,7 +17,7 @@ enum PaneTools {
         ),
         ProgramaTool(
             name: "pane_surfaces",
-            socketMethod: "pane.surfaces",
+            socketMethod: V2MethodNames.paneSurfaces,
             description: "Lists the surfaces (tabs) inside one pane, in display order.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "pane_id": ProgramaToolSchema.string("Pane UUID or short ref. Defaults to the workspace's focused pane."),
@@ -27,7 +27,7 @@ enum PaneTools {
         ),
         ProgramaTool(
             name: "pane_create",
-            socketMethod: "pane.create",
+            socketMethod: V2MethodNames.paneCreate,
             description: "Splits the workspace's focused surface's pane in the given direction, creating a new pane with a new surface in it.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -42,7 +42,7 @@ enum PaneTools {
         ),
         ProgramaTool(
             name: "pane_resize",
-            socketMethod: "pane.resize",
+            socketMethod: V2MethodNames.paneResize,
             description: "Nudges a pane's split divider in one direction by an amount (in split-tree fractional units, clamped 0.1-0.9). Fails if the pane has no split ancestor of the matching orientation.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -57,7 +57,7 @@ enum PaneTools {
         ),
         ProgramaTool(
             name: "pane_swap",
-            socketMethod: "pane.swap",
+            socketMethod: V2MethodNames.paneSwap,
             description: "Swaps the selected surfaces of two panes (searches all windows/workspaces for pane_id, so no routing context is needed).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -70,7 +70,7 @@ enum PaneTools {
         ),
         ProgramaTool(
             name: "pane_break",
-            socketMethod: "pane.break",
+            socketMethod: V2MethodNames.paneBreak,
             description: "Detaches a surface from its current pane and moves it into a brand-new workspace.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "pane_id": ProgramaToolSchema.string("Source pane UUID or short ref. Defaults to the workspace's focused pane."),
@@ -82,7 +82,7 @@ enum PaneTools {
         ),
         ProgramaTool(
             name: "pane_join",
-            socketMethod: "pane.join",
+            socketMethod: V2MethodNames.paneJoin,
             description: "Moves a surface into an existing target pane. Provide surface_id directly, or pane_id to use that pane's currently selected surface.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [

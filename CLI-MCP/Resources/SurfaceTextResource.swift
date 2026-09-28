@@ -30,7 +30,7 @@ enum SurfaceTextResource {
 
         let bridge = MCPSocketBridge()
         do {
-            let result = try bridge.send(method: "surface.read_text", params: params)
+            let result = try bridge.send(method: V2MethodNames.surfaceReadText, params: params)
             let text = (result["text"] as? String) ?? ""
             return [.text(text, uri: "programa://surface/\(surfaceId)/text", mimeType: "text/plain")]
         } catch {

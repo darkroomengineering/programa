@@ -21,6 +21,9 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   change-detection:
     runs-on: ubuntu-latest

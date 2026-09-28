@@ -16,6 +16,7 @@ struct BrowserSearchOverlay: View {
     @State private var dragOffset: CGSize = .zero
     @State private var barSize: CGSize = .zero
     @State private var isSearchFieldFocused: Bool = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(ProgramaGlassSettings.overlaysEnabledKey)
     private var overlayLiquidGlassEnabled = false
 
@@ -162,7 +163,7 @@ struct BrowserSearchOverlay: View {
                             y: centerPos.y + value.translation.height
                         )
                         let newCorner = closestCorner(to: newCenter, in: geo.size)
-                        withAnimation(.easeOut(duration: 0.2)) {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                             corner = newCorner
                             dragOffset = .zero
                         }

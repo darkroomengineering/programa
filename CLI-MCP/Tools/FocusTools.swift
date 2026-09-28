@@ -15,7 +15,7 @@ enum FocusTools {
     static let tools: [ProgramaTool] = [
         ProgramaTool(
             name: "focus_window",
-            socketMethod: "window.focus",
+            socketMethod: V2MethodNames.windowFocus,
             description: "Brings a window to the front and makes it key. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -26,7 +26,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_workspace_select",
-            socketMethod: "workspace.select",
+            socketMethod: V2MethodNames.workspaceSelect,
             description: "Selects a workspace (sidebar tab) and brings its window forward. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -38,7 +38,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_workspace_next",
-            socketMethod: "workspace.next",
+            socketMethod: V2MethodNames.workspaceNext,
             description: "Selects the next workspace (sidebar tab) and brings its window forward. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -48,7 +48,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_workspace_previous",
-            socketMethod: "workspace.previous",
+            socketMethod: V2MethodNames.workspacePrevious,
             description: "Selects the previous workspace (sidebar tab) and brings its window forward. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -58,7 +58,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_workspace_last",
-            socketMethod: "workspace.last",
+            socketMethod: V2MethodNames.workspaceLast,
             description: "Navigates back to the previously selected workspace and brings its window forward. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -68,7 +68,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_surface",
-            socketMethod: "surface.focus",
+            socketMethod: V2MethodNames.surfaceFocus,
             description: "Focuses a specific surface (terminal or browser pane content), selecting its workspace and bringing its window forward. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -81,7 +81,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_pane",
-            socketMethod: "pane.focus",
+            socketMethod: V2MethodNames.paneFocus,
             description: "Focuses a specific pane, selecting its workspace and bringing its window forward. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -94,7 +94,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_pane_last",
-            socketMethod: "pane.last",
+            socketMethod: V2MethodNames.paneLast,
             description: "Focuses the workspace's alternate (non-focused) pane. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -104,7 +104,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_review_open",
-            socketMethod: "review.open",
+            socketMethod: V2MethodNames.reviewOpen,
             description: "Opens a diff review panel as a new split next to a surface. This tool may raise/activate the Programa window only if focus is set to true (defaults to false).",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "mode": ProgramaToolSchema.stringEnum("What to diff. Defaults to uncommitted.", ["uncommitted", "branch"]),
@@ -118,7 +118,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_worktree_open",
-            socketMethod: "worktree.open",
+            socketMethod: V2MethodNames.worktreeOpen,
             description: "Opens an existing git worktree as a workspace (creating one if it doesn't exist yet, matching worktree_create's defaults). This tool may raise/activate the Programa window only if focus is set to true (defaults to false).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -135,7 +135,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_browser_webview",
-            socketMethod: "browser.focus_webview",
+            socketMethod: V2MethodNames.browserFocusWebview,
             description: "Moves keyboard focus into a browser surface's web view (making first responder), bringing its window forward. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -148,7 +148,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_browser_element",
-            socketMethod: "browser.focus",
+            socketMethod: V2MethodNames.browserFocus,
             description: "Calls .focus() on the DOM element matched by a selector inside a browser surface's page. It does not select the workspace or raise the window itself, but it runs with focus intent, so the page may end up owning keyboard focus. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -163,7 +163,7 @@ enum FocusTools {
         ),
         ProgramaTool(
             name: "focus_browser_tab_switch",
-            socketMethod: "browser.tab.switch",
+            socketMethod: V2MethodNames.browserTabSwitch,
             description: "Switches which browser tab (surface) is focused within a workspace and moves keyboard focus to it. It does not select the workspace or raise the window; pass workspace_id when the target lives in a workspace other than the selected one. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "target_surface_id": ProgramaToolSchema.string("Browser surface UUID or short ref to switch to. Also accepts tab_id as an alias."),

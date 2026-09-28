@@ -515,3 +515,84 @@ async fn workspace_dispatch_links_domain_surfaces_to_sessions_and_reconciles_on_
     let _ = shutdown_tx.send(());
     let _ = tokio::time::timeout(Duration::from_secs(5), daemon_handle).await;
 }
+
+/// `session.close(kill: true)` against a child that ignores SIGHUP must
+/// still escalate to SIGKILL and reap it, rather than returning `Timeout`
+/// and leaving the process running (M5, `docs/audits/codebase-audit-2026-09-28.md`).
+/// The whole round trip — SIGHUP grace period, SIGKILL escalation, reap —
+/// happens off the async worker (`spawn_blocking` in `server.rs`), so this
+/// also proves that path doesn't hang or error on a stubborn child.
+#[tokio::test]
+async fn session_close_escalates_to_sigkill_when_child_ignores_sighup() {
+    let _env_guard = ENV_LOCK.lock().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("programad.sock");
+    std::env::set_var("XDG_STATE_HOME", dir.path());
+
+    let (daemon_handle, shutdown_tx) = spawn_daemon(socket_path.clone());
+    let mut client = Client::connect(&socket_path).await;
+    client.call("auth.login", json!({})).await;
+
+    let opened = client
+        .call(
+            "session.open",
+            json!({
+                "argv": ["/bin/sh", "-c", "trap '' HUP; echo READY; sleep 60"],
+                "cols": 80,
+                "rows": 24,
+            }),
+        )
+        .await;
+    let session_id = opened["id"].as_str().unwrap().to_string();
+    let pid = opened["pid"].as_i64().unwrap() as i32;
+
+    // Wait for the shell to actually install the trap and print READY (via
+    // the WAL, same synchronization pattern as the MARK_ wait above) before
+    // closing. Without this, SIGHUP could land before `trap` runs and reap
+    // the child the "easy" way, which wouldn't exercise the escalation path
+    // this test exists to cover.
+    let mut saw_ready = false;
+    for _ in 0..100 {
+        let read = client
+            .call("session.read", json!({"id": session_id, "offset": 0}))
+            .await;
+        let chunk = B64.decode(read["data"].as_str().unwrap()).unwrap();
+        if chunk.windows(5).any(|w| w == b"READY") {
+            saw_ready = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(saw_ready, "shell never printed READY after installing its SIGHUP trap");
+
+    // Expected cost is ~500ms SIGHUP grace + ~500ms SIGKILL grace plus reap/
+    // join/flush overhead; give real headroom above that rather than a tight
+    // bound, since the two assertions below (closed: true, then ESRCH) are
+    // what actually discriminate pass/fail, not this timeout.
+    let closed = tokio::time::timeout(
+        Duration::from_secs(3),
+        client.call("session.close", json!({"id": session_id, "kill": true})),
+    )
+    .await
+    .expect("session.close should not hang past its own SIGHUP+SIGKILL grace periods");
+    assert_eq!(closed, json!({"closed": true}));
+
+    // The process must actually be gone (not just marked closed
+    // server-side): `kill(pid, 0)` on a reaped pid returns ESRCH.
+    for _ in 0..50 {
+        if nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None)
+            == Err(nix::errno::Errno::ESRCH)
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None),
+        Err(nix::errno::Errno::ESRCH),
+        "child that ignores SIGHUP must be SIGKILLed and reaped by session.close"
+    );
+
+    let _ = shutdown_tx.send(());
+    let _ = tokio::time::timeout(Duration::from_secs(5), daemon_handle).await;
+}

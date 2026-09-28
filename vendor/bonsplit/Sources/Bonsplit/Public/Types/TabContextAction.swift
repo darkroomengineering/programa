@@ -1,4 +1,18 @@
 import Foundation
+import AppKit
+
+/// A single swatch entry for the tab-color context menu, supplied by the host app.
+public struct TabColorSwatch {
+    public let name: String
+    public let hex: String
+    public let swatchColor: NSColor
+
+    public init(name: String, hex: String, swatchColor: NSColor) {
+        self.name = name
+        self.hex = hex
+        self.swatchColor = swatchColor
+    }
+}
 
 /// Context menu actions that can be triggered from a tab item.
 public enum TabContextAction: String, CaseIterable, Sendable {
@@ -18,4 +32,6 @@ public enum TabContextAction: String, CaseIterable, Sendable {
     case markAsRead
     case markAsUnread
     case toggleZoom
+    case clearTabColor
+    case chooseCustomTabColor
 }

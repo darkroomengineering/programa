@@ -33,7 +33,7 @@ enum SurfaceTools {
     static let tools: [ProgramaTool] = [
         ProgramaTool(
             name: "surface_list",
-            socketMethod: "surface.list",
+            socketMethod: V2MethodNames.surfaceList,
             description: "Lists every surface (terminal or browser pane content) in a workspace, in display order, with type/title/pane/agent-state.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -43,7 +43,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_current",
-            socketMethod: "surface.current",
+            socketMethod: V2MethodNames.surfaceCurrent,
             description: "Returns the currently focused surface in a workspace (falls back to the first surface if none is focused).",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -53,7 +53,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_split",
-            socketMethod: "surface.split",
+            socketMethod: V2MethodNames.surfaceSplit,
             description: "Splits a surface's pane in the given direction, creating a new terminal surface.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -68,7 +68,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_create",
-            socketMethod: "surface.create",
+            socketMethod: V2MethodNames.surfaceCreate,
             description: "Creates a new surface (terminal or browser tab) in an existing pane.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "type": ProgramaToolSchema.stringEnum("Surface type to create. Defaults to terminal.", ["terminal", "browser"]),
@@ -81,7 +81,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_close",
-            socketMethod: "surface.close",
+            socketMethod: V2MethodNames.surfaceClose,
             description: "Closes a surface. Terminal surfaces get a brief undo window; fails if it would close the workspace's last surface.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": ProgramaToolSchema.string("Surface UUID or short ref to close. Defaults to the workspace's focused surface."),
@@ -91,7 +91,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_move",
-            socketMethod: "surface.move",
+            socketMethod: V2MethodNames.surfaceMove,
             description: "Moves a surface to a different pane, workspace, or window. Provide at most one destination selector: pane_id, workspace_id, window_id, before_surface_id, or after_surface_id (before/after also implies the pane and workspace of the anchor surface).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -109,7 +109,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_reorder",
-            socketMethod: "surface.reorder",
+            socketMethod: V2MethodNames.surfaceReorder,
             description: "Reorders a surface within its current pane. Specify exactly one of index, before_surface_id, or after_surface_id (anchors must be in the same pane).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -123,19 +123,19 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_action",
-            socketMethod: "surface.action",
+            socketMethod: V2MethodNames.surfaceAction,
             description: "Runs one of a fixed set of tab-level actions on a surface (rename, close siblings, duplicate, reload, pin, mark read/unread, open a new tab beside it).",
             inputSchema: tabActionSchema()
         ),
         ProgramaTool(
             name: "tab_action",
-            socketMethod: "tab.action",
+            socketMethod: V2MethodNames.tabAction,
             description: "Alias of surface_action -- runs the same fixed set of tab-level actions on a surface (rename, close siblings, duplicate, reload, pin, mark read/unread, open a new tab beside it).",
             inputSchema: tabActionSchema()
         ),
         ProgramaTool(
             name: "surface_refresh",
-            socketMethod: "surface.refresh",
+            socketMethod: V2MethodNames.surfaceRefresh,
             description: "Forces every terminal surface in a workspace to redraw. Rarely needed; a diagnostic/recovery tool, not a normal read/write path.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -145,7 +145,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_health",
-            socketMethod: "surface.health",
+            socketMethod: V2MethodNames.surfaceHealth,
             description: "Reports whether each surface in a workspace is actually attached to a live window (diagnostic).",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -155,7 +155,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_send_text",
-            socketMethod: "surface.send_text",
+            socketMethod: V2MethodNames.surfaceSendText,
             description: "Types text into a terminal surface, as if typed at the keyboard (no Enter is sent automatically -- include \\n in text if you want to submit a command).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -169,7 +169,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_send_key",
-            socketMethod: "surface.send_key",
+            socketMethod: V2MethodNames.surfaceSendKey,
             description: "Sends a single named key (e.g. enter, escape, ctrl+c, up, tab) to a terminal surface.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -183,7 +183,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_report_tty",
-            socketMethod: "surface.report_tty",
+            socketMethod: V2MethodNames.surfaceReportTty,
             description: "Telemetry write: records a surface's TTY device name (used for shell-integration correlation). Not typically called directly by an agent.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -196,7 +196,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_ports_kick",
-            socketMethod: "surface.ports_kick",
+            socketMethod: V2MethodNames.surfacePortsKick,
             description: "Telemetry write: requests an immediate re-scan of listening ports for a surface, instead of waiting for the next periodic scan.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -209,7 +209,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_clear_history",
-            socketMethod: "surface.clear_history",
+            socketMethod: V2MethodNames.surfaceClearHistory,
             description: "Clears a terminal surface's scrollback (equivalent to the clear_screen binding action).",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": ProgramaToolSchema.string("Target terminal surface UUID or short ref. Defaults to the workspace's focused surface."),
@@ -219,7 +219,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_trigger_flash",
-            socketMethod: "surface.trigger_flash",
+            socketMethod: V2MethodNames.surfaceTriggerFlash,
             description: "Triggers a brief visual flash highlight on a surface, useful for drawing a human's attention to it.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": ProgramaToolSchema.string("Surface UUID or short ref to flash. Defaults to the workspace's focused surface."),
@@ -229,7 +229,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_report_pwd",
-            socketMethod: "surface.report_pwd",
+            socketMethod: V2MethodNames.surfaceReportPwd,
             description: "Telemetry write: records a surface's current working directory (used by shell-integration hooks).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -242,7 +242,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_report_shell_state",
-            socketMethod: "surface.report_shell_state",
+            socketMethod: V2MethodNames.surfaceReportShellState,
             description: "Telemetry write: records whether a surface's shell is at a prompt or running a command (used by shell-integration hooks).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -255,7 +255,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_report_git_branch",
-            socketMethod: "surface.report_git_branch",
+            socketMethod: V2MethodNames.surfaceReportGitBranch,
             description: "Telemetry write: records a surface's current git branch and dirty state (used by shell-integration hooks).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -269,7 +269,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_clear_git_branch",
-            socketMethod: "surface.clear_git_branch",
+            socketMethod: V2MethodNames.surfaceClearGitBranch,
             description: "Clears a surface's reported git branch state.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -281,7 +281,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_report_pr",
-            socketMethod: "surface.report_pr",
+            socketMethod: V2MethodNames.surfaceReportPr,
             description: "Telemetry write: attaches a pull request badge to a surface.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -299,7 +299,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_clear_pr",
-            socketMethod: "surface.clear_pr",
+            socketMethod: V2MethodNames.surfaceClearPr,
             description: "Clears a surface's pull request badge.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -311,7 +311,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_report_ports",
-            socketMethod: "surface.report_ports",
+            socketMethod: V2MethodNames.surfaceReportPorts,
             description: "Telemetry write: records the listening TCP ports for a surface's process.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -324,7 +324,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_clear_ports",
-            socketMethod: "surface.clear_ports",
+            socketMethod: V2MethodNames.surfaceClearPorts,
             description: "Clears reported listening ports for a surface, or for every surface in the workspace if surface_id is omitted.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -336,7 +336,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_report_agent_state",
-            socketMethod: "surface.report_agent_state",
+            socketMethod: V2MethodNames.surfaceReportAgentState,
             description: "Telemetry write: records a surface's agent activity state (working/blocked/idle), as reported by an installed lifecycle hook.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -350,7 +350,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_clear_agent_state",
-            socketMethod: "surface.clear_agent_state",
+            socketMethod: V2MethodNames.surfaceClearAgentState,
             description: "Clears a surface's reported agent activity state.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -362,7 +362,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_read_text",
-            socketMethod: "surface.read_text",
+            socketMethod: V2MethodNames.surfaceReadText,
             description: "Reads a terminal surface's visible screen text, optionally including scrollback history. The primary tool for observing sibling-pane output.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "scrollback": ProgramaToolSchema.boolean("If true, include scrollback history, not just the visible screen. Defaults to false. Forced true if lines is set."),
@@ -374,7 +374,7 @@ enum SurfaceTools {
         ),
         ProgramaTool(
             name: "surface_wait",
-            socketMethod: "surface.wait",
+            socketMethod: V2MethodNames.surfaceWait,
             description: "Blocks (up to timeout_ms) until a terminal surface hits a condition, then returns in one round trip -- avoids polling surface_read_text in a loop. Provide exactly one of pattern, exit, or agent_state.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "pattern": ProgramaToolSchema.string("Regex pattern to wait for in the surface's output (screen + scrollback)."),

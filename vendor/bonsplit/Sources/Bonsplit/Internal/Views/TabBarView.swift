@@ -46,6 +46,8 @@ struct TabContextMenuState {
     let isZoomed: Bool
     let hasSplits: Bool
     let shortcuts: [TabContextAction: KeyboardShortcut]
+    let hasCustomColor: Bool
+    let colorPalette: [TabColorSwatch]
 
     var canMarkAsUnread: Bool {
         !isUnread
@@ -310,6 +312,9 @@ struct TabBarView: View {
             },
             onContextAction: { action in
                 controller.requestTabContextAction(action, for: TabID(id: tab.id), inPane: pane.id)
+            },
+            onApplyTabColor: { hex in
+                controller.requestTabColor(hex, for: TabID(id: tab.id), inPane: pane.id)
             }
         )
         .background(
@@ -368,7 +373,9 @@ struct TabBarView: View {
             canMoveToRightPane: controller.adjacentPane(to: pane.id, direction: .right) != nil,
             isZoomed: splitViewController.zoomedPaneId == pane.id,
             hasSplits: splitViewController.rootNode.allPaneIds.count > 1,
-            shortcuts: controller.contextMenuShortcuts
+            shortcuts: controller.contextMenuShortcuts,
+            hasCustomColor: tab.customColorHex != nil,
+            colorPalette: controller.tabColorPaletteProvider?() ?? []
         )
     }
 

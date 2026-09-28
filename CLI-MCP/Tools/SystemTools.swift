@@ -7,19 +7,19 @@ enum SystemTools {
     static let tools: [ProgramaTool] = [
         ProgramaTool(
             name: "system_ping",
-            socketMethod: "system.ping",
+            socketMethod: V2MethodNames.systemPing,
             description: "Health check against the running Programa app over its control socket; returns pong.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "system_capabilities",
-            socketMethod: "system.capabilities",
+            socketMethod: V2MethodNames.systemCapabilities,
             description: "Reports the running Programa app's socket protocol capabilities (supported command families and limits).",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "system_identify",
-            socketMethod: "system.identify",
+            socketMethod: V2MethodNames.systemIdentify,
             description: "Resolves the socket's own identity: the currently focused window/workspace/pane/surface, and (optionally) validates a caller-supplied location.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "caller": ["type": "object", "description": .string("Optional caller location to validate, e.g. { \"workspace_id\": \"...\", \"surface_id\": \"...\" }.")],
@@ -27,7 +27,7 @@ enum SystemTools {
         ),
         ProgramaTool(
             name: "system_tree",
-            socketMethod: "system.tree",
+            socketMethod: V2MethodNames.systemTree,
             description: "Returns the full window -> workspace -> pane -> surface tree (optionally scoped to one workspace or all windows). The primary read tool for understanding current app layout.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "workspace_id": ProgramaToolSchema.string("Optional workspace UUID or short ref to scope the tree to a single workspace (returns just that workspace's window/pane/surface subtree)."),
