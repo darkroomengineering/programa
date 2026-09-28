@@ -214,8 +214,9 @@ struct TabItemView: View {
         // A SwiftUI `.contextMenu` here gets closed by macOS the instant this view re-renders
         // while the menu is open (constant re-eval from closure props, hover state changes when
         // the pointer crosses onto the open menu, etc.) -- AppKit's own tracking loop is immune
-        // to that since it owns the run loop for the popup, not SwiftUI's diffing.
-        .background(TabContextMenuHostView(
+        // to that since it owns the run loop for the popup, not SwiftUI's diffing. It sits in an
+        // overlay so normal hit-testing reaches it; that skips clipped and non-interactive tabs.
+        .overlay(TabContextMenuHostView(
             tab: tab,
             contextMenuState: contextMenuState,
             onContextAction: onContextAction,
@@ -621,17 +622,9 @@ private struct TabContextMenuHostView: NSViewRepresentable {
         var contextMenuState: TabContextMenuState?
         var onContextAction: ((TabContextAction) -> Void)?
         var onApplyTabColor: ((String) -> Void)?
-        weak var view: NSView?
-        var monitor: Any?
         // Keeps this popup's NSMenuItem targets alive for the duration of the menu; replaced
         // (and the previous batch released) on every new popup.
         var retainedTargets: [ClosureMenuItemTarget] = []
-
-        deinit {
-            if let monitor {
-                NSEvent.removeMonitor(monitor)
-            }
-        }
 
         func popUpMenu(for event: NSEvent, in view: NSView) {
             guard let tab, let contextMenuState else { return }
@@ -834,45 +827,60 @@ private struct TabContextMenuHostView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.clear.cgColor
-
-        context.coordinator.view = view
+    func makeNSView(context: Context) -> TabContextMenuCaptureView {
+        let view = TabContextMenuCaptureView()
+        view.coordinator = context.coordinator
         context.coordinator.tab = tab
         context.coordinator.contextMenuState = contextMenuState
         context.coordinator.onContextAction = onContextAction
         context.coordinator.onApplyTabColor = onApplyTabColor
-
-        // Only intercept right-mouse-down and ctrl-left-mouse-down so left click selection,
-        // middle click close, and drag/reorder all keep working unmodified.
-        let coordinator = context.coordinator
-        coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [weak coordinator] event in
-            guard let coordinator, let v = coordinator.view, let w = v.window else { return event }
-            guard event.window === w else { return event }
-
-            let isRightClick = event.type == .rightMouseDown
-            let isCtrlClick = event.type == .leftMouseDown && event.modifierFlags.contains(.control)
-            guard isRightClick || isCtrlClick else { return event }
-
-            let p = v.convert(event.locationInWindow, from: nil)
-            guard v.bounds.contains(p) else { return event }
-
-            coordinator.popUpMenu(for: event, in: v)
-            return nil // swallow so it doesn't also select the tab or start a drag
-        }
-
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
+    func updateNSView(_ nsView: TabContextMenuCaptureView, context: Context) {
         // Refresh on every render so a stale enabled/disabled state or pinned/unread flag
         // from a previous render can never be shown in a freshly popped menu.
-        context.coordinator.view = nsView
+        nsView.coordinator = context.coordinator
         context.coordinator.tab = tab
         context.coordinator.contextMenuState = contextMenuState
         context.coordinator.onContextAction = onContextAction
         context.coordinator.onApplyTabColor = onApplyTabColor
+    }
+}
+
+/// Claims only right-mouse-down and ctrl-left-mouse-down in `hitTest`, so left-click
+/// selection, middle-click close, hover, and drag/reorder hit-test through to the tab
+/// underneath. Control-click arrives as a genuine `.leftMouseDown` with `.control` set,
+/// so `hitTest` must recognize it too or the click falls through to plain selection.
+private final class TabContextMenuCaptureView: NSView {
+    weak var coordinator: TabContextMenuHostView.Coordinator?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let event = NSApp.currentEvent,
+              let superview,
+              bounds.contains(convert(point, from: superview)) else { return nil }
+        if event.type == .rightMouseDown {
+            return self
+        }
+        if event.type == .leftMouseDown, event.modifierFlags.contains(.control) {
+            return self
+        }
+        return nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.modifierFlags.contains(.control) else {
+            super.mouseDown(with: event)
+            return
+        }
+        rightMouseDown(with: event)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard let coordinator else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        coordinator.popUpMenu(for: event, in: self)
     }
 }
