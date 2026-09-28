@@ -113,7 +113,7 @@ struct MCPSocketBridge {
 
         if let socketPassword {
             _ = try Self.sendRequest(
-                method: "auth.login",
+                method: V2MethodNames.authLogin,
                 params: ["password": socketPassword],
                 socketFD: socketFD
             )
@@ -169,11 +169,11 @@ struct MCPSocketBridge {
     static func responseTimeout(method: String, params: [String: Any]) -> TimeInterval {
         let timeoutMs: Int
         switch method {
-        case "surface.wait":
+        case V2MethodNames.surfaceWait:
             timeoutMs = timeoutInteger(params["timeout_ms"]) ?? timeoutInteger(params["timeout"]) ?? 30_000
-        case "browser.wait":
+        case V2MethodNames.browserWait:
             timeoutMs = timeoutInteger(params["timeout_ms"]) ?? 5_000
-        case "browser.download.wait":
+        case V2MethodNames.browserDownloadWait:
             timeoutMs = timeoutInteger(params["timeout_ms"]) ?? timeoutInteger(params["timeout"]) ?? 10_000
         default:
             return defaultResponseTimeoutSeconds

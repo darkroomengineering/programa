@@ -338,6 +338,7 @@
 					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */; };
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */; };
 		C7A10002 /* V2MethodNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A10001 /* V2MethodNames.swift */; };
+		B0F65D90C522CCE8ECCBE4AF /* V2MethodNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A10001 /* V2MethodNames.swift */; };
 		C7A20002 /* V2CommandCatalogContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A20001 /* V2CommandCatalogContractTests.swift */; };
 		/* End PBXBuildFile section */
 
@@ -1786,6 +1787,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BA930A082EE6778208DFF1D5 /* programa-mcp.swift in Sources */,
+				B0F65D90C522CCE8ECCBE4AF /* V2MethodNames.swift in Sources */,
 				21C3DEC154B0CB6666377FEC /* MCPServer+Capabilities.swift in Sources */,
 				FC26678DC2FE51F6815CFB85 /* SocketPathResolution.swift in Sources */,
 				35911EB4D71E31E20BE3DACA /* MCPSocketBridge.swift in Sources */,
