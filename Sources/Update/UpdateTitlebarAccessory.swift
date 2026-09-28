@@ -1304,8 +1304,9 @@ private struct NotificationPopoverRow: View {
             // state: `onHover(false)` fires as the pointer moves from the row onto the
             // open menu, re-evaluating this view's body and rebuilding the menu, which
             // macOS then closes out from under the click. A native NSMenu shown from a
-            // right-mouse-down/ctrl-click catcher is immune to that re-evaluation.
-            .background(
+            // right-mouse-down/ctrl-click catcher is immune to that re-evaluation. It sits
+            // in an overlay so it hit-tests above the SwiftUI button.
+            .overlay(
                 NotificationRowContextMenuCatcher(
                     isRead: notification.isRead,
                     onMarkRead: onMarkRead,
