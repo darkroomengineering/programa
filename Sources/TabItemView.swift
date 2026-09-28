@@ -746,15 +746,11 @@ struct TabItemView: View, Equatable {
             }
         }
         .overlay {
-            // Native AppKit context menu, built fresh from live state at click time,
-            // instead of SwiftUI's `.contextMenu`. `.contextMenu`'s content closure
-            // hangs off this row's body, which re-evaluates as often as every 40ms
-            // from the onReceive handlers above (`workspaceObservationGeneration`),
-            // on hover changes, and on any ==-compared param change. SwiftUI rebuilds
-            // an already-open `.contextMenu` on every one of those re-evaluations,
-            // and macOS reads that rebuild as the menu (and any open submenu, e.g.
-            // Workspace Color) repeatedly closing and reopening. Building the NSMenu
-            // only once, at the moment of the click, sidesteps the churn entirely.
+            // Native AppKit context menu, built from live state at click time. Do not
+            // use SwiftUI's `.contextMenu` here: this row's body re-evaluates as often
+            // as every 40ms (`workspaceObservationGeneration`, hover, param changes),
+            // SwiftUI rebuilds an open `.contextMenu` on each re-evaluation, and macOS
+            // closes the menu and any open submenu (e.g. Workspace Color) when it does.
             SidebarRowContextMenuCapture {
                 #if DEBUG
                 dlog("sidebar.contextMenu.open workspace=\(tab.id.uuidString.prefix(5)) targets=\(contextMenuWorkspaceIds.count)")
@@ -887,22 +883,15 @@ struct TabItemView: View, Equatable {
         isMulti ? multi : single
     }
 
-    /// Applies a `StoredShortcut`'s key equivalent to an `NSMenuItem`, mirroring the
-    /// `if let key = shortcut.keyEquivalent { .keyboardShortcut(key, modifiers:) }`
-    /// pattern the SwiftUI menu used to use. `menuItemKeyEquivalent`/`modifierFlags`
-    /// are the AppKit-side counterparts of `keyEquivalent`/`eventModifiers` and are
-    /// `nil`/empty under the same conditions (chorded shortcuts have no single
-    /// menu-item key equivalent).
+    /// Shows a `StoredShortcut` on an `NSMenuItem`. Chorded shortcuts have no single
+    /// menu-item key equivalent, so they show none.
     private func applyShortcut(_ shortcut: StoredShortcut, to item: NSMenuItem) {
         guard let key = shortcut.menuItemKeyEquivalent else { return }
         item.keyEquivalent = key
         item.keyEquivalentModifierMask = shortcut.modifierFlags
     }
 
-    /// Builds the sidebar row's context menu fresh from live state at click time,
-    /// replacing the SwiftUI `.contextMenu` this row used to carry. Every item here
-    /// ports the SwiftUI menu 1:1 (same strings/keys, order, dividers, conditional
-    /// visibility, disabled states, and shortcut display).
+    /// Builds the sidebar row's context menu from live state at click time.
     private func buildWorkspaceContextMenu(colorScheme: ColorScheme) -> NSMenu {
         let targetIds = contextMenuWorkspaceIds
         let isMulti = targetIds.count > 1
@@ -1949,7 +1938,9 @@ private final class SidebarRowContextMenuCaptureView: NSView {
         // left-click selection underneath. Every other click (plain left-click
         // selection, hover, drag-reorder) continues to hit-test through to
         // SwiftUI/AppKit normally.
-        guard let event = NSApp.currentEvent else { return nil }
+        guard let event = NSApp.currentEvent,
+              let superview,
+              bounds.contains(convert(point, from: superview)) else { return nil }
         if event.type == .rightMouseDown {
             return self
         }
@@ -1975,9 +1966,7 @@ private final class SidebarRowContextMenuCaptureView: NSView {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
-    // VoiceOver's "Show menu" action relied on SwiftUI's `.contextMenu` before this
-    // change; best-effort parity for a plain NSView. Not exercised by this change
-    // (no VoiceOver pass was run) -- report a regression here if one surfaces.
+    // VoiceOver "Show menu" support for this view.
     override func accessibilityPerformShowMenu() -> Bool {
         guard let menu = buildMenu?() else { return false }
         menu.popUp(positioning: nil, at: NSPoint(x: bounds.midX, y: bounds.midY), in: self)
