@@ -1835,7 +1835,12 @@ final class TerminalSurface: Identifiable, ObservableObject {
             // width dependency to protect, so it replays immediately here,
             // before the fresh shell this surface just spawned has a
             // chance to print its own prompt -- the seed lands first,
-            // ahead of any live shell output. `resetModes: false` because
+            // ahead of the shell's first output in practice, though not
+            // guaranteed -- the child is spawned on ghostty's IO thread at
+            // `ghostty_surface_new` and can in principle win the race to
+            // print before this call's queue dispatch lands; if it does,
+            // the seed still appends at the cursor rather than overwriting
+            // a prompt. `resetModes: false` because
             // the mode-disable sequence is already baked into
             // `consumedFreshSeedText` upstream; applying it twice would be
             // redundant. `pendingReviveWinchPGID`/`pendingReviveWinchChildPID`
