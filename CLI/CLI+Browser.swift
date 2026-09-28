@@ -290,9 +290,9 @@ extension ProgramaCLI {
         if subcommand == "back" || subcommand == "forward" || subcommand == "reload" {
             let sid = try requireSurface()
             let methodMap: [String: String] = [
-                "back": "browser.back",
-                "forward": "browser.forward",
-                "reload": "browser.reload",
+                "back": V2MethodNames.browserBack,
+                "forward": V2MethodNames.browserForward,
+                "reload": V2MethodNames.browserReload,
             ]
             var params: [String: Any] = ["surface_id": sid]
             if hasFlag(subArgs, name: "--snapshot-after") {
@@ -437,15 +437,15 @@ extension ProgramaCLI {
                 throw CLIError(message: "browser \(subcommand) requires a selector")
             }
             let methodMap: [String: String] = [
-                "click": "browser.click",
-                "dblclick": "browser.dblclick",
-                "hover": "browser.hover",
-                "focus": "browser.focus",
-                "check": "browser.check",
-                "uncheck": "browser.uncheck",
-                "scrollintoview": "browser.scroll_into_view",
-                "scrollinto": "browser.scroll_into_view",
-                "scroll-into-view": "browser.scroll_into_view",
+                "click": V2MethodNames.browserClick,
+                "dblclick": V2MethodNames.browserDblclick,
+                "hover": V2MethodNames.browserHover,
+                "focus": V2MethodNames.browserFocus,
+                "check": V2MethodNames.browserCheck,
+                "uncheck": V2MethodNames.browserUncheck,
+                "scrollintoview": V2MethodNames.browserScrollIntoView,
+                "scrollinto": V2MethodNames.browserScrollIntoView,
+                "scroll-into-view": V2MethodNames.browserScrollIntoView,
             ]
             var params: [String: Any] = ["surface_id": sid, "selector": selector]
             if hasFlag(subArgs, name: "--snapshot-after") {
@@ -504,7 +504,7 @@ extension ProgramaCLI {
                 }
             }
 
-            let method = (subcommand == "type") ? "browser.type" : "browser.fill"
+            let method = (subcommand == "type") ? V2MethodNames.browserType : V2MethodNames.browserFill
             var params: [String: Any] = ["surface_id": sid, "selector": selector, "text": text]
             if snapshotAfter {
                 params["snapshot_after"] = true
@@ -522,10 +522,10 @@ extension ProgramaCLI {
                 throw CLIError(message: "browser \(subcommand) requires a key")
             }
             let methodMap: [String: String] = [
-                "press": "browser.press",
-                "key": "browser.press",
-                "keydown": "browser.keydown",
-                "keyup": "browser.keyup",
+                "press": V2MethodNames.browserPress,
+                "key": V2MethodNames.browserPress,
+                "keydown": V2MethodNames.browserKeydown,
+                "keyup": V2MethodNames.browserKeyup,
             ]
             var params: [String: Any] = ["surface_id": sid, "key": key]
             if hasFlag(subArgs, name: "--snapshot-after") {
@@ -775,13 +775,13 @@ extension ProgramaCLI {
                 }
 
                 let methodMap: [String: String] = [
-                    "text": "browser.get.text",
-                    "html": "browser.get.html",
-                    "value": "browser.get.value",
-                    "attr": "browser.get.attr",
-                    "count": "browser.get.count",
-                    "box": "browser.get.box",
-                    "styles": "browser.get.styles",
+                    "text": V2MethodNames.browserGetText,
+                    "html": V2MethodNames.browserGetHtml,
+                    "value": V2MethodNames.browserGetValue,
+                    "attr": V2MethodNames.browserGetAttr,
+                    "count": V2MethodNames.browserGetCount,
+                    "box": V2MethodNames.browserGetBox,
+                    "styles": V2MethodNames.browserGetStyles,
                 ]
                 let payload = try client.sendV2(method: methodMap[getVerb]!, params: params)
                 if effectiveJSONOutput {
@@ -816,9 +816,9 @@ extension ProgramaCLI {
             }
 
             let methodMap: [String: String] = [
-                "visible": "browser.is.visible",
-                "enabled": "browser.is.enabled",
-                "checked": "browser.is.checked",
+                "visible": V2MethodNames.browserIsVisible,
+                "enabled": V2MethodNames.browserIsEnabled,
+                "checked": V2MethodNames.browserIsChecked,
             ]
             guard let method = methodMap[isVerb] else {
                 throw CLIError(message: "Unsupported browser is subcommand: \(isVerb)")
@@ -859,7 +859,7 @@ extension ProgramaCLI {
                 if hasFlag(locatorArgs, name: "--exact") {
                     params["exact"] = true
                 }
-                method = "browser.find.role"
+                method = V2MethodNames.browserFindRole
             case "text", "label", "placeholder", "alt", "title", "testid":
                 let keyMap: [String: String] = [
                     "text": "text",
@@ -869,6 +869,14 @@ extension ProgramaCLI {
                     "title": "title",
                     "testid": "testid",
                 ]
+                let findMethodMap: [String: String] = [
+                    "text": V2MethodNames.browserFindText,
+                    "label": V2MethodNames.browserFindLabel,
+                    "placeholder": V2MethodNames.browserFindPlaceholder,
+                    "alt": V2MethodNames.browserFindAlt,
+                    "title": V2MethodNames.browserFindTitle,
+                    "testid": V2MethodNames.browserFindTestid,
+                ]
                 let candidates = nonFlagArgs(locatorArgs)
                 guard let value = candidates.first else {
                     throw CLIError(message: "browser find \(locator) requires a value")
@@ -877,7 +885,7 @@ extension ProgramaCLI {
                 if hasFlag(locatorArgs, name: "--exact") {
                     params["exact"] = true
                 }
-                method = "browser.find.\(locator)"
+                method = findMethodMap[locator]!
             case "first", "last":
                 let (selectorOpt, rem1) = parseOption(locatorArgs, name: "--selector")
                 let candidates = nonFlagArgs(rem1)
@@ -885,7 +893,7 @@ extension ProgramaCLI {
                     throw CLIError(message: "browser find \(locator) requires a selector")
                 }
                 params["selector"] = selector
-                method = "browser.find.\(locator)"
+                method = (locator == "first") ? V2MethodNames.browserFindFirst : V2MethodNames.browserFindLast
             case "nth":
                 let (indexOpt, rem1) = parseOption(locatorArgs, name: "--index")
                 let (selectorOpt, rem2) = parseOption(rem1, name: "--selector")
@@ -901,7 +909,7 @@ extension ProgramaCLI {
                 }
                 params["index"] = index
                 params["selector"] = selector
-                method = "browser.find.nth"
+                method = V2MethodNames.browserFindNth
             default:
                 throw CLIError(message: "Unsupported browser find locator: \(locator)")
             }
@@ -1114,7 +1122,7 @@ extension ProgramaCLI {
                 let payload = try client.sendV2(method: V2MethodNames.browserTabNew, params: params)
                 output(payload, fallback: "OK")
             case "switch", "close":
-                let method = (tabVerb == "switch") ? "browser.tab.switch" : "browser.tab.close"
+                let method = (tabVerb == "switch") ? V2MethodNames.browserTabSwitch : V2MethodNames.browserTabClose
                 var params: [String: Any] = ["surface_id": sid]
                 let target = tabArgs.first
                 if let target {
@@ -1135,7 +1143,7 @@ extension ProgramaCLI {
         if subcommand == "console" {
             let sid = try requireSurface()
             let consoleVerb = subArgs.first?.lowercased() ?? "list"
-            let method = (consoleVerb == "clear") ? "browser.console.clear" : "browser.console.list"
+            let method = (consoleVerb == "clear") ? V2MethodNames.browserConsoleClear : V2MethodNames.browserConsoleList
             if consoleVerb != "list" && consoleVerb != "clear" {
                 throw CLIError(message: "Unsupported browser console subcommand: \(consoleVerb)")
             }
@@ -1190,9 +1198,9 @@ extension ProgramaCLI {
             let method: String
             switch stateVerb {
             case "save":
-                method = "browser.state.save"
+                method = V2MethodNames.browserStateSave
             case "load":
-                method = "browser.state.load"
+                method = V2MethodNames.browserStateLoad
             default:
                 throw CLIError(message: "Unsupported browser state subcommand: \(stateVerb)")
             }
@@ -1210,7 +1218,12 @@ extension ProgramaCLI {
             guard !content.isEmpty else {
                 throw CLIError(message: "browser \(subcommand) requires content")
             }
-            let payload = try client.sendV2(method: "browser.\(subcommand)", params: ["surface_id": sid, field: content])
+            let addMethodMap: [String: String] = [
+                "addinitscript": V2MethodNames.browserAddinitscript,
+                "addscript": V2MethodNames.browserAddscript,
+                "addstyle": V2MethodNames.browserAddstyle,
+            ]
+            let payload = try client.sendV2(method: addMethodMap[subcommand]!, params: ["surface_id": sid, field: content])
             output(payload, fallback: "OK")
             return
         }
@@ -1258,9 +1271,9 @@ extension ProgramaCLI {
             let method: String
             switch traceVerb {
             case "start":
-                method = "browser.trace.start"
+                method = V2MethodNames.browserTraceStart
             case "stop":
-                method = "browser.trace.stop"
+                method = V2MethodNames.browserTraceStop
             default:
                 throw CLIError(message: "Unsupported browser trace subcommand: \(traceVerb)")
             }
@@ -1317,9 +1330,9 @@ extension ProgramaCLI {
             let method: String
             switch castVerb {
             case "start":
-                method = "browser.screencast.start"
+                method = V2MethodNames.browserScreencastStart
             case "stop":
-                method = "browser.screencast.stop"
+                method = V2MethodNames.browserScreencastStop
             default:
                 throw CLIError(message: "Unsupported browser screencast subcommand: \(castVerb)")
             }
@@ -1337,11 +1350,11 @@ extension ProgramaCLI {
             let method: String
             switch inputVerb {
             case "mouse":
-                method = "browser.input_mouse"
+                method = V2MethodNames.browserInputMouse
             case "keyboard":
-                method = "browser.input_keyboard"
+                method = V2MethodNames.browserInputKeyboard
             case "touch":
-                method = "browser.input_touch"
+                method = V2MethodNames.browserInputTouch
             default:
                 throw CLIError(message: "Unsupported browser input subcommand: \(inputVerb)")
             }
@@ -1356,7 +1369,12 @@ extension ProgramaCLI {
 
         if ["input_mouse", "input_keyboard", "input_touch"].contains(subcommand) {
             let sid = try requireSurface()
-            let payload = try client.sendV2(method: "browser.\(subcommand)", params: ["surface_id": sid])
+            let legacyInputMethodMap: [String: String] = [
+                "input_mouse": V2MethodNames.browserInputMouse,
+                "input_keyboard": V2MethodNames.browserInputKeyboard,
+                "input_touch": V2MethodNames.browserInputTouch,
+            ]
+            let payload = try client.sendV2(method: legacyInputMethodMap[subcommand]!, params: ["surface_id": sid])
             output(payload, fallback: "OK")
             return
         }

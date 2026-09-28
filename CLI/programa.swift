@@ -3243,7 +3243,11 @@ struct ProgramaCLI {
                         : (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
                     let workspaceArg = explicitWorkspaceArg ?? callerWorkspaceArg
                     let explicitSurfaceArg = self.optionValue(ctx.commandArgs, name: "--surface")
-                    let callerSurfaceArg = explicitSurfaceArg == nil && workspaceArg == nil && preferTTYFallback == false && ctx.windowId == nil
+                    let envWorkspaceArg = ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
+                    let callerSurfaceArg = explicitSurfaceArg == nil
+                        && preferTTYFallback == false
+                        && ctx.windowId == nil
+                        && (explicitWorkspaceArg == nil || explicitWorkspaceArg == envWorkspaceArg)
                         ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"]
                         : nil
                     let surfaceArg = explicitSurfaceArg ?? callerSurfaceArg
