@@ -153,7 +153,7 @@ pub async fn handle_connection(stream: UnixStream, state: Arc<AppState>) {
             continue;
         }
 
-        let outcome = dispatch(&request, &state, &mut authenticated, &mut my_attachments);
+        let outcome = dispatch(&request, &state, &mut authenticated, &mut my_attachments).await;
 
         let (resp_line, fd_to_send, pending_attachment) = match outcome {
             Ok(Dispatched {
@@ -202,7 +202,7 @@ fn rollback_attachment(state: &AppState, attachment: Option<(String, Uuid)>) {
     }
 }
 
-fn dispatch(
+async fn dispatch(
     req: &Request,
     state: &Arc<AppState>,
     authenticated: &mut bool,
@@ -221,7 +221,7 @@ fn dispatch(
         "session.list" => session_list(state).map(Into::into),
         "session.status" => session_status(req, state).map(Into::into),
         "session.resize" => session_resize(req, state, attachments).map(Into::into),
-        "session.close" => session_close(req, state).map(Into::into),
+        "session.close" => session_close(req, state).await.map(Into::into),
         "session.write" => session_write(req, state).map(Into::into),
         "session.read" => session_read(req, state).map(Into::into),
         "session.detach" => session_detach(req, state, attachments).map(Into::into),
@@ -447,8 +447,13 @@ fn session_resize(
     Ok(json!({"cols": eff_cols, "rows": eff_rows}))
 }
 
-fn session_close(req: &Request, state: &Arc<AppState>) -> Result<Value, ErrorBody> {
-    let id = require_str(&req.params, "id")?;
+// `Session::close` blocks on SIGHUP/SIGKILL grace-period polling (up to ~1s,
+// see session.rs), so it runs on a blocking-pool thread via `spawn_blocking`
+// rather than inline on this async connection's tokio worker — otherwise
+// closing one session would stall every other connection sharing the
+// runtime for the duration of that wait.
+async fn session_close(req: &Request, state: &Arc<AppState>) -> Result<Value, ErrorBody> {
+    let id = require_str(&req.params, "id")?.to_string();
     let kill = req
         .params
         .get("kill")
@@ -460,18 +465,25 @@ fn session_close(req: &Request, state: &Arc<AppState>) -> Result<Value, ErrorBod
             "session.close with kill=false cannot preserve a PTY after daemon ownership ends",
         ));
     }
-    let closed = state.sessions.close(id, kill).map_err(|error| {
-        let code = if error.kind() == std::io::ErrorKind::TimedOut {
-            ErrorCode::Timeout
-        } else {
-            ErrorCode::InternalError
-        };
-        ErrorBody::new(code, format!("close failed: {error}"))
-    })?;
+    let close_state = state.clone();
+    let close_id = id.clone();
+    let closed = tokio::task::spawn_blocking(move || close_state.sessions.close(&close_id, kill))
+        .await
+        .map_err(|error| {
+            ErrorBody::new(ErrorCode::InternalError, format!("close task panicked: {error}"))
+        })?
+        .map_err(|error| {
+            let code = if error.kind() == std::io::ErrorKind::TimedOut {
+                ErrorCode::Timeout
+            } else {
+                ErrorCode::InternalError
+            };
+            ErrorBody::new(code, format!("close failed: {error}"))
+        })?;
     if !closed {
         return Err(ErrorBody::new(ErrorCode::NotFound, "session not found"));
     }
-    reconcile_closed_session(state, id);
+    reconcile_closed_session(state, &id);
     Ok(json!({"closed": true}))
 }
 
