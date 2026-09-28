@@ -1488,7 +1488,6 @@ class TerminalController {
         }
     }
 
-
     private nonisolated func passwordAuthRequiredResponse(for command: String) -> String {
         let message = "Authentication required. Send auth <password> first."
         guard command.hasPrefix("{"),

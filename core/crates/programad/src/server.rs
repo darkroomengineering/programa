@@ -470,7 +470,10 @@ async fn session_close(req: &Request, state: &Arc<AppState>) -> Result<Value, Er
     let closed = tokio::task::spawn_blocking(move || close_state.sessions.close(&close_id, kill))
         .await
         .map_err(|error| {
-            ErrorBody::new(ErrorCode::InternalError, format!("close task panicked: {error}"))
+            ErrorBody::new(
+                ErrorCode::InternalError,
+                format!("close task panicked: {error}"),
+            )
         })?
         .map_err(|error| {
             let code = if error.kind() == std::io::ErrorKind::TimedOut {

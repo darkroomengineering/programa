@@ -563,7 +563,10 @@ async fn session_close_escalates_to_sigkill_when_child_ignores_sighup() {
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    assert!(saw_ready, "shell never printed READY after installing its SIGHUP trap");
+    assert!(
+        saw_ready,
+        "shell never printed READY after installing its SIGHUP trap"
+    );
 
     // Expected cost is ~500ms SIGHUP grace + ~500ms SIGKILL grace plus reap/
     // join/flush overhead; give real headroom above that rather than a tight
