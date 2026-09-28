@@ -17,6 +17,8 @@ public struct Tab: Identifiable, Hashable, Sendable {
     public let isLoading: Bool
     /// Whether the tab is pinned in its pane.
     public let isPinned: Bool
+    /// Optional hex color (e.g. "#1565C0") tinting this tab's background.
+    public let customColorHex: String?
 
     public init(
         id: TabID = TabID(),
@@ -28,7 +30,8 @@ public struct Tab: Identifiable, Hashable, Sendable {
         isDirty: Bool = false,
         showsNotificationBadge: Bool = false,
         isLoading: Bool = false,
-        isPinned: Bool = false
+        isPinned: Bool = false,
+        customColorHex: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -40,6 +43,7 @@ public struct Tab: Identifiable, Hashable, Sendable {
         self.showsNotificationBadge = showsNotificationBadge
         self.isLoading = isLoading
         self.isPinned = isPinned
+        self.customColorHex = customColorHex
     }
 
     internal init(from tabItem: TabItem) {
@@ -53,5 +57,6 @@ public struct Tab: Identifiable, Hashable, Sendable {
         self.showsNotificationBadge = tabItem.showsNotificationBadge
         self.isLoading = tabItem.isLoading
         self.isPinned = tabItem.isPinned
+        self.customColorHex = tabItem.customColorHex
     }
 }

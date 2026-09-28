@@ -596,6 +596,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                 kind: surfaceKind(for: panel),
                 isLoading: browserPanel?.isLoading ?? false,
                 isPinned: pinnedPanelIds.contains(panelId),
+                customColorHex: panelColorHexes[panelId],
                 directory: panelDirectories[panelId],
                 ttyName: surfaceTTYNames[panelId],
                 cachedTitle: cachedTitle,
@@ -1078,9 +1079,19 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         case .toggleZoom:
             guard let panelId = panelIdFromSurfaceId(tab.id) else { return }
             toggleSplitZoom(panelId: panelId)
+        case .clearTabColor:
+            guard let panelId = panelIdFromSurfaceId(tab.id) else { return }
+            setPanelColor(panelId: panelId, hex: nil)
+        case .chooseCustomTabColor:
+            promptCustomTabColor(tabId: tab.id)
         @unknown default:
             break
         }
+    }
+
+    func splitTabBar(_ controller: BonsplitController, didRequestTabColor hex: String, for tab: Bonsplit.Tab, inPane pane: PaneID) {
+        guard let panelId = panelIdFromSurfaceId(tab.id) else { return }
+        setPanelColor(panelId: panelId, hex: hex)
     }
 
     func splitTabBar(_ controller: BonsplitController, didChangeGeometry snapshot: LayoutSnapshot) {

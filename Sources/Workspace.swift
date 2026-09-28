@@ -142,6 +142,9 @@ final class Workspace: Identifiable, ObservableObject {
     var panelsWithLiveTitle: Set<UUID> = []
     @Published var panelCustomTitles: [UUID: String] = [:]
     @Published var pinnedPanelIds: Set<UUID> = []
+    /// Per-tab color tint (pane tab bar), keyed by panel id. Distinct from `customColor`,
+    /// which is the sidebar's per-workspace color.
+    @Published var panelColorHexes: [UUID: String] = [:]
     @Published var manualUnreadPanelIds: Set<UUID> = []
     @Published var tmuxLayoutSnapshot: LayoutSnapshot?
     @Published private(set) var tmuxWorkspaceFlashPanelId: UUID?
@@ -400,6 +403,7 @@ final class Workspace: Identifiable, ObservableObject {
 
         // Set ourselves as delegate
         bonsplitController.delegate = self
+        bonsplitController.tabColorPaletteProvider = { WorkspaceTabColorSettings.tabColorSwatches() }
         connectSharedTabOrdering()
 
         // Ensure bonsplit has a focused pane and our didSelectTab handler runs for the
@@ -497,6 +501,7 @@ final class Workspace: Identifiable, ObservableObject {
         }
 
         bonsplitController.delegate = self
+        bonsplitController.tabColorPaletteProvider = { WorkspaceTabColorSettings.tabColorSwatches() }
         connectSharedTabOrdering()
 
         if let initialTabId {
@@ -612,6 +617,7 @@ final class Workspace: Identifiable, ObservableObject {
         let kind: String?
         let isLoading: Bool
         let isPinned: Bool
+        let customColorHex: String?
         let directory: String?
         let ttyName: String?
         let cachedTitle: String?
@@ -628,6 +634,7 @@ final class Workspace: Identifiable, ObservableObject {
             kind: String?,
             isLoading: Bool,
             isPinned: Bool,
+            customColorHex: String?,
             directory: String?,
             ttyName: String?,
             cachedTitle: String?,
@@ -642,6 +649,7 @@ final class Workspace: Identifiable, ObservableObject {
             self.kind = kind
             self.isLoading = isLoading
             self.isPinned = isPinned
+            self.customColorHex = customColorHex
             self.directory = directory
             self.ttyName = ttyName
             self.cachedTitle = cachedTitle
@@ -976,14 +984,16 @@ final class Workspace: Identifiable, ObservableObject {
 
     func syncPinnedStateForTab(_ tabId: TabID, panelId: UUID) {
         let isPinned = pinnedPanelIds.contains(panelId)
+        let colorHex = panelColorHexes[panelId]
         if let panel = panels[panelId] {
             bonsplitController.updateTab(
                 tabId,
                 kind: .some(surfaceKind(for: panel)),
-                isPinned: isPinned
+                isPinned: isPinned,
+                customColorHex: .some(colorHex)
             )
         } else {
-            bonsplitController.updateTab(tabId, isPinned: isPinned)
+            bonsplitController.updateTab(tabId, isPinned: isPinned, customColorHex: .some(colorHex))
         }
     }
 
@@ -1150,6 +1160,20 @@ final class Workspace: Identifiable, ObservableObject {
               let paneId = paneId(forPanelId: panelId) else { return }
         bonsplitController.updateTab(tabId, isPinned: pinned)
         normalizePinnedTabs(in: paneId)
+    }
+
+    func setPanelColor(panelId: UUID, hex: String?) {
+        guard panels[panelId] != nil else { return }
+        let normalized = hex.flatMap { WorkspaceTabColorSettings.normalizedHex($0) }
+        guard panelColorHexes[panelId] != normalized else { return }
+        if let normalized {
+            panelColorHexes[panelId] = normalized
+        } else {
+            panelColorHexes.removeValue(forKey: panelId)
+        }
+
+        guard let tabId = surfaceIdFromPanelId(panelId) else { return }
+        bonsplitController.updateTab(tabId, customColorHex: .some(normalized))
     }
 
     func markPanelUnread(_ panelId: UUID) {
@@ -1778,6 +1802,11 @@ final class Workspace: Identifiable, ObservableObject {
         } else {
             pinnedPanelIds.remove(detached.panelId)
         }
+        if let customColorHex = detached.customColorHex {
+            panelColorHexes[detached.panelId] = customColorHex
+        } else {
+            panelColorHexes.removeValue(forKey: detached.panelId)
+        }
         if detached.manuallyUnread {
             manualUnreadPanelIds.insert(detached.panelId)
             manualUnreadMarkedAt[detached.panelId] = .distantPast
@@ -1795,6 +1824,7 @@ final class Workspace: Identifiable, ObservableObject {
             isDirty: detached.panel.isDirty,
             isLoading: detached.isLoading,
             isPinned: detached.isPinned,
+            customColorHex: detached.customColorHex,
             inPane: paneId
         ) else {
             panels.removeValue(forKey: detached.panelId)
@@ -1803,6 +1833,7 @@ final class Workspace: Identifiable, ObservableObject {
             panelTitles.removeValue(forKey: detached.panelId)
             panelCustomTitles.removeValue(forKey: detached.panelId)
             pinnedPanelIds.remove(detached.panelId)
+            panelColorHexes.removeValue(forKey: detached.panelId)
             manualUnreadPanelIds.remove(detached.panelId)
             manualUnreadMarkedAt.removeValue(forKey: detached.panelId)
             panelSubscriptions.removeValue(forKey: detached.panelId)
@@ -2121,6 +2152,51 @@ final class Workspace: Identifiable, ObservableObject {
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
         setPanelCustomTitle(panelId: panelId, title: input.stringValue)
+    }
+
+    func promptCustomTabColor(tabId: TabID) {
+        guard let panelId = panelIdFromSurfaceId(tabId) else { return }
+
+        let alert = NSAlert()
+        alert.messageText = String(localized: "alert.customTabColor.title", defaultValue: "Custom Tab Color")
+        alert.informativeText = String(localized: "alert.customColor.message", defaultValue: "Enter a hex color in the format #RRGGBB.")
+
+        let seed = panelColorHexes[panelId] ?? WorkspaceTabColorSettings.customPaletteEntries().first?.hex ?? ""
+        let input = NSTextField(string: seed)
+        input.placeholderString = "#1565C0"
+        input.frame = NSRect(x: 0, y: 0, width: 240, height: 22)
+        alert.accessoryView = input
+        alert.addButton(withTitle: String(localized: "alert.customColor.apply", defaultValue: "Apply"))
+        alert.addButton(withTitle: String(localized: "alert.customColor.cancel", defaultValue: "Cancel"))
+
+        let alertWindow = alert.window
+        alertWindow.initialFirstResponder = input
+        DispatchQueue.main.async {
+            alertWindow.makeFirstResponder(input)
+            input.selectText(nil)
+        }
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+        guard let normalized = WorkspaceTabColorSettings.addCustomColor(input.stringValue) else {
+            showInvalidTabColorAlert(input.stringValue)
+            return
+        }
+        setPanelColor(panelId: panelId, hex: normalized)
+    }
+
+    private func showInvalidTabColorAlert(_ value: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "alert.invalidColor.title", defaultValue: "Invalid Color")
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            alert.informativeText = String(localized: "alert.invalidColor.emptyMessage", defaultValue: "Enter a hex color in the format #RRGGBB.")
+        } else {
+            alert.informativeText = String(localized: "alert.invalidColor.invalidMessage", defaultValue: "\"\(trimmed)\" is not a valid hex color. Use #RRGGBB.")
+        }
+        alert.addButton(withTitle: String(localized: "alert.invalidColor.ok", defaultValue: "OK"))
+        _ = alert.runModal()
     }
 
     enum PanelMoveDestination {

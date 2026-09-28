@@ -5342,3 +5342,46 @@ final class FocusTransitionCoordinatorTests: XCTestCase {
         )
     }
 }
+
+final class SessionPanelSnapshotTabColorTests: XCTestCase {
+    private func makeSnapshot(customColorHex: String?) -> SessionPanelSnapshot {
+        SessionPanelSnapshot(
+            id: UUID(),
+            type: .terminal,
+            title: "Terminal",
+            customTitle: nil,
+            directory: nil,
+            isPinned: false,
+            customColorHex: customColorHex,
+            isManuallyUnread: false,
+            gitBranch: nil,
+            listeningPorts: [],
+            ttyName: nil,
+            terminal: SessionTerminalPanelSnapshot(workingDirectory: nil, scrollback: nil),
+            browser: nil,
+            markdown: nil,
+            review: nil
+        )
+    }
+
+    func testCustomColorHexRoundTripsThroughEncodeDecode() throws {
+        let original = makeSnapshot(customColorHex: "#1565C0")
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(SessionPanelSnapshot.self, from: data)
+        XCTAssertEqual(decoded.customColorHex, "#1565C0")
+        XCTAssertEqual(decoded.id, original.id)
+    }
+
+    func testMissingCustomColorHexKeyDecodesToNil() throws {
+        // Simulates a pre-tab-color session snapshot written before this field existed.
+        let legacySnapshot = makeSnapshot(customColorHex: nil)
+        var data = try JSONEncoder().encode(legacySnapshot)
+        var object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertNil(object["customColorHex"], "legacy fixture must not already contain the key")
+        object.removeValue(forKey: "customColorHex")
+        data = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(SessionPanelSnapshot.self, from: data)
+        XCTAssertNil(decoded.customColorHex)
+    }
+}

@@ -336,6 +336,17 @@ enum WorkspaceTabColorSettings {
         return Color(nsColor: color)
     }
 
+    /// Palette entries for bonsplit's native tab-color context menu, resolved for the app's
+    /// current effective appearance. Bonsplit cannot import app types, so this maps the
+    /// shared palette into its own `TabColorSwatch` value type at call time.
+    static func tabColorSwatches(defaults: UserDefaults = .standard) -> [TabColorSwatch] {
+        let colorScheme: ColorScheme = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+        return palette(defaults: defaults).compactMap { entry in
+            guard let color = displayNSColor(hex: entry.hex, colorScheme: colorScheme) else { return nil }
+            return TabColorSwatch(name: entry.name, hex: entry.hex, swatchColor: color)
+        }
+    }
+
     static func displayNSColor(
         hex: String,
         colorScheme: ColorScheme,

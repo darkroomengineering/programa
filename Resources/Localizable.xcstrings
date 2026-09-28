@@ -2842,6 +2842,23 @@
         }
       }
     },
+    "alert.customTabColor.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom Tab Color"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タブのカスタムカラー"
+          }
+        }
+      }
+    },
     "alert.invalidColor.emptyMessage": {
       "extractionState": "manual",
       "localizations": {

@@ -282,6 +282,7 @@ extension Workspace {
         let customTitle = panelCustomTitles[panelId]
         let directory = panelDirectories[panelId]
         let isPinned = pinnedPanelIds.contains(panelId)
+        let customColorHex = panelColorHexes[panelId]
         let isManuallyUnread = manualUnreadPanelIds.contains(panelId)
         let branchSnapshot = panelGitBranches[panelId].map {
             SessionGitBranchSnapshot(branch: $0.branch, isDirty: $0.isDirty)
@@ -359,6 +360,7 @@ extension Workspace {
             customTitle: customTitle,
             directory: directory,
             isPinned: isPinned,
+            customColorHex: customColorHex,
             isManuallyUnread: isManuallyUnread,
             gitBranch: branchSnapshot,
             listeningPorts: listeningPorts,
@@ -766,6 +768,7 @@ extension Workspace {
 
         setPanelCustomTitle(panelId: panelId, title: snapshot.customTitle)
         setPanelPinned(panelId: panelId, pinned: snapshot.isPinned)
+        setPanelColor(panelId: panelId, hex: snapshot.customColorHex)
 
         if snapshot.isManuallyUnread {
             markPanelUnread(panelId)

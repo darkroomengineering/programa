@@ -447,6 +447,9 @@ extension Workspace {
         if pinnedPanelIds.contains(where: { !validSurfaceIds.contains($0) }) {
             pinnedPanelIds = pinnedPanelIds.filter { validSurfaceIds.contains($0) }
         }
+        if panelColorHexes.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            panelColorHexes = panelColorHexes.filter { validSurfaceIds.contains($0.key) }
+        }
         if manualUnreadPanelIds.contains(where: { !validSurfaceIds.contains($0) }) {
             manualUnreadPanelIds = manualUnreadPanelIds.filter { validSurfaceIds.contains($0) }
         }

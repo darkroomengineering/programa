@@ -116,6 +116,7 @@ public final class BonsplitController {
         showsNotificationBadge: Bool = false,
         isLoading: Bool = false,
         isPinned: Bool = false,
+        customColorHex: String? = nil,
         inPane pane: PaneID? = nil
     ) -> TabID? {
         let tabId = TabID()
@@ -129,7 +130,8 @@ public final class BonsplitController {
             isDirty: isDirty,
             showsNotificationBadge: showsNotificationBadge,
             isLoading: isLoading,
-            isPinned: isPinned
+            isPinned: isPinned,
+            customColorHex: customColorHex
         )
         let targetPane = pane ?? focusedPaneId ?? PaneID(id: internalController.rootNode.allPaneIds.first!.id)
 
@@ -166,7 +168,8 @@ public final class BonsplitController {
             isDirty: isDirty,
             showsNotificationBadge: showsNotificationBadge,
             isLoading: isLoading,
-            isPinned: isPinned
+            isPinned: isPinned,
+            customColorHex: customColorHex
         )
         internalController.addTab(tabItem, toPane: PaneID(id: targetPane.id), atIndex: insertIndex)
 
@@ -186,6 +189,12 @@ public final class BonsplitController {
     public func requestTabContextAction(_ action: TabContextAction, for tabId: TabID, inPane pane: PaneID) {
         guard let tab = tab(tabId) else { return }
         delegate?.splitTabBar(self, didRequestTabContextAction: action, for: tab, inPane: pane)
+    }
+
+    /// Request the delegate to apply a palette color to a tab.
+    public func requestTabColor(_ hex: String, for tabId: TabID, inPane pane: PaneID) {
+        guard let tab = tab(tabId) else { return }
+        delegate?.splitTabBar(self, didRequestTabColor: hex, for: tab, inPane: pane)
     }
 
     /// Update an existing tab's metadata
@@ -210,7 +219,8 @@ public final class BonsplitController {
         isDirty: Bool? = nil,
         showsNotificationBadge: Bool? = nil,
         isLoading: Bool? = nil,
-        isPinned: Bool? = nil
+        isPinned: Bool? = nil,
+        customColorHex: String?? = nil
     ) {
         guard let (pane, tabIndex) = findTabInternal(tabId) else { return }
 
@@ -240,6 +250,9 @@ public final class BonsplitController {
         }
         if let isPinned = isPinned {
             pane.tabs[tabIndex].isPinned = isPinned
+        }
+        if let customColorHex = customColorHex {
+            pane.tabs[tabIndex].customColorHex = customColorHex
         }
     }
 
@@ -651,6 +664,12 @@ public final class BonsplitController {
     /// Keyboard shortcuts to display in tab context menus, keyed by context action.
     /// Set by the host app to sync with its customizable keyboard shortcut settings.
     public var contextMenuShortcuts: [TabContextAction: KeyboardShortcut] = [:]
+
+    // MARK: - Tab Color Palette
+
+    /// Host-provided palette entries for the tab-color context menu. Resolved at menu-build
+    /// time (not cached) so it always reflects the host's current colors and appearance.
+    @ObservationIgnored public var tabColorPaletteProvider: (() -> [TabColorSwatch])?
 
     // MARK: - Query Methods
 

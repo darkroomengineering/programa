@@ -292,6 +292,7 @@ struct SessionPanelSnapshot: Codable, Sendable {
     var customTitle: String?
     var directory: String?
     var isPinned: Bool
+    var customColorHex: String?
     var isManuallyUnread: Bool
     var gitBranch: SessionGitBranchSnapshot?
     var listeningPorts: [Int]
