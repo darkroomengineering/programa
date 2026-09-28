@@ -252,6 +252,7 @@ struct MarkdownSearchOverlay: View {
     @State private var corner: Corner = .topRight
     @State private var dragOffset: CGSize = .zero
     @State private var barSize: CGSize = .zero
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let padding: CGFloat = 8
 
@@ -349,7 +350,7 @@ struct MarkdownSearchOverlay: View {
                             x: centerPos.x + value.translation.width,
                             y: centerPos.y + value.translation.height
                         )
-                        withAnimation(.easeOut(duration: 0.2)) {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                             corner = closestCorner(to: newCenter, in: geo.size)
                             dragOffset = .zero
                         }

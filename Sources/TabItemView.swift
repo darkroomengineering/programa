@@ -336,6 +336,20 @@ struct TabItemView: View, Equatable {
         settings.visibleAuxiliaryDetails
     }
 
+    // Read imperatively instead of @Environment(\.accessibilityReduceMotion): this
+    // struct's Equatable conformance and typing-latency contract (CLAUDE.md) forbid
+    // adding environment/observed properties that would need to join `==`.
+    private var reduceMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    // Shared by the metadata/log/progress row transitions below: they insert and
+    // remove with a slide-down under normal motion, and a plain dissolve when
+    // Reduce Motion is on.
+    private var reduceMotionAwareRowTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top))
+    }
+
     var body: some View {
         let _ = workspaceObservationGeneration
         let closeWorkspaceTooltip = String(localized: "sidebar.closeWorkspace.tooltip", defaultValue: "Close Workspace")
@@ -546,7 +560,7 @@ struct TabItemView: View, Equatable {
                         isActive: usesInvertedActiveForeground,
                         onFocus: { updateSelection() }
                     )
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(reduceMotionAwareRowTransition)
                 }
                 if !metadataBlocks.isEmpty {
                     SidebarMetadataMarkdownBlocks(
@@ -554,7 +568,7 @@ struct TabItemView: View, Equatable {
                         isActive: usesInvertedActiveForeground,
                         onFocus: { updateSelection() }
                     )
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(reduceMotionAwareRowTransition)
                 }
             }
 
@@ -570,7 +584,7 @@ struct TabItemView: View, Equatable {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(reduceMotionAwareRowTransition)
             }
 
             // Progress bar
@@ -594,7 +608,7 @@ struct TabItemView: View, Equatable {
                             .lineLimit(1)
                     }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(reduceMotionAwareRowTransition)
             }
 
             // Branch + directory row
@@ -700,9 +714,9 @@ struct TabItemView: View, Equatable {
                 .lineLimit(1)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: tab.logEntries.count)
-        .animation(.easeInOut(duration: 0.2), value: tab.progress != nil)
-        .animation(.easeInOut(duration: 0.2), value: tab.metadataBlocks.count)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: tab.logEntries.count)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: tab.progress != nil)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: tab.metadataBlocks.count)
         .padding(.leading, showsWorktreeBadge ? 14 : 0)
         .padding(.horizontal, rowMetrics.horizontalPadding)
         .padding(.vertical, rowMetrics.verticalPadding)
@@ -2049,6 +2063,7 @@ private struct SidebarMetadataRows: View {
     let onFocus: () -> Void
 
     @State private var isExpanded: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let collapsedEntryLimit = 3
 
     var body: some View {
@@ -2060,7 +2075,7 @@ private struct SidebarMetadataRows: View {
             if shouldShowToggle {
                 Button(isExpanded ? String(localized: "sidebar.metadata.showLess", defaultValue: "Show less") : String(localized: "sidebar.metadata.showMore", defaultValue: "Show more")) {
                     onFocus()
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
                         isExpanded.toggle()
                     }
                 }
@@ -2198,6 +2213,7 @@ private struct SidebarMetadataMarkdownBlocks: View {
     let onFocus: () -> Void
 
     @State private var isExpanded: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let collapsedBlockLimit = 1
 
     var body: some View {
@@ -2213,7 +2229,7 @@ private struct SidebarMetadataMarkdownBlocks: View {
             if shouldShowToggle {
                 Button(isExpanded ? String(localized: "sidebar.metadata.showLessDetails", defaultValue: "Show less details") : String(localized: "sidebar.metadata.showMoreDetails", defaultValue: "Show more details")) {
                     onFocus()
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
                         isExpanded.toggle()
                     }
                 }

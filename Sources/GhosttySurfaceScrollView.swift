@@ -1499,10 +1499,15 @@ final class GhosttySurfaceScrollView: NSView {
                 logDropZoneOverlay(event: "update", zone: zone, frame: targetFrame)
             }
 #endif
+            // Reduce Motion: apply the frame directly instead of animating it sliding/
+            // resizing into place; the alpha fade still runs (dissolves are allowed).
+            if needsFrameUpdate && NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                applyDropZoneOverlayFrame(targetFrame)
+            }
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.18
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                if needsFrameUpdate {
+                if needsFrameUpdate && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                     dropZoneOverlayView.animator().frame = targetFrame
                 }
                 if dropZoneOverlayView.alphaValue < 1 {

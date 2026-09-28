@@ -10,6 +10,7 @@ import WebKit
 struct ContentView: View {
     @ObservedObject var updateViewModel: UpdateViewModel
     let windowId: UUID
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var tabManager: TabManager
     @EnvironmentObject var notificationStore: TerminalNotificationStore
     @EnvironmentObject var sidebarState: SidebarState
@@ -4655,7 +4656,7 @@ struct ContentView: View {
             commandPaletteController.commandPaletteScrollTargetIndex = selectedIndex
         }
         if animated {
-            withAnimation(.easeOut(duration: 0.1)) {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.1)) {
                 assignTarget()
             }
         } else {
