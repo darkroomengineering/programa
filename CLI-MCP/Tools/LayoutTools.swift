@@ -6,7 +6,7 @@ enum LayoutTools {
     static let tools: [ProgramaTool] = [
         ProgramaTool(
             name: "layout_save",
-            socketMethod: "layout.save",
+            socketMethod: V2MethodNames.layoutSave,
             description: "Saves the current workspace's pane/split layout under a name for later reuse with layout_apply.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -21,7 +21,7 @@ enum LayoutTools {
         ),
         ProgramaTool(
             name: "layout_apply",
-            socketMethod: "layout.apply",
+            socketMethod: V2MethodNames.layoutApply,
             description: "Applies a previously saved named layout, either to an existing workspace or by creating a new one.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -36,7 +36,7 @@ enum LayoutTools {
         ),
         ProgramaTool(
             name: "layout_list",
-            socketMethod: "layout.list",
+            socketMethod: V2MethodNames.layoutList,
             description: "Lists all saved named layouts with their save timestamps.",
             inputSchema: ProgramaToolSchema.empty
         ),

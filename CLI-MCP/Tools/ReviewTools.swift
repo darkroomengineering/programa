@@ -7,7 +7,7 @@ enum ReviewTools {
     static let tools: [ProgramaTool] = [
         ProgramaTool(
             name: "review_refresh",
-            socketMethod: "review.refresh",
+            socketMethod: V2MethodNames.reviewRefresh,
             description: "Re-computes the diff snapshot shown in an open review panel (e.g. after new commits).",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": ProgramaToolSchema.string("Review panel's surface UUID or short ref. If omitted, uses the workspace's focused review panel, or its only review panel."),
@@ -17,7 +17,7 @@ enum ReviewTools {
         ),
         ProgramaTool(
             name: "review_comment_add",
-            socketMethod: "review.comment.add",
+            socketMethod: V2MethodNames.reviewCommentAdd,
             description: "Adds an inline review comment on a line range of a file shown in an open review panel.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -34,7 +34,7 @@ enum ReviewTools {
         ),
         ProgramaTool(
             name: "review_comment_remove",
-            socketMethod: "review.comment.remove",
+            socketMethod: V2MethodNames.reviewCommentRemove,
             description: "Removes a review comment by id.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -48,7 +48,7 @@ enum ReviewTools {
         ),
         ProgramaTool(
             name: "review_comment_list",
-            socketMethod: "review.comment.list",
+            socketMethod: V2MethodNames.reviewCommentList,
             description: "Lists all comments currently on an open review panel.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": ProgramaToolSchema.string("Review panel's surface UUID or short ref. If omitted, uses the workspace's focused review panel, or its only review panel."),
@@ -58,7 +58,7 @@ enum ReviewTools {
         ),
         ProgramaTool(
             name: "review_send_comments",
-            socketMethod: "review.send_comments",
+            socketMethod: V2MethodNames.reviewSendComments,
             description: "Sends all pending review comments to the review panel's source surface (e.g. as text into the terminal that started the review), then clears them. Sending zero comments is a no-op, not an error.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "preamble": ProgramaToolSchema.string("Optional text to prepend before the formatted comments."),

@@ -30,7 +30,7 @@ enum TreeResource {
 
         let bridge = MCPSocketBridge()
         do {
-            let result = try bridge.send(method: "system.tree", params: params)
+            let result = try bridge.send(method: V2MethodNames.systemTree, params: params)
             return [try ResourceCatalog.jsonContent(for: result, uri: uri)]
         } catch {
             throw MCPErrorMapping.mcpError(for: error)

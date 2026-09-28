@@ -17,7 +17,7 @@ enum WorkspaceTools {
     static let tools: [ProgramaTool] = [
         ProgramaTool(
             name: "workspace_list",
-            socketMethod: "workspace.list",
+            socketMethod: V2MethodNames.workspaceList,
             description: "Lists every workspace (sidebar tab) in a window, in display order, with pin/selection/remote status.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -27,7 +27,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_create",
-            socketMethod: "workspace.create",
+            socketMethod: V2MethodNames.workspaceCreate,
             description: "Creates a new workspace (sidebar tab) with its own terminal.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "working_directory": ProgramaToolSchema.string("Starting directory for the new workspace's terminal. Takes priority over cwd if both are set."),
@@ -43,7 +43,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "agent_spawn",
-            socketMethod: "agent.spawn",
+            socketMethod: V2MethodNames.agentSpawn,
             description: "Starts a helper in a nested workspace that shares the parent folder. Set needs_isolation only when the helper needs its own git worktree.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -66,7 +66,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "agent_task_start",
-            socketMethod: "agent.task.start",
+            socketMethod: V2MethodNames.agentTaskStart,
             description: "Reports a helper that is already running, including helpers that run inside their parent and share its output.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -86,7 +86,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "agent_task_update",
-            socketMethod: "agent.task.update",
+            socketMethod: V2MethodNames.agentTaskUpdate,
             description: "Updates a running helper's state or description.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -103,7 +103,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "agent_task_finish",
-            socketMethod: "agent.task.finish",
+            socketMethod: V2MethodNames.agentTaskFinish,
             description: "Marks a helper as done, failed, or stopped.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -115,7 +115,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "agent_task_finish_session",
-            socketMethod: "agent.task.finish_session",
+            socketMethod: V2MethodNames.agentTaskFinishSession,
             description: "Stops any helpers that are still active when their host session ends.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -128,7 +128,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "agent_task_list",
-            socketMethod: "agent.task.list",
+            socketMethod: V2MethodNames.agentTaskList,
             description: "Lists helpers and where they run, including whether output is separate or shared with the parent.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "workspace_id": ProgramaToolSchema.string("Optional workspace UUID or short ref to filter by."),
@@ -138,7 +138,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_current",
-            socketMethod: "workspace.current",
+            socketMethod: V2MethodNames.workspaceCurrent,
             description: "Returns the currently selected workspace in a window, with its full summary.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -148,7 +148,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_close",
-            socketMethod: "workspace.close",
+            socketMethod: V2MethodNames.workspaceClose,
             description: "Closes a workspace (sidebar tab). Fails if the workspace is pinned.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -160,7 +160,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_move_to_window",
-            socketMethod: "workspace.move_to_window",
+            socketMethod: V2MethodNames.workspaceMoveToWindow,
             description: "Moves a workspace from its current window into a different window.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -173,7 +173,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_reorder",
-            socketMethod: "workspace.reorder",
+            socketMethod: V2MethodNames.workspaceReorder,
             description: "Reorders a workspace within its window's sidebar. Specify exactly one of index, before_workspace_id, or after_workspace_id.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -188,7 +188,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_rename",
-            socketMethod: "workspace.rename",
+            socketMethod: V2MethodNames.workspaceRename,
             description: "Sets a workspace's custom display title.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -201,7 +201,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_action",
-            socketMethod: "workspace.action",
+            socketMethod: V2MethodNames.workspaceAction,
             description: "Runs one of a fixed set of workspace-level actions (pin, rename, reorder, close siblings, recolor, mark read/unread, etc). Some actions require extra params: rename needs title, set_description needs description, set_color needs color.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -218,7 +218,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_equalize_splits",
-            socketMethod: "workspace.equalize_splits",
+            socketMethod: V2MethodNames.workspaceEqualizeSplits,
             description: "Proportionally equalizes pane split dividers in a workspace so leaf panes get equal space, optionally scoped to one split orientation.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "orientation": ProgramaToolSchema.stringEnum("Only equalize splits of this orientation. If omitted, equalizes every split.", ["horizontal", "vertical"]),
@@ -229,7 +229,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_set_status",
-            socketMethod: "workspace.set_status",
+            socketMethod: V2MethodNames.workspaceSetStatus,
             description: "Sets (or replaces) a single-line key/value status entry shown in a workspace's sidebar.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -248,7 +248,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_clear_status",
-            socketMethod: "workspace.clear_status",
+            socketMethod: V2MethodNames.workspaceClearStatus,
             description: "Removes a single sidebar status entry by key.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -260,7 +260,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_list_status",
-            socketMethod: "workspace.list_status",
+            socketMethod: V2MethodNames.workspaceListStatus,
             description: "Lists all sidebar status entries for a workspace, in display order.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -270,7 +270,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_log",
-            socketMethod: "workspace.log",
+            socketMethod: V2MethodNames.workspaceLog,
             description: "Appends one entry to a workspace's sidebar activity log.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -284,7 +284,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_clear_log",
-            socketMethod: "workspace.clear_log",
+            socketMethod: V2MethodNames.workspaceClearLog,
             description: "Clears a workspace's entire sidebar activity log.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -295,7 +295,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_list_log",
-            socketMethod: "workspace.list_log",
+            socketMethod: V2MethodNames.workspaceListLog,
             description: "Lists a workspace's sidebar activity log entries, optionally limited to the most recent N.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "limit": ProgramaToolSchema.integer("Maximum number of most-recent entries to return. Omit for all entries."),
@@ -306,7 +306,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_set_progress",
-            socketMethod: "workspace.set_progress",
+            socketMethod: V2MethodNames.workspaceSetProgress,
             description: "Sets a workspace's sidebar progress indicator.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -319,7 +319,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_clear_progress",
-            socketMethod: "workspace.clear_progress",
+            socketMethod: V2MethodNames.workspaceClearProgress,
             description: "Clears a workspace's sidebar progress indicator.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -330,7 +330,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_sidebar_state",
-            socketMethod: "workspace.sidebar_state",
+            socketMethod: V2MethodNames.workspaceSidebarState,
             description: "Returns a workspace's full sidebar state in one call: color, cwd, git branch, pull request, progress, status entries, metadata blocks, and recent log entries.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -340,7 +340,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_clear_agent_pid",
-            socketMethod: "workspace.clear_agent_pid",
+            socketMethod: V2MethodNames.workspaceClearAgentPid,
             description: "Removes a tracked agent process id from a workspace (used for stale-session detection).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -352,7 +352,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_set_agent_pid",
-            socketMethod: "workspace.set_agent_pid",
+            socketMethod: V2MethodNames.workspaceSetAgentPid,
             description: "Registers an agent process id under a key for a workspace (used for stale-session detection and OSC suppression); does not set a visible status entry.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -365,7 +365,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_report_meta_block",
-            socketMethod: "workspace.report_meta_block",
+            socketMethod: V2MethodNames.workspaceReportMetaBlock,
             description: "Sets (or replaces) a freeform markdown metadata block in a workspace's sidebar, distinct from the single-line status entries set by workspace_set_status.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -379,7 +379,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_clear_meta_block",
-            socketMethod: "workspace.clear_meta_block",
+            socketMethod: V2MethodNames.workspaceClearMetaBlock,
             description: "Removes a sidebar metadata block by key.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -393,7 +393,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_list_meta_blocks",
-            socketMethod: "workspace.list_meta_blocks",
+            socketMethod: V2MethodNames.workspaceListMetaBlocks,
             description: "Lists all sidebar metadata blocks for a workspace, in display order.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -403,7 +403,7 @@ enum WorkspaceTools {
         ),
         ProgramaTool(
             name: "workspace_reset_sidebar",
-            socketMethod: "workspace.reset_sidebar",
+            socketMethod: V2MethodNames.workspaceResetSidebar,
             description: "Clears all sidebar context for a workspace: status entries, log, progress, metadata blocks, and agent state.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,

@@ -47,7 +47,7 @@ enum BrowserTools {
     static let tools: [ProgramaTool] = [
         ProgramaTool(
             name: "browser_open_split",
-            socketMethod: "browser.open_split",
+            socketMethod: V2MethodNames.browserOpenSplit,
             description: "Opens a new browser surface as a split next to a source surface (or reuses an existing sibling browser pane when one is already positioned to the right). Never raises/activates the Programa window or switches the selected workspace; inside the target workspace the new tab becomes that workspace's focused surface, so the user only sees a change if they are already looking at that workspace. Returns the new surface_id.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "url": ProgramaToolSchema.string("Initial URL to load. Opens a blank browser tab if omitted."),
@@ -59,7 +59,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_navigate",
-            socketMethod: "browser.navigate",
+            socketMethod: V2MethodNames.browserNavigate,
             description: "Navigates an existing browser surface to a URL.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -73,7 +73,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_back",
-            socketMethod: "browser.back",
+            socketMethod: V2MethodNames.browserBack,
             description: "Navigates a browser surface back one entry in its history.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -86,7 +86,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_forward",
-            socketMethod: "browser.forward",
+            socketMethod: V2MethodNames.browserForward,
             description: "Navigates a browser surface forward one entry in its history.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -99,7 +99,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_reload",
-            socketMethod: "browser.reload",
+            socketMethod: V2MethodNames.browserReload,
             description: "Reloads a browser surface's current page.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -112,7 +112,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_url_get",
-            socketMethod: "browser.url.get",
+            socketMethod: V2MethodNames.browserUrlGet,
             description: "Returns a browser surface's current URL.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -125,7 +125,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_is_webview_focused",
-            socketMethod: "browser.is_webview_focused",
+            socketMethod: V2MethodNames.browserIsWebviewFocused,
             description: "Reports whether keyboard focus is currently inside a browser surface's web view. Read-only; does not move focus.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -138,7 +138,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_snapshot",
-            socketMethod: "browser.snapshot",
+            socketMethod: V2MethodNames.browserSnapshot,
             description: "Returns an accessibility-tree-style snapshot of the page (roles, names, and element refs usable by selector-based tools), plus title/url/ready_state and the page text/HTML.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "interactive": ProgramaToolSchema.boolean("If true, include only interactive elements (links, buttons, inputs, etc). Defaults to false (include the full tree)."),
@@ -153,7 +153,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_eval",
-            socketMethod: "browser.eval",
+            socketMethod: V2MethodNames.browserEval,
             description: "Runs arbitrary JavaScript in the browser surface's page context and returns its result (JSON-normalized).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -167,7 +167,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_wait",
-            socketMethod: "browser.wait",
+            socketMethod: V2MethodNames.browserWait,
             description: "Waits (up to a timeout) for a condition to become true: a selector to appear, the URL to contain a substring, the page text to contain a substring, a document.readyState value, or a custom JS boolean expression. Provide at most one condition; defaults to waiting for document.readyState === 'complete'.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "timeout_ms": ProgramaToolSchema.integer("Maximum time to wait, in milliseconds. Defaults to 5000."),
@@ -183,7 +183,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_click",
-            socketMethod: "browser.click",
+            socketMethod: V2MethodNames.browserClick,
             description: "Clicks the element matched by a selector (scrolls it into view first, dispatches a real click event or calls .click()).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -198,7 +198,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_dblclick",
-            socketMethod: "browser.dblclick",
+            socketMethod: V2MethodNames.browserDblclick,
             description: "Double-clicks the element matched by a selector.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -213,7 +213,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_hover",
-            socketMethod: "browser.hover",
+            socketMethod: V2MethodNames.browserHover,
             description: "Hovers the element matched by a selector (dispatches mouseover/mouseenter events).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -228,7 +228,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_type",
-            socketMethod: "browser.type",
+            socketMethod: V2MethodNames.browserType,
             description: "Appends text to the element matched by a selector (focuses it, then appends to its value/textContent and fires input/change events). Use browser_fill to replace the value instead of appending.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -244,7 +244,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_fill",
-            socketMethod: "browser.fill",
+            socketMethod: V2MethodNames.browserFill,
             description: "Sets the element matched by a selector to an exact value (replacing any existing value) and fires input/change events. Accepts an empty string to clear the field.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -261,7 +261,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_press",
-            socketMethod: "browser.press",
+            socketMethod: V2MethodNames.browserPress,
             description: "Dispatches a keydown, keypress, and keyup for a key to the page's currently focused element (or body if none).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -275,7 +275,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_keydown",
-            socketMethod: "browser.keydown",
+            socketMethod: V2MethodNames.browserKeydown,
             description: "Dispatches only a keydown event for a key to the page's currently focused element (or body if none). Use browser_press for a full keydown/keypress/keyup sequence.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -289,7 +289,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_keyup",
-            socketMethod: "browser.keyup",
+            socketMethod: V2MethodNames.browserKeyup,
             description: "Dispatches only a keyup event for a key to the page's currently focused element (or body if none).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -303,7 +303,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_check",
-            socketMethod: "browser.check",
+            socketMethod: V2MethodNames.browserCheck,
             description: "Sets a checkbox/radio element matched by a selector to checked, firing input/change events. Fails if the element has no 'checked' property.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -318,7 +318,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_uncheck",
-            socketMethod: "browser.uncheck",
+            socketMethod: V2MethodNames.browserUncheck,
             description: "Sets a checkbox/radio element matched by a selector to unchecked, firing input/change events. Fails if the element has no 'checked' property.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -333,7 +333,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_select",
-            socketMethod: "browser.select",
+            socketMethod: V2MethodNames.browserSelect,
             description: "Sets a <select> (or other element with a 'value' property) matched by a selector to a given option value, firing input/change events.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -350,7 +350,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_scroll",
-            socketMethod: "browser.scroll",
+            socketMethod: V2MethodNames.browserScroll,
             description: "Scrolls the page (or, if selector is given, a specific scrollable element) by a relative pixel offset.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "dx": ProgramaToolSchema.integer("Horizontal scroll delta in pixels. Defaults to 0."),
@@ -363,7 +363,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_scroll_into_view",
-            socketMethod: "browser.scroll_into_view",
+            socketMethod: V2MethodNames.browserScrollIntoView,
             description: "Scrolls the element matched by a selector into the center of the viewport.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -378,7 +378,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_screenshot",
-            socketMethod: "browser.screenshot",
+            socketMethod: V2MethodNames.browserScreenshot,
             description: "Captures a PNG screenshot of a browser surface's current content. Returns png_base64 (the image, base64-encoded) always, plus a best-effort path/url to a temp-file copy written to disk when the write succeeds.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": surfaceIdProperty(),
@@ -388,7 +388,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_get_text",
-            socketMethod: "browser.get.text",
+            socketMethod: V2MethodNames.browserGetText,
             description: "Returns the innerText (falling back to textContent) of the element matched by a selector.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -403,7 +403,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_get_html",
-            socketMethod: "browser.get.html",
+            socketMethod: V2MethodNames.browserGetHtml,
             description: "Returns the outerHTML of the element matched by a selector.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -418,7 +418,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_get_value",
-            socketMethod: "browser.get.value",
+            socketMethod: V2MethodNames.browserGetValue,
             description: "Returns the 'value' property (falling back to textContent) of the element matched by a selector.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -433,7 +433,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_get_attr",
-            socketMethod: "browser.get.attr",
+            socketMethod: V2MethodNames.browserGetAttr,
             description: "Returns the value of a named attribute on the element matched by a selector (null if the attribute is not present).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -450,7 +450,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_get_title",
-            socketMethod: "browser.get.title",
+            socketMethod: V2MethodNames.browserGetTitle,
             description: "Returns a browser surface's current page title.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": surfaceIdProperty(),
@@ -460,7 +460,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_get_count",
-            socketMethod: "browser.get.count",
+            socketMethod: V2MethodNames.browserGetCount,
             description: "Returns the number of elements matching a selector (document.querySelectorAll(selector).length).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -474,7 +474,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_get_box",
-            socketMethod: "browser.get.box",
+            socketMethod: V2MethodNames.browserGetBox,
             description: "Returns the bounding client rect (x, y, width, height, top, left, right, bottom) of the element matched by a selector.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -489,7 +489,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_get_styles",
-            socketMethod: "browser.get.styles",
+            socketMethod: V2MethodNames.browserGetStyles,
             description: "Returns computed styles for the element matched by a selector: a single property's value when property is given, otherwise a fixed summary (display, visibility, opacity, color, background, width, height).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -505,7 +505,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_is_visible",
-            socketMethod: "browser.is.visible",
+            socketMethod: V2MethodNames.browserIsVisible,
             description: "Returns whether the element matched by a selector is visible (not display:none/visibility:hidden/opacity:0, and has a non-zero bounding box).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -520,7 +520,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_is_enabled",
-            socketMethod: "browser.is.enabled",
+            socketMethod: V2MethodNames.browserIsEnabled,
             description: "Returns whether the element matched by a selector is enabled (the inverse of its .disabled property).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -535,7 +535,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_is_checked",
-            socketMethod: "browser.is.checked",
+            socketMethod: V2MethodNames.browserIsChecked,
             description: "Returns whether the element matched by a selector is checked (false if it has no 'checked' property).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -550,7 +550,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_role",
-            socketMethod: "browser.find.role",
+            socketMethod: V2MethodNames.browserFindRole,
             description: "Finds the first element with a given ARIA (explicit or implicit) role, optionally filtered by its accessible name. Returns a selector plus an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -567,7 +567,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_text",
-            socketMethod: "browser.find.text",
+            socketMethod: V2MethodNames.browserFindText,
             description: "Finds the first element under <body> whose text content matches (contains, or equals if exact) the given text. Returns a selector plus an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -583,7 +583,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_label",
-            socketMethod: "browser.find.label",
+            socketMethod: V2MethodNames.browserFindLabel,
             description: "Finds the form control associated with a <label> whose text matches the given label (via the label's 'for' attribute, or the first control nested inside it). Returns a selector plus an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -600,7 +600,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_placeholder",
-            socketMethod: "browser.find.placeholder",
+            socketMethod: V2MethodNames.browserFindPlaceholder,
             description: "Finds the first element whose placeholder attribute matches the given text. Returns a selector plus an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -617,7 +617,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_alt",
-            socketMethod: "browser.find.alt",
+            socketMethod: V2MethodNames.browserFindAlt,
             description: "Finds the first element whose alt attribute matches the given text. Returns a selector plus an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -634,7 +634,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_title",
-            socketMethod: "browser.find.title",
+            socketMethod: V2MethodNames.browserFindTitle,
             description: "Finds the first element whose title attribute matches the given text. Returns a selector plus an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -651,7 +651,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_testid",
-            socketMethod: "browser.find.testid",
+            socketMethod: V2MethodNames.browserFindTestid,
             description: "Finds the first element whose data-testid (or data-test-id/data-test) attribute exactly equals the given value. Returns a selector plus an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -667,7 +667,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_first",
-            socketMethod: "browser.find.first",
+            socketMethod: V2MethodNames.browserFindFirst,
             description: "Resolves a CSS selector to its first matching element and returns its selector, text, plus an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -681,7 +681,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_last",
-            socketMethod: "browser.find.last",
+            socketMethod: V2MethodNames.browserFindLast,
             description: "Resolves a CSS selector to its last matching element and returns a specific :nth-of-type selector, text, and an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -695,7 +695,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_find_nth",
-            socketMethod: "browser.find.nth",
+            socketMethod: V2MethodNames.browserFindNth,
             description: "Resolves a CSS selector to its Nth matching element (0-based; negative counts from the end) and returns a specific :nth-of-type selector, text, and an element_ref usable by other tools.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -711,7 +711,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_frame_select",
-            socketMethod: "browser.frame.select",
+            socketMethod: V2MethodNames.browserFrameSelect,
             description: "Scopes subsequent selector-based calls on this surface to a same-origin iframe matched by a selector. Fails for cross-origin iframes (WKWebView cannot reach into them). Cleared by browser_frame_main.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -725,7 +725,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_frame_main",
-            socketMethod: "browser.frame.main",
+            socketMethod: V2MethodNames.browserFrameMain,
             description: "Clears any frame scoping set by browser_frame_select, returning subsequent selector-based calls on this surface to the top-level document.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": surfaceIdProperty(),
@@ -735,7 +735,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_dialog_accept",
-            socketMethod: "browser.dialog.accept",
+            socketMethod: V2MethodNames.browserDialogAccept,
             description: "Answers the currently pending native JavaScript dialog (alert/confirm/prompt) on this surface by accepting it. For a prompt(), an optional text sets the answer verbatim, including an empty string; if text is omitted, the page's default prompt text is used. Returns a not_found error if no dialog is pending.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "text": ProgramaToolSchema.string("Text to enter for a prompt() dialog. Also accepts prompt_text as an alias. Ignored for alert/confirm."),
@@ -747,7 +747,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_dialog_dismiss",
-            socketMethod: "browser.dialog.dismiss",
+            socketMethod: V2MethodNames.browserDialogDismiss,
             description: "Answers the currently pending native JavaScript dialog (alert/confirm/prompt) on this surface by canceling it: confirm() resolves to false, prompt() resolves to null. Returns a not_found error if no dialog is pending.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": surfaceIdProperty(),
@@ -757,7 +757,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_download_wait",
-            socketMethod: "browser.download.wait",
+            socketMethod: V2MethodNames.browserDownloadWait,
             description: "Waits for a download to complete. With path given, polls that exact file path until it exists and is non-empty. Without path, waits for the next download-completed event on this surface and returns its metadata.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "path": ProgramaToolSchema.string("Exact file path to wait for. If omitted, waits for the next download event on the surface instead."),
@@ -770,7 +770,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_cookies_get",
-            socketMethod: "browser.cookies.get",
+            socketMethod: V2MethodNames.browserCookiesGet,
             description: "Returns cookies from the surface's cookie store, optionally filtered by name, domain (substring match), or exact path.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "name": ProgramaToolSchema.string("Filter to cookies with this exact name."),
@@ -783,7 +783,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_cookies_set",
-            socketMethod: "browser.cookies.set",
+            socketMethod: V2MethodNames.browserCookiesSet,
             description: "Sets one or more cookies on the surface's cookie store. Provide either a cookies array of cookie objects, or the single-cookie fields (name/value/url/domain/path/secure/expires) directly. domain/url default to the surface's current page when omitted.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "cookies": ["type": "array", "items": ["type": "object"], "description": .string("Array of cookie objects, each with name/value and optionally url/domain/path/secure/expires.")],
@@ -801,7 +801,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_cookies_clear",
-            socketMethod: "browser.cookies.clear",
+            socketMethod: V2MethodNames.browserCookiesClear,
             description: "Removes cookies from the surface's cookie store, optionally filtered by name or domain (substring match). Clears every cookie when no filter and no 'all' flag is given.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "name": ProgramaToolSchema.string("Only clear cookies with this exact name."),
@@ -814,7 +814,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_storage_get",
-            socketMethod: "browser.storage.get",
+            socketMethod: V2MethodNames.browserStorageGet,
             description: "Reads from the page's localStorage or sessionStorage. Returns a single value when key is given, or every key/value pair when key is omitted.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "storage": ProgramaToolSchema.stringEnum("Which storage to read. Also accepts type as an alias. Defaults to local.", ["local", "session"]),
@@ -827,7 +827,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_storage_set",
-            socketMethod: "browser.storage.set",
+            socketMethod: V2MethodNames.browserStorageSet,
             description: "Writes a key/value pair into the page's localStorage or sessionStorage (value is stringified if not already a string).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -844,7 +844,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_storage_clear",
-            socketMethod: "browser.storage.clear",
+            socketMethod: V2MethodNames.browserStorageClear,
             description: "Clears every key from the page's localStorage or sessionStorage.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "storage": ProgramaToolSchema.stringEnum("Which storage to clear. Also accepts type as an alias. Defaults to local.", ["local", "session"]),
@@ -856,7 +856,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_tab_new",
-            socketMethod: "browser.tab.new",
+            socketMethod: V2MethodNames.browserTabNew,
             description: "Creates a new browser tab (surface) in an existing pane. Never raises/activates the Programa window or switches the selected workspace; inside the target workspace the new tab becomes that pane's focused surface. Returns the new surface_id.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "url": ProgramaToolSchema.string("Initial URL to load. Opens a blank browser tab if omitted."),
@@ -869,7 +869,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_tab_list",
-            socketMethod: "browser.tab.list",
+            socketMethod: V2MethodNames.browserTabList,
             description: "Lists every browser tab (surface) in a workspace, in display order, with id/title/url/pane/focused state.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
@@ -879,7 +879,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_tab_close",
-            socketMethod: "browser.tab.close",
+            socketMethod: V2MethodNames.browserTabClose,
             description: "Closes a browser tab (surface). Fails if it would close the workspace's last surface. Target resolves from target_surface_id/tab_id, then index into the workspace's browser tabs, then surface_id, then the workspace's focused surface. Pass workspace_id when the target lives in a workspace other than the selected one; target_surface_id alone does not route the call.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "target_surface_id": ProgramaToolSchema.string("Browser surface UUID or short ref to close. Also accepts tab_id as an alias."),
@@ -892,7 +892,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_console_list",
-            socketMethod: "browser.console.list",
+            socketMethod: V2MethodNames.browserConsoleList,
             description: "Returns console.* messages captured for a browser surface since the page loaded (or since the log was last cleared).",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "clear": ProgramaToolSchema.boolean("If true, clear the captured log after reading it. Defaults to false."),
@@ -903,7 +903,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_console_clear",
-            socketMethod: "browser.console.clear",
+            socketMethod: V2MethodNames.browserConsoleClear,
             description: "Clears the captured console.* log for a browser surface and returns the entries that were captured up to that point (same response shape as browser_console_list with clear true).",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": surfaceIdProperty(),
@@ -913,7 +913,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_errors_list",
-            socketMethod: "browser.errors.list",
+            socketMethod: V2MethodNames.browserErrorsList,
             description: "Returns uncaught JS errors captured for a browser surface since the page loaded (or since the log was last cleared).",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "clear": ProgramaToolSchema.boolean("If true, clear the captured error log after reading it. Defaults to false."),
@@ -924,7 +924,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_highlight",
-            socketMethod: "browser.highlight",
+            socketMethod: V2MethodNames.browserHighlight,
             description: "Briefly (about 1.2s) draws an orange outline around the element matched by a selector, for visually pointing it out. Purely visual; does not click or focus it.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -939,7 +939,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_state_save",
-            socketMethod: "browser.state.save",
+            socketMethod: V2MethodNames.browserStateSave,
             description: "Saves a browser surface's cookies and localStorage/sessionStorage to a JSON file on disk, for later restoring with browser_state_load.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -953,7 +953,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_state_load",
-            socketMethod: "browser.state.load",
+            socketMethod: V2MethodNames.browserStateLoad,
             description: "Restores cookies and localStorage/sessionStorage onto a browser surface from a JSON file previously written by browser_state_save. Fails if another restore is already in progress on the same underlying data store.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -967,7 +967,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_addinitscript",
-            socketMethod: "browser.addinitscript",
+            socketMethod: V2MethodNames.browserAddinitscript,
             description: "Registers a JavaScript source to run at the start of every future document load on this surface (survives navigations), and runs it immediately in the current page too.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -982,7 +982,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_addscript",
-            socketMethod: "browser.addscript",
+            socketMethod: V2MethodNames.browserAddscript,
             description: "Runs a JavaScript source once in the current page immediately (does not persist across navigations; use browser_addinitscript for that). Returns its result, JSON-normalized.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -997,7 +997,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_addstyle",
-            socketMethod: "browser.addstyle",
+            socketMethod: V2MethodNames.browserAddstyle,
             description: "Injects a <style> element with the given CSS into the current page immediately, and registers it to be re-injected at the start of every future document load on this surface (survives navigations).",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
@@ -1013,37 +1013,37 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_viewport_set",
-            socketMethod: "browser.viewport.set",
+            socketMethod: V2MethodNames.browserViewportSet,
             description: "Always returns a not_supported error: WKWebView does not provide a per-tab programmable viewport emulation API equivalent to CDP.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_geolocation_set",
-            socketMethod: "browser.geolocation.set",
+            socketMethod: V2MethodNames.browserGeolocationSet,
             description: "Always returns a not_supported error: WKWebView does not expose per-tab geolocation spoofing hooks equivalent to Playwright/CDP.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_offline_set",
-            socketMethod: "browser.offline.set",
+            socketMethod: V2MethodNames.browserOfflineSet,
             description: "Always returns a not_supported error: WKWebView does not expose reliable per-tab offline emulation.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_trace_start",
-            socketMethod: "browser.trace.start",
+            socketMethod: V2MethodNames.browserTraceStart,
             description: "Always returns a not_supported error: Playwright trace artifacts are not available on WKWebView.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_trace_stop",
-            socketMethod: "browser.trace.stop",
+            socketMethod: V2MethodNames.browserTraceStop,
             description: "Always returns a not_supported error: Playwright trace artifacts are not available on WKWebView.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_network_route",
-            socketMethod: "browser.network.route",
+            socketMethod: V2MethodNames.browserNetworkRoute,
             description: "Always returns a not_supported error: WKWebView does not provide CDP-style request interception/mocking. The attempted route is still recorded and shows up in browser_network_requests.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "url": ProgramaToolSchema.string("URL or pattern the route would have matched."),
@@ -1056,7 +1056,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_network_unroute",
-            socketMethod: "browser.network.unroute",
+            socketMethod: V2MethodNames.browserNetworkUnroute,
             description: "Always returns a not_supported error: WKWebView does not provide CDP-style request interception/mocking. The attempted unroute is still recorded and shows up in browser_network_requests.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "url": ProgramaToolSchema.string("URL or pattern the unroute would have matched."),
@@ -1067,7 +1067,7 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_network_requests",
-            socketMethod: "browser.network.requests",
+            socketMethod: V2MethodNames.browserNetworkRequests,
             description: "Always returns a not_supported error, along with recorded_requests: the browser_network_route/browser_network_unroute attempts recorded for this surface (WKWebView cannot supply real request logs).",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "surface_id": surfaceIdProperty(),
@@ -1077,37 +1077,37 @@ enum BrowserTools {
         ),
         ProgramaTool(
             name: "browser_screencast_start",
-            socketMethod: "browser.screencast.start",
+            socketMethod: V2MethodNames.browserScreencastStart,
             description: "Always returns a not_supported error: WKWebView does not expose CDP screencast streaming. Use browser_screenshot for point-in-time captures.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_screencast_stop",
-            socketMethod: "browser.screencast.stop",
+            socketMethod: V2MethodNames.browserScreencastStop,
             description: "Always returns a not_supported error: WKWebView does not expose CDP screencast streaming.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_input_mouse",
-            socketMethod: "browser.input_mouse",
+            socketMethod: V2MethodNames.browserInputMouse,
             description: "Always returns a not_supported error: raw CDP mouse injection is unavailable. Use browser_click/browser_hover/browser_scroll instead.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_input_keyboard",
-            socketMethod: "browser.input_keyboard",
+            socketMethod: V2MethodNames.browserInputKeyboard,
             description: "Always returns a not_supported error: raw CDP keyboard injection is unavailable. Use browser_press/browser_keydown/browser_keyup instead.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_input_touch",
-            socketMethod: "browser.input_touch",
+            socketMethod: V2MethodNames.browserInputTouch,
             description: "Always returns a not_supported error: raw CDP touch injection is unavailable on WKWebView.",
             inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_design_mode_toggle",
-            socketMethod: "browser.design_mode.toggle",
+            socketMethod: V2MethodNames.browserDesignModeToggle,
             description: "Toggles Design Mode on the workspace's focused browser panel (or its single browser panel, when a terminal is focused). Inside that workspace it focuses the browser panel and its web view; it never raises/activates the Programa window or switches the selected workspace. No surface_id needed.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
