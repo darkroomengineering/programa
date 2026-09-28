@@ -31,6 +31,7 @@ struct SettingsView: View {
     /// Shared by the tab strip and the scrolling rows so they line up on both edges.
     private let contentHorizontalInset: CGFloat = 20
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab: SettingsTab = .general
     @State private var measuredContentHeight: CGFloat = 0
     @State private var minimumWindowWidth: CGFloat = SettingsWindowMetrics.contentWidth
@@ -472,7 +473,7 @@ struct SettingsView: View {
             // the selected one, so scrolling in the same pass would find nothing.
             selectedTab = SettingsTab.owning(target)
             DispatchQueue.main.async {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                     proxy.scrollTo(target, anchor: .top)
                 }
             }

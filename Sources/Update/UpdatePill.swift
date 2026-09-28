@@ -6,6 +6,7 @@ import SwiftUI
 struct UpdatePill: View {
     @ObservedObject var model: UpdateViewModel
     @State private var showPopover = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let textFont = NSFont.systemFont(ofSize: 11, weight: .medium)
 
@@ -18,7 +19,7 @@ struct UpdatePill: View {
                         showPopover = false
                     }
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
         }
     }
 
