@@ -1,11 +1,10 @@
-// TabItemView + its exclusive helper-view cluster, extracted from ContentView.swift (nuclear-review #94.2).
-// Pure move — behavior-identical relocation. Do NOT touch TabItemView's Equatable
-// conformance, its precomputed let parameters, or the .equatable() call site in
-// VerticalTabsSidebar (ContentView.swift) — see CLAUDE.md typing-latency-sensitive paths.
+// TabItemView + its exclusive helper-view cluster. Do NOT touch TabItemView's
+// Equatable conformance, its precomputed let parameters, or the .equatable() call
+// site in VerticalTabsSidebar (Sources/VerticalTabsSidebar.swift) — see CLAUDE.md
+// typing-latency-sensitive paths.
 //
-// Access-level widening: TabItemView was `private struct` (file-private to the old
-// ContentView.swift); widened to internal (default) so VerticalTabsSidebar, which stays
-// in ContentView.swift, can still construct it. No other behavior change.
+// TabItemView is internal (not private) so VerticalTabsSidebar, defined in
+// Sources/VerticalTabsSidebar.swift, can construct it.
 
 import AppKit
 import Bonsplit
@@ -746,6 +745,23 @@ struct TabItemView: View, Equatable {
                 tabManager.closeWorkspaceWithConfirmation(tab)
             }
         }
+        .overlay {
+            // Native AppKit context menu, built fresh from live state at click time,
+            // instead of SwiftUI's `.contextMenu`. `.contextMenu`'s content closure
+            // hangs off this row's body, which re-evaluates as often as every 40ms
+            // from the onReceive handlers above (`workspaceObservationGeneration`),
+            // on hover changes, and on any ==-compared param change. SwiftUI rebuilds
+            // an already-open `.contextMenu` on every one of those re-evaluations,
+            // and macOS reads that rebuild as the menu (and any open submenu, e.g.
+            // Workspace Color) repeatedly closing and reopening. Building the NSMenu
+            // only once, at the moment of the click, sidesteps the churn entirely.
+            SidebarRowContextMenuCapture {
+                #if DEBUG
+                dlog("sidebar.contextMenu.open workspace=\(tab.id.uuidString.prefix(5)) targets=\(contextMenuWorkspaceIds.count)")
+                #endif
+                return buildWorkspaceContextMenu(colorScheme: colorScheme)
+            }
+        }
         .overlay(alignment: .top) {
             if showsCenteredTopDropIndicator {
                 Rectangle()
@@ -865,90 +881,34 @@ struct TabItemView: View, Equatable {
             // Toggling branch/PR columns changes which data we need to cache.
             recomputeSidebarDetailCache()
         }
-        .contextMenu { workspaceContextMenu }
     }
 
     private func contextMenuLabel(multi: String, single: String, isMulti: Bool) -> String {
         isMulti ? multi : single
     }
 
-    // Isolates the workspace-color submenu from the churning per-row
-    // observation tick (`workspaceObservationGeneration`, bumped as often as
-    // every 40ms while workspace telemetry is updating -- see the
-    // `let _ = workspaceObservationGeneration` line at the top of `body`).
-    // `.contextMenu`'s content closure is re-invoked on every TabItemView.body
-    // re-evaluation; without `.equatable()` gating this subtree, AppKit tears
-    // down and rebuilds the color submenu's NSMenu on each tick, which -- while
-    // the submenu is open under mouse hover -- reads as the submenu repeatedly
-    // closing and reopening. Wrapping the submenu in its own Equatable view and
-    // applying `.equatable()` at the call site lets SwiftUI skip rebuilding it
-    // when none of its own (non-churning) inputs changed, mirroring the
-    // TabItemView Equatable contract in CLAUDE.md "Typing-latency-sensitive paths".
-    private struct WorkspaceColorMenu: View, Equatable {
-        let hasCustomColor: Bool
-        let palette: [WorkspaceTabColorEntry]
-        let targetIds: [UUID]
-        let colorScheme: ColorScheme
-        let activeTabIndicatorStyle: SidebarActiveTabIndicatorStyle
-        let onApplyColor: (String?, [UUID]) -> Void
-        let onPromptCustomColor: ([UUID]) -> Void
-
-        nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-            lhs.hasCustomColor == rhs.hasCustomColor &&
-            lhs.palette == rhs.palette &&
-            lhs.targetIds == rhs.targetIds &&
-            lhs.colorScheme == rhs.colorScheme &&
-            lhs.activeTabIndicatorStyle == rhs.activeTabIndicatorStyle
-        }
-
-        private func swatchColor(for hex: String) -> NSColor {
-            WorkspaceTabColorSettings.displayNSColor(
-                hex: hex,
-                colorScheme: colorScheme,
-                forceBright: activeTabIndicatorStyle == .leftRail
-            ) ?? NSColor(hex: hex) ?? .gray
-        }
-
-        var body: some View {
-            Menu(String(localized: "contextMenu.workspaceColor", defaultValue: "Workspace Color")) {
-                if hasCustomColor {
-                    Button {
-                        onApplyColor(nil, targetIds)
-                    } label: {
-                        Label(String(localized: "contextMenu.clearColor", defaultValue: "Clear Color"), systemImage: "xmark.circle")
-                    }
-                }
-
-                Button {
-                    onPromptCustomColor(targetIds)
-                } label: {
-                    Label(String(localized: "contextMenu.chooseCustomColor", defaultValue: "Choose Custom Color…"), systemImage: "paintpalette")
-                }
-
-                if !palette.isEmpty {
-                    Divider()
-                }
-
-                ForEach(palette, id: \.id) { entry in
-                    Button {
-                        onApplyColor(entry.hex, targetIds)
-                    } label: {
-                        Label {
-                            Text(entry.name)
-                        } icon: {
-                            Image(nsImage: coloredCircleImage(color: swatchColor(for: entry.hex)))
-                        }
-                    }
-                }
-            }
-        }
+    /// Applies a `StoredShortcut`'s key equivalent to an `NSMenuItem`, mirroring the
+    /// `if let key = shortcut.keyEquivalent { .keyboardShortcut(key, modifiers:) }`
+    /// pattern the SwiftUI menu used to use. `menuItemKeyEquivalent`/`modifierFlags`
+    /// are the AppKit-side counterparts of `keyEquivalent`/`eventModifiers` and are
+    /// `nil`/empty under the same conditions (chorded shortcuts have no single
+    /// menu-item key equivalent).
+    private func applyShortcut(_ shortcut: StoredShortcut, to item: NSMenuItem) {
+        guard let key = shortcut.menuItemKeyEquivalent else { return }
+        item.keyEquivalent = key
+        item.keyEquivalentModifierMask = shortcut.modifierFlags
     }
 
-    @ViewBuilder
-    private var workspaceContextMenu: some View {
+    /// Builds the sidebar row's context menu fresh from live state at click time,
+    /// replacing the SwiftUI `.contextMenu` this row used to carry. Every item here
+    /// ports the SwiftUI menu 1:1 (same strings/keys, order, dividers, conditional
+    /// visibility, disabled states, and shortcut display).
+    private func buildWorkspaceContextMenu(colorScheme: ColorScheme) -> NSMenu {
         let targetIds = contextMenuWorkspaceIds
         let isMulti = targetIds.count > 1
-        let tabColorPalette = WorkspaceTabColorSettings.palette()
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+
         let shouldPin = !tab.isPinned
         let pinLabel = shouldPin
             ? contextMenuLabel(
@@ -978,190 +938,210 @@ struct TabItemView: View, Equatable {
         let renameWorkspaceShortcut = KeyboardShortcutSettings.shortcut(for: .renameWorkspace)
         let editWorkspaceDescriptionShortcut = KeyboardShortcutSettings.shortcut(for: .editWorkspaceDescription)
         let closeWorkspaceShortcut = KeyboardShortcutSettings.shortcut(for: .closeWorkspace)
-        Button(pinLabel) {
+
+        menu.addItem(SidebarMenuItem(title: pinLabel) { [self] in
             for id in targetIds {
                 if let tab = tabManager.tabs.first(where: { $0.id == id }) {
                     tabManager.setPinned(tab, pinned: shouldPin)
                 }
             }
             syncSelectionAfterMutation()
-        }
+        })
 
-        if let key = renameWorkspaceShortcut.keyEquivalent {
-            Button(String(localized: "contextMenu.renameWorkspace", defaultValue: "Rename Workspace…")) {
-                promptRename()
-            }
-            .keyboardShortcut(key, modifiers: renameWorkspaceShortcut.eventModifiers)
-        } else {
-            Button(String(localized: "contextMenu.renameWorkspace", defaultValue: "Rename Workspace…")) {
-                promptRename()
-            }
-        }
+        let renameItem = SidebarMenuItem(
+            title: String(localized: "contextMenu.renameWorkspace", defaultValue: "Rename Workspace…")
+        ) { [self] in promptRename() }
+        applyShortcut(renameWorkspaceShortcut, to: renameItem)
+        menu.addItem(renameItem)
 
         if tab.hasCustomTitle {
-            Button(String(localized: "contextMenu.removeCustomWorkspaceName", defaultValue: "Remove Custom Workspace Name")) {
-                tabManager.clearCustomTitle(tabId: tab.id)
-            }
+            menu.addItem(SidebarMenuItem(
+                title: String(localized: "contextMenu.removeCustomWorkspaceName", defaultValue: "Remove Custom Workspace Name")
+            ) { [self] in tabManager.clearCustomTitle(tabId: tab.id) })
         }
 
         if !isMulti {
-            if let key = editWorkspaceDescriptionShortcut.keyEquivalent {
-                Button(String(localized: "contextMenu.editWorkspaceDescription", defaultValue: "Edit Workspace Description…")) {
-                    beginWorkspaceDescriptionEditFromContextMenu()
-                }
-                .keyboardShortcut(key, modifiers: editWorkspaceDescriptionShortcut.eventModifiers)
-            } else {
-                Button(String(localized: "contextMenu.editWorkspaceDescription", defaultValue: "Edit Workspace Description…")) {
-                    beginWorkspaceDescriptionEditFromContextMenu()
-                }
-            }
+            let editDescriptionItem = SidebarMenuItem(
+                title: String(localized: "contextMenu.editWorkspaceDescription", defaultValue: "Edit Workspace Description…")
+            ) { [self] in beginWorkspaceDescriptionEditFromContextMenu() }
+            applyShortcut(editWorkspaceDescriptionShortcut, to: editDescriptionItem)
+            menu.addItem(editDescriptionItem)
 
             if tab.hasCustomDescription {
-                Button(String(localized: "contextMenu.clearWorkspaceDescription", defaultValue: "Clear Workspace Description")) {
-                    tabManager.clearCustomDescription(tabId: tab.id)
-                }
+                menu.addItem(SidebarMenuItem(
+                    title: String(localized: "contextMenu.clearWorkspaceDescription", defaultValue: "Clear Workspace Description")
+                ) { [self] in tabManager.clearCustomDescription(tabId: tab.id) })
             }
 
-            Divider()
+            menu.addItem(.separator())
 
-            Button(String(localized: "contextMenu.openAgentOverview", defaultValue: "Open Agent Overview")) {
-                AgentOverviewWindowController.shared.show(
-                    tabManager: tabManager,
-                    workspaceId: tab.id
-                )
-            }
+            menu.addItem(SidebarMenuItem(
+                title: String(localized: "contextMenu.openAgentOverview", defaultValue: "Open Agent Overview")
+            ) { [self] in
+                AgentOverviewWindowController.shared.show(tabManager: tabManager, workspaceId: tab.id)
+            })
         }
 
         if !isMulti, !showsWorktreeBadge {
-            Divider()
+            menu.addItem(.separator())
 
             if isWorktreeFolder {
-                Button(String(localized: "contextMenu.newWorktreeWorkspace", defaultValue: "New Worktree Workspace…")) {
-                    promptNewWorktreeWorkspace()
-                }
+                menu.addItem(SidebarMenuItem(
+                    title: String(localized: "contextMenu.newWorktreeWorkspace", defaultValue: "New Worktree Workspace…")
+                ) { [self] in promptNewWorktreeWorkspace() })
 
                 if worktreeChildCount > 0 {
-                    Button(
-                        isWorktreeFolderCollapsed
-                            ? String(localized: "contextMenu.expandWorktreeFolder", defaultValue: "Expand Worktree Folder")
-                            : String(localized: "contextMenu.collapseWorktreeFolder", defaultValue: "Collapse Worktree Folder")
-                    ) {
-                        tabManager.setWorktreeFolderCollapsed(
-                            tab,
-                            collapsed: !isWorktreeFolderCollapsed
-                        )
-                    }
+                    let title = isWorktreeFolderCollapsed
+                        ? String(localized: "contextMenu.expandWorktreeFolder", defaultValue: "Expand Worktree Folder")
+                        : String(localized: "contextMenu.collapseWorktreeFolder", defaultValue: "Collapse Worktree Folder")
+                    menu.addItem(SidebarMenuItem(title: title) { [self] in
+                        tabManager.setWorktreeFolderCollapsed(tab, collapsed: !isWorktreeFolderCollapsed)
+                    })
                 }
 
-                Button(String(localized: "contextMenu.stopUsingAsWorktreeFolder", defaultValue: "Stop Using as Worktree Folder")) {
-                    tabManager.disableWorktreeFolder(tab)
-                }
+                menu.addItem(SidebarMenuItem(
+                    title: String(localized: "contextMenu.stopUsingAsWorktreeFolder", defaultValue: "Stop Using as Worktree Folder")
+                ) { [self] in tabManager.disableWorktreeFolder(tab) })
             } else {
-                Button(String(localized: "contextMenu.useAsWorktreeFolder", defaultValue: "Use as Worktree Folder")) {
-                    enableWorktreeFolder()
-                }
+                menu.addItem(SidebarMenuItem(
+                    title: String(localized: "contextMenu.useAsWorktreeFolder", defaultValue: "Use as Worktree Folder")
+                ) { [self] in enableWorktreeFolder() })
             }
         }
 
-        WorkspaceColorMenu(
-            hasCustomColor: tab.customColor != nil,
-            palette: tabColorPalette,
-            targetIds: targetIds,
-            colorScheme: colorScheme,
-            activeTabIndicatorStyle: activeTabIndicatorStyle,
-            onApplyColor: { hex, ids in applyTabColor(hex, targetIds: ids) },
-            onPromptCustomColor: { ids in promptCustomColor(targetIds: ids) }
+        let colorItem = NSMenuItem(
+            title: String(localized: "contextMenu.workspaceColor", defaultValue: "Workspace Color"),
+            action: nil,
+            keyEquivalent: ""
         )
-        .equatable()
+        colorItem.submenu = buildWorkspaceColorMenu(targetIds: targetIds, colorScheme: colorScheme)
+        menu.addItem(colorItem)
 
-        Divider()
+        menu.addItem(.separator())
 
-        Button(String(localized: "contextMenu.moveUp", defaultValue: "Move Up")) {
-            moveBy(-1)
-        }
-        .disabled(index == 0)
+        menu.addItem(SidebarMenuItem(
+            title: String(localized: "contextMenu.moveUp", defaultValue: "Move Up"),
+            isEnabled: index != 0
+        ) { [self] in moveBy(-1) })
 
-        Button(String(localized: "contextMenu.moveDown", defaultValue: "Move Down")) {
-            moveBy(1)
-        }
-        .disabled(index >= tabManager.tabs.count - 1)
+        menu.addItem(SidebarMenuItem(
+            title: String(localized: "contextMenu.moveDown", defaultValue: "Move Down"),
+            isEnabled: index < tabManager.tabs.count - 1
+        ) { [self] in moveBy(1) })
 
-        Button(String(localized: "contextMenu.moveToTop", defaultValue: "Move to Top")) {
+        menu.addItem(SidebarMenuItem(
+            title: String(localized: "contextMenu.moveToTop", defaultValue: "Move to Top"),
+            isEnabled: !targetIds.isEmpty
+        ) { [self] in
             tabManager.moveTabsToTop(Set(targetIds))
             syncSelectionAfterMutation()
-        }
-        .disabled(targetIds.isEmpty)
+        })
 
         let referenceWindowId = AppDelegate.shared?.windowId(for: tabManager)
         let windowMoveTargets = AppDelegate.shared?.windowMoveTargets(referenceWindowId: referenceWindowId) ?? []
-        let moveMenuTitle = targetIds.count > 1
+        let moveMenuTitle = isMulti
             ? String(localized: "contextMenu.moveWorkspacesToWindow", defaultValue: "Move Workspaces to Window")
             : String(localized: "contextMenu.moveWorkspaceToWindow", defaultValue: "Move Workspace to Window")
-        Menu(moveMenuTitle) {
-            Button(String(localized: "contextMenu.newWindow", defaultValue: "New Window")) {
-                moveWorkspacesToNewWindow(targetIds)
+        let moveMenuItem = NSMenuItem(title: moveMenuTitle, action: nil, keyEquivalent: "")
+        moveMenuItem.isEnabled = !targetIds.isEmpty
+        let moveSubmenu = NSMenu()
+        moveSubmenu.autoenablesItems = false
+        moveSubmenu.addItem(SidebarMenuItem(
+            title: String(localized: "contextMenu.newWindow", defaultValue: "New Window"),
+            isEnabled: !targetIds.isEmpty
+        ) { [self] in moveWorkspacesToNewWindow(targetIds) })
+        if !windowMoveTargets.isEmpty {
+            moveSubmenu.addItem(.separator())
+        }
+        for target in windowMoveTargets {
+            moveSubmenu.addItem(SidebarMenuItem(
+                title: target.label,
+                isEnabled: !target.isCurrentWindow && !targetIds.isEmpty
+            ) { [self] in moveWorkspaces(targetIds, toWindow: target.windowId) })
+        }
+        moveMenuItem.submenu = moveSubmenu
+        menu.addItem(moveMenuItem)
+
+        menu.addItem(.separator())
+
+        let closeItem = SidebarMenuItem(title: closeLabel, isEnabled: !targetIds.isEmpty) { [self] in
+            closeTabs(targetIds, allowPinned: true)
+        }
+        applyShortcut(closeWorkspaceShortcut, to: closeItem)
+        menu.addItem(closeItem)
+
+        menu.addItem(SidebarMenuItem(
+            title: String(localized: "contextMenu.closeOtherWorkspaces", defaultValue: "Close Other Workspaces"),
+            isEnabled: tabManager.tabs.count > 1 && targetIds.count != tabManager.tabs.count
+        ) { [self] in closeOtherTabs(targetIds) })
+
+        menu.addItem(SidebarMenuItem(
+            title: String(localized: "contextMenu.closeWorkspacesBelow", defaultValue: "Close Workspaces Below"),
+            isEnabled: index < tabManager.tabs.count - 1
+        ) { [self] in closeTabsBelow(tabId: tab.id) })
+
+        menu.addItem(SidebarMenuItem(
+            title: String(localized: "contextMenu.closeWorkspacesAbove", defaultValue: "Close Workspaces Above"),
+            isEnabled: index != 0
+        ) { [self] in closeTabsAbove(tabId: tab.id) })
+
+        menu.addItem(.separator())
+
+        menu.addItem(SidebarMenuItem(
+            title: markReadLabel,
+            isEnabled: hasUnreadNotifications(in: targetIds)
+        ) { [self] in markTabsRead(targetIds) })
+
+        menu.addItem(SidebarMenuItem(
+            title: markUnreadLabel,
+            isEnabled: hasReadNotifications(in: targetIds)
+        ) { [self] in markTabsUnread(targetIds) })
+
+        menu.addItem(SidebarMenuItem(
+            title: clearLatestNotificationLabel,
+            isEnabled: hasLatestNotifications(in: targetIds)
+        ) { [self] in clearLatestNotifications(targetIds) })
+
+        return menu
+    }
+
+    private func buildWorkspaceColorMenu(targetIds: [UUID], colorScheme: ColorScheme) -> NSMenu {
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+
+        if tab.customColor != nil {
+            let clearItem = SidebarMenuItem(
+                title: String(localized: "contextMenu.clearColor", defaultValue: "Clear Color")
+            ) { [self] in applyTabColor(nil, targetIds: targetIds) }
+            clearItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+            submenu.addItem(clearItem)
+        }
+
+        let chooseCustomItem = SidebarMenuItem(
+            title: String(localized: "contextMenu.chooseCustomColor", defaultValue: "Choose Custom Color…")
+        ) { [self] in promptCustomColor(targetIds: targetIds) }
+        chooseCustomItem.image = NSImage(systemSymbolName: "paintpalette", accessibilityDescription: nil)
+        submenu.addItem(chooseCustomItem)
+
+        let palette = WorkspaceTabColorSettings.palette()
+        if !palette.isEmpty {
+            submenu.addItem(.separator())
+        }
+
+        for entry in palette {
+            let swatchColor = WorkspaceTabColorSettings.displayNSColor(
+                hex: entry.hex,
+                colorScheme: colorScheme,
+                forceBright: activeTabIndicatorStyle == .leftRail
+            ) ?? NSColor(hex: entry.hex) ?? .gray
+            let item = SidebarMenuItem(title: entry.name) { [self] in
+                applyTabColor(entry.hex, targetIds: targetIds)
             }
-            .disabled(targetIds.isEmpty)
-
-            if !windowMoveTargets.isEmpty {
-                Divider()
-            }
-
-            ForEach(windowMoveTargets) { target in
-                Button(target.label) {
-                    moveWorkspaces(targetIds, toWindow: target.windowId)
-                }
-                .disabled(target.isCurrentWindow || targetIds.isEmpty)
-            }
-        }
-        .disabled(targetIds.isEmpty)
-
-        Divider()
-
-        if let key = closeWorkspaceShortcut.keyEquivalent {
-            Button(closeLabel) {
-                closeTabs(targetIds, allowPinned: true)
-            }
-            .keyboardShortcut(key, modifiers: closeWorkspaceShortcut.eventModifiers)
-            .disabled(targetIds.isEmpty)
-        } else {
-            Button(closeLabel) {
-                closeTabs(targetIds, allowPinned: true)
-            }
-            .disabled(targetIds.isEmpty)
+            item.image = coloredCircleImage(color: swatchColor)
+            submenu.addItem(item)
         }
 
-        Button(String(localized: "contextMenu.closeOtherWorkspaces", defaultValue: "Close Other Workspaces")) {
-            closeOtherTabs(targetIds)
-        }
-        .disabled(tabManager.tabs.count <= 1 || targetIds.count == tabManager.tabs.count)
-
-        Button(String(localized: "contextMenu.closeWorkspacesBelow", defaultValue: "Close Workspaces Below")) {
-            closeTabsBelow(tabId: tab.id)
-        }
-        .disabled(index >= tabManager.tabs.count - 1)
-
-        Button(String(localized: "contextMenu.closeWorkspacesAbove", defaultValue: "Close Workspaces Above")) {
-            closeTabsAbove(tabId: tab.id)
-        }
-        .disabled(index == 0)
-
-        Divider()
-
-        Button(markReadLabel) {
-            markTabsRead(targetIds)
-        }
-        .disabled(!hasUnreadNotifications(in: targetIds))
-
-        Button(markUnreadLabel) {
-            markTabsUnread(targetIds)
-        }
-        .disabled(!hasReadNotifications(in: targetIds))
-
-        Button(clearLatestNotificationLabel) {
-            clearLatestNotifications(targetIds)
-        }
-        .disabled(!hasLatestNotifications(in: targetIds))
+        return submenu
     }
 
     private var selectionBackgroundColor: NSColor {
@@ -1180,11 +1160,16 @@ struct TabItemView: View, Equatable {
             if isMultiSelected { return programaAccentColor().opacity(0.25) }
             return Color.clear
         case .solidFill:
-            if isActive { return Color(nsColor: selectionBackgroundColor) }
+            // A custom color takes precedence over the plain selection wash so an
+            // active row keeps showing its color (the active state still reads via
+            // the border overlay below) instead of the custom color disappearing
+            // behind a flat selection fill.
             if let custom = resolvedCustomTabColor {
+                if isActive { return custom.opacity(0.85) }
                 if isMultiSelected { return custom.opacity(0.35) }
                 return custom.opacity(0.7)
             }
+            if isActive { return Color(nsColor: selectionBackgroundColor) }
             if isMultiSelected { return programaAccentColor().opacity(0.25) }
             return Color.clear
         }
@@ -1195,7 +1180,12 @@ struct TabItemView: View, Equatable {
     }
 
     private var explicitRailColor: Color? {
-        guard activeTabIndicatorStyle == .leftRail || isActive,
+        // .leftRail always shows the custom color as an edge stripe (active or not) —
+        // it has no other way to carry a custom color while active. .solidFill instead
+        // carries the custom color directly in the row's background fill (see
+        // `backgroundColor` below), so it doesn't also need the rail; showing both
+        // would be a redundant triple indicator alongside the active border.
+        guard activeTabIndicatorStyle == .leftRail,
               let custom = resolvedCustomTabColor else {
             return nil
         }
@@ -1887,6 +1877,111 @@ struct TabItemView: View, Equatable {
         tabManager.selectTab(tab)
         setSelectionToTabs()
         _ = AppDelegate.shared?.requestEditWorkspaceDescriptionViaCommandPalette()
+    }
+}
+
+// MARK: - Native sidebar row context menu
+
+/// Runs `run` when its owning `NSMenuItem` is selected. Retained by the item via
+/// `representedObject`, and the item is retained by its `NSMenu`, so the closure
+/// lives exactly as long as the menu that owns it -- nothing to clean up between
+/// context-menu presentations.
+private final class SidebarMenuItemAction {
+    let run: () -> Void
+    init(_ run: @escaping () -> Void) { self.run = run }
+}
+
+/// One statically-shared target for every closure-backed item `SidebarMenuItem`
+/// builds, so building a context menu never needs its own retained NSObject target.
+private final class SidebarMenuItemTarget: NSObject {
+    static let shared = SidebarMenuItemTarget()
+
+    @objc func invoke(_ sender: NSMenuItem) {
+        (sender.representedObject as? SidebarMenuItemAction)?.run()
+    }
+}
+
+/// Builds a closure-backed `NSMenuItem`, the AppKit equivalent of a SwiftUI
+/// `Button { handler() } label: { Text(title) }.disabled(!isEnabled)` inside a
+/// `.contextMenu`.
+private func SidebarMenuItem(
+    title: String,
+    isEnabled: Bool = true,
+    handler: @escaping () -> Void
+) -> NSMenuItem {
+    let item = NSMenuItem(title: title, action: #selector(SidebarMenuItemTarget.invoke(_:)), keyEquivalent: "")
+    item.target = SidebarMenuItemTarget.shared
+    item.representedObject = SidebarMenuItemAction(handler)
+    item.isEnabled = isEnabled
+    return item
+}
+
+/// Native right-click/ctrl-click catcher for the sidebar row's context menu, built
+/// fresh at click time instead of hanging a SwiftUI `.contextMenu` off the row's
+/// body (see the `.overlay` call site in `TabItemView.body` for why). Mirrors
+/// `MiddleClickCapture` (Sources/SidebarVisuals.swift): `hitTest` only claims the
+/// view for the button/modifier combo it cares about, so left-click selection,
+/// hover, and drag continue to hit-test through to SwiftUI/AppKit normally.
+private struct SidebarRowContextMenuCapture: NSViewRepresentable {
+    let buildMenu: () -> NSMenu
+
+    func makeNSView(context: Context) -> SidebarRowContextMenuCaptureView {
+        let view = SidebarRowContextMenuCaptureView()
+        view.buildMenu = buildMenu
+        return view
+    }
+
+    func updateNSView(_ nsView: SidebarRowContextMenuCaptureView, context: Context) {
+        nsView.buildMenu = buildMenu
+    }
+}
+
+private final class SidebarRowContextMenuCaptureView: NSView {
+    var buildMenu: (() -> NSMenu)?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Intercept right-mouse-down, and control-click too: unlike a plain
+        // right-click, control-click arrives here as a genuine .leftMouseDown
+        // event with the .control modifier set -- AppKit only redirects it to
+        // rightMouseDown(with:) dispatch for whichever view hit-testing already
+        // picked, so hitTest itself must recognize the control-click case or
+        // this view is never chosen and the click falls through to plain
+        // left-click selection underneath. Every other click (plain left-click
+        // selection, hover, drag-reorder) continues to hit-test through to
+        // SwiftUI/AppKit normally.
+        guard let event = NSApp.currentEvent else { return nil }
+        if event.type == .rightMouseDown {
+            return self
+        }
+        if event.type == .leftMouseDown, event.modifierFlags.contains(.control) {
+            return self
+        }
+        return nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.modifierFlags.contains(.control) else {
+            super.mouseDown(with: event)
+            return
+        }
+        rightMouseDown(with: event)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard let menu = buildMenu?() else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    // VoiceOver's "Show menu" action relied on SwiftUI's `.contextMenu` before this
+    // change; best-effort parity for a plain NSView. Not exercised by this change
+    // (no VoiceOver pass was run) -- report a regression here if one surfaces.
+    override func accessibilityPerformShowMenu() -> Bool {
+        guard let menu = buildMenu?() else { return false }
+        menu.popUp(positioning: nil, at: NSPoint(x: bounds.midX, y: bounds.midY), in: self)
+        return true
     }
 }
 
