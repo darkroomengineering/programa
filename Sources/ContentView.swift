@@ -3069,7 +3069,10 @@ struct ContentView: View {
             includeSurfaces: includeSurfaces,
             commandsContext: commandsContext
         )
-        commandPaletteController.commandPaletteSearchCommandsByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        // `uniquingKeysWith` (not `uniqueKeysWithValues:`) guards against a crash if two entries
+        // ever share an id -- e.g. Unicode-normalization-equal saved-layout filenames on a
+        // non-APFS mount -- rather than trapping the whole palette.
+        commandPaletteController.commandPaletteSearchCommandsByID = Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let searchCorpus = entries.map { entry in
             CommandPaletteSearchCorpusEntry(
                 payload: entry.id,
@@ -3079,7 +3082,7 @@ struct ContentView: View {
             )
         }
         commandPaletteController.commandPaletteSearchCorpus = searchCorpus
-        commandPaletteController.commandPaletteSearchCorpusByID = Dictionary(uniqueKeysWithValues: searchCorpus.map { ($0.payload, $0) })
+        commandPaletteController.commandPaletteSearchCorpusByID = Dictionary(searchCorpus.map { ($0.payload, $0) }, uniquingKeysWith: { first, _ in first })
         commandPaletteController.cachedCommandPaletteScope = scope
         commandPaletteController.cachedCommandPaletteFingerprint = fingerprint
     }
