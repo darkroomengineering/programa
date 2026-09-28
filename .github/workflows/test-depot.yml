@@ -26,6 +26,9 @@ on:
         required: false
         default: "120"
 
+permissions:
+  contents: read
+
 jobs:
   tests:
     runs-on: macos-15
