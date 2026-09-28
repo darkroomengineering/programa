@@ -2154,7 +2154,19 @@ final class TerminalSurface: Identifiable, ObservableObject {
         pendingReviveWinchPGID = nil
         pendingReviveWinchChildPID = nil
 
-        reviveReplayQueue.async { [reviveReplayCanceled] in
+        // Read into locals up front so the closure below has no reason to reach `self` other
+        // than the `[weak self]` capture it needs for the main-queue hop at the end -- a `Self.`
+        // static reference inside the closure would also capture `self` (strongly, to resolve
+        // the dynamic type), which is a second, redundant path to the same capture.
+        let reviveReplayChunkBytes = Self.reviveReplayChunkBytes
+#if DEBUG
+        let reviveReplayChunkObserverForTesting = Self.reviveReplayChunkObserverForTesting
+#endif
+
+        // `weak self` here (not just on the inner hop) is what actually lets the surface
+        // deallocate mid-replay: without it the compiler captures `self` strongly by default
+        // to make it available to the inner closure's own `[weak self]`.
+        reviveReplayQueue.async { [reviveReplayCanceled, weak self] in
             // The chunk loop runs to completion here rather than yielding the
             // run loop between chunks. Releasing the mutex is what breaks the
             // deadlock; yielding as well would additionally let live output
@@ -2165,7 +2177,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             var offset = 0
             while offset < bytes.count {
                 if reviveReplayCanceled.withLock({ $0 }) { break }
-                let end = min(offset + Self.reviveReplayChunkBytes, bytes.count)
+                let end = min(offset + reviveReplayChunkBytes, bytes.count)
                 bytes.withUnsafeBufferPointer { buffer in
                     guard let baseAddress = buffer.baseAddress else { return }
                     UnsafeRawPointer(baseAddress + offset)
@@ -2175,7 +2187,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 }
                 offset = end
 #if DEBUG
-                Self.reviveReplayChunkObserverForTesting?(Thread.isMainThread)
+                reviveReplayChunkObserverForTesting?(Thread.isMainThread)
 #endif
             }
 

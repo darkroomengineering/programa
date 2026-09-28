@@ -157,7 +157,7 @@ class TerminalController {
         case failure(path: String, stage: String, errnoCode: Int32)
     }
 
-    private static let focusIntentV2Methods: Set<String> = [
+    private nonisolated static let focusIntentV2Methods: Set<String> = [
         "window.focus",
         "workspace.select",
         "review.open",
@@ -578,7 +578,7 @@ class TerminalController {
         }
     }
 
-    private static func socketCommandAllowsInAppFocusMutations(commandKey: String, isV2: Bool) -> Bool {
+    private nonisolated static func socketCommandAllowsInAppFocusMutations(commandKey: String, isV2: Bool) -> Bool {
         // The v1 line protocol is gone; only v2 JSON-RPC methods can carry focus intent.
         guard isV2 else { return false }
         return focusIntentV2Methods.contains(commandKey)
@@ -601,7 +601,7 @@ class TerminalController {
         return body()
     }
 
-    private func withSocketCommandPolicy<T>(commandKey: String, isV2: Bool, _ body: () -> T) -> T {
+    private nonisolated func withSocketCommandPolicy<T>(commandKey: String, isV2: Bool, _ body: () -> T) -> T {
         let allowsFocusMutation = Self.socketCommandAllowsInAppFocusMutations(commandKey: commandKey, isV2: isV2)
         Self.socketCommandPolicyLock.lock()
         Self.socketCommandPolicyDepth += 1
@@ -940,7 +940,7 @@ class TerminalController {
     }
 
     /// Check if `pid` is a descendant of this process by walking the process tree.
-    func isDescendant(_ pid: pid_t) -> Bool {
+    nonisolated func isDescendant(_ pid: pid_t) -> Bool {
         var current = pid
         // Walk up to 128 levels to avoid infinite loops from kernel bugs
         for _ in 0..<128 {
@@ -960,7 +960,7 @@ class TerminalController {
     }
 
     /// Get the parent PID of a process using sysctl.
-    private func parentPid(of pid: pid_t) -> pid_t {
+    private nonisolated func parentPid(of pid: pid_t) -> pid_t {
         var info = kinfo_proc()
         var size = MemoryLayout<kinfo_proc>.size
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
@@ -1489,7 +1489,7 @@ class TerminalController {
     }
 
 
-    private func passwordAuthRequiredResponse(for command: String) -> String {
+    private nonisolated func passwordAuthRequiredResponse(for command: String) -> String {
         let message = "Authentication required. Send auth <password> first."
         guard command.hasPrefix("{"),
               let data = command.data(using: .utf8),
@@ -1500,7 +1500,7 @@ class TerminalController {
         return v2Error(id: id, code: "auth_required", message: message)
     }
 
-    private func passwordLoginV2ResponseIfNeeded(for command: String, authenticated: inout Bool) -> String? {
+    private nonisolated func passwordLoginV2ResponseIfNeeded(for command: String, authenticated: inout Bool) -> String? {
         guard command.hasPrefix("{"),
               let data = command.data(using: .utf8),
               let dict = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] else {
@@ -1536,7 +1536,7 @@ class TerminalController {
         return v2Ok(id: id, result: ["authenticated": true])
     }
 
-    private func authResponseIfNeeded(
+    private nonisolated func authResponseIfNeeded(
         for command: String,
         authenticated: inout Bool,
         requestPolicy: SocketRequestPolicy
@@ -1760,7 +1760,7 @@ class TerminalController {
 
     /// Unix clients carry the listener policy captured when they were accepted.
     /// Mobile Bridge sessions are admitted independently by pairing and its method allow-list.
-    func handleClient(_ socket: Int32, peerPid: pid_t? = nil, source: SocketConnectionSource) {
+    nonisolated func handleClient(_ socket: Int32, peerPid: pid_t? = nil, source: SocketConnectionSource) {
         // Owns this connection's writes (both ordinary v2 responses and any #167 subscription
         // event pushes) and its subscription lifecycle. `teardown()` (which tears down any
         // attached subscription) must run before the fd is closed -- defers unwind LIFO, so the
@@ -1889,7 +1889,7 @@ class TerminalController {
         }
     }
 
-    private func processCommand(
+    private nonisolated func processCommand(
         _ command: String,
         connection: SocketConnection,
         requestPolicy: SocketRequestPolicy
@@ -1913,7 +1913,7 @@ class TerminalController {
 
     // MARK: - V2 JSON Socket Protocol
 
-    private func processV2Command(
+    private nonisolated func processV2Command(
         _ jsonLine: String,
         connection: SocketConnection,
         requestPolicy: SocketRequestPolicy
@@ -1953,7 +1953,7 @@ class TerminalController {
         }
 
         return withSocketCommandPolicy(commandKey: method, isV2: true) {
-            if let result = browserRPCDispatcher.dispatch(method: method, params: params, controller: self) ?? AgentRPCDispatcher.dispatch(method: method, params: params, controller: self) {
+            if let result = AgentRPCDispatcher.dispatch(method: method, params: params, controller: self) {
                 return v2Result(id: id, result)
             }
             switch method {
@@ -2195,7 +2195,8 @@ class TerminalController {
 
         // Markdown
         case "markdown.open":
-            return v2Result(id: id, self.v2MarkdownOpen(params: params))
+            // `v2MarkdownOpen` is main actor-isolated; hop explicitly.
+            return v2Result(id: id, v2MainSync { self.v2MarkdownOpen(params: params) })
 
         // Review (agent diff review panel)
         case "review.open":
@@ -2297,12 +2298,17 @@ class TerminalController {
 #endif
 
             default:
+                // BrowserRPCDispatcher is @MainActor; only methods that missed every
+                // nonisolated case above pay this hop, keeping telemetry off main.
+                if let result = v2MainSync({ browserRPCDispatcher.dispatch(method: method, params: params, controller: self) }) {
+                    return v2Result(id: id, result)
+                }
                 return v2Error(id: id, code: "method_not_found", message: "Unknown method")
             }
         }
     }
 
-    private func v2Capabilities(requestPolicy: SocketRequestPolicy) -> [String: Any] {
+    private nonisolated func v2Capabilities(requestPolicy: SocketRequestPolicy) -> [String: Any] {
         return [
             "protocol": "cmux-socket",
             "version": 2,
