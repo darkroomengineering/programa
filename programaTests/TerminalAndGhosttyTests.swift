@@ -5901,3 +5901,38 @@ final class BrowserStateExportPolicyTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class ThemeReloadCoalescerTests: XCTestCase {
+    func testBurstOfRequestsReloadsOnceAfterTheDebounce() {
+        let coalescer = ThemeReloadCoalescer(debounce: 0.05)
+        var reloads = 0
+        let done = expectation(description: "reload")
+        for _ in 0..<5 {
+            coalescer.request(fingerprint: { ["a"] }, reload: {
+                reloads += 1
+                done.fulfill()
+            })
+        }
+        wait(for: [done], timeout: 2)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        XCTAssertEqual(reloads, 1)
+    }
+
+    func testUnchangedFingerprintSkipsTheNextReloadButChangeReloads() {
+        let coalescer = ThemeReloadCoalescer(debounce: 0.01)
+        var reloads = 0
+        func fire(_ fingerprint: [String]) {
+            let done = expectation(description: "settled")
+            done.isInverted = false
+            coalescer.request(fingerprint: { fingerprint }, reload: { reloads += 1 })
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { done.fulfill() }
+            wait(for: [done], timeout: 2)
+        }
+        fire(["v1"])
+        fire(["v1"])
+        XCTAssertEqual(reloads, 1)
+        fire(["v2"])
+        XCTAssertEqual(reloads, 2)
+    }
+}
