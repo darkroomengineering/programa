@@ -41,4 +41,3 @@ test_worktree_open_all_flag_validation.py
 test_worktree_remove_never_deletes_branch.py
 test_terminal_close_undo.py
 test_opencode_install_integration.py
-test_tmux_compat_matrix.py
