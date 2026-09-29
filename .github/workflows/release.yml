@@ -718,6 +718,7 @@ jobs:
       always() &&
       needs.release-identity.result == 'success' &&
       needs.build-sign-notarize.result == 'success' &&
+      needs.post-build-main-check.result == 'success' &&
       needs.post-build-main-check.outputs.current == 'true'
     runs-on: ubuntu-latest
     env:
