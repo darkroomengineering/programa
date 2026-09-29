@@ -722,3 +722,38 @@ fn validate_command_sessions(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `system.capabilities` advertises `IMPLEMENTED_METHODS`; every advertised
+    /// method must have a `dispatch` arm, and an unlisted one must not.
+    #[test]
+    fn every_advertised_method_is_dispatched() {
+        let state = Arc::new(AppState::new(None));
+        let call = |method: &str| {
+            let req = Request {
+                id: None,
+                method: method.to_string(),
+                // An empty argv makes session.open fail validation instead of
+                // spawning a shell; other methods reject empty params.
+                params: json!({"argv": []}),
+            };
+            let mut authenticated = true;
+            let mut attachments = HashSet::new();
+            dispatch(&req, &state, &mut authenticated, &mut attachments)
+        };
+        for method in IMPLEMENTED_METHODS {
+            if let Err(error) = call(method) {
+                assert_ne!(
+                    error.code.as_str(),
+                    ErrorCode::MethodNotFound.as_str(),
+                    "{method} is advertised but not dispatched"
+                );
+            }
+        }
+        let unknown = call("system.not_a_method").err().map(|e| e.code.as_str());
+        assert_eq!(unknown, Some(ErrorCode::MethodNotFound.as_str()));
+    }
+}
