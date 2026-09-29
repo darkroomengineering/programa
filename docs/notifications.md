@@ -198,10 +198,12 @@ Programa sets these in child shells:
 | Variable | Description |
 |----------|-------------|
 | `PROGRAMA_SOCKET_PATH` | Path to control socket |
-| `PROGRAMA_TAB_ID` | UUID of the current tab |
-| `PROGRAMA_PANEL_ID` | UUID of the current panel |
+| `PROGRAMA_WORKSPACE_ID` | UUID of the current workspace (also `PROGRAMA_TAB_ID`) |
+| `PROGRAMA_SURFACE_ID` | UUID of the current surface (also `PROGRAMA_PANEL_ID`) |
 | `PROGRAMA_DEFAULT_BROWSER` | Short key of the system default browser (e.g. `chrome`, `safari`, `arc`) -- see [socket-api.md](socket-api.md#browser-availability-appbrowsers-programa_default_browser) |
 | `PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID` | Bundle identifier of the system default browser |
+
+See [environment-variables.md](environment-variables.md) for the full list.
 
 ## CLI Commands
 

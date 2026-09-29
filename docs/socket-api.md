@@ -93,7 +93,8 @@ The app listens on:
 `PROGRAMA_ALLOW_SOCKET_OVERRIDE=1` is set. A tagged Debug build ignores it unless that variable
 is set too.
 
-Programa terminals export `PROGRAMA_SOCKET_PATH` to the socket of the app that started them.
+Programa terminals export both `PROGRAMA_SOCKET_PATH` and `PROGRAMA_SOCKET` set to the socket of the
+app that started them.
 The app also writes the path it is listening on to
 `~/Library/Application Support/programa/last-socket-path`.
 
@@ -104,8 +105,8 @@ path is, in order of precedence:
 
 1. `--socket <path>` (CLI only). An explicit flag is used as given, with no discovery.
 2. `PROGRAMA_SOCKET_PATH`.
-3. `PROGRAMA_SOCKET`. This name is read by the CLI, `programa-mcp` and the Python test helpers
-   (the app itself does not read it), and `PROGRAMA_SOCKET_PATH` wins when both are set.
+3. `PROGRAMA_SOCKET`. The CLI, `programa-mcp` and the Python test helpers read this name; the app
+   only exports it. `PROGRAMA_SOCKET_PATH` wins when both are set.
 4. The default, `~/Library/Application Support/programa/programa.sock`.
 
 A path from an environment variable is used as given, unless it is one of the default paths.
@@ -125,9 +126,9 @@ candidate that accepts a connection, then the first candidate that exists as a s
 
 If none exists, the requested path is used and the connection error names it.
 
-Inside a Programa terminal, `PROGRAMA_SOCKET_PATH` points at that app's own socket, so a script
-run there talks to the app that hosts it. To drive a different instance, such as a tagged build,
-set both `PROGRAMA_SOCKET_PATH` and `PROGRAMA_SOCKET` to its socket.
+Inside a Programa terminal, both variables point at the socket of the app that hosts it, so a
+script run there talks to that app. To drive a different instance, such as a tagged build, set both
+`PROGRAMA_SOCKET_PATH` and `PROGRAMA_SOCKET` to its socket.
 
 ### Password flow
 
