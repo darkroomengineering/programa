@@ -480,6 +480,15 @@ fn cursor_is_visible(display_offset: usize, mode: &TermMode) -> bool {
     display_offset == 0 && mode.contains(TermMode::SHOW_CURSOR)
 }
 
+/// Returns the view to the live screen; true when it had been scrolled back.
+fn scroll_to_bottom<T: EventListener>(term: &mut Term<T>) -> bool {
+    if term.grid().display_offset() == 0 {
+        return false;
+    }
+    term.scroll_display(Scroll::Bottom);
+    true
+}
+
 fn paste_bytes(data: &[u8], requested: bool, mode: &TermMode) -> Vec<u8> {
     let enabled = requested && mode.contains(TermMode::BRACKETED_PASTE);
     if !enabled {
@@ -684,9 +693,11 @@ pub unsafe extern "C" fn programa_terminal_write(
     ffi_status(|| {
         let value = session(value)?;
         let data = bytes(data, len)?;
-        value.term.lock().scroll_display(Scroll::Bottom);
+        let scrolled = scroll_to_bottom(&mut value.term.lock());
         value.notifier.notify(Cow::Owned(data.to_vec()));
-        value.state.changed();
+        if scrolled {
+            value.state.changed();
+        }
         Ok(())
     })
 }
@@ -898,10 +909,12 @@ pub unsafe extern "C" fn programa_terminal_paste(
         let data = bytes(data, len)?;
         let mut term = value.term.lock();
         let output = paste_bytes(data, bracketed, term.mode());
-        term.scroll_display(Scroll::Bottom);
+        let scrolled = scroll_to_bottom(&mut term);
         drop(term);
         value.notifier.notify(Cow::Owned(output));
-        value.state.changed();
+        if scrolled {
+            value.state.changed();
+        }
         Ok(())
     })
 }

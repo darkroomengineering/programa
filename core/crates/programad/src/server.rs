@@ -713,11 +713,24 @@ fn validate_command_sessions(
         | DomainCommand::ResizeSplit { .. } => Vec::new(),
     };
     for session_id in session_ids {
-        if state.sessions.get(session_id).is_none() {
-            return Err(ErrorBody::new(
-                ErrorCode::NotFound,
-                format!("session '{session_id}' was not found"),
-            ));
+        match state
+            .sessions
+            .get(session_id)
+            .map(|session| session.status())
+        {
+            None => {
+                return Err(ErrorBody::new(
+                    ErrorCode::NotFound,
+                    format!("session '{session_id}' was not found"),
+                ))
+            }
+            Some(SessionStatus::Running) => {}
+            Some(_) => {
+                return Err(ErrorBody::new(
+                    ErrorCode::InvalidParams,
+                    format!("session '{session_id}' has already exited"),
+                ))
+            }
         }
     }
     Ok(())

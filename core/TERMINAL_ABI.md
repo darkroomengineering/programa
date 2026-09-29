@@ -77,7 +77,7 @@ Write sends raw bytes to the PTY. Paste sends text; when bracketed is true and
 the program has enabled bracketed paste, the text is wrapped in ESC[200~ and
 ESC[201~ and every C0 control byte except tab, CR, and LF (including ESC) is
 removed first, so pasted text cannot close the bracket. Without bracketing the
-bytes are sent unchanged. Both calls scroll the view to the bottom. A zero
+bytes are sent unchanged. Both calls return a scrolled-back view to the bottom. A zero
 length is valid and a null data pointer is accepted only with length 0.
 
     bool programa_terminal_application_cursor(session);

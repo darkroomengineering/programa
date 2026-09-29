@@ -52,7 +52,7 @@ The implemented methods are:
 
 `workspace.snapshot` returns the shared `programa-domain` snapshot and
 `workspace.dispatch` applies one domain command (both documented in
-`core/ABI.md`). A command that attaches a new surface must name a session this
+`core/ABI.md`). A command that attaches a new surface must name a running session this
 daemon owns, checked under the same lock that applies the command. A surface
 whose session has closed, or whose child has exited or failed, is closed the
 next time the workspace state is read or changed; the session itself stays
