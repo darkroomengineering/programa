@@ -667,6 +667,9 @@ impl SessionManager {
             Some(session) => {
                 session.close(kill)?;
                 self.sessions.lock().unwrap().remove(id);
+                if let Err(error) = crate::paths::remove_session_dir(id) {
+                    tracing::warn!(session = id, %error, "failed to remove closed session directory");
+                }
                 Ok(true)
             }
             None => Ok(false),

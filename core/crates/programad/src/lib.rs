@@ -54,6 +54,20 @@ pub async fn serve(
             accepted = listener.accept() => {
                 match accepted {
                     Ok((stream, _addr)) => {
+                        // Accepted sockets are not created with CLOEXEC on macOS.
+                        // Setting it under the spawn lock keeps the fd out of any
+                        // PTY child forked afterwards. A fork that lands between
+                        // accept(2) returning and this lock is not covered.
+                        let cloexec = {
+                            let _guard = pty::SPAWN_FD_LOCK
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            pty::set_cloexec(&stream)
+                        };
+                        if let Err(e) = cloexec {
+                            tracing::warn!(error = %e, "dropping connection: could not set FD_CLOEXEC");
+                            continue;
+                        }
                         let state = state.clone();
                         tokio::spawn(async move {
                             server::handle_connection(stream, state).await;
