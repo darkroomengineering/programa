@@ -61,7 +61,7 @@ The README download button points at `releases/latest/download/programa-macos.dm
 | `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for notarization |
 | `APPLE_TEAM_ID` | Apple team id |
 | `SPARKLE_PRIVATE_KEY` | Signs the appcast and enclosures; the workflow derives the public key embedded in the app from it. The release fails without it |
-| `APPLE_PROVISION_PROFILE_BASE64` | Provisioning profile embedded in the app. Optional: without it the workflow skips embedding, but entitlements that Apple gates behind a profile then stop the app from launching |
+| `APPLE_PROVISION_PROFILE_BASE64` | Provisioning profile embedded in the app. Required: the app declares restricted entitlements (CloudKit), and without an embedded profile macOS kills it at launch even though signing and notarization succeed. The profile verification step fails the build when the secret is missing |
 
 ## Milestone version bumps
 
