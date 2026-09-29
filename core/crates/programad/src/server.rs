@@ -241,10 +241,7 @@ fn require_str<'a>(params: &'a Value, key: &str) -> Result<&'a str, ErrorBody> {
     })
 }
 
-fn get_session<'a>(
-    state: &'a AppState,
-    id: &str,
-) -> Result<Arc<crate::session::Session>, ErrorBody> {
+fn get_session(state: &AppState, id: &str) -> Result<Arc<crate::session::Session>, ErrorBody> {
     state
         .sessions
         .get(id)

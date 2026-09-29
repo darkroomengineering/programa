@@ -173,8 +173,7 @@ impl Session {
         let inner = self.inner.clone();
         let input_handle = std::thread::Builder::new()
             .name(format!("programad-input-{}-{attach_id}", self.id))
-            .spawn(move || attachment_input_loop(inner, input_r, stop_r))
-            .map_err(io::Error::from)?;
+            .spawn(move || attachment_input_loop(inner, input_r, stop_r))?;
 
         self.inner.attachments.lock().unwrap().insert(
             attach_id,
