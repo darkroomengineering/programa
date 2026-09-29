@@ -5027,3 +5027,41 @@ final class ExternalOpenPolicyTests: XCTestCase {
         XCTAssertFalse(ExternalOpenPolicy.navigationTypeHasUserGesture(.reload))
     }
 }
+
+final class DesignModePickHardeningTests: XCTestCase {
+    private func payload(selector: String, url: String, css: [String: String]) -> DesignModePickPayload {
+        DesignModePickPayload(
+            html: "<div></div>",
+            css: css,
+            selector: selector,
+            rect: DesignModePickRect(x: 0, y: 0, width: 1, height: 1),
+            url: url
+        )
+    }
+
+    func testLineBreaksAreStrippedFromSelectorUrlAndCss() {
+        let sanitized = payload(
+            selector: "div\r\n.a\nrm -rf ~",
+            url: "https://x.test/\nwhoami\r",
+            css: ["color": "red\nreboot", "font\n": "a\rb"]
+        )
+        for value in [sanitized.selector, sanitized.url] + Array(sanitized.css.values) + Array(sanitized.css.keys) {
+            XCTAssertFalse(value.contains("\n") || value.contains("\r"), value)
+        }
+        XCTAssertEqual(sanitized.css["color"], "redreboot")
+    }
+
+    func testUrlAndCssValuesAreCapped() {
+        let long = String(repeating: "a", count: 10_000)
+        let sanitized = payload(selector: "div", url: long, css: ["k": long])
+        XCTAssertEqual(sanitized.url.count, DesignModePickPayload.fieldLengthLimit)
+        XCTAssertEqual(sanitized.css["k"]?.count, DesignModePickPayload.fieldLengthLimit)
+    }
+
+    func testPickIsAcceptedOnlyShortlyAfterANativeClick() {
+        XCTAssertFalse(DesignModePickGate.accepts(lastNativeMouseDown: nil, now: 100))
+        XCTAssertTrue(DesignModePickGate.accepts(lastNativeMouseDown: 99.5, now: 100))
+        XCTAssertFalse(DesignModePickGate.accepts(lastNativeMouseDown: 90, now: 100))
+        XCTAssertFalse(DesignModePickGate.accepts(lastNativeMouseDown: 101, now: 100), "clock going backwards must not pass")
+    }
+}
