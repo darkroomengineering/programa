@@ -1,5 +1,7 @@
 # Programa concept inventory
 
+Status: reference inventory, not a plan. The in-tree `core/` crates implement part of it.
+
 What a replacement core (any toolkit, any terminal engine) has to reproduce. Companion to `rust-core-spike.md`. Generated 2026-09-15 from a read-only pass over the repo.
 
 Read-only research pass over `/Users/frz/Developer/@darkroom/programa`. Each section names the

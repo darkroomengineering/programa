@@ -10,6 +10,8 @@ Dual-platform release contract ────────── native Windows EXE
 
 # Native frontends, shared behavior
 
+Status: decided and in progress. The AppKit/SwiftUI app and the WinUI 3 app (`windows/`) both live in the tree; the shared core is extracted incrementally into `core/`.
+
 Decision: the user superseded the GPUI direction on September 16, 2026.
 Programa uses AppKit/SwiftUI on macOS and WinUI 3 on Windows. The shared core
 owns application semantics; frontends own platform presentation and interaction.

@@ -1,5 +1,7 @@
 # t3code inventory
 
+Status: reference inventory, not a plan.
+
 Read-only pass over a shallow clone of github.com/pingdotgg/t3code (MIT) on 2026-09-15. Companion to `rust-core-spike.md`; kept as a reference for the core-plus-clients design and for features worth porting.
 
 

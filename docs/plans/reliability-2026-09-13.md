@@ -10,6 +10,8 @@ Native chrome hit routing + usage layout ──── expected drag and compact 
 
 # Reliability release plan
 
+Status: implemented and shipped.
+
 User authorized implementing all items and pushing for a new version. Base: `1636122cff`.
 Keep unrelated dirty user work intact; release checkout: `/private/tmp/programa-reliability-release`,
 branch `release/session-reliability-20260914`. Source writers have finished.

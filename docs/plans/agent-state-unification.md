@@ -1,5 +1,7 @@
 # Agent state unification
 
+Status: shipped. `Workspace.panelAgentPresence` is the single source of state, and `agent.needs_input` writes state and notification together.
+
 One source of truth for agent working/blocked/idle, one sidebar indicator, one write
 path for "needs input", and a watchdog that retires state nobody is maintaining.
 

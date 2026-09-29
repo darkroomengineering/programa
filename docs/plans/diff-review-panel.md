@@ -1,6 +1,6 @@
 # Agent Diff Review Panel — Implementation Plan
 
-Status: proposed, not started. Modeled on Warp's "Interactive Code Review" and the
+Status: shipped. The review panel and the `review.*` socket methods are in the app (`Sources/TerminalController+Review.swift`, `CLI/CLI+Review.swift`). Modeled on Warp's "Interactive Code Review" and the
 herdr-reviewr plugin pattern. Read-only w.r.t. git; never mutates worktree/index/branches.
 
 ## 0. Research summary (what already exists, and what to mirror)
