@@ -59,7 +59,7 @@ pub fn sessions_dir() -> io::Result<PathBuf> {
     Ok(dir)
 }
 
-pub fn session_dir(session_id: &str) -> io::Result<PathBuf> {
+fn checked_session_id(session_id: &str) -> io::Result<()> {
     if session_id.is_empty()
         || session_id == "."
         || session_id == ".."
@@ -70,9 +70,24 @@ pub fn session_dir(session_id: &str) -> io::Result<PathBuf> {
             "invalid session id path component",
         ));
     }
+    Ok(())
+}
+
+pub fn session_dir(session_id: &str) -> io::Result<PathBuf> {
+    checked_session_id(session_id)?;
     let dir = sessions_dir()?.join(session_id);
     ensure_private_dir(&dir)?;
     Ok(dir)
+}
+
+/// Delete `sessions/<id>/` (the WAL) once its session is closed. A missing
+/// directory is not an error.
+pub fn remove_session_dir(session_id: &str) -> io::Result<()> {
+    checked_session_id(session_id)?;
+    match fs::remove_dir_all(sessions_dir()?.join(session_id)) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
 }
 
 pub fn wal_path(session_id: &str) -> io::Result<PathBuf> {

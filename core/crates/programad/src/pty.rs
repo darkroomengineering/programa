@@ -134,7 +134,7 @@ pub fn spawn(params: SpawnParams) -> io::Result<PtySession> {
     Ok(PtySession { master, child })
 }
 
-pub(crate) fn set_cloexec(fd: &OwnedFd) -> io::Result<()> {
+pub(crate) fn set_cloexec(fd: &impl AsRawFd) -> io::Result<()> {
     use nix::fcntl::{fcntl, FcntlArg, FdFlag};
     fcntl(fd.as_raw_fd(), FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC))
         .map(|_| ())

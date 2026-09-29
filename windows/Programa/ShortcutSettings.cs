@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Windows.System;
@@ -21,6 +22,10 @@ public sealed class ShortcutSettings
     };
 
     private static readonly HashSet<string> Reserved = ["ctrl-c", "ctrl-d", "ctrl-w"];
+
+    // The file is shared with the macOS app, which writes JSON with comments and trailing commas.
+    private static readonly JsonDocumentOptions DocumentOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
+    private static readonly JsonReaderOptions ReaderOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
     private readonly Dictionary<string, string> _values;
 
     private ShortcutSettings(Dictionary<string, string> values) => _values = values;
@@ -33,7 +38,9 @@ public sealed class ShortcutSettings
         var values = new Dictionary<string, string>(Defaults, StringComparer.Ordinal);
         var path = SettingsPath;
         if (!File.Exists(path)) return new(values);
-        var root = JsonNode.Parse(File.ReadAllText(path))?.AsObject()
+        var text = File.ReadAllText(path);
+        if (string.IsNullOrWhiteSpace(text)) return new(values);
+        var root = JsonNode.Parse(text, null, DocumentOptions)?.AsObject()
             ?? throw new InvalidDataException($"Settings must contain a JSON object: {path}");
         if (root["windows"]?["shortcuts"] is JsonObject shortcuts)
         {
@@ -53,30 +60,124 @@ public sealed class ShortcutSettings
         return new(copy);
     }
 
+    /// <summary>
+    /// Rewrites only the <c>windows.shortcuts</c> member of the shared settings file. Every other byte,
+    /// including comments and trailing commas, is kept; comments inside the rewritten member are not.
+    /// </summary>
     public void Save()
     {
         Validate(_values);
         var path = SettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        JsonObject root;
-        try { root = File.Exists(path) ? JsonNode.Parse(File.ReadAllText(path))?.AsObject() ?? [] : []; }
+        var original = File.Exists(path) ? File.ReadAllBytes(path) : [];
+        byte[] updated;
+        try { updated = Patch(original, _values); }
         catch (JsonException error) { throw new InvalidDataException($"Invalid JSON in {path}", error); }
-        var windows = root["windows"] as JsonObject;
-        if (windows is null)
-        {
-            windows = [];
-            root["windows"] = windows;
-        }
-        var shortcuts = windows["shortcuts"] as JsonObject;
-        if (shortcuts is null)
-        {
-            shortcuts = [];
-            windows["shortcuts"] = shortcuts;
-        }
-        foreach (var pair in _values) shortcuts[pair.Key] = pair.Value;
         var temporary = path + ".tmp";
-        File.WriteAllText(temporary, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllBytes(temporary, updated);
         File.Move(temporary, path, true);
+    }
+
+    private readonly record struct Member(int Start, int End, JsonTokenType Type);
+    private readonly record struct ObjectScan(int Start, int LastValueEnd, Member? Found);
+
+    internal static byte[] Patch(byte[] original, IReadOnlyDictionary<string, string> values)
+    {
+        var bom = original.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]) ? 3 : 0;
+        var text = Encoding.UTF8.GetString(original, bom, original.Length - bom);
+        var nl = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        byte[] result;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            result = Encoding.UTF8.GetBytes($"{{{nl}  \"windows\": {WindowsJson(values, nl)}{nl}}}{nl}");
+        }
+        else
+        {
+            var root = ScanObject(original, bom, "windows");
+            if (root.Found is not { } windows)
+                result = Insert(original, root, "windows", WindowsJson(values, nl), "  ", nl);
+            else if (windows.Type != JsonTokenType.StartObject)
+                result = Replace(original, windows, WindowsJson(values, nl));
+            else
+            {
+                var inner = ScanObject(original, windows.Start, "shortcuts");
+                if (inner.Found is not { } shortcuts)
+                    result = Insert(original, inner, "shortcuts", ShortcutsJson(null, values, "    ", nl), "    ", nl);
+                else
+                {
+                    var existing = shortcuts.Type == JsonTokenType.StartObject
+                        ? JsonNode.Parse(Encoding.UTF8.GetString(original, shortcuts.Start, shortcuts.End - shortcuts.Start), null, DocumentOptions) as JsonObject
+                        : null;
+                    result = Replace(original, shortcuts, ShortcutsJson(existing, values, "    ", nl));
+                }
+            }
+        }
+        // Never write a file the next Load could not read back.
+        JsonDocument.Parse(result.AsMemory(result.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]) ? 3 : 0), DocumentOptions).Dispose();
+        return result;
+    }
+
+    private static ObjectScan ScanObject(byte[] bytes, int from, string name)
+    {
+        var reader = new Utf8JsonReader(bytes.AsSpan(from), ReaderOptions);
+        if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+            throw new InvalidDataException("Settings must contain a JSON object.");
+        var start = from + (int)reader.TokenStartIndex;
+        var lastValueEnd = -1;
+        Member? found = null;
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var key = reader.GetString();
+            reader.Read();
+            var type = reader.TokenType;
+            var valueStart = from + (int)reader.TokenStartIndex;
+            reader.Skip();
+            lastValueEnd = from + (int)reader.BytesConsumed;
+            if (string.Equals(key, name, StringComparison.Ordinal)) found = new Member(valueStart, lastValueEnd, type);
+        }
+        return new(start, lastValueEnd, found);
+    }
+
+    private static byte[] Replace(byte[] bytes, Member member, string json) =>
+        Splice(bytes, member.Start, member.End, json);
+
+    private static byte[] Insert(byte[] bytes, ObjectScan scan, string name, string json, string indent, string nl)
+    {
+        var property = $"\"{name}\": {json}";
+        return scan.LastValueEnd < 0
+            ? Splice(bytes, scan.Start + 1, scan.Start + 1, nl + indent + property + nl + indent[..^2])
+            : Splice(bytes, scan.LastValueEnd, scan.LastValueEnd, "," + nl + indent + property);
+    }
+
+    private static byte[] Splice(byte[] bytes, int start, int end, string replacement)
+    {
+        var insert = Encoding.UTF8.GetBytes(replacement);
+        var result = new byte[bytes.Length - (end - start) + insert.Length];
+        bytes.AsSpan(0, start).CopyTo(result);
+        insert.CopyTo(result, start);
+        bytes.AsSpan(end).CopyTo(result.AsSpan(start + insert.Length));
+        return result;
+    }
+
+    private static string WindowsJson(IReadOnlyDictionary<string, string> values, string nl) =>
+        $"{{{nl}    \"shortcuts\": {ShortcutsJson(null, values, "    ", nl)}{nl}  }}";
+
+    /// <summary>Serializes the shortcuts object, keeping keys this app does not manage.</summary>
+    private static string ShortcutsJson(JsonObject? existing, IReadOnlyDictionary<string, string> values, string indent, string nl)
+    {
+        var members = new List<(string Key, string Json)>();
+        if (existing is not null)
+            foreach (var pair in existing)
+                members.Add((pair.Key, pair.Value is null ? "null" : pair.Value.ToJsonString()));
+        foreach (var pair in values)
+        {
+            var json = JsonSerializer.Serialize(pair.Value);
+            var index = members.FindIndex(member => member.Key == pair.Key);
+            if (index >= 0) members[index] = (pair.Key, json);
+            else members.Add((pair.Key, json));
+        }
+        var lines = members.Select(member => $"{indent}  {JsonSerializer.Serialize(member.Key)}: {member.Json}");
+        return "{" + nl + string.Join("," + nl, lines) + nl + indent + "}";
     }
 
     public bool Matches(string action, VirtualKey key)
