@@ -8,7 +8,7 @@ contributing a new agent (e.g. a CLI not yet covered) or fixing a pattern that's
 an upstream UI change.
 
 Wire-level behavior (report source tagging, hooks-always-win precedence) is documented in
-`docs/v2-api-migration.md`'s `agent_state` sections; this doc is only about the manifest file
+`docs/socket-api.md`'s `agent_state` sections; this doc is only about the manifest file
 format itself.
 
 Since docs/plans/agent-state-unification.md, a manifest classification writes the same

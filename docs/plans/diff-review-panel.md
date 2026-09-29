@@ -1,6 +1,6 @@
 # Agent Diff Review Panel — Implementation Plan
 
-Status: proposed, not started. Modeled on Warp's "Interactive Code Review" and the
+Status: shipped. The review panel and the `review.*` socket methods are in the app (`Sources/TerminalController+Review.swift`, `CLI/CLI+Review.swift`). Modeled on Warp's "Interactive Code Review" and the
 herdr-reviewr plugin pattern. Read-only w.r.t. git; never mutates worktree/index/branches.
 
 ## 0. Research summary (what already exists, and what to mirror)
@@ -477,7 +477,7 @@ Can run in parallel with Phase C once Phase B is done — different files.
 14. **(30 min)** Wire the 6 new `case "review.*":` entries into `TerminalController.swift`'s
     dispatch switch (near `TerminalController.swift:1894`, alongside `markdown.open`).
 15. **(15 min)** Add the 6 new method names to `V2CommandCatalog.swift` (alongside `markdown.open`
-    at line 112) and to `docs/v2-api-migration.md`'s method reference (a new "Review" section,
+    at line 112) and to `docs/socket-api.md`'s method reference (a new "Review" section,
     mirroring the existing "Markdown" section's one-liner + a fuller `### review.open (#<issue>)`
     style subsection like `surface.wait`/`agent.prompt` get, given this is a materially bigger API
     than markdown's single method).

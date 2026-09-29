@@ -5,54 +5,25 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Fork update checklist
 
-1) Make changes in `ghostty/`.
-2) Commit and push to the Darkroom Engineering ghostty fork.
-3) Update this file with the new change summary + conflict notes.
+1) In `ghostty/`, branch off the SHA the parent repo pins, not off the fork's `main`. The fork's
+   `main` is far ahead of the pin.
+2) Commit and push the branch to `origin`, which is the Darkroom Engineering ghostty fork.
+3) Update this file with the new change summary and conflict notes.
 4) In the parent repo: `git add ghostty` and commit the submodule SHA.
 
 ## Current fork changes
 
-Current committed Programa fork head: `bccfc8333`, on fork `main`. It contains
-the PTY tee, PTY/process accessors, surface revival, occluded-render throttle,
-renderer realization API, bounded screen export, precision scrolling, and the
-temporary-directory handle fix. The parent previously pinned `6772a8884`
-directly on the temporary-directory feature branch. Although the historical
-Programa commits remained reachable through retain-ancestry merges, their
-accessor and revival changes were absent from the resulting fork-main tree.
-`96316fc50` reconciles those required APIs onto the actual fork `main` tree.
+The pinned fork head is `bccfc8333fecf707dd918d46e3849fc8ed72cca0` on fork `main`. It is built on
+`ghostty-org/ghostty` `main` at `c8634f3fce12f8189ed058e018195eb693f8562b` and Zig 0.16.0, and
+carries the ten patch groups below: display-link restart, resize stale-frame mitigation, OSC 99
+notifications, theme picker hooks, color scheme mode 2031, keyboard copy mode selection API,
+layer-background flag, occluded-surface throttle, offscreen renderer realization, and session
+introspection and revival APIs (which include the PTY tee).
 
-`bccfc8333fecf707dd918d46e3849fc8ed72cca0` reconciles the prior fork head with
-`ghostty-org/ghostty` `main` at
-`c8634f3fce12f8189ed058e018195eb693f8562b` (August 21, 2026). The merge
-preserves the Programa APIs described below while moving the fork to Zig
-0.16.0. It also brings in upstream's complete Kitty graphics protocol
-implementation, including validation and deletion fixes, relative placements,
-margin clipping, animation parsing and storage, playback, and renderer-driven
-frame scheduling.
+Prebuilt framework for the pinned head:
 
-The section 8 occluded-render skip (`c25020f99`, branch
-`perf/occluded-update-frame-skip`, retain-ancestry merge `363d56e5d` on fork
-`main`) was pinned on August 4, 2026 and REVERTED the same day. The initial
-write-up attributed the CI failures to a Swift-side window-teardown race
-masked by incidental render-thread serialization; closer reading of the
-renderer code found the actual mechanism instead: on CI's virtual display
-every surface is permanently occluded, and the hard skip left
-`ghostty_surface_read_text` (used by the app's socket event-subscription
-polling; locks `renderer_state.mutex`) hanging forever, because
-`scrollbar_dirty` is set inside `updateFrame` but only cleared inside
-`drawFrame`, and `drawFrame` is *also* gated off while invisible — the skip
-left that state machine with no live half. (A separate, unrelated
-use-after-free via stale surface userdata in the `.scrollbar` mailbox path
-was also found and fixed app-side during this investigation.)
-
-Section 8 was re-landed on August 5, 2026 as a throttle instead of a hard
-skip (`08bac45e9`, branch `perf/occluded-update-frame-throttle`): call
-`updateFrame` on every wakeup while visible (unchanged from upstream), but
-at most once per 250ms while occluded, so anything gated behind
-`updateFrame` — including the scrollbar handshake above — keeps making
-forward progress instead of stalling. See section 8 below for the full
-rationale. The prebuilt release and checksum pin for `c25020f99` are no
-longer relevant; `08bac45e9` has its own pin.
+- Release: `xcframework-bccfc8333fecf707dd918d46e3849fc8ed72cca0`
+- Asset SHA-256: `26441b6e038523b9c6223bfbb73535a727d5c7c26c225326dc85122bda30881f`
 
 ### 1) macOS display link restart on display changes
 
@@ -151,15 +122,14 @@ tend to conflict together during rebases.
 
 ### 8) Occluded-surface frame-generation throttle
 
-- Commit: `08bac45e9` (perf(renderer): throttle instead of skip frame generation for occluded surfaces), superseding the reverted `c25020f99` skip on branch `perf/occluded-update-frame-throttle`
+- Commit: `08bac45e9` (perf(renderer): throttle instead of skip frame generation for occluded surfaces)
 - Files:
   - `src/renderer/Thread.zig`
 - Summary:
-  - `renderCallback` previously called `updateFrame` unconditionally on every wakeup (i.e. every PTY output burst), even for surfaces the app has told us are fully occluded. That call locks the terminal mutex, consumes dirty tracking, and rebuilds render state — the dominant idle-CPU cost for hidden-but-busy surfaces (e.g. background agent panes).
-  - The first attempt at fixing this (`c25020f99`) hard-skipped `updateFrame` entirely while occluded. That broke anything with only half its state machine living inside `updateFrame`: `scrollbar_dirty` is set inside `updateFrame` (generic.zig) but only cleared inside `drawFrame`, and `drawFrame` is *also* gated off while invisible. On CI, where every surface is permanently occluded on the virtual display, this manifested as `ghostty_surface_read_text` (locks `renderer_state.mutex`; used by the app's socket event-subscription polling) hanging indefinitely.
-  - The current implementation throttles instead of skipping: both upstream call sites, `renderCallback` and `renderNow`, run `updateFrame` on every wakeup while visible and at most once per `OCCLUDED_UPDATE_INTERVAL_MS` (250ms / 4Hz) while occluded. The monotonic timestamp resets on the visible-to-occluded transition so the first occluded update fires immediately. This keeps renderer and Kitty-animation state moving forward without restoring the hard-skip deadlock.
+  - `renderCallback` calls `updateFrame` on every wakeup (every PTY output burst), even for surfaces the app has told us are fully occluded. That call locks the terminal mutex, consumes dirty tracking, and rebuilds render state, which is the dominant idle-CPU cost for hidden-but-busy surfaces such as background agent panes.
+  - A hard skip of `updateFrame` while occluded is wrong: part of the scrollbar state machine lives inside `updateFrame` (`scrollbar_dirty` is set there in generic.zig but cleared only inside `drawFrame`), and `drawFrame` is also gated off while invisible. With every surface permanently occluded (as on CI's virtual display), `ghostty_surface_read_text` (locks `renderer_state.mutex`; used by the app's socket event-subscription polling) hangs indefinitely.
+  - The implementation throttles instead of skipping: both upstream call sites, `renderCallback` and `renderNow`, run `updateFrame` on every wakeup while visible and at most once per `OCCLUDED_UPDATE_INTERVAL_MS` (250ms / 4Hz) while occluded. The monotonic timestamp resets on the visible-to-occluded transition so the first occluded update fires immediately. This keeps renderer and Kitty-animation state moving forward without restoring the hard-skip deadlock.
   - `drainMailbox`'s `.visible` false→true transition still calls `renderer.markDirty()` to force one full rebuild at un-occlude, unchanged from the original skip implementation. Terminal-side dirty tracking is level-triggered (bits accumulate until consumed; dimensions/viewport compared directly), so this remains correctness-optional but cheap insurance against renderer-side cache staleness.
-  - Merge gate for this fork branch is 3 consecutive green CI runs before it lands on fork `main` — the failure mode that motivated the throttle (CI hangs on an occluded virtual display) is probabilistic, not deterministic.
 
 ### 9) Offscreen renderer realization API
 
@@ -188,18 +158,7 @@ tend to conflict together during rebases.
 - Summary:
   - Restores read-only child PID, PTY path, and PTY master-fd accessors used by Programa's durable session machinery.
   - Restores surface revival through an existing PTY master fd and running child PID without taking ownership of or signaling that process.
-  - Programa now uses the fork's newer `ghostty_surface_set_pty_tee_cb` callback for its session WAL. That callback runs before VT parsing and supersedes the older Programa-only output-tap API, so the obsolete output-tap export was intentionally not restored.
-  - Reconciles the reachable historical feature lineage with the concrete fork-main file tree, which is what consumers and release artifacts actually build.
-- Prebuilt framework:
-  - Release: `xcframework-96316fc506f0015f6e8e3906b995e2c4aba23ebf`
-  - Asset SHA-256: `0f12f0d6dd920ccfa49789eae1018be314344797894ef0aae7db3e90fc27a441`
-
-The committed fork branch head is `bccfc8333fecf707dd918d46e3849fc8ed72cca0`
-on fork `main`.
-
-- Prebuilt framework:
-  - Release: `xcframework-bccfc8333fecf707dd918d46e3849fc8ed72cca0`
-  - Asset SHA-256: `26441b6e038523b9c6223bfbb73535a727d5c7c26c225326dc85122bda30881f`
+  - Programa uses the fork's `ghostty_surface_set_pty_tee_cb` callback for its session WAL. That callback runs before VT parsing. There is no separate output-tap API.
 
 ## Upstreamed fork changes
 
@@ -224,33 +183,7 @@ on fork `main`.
 
 ## Merge conflict notes
 
-The August 21, 2026 upstream reconciliation had literal conflicts in:
-
-- `src/Surface.zig`
-- `src/cli/list_themes.zig`
-- `src/cli/toggle_quick_terminal.zig`
-- `src/config/url.zig`
-- `src/crash/dir.zig`
-- `src/font/shaper/coretext.zig`
-- `src/os/TempDir.zig`
-- `src/renderer/generic.zig`
-- `src/termio/Termio.zig`
-
-Semantic reconciliation was also required in `src/App.zig`,
-`src/apprt/embedded.zig`, `src/config/CApi.zig`, and
-`src/renderer/Thread.zig`. The important resolutions were:
-
-- Migrate fork APIs to Zig 0.16's explicit `std.Io` mutex, event, environment,
-  file, mailbox, resize, and allocator interfaces without removing exports.
-- Preserve manual IO, mobile render-grid and tmux hooks, PTY tee and revival,
-  selection and process accessors, layer-background alpha behavior, renderer
-  realization, display-link restart, and resize fixes.
-- Export render-grid rows through `pagePreservingState` so compressed
-  scrollback is decoded at most once per page without changing PageList storage.
-- Apply the 4 Hz occlusion throttle to every upstream `updateFrame` caller and
-  retain `markDirty()` when a surface becomes visible.
-- Keep the upstream Kitty graphics animation scheduler active through the
-  throttle rather than restoring upstream's hard invisible skip.
+When syncing with upstream, re-check these areas.
 
 These files change frequently upstream; be careful when rebasing the fork:
 
@@ -302,3 +235,52 @@ These files change frequently upstream; be careful when rebasing the fork:
     reports follow actual focus transitions.
 
 If you resolve a conflict, update this doc with what changed.
+
+## Fork history
+
+Notes for maintainers who need the chronology behind the current state.
+
+- The fork's `main` once lacked the accessor and revival changes that older Programa commits carried
+  on a temporary feature branch, because those commits reached `main` only through
+  retain-ancestry merges. `96316fc50` reconciled those required APIs onto the actual fork `main`
+  tree.
+- `bccfc8333` reconciled the fork with `ghostty-org/ghostty` `main` (August 21, 2026), moved it to
+  Zig 0.16.0, and brought in upstream's complete Kitty graphics implementation (validation and
+  deletion fixes, relative placements, margin clipping, animation parsing, storage and playback,
+  and renderer-driven frame scheduling).
+- The occluded-render hard skip (`c25020f99`) was pinned and reverted on August 4, 2026 because
+  of the `ghostty_surface_read_text` hang described in section 8. The throttle (`08bac45e9`)
+  landed on August 5, 2026. Its merge gate was three consecutive green CI runs, because the
+  failure mode was probabilistic and one green run is not enough evidence. A separate use-after-free through
+  stale surface userdata in the `.scrollbar` mailbox path was found and fixed app-side during
+  that investigation.
+
+### August 21, 2026 upstream sync
+
+The August 21, 2026 upstream reconciliation had literal conflicts in:
+
+- `src/Surface.zig`
+- `src/cli/list_themes.zig`
+- `src/cli/toggle_quick_terminal.zig`
+- `src/config/url.zig`
+- `src/crash/dir.zig`
+- `src/font/shaper/coretext.zig`
+- `src/os/TempDir.zig`
+- `src/renderer/generic.zig`
+- `src/termio/Termio.zig`
+
+Semantic reconciliation was also required in `src/App.zig`,
+`src/apprt/embedded.zig`, `src/config/CApi.zig`, and
+`src/renderer/Thread.zig`. The important resolutions were:
+
+- Migrate fork APIs to Zig 0.16's explicit `std.Io` mutex, event, environment,
+  file, mailbox, resize, and allocator interfaces without removing exports.
+- Preserve manual IO, mobile render-grid and tmux hooks, PTY tee and revival,
+  selection and process accessors, layer-background alpha behavior, renderer
+  realization, display-link restart, and resize fixes.
+- Export render-grid rows through `pagePreservingState` so compressed
+  scrollback is decoded at most once per page without changing PageList storage.
+- Apply the 4 Hz occlusion throttle to every upstream `updateFrame` caller and
+  retain `markDirty()` when a surface becomes visible.
+- Keep the upstream Kitty graphics animation scheduler active through the
+  throttle rather than restoring upstream's hard invisible skip.

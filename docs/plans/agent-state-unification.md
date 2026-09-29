@@ -1,5 +1,7 @@
 # Agent state unification
 
+Status: shipped. `Workspace.panelAgentPresence` is the single source of state, and `agent.needs_input` writes state and notification together.
+
 One source of truth for agent working/blocked/idle, one sidebar indicator, one write
 path for "needs input", and a watchdog that retires state nobody is maintaining.
 
@@ -248,7 +250,7 @@ failing test first, fix second.
 
 Docs to update: docs/notifications.md (the needs-input lifecycle and what the sidebar
 now shows), docs/agent-detection-manifests.md (inferred tier feeds presence),
-docs/plans/agent-events.md (new method alongside the event mapping), docs/v2-api-migration.md
+docs/plans/agent-events.md (new method alongside the event mapping), docs/socket-api.md
 (method list), and contracts/v2/methods.json, with the generated Swift files
 refreshed via `scripts/gen-v2-contract.py`.
 

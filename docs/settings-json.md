@@ -1,11 +1,11 @@
 # settings.json
 
-This generated reference describes macOS. The Windows frontend stores its
+This reference describes macOS. The Windows frontend stores its
 editable shortcuts under `windows.shortcuts` in
 `%USERPROFILE%\\.config\\programa\\settings.json`; see the
 [Windows configuration guide](../windows/README.md#windows-behavior).
 
-Programa reads `~/.config/programa/settings.json` on launch and reloads it whenever the file changes, so edits apply without a restart. Every key here also has a control in the Settings window; a key set in the file wins over the Settings window until you remove it from the file. The file may contain `//` comments. The full contract is `Resources/settings.schema.json` in the repository, and this page is generated from it.
+Programa reads `~/.config/programa/settings.json` on launch and reloads it whenever the file changes, so edits apply without a restart. Every key here also has a control in the Settings window; a key set in the file wins over the Settings window until you remove it from the file. The file may contain `//` comments. The full contract is `Resources/settings.schema.json` in the repository. This page is maintained by hand, and `scripts/check-settings-docs.py` fails when a schema key is missing from it (or the reverse).
 
 Keys you do not set fall back to the defaults listed below. Keyboard shortcuts live under `shortcuts.bindings` and are documented in [keyboard-shortcuts.md](keyboard-shortcuts.md); terminal theme and font keys are explained in [terminal-themes.md](terminal-themes.md).
 
@@ -97,7 +97,8 @@ Embedded browser settings from Settings > Browser.
 | `interceptTerminalOpenCommandInProgramaBrowser` | boolean | `true` | Intercept terminal open http(s) commands and route them through the embedded browser. |
 | `hostsToOpenInEmbeddedBrowser` | array | `[]` | Allowlist of hosts that should stay inside the embedded browser. |
 | `urlsToAlwaysOpenExternally` | array | `[]` | Rules that always open matching URLs in the system browser. |
-| `externalBrowser` | string | `""` | Bundle identifier of the browser used for links that open outside Programa (for example `at.studio.AsideBrowser`, replace with the real Aside bundle id you discovered). Empty uses the macOS default browser. |
+| `externalBrowser` | string | `""` | Bundle identifier of the browser that opens http(s) links leaving Programa, for example `com.apple.Safari`. Empty uses the macOS default browser. Other URL schemes (`mailto:`, `slack://`, `file:`) keep their registered handlers. |
+| `externalAppOpenAllowlist` | array | `[]` | Bundle identifiers of apps for which you chose Always allow in the external app open prompt. Links that open these apps skip the prompt. |
 | `insecureHttpHostsAllowedInEmbeddedBrowser` | array | `["localhost", "127.0.0.1", "::1", "0.0.0.0", "*.localtest.me"]` | HTTP hosts allowed in the embedded browser without a warning prompt. |
 | `proxy` | object |  | Route the embedded browser through a proxy. Requires host and port; type defaults to socks5. |
 
@@ -120,3 +121,27 @@ Keyboard shortcut settings from Settings > Keyboard Shortcuts.
 
 `openAgentOverview` opens the all-workspaces Agent Overview. It is unbound by default;
 set it under `shortcuts.bindings` or use Settings → Keyboard Shortcuts.
+
+## `windows`
+
+Settings read by the Windows frontend only. The macOS app ignores this section.
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `shortcuts` | object | see below | Windows keyboard bindings keyed by action id. |
+
+A binding is modifiers and one key joined by hyphens, for example `ctrl-shift-t`. Modifiers are
+`ctrl`, `alt` and `shift`; the key is one letter or digit, `comma` or `insert`. `ctrl-c`,
+`ctrl-d` and `ctrl-w` are reserved for the terminal, and no two actions can share a binding.
+
+| Action id | Default |
+|---|---|
+| `open_settings` | `ctrl-comma` |
+| `new_tab` | `ctrl-shift-t` |
+| `close_tab` | `ctrl-shift-w` |
+| `split_vertical` | `ctrl-shift-d` |
+| `split_horizontal` | `ctrl-shift-e` |
+| `select_tab_1` to `select_tab_9` | `alt-1` to `alt-9` |
+| `copy` | `ctrl-shift-c` |
+| `paste` | `ctrl-shift-v` |
+| `paste_alternate` | `shift-insert` |

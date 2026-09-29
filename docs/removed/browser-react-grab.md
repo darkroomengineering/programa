@@ -67,7 +67,7 @@ no new shortcut was added.
 
 ## What we learned
 
-No CHANGELOG.md entry and no audit finding mentions React Grab by name. The code's own comments
+No CHANGELOG.md entry and no review finding mentions React Grab by name. The code's own comments
 are the only source of design rationale: the pasteback flow explicitly distinguished "focused
 browser panel, no return target" from "focused terminal panel, route to the workspace's single
 browser panel, remember where to paste back" — and refused to route at all when zero or more than

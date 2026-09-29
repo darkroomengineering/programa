@@ -49,10 +49,19 @@ brew tap darkroomengineering/programa
 brew install --cask programa
 ```
 
-The macOS app auto-updates. Every eligible commit on `main` that passes CI and
-both platform release builds advances the shared rolling release, which
-provides `programa-macos.dmg` and `programa-windows.exe` from the same commit.
-If either platform fails, the previous rolling release remains available.
+The macOS app auto-updates. Every commit on `main` that passes CI advances the
+[rolling release](https://github.com/darkroomengineering/programa/releases/tag/rolling),
+which provides `programa-macos.dmg`. macOS ships independently of Windows: the
+Windows `programa-windows.exe` is attached to the same release when its build
+passes. See [docs/release.md](docs/release.md).
+
+Inside a Programa terminal the `programa` CLI is already on `PATH`. To use it from
+any other terminal, run **Shell Command: Install 'programa' in PATH** from the
+command palette (⌘⇧P). It symlinks `/usr/local/bin/programa` to the CLI inside the
+app bundle and asks for an administrator password only if that folder is not
+writable. Without it, call `/Applications/Programa.app/Contents/Resources/bin/programa`
+directly.
+
 On macOS, relaunch restores layout, directories, scrollback, and browser state.
 Terminal processes survive Programa quitting or crashing, and the app
 reattaches to them live on the next launch.
@@ -64,12 +73,10 @@ its AppKit/SwiftUI interface. Workspace, tab, split, and session behavior belong
 in the shared core; each frontend handles its platform's rendering, input,
 window management, and accessibility.
 
-The planned Windows download is `programa-windows.exe` on the same
+The Windows download is `programa-windows.exe` on the same
 [rolling release](https://github.com/darkroomengineering/programa/releases/tag/rolling)
-as `programa-macos.dmg`. The WinUI frontend builds and passes its automated
-checks on Windows; a [verification build](https://github.com/darkroomengineering/programa/actions/runs/35104587262)
-is available from GitHub Actions. It is not yet a published release. Desktop
-interaction testing and macOS feature parity remain incomplete.
+as `programa-macos.dmg`, attached when the Windows build passes its automated
+checks. Desktop interaction testing and macOS feature parity remain incomplete.
 
 On an Apple Silicon Mac, test the Windows executable in a Windows 11 Arm VM;
 Windows can run x64 executables through emulation. See the
@@ -100,7 +107,7 @@ Programa keeps what tmux is good at and adds what agents need:
 - A diff review panel with line comments that go straight into the agent's input.
 - Git worktrees as workspaces, and `programa race` to fan one prompt across several agents in isolated worktrees.
 - An MCP server and an installable agent skill, so agents can split panes, read sibling output, and coordinate helpers without stealing your focus.
-- A machine-readable socket API contract that generates the CLI, the MCP catalog, and the test client, so clients cannot drift.
+- A machine-readable socket API contract (`contracts/v2/methods.json`) that generates the app's command catalog and the CLI's method names, so those two cannot drift from it.
 - Native Windows.
 
 Things cmux has that Programa removed on purpose, to stay lean: SSH remote workspaces and an iOS companion. Both are documented under `docs/removed/`, with the reasons and what a future version should do differently.

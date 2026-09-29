@@ -65,3 +65,6 @@ remains separate.
 
 No test assertion may be relaxed to hide a regression. Tests that assert the
 old four-asset schema must change with the explicit six-asset contract.
+
+
+Status: shipped, with one change: macOS ships independently of the Windows build, and the Windows executable is attached to the rolling release when its build passes. The rule below that both platform builds must succeed before sealing is superseded; `docs/release.md` describes the current process.

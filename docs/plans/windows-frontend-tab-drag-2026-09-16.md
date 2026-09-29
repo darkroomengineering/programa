@@ -54,3 +54,6 @@ and applied only after the four source files matched saved baseline hashes.
 The Windows changes were built in `/private/tmp/programa-windows-tabs` and
 copied back after all original sibling files matched saved hashes. Existing
 unrelated edits and recovered foundation work were preserved.
+
+
+Status: the macOS half (native drops on the tab strip) shipped. The Rust/GPUI prototype half was superseded by the WinUI 3 Windows app.

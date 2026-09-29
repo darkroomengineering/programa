@@ -1,13 +1,189 @@
-# V2 Socket API
+# Socket API
 
-**The v1 line protocol (space-delimited commands) was removed on 2026-07-08.** v2 JSON-RPC
-is now the only socket protocol. Every consumer (CLI, shell integration, the debug/test
-harnesses, and the automated test suites) was migrated to v2 first (see `tests_v2/`), and
-a non-JSON line now gets a terse `v1_removed` error from `TerminalController.processCommand`
-instead of being dispatched. The method mapping table below is kept for reference when
-reading old scripts, commits, or bug reports that mention v1 command names.
+Programa exposes a local control socket. Its protocol is v2 JSON-RPC: one JSON object per line
+over a Unix domain socket. The CLI, the MCP server, shell integration and your own scripts all
+use it. A line that does not start with `{` gets a terse `v1_removed` error. The method table
+below lists the former line-protocol command names next to their v2 methods, for reading old
+scripts and bug reports.
 
-## V2 Protocol Sketch
+The machine-readable contract is `contracts/v2/methods.json` (methods) and
+`contracts/v2/protocol.json` (framing and auth handshake). See [Contract](#contract).
+
+## Request path and threading
+
+The listener runs off the main thread, so a slow or hostile client cannot stall the UI.
+Handlers move work to the main actor only when they must.
+
+```mermaid
+sequenceDiagram
+    participant C as Client (CLI, MCP, script)
+    participant L as Listener (off-main)
+    participant H as v2 handler
+    participant M as Main actor
+
+    C->>L: connect to the socket
+    Note over L: cmuxOnly mode checks that the peer process<br/>descends from Programa
+    opt password mode
+        C->>L: auth.login {password}
+        L-->>C: authenticated, or auth_failed
+    end
+    C->>L: request line {id, method, params}
+    L->>H: parse, apply the auth gate, dispatch
+    alt telemetry (surface.report_*, ports_kick, status/progress/log)
+        H->>H: validate, dedupe and coalesce off-main
+        H-)M: DispatchQueue.main.async, only when state changed
+        H-->>L: result
+    else focus-intent command, or a query that needs an exact snapshot
+        H->>M: run on the main actor
+        M-->>H: value
+        H-->>L: result
+    end
+    L-->>C: response line {id, ok, result | error}
+```
+
+Rules that follow from the diagram:
+
+- High-frequency telemetry never blocks on the main thread. It is parsed and deduplicated
+  off-main, and the UI mutation is scheduled with `DispatchQueue.main.async` only when
+  something changed.
+- Commands that drive AppKit or Ghostty state (focus, select, open, close, send input) and
+  queries that need an exact snapshot run on the main actor.
+- Only explicit focus-intent commands (`focus_intent: true` in the contract) change in-app
+  focus or selection. Every other command leaves the user's focus alone.
+- `contracts/v2/methods.json` records each method's `threading` (`main` or `off_main`).
+
+## Security and discovery
+
+### Socket modes
+
+The mode is `automation.socketControlMode` in `settings.json` or **Settings > Automation**.
+The default is `cmuxOnly`.
+
+| Mode | Shown in Settings as | Who can connect |
+|---|---|---|
+| `off` | Off | Nobody. The socket is not created. |
+| `cmuxOnly` | Programa processes only | Processes started inside Programa terminals. The server checks that the peer process descends from Programa. |
+| `automation` | Automation mode | Any process of the same macOS user. No ancestry check. |
+| `password` | Password mode | Any process of the same macOS user that authenticates with the socket password. |
+| `allowAll` | Full open access | Any local process and user, with no auth. The socket file is world-writable (`0666`); every other mode uses `0600`. Unsafe. |
+
+Older spellings are accepted and normalized: `openAccess` and `fullOpenAccess` mean `allowAll`,
+`notifications` means `automation`, `full` means `allowAll`.
+
+Two environment variables override the setting for one launch. `PROGRAMA_SOCKET_ENABLE`
+(`1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`) turns the socket on or off, and
+`PROGRAMA_SOCKET_MODE` sets the mode. Disabling wins over a mode.
+
+A client denied by `cmuxOnly` receives a plain-text line, `ERROR: Access denied — only
+processes started inside Programa can connect`, and the connection closes. It is not a JSON
+error envelope.
+
+### Where the socket lives
+
+The app listens on:
+
+| Build | Path |
+|---|---|
+| Release | `~/Library/Application Support/programa/programa.sock` (the per-user file `cmux-<uid>.sock` in the same folder is used when `programa.sock` exists but belongs to another user or is not a socket) |
+| Debug | `/tmp/programa-debug.sock` |
+| Tagged Debug (`reload.sh --tag <tag>`) | `/tmp/programa-debug-<tag>.sock` |
+| Staging | `/tmp/programa-staging.sock` |
+
+`PROGRAMA_SOCKET_PATH` overrides the listener path only for Debug and Staging builds, or when
+`PROGRAMA_ALLOW_SOCKET_OVERRIDE=1` is set. A tagged Debug build ignores it unless that variable
+is set too.
+
+Programa terminals export both `PROGRAMA_SOCKET_PATH` and `PROGRAMA_SOCKET` set to the socket of the
+app that started them.
+The app also writes the path it is listening on to
+`~/Library/Application Support/programa/last-socket-path`.
+
+### How clients find it
+
+The CLI and `programa-mcp` share one resolver (`CLI/SocketPathResolution.swift`). The requested
+path is, in order of precedence:
+
+1. `--socket <path>` (CLI only). An explicit flag is used as given, with no discovery.
+2. `PROGRAMA_SOCKET_PATH`.
+3. `PROGRAMA_SOCKET`. The CLI, `programa-mcp` and the Python test helpers read this name; the app
+   only exports it. `PROGRAMA_SOCKET_PATH` wins when both are set.
+4. The default, `~/Library/Application Support/programa/programa.sock`.
+
+A path from an environment variable is used as given, unless it is one of the default paths.
+When the requested path is the default (or nothing was requested), the client picks the first
+candidate that accepts a connection, then the first candidate that exists as a socket file:
+
+1. `/tmp/programa-debug-<slug>.sock` and `/tmp/programa-<slug>.sock` when `PROGRAMA_TAG` is set
+   (`<slug>` is the tag lowercased, with runs of other characters replaced by `-`)
+2. the requested path
+3. `~/Library/Application Support/programa/programa.sock`
+4. `/tmp/programa.sock`
+5. `/tmp/programa-debug.sock`
+6. `/tmp/programa-staging.sock`
+7. the 12 most recently modified `programa*.sock` files in `/tmp` and the Application Support
+   `programa` folder
+8. the path recorded in `last-socket-path`
+
+If none exists, the requested path is used and the connection error names it.
+
+Inside a Programa terminal, both variables point at the socket of the app that hosts it, so a
+script run there talks to that app. To drive a different instance, such as a tagged build, set both
+`PROGRAMA_SOCKET_PATH` and `PROGRAMA_SOCKET` to its socket.
+
+### Password flow
+
+`password` mode needs a password. Programa looks for it in this order:
+
+1. `PROGRAMA_SOCKET_PASSWORD` in the environment
+2. the file `~/Library/Application Support/programa/socket-control-password` (mode `0600`,
+   written by **Settings > Automation**; `automation.socketPassword` in `settings.json`)
+
+The CLI takes `--password <value>` first, then `PROGRAMA_SOCKET_PASSWORD`, then the saved
+password. `programa-mcp` reads only `PROGRAMA_SOCKET_PASSWORD`.
+
+A client authenticates once per connection:
+
+```json
+{"id":"1","method":"auth.login","params":{"password":"..."}}
+{"id":"1","ok":true,"result":{"authenticated":true,"required":true}}
+```
+
+Until it succeeds, every other method returns `auth_required`. A wrong password returns
+`auth_failed` and a missing one returns `invalid_params`. Changing the password in Settings
+invalidates existing authenticated connections. Outside password mode, `auth.login` succeeds
+with `"required": false` and nothing else is needed.
+
+### Error codes
+
+An error response is `{"id":..., "ok": false, "error": {"code": "...", "message": "..."}}`,
+with an optional `data` field. Codes that any method can return:
+
+| Code | Meaning |
+|---|---|
+| `v1_removed` | The line did not start with `{`. |
+| `invalid_utf8` | The request was not valid UTF-8. |
+| `parse_error` | The line was not valid JSON. |
+| `invalid_request` | The JSON was not an object, `params` was not an object, or `method` was missing or empty. |
+| `auth_required` | The socket is in password mode and this connection has not sent a successful `auth.login`. |
+| `auth_failed` | `auth.login` had the wrong password. |
+| `invalid_params` | A required parameter was missing or had the wrong type. |
+| `not_found` | A referenced window, workspace, pane, surface or similar object does not exist. |
+| `unavailable` | The app or a required subsystem cannot handle the request right now. |
+| `internal_error` | An unexpected server-side failure. |
+| `encode_error` | The server could not encode its own response. |
+
+Individual methods add their own codes (for example `invalid_state`, `not_supported`, `timeout`,
+`layout_not_found`, `worktree_dirty`). The full list per method is in `contracts/v2/methods.json`.
+
+### Units
+
+`pane.resize` takes `amount` in pixels along the resize axis. The handler defaults `amount` to 1
+when it is omitted, although the contract marks it required. `programa resize-pane --amount <n>`
+sends `n` as pixels. The tmux-compatible `resize-pane -x <columns>` converts columns to pixels
+with the pane's cell width before it calls the method; its directional forms send the amount
+unchanged.
+
+## Protocol sketch
 
 Each request is one JSON object per line:
 
@@ -673,16 +849,13 @@ checks the compiled `V2CommandCatalog` arrays against the contract directly.
 
 **The rule this exists to enforce: a v2 handler's params, result shape, or error codes change
 only after `contracts/v2/methods.json` changes first**, then regenerate
-(`python3 scripts/gen-v2-contract.py`) before touching the handler. This is what stops the CLI,
-the MCP bridge, `system.capabilities`, and the Python test client from drifting apart the way
-the SSH remote-workspaces effort did (see `docs/removed/ssh-remote-workspaces.md`, "What we
-learned").
+(`python3 scripts/gen-v2-contract.py`) before touching the handler. This keeps the CLI's method
+names and `system.capabilities` from drifting away from the handlers (the SSH remote-workspaces
+effort is the cautionary case; see `docs/removed/ssh-remote-workspaces.md`, "What we learned").
 
-Note: `contracts/v2/methods.json`'s params/required/threading/focus_intent were mined from the
-actual v2 handler bodies (guard-clause and accessor analysis) rather than typed by hand, but
-that mining was a one-time bootstrap, not something `gen-v2-contract.py` re-runs -- the contract
-is now the checked-in source of truth and a handler change that isn't reflected there is a
-drift, not something the generator silently re-derives. `CLI-MCP/ToolCatalogGenerated.swift`
-(the MCP tool input-schema half of this pass) was scoped out: wiring ~180 hand-written MCP
-tools across a dozen `CLI-MCP/*Tools.swift` files to a generated schema catalog needs its own
-pass with MCP-server-level verification.
+The contract's params, required lists, threading and `focus_intent` were extracted from the
+handler bodies once. The generator does not re-derive them, so a handler change that is not
+reflected in the contract is drift.
+
+The MCP tools in `CLI-MCP/*Tools.swift` are hand-written. They do not come from the contract,
+so a change to a method's params needs a matching edit to the tools that call it.

@@ -1,5 +1,7 @@
 # AppDelegate shortcut-routing coupling map
 
+Status: reference. Shortcut routing stays inside `Sources/AppDelegate.swift`; this document records why a separate router type was not extracted.
+
 Captured while evaluating audit findings N1/N2 ("extract AppDelegate's shortcut-routing
 subsystem into its own module"). This documents why the extraction was scoped down to
 Option A (in-place `switch` conversion + preamble struct, both still inside `AppDelegate.swift`)

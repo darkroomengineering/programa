@@ -2,6 +2,8 @@
 
 The reference below describes macOS. Every shortcut is editable in `Settings → Keyboard Shortcuts` and in `~/.config/programa/settings.json`. `⌘ ⇧ P` opens the command palette, which lists every action.
 
+The defaults come from `KeyboardShortcutSettings.Action` in `Sources/KeyboardShortcutSettings.swift`. `scripts/check-settings-docs.py` fails when an action in that enum is missing from the [action id table](#action-ids-and-chord-syntax) below.
+
 The Windows frontend uses its own editable bindings under `windows.shortcuts`
 in the same configuration file. See [Windows shortcuts](../windows/README.md#windows-behavior)
 for defaults and [Windows testing](windows-testing.md) for validation status.
@@ -20,6 +22,9 @@ for defaults and [Windows testing](windows-testing.md) for validation status.
 | ⌘ ⇧ W | Close workspace |
 | ⌘ ⇧ R | Rename workspace |
 | ⌘ B | Toggle sidebar |
+| ⌘ O | Open folder |
+| ⌘ R | Rename tab (browser panes use ⌘ R for reload) |
+| ⌘ ⇧ E | Edit workspace description |
 
 ## Surfaces
 
@@ -33,7 +38,8 @@ for defaults and [Windows testing](windows-testing.md) for validation status.
 | ⌃ 1–8 | Jump to surface 1–8 |
 | ⌃ 9 | Jump to last surface |
 | ⌘ ⇧ T | Reopen closed panel |
-| ⌘ W | Close surface |
+| ⌘ W | Close tab (action `closeTab`) |
+| ⌥ ⌘ T | Close other tabs in the pane |
 
 ## Split panes
 
@@ -41,6 +47,9 @@ for defaults and [Windows testing](windows-testing.md) for validation status.
 |----------|--------|
 | ⌘ D | Split right |
 | ⌘ ⇧ D | Split down |
+| ⌘ ⇧ ↩ | Toggle pane zoom |
+| ⌥ ⌘ D | Split browser right |
+| ⌥ ⇧ ⌘ D | Split browser down |
 | ⌥ ⌘ ← → ↑ ↓ | Focus pane directionally |
 | ⌘ ⇧ H | Flash focused panel |
 
@@ -54,7 +63,10 @@ Browser developer-tool shortcuts follow Safari defaults.
 | ⌘ L | Focus address bar |
 | ⌘ [ | Back |
 | ⌘ ] | Forward |
-| ⌘ R | Reload page |
+| ⌘ R | Reload page (in a browser pane; elsewhere ⌘ R renames the tab) |
+| ⌘ = | Zoom in |
+| ⌘ - | Zoom out |
+| ⌘ 0 | Actual size |
 | ⌥ ⌘ I | Toggle Developer Tools (Safari default) |
 | ⌥ ⌘ C | Show JavaScript Console (Safari default) |
 
@@ -74,7 +86,7 @@ All, Needs input, and Failed filters or search by workspace/agent name to find a
 | Shortcut | Action |
 |----------|--------|
 | ⌘ F | Find |
-| ⌘ G / ⌘ ⇧ G | Find next / previous |
+| ⌘ G / ⌥ ⌘ G | Find next / previous |
 | ⌘ ⇧ F | Hide find bar |
 | ⌘ E | Use selection for find |
 
@@ -85,8 +97,8 @@ All, Needs input, and Failed filters or search by workspace/agent name to find a
 | ⌘ K | Clear scrollback |
 | ⌘ C | Copy (with selection) |
 | ⌘ V | Paste |
-| ⌘ + / ⌘ - | Increase / decrease font size |
-| ⌘ 0 | Reset font size |
+| ⌘ + / ⌘ - | Increase / decrease font size (in a terminal pane) |
+| ⌘ 0 | Reset font size (in a terminal pane) |
 | ⌘ ⇧ M | Toggle terminal copy mode |
 | { / } (in copy mode) | Jump to previous / next prompt |
 
@@ -95,6 +107,8 @@ All, Needs input, and Failed filters or search by workspace/agent name to find a
 | Shortcut | Action |
 |----------|--------|
 | ⌘ ⇧ N | New window |
+| ⌃ ⌘ F | Toggle full screen |
+| ⌥ ⌘ F | Send feedback |
 | ⌃ ⌘ W | Hide window, keeping its sessions running |
 | ⌘ ⇧ P | Command palette |
 | ⌘ , | Settings |
@@ -123,3 +137,89 @@ input. No default keyboard shortcut ships for v1 to avoid colliding with existin
 The native git worktree workflow (`programa worktree ...`) and named layout configs
 (`programa layout ...`, "Apply layout: <name>" in the command palette) add no new keyboard
 shortcuts — CLI and command palette only, by design (not an oversight).
+
+## Action ids and chord syntax
+
+Bind an action by setting its id under `shortcuts.bindings` in `~/.config/programa/settings.json`.
+A value is one string for a single shortcut, or an array of two strings for a two-stroke chord:
+
+```json
+{
+  "shortcuts": {
+    "bindings": {
+      "splitRight": "cmd+d",
+      "newSurface": ["cmd+k", "cmd+t"]
+    }
+  }
+}
+```
+
+A stroke is modifiers and one key joined by `+`. Modifiers are `cmd` (`command`, `⌘`),
+`shift` (`⇧`), `opt` (`option`, `alt`, `⌥`) and `ctrl` (`control`, `⌃`). The first stroke of a
+binding needs at least one modifier. The key is a single character or one of `left`, `right`,
+`up`, `down`, `tab`, `return`, `space`, `comma`, `period`, `slash`, `backslash`, `semicolon`,
+`quote`, `backtick`, `minus`, `plus`, `equals`, `leftbracket`, `rightbracket`. Unknown action ids
+and invalid values are ignored and logged.
+
+`selectSurfaceByNumber` and `selectWorkspaceByNumber` bind the digit `1`, and the same modifiers
+apply to digits 1 to 9.
+
+| Action id | Action | Default | Setting value |
+|---|---|---|---|
+| `openSettings` | Settings… | ⌘, | "cmd+," |
+| `reloadConfiguration` | Reload Configuration | ⇧⌘, | "cmd+shift+," |
+| `newWindow` | New Window | ⇧⌘N | "cmd+shift+n" |
+| `closeWindow` | Close Window | ⌃⌘W | "cmd+ctrl+w" |
+| `toggleFullScreen` | Toggle Full Screen | ⌃⌘F | "cmd+ctrl+f" |
+| `quit` | Quit Programa | ⌘Q | "cmd+q" |
+| `toggleSidebar` | Toggle Sidebar | ⌘B | "cmd+b" |
+| `newTab` | New Workspace | ⌘N | "cmd+n" |
+| `newClaudeWorkspace` | New Claude Code Workspace | ⇧⌘C | "cmd+shift+c" |
+| `openFolder` | Open Folder | ⌘O | "cmd+o" |
+| `goToWorkspace` | Go to Workspace… | ⌘P | "cmd+p" |
+| `commandPalette` | Command Palette… | ⇧⌘P | "cmd+shift+p" |
+| `sendFeedback` | Send Feedback | ⌥⌘F | "cmd+opt+f" |
+| `showNotifications` | Show Notifications | ⌘I | "cmd+i" |
+| `jumpToUnread` | Jump to Latest Unread | ⇧⌘U | "cmd+shift+u" |
+| `triggerFlash` | Flash Focused Panel | ⇧⌘H | "cmd+shift+h" |
+| `nextSurface` | Next Surface | ⇧⌘] | "cmd+shift+]" |
+| `prevSurface` | Previous Surface | ⇧⌘[ | "cmd+shift+[" |
+| `selectSurfaceByNumber` | Select Surface 1…9 | ⌃1 | "ctrl+1" |
+| `nextSidebarTab` | Next Workspace | ⌃⌘] | "cmd+ctrl+]" |
+| `prevSidebarTab` | Previous Workspace | ⌃⌘[ | "cmd+ctrl+[" |
+| `selectWorkspaceByNumber` | Select Workspace 1…9 | ⌘1 | "cmd+1" |
+| `renameTab` | Rename Tab | ⌘R | "cmd+r" |
+| `renameWorkspace` | Rename Workspace | ⇧⌘R | "cmd+shift+r" |
+| `editWorkspaceDescription` | Edit Workspace Description | ⇧⌘E | "cmd+shift+e" |
+| `closeTab` | Close Tab | ⌘W | "cmd+w" |
+| `closeOtherTabsInPane` | Close Other Tabs in Pane | ⌥⌘T | "cmd+opt+t" |
+| `closeWorkspace` | Close Workspace | ⇧⌘W | "cmd+shift+w" |
+| `reopenClosedBrowserPanel` | Reopen Closed Panel | ⇧⌘T | "cmd+shift+t" |
+| `newSurface` | New Surface | ⌘T | "cmd+t" |
+| `toggleTerminalCopyMode` | Toggle Terminal Copy Mode | ⇧⌘M | "cmd+shift+m" |
+| `focusLeft` | Focus Pane Left | ⌥⌘← | "cmd+opt+left" |
+| `focusRight` | Focus Pane Right | ⌥⌘→ | "cmd+opt+right" |
+| `focusUp` | Focus Pane Up | ⌥⌘↑ | "cmd+opt+up" |
+| `focusDown` | Focus Pane Down | ⌥⌘↓ | "cmd+opt+down" |
+| `splitRight` | Split Right | ⌘D | "cmd+d" |
+| `splitDown` | Split Down | ⇧⌘D | "cmd+shift+d" |
+| `toggleSplitZoom` | Toggle Pane Zoom | ⇧⌘↩ | "cmd+shift+return" |
+| `splitBrowserRight` | Split Browser Right | ⌥⌘D | "cmd+opt+d" |
+| `splitBrowserDown` | Split Browser Down | ⌥⇧⌘D | "cmd+shift+opt+d" |
+| `openBrowser` | Open Browser | ⇧⌘L | "cmd+shift+l" |
+| `focusBrowserAddressBar` | Focus Address Bar | ⌘L | "cmd+l" |
+| `browserBack` | Back | ⌘[ | "cmd+[" |
+| `browserForward` | Forward | ⌘] | "cmd+]" |
+| `browserReload` | Reload Page | ⌘R | "cmd+r" |
+| `browserZoomIn` | Zoom In | ⌘= | "cmd+=" |
+| `browserZoomOut` | Zoom Out | ⌘- | "cmd+-" |
+| `browserZoomReset` | Actual Size | ⌘0 | "cmd+0" |
+| `find` | Find… | ⌘F | "cmd+f" |
+| `findNext` | Find Next | ⌘G | "cmd+g" |
+| `findPrevious` | Find Previous | ⌥⌘G | "cmd+opt+g" |
+| `hideFind` | Hide Find Bar | ⇧⌘F | "cmd+shift+f" |
+| `useSelectionForFind` | Use Selection for Find | ⌘E | "cmd+e" |
+| `toggleBrowserDeveloperTools` | Toggle Browser Developer Tools | ⌥⌘I | "cmd+opt+i" |
+| `showBrowserJavaScriptConsole` | Show Browser JavaScript Console | ⌥⌘C | "cmd+opt+c" |
+| `openReview` | Open Review Panel | (unbound) | (none) |
+| `openAgentOverview` | Open Agent Overview | (unbound) | (none) |

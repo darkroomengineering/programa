@@ -73,7 +73,7 @@ xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug 
 When rebuilding GhosttyKit.xcframework, always use Release optimizations:
 
 ```bash
-cd ghostty && zig build -Demit-xcframework=true -Dxcframework-target=universal -Doptimize=ReleaseFast
+cd ghostty && zig build -Demit-xcframework=true -Demit-macos-app=false -Dxcframework-target=native -Doptimize=ReleaseFast
 ```
 
 `reload` = build the Debug app (tag required). Pass `--launch` to also kill existing and open:
@@ -149,7 +149,7 @@ This makes it visible in the GitHub PR UI (Commits tab, check statuses) that the
 The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use it for visual iteration:
 
 - **Debug > Debug Windows** contains panels for tuning layout, colors, and behavior. Entries are alphabetical with no dividers.
-- To add a debug toggle or visual option: create an `NSWindowController` subclass with a `shared` singleton, add it to the "Debug Windows" menu in `Sources/programaApp.swift`, and add a SwiftUI view with `@AppStorage` bindings for live changes.
+- To add a debug toggle or visual option: create an `NSWindowController` subclass with a `shared` singleton, add it to the "Debug Windows" menu in `Sources/ProgramaApp.swift`, and add a SwiftUI view with `@AppStorage` bindings for live changes.
 - When the user says "debug menu" or "debug window", they mean this menu, not `defaults write`.
 
 ## Pitfalls
@@ -159,9 +159,9 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 - **Typing-latency-sensitive paths** (read carefully before touching these areas):
   - `WindowTerminalHostView.hitTest()` in `Sources/WindowTerminalHostView.swift`: called on every event including keyboard. Keyboard events (`.keyDown`/`.keyUp`/`.flagsChanged`) take an early `switch currentEvent?.type` fast path; everything else — all pointer events, and an ambiguous/nil `currentEvent` — must fall through to the full divider/sidebar/drag routing below it. Do not add work to that keyboard fast path.
   - `NSWindow.programa_sendEvent` in `Sources/WindowSwizzles.swift`: runs for every event. The hit-view context it caches is only ever read for pointer-down events, so it is computed only for those — do not restore an unconditional hit-test here (#183).
-  - `TabItemView` in `Sources/TabItemView.swift`: uses `Equatable` conformance + `.equatable()` to skip body re-evaluation during typing. Do not add `@EnvironmentObject`, `@ObservedObject` (besides `tab`), or `@Binding` properties without updating the `==` function. Do not remove `.equatable()` from the ForEach call site. Do not read `tabManager` or `notificationStore` in the body; use the precomputed `let` parameters instead.
-  - `TerminalSurface.forceRefresh()` in `GhosttyTerminalView.swift`: called on every keystroke. Do not add allocations, file I/O, or formatting here.
-- **Terminal find layering contract:** `SurfaceSearchOverlay` must be mounted from `GhosttySurfaceScrollView` in `Sources/GhosttyTerminalView.swift` (AppKit portal layer), not from SwiftUI panel containers such as `Sources/Panels/TerminalPanelView.swift`. Portal-hosted terminal views can sit above SwiftUI during split/workspace churn.
+  - `TabItemView` in `Sources/TabItemView.swift`: uses `Equatable` conformance + `.equatable()` to skip body re-evaluation during typing. Do not add `@EnvironmentObject`, `@ObservedObject` (besides `tab`), or `@Binding` properties without updating the `==` function. Do not remove `.equatable()` from the ForEach call site in `Sources/VerticalTabsSidebar.swift`. Do not read `tabManager` or `notificationStore` in the body; use the precomputed `let` parameters instead.
+  - `TerminalSurface.forceRefresh()` in `Sources/TerminalSurface.swift`: called on every keystroke. Do not add allocations, file I/O, or formatting here.
+- **Terminal find layering contract:** `SurfaceSearchOverlay` must be mounted from `GhosttySurfaceScrollView` in `Sources/GhosttySurfaceScrollView.swift` (AppKit portal layer), not from SwiftUI panel containers such as `Sources/Panels/TerminalPanelView.swift`. Portal-hosted terminal views can sit above SwiftUI during split/workspace churn.
 - **Submodule safety:** When modifying a submodule (ghostty), always push the submodule commit to its remote `main` branch BEFORE committing the updated pointer in the parent repo. Never commit on a detached HEAD or temporary branch — the commit will be orphaned and lost. Verify with: `cd <submodule> && git merge-base --is-ancestor HEAD origin/main`. Note: `vendor/bonsplit` is NOT a submodule — it is vendored in-tree (MIT, from the manaflow-ai fork); edit and commit it like any other source directory.
 - **All user-facing strings must be localized.** Use `String(localized: "key.name", defaultValue: "English text")` for every string shown in the UI (labels, buttons, menus, dialogs, tooltips, error messages). Keys go in `Resources/Localizable.xcstrings` with translations for all supported languages (currently English and Japanese). Never use bare string literals in SwiftUI `Text()`, `Button()`, alert titles, etc.
 - **Shortcut policy:** Every new Programa-owned keyboard shortcut must be added to `KeyboardShortcutSettings`, visible/editable in Settings, supported in `~/.config/programa/settings.json`, and documented in the keyboard shortcut and configuration docs.
@@ -195,8 +195,8 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 
 **Never run tests locally.** All tests (E2E, UI, python socket tests) run via GitHub Actions or on the VM.
 
-- **E2E / UI tests:** trigger via `gh workflow run test-e2e.yml` (see programa-hq CLAUDE.md for details)
-- **Unit tests:** `xcodebuild -scheme programa-unit` is safe (no app launch), but prefer CI
+- **E2E / UI tests:** trigger `.github/workflows/test-e2e.yml` with `gh workflow run test-e2e.yml -f test_filter=<TestClass[/testMethod]>`. Optional inputs: `-f ref=<branch-or-sha>` (default: the current ref), `-f test_timeout=<seconds>` (default 120), `-f record_video=true`, `-f runner=macos-26|macos-15|macos-14` (default `macos-15`).
+- **Unit tests:** run in CI. The `programa-unit` scheme is app-hosted: its default `TEST_HOST` is the untagged Debug app, which opens windows, starts shells and writes preferences, so never run it as is. The only local path is the tagged build-for-testing recipe in `docs/testing-layout.md` ("Running them").
 - **Python socket tests (tests_v2/):** these connect to a running Programa instance's socket. Never launch an untagged `Programa DEV.app` to run them. If you must test locally, use a tagged build's socket (`/tmp/programa-debug-<tag>.sock`) with `PROGRAMA_SOCKET=/tmp/programa-debug-<tag>.sock`
 - **Never `open` an untagged `Programa DEV.app`** from DerivedData. It conflicts with the user's running debug instance.
 
@@ -205,24 +205,23 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 Ghostty changes must be committed in the `ghostty` submodule and pushed to the Darkroom Engineering ghostty fork.
 Keep `docs/ghostty-fork.md` up to date with any fork changes and conflict notes.
 
+In the `ghostty` checkout, `origin` is the Darkroom Engineering fork
+(`darkroomengineering/ghostty`). Upstream Ghostty is not configured as a remote by default; add
+it yourself (`git remote add upstream https://github.com/ghostty-org/ghostty.git`) when you need
+to compare against it.
+
+Branch fork work off the SHA the parent repo pins, not off `origin/main`. The fork's `main` is
+far ahead of the pin, and moving the pin to it pulls in unrelated upstream changes.
+
 ```bash
 cd ghostty
-git remote -v  # origin = upstream, darkroom = fork
-git checkout -b <branch>
+git checkout -b <branch>    # from the pinned commit
 git add <files>
 git commit -m "..."
-git push darkroom <branch>
+git push origin <branch>
 ```
 
-To keep the fork up to date with upstream:
-
-```bash
-cd ghostty
-git fetch origin
-git checkout main
-git merge origin/main
-git push darkroom main
-```
+Push the submodule commit to the fork before committing the new pointer in the parent repo.
 
 Then update the parent repo with the new submodule SHA:
 
@@ -234,61 +233,12 @@ git commit -m "Update ghostty submodule"
 
 ## Release
 
-Single lane: every commit on `main` that passes the `CI` workflow is automatically built,
-signed, notarized, and published as the latest GitHub release via `.github/workflows/release.yml`
-(triggered by `workflow_run` on `CI` completing with `conclusion: success`, on `branches: [main]`).
-There is no nightly/beta channel — if something ships broken, fix it forward on `main` and the
-next green CI run auto-ships the fix. Auto-ship builds get a monotonic build number derived from
-the run ID AND a distinct user-visible version — the committed major.minor with the patch
-replaced by the workflow run number (e.g. `0.4.213`) — both injected into `Info.plist` at
-build time, never committed. They publish to a single, reused `rolling` GitHub release
-(titled with the effective version) that is overwritten each ship and marked "latest" — so
-the releases page stays clean (exactly one `rolling` entry, nothing else) and
-`releases/latest/download/*` always resolves to the newest green build. Every ship is
-therefore distinguishable in the about box and on the releases page.
+Every commit on `main` that passes `CI` is built, signed, notarized and published to the
+single `rolling` GitHub release by `.github/workflows/release.yml`. There is no nightly or
+beta channel; fix broken ships forward on `main`. The build number comes from the workflow
+run id, not from the committed `CURRENT_PROJECT_VERSION`. Milestone bumps use
+`./scripts/bump-version.sh` and a `CHANGELOG.md` entry. macOS ships independently of the
+Windows build.
 
-Each ship also seals a `rolling-candidate-<build>` **draft** release as its build-specific
-payload (the versioned DMG/EXE and dSYMs). Candidates never leave draft state — draft releases
-are invisible on the public releases page and to `releases/latest` — so they never add a
-second entry. After promoting a candidate's assets into `rolling`, the reconciler deletes every
-older candidate draft, keeping exactly the just-promoted one around as a private rollback
-archive (retention 1); download it with `gh release download rolling-candidate-<build> --repo
-darkroomengineering/programa` (requires collaborator access, since it is a draft).
-
-Milestone marketing-version bumps (e.g. `0.15.0` → `0.16.0`) are git tags only — they do not
-create a GitHub release. Bump, tag, and let the next auto-ship pick up the new major.minor:
-
-```bash
-./scripts/bump-version.sh          # bump minor (0.15.0 → 0.16.0)
-./scripts/bump-version.sh patch    # bump patch (0.15.0 → 0.15.1)
-./scripts/bump-version.sh major    # bump major (0.15.0 → 1.0.0)
-./scripts/bump-version.sh 1.0.0    # set specific version
-```
-
-This updates both `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (build number). Then update
-`CHANGELOG.md`, which is the source of truth for the changelog, commit, and optionally tag as a
-milestone marker:
-
-```bash
-git tag vX.Y.Z
-git push origin vX.Y.Z
-```
-
-The tag is a marker in `git log`/`git tag` only; it does not trigger a build or a release. The
-next push to `main` (or the same commit, once CI goes green) ships it through the normal
-auto-ship lane.
-
-Notes:
-- Requires GitHub secrets: `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD`,
-  `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
-- The `rolling` release carries `appcast.xml`, `programa-macos.dmg`, `programa-windows.exe`,
-  and the Sparkle enclosures `programa-macos-<build>.dmg` for the newest builds (keep window in
-  `scripts/sparkle_enclosure.js`; older ones are pruned after each promotion). The appcast must
-  point at `rolling`, not the candidate: GitHub serves no assets from a draft, and a candidate
-  URL 404s for every auto-updating client. dSYMs and the versioned EXE live only on the
-  candidate draft.
-- README download button points to `releases/latest/download/programa-macos.dmg`.
-- Versioning: bump the minor version for milestone tags unless explicitly asked otherwise.
-- Changelog: update `CHANGELOG.md`; it is the source of truth for the changelog.
-- `workflow_dispatch` on `release.yml` still runs a dry-run build that uploads an artifact instead
-  of publishing.
+Full details, the required secrets and the release asset layout are in
+[docs/release.md](docs/release.md).
