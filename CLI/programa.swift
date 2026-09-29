@@ -360,16 +360,18 @@ final class SocketClient {
     }
 
     private func connectOnce() throws {
-        // Verify socket is owned by the current user to prevent fake-socket attacks.
-        var st = stat()
-        guard stat(path, &st) == 0 else {
-            let statErrno = errno
+        // Verify the path is a socket (never a symlink) owned by the current user to prevent
+        // fake-socket attacks; the peer uid is checked again after connecting.
+        switch CLISocketSafety.checkPath(path) {
+        case .ok:
+            break
+        case .missing(let statErrno):
             throw SocketConnectError(errnoValue: statErrno, message: "Socket not found at \(path)")
-        }
-        guard (st.st_mode & mode_t(S_IFMT)) == mode_t(S_IFSOCK) else {
+        case .symlink:
+            throw CLIError(message: "Path at \(path) is a symlink — refusing to connect")
+        case .notSocket:
             throw CLIError(message: "Path exists at \(path) but is not a Unix socket")
-        }
-        guard st.st_uid == getuid() else {
+        case .foreignOwner:
             throw CLIError(message: "Socket at \(path) is not owned by the current user — refusing to connect")
         }
 
@@ -400,6 +402,11 @@ final class SocketClient {
             }
         }
         if result == 0 {
+            guard CLISocketSafety.peerUIDMatchesCurrentUser(fd: socketFD) else {
+                Darwin.close(socketFD)
+                socketFD = -1
+                throw CLIError(message: "Socket at \(path) is served by a different user — refusing to connect")
+            }
             return
         }
 

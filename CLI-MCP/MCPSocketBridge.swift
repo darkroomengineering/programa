@@ -253,14 +253,18 @@ struct MCPSocketBridge {
         // Verify the socket is owned by the current user to prevent
         // fake-socket attacks -- mirrors `SocketClient.connectOnce()`
         // (`CLI/programa.swift:551-607`).
-        var st = stat()
-        guard stat(path, &st) == 0 else {
-            throw ConnectFailure(errnoValue: errno, message: "Socket not found at \(path)")
-        }
-        guard (st.st_mode & mode_t(S_IFMT)) == mode_t(S_IFSOCK) else {
+        // `checkPath` uses lstat, so a symlink at the path is refused; the peer uid is checked
+        // again after connecting.
+        switch CLISocketSafety.checkPath(path) {
+        case .ok:
+            break
+        case .missing(let statErrno):
+            throw ConnectFailure(errnoValue: statErrno, message: "Socket not found at \(path)")
+        case .symlink:
+            throw ConnectFailure(errnoValue: nil, message: "Path at \(path) is a symlink -- refusing to connect")
+        case .notSocket:
             throw ConnectFailure(errnoValue: nil, message: "Path exists at \(path) but is not a Unix socket")
-        }
-        guard st.st_uid == getuid() else {
+        case .foreignOwner:
             throw ConnectFailure(errnoValue: nil, message: "Socket at \(path) is not owned by the current user -- refusing to connect")
         }
 
@@ -292,6 +296,10 @@ struct MCPSocketBridge {
             }
         }
         if result == 0 {
+            guard CLISocketSafety.peerUIDMatchesCurrentUser(fd: fd) else {
+                Darwin.close(fd)
+                throw ConnectFailure(errnoValue: nil, message: "Socket at \(path) is served by a different user -- refusing to connect")
+            }
             return fd
         }
 
