@@ -41,7 +41,7 @@ enum SocketControlMode: String, CaseIterable, Identifiable, Sendable {
         case .automation:
             return String(localized: "socketControl.automation.description", defaultValue: "Allow external local automation clients from this macOS user (no ancestry check).")
         case .password:
-            return String(localized: "socketControl.password.description", defaultValue: "Only processes started inside Programa terminals can connect, and each connection must also authenticate with the password stored in a local file.")
+            return String(localized: "socketControl.password.description", defaultValue: "Any process from this macOS user can connect after authenticating with the password stored in a local file.")
         case .allowAll:
             return String(localized: "socketControl.allowAll.description", defaultValue: "Allow any local process and user to connect with no auth. Unsafe.")
         }

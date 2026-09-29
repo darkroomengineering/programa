@@ -1848,10 +1848,10 @@ class TerminalController {
             return
         }
 
-        // In cmuxOnly and password modes, verify the connecting process is a descendant of cmux
-        // (password mode adds authentication on top of the ancestry check, never replaces it).
-        // In automation and allowAll modes, skip the ancestry check.
-        if unixPolicy != nil, requestPolicy.accessMode == .cmuxOnly || requestPolicy.accessMode == .password {
+        // In cmuxOnly mode, verify the connecting process is a descendant of cmux.
+        // Password mode skips it on purpose: it exists so external clients (programa-mcp started
+        // by another app, scripts) can connect by proving they know the password.
+        if unixPolicy != nil, requestPolicy.accessMode == .cmuxOnly {
             // Use pre-captured peer PID if available (captured in accept loop before
             // the peer can disconnect), falling back to live lookup.
             guard let pid = peerPid ?? getPeerPid(socket) else {

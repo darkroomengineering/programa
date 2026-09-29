@@ -12146,13 +12146,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only processes started inside Programa terminals can connect, and each connection must also authenticate with the password stored in a local file."
+            "value": "Any process from this macOS user can connect after authenticating with the password stored in a local file."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Programa のターミナル内で起動されたプロセスのみ接続でき、各接続はローカルファイルに保存されたパスワードでの認証も必要です。"
+            "value": "この macOS ユーザーのプロセスは、ローカルファイルに保存されたパスワードで認証すると接続できます。"
           }
         }
       }
