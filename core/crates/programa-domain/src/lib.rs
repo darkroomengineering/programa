@@ -702,7 +702,7 @@ fn remove_workspace(snapshot: &mut Snapshot, index: usize) {
 fn remove_pane(workspace: &mut Workspace, pane_index: usize) -> Result<(), DomainError> {
     let pane_id = workspace.panes[pane_index].id.clone();
     let (layout, neighbor_pane_id, removed) =
-        remove_pane_from_layout(workspace.layout.clone(), &pane_id);
+        remove_pane_from_layout(workspace.layout.clone(), &pane_id)?;
     if !removed {
         return Err(not_found("pane", &pane_id));
     }
@@ -724,14 +724,20 @@ fn remove_pane(workspace: &mut Workspace, pane_index: usize) -> Result<(), Domai
     Ok(())
 }
 
-fn remove_pane_from_layout(
-    node: LayoutNode,
-    pane_id: &str,
-) -> (Option<LayoutNode>, Option<String>, bool) {
+type LayoutRemoval = (Option<LayoutNode>, Option<String>, bool);
+
+fn unmatched_branch_missing() -> DomainError {
+    DomainError::new(
+        "invalid_snapshot",
+        "an unmatched layout branch is missing after pane removal",
+    )
+}
+
+fn remove_pane_from_layout(node: LayoutNode, pane_id: &str) -> Result<LayoutRemoval, DomainError> {
     match node {
-        LayoutNode::Pane { pane_id: found } if found == pane_id => (None, None, true),
+        LayoutNode::Pane { pane_id: found } if found == pane_id => Ok((None, None, true)),
         LayoutNode::Pane { pane_id: found } => {
-            (Some(LayoutNode::Pane { pane_id: found }), None, false)
+            Ok((Some(LayoutNode::Pane { pane_id: found }), None, false))
         }
         LayoutNode::Split {
             id,
@@ -740,9 +746,9 @@ fn remove_pane_from_layout(
             first,
             second,
         } => {
-            let (new_first, neighbor, removed) = remove_pane_from_layout(*first, pane_id);
+            let (new_first, neighbor, removed) = remove_pane_from_layout(*first, pane_id)?;
             if removed {
-                return match new_first {
+                return Ok(match new_first {
                     Some(first) => (
                         Some(LayoutNode::Split {
                             id,
@@ -758,13 +764,13 @@ fn remove_pane_from_layout(
                         let neighbor = first_pane_id(&second).to_owned();
                         (Some(*second), Some(neighbor), true)
                     }
-                };
+                });
             }
 
-            let first = new_first.expect("an unmatched layout branch remains present");
-            let (new_second, neighbor, removed) = remove_pane_from_layout(*second, pane_id);
+            let first = new_first.ok_or_else(unmatched_branch_missing)?;
+            let (new_second, neighbor, removed) = remove_pane_from_layout(*second, pane_id)?;
             if removed {
-                return match new_second {
+                return Ok(match new_second {
                     Some(second) => (
                         Some(LayoutNode::Split {
                             id,
@@ -780,22 +786,20 @@ fn remove_pane_from_layout(
                         let neighbor = last_pane_id(&first).to_owned();
                         (Some(first), Some(neighbor), true)
                     }
-                };
+                });
             }
 
-            (
+            Ok((
                 Some(LayoutNode::Split {
                     id,
                     direction,
                     ratio,
                     first: Box::new(first),
-                    second: Box::new(
-                        new_second.expect("an unmatched layout branch remains present"),
-                    ),
+                    second: Box::new(new_second.ok_or_else(unmatched_branch_missing)?),
                 }),
                 None,
                 false,
-            )
+            ))
         }
     }
 }
