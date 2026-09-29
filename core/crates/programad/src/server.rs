@@ -487,6 +487,22 @@ fn reconcile_closed_session(state: &Arc<AppState>, session_id: &str) {
     let Ok(mut domain) = state.domain.lock() else {
         return;
     };
+    reconcile_session_locked(&mut domain, session_id);
+}
+
+/// Same rule for sessions whose child exited (or failed) on its own: the
+/// session stays listed until `session.close`, but its domain surface is
+/// closed. Run whenever the domain is observed or mutated, so a client never
+/// sees a surface bound to a dead PTY.
+fn reconcile_dead_sessions(state: &AppState, domain: &mut DomainCore) {
+    for session in state.sessions.list() {
+        if !matches!(session.status(), SessionStatus::Running) {
+            reconcile_session_locked(domain, &session.id);
+        }
+    }
+}
+
+fn reconcile_session_locked(domain: &mut DomainCore, session_id: &str) {
     loop {
         let Some((workspace_id, pane_id, surface_id)) =
             find_surface_by_session(domain.snapshot(), session_id)
@@ -630,10 +646,11 @@ fn attach(req: &Request, state: &Arc<AppState>) -> Result<Dispatched, ErrorBody>
 /// matching `programa_core_snapshot` over the C ABI (`core/ABI.md`
 /// "Snapshot").
 fn workspace_snapshot(state: &Arc<AppState>) -> Result<Value, ErrorBody> {
-    let domain = state
+    let mut domain = state
         .domain
         .lock()
         .map_err(|_| ErrorBody::new(ErrorCode::InternalError, "domain lock is poisoned"))?;
+    reconcile_dead_sessions(state, &mut domain);
     serde_json::to_value(domain.snapshot())
         .map_err(|e| ErrorBody::new(ErrorCode::InternalError, format!("serialize failed: {e}")))
 }
@@ -652,12 +669,15 @@ fn workspace_snapshot(state: &Arc<AppState>) -> Result<Value, ErrorBody> {
 fn workspace_dispatch(req: &Request, state: &Arc<AppState>) -> Result<Value, ErrorBody> {
     let command: DomainCommand = serde_json::from_value(req.params.clone())
         .map_err(|e| ErrorBody::new(ErrorCode::InvalidParams, format!("invalid command: {e}")))?;
-    validate_command_sessions(&command, state)?;
-
+    // Validate while holding the domain lock: `session.close` reconciles under
+    // the same lock after removing the session, so a surface can never be
+    // attached to a session that closes between the check and the dispatch.
     let mut domain = state
         .domain
         .lock()
         .map_err(|_| ErrorBody::new(ErrorCode::InternalError, "domain lock is poisoned"))?;
+    validate_command_sessions(&command, state)?;
+    reconcile_dead_sessions(state, &mut domain);
     match domain.dispatch(command) {
         Ok(snapshot) => serde_json::to_value(json!({ "snapshot": snapshot })).map_err(|e| {
             ErrorBody::new(ErrorCode::InternalError, format!("serialize failed: {e}"))
