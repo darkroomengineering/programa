@@ -423,18 +423,7 @@ public final class BonsplitController {
 
         let internalTab: TabItem?
         if let tab {
-            internalTab = TabItem(
-                id: tab.id.id,
-                title: tab.title,
-                hasCustomTitle: tab.hasCustomTitle,
-                icon: tab.icon,
-                iconImageData: tab.iconImageData,
-                kind: tab.kind,
-                isDirty: tab.isDirty,
-                showsNotificationBadge: tab.showsNotificationBadge,
-                isLoading: tab.isLoading,
-                isPinned: tab.isPinned
-            )
+            internalTab = TabItem(from: tab)
         } else {
             internalTab = nil
         }
@@ -485,18 +474,7 @@ public final class BonsplitController {
             return nil
         }
 
-        let internalTab = TabItem(
-            id: tab.id.id,
-            title: tab.title,
-            hasCustomTitle: tab.hasCustomTitle,
-            icon: tab.icon,
-            iconImageData: tab.iconImageData,
-            kind: tab.kind,
-            isDirty: tab.isDirty,
-            showsNotificationBadge: tab.showsNotificationBadge,
-            isLoading: tab.isLoading,
-            isPinned: tab.isPinned
-        )
+        let internalTab = TabItem(from: tab)
 
         // Perform split with insertion side.
         internalController.splitPaneWithTab(
