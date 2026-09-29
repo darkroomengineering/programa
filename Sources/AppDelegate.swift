@@ -43,7 +43,9 @@ final class ThemeReloadCoalescer {
         DispatchQueue.main.asyncAfter(deadline: .now() + debounce, execute: work)
     }
 
-    /// Modification date and size of every config file a theme change can touch.
+    /// Modification date and size of the config files a theme change writes. Ceiling: files pulled in
+    /// through `config-file` includes and theme files are not fingerprinted, so a change confined to
+    /// one of them does not force a reload; the manual reload shortcut still applies it.
     static func configFingerprint(fileManager: FileManager = .default) -> [String] {
         var paths: [String] = []
         let home = fileManager.homeDirectoryForCurrentUser
@@ -5588,7 +5590,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         sendTextWhenReady(content, to: workspace, preferredPanelId: returnPanelId, afterSend: { [weak workspace] terminalPanel in
             // Submit only inside a pane the agent-detection state already knows hosts an agent;
             // a plain shell must never receive an implicit Return.
-            guard let workspace, workspace.panelAgentPresence[returnPanelId] != nil else { return }
+            // A blocked agent is waiting on a permission or y/n prompt; never answer that with a capture.
+            guard let workspace,
+                  let presence = workspace.panelAgentPresence[returnPanelId],
+                  presence.state != .blocked,
+                  !presence.isStale(now: Date()) else { return }
             terminalPanel.sendInput("\r")
         })
     }

@@ -692,7 +692,7 @@ enum ExternalOpenPolicy {
     }
 
     /// Opens `url` if policy allows, otherwise shows a confirmation sheet on the key window.
-    /// The sheet never activates the app. With no window to attach to the open is refused.
+    /// The sheet never activates the app; with no window at all the alert runs modally.
     @discardableResult
     static func confirmAndOpen(
         _ url: URL,
@@ -712,10 +712,6 @@ enum ExternalOpenPolicy {
         case .openWithoutPrompt:
             return workspace.open(url)
         case let .prompt(offerAlwaysAllow):
-            guard let sheetWindow = window ?? NSApp.keyWindow ?? NSApp.mainWindow else {
-                NSLog("ExternalOpenPolicy: no window to confirm opening %@; refused", url.absoluteString)
-                return false
-            }
             let appName = handlerURL.map(applicationDisplayName(at:))
                 ?? String(localized: "externalOpen.defaultAppName", defaultValue: "the default app")
             let alert = NSAlert()
@@ -731,7 +727,7 @@ enum ExternalOpenPolicy {
                     defaultValue: "Always allow for this app"
                 )
             }
-            alert.beginSheetModal(for: sheetWindow) { response in
+            let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
                 guard response == .alertFirstButtonReturn else { return }
                 if offerAlwaysAllow,
                    alert.suppressionButton?.state == .on,
@@ -741,6 +737,15 @@ enum ExternalOpenPolicy {
                 if !workspace.open(url) {
                     NSLog("ExternalOpenPolicy: failed to open %@", url.absoluteString)
                 }
+            }
+            // Prefer a sheet on the key window (no app activation). Without any window the alert
+            // runs modally instead of refusing: a refusal would return false, and callers such as
+            // the terminal link handler treat false as "let another opener handle it".
+            if let sheetWindow = window ?? NSApp.keyWindow ?? NSApp.mainWindow {
+                alert.beginSheetModal(for: sheetWindow, completionHandler: handleResponse)
+            } else {
+                // Deferred so a caller holding a lock (ghostty's link callback) returns before the modal loop starts.
+                DispatchQueue.main.async { handleResponse(alert.runModal()) }
             }
             return true
         }
