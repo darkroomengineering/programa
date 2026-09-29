@@ -250,8 +250,8 @@ Notes for maintainers who need the chronology behind the current state.
   and renderer-driven frame scheduling).
 - The occluded-render hard skip (`c25020f99`) was pinned and reverted on August 4, 2026 because
   of the `ghostty_surface_read_text` hang described in section 8. The throttle (`08bac45e9`)
-  landed on August 5, 2026 after three consecutive green CI runs; the failure mode was
-  probabilistic, so one green run was not enough evidence. A separate use-after-free through
+  landed on August 5, 2026. Its merge gate was three consecutive green CI runs, because the
+  failure mode was probabilistic and one green run is not enough evidence. A separate use-after-free through
   stale surface userdata in the `.scrollbar` mailbox path was found and fixed app-side during
   that investigation.
 
