@@ -213,7 +213,7 @@ fixture_roles() {
     "immutable=${dir}/programa-windows-${build}.exe" \
     "appcast=${dir}/appcast.xml" \
     "stable-alias=${dir}/programa-macos.dmg" \
-    "stable-alias=${dir}/programa-windows.exe"
+    "stable-alias=${dir}/programa-windows.exe" | { if [[ -n "${FIXTURE_NO_WINDOWS:-}" ]]; then grep -v programa-windows; else cat; fi; }
 }
 
 seal_output_for() { printf '%s/candidate-seal-%s.json' "${TMP_DIR}" "$1"; }
@@ -721,22 +721,6 @@ grep '^mutation upload-asset rolling-candidate-104 ' "${STATE_DIR}/operations.lo
 ! sed -n '1,6p' "${TMP_DIR}/rolling-prepared-uploads" | grep -Fq " ${SEAL_NAME}" || fail "rolling prepared seal was uploaded before all payloads"
 [[ "$(tail -1 "${TMP_DIR}/rolling-prepared-uploads")" == *" ${SEAL_NAME}" ]] || fail "rolling prepared seal was not uploaded last"
 
-reset_state
-make_fixture 201 1.2.3 v1.2.3
-prepare_candidate 201 1.2.3 milestone-candidate- v1.2.3 009
-milestone_prepared_seal="$(seal_output_for milestone-candidate-201-009)"
-[[ -s "${milestone_prepared_seal}" ]] || fail "milestone prepare did not write a seal"
-! grep -q '^mutation ' "${STATE_DIR}/operations.log" || fail "milestone seal preparation mutated GitHub"
-cp "${milestone_prepared_seal}" "${TMP_DIR}/milestone-prepared-seal.snapshot"
-: > "${STATE_DIR}/operations.log"
-stage_prepared_candidate 201 1.2.3 milestone-candidate- v1.2.3 009
-assert_candidate_sealed 201 1.2.3 milestone-candidate-201-009
-cmp -s "${TMP_DIR}/milestone-prepared-seal.snapshot" "${milestone_prepared_seal}" || fail "milestone staging rewrote the prepared seal"
-grep '^mutation upload-asset milestone-candidate-201-009 ' "${STATE_DIR}/operations.log" > "${TMP_DIR}/milestone-prepared-uploads"
-[[ "$(wc -l < "${TMP_DIR}/milestone-prepared-uploads" | tr -d ' ')" == 7 ]] || fail "milestone prepared staging did not upload the exact payload set plus seal"
-! sed -n '1,6p' "${TMP_DIR}/milestone-prepared-uploads" | grep -Fq " ${SEAL_NAME}" || fail "milestone prepared seal was uploaded before all payloads"
-[[ "$(tail -1 "${TMP_DIR}/milestone-prepared-uploads")" == *" ${SEAL_NAME}" ]] || fail "milestone prepared seal was not uploaded last"
-
 # Both kinds of stale handoff fail before candidate mutation: altered seal
 # bytes and payload bytes that no longer match the seal prepared for them.
 reset_state
@@ -749,13 +733,13 @@ if stage_prepared_candidate 105 0.64.73; then fail "rolling staging accepted mod
 assert_release_absent rolling-candidate-105
 
 reset_state
-make_fixture 201 1.2.3 v1.2.3
-prepare_candidate 201 1.2.3 milestone-candidate- v1.2.3 010
-printf 'changed-after-prepare\n' >> "${FIXTURE_DIR}/201/programa-dSYMs-201.zip"
+make_fixture 106 0.64.73 rolling
+prepare_candidate 106 0.64.73
+printf 'changed-after-prepare\n' >> "${FIXTURE_DIR}/106/programa-dSYMs-106.zip"
 : > "${STATE_DIR}/operations.log"
-if stage_prepared_candidate 201 1.2.3 milestone-candidate- v1.2.3 010; then fail "milestone staging accepted payload bytes that differ from its prepared seal"; fi
-! grep -q '^mutation ' "${STATE_DIR}/operations.log" || fail "stale milestone prepared seal mutated candidate state"
-assert_release_absent milestone-candidate-201-010
+if stage_prepared_candidate 106 0.64.73; then fail "rolling staging accepted payload bytes that differ from its prepared seal"; fi
+! grep -q '^mutation ' "${STATE_DIR}/operations.log" || fail "stale rolling prepared seal mutated candidate state"
+assert_release_absent rolling-candidate-106
 
 # Candidate seal is last; verification downloads are authenticated; payload URLs remain stable.
 reset_state
@@ -902,44 +886,54 @@ invoke_rolling '' '' "$(target_sha_for 103)"
 assert_rolling_converged 103; assert_published_archive 103; assert_release_exists rolling-candidate-104
 grep -Fq 'authenticated-download rolling-candidate-103 programa-release-candidate.json' "${STATE_DIR}/operations.log" || \
   fail "matching candidate seal was not validated"
-grep -Fq 'authenticated-download rolling-candidate-104 programa-release-candidate.json' "${STATE_DIR}/operations.log" || \
-  fail "nonmatching candidate seal was not validated"
+! grep -Fq 'rolling-candidate-104' "${STATE_DIR}/operations.log" || \
+  fail "a candidate bound to another target was queried or downloaded"
 
-# Highest sealed decimal build wins; stale lower drafts prune; higher drafts remain.
+# A broken draft bound to some other commit never fails a ship: it is not downloaded or
+# validated, and a corrupt seal or a stray non-draft cannot block the target's promotion.
+reset_state
+seed_sealed_candidate 103; seed_sealed_candidate 104; seed_rolling 102
+printf '{"corrupt":true}\n' > "${TMP_DIR}/corrupt-seal.json"
+write_asset rolling-candidate-104 "${SEAL_NAME}" "${TMP_DIR}/corrupt-seal.json"
+write_release rolling-candidate-105 "$(target_sha_for 105)" false false 'leaked non-draft' leaked
+printf '%s\n' "$(target_sha_for 103)" > "${STATE_DIR}/main_sha"
+: > "${STATE_DIR}/operations.log"
+invoke_rolling '' '' "$(target_sha_for 103)"
+assert_rolling_converged 103; assert_published_archive 103
+assert_release_exists rolling-candidate-104; assert_release_exists rolling-candidate-105
+! grep -Fq 'rolling-candidate-104 ' "${STATE_DIR}/operations.log" || fail "corrupt non-target draft was read"
+
+# Highest sealed decimal build wins among this run's candidates; drafts within the
+# retention window and higher drafts remain.
 reset_state
 seed_sealed_candidate 100; seed_sealed_candidate 101; seed_sealed_candidate 103
 write_release rolling-candidate-099 "$(target_sha_for 99)" true false 'stale lower draft' stale; printf '599\n' > "$(release_dir rolling-candidate-099)/id"
 write_release rolling-candidate-104 "$(target_sha_for 104)" true false 'higher draft' pending; printf '604\n' > "$(release_dir rolling-candidate-104)/id"
 seed_rolling 100; invoke_rolling; assert_rolling_converged 103
-assert_release_absent rolling-candidate-099; assert_release_absent rolling-candidate-100
-assert_release_absent rolling-candidate-101; assert_published_archive 103; assert_release_exists rolling-candidate-104
+assert_release_exists rolling-candidate-099; assert_release_exists rolling-candidate-100
+assert_release_exists rolling-candidate-101; assert_published_archive 103; assert_release_exists rolling-candidate-104
 
-# Promotion deletes every draft candidate at or below the finalized build
-# except the one just selected: retention is always exactly one candidate
-# draft (the private rollback archive), regardless of how many stale drafts
-# accumulated. A candidate strictly above the finalized build survives. Drafts
-# have no git tag, so deletion must not request tag cleanup (GitHub answers
-# 422 for the missing ref and the job goes red after the release is gone).
+# Promotion keeps the newest five draft candidates at or below the finalized build (each
+# carries that build's dSYMs) and deletes the older ones. A candidate strictly above the
+# finalized build survives. Drafts have no git tag, so deletion must not request tag
+# cleanup (GitHub answers 422 for the missing ref and the job goes red after the
+# release is gone).
 reset_state
 seed_sealed_candidate 103
-write_release rolling-candidate-050 "$(target_sha_for 50)" true false 'Candidate 50' candidate
-write_release rolling-candidate-060 "$(target_sha_for 60)" true false 'Candidate 60' candidate
-write_release rolling-candidate-070 "$(target_sha_for 70)" true false 'Candidate 70' candidate
+for stale_build in 020 030 040 050 060 070; do
+  write_release "rolling-candidate-${stale_build}" "$(target_sha_for "${stale_build#0}")" true false "Candidate ${stale_build}" candidate
+done
 write_release rolling-candidate-104 "$(target_sha_for 104)" true false 'Candidate 104' candidate
 seed_rolling 100
 : > "${STATE_DIR}/operations.log"
 invoke_rolling
 assert_rolling_converged 103; assert_published_archive 103
-assert_release_absent rolling-candidate-050
-assert_release_absent rolling-candidate-060
-assert_release_absent rolling-candidate-070
-assert_release_exists rolling-candidate-104
-grep -Fq 'mutation delete-release rolling-candidate-050 cleanup-tag=false' "${STATE_DIR}/operations.log" || \
-  fail "retention did not delete an older candidate draft, or asked for tag cleanup"
-grep -Fq 'mutation delete-release rolling-candidate-060 cleanup-tag=false' "${STATE_DIR}/operations.log" || \
-  fail "retention did not delete an older candidate draft, or asked for tag cleanup"
-grep -Fq 'mutation delete-release rolling-candidate-070 cleanup-tag=false' "${STATE_DIR}/operations.log" || \
-  fail "retention did not delete the candidate draft just below the finalized build, or asked for tag cleanup"
+for kept in 040 050 060 070 104; do assert_release_exists "rolling-candidate-${kept}"; done
+for pruned in 020 030; do
+  assert_release_absent "rolling-candidate-${pruned}"
+  grep -Fq "mutation delete-release rolling-candidate-${pruned} cleanup-tag=false" "${STATE_DIR}/operations.log" || \
+    fail "retention did not delete candidate ${pruned} past the window, or asked for tag cleanup"
+done
 ! grep -Fq 'mutation delete-release rolling-candidate-104' "${STATE_DIR}/operations.log" || \
   fail "retention deleted a candidate draft above the finalized build"
 ! grep -Fq 'mutation delete-release rolling-candidate-103' "${STATE_DIR}/operations.log" || \
@@ -974,7 +968,7 @@ seed_sealed_candidate 103; seed_rolling 102
 seed_milestone_tag v9.0.0 101
 seed_milestone_tag v1.0.0 200
 : > "${STATE_DIR}/operations.log"; invoke_rolling
-assert_rolling_converged 102; assert_release_absent rolling-candidate-103
+assert_rolling_converged 102; assert_release_exists rolling-candidate-103
 grep -Fq 'authenticated-download v1.0.0 appcast.xml' "${STATE_DIR}/operations.log" || fail "lower-semver milestone appcast was not inspected"
 ! grep -Eq '^mutation (upload-asset|delete-asset|edit-release|move-ref) rolling ' "${STATE_DIR}/operations.log" || fail "candidate below an older-tag milestone build mutated rolling"
 
@@ -1002,7 +996,7 @@ reset_state
 seed_sealed_candidate 103; seed_rolling 102
 seed_milestone_tag customer-preview-2026 200
 : > "${STATE_DIR}/operations.log"; invoke_rolling
-assert_rolling_converged 102; assert_release_absent rolling-candidate-103
+assert_rolling_converged 102; assert_release_exists rolling-candidate-103
 grep -Fq 'authenticated-download customer-preview-2026 appcast.xml' "${STATE_DIR}/operations.log" || \
   fail "arbitrary-tag advertised appcast was not inspected"
 ! grep -Eq '^mutation (upload-asset|delete-asset|edit-release|move-ref) rolling ' "${STATE_DIR}/operations.log" || \
@@ -1057,7 +1051,7 @@ cp "$(asset_dir rolling-candidate-103 "${SEAL_NAME}")/bytes" "${prepublication_s
 : > "${STATE_DIR}/operations.log"
 invoke_rolling
 assert_published_archive 103
-assert_release_absent rolling-candidate-101
+assert_release_exists rolling-candidate-101
 assert_rolling_converged 103
 assert_asset_count rolling "$((initial_rolling_asset_count + 1))"
 cmp -s "${prepublication_seal_103}" "$(asset_dir rolling-candidate-103 "${SEAL_NAME}")/bytes" || \
@@ -1082,7 +1076,7 @@ feed_line="$(grep -n '^mutation upload-asset rolling appcast.xml$' "${STATE_DIR}
 stage_archive_candidate 104
 : > "${STATE_DIR}/operations.log"
 invoke_rolling
-assert_release_absent rolling-candidate-103
+assert_release_exists rolling-candidate-103
 assert_published_archive 104
 assert_rolling_converged 104
 assert_asset_count rolling "$((initial_rolling_asset_count + 2))"
@@ -1261,5 +1255,25 @@ assert_rolling_converged 100; assert_release_exists rolling-candidate-101
 # Fully converged retry performs no asset writes.
 reset_state; seed_sealed_candidate 100; seed_rolling 100; : > "${STATE_DIR}/operations.log"; rm -f "${STATE_DIR}/mutation_count"; invoke_rolling; assert_rolling_converged 100
 while IFS='=' read -r role path; do assert_no_asset_write "$(basename "${path}")"; done < <(fixture_roles 100)
+
+# macOS ships without waiting for Windows: a candidate sealed without the EXE pair (4
+# payloads plus the seal) promotes, and the previous programa-windows.exe on rolling stays.
+reset_state
+make_fixture 106 0.64.73 rolling; make_fixture 107 0.64.73 rolling
+seed_rolling 106
+FIXTURE_NO_WINDOWS=1 invoke_candidate 107 0.64.73
+assert_asset_count rolling-candidate-107 5
+! grep -q 'programa-windows' "$(seal_output_for rolling-candidate-107)" || fail "macOS-only seal mentions Windows assets"
+printf '%s\n' "$(target_sha_for 107)" > "${STATE_DIR}/main_sha"
+: > "${STATE_DIR}/operations.log"
+invoke_rolling
+assert_file_equals "$(release_dir rolling)/target_sha" "$(target_sha_for 107)"
+assert_asset_equals rolling appcast.xml "${FIXTURE_DIR}/107/appcast.xml"
+assert_asset_equals rolling programa-macos.dmg "${FIXTURE_DIR}/107/programa-macos.dmg"
+assert_asset_equals rolling programa-macos-107.dmg "${FIXTURE_DIR}/107/programa-macos-107.dmg"
+assert_asset_equals rolling programa-windows.exe "${FIXTURE_DIR}/106/programa-windows.exe"
+! grep -Eq '^mutation (upload-asset|delete-asset) rolling programa-windows' "${STATE_DIR}/operations.log" || \
+  fail "macOS-only promotion touched the previous Windows alias"
+assert_release_exists rolling-candidate-107
 
 echo "PASS: sealed-archive-backed rolling publication is bounded, monotonic, and retry-convergent"

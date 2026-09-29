@@ -8,6 +8,8 @@ STATE_MODULE="${SCRIPT_DIR}/rolling_release_state.js"
 ENCLOSURE_MODULE="${SCRIPT_DIR}/sparkle_enclosure.js"
 # Versioned enclosures kept on rolling after promotion; empty uses the module default.
 ENCLOSURE_KEEP_BUILDS="${ROLLING_ENCLOSURE_KEEP_BUILDS:-}"
+# Candidate drafts kept as private rollback archives (each holds that build's dSYMs).
+CANDIDATE_KEEP_COUNT="${ROLLING_CANDIDATE_KEEP_COUNT:-5}"
 GH_BIN="${GH_BIN:-gh}"
 REPOSITORY="${GITHUB_REPOSITORY:-}"
 CANDIDATE_PREFIX=""
@@ -171,25 +173,34 @@ query_releases_paginated() {
 
 # Candidates never leave draft state (see the promotion path below), so they
 # are never on the public releases page. This is the sole candidate cleanup:
-# every draft candidate at or below the finalized build is deleted except
-# skip_tag (the just-promoted one), which keeps exactly one candidate draft
-# around as the rollback archive for the next build. A draft has no git tag
-# (GitHub creates the tag on publish), so the delete must not ask for tag
-# cleanup: --cleanup-tag fails with 422 "Reference does not exist" after the
-# release is already gone and turns every promotion red.
+# of the draft candidates at or below the finalized build, the newest
+# CANDIDATE_KEEP_COUNT stay as private rollback archives (they carry each build's
+# dSYMs) and the rest are deleted; skip_tag (the just-promoted one) is always kept.
+# It reads only release-list fields, never a candidate's assets, so a corrupt draft
+# cannot block a ship. A draft has no git tag (GitHub creates the tag on publish),
+# so the delete must not ask for tag cleanup: --cleanup-tag fails with 422
+# "Reference does not exist" after the release is already gone and turns every
+# promotion red.
 prune_candidates() {
   local finalized_build="$1" skip_tag="${2:-}"
-  local tag is_draft is_prerelease is_immutable target suffix
+  local tag is_draft is_prerelease is_immutable target suffix rank=0
+  local eligible="${TEMP_DIR}/prune-eligible.tsv"
+  : > "${eligible}"
   while IFS=$'\t' read -r tag is_draft is_prerelease is_immutable target; do
     [[ "${is_draft}" == "true" && "${tag}" == "${CANDIDATE_PREFIX}"* ]] || continue
-    [[ "${tag}" != "${skip_tag}" ]] || continue
     suffix="${tag#"${CANDIDATE_PREFIX}"}"
     [[ "${suffix}" =~ ^[0-9]+$ ]] || continue
     suffix="$((10#${suffix}))"
     if build_is_at_most "${suffix}" "${finalized_build}"; then
-      "${GH_BIN}" release delete "${tag}" --repo "${REPOSITORY}" --yes
+      printf '%s\t%s\n' "${suffix}" "${tag}" >> "${eligible}"
     fi
   done < "${RELEASE_LIST}"
+  while IFS=$'\t' read -r suffix tag; do
+    rank=$((rank + 1))
+    ((rank > CANDIDATE_KEEP_COUNT)) || continue
+    [[ "${tag}" != "${skip_tag}" ]] || continue
+    "${GH_BIN}" release delete "${tag}" --repo "${REPOSITORY}" --yes
+  done < <(sort -t $'\t' -k1,1nr "${eligible}")
 }
 
 snapshot_public_high_water() {
@@ -272,7 +283,9 @@ NODE
 }
 
 # Uploads every sealed asset of one role to rolling (or only the asset named by the
-# optional second argument), skipping any whose bytes already match.
+# optional second argument), skipping any whose bytes already match. Assets absent from
+# the seal are never touched: a macOS-only candidate (Windows build failed) leaves the
+# previous programa-windows.exe on rolling in place.
 reconcile_role() {
   local expected_role="$1" only_name="${2:-}" name role size sha current_metadata
   while IFS=$'\t' read -r name role size sha; do
@@ -285,6 +298,12 @@ reconcile_role() {
       continue
     fi
 
+    # --clobber deletes the old asset before uploading its replacement, so a client
+    # fetching appcast.xml or a stable alias in that gap gets a 404 until the upload
+    # finishes (seconds; clients retry on their next scheduled check). Order limits the
+    # damage: the versioned enclosure lands before the appcast that points at it, so
+    # the feed never references a missing DMG. Uploading under a
+    # temporary name and renaming is not available through gh, so the window remains.
     "${GH_BIN}" release upload "${ROLLING_TAG}" \
       "${SELECTED_PAYLOAD_DIR}/${name}" \
       --repo "${REPOSITORY}" \
@@ -374,7 +393,7 @@ ROLLING_EXISTS=false
 ROLLING_PUBLISHED_AT_START=false
 ROLLING_IMMUTABLE_AT_START=""
 candidate_index=0
-sealed_candidate_count=0
+other_candidate_count=0
 while IFS=$'\t' read -r tag is_draft is_prerelease is_immutable candidate_target; do
   if [[ "${tag}" == "${ROLLING_TAG}" ]]; then
     ROLLING_EXISTS=true
@@ -386,12 +405,19 @@ while IFS=$'\t' read -r tag is_draft is_prerelease is_immutable candidate_target
   [[ "${tag}" == "${CANDIDATE_PREFIX}"* ]] || continue
   candidate_suffix="${tag#"${CANDIDATE_PREFIX}"}"
   [[ "${candidate_suffix}" =~ ^[1-9][0-9]*$ ]] || continue
+  # A candidate bound to another target is never downloaded or validated: it belongs
+  # to another run and can only be pruned (from release-list fields alone) after a
+  # successful ship. A bad draft for some other commit must never fail this ship.
+  if [[ "${candidate_target}" != "${RECONCILER_TARGET_SHA}" ]]; then
+    other_candidate_count=$((other_candidate_count + 1))
+    continue
+  fi
   # Candidates are never published: they stay drafts for their whole
-  # lifecycle and are deleted once superseded (see prune_candidates), so the
-  # releases page never carries more than the one `rolling` entry. A
-  # non-draft candidate here means an old workflow version leaked one onto
-  # the public page; fail loudly rather than silently treat it as valid
-  # archived state.
+  # lifecycle and are pruned once past the retention window (see
+  # prune_candidates), so the releases page never carries more than the one
+  # `rolling` entry. A non-draft candidate for this target means an old
+  # workflow version leaked one onto the public page; fail loudly rather than
+  # silently treat it as valid archived state.
   [[ "${is_draft}" == "true" ]] || \
     fail "candidate ${tag} is not a draft; published rolling candidates are no longer supported"
 
@@ -402,10 +428,7 @@ while IFS=$'\t' read -r tag is_draft is_prerelease is_immutable candidate_target
   query_assets "${tag}" "${candidate_metadata}"
   seal_line="$(asset_metadata_line "${SEAL_NAME}" "${candidate_metadata}")" || \
     fail "candidate ${tag} has duplicate seal assets"
-  if [[ -z "${seal_line}" ]]; then
-    [[ "${is_draft}" == "true" ]] || fail "published archive ${tag} is missing its seal"
-    continue
-  fi
+  [[ -n "${seal_line}" ]] || continue
 
   verify_asset_strict "${tag}" "${SEAL_NAME}" "" "" \
     "${candidate_metadata}" "${candidate_dir}/seal"
@@ -419,7 +442,6 @@ const manifest = validateCandidateManifest(value);
 if (!manifest.sealed) throw new TypeError("candidate seal must declare sealed: true");
 process.stdout.write(`${JSON.stringify(manifest)}\n`);
 NODE
-  sealed_candidate_count=$((sealed_candidate_count + 1))
 
   IFS=$'\t' read -r manifest_build manifest_target manifest_version < <(
     node -e '
@@ -431,9 +453,7 @@ NODE
     fail "candidate tag ${tag} disagrees with sealed build ${manifest_build}"
   [[ "${candidate_target}" == "${manifest_target}" ]] || \
     fail "candidate ${tag} target disagrees with its seal"
-  if [[ "${manifest_target}" == "${RECONCILER_TARGET_SHA}" ]]; then
-    cat "${normalized_manifest}" >> "${CANDIDATES_JSONL}"
-  fi
+  cat "${normalized_manifest}" >> "${CANDIDATES_JSONL}"
 done < "${RELEASE_LIST}"
 
 SELECTED_MANIFEST="${TEMP_DIR}/selected-manifest.json"
@@ -447,7 +467,7 @@ if (selected !== null) process.stdout.write(`${JSON.stringify(selected)}\n`);
 NODE
 
 if [[ ! -s "${SELECTED_MANIFEST}" ]]; then
-  if ((sealed_candidate_count > 0)); then
+  if ((other_candidate_count > 0)); then
     UNMATCHED_CURRENT_MAIN="$("${GH_BIN}" api \
       "repos/${REPOSITORY}/git/ref/heads/main" \
       --jq .object.sha)" || \
@@ -501,7 +521,7 @@ cut -f1 "${PROMOTION_ORDER}" > "${TEMP_DIR}/candidate-expected-names.txt"
 printf '%s\n' "${SEAL_NAME}" >> "${TEMP_DIR}/candidate-expected-names.txt"
 LC_ALL=C sort "${TEMP_DIR}/candidate-expected-names.txt" > "${TEMP_DIR}/candidate-expected-names.sorted.txt"
 cmp -s "${TEMP_DIR}/candidate-actual-names.txt" "${TEMP_DIR}/candidate-expected-names.sorted.txt" || \
-  fail "candidate ${SELECTED_TAG} does not contain exactly six payloads plus its seal"
+  fail "candidate ${SELECTED_TAG} does not contain exactly its sealed payloads plus its seal"
 
 SELECTED_PAYLOAD_DIR="${TEMP_DIR}/selected-payload"
 while IFS=$'\t' read -r name role size sha; do

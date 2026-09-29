@@ -25,8 +25,9 @@ const assert = require("node:assert/strict");
 //
 // `role` is exactly "immutable", "appcast", or "stable-alias". Asset names
 // are safe basenames. A sealed manifest contains the complete rolling payload:
-// one build-suffixed enclosure DMG, one dSYM archive, one build-suffixed Windows
-// executable, appcast.xml, and the stable macOS and Windows aliases. Asset size
+// one build-suffixed enclosure DMG, one dSYM archive, appcast.xml, and the stable macOS
+// alias, plus, only when the Windows build succeeded, the build-suffixed Windows
+// executable and the stable Windows alias (both or neither). Asset size
 // is a positive safe integer and sha256 is 64
 // lowercase hexadecimal characters. Marketing `version` and monotonic `build`
 // are independent canonical identifiers. Every immutable filename suffix still
@@ -92,6 +93,12 @@ function manifestFor(build = "900719925474099312345678901234567890", overrides =
   };
 
   return { ...manifest, ...overrides };
+}
+
+function withoutWindows(manifest) {
+  const value = clone(manifest);
+  value.assets = value.assets.filter((asset) => !asset.name.includes("programa-windows"));
+  return value;
 }
 
 function clone(value) {
@@ -238,10 +245,12 @@ test("mutable aliases cannot masquerade as immutable payloads", async (t) => {
   }
 });
 
-test("a sealed candidate has exactly one appcast and two stable aliases", async (t) => {
+test("a sealed candidate has exactly one appcast and its stable aliases", async (t) => {
   const cases = [
     ["missing appcast", (assets) => assets.filter((asset) => asset.role !== "appcast")],
-    ["missing stable alias", (assets) => assets.filter((asset) => asset.name !== "programa-windows.exe")],
+    ["missing macOS stable alias", (assets) => assets.filter((asset) => asset.name !== "programa-macos.dmg")],
+    ["missing Windows stable alias", (assets) => assets.filter((asset) => asset.name !== "programa-windows.exe")],
+    ["missing Windows immutable EXE", (assets) => assets.filter((asset) => asset.name !== "programa-windows-41.exe")],
     ["second appcast", (assets) => [...assets, { name: "feed.xml", role: "appcast", size: 1, sha256: ASSET_SHA }]],
     ["second stable alias", (assets) => [...assets, { name: "latest.dmg", role: "stable-alias", size: 1, sha256: ASSET_SHA }]],
   ];
@@ -256,7 +265,7 @@ test("a sealed candidate has exactly one appcast and two stable aliases", async 
 });
 
 test("a sealed candidate requires every build-specific immutable payload", async (t) => {
-  for (const required of requiredAssets("41").map((asset) => asset.name)) {
+  for (const required of ["programa-macos-41.dmg", "programa-dSYMs-41.zip"]) {
     await t.test(required, () => {
       const value = manifestFor("41");
       value.assets = value.assets.filter((asset) => asset.name !== required);
@@ -272,51 +281,19 @@ test("immutable payload suffixes must match the candidate build", () => {
   assert.throws(() => validateCandidateManifest(value), /build|suffix|asset|required/i);
 });
 
-// PR #329 removed the remote daemon (programad-remote). Historical schema 1
-// candidates can still carry its six legacy immutables, so they remain readable
-// even though only schema 2 desktop payloads are promotable now.
-function legacyDaemonAssets(build) {
-  return [
-    `programad-remote-checksums-${build}.txt`,
-    `programad-remote-darwin-amd64-${build}`,
-    `programad-remote-darwin-arm64-${build}`,
-    `programad-remote-linux-amd64-${build}`,
-    `programad-remote-linux-arm64-${build}`,
-    `programad-remote-manifest-${build}.json`,
-  ].map((name, index) => ({
-    name,
-    role: "immutable",
-    size: index + 100,
-    sha256: String(index + 100).padStart(64, "0"),
-  }));
-}
-
-function historicalManifestFor(build) {
-  const value = manifestFor(build);
-  value.schemaVersion = 1;
-  value.assets = value.assets.filter(
-    (asset) =>
-      asset.name !== `programa-windows-${build}.exe` && asset.name !== "programa-windows.exe",
-  );
-  return value;
-}
-
-test("a sealed manifest with the full legacy ten-asset daemon set still validates", () => {
-  const value = historicalManifestFor("41");
-  value.assets.push(...legacyDaemonAssets("41"));
+test("a sealed candidate without the Windows EXE pair is valid", () => {
+  const value = withoutWindows(manifestFor("41"));
 
   const validated = validateCandidateManifest(value);
-  assert.equal(validated.assets.length, 10);
+  assert.equal(validated.assets.length, 4);
+  assert.deepEqual(
+    getPromotionOrder(value).map((asset) => asset.name),
+    ["programa-dSYMs-41.zip", "programa-macos-41.dmg", "appcast.xml", "programa-macos.dmg"],
+  );
+  assert.equal(assertCandidateMayPromote(value, null), "promote");
 });
 
-test("a sealed manifest with a partial legacy daemon asset set fails closed", () => {
-  const value = historicalManifestFor("41");
-  value.assets.push(...legacyDaemonAssets("41").slice(0, 3));
-
-  assert.throws(() => validateCandidateManifest(value), /partial|legacy|daemon|asset/i);
-});
-
-test("an immutable asset with an unknown, non-legacy name still fails validation", () => {
+test("an immutable asset with an unknown name still fails validation", () => {
   const value = manifestFor("41");
   value.assets.push({
     name: "programad-remote-windows-amd64-41",
@@ -331,11 +308,10 @@ test("an immutable asset with an unknown, non-legacy name still fails validation
   );
 });
 
-test("historical schema 1 payloads remain readable but cannot be promoted", () => {
-  const historical = historicalManifestFor("41");
-  assert.equal(validateCandidateManifest(historical).schemaVersion, 1);
-  assert.throws(() => assertCandidateMayPromote(historical, null), /schema|current|version 2/i);
-  assert.throws(() => getPromotionOrder(historical), /schema|current|version 2/i);
+test("schema 1 manifests are rejected", () => {
+  const historical = withoutWindows(manifestFor("41"));
+  historical.schemaVersion = 1;
+  assert.throws(() => validateCandidateManifest(historical), /schema/i);
 });
 
 test("the stable DMG is byte-identical to the immutable build DMG", () => {
@@ -413,7 +389,7 @@ test("candidate selection returns the highest sealed build regardless of input o
 });
 
 test("candidate selection ignores incomplete unsealed drafts", () => {
-  const incompleteDraft = { schemaVersion: 1, sealed: false, build: "999999999999999999999999999999999999" };
+  const incompleteDraft = { schemaVersion: 2, sealed: false, build: "999999999999999999999999999999999999" };
   const sealed = manifestFor("42");
 
   assert.deepEqual(selectPromotionCandidate([incompleteDraft, sealed]), sealed);
