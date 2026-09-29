@@ -73,7 +73,7 @@ xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug 
 When rebuilding GhosttyKit.xcframework, always use Release optimizations:
 
 ```bash
-cd ghostty && zig build -Demit-xcframework=true -Dxcframework-target=universal -Doptimize=ReleaseFast
+cd ghostty && zig build -Demit-xcframework=true -Demit-macos-app=false -Dxcframework-target=native -Doptimize=ReleaseFast
 ```
 
 `reload` = build the Debug app (tag required). Pass `--launch` to also kill existing and open:
@@ -149,7 +149,7 @@ This makes it visible in the GitHub PR UI (Commits tab, check statuses) that the
 The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use it for visual iteration:
 
 - **Debug > Debug Windows** contains panels for tuning layout, colors, and behavior. Entries are alphabetical with no dividers.
-- To add a debug toggle or visual option: create an `NSWindowController` subclass with a `shared` singleton, add it to the "Debug Windows" menu in `Sources/programaApp.swift`, and add a SwiftUI view with `@AppStorage` bindings for live changes.
+- To add a debug toggle or visual option: create an `NSWindowController` subclass with a `shared` singleton, add it to the "Debug Windows" menu in `Sources/ProgramaApp.swift`, and add a SwiftUI view with `@AppStorage` bindings for live changes.
 - When the user says "debug menu" or "debug window", they mean this menu, not `defaults write`.
 
 ## Pitfalls
@@ -159,9 +159,9 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 - **Typing-latency-sensitive paths** (read carefully before touching these areas):
   - `WindowTerminalHostView.hitTest()` in `Sources/WindowTerminalHostView.swift`: called on every event including keyboard. Keyboard events (`.keyDown`/`.keyUp`/`.flagsChanged`) take an early `switch currentEvent?.type` fast path; everything else — all pointer events, and an ambiguous/nil `currentEvent` — must fall through to the full divider/sidebar/drag routing below it. Do not add work to that keyboard fast path.
   - `NSWindow.programa_sendEvent` in `Sources/WindowSwizzles.swift`: runs for every event. The hit-view context it caches is only ever read for pointer-down events, so it is computed only for those — do not restore an unconditional hit-test here (#183).
-  - `TabItemView` in `ContentView.swift`: uses `Equatable` conformance + `.equatable()` to skip body re-evaluation during typing. Do not add `@EnvironmentObject`, `@ObservedObject` (besides `tab`), or `@Binding` properties without updating the `==` function. Do not remove `.equatable()` from the ForEach call site. Do not read `tabManager` or `notificationStore` in the body; use the precomputed `let` parameters instead.
-  - `TerminalSurface.forceRefresh()` in `GhosttyTerminalView.swift`: called on every keystroke. Do not add allocations, file I/O, or formatting here.
-- **Terminal find layering contract:** `SurfaceSearchOverlay` must be mounted from `GhosttySurfaceScrollView` in `Sources/GhosttyTerminalView.swift` (AppKit portal layer), not from SwiftUI panel containers such as `Sources/Panels/TerminalPanelView.swift`. Portal-hosted terminal views can sit above SwiftUI during split/workspace churn.
+  - `TabItemView` in `Sources/TabItemView.swift`: uses `Equatable` conformance + `.equatable()` to skip body re-evaluation during typing. Do not add `@EnvironmentObject`, `@ObservedObject` (besides `tab`), or `@Binding` properties without updating the `==` function. Do not remove `.equatable()` from the ForEach call site in `Sources/VerticalTabsSidebar.swift`. Do not read `tabManager` or `notificationStore` in the body; use the precomputed `let` parameters instead.
+  - `TerminalSurface.forceRefresh()` in `Sources/TerminalSurface.swift`: called on every keystroke. Do not add allocations, file I/O, or formatting here.
+- **Terminal find layering contract:** `SurfaceSearchOverlay` must be mounted from `GhosttySurfaceScrollView` in `Sources/GhosttySurfaceScrollView.swift` (AppKit portal layer), not from SwiftUI panel containers such as `Sources/Panels/TerminalPanelView.swift`. Portal-hosted terminal views can sit above SwiftUI during split/workspace churn.
 - **Submodule safety:** When modifying a submodule (ghostty), always push the submodule commit to its remote `main` branch BEFORE committing the updated pointer in the parent repo. Never commit on a detached HEAD or temporary branch — the commit will be orphaned and lost. Verify with: `cd <submodule> && git merge-base --is-ancestor HEAD origin/main`. Note: `vendor/bonsplit` is NOT a submodule — it is vendored in-tree (MIT, from the manaflow-ai fork); edit and commit it like any other source directory.
 - **All user-facing strings must be localized.** Use `String(localized: "key.name", defaultValue: "English text")` for every string shown in the UI (labels, buttons, menus, dialogs, tooltips, error messages). Keys go in `Resources/Localizable.xcstrings` with translations for all supported languages (currently English and Japanese). Never use bare string literals in SwiftUI `Text()`, `Button()`, alert titles, etc.
 - **Shortcut policy:** Every new Programa-owned keyboard shortcut must be added to `KeyboardShortcutSettings`, visible/editable in Settings, supported in `~/.config/programa/settings.json`, and documented in the keyboard shortcut and configuration docs.
@@ -195,8 +195,8 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 
 **Never run tests locally.** All tests (E2E, UI, python socket tests) run via GitHub Actions or on the VM.
 
-- **E2E / UI tests:** trigger via `gh workflow run test-e2e.yml` (see programa-hq CLAUDE.md for details)
-- **Unit tests:** `xcodebuild -scheme programa-unit` is safe (no app launch), but prefer CI
+- **E2E / UI tests:** trigger `.github/workflows/test-e2e.yml` with `gh workflow run test-e2e.yml -f test_filter=<TestClass[/testMethod]>`. Optional inputs: `-f ref=<branch-or-sha>` (default: the current ref), `-f test_timeout=<seconds>` (default 120), `-f record_video=true`, `-f runner=macos-26|macos-15|macos-14` (default `macos-15`).
+- **Unit tests:** run in CI. The `programa-unit` scheme is app-hosted: its default `TEST_HOST` is the untagged Debug app, which opens windows, starts shells and writes preferences, so never run it as is. The only local path is the tagged build-for-testing recipe in `docs/testing-layout.md` ("Running them").
 - **Python socket tests (tests_v2/):** these connect to a running Programa instance's socket. Never launch an untagged `Programa DEV.app` to run them. If you must test locally, use a tagged build's socket (`/tmp/programa-debug-<tag>.sock`) with `PROGRAMA_SOCKET=/tmp/programa-debug-<tag>.sock`
 - **Never `open` an untagged `Programa DEV.app`** from DerivedData. It conflicts with the user's running debug instance.
 
@@ -205,24 +205,23 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 Ghostty changes must be committed in the `ghostty` submodule and pushed to the Darkroom Engineering ghostty fork.
 Keep `docs/ghostty-fork.md` up to date with any fork changes and conflict notes.
 
+In the `ghostty` checkout, `origin` is the Darkroom Engineering fork
+(`darkroomengineering/ghostty`). Upstream Ghostty is not configured as a remote by default; add
+it yourself (`git remote add upstream https://github.com/ghostty-org/ghostty.git`) when you need
+to compare against it.
+
+Branch fork work off the SHA the parent repo pins, not off `origin/main`. The fork's `main` is
+far ahead of the pin, and moving the pin to it pulls in unrelated upstream changes.
+
 ```bash
 cd ghostty
-git remote -v  # origin = upstream, darkroom = fork
-git checkout -b <branch>
+git checkout -b <branch>    # from the pinned commit
 git add <files>
 git commit -m "..."
-git push darkroom <branch>
+git push origin <branch>
 ```
 
-To keep the fork up to date with upstream:
-
-```bash
-cd ghostty
-git fetch origin
-git checkout main
-git merge origin/main
-git push darkroom main
-```
+Push the submodule commit to the fork before committing the new pointer in the parent repo.
 
 Then update the parent repo with the new submodule SHA:
 
