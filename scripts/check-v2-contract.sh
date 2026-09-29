@@ -26,11 +26,10 @@ check_file() {
 }
 
 check_file "Sources/V2CommandCatalog.swift"
-check_file "tests_v2/programa_v2.py"
 check_file "CLI/V2MethodNames.swift"
 
 if [ "$STATUS" -eq 0 ]; then
-    echo "v2 contract check: OK (Sources/V2CommandCatalog.swift, tests_v2/programa_v2.py, CLI/V2MethodNames.swift all match contracts/v2/methods.json)"
+    echo "v2 contract check: OK (Sources/V2CommandCatalog.swift, CLI/V2MethodNames.swift both match contracts/v2/methods.json)"
 fi
 
 exit "$STATUS"

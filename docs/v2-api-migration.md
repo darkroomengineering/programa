@@ -662,8 +662,6 @@ it's DEBUG-only. `contracts/v2/protocol.json` covers the wire framing (JSON line
 
 - `Sources/V2CommandCatalog.swift` -- the base/debug method-name arrays `system.capabilities`
   advertises.
-- `tests_v2/programa_v2.py` -- a typed Python client, one method per contract entry, built on
-  `tests_v2/cmux.py`'s transport, validating required params before it ever talks to the socket.
 - `CLI/V2MethodNames.swift` -- one named constant per method, which `CLI/*.swift` sends v2
   requests through instead of repeating string literals.
 
