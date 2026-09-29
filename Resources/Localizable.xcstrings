@@ -13762,6 +13762,40 @@
           }
         }
       }
+    },
+    "terminal.sendText.notReady.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t send text to the terminal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルにテキストを送信できませんでした"
+          }
+        }
+      }
+    },
+    "terminal.sendText.notReady.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The terminal wasn’t ready after 3 seconds, so nothing was sent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3秒待ってもターミナルの準備ができなかったため、何も送信されていません。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

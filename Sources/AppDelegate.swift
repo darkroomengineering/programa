@@ -5504,11 +5504,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         let content = DesignModeTextComposer.compose(payload: payload, screenshotPath: screenshotPath)
         manager.focusTab(workspaceId, surfaceId: returnPanelId, suppressFlash: true)
-        sendTextWhenReady(content, to: workspace, preferredPanelId: returnPanelId)
-    }
-
-    nonisolated private static func debugShortId(_ id: UUID?) -> String {
-        id.map { String($0.uuidString.prefix(5)) } ?? "nil"
+        sendTextWhenReady(content, to: workspace, preferredPanelId: returnPanelId, afterSend: { [weak workspace] terminalPanel in
+            // Submit only inside a pane the agent-detection state already knows hosts an agent;
+            // a plain shell must never receive an implicit Return.
+            guard let workspace, workspace.panelAgentPresence[returnPanelId] != nil else { return }
+            terminalPanel.sendInput("\r")
+        })
     }
 
     static func resolveTerminalPanelForTextSend(in tab: Workspace, preferredPanelId: UUID? = nil) -> TerminalPanel? {
@@ -5518,73 +5519,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return tab.focusedTerminalPanel
     }
 
+    /// Sends `text` to a terminal in `tab` once its surface exists. `afterSend` runs right after
+    /// the text is written. When the surface is still not ready after 3 seconds the text is
+    /// dropped and the user is told through an app notification.
     func sendTextWhenReady(
         _ text: String,
         to tab: Workspace,
         preferredPanelId: UUID? = nil,
-        beforeSend: (() -> Void)? = nil
+        beforeSend: (() -> Void)? = nil,
+        afterSend: ((TerminalPanel) -> Void)? = nil
     ) {
-        let isDesignModePasteback = preferredPanelId != nil
-#if DEBUG
-        let initialTargetPanel = Self.resolveTerminalPanelForTextSend(
-            in: tab,
-            preferredPanelId: preferredPanelId
-        )
-        if isDesignModePasteback {
-            dlog(
-                "reactGrab.pasteback h2.send.start " +
-                "workspace=\(Self.debugShortId(tab.id)) " +
-                "preferred=\(Self.debugShortId(preferredPanelId)) " +
-                "focused=\(Self.debugShortId(tab.focusedPanelId)) " +
-                "focusedTerminal=\(Self.debugShortId(tab.focusedTerminalPanel?.id)) " +
-                "resolved=\(Self.debugShortId(initialTargetPanel?.id)) " +
-                "surfaceReady=\(initialTargetPanel?.surface.surface != nil ? 1 : 0) len=\(text.count)"
-            )
-        }
-#endif
         if let terminalPanel = Self.resolveTerminalPanelForTextSend(
             in: tab,
             preferredPanelId: preferredPanelId
         ),
            terminalPanel.surface.surface != nil {
-#if DEBUG
-            if isDesignModePasteback {
-                dlog(
-                    "reactGrab.pasteback h2.send.immediate " +
-                    "workspace=\(Self.debugShortId(tab.id)) " +
-                    "target=\(Self.debugShortId(terminalPanel.id)) len=\(text.count)"
-                )
-            }
-#endif
             beforeSend?()
             terminalPanel.sendText(text)
-#if DEBUG
-            if isDesignModePasteback {
-                dlog(
-                    "reactGrab.pasteback h2.send.sent " +
-                    "workspace=\(Self.debugShortId(tab.id)) " +
-                    "target=\(Self.debugShortId(terminalPanel.id)) mode=immediate len=\(text.count)"
-                )
-            }
-#endif
+            afterSend?(terminalPanel)
             return
         }
 
         var resolved = false
         var readyObserver: NSObjectProtocol?
-        var focusObserver: NSObjectProtocol?
-        var firstResponderObserver: NSObjectProtocol?
         var panelsCancellable: AnyCancellable?
 
         func cleanupObservers() {
             if let readyObserver {
                 NotificationCenter.default.removeObserver(readyObserver)
-            }
-            if let focusObserver {
-                NotificationCenter.default.removeObserver(focusObserver)
-            }
-            if let firstResponderObserver {
-                NotificationCenter.default.removeObserver(firstResponderObserver)
             }
             panelsCancellable?.cancel()
         }
@@ -5594,18 +5556,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 in: tab,
                 preferredPanelId: preferredPanelId
             )
-#if DEBUG
-            if isDesignModePasteback {
-                dlog(
-                    "reactGrab.pasteback h2.finishIfReady " +
-                    "workspace=\(Self.debugShortId(tab.id)) " +
-                    "preferred=\(Self.debugShortId(preferredPanelId)) " +
-                    "focused=\(Self.debugShortId(tab.focusedPanelId)) " +
-                    "resolved=\(Self.debugShortId(terminalPanel?.id)) " +
-                    "surfaceReady=\(terminalPanel?.surface.surface != nil ? 1 : 0) alreadyResolved=\(resolved ? 1 : 0)"
-                )
-            }
-#endif
             guard !resolved,
                   let terminalPanel,
                   terminalPanel.surface.surface != nil else { return }
@@ -5613,73 +5563,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             cleanupObservers()
             beforeSend?()
             terminalPanel.sendText(text)
-#if DEBUG
-            if isDesignModePasteback {
-                dlog(
-                    "reactGrab.pasteback h2.send.sent " +
-                    "workspace=\(Self.debugShortId(tab.id)) " +
-                    "target=\(Self.debugShortId(terminalPanel.id)) mode=delayed len=\(text.count)"
-                )
-            }
-#endif
+            afterSend?(terminalPanel)
         }
 
         panelsCancellable = tab.$panels
             .map { _ in () }
-            .sink { _ in
-#if DEBUG
-                if isDesignModePasteback {
-                    dlog(
-                        "reactGrab.pasteback h2.panelsChanged " +
-                        "workspace=\(Self.debugShortId(tab.id)) " +
-                        "focused=\(Self.debugShortId(tab.focusedPanelId))"
-                    )
-                }
-#endif
-                finishIfReady()
-            }
-        if isDesignModePasteback {
-            focusObserver = NotificationCenter.default.addObserver(
-                forName: .ghosttyDidFocusSurface,
-                object: nil,
-                queue: .main
-            ) { note in
-                guard let candidateTabId = note.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
-                      candidateTabId == tab.id,
-                      let candidateSurfaceId = note.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID else {
-                    return
-                }
-#if DEBUG
-                dlog(
-                    "reactGrab.pasteback h1.focusEvent " +
-                    "workspace=\(Self.debugShortId(candidateTabId)) " +
-                    "surface=\(Self.debugShortId(candidateSurfaceId)) " +
-                    "target=\(Self.debugShortId(preferredPanelId)) " +
-                    "match=\(candidateSurfaceId == preferredPanelId ? 1 : 0)"
-                )
-#endif
-            }
-            firstResponderObserver = NotificationCenter.default.addObserver(
-                forName: .ghosttyDidBecomeFirstResponderSurface,
-                object: nil,
-                queue: .main
-            ) { note in
-                guard let candidateTabId = note.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
-                      candidateTabId == tab.id,
-                      let candidateSurfaceId = note.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID else {
-                    return
-                }
-#if DEBUG
-                dlog(
-                    "reactGrab.pasteback h1.firstResponderEvent " +
-                    "workspace=\(Self.debugShortId(candidateTabId)) " +
-                    "surface=\(Self.debugShortId(candidateSurfaceId)) " +
-                    "target=\(Self.debugShortId(preferredPanelId)) " +
-                    "match=\(candidateSurfaceId == preferredPanelId ? 1 : 0)"
-                )
-#endif
-            }
-        }
+            .sink { _ in finishIfReady() }
         readyObserver = NotificationCenter.default.addObserver(
             forName: .terminalSurfaceDidBecomeReady,
             object: nil,
@@ -5689,17 +5578,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 guard let workspaceId = note.userInfo?["workspaceId"] as? UUID,
                       workspaceId == tab.id else { return }
                 let surfaceId = note.userInfo?["surfaceId"] as? UUID
-#if DEBUG
-                if isDesignModePasteback {
-                    dlog(
-                        "reactGrab.pasteback h2.surfaceReadyEvent " +
-                        "workspace=\(Self.debugShortId(workspaceId)) " +
-                        "surface=\(Self.debugShortId(surfaceId)) " +
-                        "target=\(Self.debugShortId(preferredPanelId)) " +
-                        "match=\(surfaceId == preferredPanelId ? 1 : 0)"
-                    )
-                }
-#endif
                 if let preferredPanelId,
                    let surfaceId,
                    surfaceId != preferredPanelId {
@@ -5710,19 +5588,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             if !resolved {
-#if DEBUG
-                if isDesignModePasteback {
-                    dlog(
-                        "reactGrab.pasteback h2.send.timeout " +
-                        "workspace=\(Self.debugShortId(tab.id)) " +
-                        "preferred=\(Self.debugShortId(preferredPanelId)) " +
-                        "focused=\(Self.debugShortId(tab.focusedPanelId)) " +
-                        "focusedTerminal=\(Self.debugShortId(tab.focusedTerminalPanel?.id))"
-                    )
-                }
-#endif
+                resolved = true
                 cleanupObservers()
                 NSLog("Command send: surface not ready after 3.0s")
+                TerminalNotificationStore.shared.postAppNotification(
+                    title: String(
+                        localized: "terminal.sendText.notReady.title",
+                        defaultValue: "Couldn\u{2019}t send text to the terminal"
+                    ),
+                    body: String(
+                        localized: "terminal.sendText.notReady.body",
+                        defaultValue: "The terminal wasn\u{2019}t ready after 3 seconds, so nothing was sent."
+                    )
+                )
             }
         }
     }
