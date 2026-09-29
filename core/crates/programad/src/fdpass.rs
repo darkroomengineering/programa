@@ -259,6 +259,9 @@ fn recv_with_fds(socket_fd: RawFd, bytes: &mut [u8], accept_fds: bool) -> io::Re
 pub struct MsgStream {
     stream: UnixStream,
     buf: Vec<u8>,
+    /// Length of the `buf` prefix already scanned for `\n`, so each byte is
+    /// scanned once however many reads a long line takes.
+    scanned: usize,
     fds: VecDeque<OwnedFd>,
     accept_fds: bool,
 }
@@ -268,6 +271,7 @@ impl MsgStream {
         MsgStream {
             stream,
             buf: Vec::new(),
+            scanned: 0,
             fds: VecDeque::new(),
             accept_fds: true,
         }
@@ -279,6 +283,7 @@ impl MsgStream {
         MsgStream {
             stream,
             buf: Vec::new(),
+            scanned: 0,
             fds: VecDeque::new(),
             accept_fds: false,
         }
@@ -292,10 +297,12 @@ impl MsgStream {
     /// Returns `Ok(None)` on a clean EOF with no partial line pending.
     pub async fn read_line(&mut self) -> Result<Option<String>, ReadFrameError> {
         loop {
-            if let Some(pos) = self.buf.iter().position(|&b| b == b'\n') {
+            if let Some(offset) = self.buf[self.scanned..].iter().position(|&b| b == b'\n') {
+                let pos = self.scanned + offset;
                 if pos > MAX_FRAME_BYTES {
                     return Err(ReadFrameError::TooLarge);
                 }
+                self.scanned = 0;
                 let mut line: Vec<u8> = self.buf.drain(..=pos).collect();
                 line.pop(); // trailing \n
                 if line.last() == Some(&b'\r') {
@@ -305,6 +312,7 @@ impl MsgStream {
                     .map(Some)
                     .map_err(|_| ReadFrameError::InvalidUtf8);
             }
+            self.scanned = self.buf.len();
             let n = self.fill_more().await?;
             if self.buf.len() > MAX_FRAME_BYTES {
                 return Err(ReadFrameError::TooLarge);
@@ -313,6 +321,7 @@ impl MsgStream {
                 if self.buf.is_empty() {
                     return Ok(None);
                 }
+                self.scanned = 0;
                 let rest = std::mem::take(&mut self.buf);
                 return String::from_utf8(rest)
                     .map(Some)
