@@ -90,7 +90,7 @@ When `notifications.command` runs, Programa sets `PROGRAMA_NOTIFICATION_TITLE`,
 | `PROGRAMA_RUNTIME_DEBUG_BASE_URL`, `PROGRAMA_RUNTIME_DEBUG_TOKEN`, `PROGRAMA_RUNTIME_DEBUG_SESSION_ID` | All three together point the app at a runtime debug collector. Without all three the feature is off. |
 | `PROGRAMA_SESSION_ESCROW_HOLDER_SOCKET` | Socket path handed to the session escrow holder process, so it stays out of the process command line. |
 | `PROGRAMA_TEST_FORCE_WINDOW_GLASS`, `_TAB_BAR_GLASS`, `_SIDEBAR_GLASS`, `_OVERLAY_GLASS`, `_BROWSER_TOOLBAR_GLASS` | Force a glass surface on or off for `scripts/run-glass-perf-gate.sh`. |
-| `PROGRAMA_UI_TEST_*` | Launch switches that the XCUITest suites in `programaUITests/` pass to the app. The app reads them only under test; the names live in `Sources/AppDelegate+UITest*.swift`. |
+| `PROGRAMA_UI_TEST_*` | Launch switches that the XCUITest suites in `programaUITests/` pass to the app. The app reads them only under test; `grep PROGRAMA_UI_TEST_ Sources` lists the names. |
 
 ## `programad`
 
@@ -102,7 +102,7 @@ The standalone daemon in `core/` is described in `core/docs/programad.md`.
 
 `PROGRAMAD_AUTH_TOKEN`, `PROGRAMA_SOCKET_PASSWORD` and `PROGRAMA_SOCKET_AUTH_TOKEN` are removed
 from the environment of every child process the daemon starts. `PROGRAMAD_UNIX_PATH`,
-`PROGRAMAD_SOCKET` and `PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD` still appear in
+`PROGRAMAD_SOCKET` and `PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD` are set or cleared by
 `scripts/reload.sh`, `scripts/reloads.sh`, `scripts/launch-tagged-automation.sh` and the shell
 integration, but no app, CLI or daemon code reads them.
 

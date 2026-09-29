@@ -170,6 +170,7 @@ with an optional `data` field. Codes that any method can return:
 | `not_found` | A referenced window, workspace, pane, surface or similar object does not exist. |
 | `unavailable` | The app or a required subsystem cannot handle the request right now. |
 | `internal_error` | An unexpected server-side failure. |
+| `encode_error` | The server could not encode its own response. |
 
 Individual methods add their own codes (for example `invalid_state`, `not_supported`, `timeout`,
 `layout_not_found`, `worktree_dirty`). The full list per method is in `contracts/v2/methods.json`.
