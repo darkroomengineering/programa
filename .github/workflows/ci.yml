@@ -76,6 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run_app_jobs: ${{ steps.detect.outputs.run_app_jobs }}
+      run_windows_jobs: ${{ steps.detect.outputs.run_windows_jobs }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -100,6 +101,7 @@ jobs:
 
           if [[ "$WINDOWS_ONLY" == "true" ]]; then
             echo "run_app_jobs=false" >> "$GITHUB_OUTPUT"
+            echo "run_windows_jobs=true" >> "$GITHUB_OUTPUT"
             echo "Manual Windows verification: macOS jobs excluded." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -107,6 +109,7 @@ jobs:
           # Keep full CI for push events and non-PR runs.
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "run_app_jobs=true" >> "$GITHUB_OUTPUT"
+            echo "run_windows_jobs=true" >> "$GITHUB_OUTPUT"
             echo "Changed files: full suite (non-PR context)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -133,6 +136,15 @@ jobs:
           esac
 
           printf '%s\n' "$CLASSIFICATION" >> "$GITHUB_OUTPUT"
+
+          # The Windows build reads only windows/, core/ and its build script, so
+          # a PR that touches none of them (or this workflow) skips it. Pushes to
+          # main always build it.
+          RUN_WINDOWS_JOBS=false
+          if grep -qE '^(windows/|core/|scripts/build-windows\.ps1$|\.github/workflows/ci\.yml$)' <<< "$CHANGED_FILES"; then
+            RUN_WINDOWS_JOBS=true
+          fi
+          echo "run_windows_jobs=${RUN_WINDOWS_JOBS}" >> "$GITHUB_OUTPUT"
           {
             echo "### CI scope decision"
             if [[ "$RUN_APP_JOBS" == "true" ]]; then
@@ -238,6 +250,8 @@ jobs:
           python3 core/crates/programad/tests/smoke.py --socket "$socket_path"
 
   windows-build:
+    needs: change-detection
+    if: needs.change-detection.outputs.run_windows_jobs == 'true'
     runs-on: windows-latest
     timeout-minutes: 30
     permissions:

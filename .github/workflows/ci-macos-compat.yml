@@ -4,8 +4,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Runs after merge, not on pull requests: the main CI workflow already runs the
+# full unit suite on macos-26 for every PR, so this only adds the oldest
+# supported runner (macos-15), and a break there is caught one merge later.
 on:
-  pull_request:
+  push:
+    branches: [main]
     paths:
       - "Sources/**"
       - "CLI/**"
@@ -16,6 +20,7 @@ on:
       - "scripts/**"
       - ".github/workflows/ci-macos-compat.yml"
       - "GhosttyTabs.xcodeproj/**"
+      - "ghostty"
       - "ghostty/**"
       - ".gitmodules"
 
@@ -25,85 +30,8 @@ permissions:
   contents: read
 
 jobs:
-  change-detection:
-    runs-on: ubuntu-latest
-    outputs:
-      run_compat_tests: ${{ steps.detect.outputs.run_compat_tests }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          fetch-depth: 0
-
-      - name: Detect changed files
-        id: detect
-        run: |
-          set -euo pipefail
-
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            echo "run_compat_tests=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          git fetch --no-tags origin "${BASE_SHA}" "${HEAD_SHA}"
-          CHANGED_FILES="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"
-          RUN_COMPAT_TESTS=false
-          if [[ -z "${CHANGED_FILES}" ]]; then
-            RUN_COMPAT_TESTS=true
-          fi
-
-          while IFS= read -r path; do
-            [[ -z "$path" ]] && continue
-
-            case "$path" in
-              *.md|docs/*|plans/*|AGENTS.md|CHANGELOG.md|PROJECTS.md|TODO.md|README.md|LICENSE*|THIRD_PARTY_LICENSES.md|.editorconfig|.gitattributes|.gitignore|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg)
-                continue
-                ;;
-              .github/*)
-                continue
-                ;;
-              Resources/*.xcstrings|Resources/*/*.xcstrings|Resources/*.strings|Resources/*/*.strings|Resources/*.lproj/*)
-                continue
-                ;;
-              *)
-                RUN_COMPAT_TESTS=true
-                break
-                ;;
-            esac
-          done <<< "$CHANGED_FILES"
-
-          echo "run_compat_tests=${RUN_COMPAT_TESTS}" >> "$GITHUB_OUTPUT"
-
-          {
-            echo "### CI scope decision"
-            if [[ "$RUN_COMPAT_TESTS" == "true" ]]; then
-              echo "Changed file set contains app-relevant changes; running compat matrix."
-            else
-              echo "Pull request appears docs/localization-only; skipping compatibility matrix."
-            fi
-            echo ""
-            echo "Changed files:"
-            if [[ -z "${CHANGED_FILES}" ]]; then
-              echo "- <none>"
-            else
-              printf '%s\n' "${CHANGED_FILES}"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
   compat-tests:
-    needs: change-detection
-    if: needs.change-detection.outputs.run_compat_tests == 'true'
     strategy:
-      # The two legs are independent OS-compatibility checks, so cancelling one
-      # because the other failed destroys the exact signal this job exists to
-      # produce. Worse, GitHub reports the cancelled leg as a *failure* to
-      # `gh pr checks`, so a leg that was passing when it got killed reads as
-      # broken. That cost real debugging time: two separate "macos-15 is failing
-      # everywhere" conclusions turned out to be macos-15 being cancelled
-      # mid-pass after macos-26 failed, only visible by reading the raw job log.
-      # Both legs should always run to completion and report independently.
-      fail-fast: false
       matrix:
         include:
           - os: macos-15
@@ -112,12 +40,9 @@ jobs:
             # This runner starves async completions partway through the serial
             # suite, timing out a fixed set of tests that are not broken on
             # macOS 15 -- see QUARANTINED_ON_COMPAT in scripts/ci-run-unit-tests.sh
-            # for the evidence. Every quarantined test still runs on the macos-26
-            # leg and in the main CI workflow, so no coverage is lost.
+            # for the evidence. Every quarantined test still runs in the main CI
+            # workflow, so no coverage is lost.
             quarantine: true
-          - os: macos-26
-            timeout: 60  # macos-26 runner is ~2x slower than macos-15; 45m was too tight on a cold DerivedData cache (see cache key on project.pbxproj)
-            smoke: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout }}
     env:

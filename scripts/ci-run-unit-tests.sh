@@ -37,9 +37,8 @@ SHARD_COUNT="${PROGRAMA_UNIT_TEST_SHARD_COUNT:-1}"
 #     A BSD socket accept and a DispatchQueue.main.async closure share no SwiftUI
 #     or AppKit code; the only thing in common is needing an async completion
 #     serviced promptly. That points at the runner, not the code.
-#   * The slower runner passes. macos-26 is ~2x slower than macos-15 (see the
-#     matrix comment in ci-macos-compat.yml) and is green, which rules out a
-#     simple "needs more time" explanation.
+#   * The slower runner passes. macos-26 is ~2x slower than macos-15 and is
+#     green, which rules out a simple "needs more time" explanation.
 #
 # BY CLASS, not by test method, deliberately. The first version of this listed 17
 # individual methods derived from intersecting two runs' failures. The next run
@@ -47,9 +46,9 @@ SHARD_COUNT="${PROGRAMA_UNIT_TEST_SHARD_COUNT:-1}"
 # the scheduler lottery varies per run, while the affected CLASSES do not. Listing
 # methods guarantees a slow leak of new stragglers; listing classes ends it.
 #
-# IMPORTANT: scoped to the compat leg only. Every class here still runs on the
-# macos-26 compat leg AND in the main CI workflow's unit-tests job on every PR,
-# so none of this coverage is actually lost -- including
+# IMPORTANT: scoped to the compat leg only. Every class here still runs in the
+# main CI workflow's unit-tests job on every PR, so none of this coverage is
+# actually lost -- including
 # TerminalControllerSocketSecurityTests, which is security-relevant and would
 # otherwise be the most alarming thing on this list.
 #
