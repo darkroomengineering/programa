@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError  # noqa: E402
+from v2_support import must as _must
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET_PATH") or os.environ.get("PROGRAMA_SOCKET") or "/tmp/programa-debug.sock"
@@ -102,11 +103,6 @@ EXPECTED_TOOL_NAMES = {
 EXPECTED_FOCUS_TOOL_NAMES = {name for name in EXPECTED_TOOL_NAMES if name.startswith("focus_")}
 
 FOCUS_TOOL_DESCRIPTION_MARKER = "may raise/activate the Programa window"
-
-
-def _must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
 
 
 class McpError(Exception):

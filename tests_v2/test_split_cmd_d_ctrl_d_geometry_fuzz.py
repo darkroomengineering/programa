@@ -24,7 +24,9 @@ SAMPLES_PER_STEP = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_SAMPLES", "4"))
 SAMPLE_INTERVAL_S = float(os.environ.get("PROGRAMA_SPLIT_FUZZ_SAMPLE_INTERVAL_S", "0.0015"))
 ACTION_JITTER_MAX_S = float(os.environ.get("PROGRAMA_SPLIT_FUZZ_ACTION_JITTER_MAX_S", "0.0035"))
 BURST_MAX = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_BURST_MAX", "3"))
-MAX_PANES = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_MAX_PANES", "10"))
+# Matches SplitPolicy.maxPanesPerWorkspace (Sources/Workspace+Bonsplit.swift); the app refuses
+# splits beyond it, so a higher default only makes the fuzzer issue splits that are no-ops.
+MAX_PANES = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_MAX_PANES", "4"))
 EPSILON = float(os.environ.get("PROGRAMA_SPLIT_FUZZ_EPSILON", "0.0"))
 TRACE_TAIL = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_TRACE_TAIL", "40"))
 ASSERT_NO_UNDERFLOW = os.environ.get("PROGRAMA_SPLIT_FUZZ_ASSERT_NO_UNDERFLOW", "0") == "1"

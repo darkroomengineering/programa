@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
+from v2_support import palette_visible as _palette_visible
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -24,11 +25,6 @@ def _focused_surface_id(client: cmux) -> str:
         if focused:
             return sid
     raise cmuxError(f"No focused surface in list_surfaces: {surfaces}")
-
-
-def _palette_visible(client: cmux, window_id: str) -> bool:
-    res = client._call("debug.command_palette.visible", {"window_id": window_id}) or {}
-    return bool(res.get("visible"))
 
 
 def _wait_until(predicate, timeout_s: float = 3.0, interval_s: float = 0.05, message: str = "timeout") -> None:

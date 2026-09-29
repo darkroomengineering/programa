@@ -22,18 +22,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
+from v2_support import wait_for as _wait_for
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
-
-
-def _wait_for(pred, timeout_s: float, step_s: float = 0.05) -> None:
-    start = time.time()
-    while time.time() - start < timeout_s:
-        if pred():
-            return
-        time.sleep(step_s)
-    raise cmuxError("Timed out waiting for condition")
 
 
 def _wait_for_terminal_focus(c: cmux, panel_id: str, timeout_s: float = 8.0) -> None:

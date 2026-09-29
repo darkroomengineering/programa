@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-E2E tests for tab dragging functionality.
+E2E tests for splits, focus, close, and resize.
 
 Tests that terminal content remains visible and functional after:
-1. Creating splits
-2. Moving tabs between panes
-3. Reordering tabs within a pane
+1. Creating splits (right, down, nested, repeated)
+2. Switching focus between panes and creating new surfaces
+3. Closing panes in every position, including rapid split/close cycles
+4. Resizing splits (50/50 ratio)
 
-These tests use the cmux socket interface to:
-- Create splits and tabs
+These tests do not drag tabs; they cover the split-layout operations where
+terminal-visibility bugs show up. They use the cmux socket interface to:
+- Create splits and surfaces
 - Send commands to terminals
 - Verify terminal responsiveness by checking for marker files
 
 Usage:
-    python3 test_tab_dragging.py
+    python3 test_splits_focus_close_resize.py
 
 Requirements:
     - cmux must be running with the socket controller enabled
@@ -1091,12 +1093,11 @@ def test_rapid_split_close_first_pane(client: cmux) -> TestResult:
 def run_tests():
     """Run all tests."""
     print("=" * 60)
-    print("cmux Tab Dragging E2E Tests")
+    print("cmux Splits, Focus, Close, and Resize E2E Tests")
     print("=" * 60)
     print()
     print("These tests verify that terminals remain responsive after")
-    print("various split and tab operations that simulate the scenarios")
-    print("where tab dragging bugs occur.")
+    print("split, focus, close, and resize operations.")
     print()
 
     socket_path = cmux.DEFAULT_SOCKET_PATH

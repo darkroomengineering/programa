@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
+from v2_support import must as _must
 
 
 def _resolve_socket_path() -> str:
@@ -27,11 +28,6 @@ def _resolve_socket_path() -> str:
 
 
 SOCKET_PATH = _resolve_socket_path()
-
-
-def _must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
 
 
 def _find_cli_binary() -> str:

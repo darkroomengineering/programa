@@ -12,23 +12,10 @@ from typing import Callable, List
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
+from v2_support import must as _must, wait_for as _wait_for
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
-
-
-def _must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
-
-
-def _wait_for(pred: Callable[[], bool], timeout_s: float = 5.0, step_s: float = 0.05) -> None:
-    start = time.time()
-    while time.time() - start < timeout_s:
-        if pred():
-            return
-        time.sleep(step_s)
-    raise cmuxError("Timed out waiting for condition")
 
 
 def _find_cli_binary() -> str:

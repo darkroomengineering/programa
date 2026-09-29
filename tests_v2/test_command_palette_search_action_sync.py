@@ -13,23 +13,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
+from v2_support import palette_visible as _palette_visible, wait_until as _wait_until
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
-
-
-def _wait_until(predicate, timeout_s=4.0, interval_s=0.05, message="timeout"):
-    start = time.time()
-    while time.time() - start < timeout_s:
-        if predicate():
-            return
-        time.sleep(interval_s)
-    raise cmuxError(message)
-
-
-def _palette_visible(client, window_id):
-    payload = client._call("debug.command_palette.visible", {"window_id": window_id}) or {}
-    return bool(payload.get("visible"))
 
 
 def _set_palette_visible(client, window_id, visible):

@@ -25,16 +25,12 @@ from typing import List
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmuxError
+from v2_support import must as _must
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 REPO_ROOT = str(Path(__file__).resolve().parent.parent)
 REGISTRY_ERROR = "no argument contract for"
-
-
-def _must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
 
 
 def _find_cli_binary() -> str:

@@ -22,24 +22,24 @@ TIMEOUT_SECONDS = 10.0
 EXPECTED_STDOUT = "programa 9.9.9 (999)"
 
 
-def resolve_cmux_cli() -> str:
+def resolve_programa_cli() -> str:
     explicit = os.environ.get("PROGRAMA_CLI_BIN") or os.environ.get("PROGRAMA_CLI")
     if explicit and os.path.exists(explicit) and os.access(explicit, os.X_OK):
         return explicit
 
     candidates: list[str] = []
-    candidates.extend(glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug/cmux")))
+    candidates.extend(glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug/programa")))
     candidates.extend(glob.glob("/tmp/programa-*/Build/Products/Debug/programa"))
     candidates = [p for p in candidates if os.path.exists(p) and os.access(p, os.X_OK)]
     if candidates:
         candidates.sort(key=os.path.getmtime, reverse=True)
         return candidates[0]
 
-    in_path = shutil.which("cmux")
+    in_path = shutil.which("programa")
     if in_path:
         return in_path
 
-    raise RuntimeError("Unable to find cmux CLI binary. Set PROGRAMA_CLI_BIN.")
+    raise RuntimeError("Unable to find programa CLI binary. Set PROGRAMA_CLI_BIN.")
 
 
 def copy_runtime_frameworks(cli_path: str, fixture_contents: str) -> None:
@@ -145,7 +145,7 @@ def run_with_limits(cli_path: str, *args: str) -> dict[str, object]:
 
 def main() -> int:
     try:
-        cli_path = resolve_cmux_cli()
+        cli_path = resolve_programa_cli()
     except Exception as exc:
         print(f"FAIL: {exc}")
         return 1

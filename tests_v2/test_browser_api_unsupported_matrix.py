@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
+from v2_support import must as _must
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -116,11 +117,6 @@ WKWEBVIEW_NOT_SUPPORTED = {
     "browser.input_keyboard": {"args": ["type", "hello"]},
     "browser.input_touch": {"args": ["tap", "10", "10"]},
 }
-
-
-def _must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
 
 
 def _expect_not_supported(c: cmux, method: str, params: dict) -> str:
