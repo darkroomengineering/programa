@@ -5002,6 +5002,32 @@ final class ExternalOpenPolicyTests: XCTestCase {
         XCTAssertFalse(ExternalOpenPolicy.targetIsExecutable(try url("slack://open")))
     }
 
+    func testTargetIsExecutableFollowsSymlinksToBundlesAndExecutables() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+
+        let bundle = dir.appendingPathComponent("Setup.app/Contents/MacOS", isDirectory: true)
+        try fm.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let bundleLink = dir.appendingPathComponent("docs.txt")
+        try fm.createSymbolicLink(at: bundleLink, withDestinationURL: dir.appendingPathComponent("Setup.app"))
+        XCTAssertTrue(ExternalOpenPolicy.targetIsExecutable(bundleLink), "a symlink to an app bundle must prompt")
+
+        let script = dir.appendingPathComponent("payload")
+        try "#!/bin/sh\n".write(to: script, atomically: true, encoding: .utf8)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        let scriptLink = dir.appendingPathComponent("readme.md")
+        try fm.createSymbolicLink(at: scriptLink, withDestinationURL: script)
+        XCTAssertTrue(ExternalOpenPolicy.targetIsExecutable(scriptLink), "a symlink to an executable must prompt")
+
+        let text = dir.appendingPathComponent("notes.txt")
+        try "x".write(to: text, atomically: true, encoding: .utf8)
+        let textLink = dir.appendingPathComponent("alias.txt")
+        try fm.createSymbolicLink(at: textLink, withDestinationURL: text)
+        XCTAssertFalse(ExternalOpenPolicy.targetIsExecutable(textLink))
+    }
+
     func testAllowlistRoundTripsThroughDefaults() throws {
         let suite = "ExternalOpenPolicyTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

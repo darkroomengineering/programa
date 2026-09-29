@@ -649,11 +649,16 @@ enum ExternalOpenPolicy {
     static func targetIsExecutable(_ url: URL, fileManager: FileManager = .default) -> Bool {
         guard url.isFileURL else { return false }
         if executableExtensions.contains(url.pathExtension.lowercased()) { return true }
+        // LaunchServices opens what a symlink points at, so judge the resolved target.
+        let resolved = url.resolvingSymlinksInPath()
+        if executableExtensions.contains(resolved.pathExtension.lowercased()) { return true }
         var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
-            return false
+        guard fileManager.fileExists(atPath: resolved.path, isDirectory: &isDirectory) else { return false }
+        if isDirectory.boolValue {
+            // Bundles and packages (apps, installers) launch rather than open for reading.
+            return NSWorkspace.shared.isFilePackage(atPath: resolved.path)
         }
-        return fileManager.isExecutableFile(atPath: url.path)
+        return fileManager.isExecutableFile(atPath: resolved.path)
     }
 
     static func requirement(
