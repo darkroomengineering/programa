@@ -9222,7 +9222,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No password set. External clients will be blocked until one is configured."
+            "value": "No password set. All clients will be blocked until one is configured."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パスワードが設定されていません。設定するまで、すべてのクライアントがブロックされます。"
           }
         }
       }
@@ -12140,7 +12146,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Require socket authentication with a password stored in a local file."
+            "value": "Only processes started inside Programa terminals can connect, and each connection must also authenticate with the password stored in a local file."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programa のターミナル内で起動されたプロセスのみ接続でき、各接続はローカルファイルに保存されたパスワードでの認証も必要です。"
           }
         }
       }

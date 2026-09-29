@@ -1500,7 +1500,12 @@ class TerminalController {
         return v2Error(id: id, code: "auth_required", message: message)
     }
 
-    private func passwordLoginV2ResponseIfNeeded(for command: String, authenticated: inout Bool) -> String? {
+    private func passwordLoginV2ResponseIfNeeded(
+        for command: String,
+        authenticated: inout Bool,
+        failureLimiter: inout SocketAuthFailureLimiter,
+        shouldCloseConnection: inout Bool
+    ) -> String? {
         guard command.hasPrefix("{"),
               let data = command.data(using: .utf8),
               let dict = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] else {
@@ -1530,6 +1535,7 @@ class TerminalController {
         }
 
         guard credentialSource.verify(provided) else {
+            shouldCloseConnection = failureLimiter.recordFailure()
             return v2Error(id: id, code: "auth_failed", message: "Invalid password")
         }
         authenticated = true
@@ -1539,12 +1545,19 @@ class TerminalController {
     private func authResponseIfNeeded(
         for command: String,
         authenticated: inout Bool,
+        failureLimiter: inout SocketAuthFailureLimiter,
+        shouldCloseConnection: inout Bool,
         requestPolicy: SocketRequestPolicy
     ) -> String? {
         guard requestPolicy.requiresPasswordAuthentication else {
             return nil
         }
-        if let v2Response = passwordLoginV2ResponseIfNeeded(for: command, authenticated: &authenticated) {
+        if let v2Response = passwordLoginV2ResponseIfNeeded(
+            for: command,
+            authenticated: &authenticated,
+            failureLimiter: &failureLimiter,
+            shouldCloseConnection: &shouldCloseConnection
+        ) {
             return v2Response
         }
         if !authenticated {
@@ -1800,9 +1813,10 @@ class TerminalController {
             return
         }
 
-        // In cmuxOnly mode, verify the connecting process is a descendant of cmux.
-        // In allowAll mode (env-var only), skip the ancestry check.
-        if unixPolicy != nil, requestPolicy.accessMode == .cmuxOnly {
+        // In cmuxOnly and password modes, verify the connecting process is a descendant of cmux
+        // (password mode adds authentication on top of the ancestry check, never replaces it).
+        // In automation and allowAll modes, skip the ancestry check.
+        if unixPolicy != nil, requestPolicy.accessMode == .cmuxOnly || requestPolicy.accessMode == .password {
             // Use pre-captured peer PID if available (captured in accept loop before
             // the peer can disconnect), falling back to live lookup.
             guard let pid = peerPid ?? getPeerPid(socket) else {
@@ -1826,6 +1840,7 @@ class TerminalController {
         var buffer = [UInt8](repeating: 0, count: 4096)
         var pending = Data()
         var authenticated = false
+        var failureLimiter = SocketAuthFailureLimiter()
 
         connectionLoop: while true {
             let bytesRead = read(socket, &buffer, buffer.count - 1)
@@ -1864,12 +1879,19 @@ class TerminalController {
                 let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { continue }
 
+                var closeAfterResponse = false
                 if let authResponse = authResponseIfNeeded(
                     for: trimmed,
                     authenticated: &authenticated,
+                    failureLimiter: &failureLimiter,
+                    shouldCloseConnection: &closeAfterResponse,
                     requestPolicy: requestPolicy
                 ) {
                     connection.writeLine(authResponse)
+                    if closeAfterResponse {
+                        closeReason = "auth_failed_limit"
+                        break connectionLoop
+                    }
                     continue
                 }
 

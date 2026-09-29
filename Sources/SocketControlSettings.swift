@@ -1,4 +1,5 @@
 import Darwin
+import CryptoKit
 import Foundation
 #if canImport(Security)
 import Security
@@ -40,7 +41,7 @@ enum SocketControlMode: String, CaseIterable, Identifiable, Sendable {
         case .automation:
             return String(localized: "socketControl.automation.description", defaultValue: "Allow external local automation clients from this macOS user (no ancestry check).")
         case .password:
-            return String(localized: "socketControl.password.description", defaultValue: "Require socket authentication with a password stored in a local file.")
+            return String(localized: "socketControl.password.description", defaultValue: "Only processes started inside Programa terminals can connect, and each connection must also authenticate with the password stored in a local file.")
         case .allowAll:
             return String(localized: "socketControl.allowAll.description", defaultValue: "Allow any local process and user to connect with no auth. Unsafe.")
         }
@@ -57,6 +58,18 @@ enum SocketControlMode: String, CaseIterable, Identifiable, Sendable {
 
     var requiresPasswordAuth: Bool {
         self == .password
+    }
+}
+
+/// Counts failed `auth.login` attempts on one connection.
+struct SocketAuthFailureLimiter {
+    static let maxFailures = 5
+    private var failures = 0
+
+    /// Returns true when the connection has used up its attempts and must be closed.
+    mutating func recordFailure() -> Bool {
+        failures += 1
+        return failures >= Self.maxFailures
     }
 }
 
@@ -129,7 +142,19 @@ enum SocketControlPasswordStore {
         ), !expected.isEmpty else {
             return false
         }
-        return expected == candidate
+        return constantTimeEquals(expected, candidate)
+    }
+
+    /// Compares SHA-256 digests with a loop that never exits early, so timing reveals neither
+    /// the password length nor how many leading bytes matched.
+    static func constantTimeEquals(_ lhs: String, _ rhs: String) -> Bool {
+        let a = Array(SHA256.hash(data: Data(lhs.utf8)))
+        let b = Array(SHA256.hash(data: Data(rhs.utf8)))
+        var difference: UInt8 = 0
+        for index in 0..<a.count {
+            difference |= a[index] ^ b[index]
+        }
+        return difference == 0
     }
 
     static func migrateLegacyKeychainPasswordIfNeeded(

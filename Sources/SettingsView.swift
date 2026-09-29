@@ -957,7 +957,7 @@ struct SettingsView: View {
                     String(localized: "settings.automation.socketPassword", defaultValue: "Socket Password"),
                     subtitle: hasSocketPasswordConfigured
                         ? String(localized: "settings.automation.socketPassword.subtitleSet", defaultValue: "Stored in Application Support.")
-                        : String(localized: "settings.automation.socketPassword.subtitleUnset", defaultValue: "No password set. External clients will be blocked until one is configured.")
+                        : String(localized: "settings.automation.socketPassword.subtitleUnset", defaultValue: "No password set. All clients will be blocked until one is configured.")
                 ) {
                     HStack(spacing: 8) {
                         SecureField(String(localized: "settings.automation.socketPassword.placeholder", defaultValue: "Password"), text: $socketPasswordDraft)
