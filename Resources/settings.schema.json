@@ -370,6 +370,19 @@
           "default": [],
           "description": "Rules that always open matching URLs in the system browser."
         },
+        "externalBrowser": {
+          "type": "string",
+          "default": "",
+          "description": "Bundle identifier of the browser used for http(s) links that open outside Programa, for example com.apple.Safari. Empty uses the macOS default browser."
+        },
+        "externalAppOpenAllowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Bundle identifiers of apps for which you chose Always allow in the external app open prompt. Links that open these apps skip the prompt."
+        },
         "insecureHttpHostsAllowedInEmbeddedBrowser": {
           "type": "array",
           "items": {
@@ -440,6 +453,7 @@
               "quit",
               "toggleSidebar",
               "newTab",
+              "newClaudeWorkspace",
               "openFolder",
               "goToWorkspace",
               "commandPalette",
@@ -455,6 +469,7 @@
               "selectWorkspaceByNumber",
               "renameTab",
               "renameWorkspace",
+              "editWorkspaceDescription",
               "closeTab",
               "closeOtherTabsInPane",
               "closeWorkspace",
@@ -484,11 +499,97 @@
               "hideFind",
               "useSelectionForFind",
               "toggleBrowserDeveloperTools",
-              "showBrowserJavaScriptConsole"
+              "showBrowserJavaScriptConsole",
+              "openReview",
+              "openAgentOverview"
             ]
           },
           "additionalProperties": {
             "$ref": "#/$defs/shortcutBinding"
+          }
+        }
+      }
+    },
+    "windows": {
+      "title": "windows",
+      "description": "Settings read by the Windows frontend only. The macOS app ignores this section.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shortcuts": {
+          "title": "shortcuts",
+          "description": "Windows keyboard bindings keyed by action. A binding is modifiers and one key joined by hyphens, for example ctrl-shift-t. Modifiers are ctrl, alt and shift; the key is one letter or digit, comma or insert. ctrl-c, ctrl-d and ctrl-w are reserved for the terminal, and no two actions can share a binding.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+          "open_settings": {
+            "type": "string",
+            "default": "ctrl-comma"
+          },
+          "new_tab": {
+            "type": "string",
+            "default": "ctrl-shift-t"
+          },
+          "close_tab": {
+            "type": "string",
+            "default": "ctrl-shift-w"
+          },
+          "split_vertical": {
+            "type": "string",
+            "default": "ctrl-shift-d"
+          },
+          "split_horizontal": {
+            "type": "string",
+            "default": "ctrl-shift-e"
+          },
+          "select_tab_1": {
+            "type": "string",
+            "default": "alt-1"
+          },
+          "select_tab_2": {
+            "type": "string",
+            "default": "alt-2"
+          },
+          "select_tab_3": {
+            "type": "string",
+            "default": "alt-3"
+          },
+          "select_tab_4": {
+            "type": "string",
+            "default": "alt-4"
+          },
+          "select_tab_5": {
+            "type": "string",
+            "default": "alt-5"
+          },
+          "select_tab_6": {
+            "type": "string",
+            "default": "alt-6"
+          },
+          "select_tab_7": {
+            "type": "string",
+            "default": "alt-7"
+          },
+          "select_tab_8": {
+            "type": "string",
+            "default": "alt-8"
+          },
+          "select_tab_9": {
+            "type": "string",
+            "default": "alt-9"
+          },
+          "copy": {
+            "type": "string",
+            "default": "ctrl-shift-c"
+          },
+          "paste": {
+            "type": "string",
+            "default": "ctrl-shift-v"
+          },
+          "paste_alternate": {
+            "type": "string",
+            "default": "shift-insert"
+          }
           }
         }
       }
