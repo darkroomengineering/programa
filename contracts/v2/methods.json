@@ -3098,6 +3098,9 @@
       "params": {
         "additionalProperties": false,
         "properties": {
+          "all_domains": {
+            "type": "boolean"
+          },
           "path": {
             "type": "string"
           },

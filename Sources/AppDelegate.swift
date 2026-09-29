@@ -16,6 +16,62 @@ private enum ProgramaThemeNotifications {
     static let reloadConfig = Notification.Name("com.darkroom.programa.themes.reload-config")
 }
 
+/// Debounces distributed theme-reload requests and skips a reload when the config files are
+/// byte-for-byte as they were at the previous reload (same modification date and size).
+@MainActor
+final class ThemeReloadCoalescer {
+    private let debounce: TimeInterval
+    private var pending: DispatchWorkItem?
+    private var lastFingerprint: [String]?
+
+    init(debounce: TimeInterval = 0.25) {
+        self.debounce = debounce
+    }
+
+    func request(fingerprint: @escaping () -> [String], reload: @escaping () -> Void) {
+        pending?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let current = fingerprint()
+                if current == self.lastFingerprint { return }
+                self.lastFingerprint = current
+                reload()
+            }
+        }
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + debounce, execute: work)
+    }
+
+    /// Modification date and size of the config files a theme change writes. Ceiling: files pulled in
+    /// through `config-file` includes and theme files are not fingerprinted, so a change confined to
+    /// one of them does not force a reload; the manual reload shortcut still applies it.
+    static func configFingerprint(fileManager: FileManager = .default) -> [String] {
+        var paths: [String] = []
+        let home = fileManager.homeDirectoryForCurrentUser
+        if let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            var bundleIdentifiers = ["com.darkroom.programa", "com.mitchellh.ghostty"]
+            if let current = Bundle.main.bundleIdentifier, !bundleIdentifiers.contains(current) {
+                bundleIdentifiers.append(current)
+            }
+            for id in bundleIdentifiers {
+                for name in ["config", "config.ghostty"] {
+                    paths.append(appSupport.appendingPathComponent(id).appendingPathComponent(name).path)
+                }
+            }
+        }
+        for name in ["config", "config.ghostty"] {
+            paths.append(home.appendingPathComponent(".config/ghostty/\(name)").path)
+        }
+        return paths.map { path in
+            guard let attributes = try? fileManager.attributesOfItem(atPath: path) else { return "\(path)|missing" }
+            let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            let size = (attributes[.size] as? NSNumber)?.intValue ?? -1
+            return "\(path)|\(modified)|\(size)"
+        }
+    }
+}
+
 /// Association key for retaining `MainWindowToolbarDelegate` on its window --
 /// `NSToolbar.delegate` is weak, so without this the delegate is deallocated
 /// immediately and the toolbar silently loses its item provider.
@@ -767,7 +823,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private static func detectRunningUnderXCTest(_ env: [String: String]) -> Bool {
         if SessionMachineryGate.isUnitTesting { return true }
+#if DEBUG
         if env.keys.contains(where: { $0.hasPrefix("PROGRAMA_UI_TEST_") }) { return true }
+#endif
         return false
     }
 
@@ -859,6 +917,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     var shortcutLayoutCharacterProvider: (UInt16, NSEvent.ModifierFlags) -> String? = KeyboardLayout.character(forKeyCode:modifierFlags:)
     private var workspaceObserver: NSObjectProtocol?
     private var lifecycleSnapshotObservers: [NSObjectProtocol] = []
+    private let themeReloadCoalescer = ThemeReloadCoalescer()
     private var windowKeyObserver: NSObjectProtocol?
     private var mainWindowFullScreenToolbarObservers: [NSObjectProtocol] = []
     private var shortcutMonitor: Any?
@@ -2575,7 +2634,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// record in the always-on diagnostics log if it ever happens again.
     private func handleSystemDidWake() {
         dilog("wake.lifecycle", "didWake")
-        restartSocketListenerIfEnabled(source: "workspace.didWake")
+        restartSocketListenerIfDead(source: "workspace.didWake")
         SessionEscrowClient.shared.notifySystemDidWake()
         RendererRealizationController.shared.scheduleImmediatePass()
     }
@@ -2587,6 +2646,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let mode = SocketControlSettings.effectiveMode(userMode: userMode)
         guard mode != .off else { return nil }
         return (mode: mode, path: SocketControlSettings.socketPath())
+    }
+
+    /// Restarts the listener only when it is not serving. A restart drops every connected
+    /// client, so a listener that survived the wake is left alone; a stale accept loop, a
+    /// missing or replaced socket file, or a refused connection all count as dead.
+    func restartSocketListenerIfDead(source: String) {
+        guard let config = socketListenerConfigurationIfEnabled() else { return }
+        let expectedPath = TerminalController.shared.activeSocketPath(preferredPath: config.path)
+        let health = TerminalController.shared.socketListenerHealth(expectedSocketPath: expectedPath)
+        guard health.isHealthy else {
+            dilog("wake.lifecycle", "socket unhealthy signals=\(health.failureSignals.joined(separator: ",")); restarting")
+            restartSocketListenerIfEnabled(source: source)
+            return
+        }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let reachable = TerminalController.probeSocketConnect(at: expectedPath, timeout: 0.5)
+            guard !reachable else { return }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    dilog("wake.lifecycle", "socket connect probe failed; restarting")
+                    self?.restartSocketListenerIfEnabled(source: source)
+                }
+            }
+        }
     }
 
     func restartSocketListenerIfEnabled(source: String) {
@@ -5504,11 +5587,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         let content = DesignModeTextComposer.compose(payload: payload, screenshotPath: screenshotPath)
         manager.focusTab(workspaceId, surfaceId: returnPanelId, suppressFlash: true)
-        sendTextWhenReady(content, to: workspace, preferredPanelId: returnPanelId)
-    }
-
-    nonisolated private static func debugShortId(_ id: UUID?) -> String {
-        id.map { String($0.uuidString.prefix(5)) } ?? "nil"
+        sendTextWhenReady(content, to: workspace, preferredPanelId: returnPanelId, afterSend: { [weak workspace] terminalPanel in
+            // Submit only inside a pane the agent-detection state already knows hosts an agent;
+            // a plain shell must never receive an implicit Return.
+            // A blocked agent is waiting on a permission or y/n prompt; never answer that with a capture.
+            guard let workspace,
+                  let presence = workspace.panelAgentPresence[returnPanelId],
+                  presence.state != .blocked,
+                  !presence.isStale(now: Date()) else { return }
+            terminalPanel.sendInput("\r")
+        })
     }
 
     static func resolveTerminalPanelForTextSend(in tab: Workspace, preferredPanelId: UUID? = nil) -> TerminalPanel? {
@@ -5518,73 +5606,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return tab.focusedTerminalPanel
     }
 
+    /// Sends `text` to a terminal in `tab` once its surface exists. `afterSend` runs right after
+    /// the text is written. When the surface is still not ready after 3 seconds the text is
+    /// dropped and the user is told through an app notification.
     func sendTextWhenReady(
         _ text: String,
         to tab: Workspace,
         preferredPanelId: UUID? = nil,
-        beforeSend: (() -> Void)? = nil
+        beforeSend: (() -> Void)? = nil,
+        afterSend: ((TerminalPanel) -> Void)? = nil
     ) {
-        let isDesignModePasteback = preferredPanelId != nil
-#if DEBUG
-        let initialTargetPanel = Self.resolveTerminalPanelForTextSend(
-            in: tab,
-            preferredPanelId: preferredPanelId
-        )
-        if isDesignModePasteback {
-            dlog(
-                "reactGrab.pasteback h2.send.start " +
-                "workspace=\(Self.debugShortId(tab.id)) " +
-                "preferred=\(Self.debugShortId(preferredPanelId)) " +
-                "focused=\(Self.debugShortId(tab.focusedPanelId)) " +
-                "focusedTerminal=\(Self.debugShortId(tab.focusedTerminalPanel?.id)) " +
-                "resolved=\(Self.debugShortId(initialTargetPanel?.id)) " +
-                "surfaceReady=\(initialTargetPanel?.surface.surface != nil ? 1 : 0) len=\(text.count)"
-            )
-        }
-#endif
         if let terminalPanel = Self.resolveTerminalPanelForTextSend(
             in: tab,
             preferredPanelId: preferredPanelId
         ),
            terminalPanel.surface.surface != nil {
-#if DEBUG
-            if isDesignModePasteback {
-                dlog(
-                    "reactGrab.pasteback h2.send.immediate " +
-                    "workspace=\(Self.debugShortId(tab.id)) " +
-                    "target=\(Self.debugShortId(terminalPanel.id)) len=\(text.count)"
-                )
-            }
-#endif
             beforeSend?()
             terminalPanel.sendText(text)
-#if DEBUG
-            if isDesignModePasteback {
-                dlog(
-                    "reactGrab.pasteback h2.send.sent " +
-                    "workspace=\(Self.debugShortId(tab.id)) " +
-                    "target=\(Self.debugShortId(terminalPanel.id)) mode=immediate len=\(text.count)"
-                )
-            }
-#endif
+            afterSend?(terminalPanel)
             return
         }
 
         var resolved = false
         var readyObserver: NSObjectProtocol?
-        var focusObserver: NSObjectProtocol?
-        var firstResponderObserver: NSObjectProtocol?
         var panelsCancellable: AnyCancellable?
 
         func cleanupObservers() {
             if let readyObserver {
                 NotificationCenter.default.removeObserver(readyObserver)
-            }
-            if let focusObserver {
-                NotificationCenter.default.removeObserver(focusObserver)
-            }
-            if let firstResponderObserver {
-                NotificationCenter.default.removeObserver(firstResponderObserver)
             }
             panelsCancellable?.cancel()
         }
@@ -5594,18 +5643,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 in: tab,
                 preferredPanelId: preferredPanelId
             )
-#if DEBUG
-            if isDesignModePasteback {
-                dlog(
-                    "reactGrab.pasteback h2.finishIfReady " +
-                    "workspace=\(Self.debugShortId(tab.id)) " +
-                    "preferred=\(Self.debugShortId(preferredPanelId)) " +
-                    "focused=\(Self.debugShortId(tab.focusedPanelId)) " +
-                    "resolved=\(Self.debugShortId(terminalPanel?.id)) " +
-                    "surfaceReady=\(terminalPanel?.surface.surface != nil ? 1 : 0) alreadyResolved=\(resolved ? 1 : 0)"
-                )
-            }
-#endif
             guard !resolved,
                   let terminalPanel,
                   terminalPanel.surface.surface != nil else { return }
@@ -5613,73 +5650,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             cleanupObservers()
             beforeSend?()
             terminalPanel.sendText(text)
-#if DEBUG
-            if isDesignModePasteback {
-                dlog(
-                    "reactGrab.pasteback h2.send.sent " +
-                    "workspace=\(Self.debugShortId(tab.id)) " +
-                    "target=\(Self.debugShortId(terminalPanel.id)) mode=delayed len=\(text.count)"
-                )
-            }
-#endif
+            afterSend?(terminalPanel)
         }
 
         panelsCancellable = tab.$panels
             .map { _ in () }
-            .sink { _ in
-#if DEBUG
-                if isDesignModePasteback {
-                    dlog(
-                        "reactGrab.pasteback h2.panelsChanged " +
-                        "workspace=\(Self.debugShortId(tab.id)) " +
-                        "focused=\(Self.debugShortId(tab.focusedPanelId))"
-                    )
-                }
-#endif
-                finishIfReady()
-            }
-        if isDesignModePasteback {
-            focusObserver = NotificationCenter.default.addObserver(
-                forName: .ghosttyDidFocusSurface,
-                object: nil,
-                queue: .main
-            ) { note in
-                guard let candidateTabId = note.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
-                      candidateTabId == tab.id,
-                      let candidateSurfaceId = note.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID else {
-                    return
-                }
-#if DEBUG
-                dlog(
-                    "reactGrab.pasteback h1.focusEvent " +
-                    "workspace=\(Self.debugShortId(candidateTabId)) " +
-                    "surface=\(Self.debugShortId(candidateSurfaceId)) " +
-                    "target=\(Self.debugShortId(preferredPanelId)) " +
-                    "match=\(candidateSurfaceId == preferredPanelId ? 1 : 0)"
-                )
-#endif
-            }
-            firstResponderObserver = NotificationCenter.default.addObserver(
-                forName: .ghosttyDidBecomeFirstResponderSurface,
-                object: nil,
-                queue: .main
-            ) { note in
-                guard let candidateTabId = note.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
-                      candidateTabId == tab.id,
-                      let candidateSurfaceId = note.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID else {
-                    return
-                }
-#if DEBUG
-                dlog(
-                    "reactGrab.pasteback h1.firstResponderEvent " +
-                    "workspace=\(Self.debugShortId(candidateTabId)) " +
-                    "surface=\(Self.debugShortId(candidateSurfaceId)) " +
-                    "target=\(Self.debugShortId(preferredPanelId)) " +
-                    "match=\(candidateSurfaceId == preferredPanelId ? 1 : 0)"
-                )
-#endif
-            }
-        }
+            .sink { _ in finishIfReady() }
         readyObserver = NotificationCenter.default.addObserver(
             forName: .terminalSurfaceDidBecomeReady,
             object: nil,
@@ -5689,17 +5665,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 guard let workspaceId = note.userInfo?["workspaceId"] as? UUID,
                       workspaceId == tab.id else { return }
                 let surfaceId = note.userInfo?["surfaceId"] as? UUID
-#if DEBUG
-                if isDesignModePasteback {
-                    dlog(
-                        "reactGrab.pasteback h2.surfaceReadyEvent " +
-                        "workspace=\(Self.debugShortId(workspaceId)) " +
-                        "surface=\(Self.debugShortId(surfaceId)) " +
-                        "target=\(Self.debugShortId(preferredPanelId)) " +
-                        "match=\(surfaceId == preferredPanelId ? 1 : 0)"
-                    )
-                }
-#endif
                 if let preferredPanelId,
                    let surfaceId,
                    surfaceId != preferredPanelId {
@@ -5710,19 +5675,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             if !resolved {
-#if DEBUG
-                if isDesignModePasteback {
-                    dlog(
-                        "reactGrab.pasteback h2.send.timeout " +
-                        "workspace=\(Self.debugShortId(tab.id)) " +
-                        "preferred=\(Self.debugShortId(preferredPanelId)) " +
-                        "focused=\(Self.debugShortId(tab.focusedPanelId)) " +
-                        "focusedTerminal=\(Self.debugShortId(tab.focusedTerminalPanel?.id))"
-                    )
-                }
-#endif
+                resolved = true
                 cleanupObservers()
                 NSLog("Command send: surface not ready after 3.0s")
+                TerminalNotificationStore.shared.postAppNotification(
+                    title: String(
+                        localized: "terminal.sendText.notReady.title",
+                        defaultValue: "Couldn\u{2019}t send text to the terminal"
+                    ),
+                    body: String(
+                        localized: "terminal.sendText.notReady.body",
+                        defaultValue: "The terminal wasn\u{2019}t ready after 3 seconds, so nothing was sent."
+                    )
+                )
             }
         }
     }
@@ -10870,7 +10835,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
 private extension AppDelegate {
     @objc func handleThemesReloadNotification(_ notification: Notification) {
-        DispatchQueue.main.async {
+        themeReloadCoalescer.request(fingerprint: { ThemeReloadCoalescer.configFingerprint() }) {
             GhosttyApp.shared.reloadConfiguration(source: "distributed.cmux.themes")
         }
     }

@@ -20,6 +20,36 @@ enum CLISocketPathSource {
     case implicitDefault
 }
 
+/// Checks applied by every client before and after it connects to a control socket.
+enum CLISocketSafety {
+    enum PathCheck: Equatable {
+        case ok
+        case missing(errno: Int32)
+        case symlink
+        case notSocket
+        case foreignOwner
+    }
+
+    /// Uses `lstat`, so a symlink planted at the socket path is rejected instead of followed.
+    static func checkPath(_ path: String) -> PathCheck {
+        var st = stat()
+        guard lstat(path, &st) == 0 else { return .missing(errno: errno) }
+        let type = st.st_mode & mode_t(S_IFMT)
+        if type == mode_t(S_IFLNK) { return .symlink }
+        guard type == mode_t(S_IFSOCK) else { return .notSocket }
+        guard st.st_uid == getuid() else { return .foreignOwner }
+        return .ok
+    }
+
+    /// True when the process on the other end of the connected socket runs as the current user.
+    static func peerUIDMatchesCurrentUser(fd: Int32) -> Bool {
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        guard getpeereid(fd, &uid, &gid) == 0 else { return false }
+        return uid == geteuid()
+    }
+}
+
 enum CLISocketPathResolver {
     private static let appSupportDirectoryName = "programa"
     private static let stableSocketFileName = "programa.sock"
@@ -73,8 +103,13 @@ enum CLISocketPathResolver {
             candidates.append("/tmp/programa-\(slug).sock")
         }
 
-        candidates.append(requestedPath)
+        // The App Support socket lives in an owner-only directory; /tmp is world-writable, so the
+        // legacy /tmp path is tried after it.
+        if requestedPath != legacyDefaultSocketPath {
+            candidates.append(requestedPath)
+        }
         candidates.append(defaultSocketPath)
+        candidates.append(requestedPath)
         candidates.append(legacyDefaultSocketPath)
         candidates.append(fallbackSocketPath)
         candidates.append(stagingSocketPath)
@@ -134,7 +169,7 @@ enum CLISocketPathResolver {
     }
 
     private static func canConnect(to path: String) -> Bool {
-        guard isSocketFile(path) else { return false }
+        guard CLISocketSafety.checkPath(path) == .ok else { return false }
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
         defer { Darwin.close(fd) }
@@ -154,7 +189,7 @@ enum CLISocketPathResolver {
                 Darwin.connect(fd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        return result == 0
+        return result == 0 && CLISocketSafety.peerUIDMatchesCurrentUser(fd: fd)
     }
 
     private static func sanitizeTagSlug(_ raw: String) -> String {

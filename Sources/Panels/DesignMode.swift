@@ -1,6 +1,7 @@
 import Foundation
 import WebKit
 import AppKit
+import Bonsplit
 
 // MARK: - Design Mode
 //
@@ -67,6 +68,7 @@ struct DesignModePickRect: Equatable {
 struct DesignModePickPayload: Equatable {
     static let htmlTruncationLimit = 4000
     static let truncationMarker = "\n... [truncated]"
+    static let fieldLengthLimit = 2000
 
     let html: String
     let css: [String: String]
@@ -76,10 +78,20 @@ struct DesignModePickPayload: Equatable {
 
     init(html: String, css: [String: String], selector: String, rect: DesignModePickRect, url: String) {
         self.html = Self.truncatedHTML(html)
-        self.css = css
-        self.selector = selector
+        // The page script is untrusted and these fields land in a terminal: no line breaks, bounded length.
+        var cleanCSS: [String: String] = [:]
+        for (key, value) in css {
+            cleanCSS[Self.singleLine(key)] = Self.singleLine(value)
+        }
+        self.css = cleanCSS
+        self.selector = Self.singleLine(selector)
         self.rect = rect
-        self.url = url
+        self.url = Self.singleLine(url)
+    }
+
+    static func singleLine(_ value: String) -> String {
+        let stripped = value.unicodeScalars.filter { $0 != "\n" && $0 != "\r" }
+        return String(String.UnicodeScalarView(stripped).prefix(fieldLengthLimit))
     }
 
     /// Parses the `pick` message body posted from the injected picker script.
@@ -263,6 +275,18 @@ func activateDesignModeRoute(in workspace: Workspace) -> Bool {
 
 private let designModeMessageHandlerName = "programaDesignMode"
 
+/// A `pick` posted by the page script counts only when it follows a real click in the web view;
+/// the script itself cannot be trusted to prove a user acted.
+enum DesignModePickGate {
+    static let window: TimeInterval = 1.5
+
+    static func accepts(lastNativeMouseDown: TimeInterval?, now: TimeInterval) -> Bool {
+        guard let lastNativeMouseDown else { return false }
+        let elapsed = now - lastNativeMouseDown
+        return elapsed >= 0 && elapsed <= window
+    }
+}
+
 enum DesignModeBridgeMessage {
     case stateChange(isActive: Bool)
     case pick(payload: DesignModePickPayload)
@@ -293,6 +317,12 @@ class DesignModeMessageHandler: NSObject, WKScriptMessageHandler {
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
+        guard message.frameInfo.isMainFrame else {
+#if DEBUG
+            dlog("designMode.message dropped: not main frame")
+#endif
+            return
+        }
         guard let body = message.body as? [String: Any],
               let bridgeMessage = DesignModeBridgeMessage(body: body) else { return }
         Task { @MainActor in
@@ -500,6 +530,16 @@ extension BrowserPanel {
         case .stateChange(let isActive):
             isDesignModeActive = isActive
         case .pick(let payload):
+            let lastMouseDown = (webView as? ProgramaWebView)?.lastPrimaryMouseDownTimestamp
+            guard DesignModePickGate.accepts(
+                lastNativeMouseDown: lastMouseDown,
+                now: ProcessInfo.processInfo.systemUptime
+            ) else {
+#if DEBUG
+                dlog("designMode.pick dropped: no recent native click")
+#endif
+                return
+            }
             guard let returnPanelId = pendingDesignModeReturnTargetPanelId else {
                 // No return terminal armed (e.g. focused directly inside the browser panel with
                 // no terminal to return to): drop the capture.

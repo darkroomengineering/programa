@@ -5861,3 +5861,78 @@ final class TerminalControllerV2RefInvariantTests: XCTestCase {
         XCTAssertNotEqual(refA2, refB)
     }
 }
+
+final class BrowserStateExportPolicyTests: XCTestCase {
+    func testCookieDomainsMatchOnlyTheCurrentSite() {
+        let match = TerminalController.V2BrowserStateExport.cookieMatchesSite
+        XCTAssertTrue(match("example.com", "example.com"))
+        XCTAssertTrue(match(".example.com", "www.example.com"), "parent-domain cookies apply to the host")
+        XCTAssertTrue(match("api.example.com", "example.com"), "subdomain cookies of the host are part of the site")
+        XCTAssertTrue(match("WWW.Example.COM", "www.example.com"))
+        XCTAssertFalse(match("evil-example.com", "example.com"))
+        XCTAssertFalse(match("example.com.evil.test", "example.com"))
+        XCTAssertFalse(match("other.test", "example.com"))
+        XCTAssertFalse(match(".example.com", ""), "no page host means nothing matches")
+    }
+
+    func testPrivateFileWriteUses0600AndReplacesExistingFiles() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let target = dir.appendingPathComponent("state.json")
+
+        try Data("old".utf8).write(to: target)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: target.path)
+
+        try TerminalController.V2BrowserStateExport.writePrivateFile(Data("new".utf8), to: target.path)
+
+        XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "new")
+        let mode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(mode.intValue & 0o777, 0o600)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["state.json"], "no temp file left behind")
+    }
+
+    func testPrivateFileWriteFailsWhenDirectoryIsMissing() {
+        XCTAssertThrowsError(
+            try TerminalController.V2BrowserStateExport.writePrivateFile(
+                Data("x".utf8),
+                to: "/nonexistent-\(UUID().uuidString)/state.json"
+            )
+        )
+    }
+}
+
+@MainActor
+final class ThemeReloadCoalescerTests: XCTestCase {
+    func testBurstOfRequestsReloadsOnceAfterTheDebounce() {
+        let coalescer = ThemeReloadCoalescer(debounce: 0.05)
+        var reloads = 0
+        let done = expectation(description: "reload")
+        for _ in 0..<5 {
+            coalescer.request(fingerprint: { ["a"] }, reload: {
+                reloads += 1
+                done.fulfill()
+            })
+        }
+        wait(for: [done], timeout: 2)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        XCTAssertEqual(reloads, 1)
+    }
+
+    func testUnchangedFingerprintSkipsTheNextReloadButChangeReloads() {
+        let coalescer = ThemeReloadCoalescer(debounce: 0.01)
+        var reloads = 0
+        func fire(_ fingerprint: [String]) {
+            let done = expectation(description: "settled")
+            done.isInverted = false
+            coalescer.request(fingerprint: { fingerprint }, reload: { reloads += 1 })
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { done.fulfill() }
+            wait(for: [done], timeout: 2)
+        }
+        fire(["v1"])
+        fire(["v1"])
+        XCTAssertEqual(reloads, 1)
+        fire(["v2"])
+        XCTAssertEqual(reloads, 2)
+    }
+}

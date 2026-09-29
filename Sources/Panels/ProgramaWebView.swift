@@ -505,6 +505,10 @@ final class ProgramaWebView: WKWebView {
     // clicks when a WKWebView is underneath — AppKit delivers the click to the deepest
     // NSView (WKWebView), not to sibling SwiftUI overlays. Notify the panel system so
     // bonsplit focus tracks which pane the user clicked in.
+    /// `NSEvent.timestamp` (system uptime) of the last native left mouse-down. Design Mode uses it
+    /// to reject `pick` messages that were not preceded by a real click.
+    private(set) var lastPrimaryMouseDownTimestamp: TimeInterval?
+
     override func mouseDown(with event: NSEvent) {
 #if DEBUG
         let windowNumber = window?.windowNumber ?? -1
@@ -515,6 +519,7 @@ final class ProgramaWebView: WKWebView {
             "pointerDepth=\(pointerFocusAllowanceDepth) win=\(windowNumber) fr=\(firstResponderType)"
         )
 #endif
+        lastPrimaryMouseDownTimestamp = event.timestamp
         NotificationCenter.default.post(name: .webViewDidReceiveClick, object: self)
         withPointerFocusAllowance {
             super.mouseDown(with: event)

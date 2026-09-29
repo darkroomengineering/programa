@@ -12417,13 +12417,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No password set. External clients will be blocked until one is configured."
+            "value": "No password set. All clients will be blocked until one is configured."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "パスワードが未設定です。設定するまで外部クライアントはブロックされます。"
+            "value": "パスワードが設定されていません。設定するまで、すべてのクライアントがブロックされます。"
           }
         }
       }
@@ -16157,13 +16157,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Require socket authentication with a password stored in a local file."
+            "value": "Any process from this macOS user can connect after authenticating with the password stored in a local file."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ローカルファイルに保存されたパスワードによるソケット認証を要求します。"
+            "value": "この macOS ユーザーのプロセスは、ローカルファイルに保存されたパスワードで認証すると接続できます。"
           }
         }
       }
@@ -19071,6 +19071,108 @@
           "stringUnit": {
             "state": "translated",
             "value": "使用方法: programa omc [omc-args...]\n\nprograma のペインとネイティブに連携した状態で Oh My Claude Code (OMC) を起動します。\n\nOMC は Claude Code 向けのマルチエージェント・オーケストレーション・システムで、\n専門エージェント、スマートなモデルルーティング、チームパイプラインを備えています。\nこのコマンドは tmux シムを設定し、OMC のチームモードとエージェントのペインを\nprograma のネイティブな分割として表示します。\n\nこのコマンドは次の処理を行います:\n  - OMC が programa の分割を使うよう tmux 互換の環境を設定\n  - 専用の tmux シムを PATH の先頭に追加\n  - Claude との互換性のため NODE_OPTIONS の復元モジュールを注入\n  - 残りの引数をすべて omc に渡す\n\nインストール: npm install -g oh-my-claude-sisyphus\n\n例:\n  programa omc\n  programa omc team 3:claude \"implement feature\"\n  programa omc --watch"
+          }
+        }
+      }
+    },
+    "externalOpen.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in %@?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ で開きますか？"
+          }
+        }
+      }
+    },
+    "externalOpen.defaultAppName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the default app"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既定のアプリ"
+          }
+        }
+      }
+    },
+    "externalOpen.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開く"
+          }
+        }
+      }
+    },
+    "externalOpen.alwaysAllow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always allow for this app"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアプリでは常に許可する"
+          }
+        }
+      }
+    },
+    "terminal.sendText.notReady.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t send text to the terminal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルにテキストを送信できませんでした"
+          }
+        }
+      }
+    },
+    "terminal.sendText.notReady.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The terminal wasn’t ready after 3 seconds, so nothing was sent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3秒待ってもターミナルの準備ができなかったため、何も送信されていません。"
           }
         }
       }
