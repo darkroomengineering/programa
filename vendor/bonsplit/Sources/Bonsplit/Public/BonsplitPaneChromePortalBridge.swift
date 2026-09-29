@@ -5,6 +5,10 @@ import Foundation
 public enum BonsplitPaneChromeMenuItem {
     case separator
     case action(title: String, action: TabContextAction, isEnabled: Bool)
+    /// A nested menu (used for the Tab Color submenu).
+    indirect case submenu(title: String, items: [BonsplitPaneChromeMenuItem])
+    /// A palette swatch that applies `hex` to the tab through `onApplyTabColor`.
+    case tabColor(title: String, hex: String, swatch: NSColor)
 }
 
 /// Read-only tab state consumed by the native pane chrome renderer.
@@ -17,6 +21,8 @@ public struct BonsplitPaneChromeTabDescriptor {
     public let isPinned: Bool
     public let isDirty: Bool
     public let showsNotificationBadge: Bool
+    /// Optional "#RRGGBB" tint for the tab.
+    public let customColorHex: String?
     public let accessibilityValue: String
     public let menuItems: [BonsplitPaneChromeMenuItem]
 
@@ -29,6 +35,7 @@ public struct BonsplitPaneChromeTabDescriptor {
         isPinned: Bool,
         isDirty: Bool,
         showsNotificationBadge: Bool,
+        customColorHex: String? = nil,
         accessibilityValue: String,
         menuItems: [BonsplitPaneChromeMenuItem]
     ) {
@@ -40,6 +47,7 @@ public struct BonsplitPaneChromeTabDescriptor {
         self.isPinned = isPinned
         self.isDirty = isDirty
         self.showsNotificationBadge = showsNotificationBadge
+        self.customColorHex = customColorHex
         self.accessibilityValue = accessibilityValue
         self.menuItems = menuItems
     }
@@ -57,6 +65,7 @@ public final class BonsplitPaneChromeDescriptor {
     public let onSelect: (TabID) -> Void
     public let onClose: (TabID) -> Void
     public let onContextAction: (TabID, TabContextAction) -> Void
+    public let onApplyTabColor: (TabID, String) -> Void
     public let dragPasteboardData: (TabID) -> Data?
     public let onDragStateChanged: (TabID, Bool) -> Void
     public let validatedDropIndex: (Int) -> Int?
@@ -77,6 +86,7 @@ public final class BonsplitPaneChromeDescriptor {
         onSelect: @escaping (TabID) -> Void,
         onClose: @escaping (TabID) -> Void,
         onContextAction: @escaping (TabID, TabContextAction) -> Void,
+        onApplyTabColor: @escaping (TabID, String) -> Void = { _, _ in },
         dragPasteboardData: @escaping (TabID) -> Data?,
         onDragStateChanged: @escaping (TabID, Bool) -> Void,
         validatedDropIndex: @escaping (Int) -> Int?,
@@ -96,6 +106,7 @@ public final class BonsplitPaneChromeDescriptor {
         self.onSelect = onSelect
         self.onClose = onClose
         self.onContextAction = onContextAction
+        self.onApplyTabColor = onApplyTabColor
         self.dragPasteboardData = dragPasteboardData
         self.onDragStateChanged = onDragStateChanged
         self.validatedDropIndex = validatedDropIndex

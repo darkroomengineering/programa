@@ -53,6 +53,22 @@ struct TabItem: Identifiable, Hashable, Codable {
         self.customColorHex = customColorHex
     }
 
+    init(from tab: Tab) {
+        self.init(
+            id: tab.id.id,
+            title: tab.title,
+            hasCustomTitle: tab.hasCustomTitle,
+            icon: tab.icon,
+            iconImageData: tab.iconImageData,
+            kind: tab.kind,
+            isDirty: tab.isDirty,
+            showsNotificationBadge: tab.showsNotificationBadge,
+            isLoading: tab.isLoading,
+            isPinned: tab.isPinned,
+            customColorHex: tab.customColorHex
+        )
+    }
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
