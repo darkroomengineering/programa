@@ -3770,7 +3770,7 @@ struct ProgramaCLI {
                     "browser console <list|clear>",
                     "browser errors <list|clear>",
                     "browser highlight <selector>",
-                    "browser state <save|load> <path>",
+                    "browser state <save|load> <path> [--all-domains]",
                     "browser addinitscript <script>",
                     "browser addscript <script>",
                     "browser addstyle <css>",

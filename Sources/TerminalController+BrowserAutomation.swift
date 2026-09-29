@@ -257,6 +257,53 @@ extension TerminalController {
         }
     }
 
+    enum V2BrowserStateExport {
+        /// True when a cookie's domain belongs to the page's site: the cookie applies to the page
+        /// host (equal or parent domain) or is scoped to a subdomain of it.
+        static func cookieMatchesSite(_ cookieDomain: String, _ pageHost: String) -> Bool {
+            let host = pageHost.lowercased()
+            guard !host.isEmpty else { return false }
+            var domain = cookieDomain.lowercased()
+            if domain.hasPrefix(".") { domain.removeFirst() }
+            guard !domain.isEmpty else { return false }
+            return host == domain || host.hasSuffix("." + domain) || domain.hasSuffix("." + host)
+        }
+
+        /// Writes `data` to a new 0600 temp file next to `path`, fsyncs it, then renames it over
+        /// `path`, so the file is never observable with wider permissions or half written.
+        static func writePrivateFile(_ data: Data, to path: String) throws {
+            let url = URL(fileURLWithPath: path)
+            let tempPath = url.deletingLastPathComponent()
+                .appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp").path
+            let fd = Darwin.open(tempPath, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC | O_NOFOLLOW, 0o600)
+            guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            var succeeded = false
+            defer {
+                if !succeeded { _ = Darwin.unlink(tempPath) }
+            }
+            var writeError: Int32 = 0
+            data.withUnsafeBytes { raw in
+                var offset = 0
+                while offset < raw.count {
+                    let n = Darwin.write(fd, raw.baseAddress! + offset, raw.count - offset)
+                    if n < 0 {
+                        if errno == EINTR { continue }
+                        writeError = errno
+                        return
+                    }
+                    offset += n
+                }
+            }
+            if writeError == 0, Darwin.fsync(fd) != 0 { writeError = errno }
+            if Darwin.close(fd) != 0, writeError == 0 { writeError = errno }
+            if writeError != 0 { throw POSIXError(POSIXErrorCode(rawValue: writeError) ?? .EIO) }
+            guard Darwin.rename(tempPath, path) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            succeeded = true
+        }
+    }
+
     enum V2BrowserStateRestorer {
         static let currentSchemaVersion = 1
 
@@ -5649,9 +5696,14 @@ extension TerminalController {
     }
 
     func v2BrowserStateSave(params: [String: Any]) -> V2CallResult {
-        guard let path = v2String(params, "path") else {
+        guard let rawPath = v2String(params, "path") else {
             return .err(code: "invalid_params", message: "Missing path", data: nil)
         }
+        let path = NSString(string: rawPath).expandingTildeInPath
+        guard path.hasPrefix("/") else {
+            return .err(code: "invalid_params", message: "Path must be absolute: \(path)", data: ["path": path])
+        }
+        let allDomains = v2Bool(params, "all_domains") ?? false
 
         return v2BrowserWithPanel(params: params) { _, ws, surfaceId, browserPanel in
             let storageScript = """
@@ -5681,7 +5733,10 @@ extension TerminalController {
             }
 
             let store = browserPanel.webView.configuration.websiteDataStore.httpCookieStore
-            let cookies = (v2BrowserCookieStoreAll(store) ?? []).map(v2BrowserCookieDict)
+            let pageHost = browserPanel.currentURL?.host ?? ""
+            let cookies = (v2BrowserCookieStoreAll(store) ?? [])
+                .filter { allDomains || V2BrowserStateExport.cookieMatchesSite($0.domain, pageHost) }
+                .map(v2BrowserCookieDict)
 
             let data: Data
             switch V2BrowserStateRestorer.encodeDocument(
@@ -5697,7 +5752,7 @@ extension TerminalController {
             }
 
             do {
-                try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+                try V2BrowserStateExport.writePrivateFile(data, to: path)
             } catch {
                 return .err(code: "internal_error", message: "Failed to write state file", data: ["path": path, "error": error.localizedDescription])
             }
@@ -5708,7 +5763,9 @@ extension TerminalController {
                 "surface_id": surfaceId.uuidString,
                 "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
                 "path": path,
-                "cookies": cookies.count
+                "cookies": cookies.count,
+                "all_domains": allDomains,
+                "note": "The state file contains session cookies and storage that grant access to signed-in accounts. It is readable only by you (0600); keep it private and delete it when done."
             ])
         }
     }

@@ -1118,9 +1118,11 @@ class ProgramaV2Client:
             raise ProgramaV2Error("browser.state.load requires 'path'")
         return self._client._call("browser.state.load", params)
 
-    def browser_state_save(self, path: Optional[Any] = None, surface_id: Optional[Any] = None, tab_id: Optional[Any] = None, window_id: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
+    def browser_state_save(self, all_domains: Optional[Any] = None, path: Optional[Any] = None, surface_id: Optional[Any] = None, tab_id: Optional[Any] = None, window_id: Optional[Any] = None, workspace_id: Optional[Any] = None, **extra_params: Any) -> Any:
         """Embedded browser automation (Playwright-like RPC surface). (save)."""
         params: Dict[str, Any] = {}
+        if all_domains is not None:
+            params["all_domains"] = all_domains
         if path is not None:
             params["path"] = path
         if surface_id is not None:

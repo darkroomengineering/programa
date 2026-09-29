@@ -943,7 +943,8 @@ enum BrowserTools {
             description: "Saves a browser surface's cookies and localStorage/sessionStorage to a JSON file on disk, for later restoring with browser_state_load.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
-                    "path": ProgramaToolSchema.string("File path to write the saved state to."),
+                    "path": ProgramaToolSchema.string("Absolute file path to write the saved state to. The file is created with 0600 permissions and contains credentials."),
+                    "all_domains": ProgramaToolSchema.boolean("Export cookies for every site in the browser profile instead of only the current page's site. Default false."),
                     "surface_id": surfaceIdProperty(),
                     "window_id": ProgramaToolSchema.windowIdProperty,
                     "workspace_id": ProgramaToolSchema.workspaceIdProperty,
