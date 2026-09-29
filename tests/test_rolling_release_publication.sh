@@ -35,9 +35,10 @@ set -euo pipefail
 #       --reconciler-target-sha <checked-out-trigger-sha>
 #
 # GitHub Actions serializes reconciler jobs externally. The helper creates no
-# persistent lock. It discovers the greatest sealed decimal build, validates
-# and downloads every candidate
-# asset through authenticated gh calls, then reconciles the rolling release.
+# persistent lock. It reads only the candidate bound to the reconciler's target
+# SHA, validating and downloading its assets through authenticated gh calls, then
+# reconciles the rolling release. Candidates bound to other commits are never
+# downloaded or validated.
 # Before mutation it verifies the seal and all payload attestations against the release
 # workflow on refs/heads/main with self-hosted runners denied, and requires a
 # completed successful main-branch push CI run for the sealed target SHA.
@@ -48,15 +49,16 @@ set -euo pipefail
 # rolling is intentionally reused; candidate integrity comes from its sealed
 # bytes and attestations instead. Rolling reconciles the Sparkle enclosure
 # (programa-macos-<build>.dmg, uploaded before the feed that points at it),
-# appcast.xml, and the stable macOS and Windows aliases; dSYMs and the
-# versioned EXE remain on the draft candidate. Enclosures older than the keep
+# appcast.xml, and the stable macOS alias plus the stable Windows alias when the
+# candidate carries the Windows pair (a candidate sealed without it leaves the
+# previous Windows alias in place); dSYMs and the versioned EXE remain on the
+# draft candidate. Enclosures older than the keep
 # window are pruned from rolling after convergence. Metadata and latest status
 # change before the rolling ref moves. Rolling must already exist as the
 # legacy mutable release; missing or immutable state fails. After promotion,
-# every other draft candidate at or below the finalized build is deleted,
-# keeping exactly the just-promoted candidate draft as a private rollback
-# archive (retention 1) so the releases page never shows more than the one
-# `rolling` entry.
+# the newest five draft candidates at or below the finalized build stay as
+# private rollback archives and older ones are deleted, so the releases page
+# never shows more than the one `rolling` entry.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CANDIDATE_HELPER="${ROOT_DIR}/scripts/publish_release_candidate.sh"
@@ -1038,8 +1040,8 @@ assert_rolling_converged 103; assert_published_archive 103
 # A promotion seals its build-specific payload in-place before either mutable
 # rolling alias changes. Repeated promotions replace the feed and two aliases
 # and add exactly one per-build enclosure (dSYMs and the versioned EXE stay on
-# the candidate), and each promotion deletes the previous candidate draft
-# (retention 1) once the new one is in place.
+# the candidate), and each promotion prunes candidate drafts beyond the retention
+# window once the new one is in place.
 reset_state
 seed_rolling 100
 seed_release_decoys 1005

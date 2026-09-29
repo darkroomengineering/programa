@@ -410,6 +410,10 @@ while IFS=$'\t' read -r tag is_draft is_prerelease is_immutable candidate_target
   # successful ship. A bad draft for some other commit must never fail this ship.
   if [[ "${candidate_target}" != "${RECONCILER_TARGET_SHA}" ]]; then
     other_candidate_count=$((other_candidate_count + 1))
+    if [[ "${is_draft}" != "true" ]]; then
+      # Pruning only ever deletes drafts, so a leaked public candidate needs a human.
+      echo "::warning::candidate ${tag} for another target is published, not a draft"
+    fi
     continue
   fi
   # Candidates are never published: they stay drafts for their whole
