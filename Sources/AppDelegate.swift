@@ -2575,7 +2575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// record in the always-on diagnostics log if it ever happens again.
     private func handleSystemDidWake() {
         dilog("wake.lifecycle", "didWake")
-        restartSocketListenerIfEnabled(source: "workspace.didWake")
+        restartSocketListenerIfDead(source: "workspace.didWake")
         SessionEscrowClient.shared.notifySystemDidWake()
         RendererRealizationController.shared.scheduleImmediatePass()
     }
@@ -2587,6 +2587,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let mode = SocketControlSettings.effectiveMode(userMode: userMode)
         guard mode != .off else { return nil }
         return (mode: mode, path: SocketControlSettings.socketPath())
+    }
+
+    /// Restarts the listener only when it is not serving. A restart drops every connected
+    /// client, so a listener that survived the wake is left alone; a stale accept loop, a
+    /// missing or replaced socket file, or a refused connection all count as dead.
+    func restartSocketListenerIfDead(source: String) {
+        guard let config = socketListenerConfigurationIfEnabled() else { return }
+        let expectedPath = TerminalController.shared.activeSocketPath(preferredPath: config.path)
+        let health = TerminalController.shared.socketListenerHealth(expectedSocketPath: expectedPath)
+        guard health.isHealthy else {
+            dilog("wake.lifecycle", "socket unhealthy signals=\(health.failureSignals.joined(separator: ",")); restarting")
+            restartSocketListenerIfEnabled(source: source)
+            return
+        }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let reachable = TerminalController.probeSocketConnect(at: expectedPath, timeout: 0.5)
+            guard !reachable else { return }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    dilog("wake.lifecycle", "socket connect probe failed; restarting")
+                    self?.restartSocketListenerIfEnabled(source: source)
+                }
+            }
+        }
     }
 
     func restartSocketListenerIfEnabled(source: String) {
