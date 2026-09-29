@@ -565,9 +565,11 @@ private class PopupNavigationDelegate: NSObject, WKNavigationDelegate {
 
         // External URL schemes → hand off to macOS
         if browserShouldOpenURLExternally(url) {
-            NSWorkspace.shared.open(url)
+            if ExternalOpenPolicy.navigationTypeHasUserGesture(navigationAction.navigationType) {
+                BrowserLinkOpenSettings.openExternally(url)
+            }
             #if DEBUG
-            dlog("popup.nav.external url=\(url.absoluteString)")
+            dlog("popup.nav.external url=\(url.absoluteString) gesture=\(ExternalOpenPolicy.navigationTypeHasUserGesture(navigationAction.navigationType) ? 1 : 0)")
             #endif
             decisionHandler(.cancel)
             return

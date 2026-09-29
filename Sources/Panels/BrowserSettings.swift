@@ -296,11 +296,15 @@ enum BrowserLinkOpenSettings {
     }
 
     /// Opens a web link outside Programa. Only http(s) URLs go to the preferred browser;
-    /// every other scheme (mailto:, slack://, file:) keeps its macOS-registered handler.
-    /// The preferred-browser launch is asynchronous, so `true` means the launch was
-    /// dispatched, not that it finished; a launch error is logged, not surfaced.
+    /// mailto: keeps its macOS-registered handler. Every other scheme and every file
+    /// target goes through `ExternalOpenPolicy` and opens only after the user confirms.
+    /// The launch is asynchronous, so `true` means the launch (or the confirmation
+    /// prompt) was dispatched, not that it finished; a launch error is logged, not surfaced.
     @discardableResult
     static func openExternally(_ url: URL, defaults: UserDefaults = .standard, workspace: NSWorkspace = .shared) -> Bool {
+        if !ExternalOpenPolicy.opensWithoutPrompt(url) {
+            return ExternalOpenPolicy.confirmAndOpen(url, defaults: defaults, workspace: workspace)
+        }
         let scheme = url.scheme?.lowercased()
         let isWebLink = scheme == "http" || scheme == "https"
         let bundleIdentifier = externalBrowserBundleIdentifier(defaults: defaults)
@@ -615,4 +619,130 @@ enum BrowserUserAgentSettings {
 enum BrowserInsecureHTTPNavigationIntent {
     case currentTab
     case newTab
+}
+
+/// One policy for every hand-off to another app. http, https and mailto open silently;
+/// everything else asks first, naming the app that would receive the target.
+enum ExternalOpenPolicy {
+    static let allowlistKey = "browserExternalAppOpenAllowlist"
+    static let maxRemembered = 200
+
+    private static let freeSchemes: Set<String> = ["http", "https", "mailto"]
+    private static let executableExtensions: Set<String> = ["app", "command", "sh", "tool"]
+
+    enum Requirement: Equatable {
+        case openWithoutPrompt
+        case prompt(offerAlwaysAllow: Bool)
+    }
+
+    static func opensWithoutPrompt(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return freeSchemes.contains(scheme)
+    }
+
+    /// Web pages may only reach the prompt through a real link click or form submit.
+    static func navigationTypeHasUserGesture(_ type: WKNavigationType) -> Bool {
+        type == .linkActivated || type == .formSubmitted
+    }
+
+    /// App bundles and anything runnable. These always prompt, even for an allow-listed app.
+    static func targetIsExecutable(_ url: URL, fileManager: FileManager = .default) -> Bool {
+        guard url.isFileURL else { return false }
+        if executableExtensions.contains(url.pathExtension.lowercased()) { return true }
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+            return false
+        }
+        return fileManager.isExecutableFile(atPath: url.path)
+    }
+
+    static func requirement(
+        for url: URL,
+        handlerBundleIdentifier: String?,
+        allowlist: [String],
+        targetIsExecutable: Bool
+    ) -> Requirement {
+        if opensWithoutPrompt(url) { return .openWithoutPrompt }
+        if targetIsExecutable { return .prompt(offerAlwaysAllow: false) }
+        if let handlerBundleIdentifier, allowlist.contains(handlerBundleIdentifier) {
+            return .openWithoutPrompt
+        }
+        return .prompt(offerAlwaysAllow: handlerBundleIdentifier != nil)
+    }
+
+    static func allowlist(defaults: UserDefaults = .standard) -> [String] {
+        (defaults.string(forKey: allowlistKey) ?? "")
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    static func addToAllowlist(_ bundleIdentifier: String, defaults: UserDefaults = .standard) {
+        let trimmed = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("\n") else { return }
+        var entries = allowlist(defaults: defaults)
+        guard !entries.contains(trimmed), entries.count < maxRemembered else { return }
+        entries.append(trimmed)
+        defaults.set(entries.joined(separator: "\n"), forKey: allowlistKey)
+    }
+
+    static func applicationDisplayName(at appURL: URL) -> String {
+        let name = FileManager.default.displayName(atPath: appURL.path)
+        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+
+    /// Opens `url` if policy allows, otherwise shows a confirmation sheet on the key window.
+    /// The sheet never activates the app. With no window to attach to the open is refused.
+    @discardableResult
+    static func confirmAndOpen(
+        _ url: URL,
+        defaults: UserDefaults = .standard,
+        workspace: NSWorkspace = .shared,
+        window: NSWindow? = nil
+    ) -> Bool {
+        let handlerURL = workspace.urlForApplication(toOpen: url)
+        let handlerBundleIdentifier = handlerURL.flatMap { Bundle(url: $0)?.bundleIdentifier }
+        let requirement = requirement(
+            for: url,
+            handlerBundleIdentifier: handlerBundleIdentifier,
+            allowlist: allowlist(defaults: defaults),
+            targetIsExecutable: targetIsExecutable(url)
+        )
+        switch requirement {
+        case .openWithoutPrompt:
+            return workspace.open(url)
+        case let .prompt(offerAlwaysAllow):
+            guard let sheetWindow = window ?? NSApp.keyWindow ?? NSApp.mainWindow else {
+                NSLog("ExternalOpenPolicy: no window to confirm opening %@; refused", url.absoluteString)
+                return false
+            }
+            let appName = handlerURL.map(applicationDisplayName(at:))
+                ?? String(localized: "externalOpen.defaultAppName", defaultValue: "the default app")
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "externalOpen.title", defaultValue: "Open in \(appName)?")
+            alert.informativeText = url.isFileURL ? url.path : url.absoluteString
+            alert.addButton(withTitle: String(localized: "externalOpen.open", defaultValue: "Open"))
+            alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
+            if offerAlwaysAllow {
+                alert.showsSuppressionButton = true
+                alert.suppressionButton?.title = String(
+                    localized: "externalOpen.alwaysAllow",
+                    defaultValue: "Always allow for this app"
+                )
+            }
+            alert.beginSheetModal(for: sheetWindow) { response in
+                guard response == .alertFirstButtonReturn else { return }
+                if offerAlwaysAllow,
+                   alert.suppressionButton?.state == .on,
+                   let handlerBundleIdentifier {
+                    addToAllowlist(handlerBundleIdentifier, defaults: defaults)
+                }
+                if !workspace.open(url) {
+                    NSLog("ExternalOpenPolicy: failed to open %@", url.absoluteString)
+                }
+            }
+            return true
+        }
+    }
 }
