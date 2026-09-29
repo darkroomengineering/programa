@@ -108,6 +108,7 @@ enum SessionRestorePolicy {
     static func isRunningUnderAutomatedTests(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
+#if DEBUG
         if environment["PROGRAMA_UI_TEST_MODE"] == "1" {
             return true
         }
@@ -133,6 +134,10 @@ enum SessionRestorePolicy {
             return true
         }
         return false
+#else
+        // Release builds never treat environment variables as a test harness signal.
+        return false
+#endif
     }
 
     static func shouldAttemptRestore(

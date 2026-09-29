@@ -821,7 +821,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private static func detectRunningUnderXCTest(_ env: [String: String]) -> Bool {
         if SessionMachineryGate.isUnitTesting { return true }
+#if DEBUG
         if env.keys.contains(where: { $0.hasPrefix("PROGRAMA_UI_TEST_") }) { return true }
+#endif
         return false
     }
 
