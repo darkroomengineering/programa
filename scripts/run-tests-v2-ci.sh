@@ -61,6 +61,15 @@ if [ ! -x "$CMUXTERM_CLI" ]; then
 fi
 export CMUXTERM_CLI
 
+# test_mcp_server_e2e.py looks in DerivedData paths a CI runner does not use, so hand it the
+# binary shipped inside the app bundle.
+PROGRAMA_MCP_BIN="$APP/Contents/Resources/bin/programa-mcp"
+if [ ! -x "$PROGRAMA_MCP_BIN" ]; then
+  echo "ERROR: programa-mcp binary not found or not executable at $PROGRAMA_MCP_BIN" >&2
+  exit 1
+fi
+export PROGRAMA_MCP_BIN
+
 if [ ! -f "$SUBSET_FILE" ]; then
   echo "ERROR: Subset file not found: $SUBSET_FILE" >&2
   exit 1
