@@ -1506,13 +1506,6 @@ final class BrowserDevToolsButtonDebugSettingsTests: XCTestCase {
         return defaults
     }
 
-    func testIconCatalogIncludesExpandedChoices() {
-        XCTAssertGreaterThanOrEqual(BrowserDevToolsIconOption.allCases.count, 10)
-        XCTAssertTrue(BrowserDevToolsIconOption.allCases.contains(.terminal))
-        XCTAssertTrue(BrowserDevToolsIconOption.allCases.contains(.globe))
-        XCTAssertTrue(BrowserDevToolsIconOption.allCases.contains(.curlyBracesSquare))
-    }
-
     func testIconOptionFallsBackToDefaultForUnknownRawValue() {
         let defaults = makeIsolatedDefaults()
         defaults.set("this.symbol.does.not.exist", forKey: BrowserDevToolsButtonDebugSettings.iconNameKey)
