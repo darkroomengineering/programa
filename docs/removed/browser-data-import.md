@@ -44,7 +44,7 @@ safety net), `Sources/SidebarVisuals.swift` (help menu item), `Sources/Panels/Br
 (`BrowserImportHint*` types/settings), `Sources/DebugWindows.swift` (stray label in a debug preview),
 `Sources/ProgramaSettingsFileStore.swift` and `Resources/settings.schema.json` (`showImportHintOnBlankTabs`
 config key), `Sources/SettingsModels.swift` (`SettingsTab.owning` switch), `programaTests/GhosttyConfigTests.swift`
-(`BrowserInstallDetectorTests`, `BrowserImportScopeTests`), `docs/v2-api-migration.md` (pointed the
+(`BrowserInstallDetectorTests`, `BrowserImportScopeTests`), `docs/socket-api.md` (pointed the
 `app.browsers` doc at the new file, dropped the reference to the removed wizard).
 `Sources/Panels/BrowserProfileStore.swift` was not touched — none of its members existed only for import.
 

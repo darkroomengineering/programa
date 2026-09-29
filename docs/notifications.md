@@ -171,7 +171,7 @@ Programa sets these in child shells:
 | `PROGRAMA_SOCKET_PATH` | Path to control socket |
 | `PROGRAMA_TAB_ID` | UUID of the current tab |
 | `PROGRAMA_PANEL_ID` | UUID of the current panel |
-| `PROGRAMA_DEFAULT_BROWSER` | Short key of the system default browser (e.g. `chrome`, `safari`, `arc`) -- see [v2-api-migration.md](v2-api-migration.md#browser-availability-appbrowsers-programa_default_browser) |
+| `PROGRAMA_DEFAULT_BROWSER` | Short key of the system default browser (e.g. `chrome`, `safari`, `arc`) -- see [socket-api.md](socket-api.md#browser-availability-appbrowsers-programa_default_browser) |
 | `PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID` | Bundle identifier of the system default browser |
 
 ## CLI Commands

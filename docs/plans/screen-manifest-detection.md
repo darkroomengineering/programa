@@ -124,7 +124,7 @@ options were considered:
 so the existing exact-string-equality test keeps passing untouched. A new sibling field
 `agent_state_source` (`"hooks" | "inferred"`, `null` when `agent_state` itself is `null`)
 is added next to it everywhere `agent_state` appears. This is the standard additive-field
-pattern already used throughout the v2 API (see `docs/v2-api-migration.md`'s discipline
+pattern already used throughout the v2 API (see `docs/socket-api.md`'s discipline
 of never repurposing an existing field shape).
 
 ### 1.4 Hooks-always-win: source-tagged storage, not last-write-wins
@@ -313,7 +313,7 @@ Field notes:
 
 Extract this schema section (2.1–2.2) into `docs/agent-detection-manifests.md` during
 implementation, so contributors adding a manifest for e.g. Aider or Cursor Agent don't
-need to read this planning doc. Cross-link from `docs/v2-api-migration.md`'s agent_state
+need to read this planning doc. Cross-link from `docs/socket-api.md`'s agent_state
 section.
 
 ### 2.4 Bundled manifests for v1
@@ -350,7 +350,7 @@ section.
    gains a sibling `"source"` field.
 8. **Modify** `Sources/TerminalController+Subscriptions.swift` — `agent_state` event
    frame gains a sibling `"source"` field.
-9. **Modify** `docs/v2-api-migration.md` — document the new field under both the
+9. **Modify** `docs/socket-api.md` — document the new field under both the
    `surface.wait` and `Socket Event Subscriptions` sections.
 10. **New test**: extend `tests_v2/test_agent_activity_state_socket.py` (or a small new
     file) asserting `agent_state_source == "hooks"` after a `surface.report_agent_state`

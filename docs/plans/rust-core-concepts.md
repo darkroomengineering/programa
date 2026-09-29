@@ -10,8 +10,7 @@ Rust/cross-platform core spec can enumerate what has to be reimplemented.
 
 Nesting: `window` (native macOS window) -> `workspace` (sidebar entry, often called "tab" in the
 UI) -> `pane` (a split region from vendor/bonsplit) -> `surface` (a tab within a pane: terminal or
-browser). `panel` is the internal implementation term for what the public API calls `surface`
-(`docs/agent-browser-port-spec.md:30-40`).
+browser). `panel` is the internal implementation term for what the public API calls `surface`.
 
 - **Window**: `Sources/AppDelegate.swift`, `Sources/WindowAccessor.swift`, `Sources/MainWindowHostingView.swift`, `Sources/WindowChrome.swift`, `Sources/WindowSwizzles.swift`, `Sources/TerminalController+Window.swift`.
 - **Workspace**: `Sources/Workspace.swift` (`final class Workspace: Identifiable, ObservableObject`, `let id: UUID`, `Sources/Workspace.swift:14-15`), plus `Workspace+Bonsplit.swift`, `Workspace+FocusGeometry.swift`, `Workspace+Layout.swift`, `Workspace+Persistence.swift`, `Workspace+SidebarTelemetry.swift`, `Workspace+Surfaces.swift`, `Workspace+Theme.swift`. Owned by `Sources/TabManager.swift` (`class TabManager: ObservableObject`, `@Published var tabs: [Workspace]`, `Sources/TabManager.swift:593,624`) — the manager's own vocabulary is "tabs" even though the public/UI concept is "workspace." Sidebar rendering: `Sources/VerticalTabsSidebar.swift`, `Sources/TabItemView.swift`, `Sources/WorkspaceSidebarModels.swift`.
@@ -72,10 +71,10 @@ close the sender's fd right after `sendmsg`.
 **What survives an app restart today:** with escrow, the live child process and PTY (detached
 sessions). Without/before escrow completes for a given surface, only layout/cwd/scrollback text
 survives (snapshot). Neither mechanism persists env vars, command line, or focus state
-(`v2-api-migration.md`/`layout.save` explicitly excludes "command/env/focus, which have no live
+(`socket-api.md`/`layout.save` explicitly excludes "command/env/focus, which have no live
 'what's running' signal").
 
-## 3. Socket API v2 (`docs/v2-api-migration.md`, `tests_v2/`)
+## 3. Socket API v2 (`docs/socket-api.md`, `tests_v2/`)
 
 JSON-RPC-shaped, one JSON object per line, `{"id","method","params"}` -> `{"id","ok","result"}` /
 `{"id","ok":false,"error":{"code","message"}}`. `auth.login` is a connection preamble, not a
@@ -87,7 +86,7 @@ Full v2 method list by area (authoritative source: `Sources/V2CommandCatalog.swi
 - **System**: `system.ping`, `system.identify`, `system.capabilities`, `rpc` (raw passthrough — CLI `programa rpc`).
 - **Window**: `window.list`, `window.current`, `window.focus` (focus-intent), `window.create`, `window.close`.
 - **Workspace**: `workspace.list`, `workspace.create`, `workspace.select` (focus-intent), `workspace.current`, `workspace.close`, `workspace.move_to_window`, `workspace.next`/`workspace.previous`/`workspace.last` (focus-intent), `workspace.rename`.
-- **Worktree** (`docs/plans/worktree-and-layouts.md`): `worktree.create`, `worktree.open` (focus-intent, opt-in `focus`), `worktree.remove`, `worktree.list`. Params/errors detailed in `docs/mcp-server.md`/`v2-api-migration.md:458-511`.
+- **Worktree** (`docs/plans/worktree-and-layouts.md`): `worktree.create`, `worktree.open` (focus-intent, opt-in `focus`), `worktree.remove`, `worktree.list`. Params/errors detailed in `docs/mcp-server.md`/`socket-api.md:458-511`.
 - **Layout**: `layout.save`, `layout.apply`, `layout.list`.
 - **Snapshot**: `snapshot.list`, `snapshot.restore` (see §2).
 - **Agent detection**: `agent.detection.list`, `agent.detection.classify` (see §5).
@@ -97,7 +96,7 @@ Full v2 method list by area (authoritative source: `Sources/V2CommandCatalog.swi
 - **Sidebar metadata** (workspace-scoped): `workspace.set_status`/`clear_status`/`list_status`, `workspace.log`/`clear_log`/`list_log`, `workspace.set_progress`/`clear_progress`, `workspace.sidebar_state`, `workspace.clear_agent_pid`/`set_agent_pid`, `workspace.report_meta_block`/`clear_meta_block`/`list_meta_blocks`, `workspace.reset_sidebar`.
 - **Notification**: `notification.create`, `notification.create_for_surface`, `notification.create_for_target`, `notification.list`, `notification.clear`.
 - **App**: `app.focus_override.set`, `app.simulate_active`, `app.reload_config`, `app.browsers` (lists installed/running browsers + system default; see `Sources/Panels/BrowserAvailability.swift`).
-- **Browser**: `browser.open_split` (focus-intent varies), `browser.navigate`, `browser.back`, `browser.forward`, `browser.reload`, `browser.url.get`, `browser.focus_webview` (focus-intent), `browser.is_webview_focused`, `browser.focus` (focus-intent, element-level), `browser.tab.switch` (focus-intent). Full agent-browser-shaped surface (`browser.snapshot`, `.click`, `.fill`, `.screenshot`, `.console.list`, `.tab.new/close`, etc.) documented in `docs/aside-browser.md` and `docs/agent-browser-port-spec.md`; Playwright-shaped network/viewport/raw-input methods return `not_supported` (no CDP under `WKWebView`).
+- **Browser**: `browser.open_split` (focus-intent varies), `browser.navigate`, `browser.back`, `browser.forward`, `browser.reload`, `browser.url.get`, `browser.focus_webview` (focus-intent), `browser.is_webview_focused`, `browser.focus` (focus-intent, element-level), `browser.tab.switch` (focus-intent). Full agent-browser-shaped surface (`browser.snapshot`, `.click`, `.fill`, `.screenshot`, `.console.list`, `.tab.new/close`, etc.) documented in `docs/aside-browser.md`; Playwright-shaped network/viewport/raw-input methods return `not_supported` (no CDP under `WKWebView`).
 - **Review** (`review.*`, docs/plans/diff-review-panel.md — see §5): `review.open` (focus-intent, opt-in), `review.refresh`, `review.comment.add`, `review.comment.remove`, `review.comment.list`, `review.send_comments`.
 - **Markdown**: `markdown.open` (app-chrome, not MCP-exposed).
 - **Subscriptions**: `subscribe` (`classes`: `agent_state`|`output`|`workspace_lifecycle`; `surface_ids` required for `output`), `unsubscribe`. Push frames use a bare `{"event": ...}` shape, not the request/response envelope; 256-event drop-oldest queue per subscription with a `{"event":"dropped","count"}` marker frame.
@@ -116,7 +115,7 @@ idle, phased: send+register atomically, wait `working_grace_ms` for a `working` 
 prompt-agent`.
 
 **Threading/focus policy** (from root `CLAUDE.md`, cross-referenced throughout
-`v2-api-migration.md`): telemetry hot-path commands must not use `DispatchQueue.main.sync`; only
+`socket-api.md`): telemetry hot-path commands must not use `DispatchQueue.main.sync`; only
 `focusIntentV2Methods` may mutate in-app focus/window activation; everything else must preserve
 the user's current focus while still applying data/model mutations.
 
@@ -144,8 +143,7 @@ in `commandDescriptors()` (`CLI/programa.swift`, one `CommandDescriptor` per nam
 `CLI/CLI+TmuxCompat.swift`), `markdown`, `review`, `recap`, `browser` (with legacy flat aliases
 `open-browser`, `navigate`, `browser-back`, `browser-forward`, `browser-reload`, `get-url`,
 `focus-webview`, `is-webview-focused`), `help`. Command families with their own subcommand sets:
-`CLI/CLI+Aside.swift`, `CLI/CLI+Browser.swift` (49-verb agent-browser-shaped surface — see
-`docs/agent-browser-port-spec.md`), `CLI/CLI+Review.swift`, `CLI/CLI+Markdown.swift`,
+`CLI/CLI+Aside.swift`, `CLI/CLI+Browser.swift` (49-verb agent-browser-shaped surface), `CLI/CLI+Review.swift`, `CLI/CLI+Markdown.swift`,
 `CLI/CLI+Recap.swift`, `CLI/CLI+Themes.swift`, `CLI/CLI+AgentWrappers.swift` (`claude`, `codex`,
 `opencode` install/uninstall-integration), `CLI/CLI+Hooks.swift`/`CLI/CLI+HookCommands.swift`.
 Notifications CLI subset is also documented standalone in `docs/notifications.md`: `programa
@@ -237,11 +235,7 @@ Embedded browser source: `Sources/Panels/BrowserPanel.swift` + companions
 `DesignMode.swift`. Depends on WebKit (`WKWebView`) — there is no Chrome DevTools Protocol
 underneath, so Playwright-shaped tools (`browser_viewport_set`, `browser_network_route`,
 `browser_input_mouse`, etc.) return `not_supported` deliberately rather than failing as unknown
-tools (`docs/mcp-server.md:135-141`). `docs/agent-browser-port-spec.md` is a historical porting-gap
-tracker against `vercel-labs/agent-browser`'s CLI/protocol surface (its "keep v1 working" framing
-is stale — see the doc's own 2026-07-08 historical note — but its "Concepts (Canonical Terms)"
-section §30-40 is the accurate current terminology, and its counted command/flag/protocol-action
-inventory is useful as an upper bound on what a full port would need).
+tools (`docs/mcp-server.md:135-141`).
 
 ## 7. Configuration
 

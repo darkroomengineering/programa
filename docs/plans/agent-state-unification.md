@@ -248,7 +248,7 @@ failing test first, fix second.
 
 Docs to update: docs/notifications.md (the needs-input lifecycle and what the sidebar
 now shows), docs/agent-detection-manifests.md (inferred tier feeds presence),
-docs/plans/agent-events.md (new method alongside the event mapping), docs/v2-api-migration.md
+docs/plans/agent-events.md (new method alongside the event mapping), docs/socket-api.md
 (method list), contracts/v2/methods.json, and the generated Python client
 tests_v2/programa_v2.py via `scripts/gen-v2-contract.py`.
 
