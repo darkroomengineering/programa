@@ -234,61 +234,12 @@ git commit -m "Update ghostty submodule"
 
 ## Release
 
-Single lane: every commit on `main` that passes the `CI` workflow is automatically built,
-signed, notarized, and published as the latest GitHub release via `.github/workflows/release.yml`
-(triggered by `workflow_run` on `CI` completing with `conclusion: success`, on `branches: [main]`).
-There is no nightly/beta channel — if something ships broken, fix it forward on `main` and the
-next green CI run auto-ships the fix. Auto-ship builds get a monotonic build number derived from
-the run ID AND a distinct user-visible version — the committed major.minor with the patch
-replaced by the workflow run number (e.g. `0.4.213`) — both injected into `Info.plist` at
-build time, never committed. They publish to a single, reused `rolling` GitHub release
-(titled with the effective version) that is overwritten each ship and marked "latest" — so
-the releases page stays clean (exactly one `rolling` entry, nothing else) and
-`releases/latest/download/*` always resolves to the newest green build. Every ship is
-therefore distinguishable in the about box and on the releases page.
+Every commit on `main` that passes `CI` is built, signed, notarized and published to the
+single `rolling` GitHub release by `.github/workflows/release.yml`. There is no nightly or
+beta channel; fix broken ships forward on `main`. The build number comes from the workflow
+run id, not from the committed `CURRENT_PROJECT_VERSION`. Milestone bumps use
+`./scripts/bump-version.sh` and a `CHANGELOG.md` entry. macOS ships independently of the
+Windows build.
 
-Each ship also seals a `rolling-candidate-<build>` **draft** release as its build-specific
-payload (the versioned DMG/EXE and dSYMs). Candidates never leave draft state — draft releases
-are invisible on the public releases page and to `releases/latest` — so they never add a
-second entry. After promoting a candidate's assets into `rolling`, the reconciler deletes every
-older candidate draft, keeping exactly the just-promoted one around as a private rollback
-archive (retention 1); download it with `gh release download rolling-candidate-<build> --repo
-darkroomengineering/programa` (requires collaborator access, since it is a draft).
-
-Milestone marketing-version bumps (e.g. `0.15.0` → `0.16.0`) are git tags only — they do not
-create a GitHub release. Bump, tag, and let the next auto-ship pick up the new major.minor:
-
-```bash
-./scripts/bump-version.sh          # bump minor (0.15.0 → 0.16.0)
-./scripts/bump-version.sh patch    # bump patch (0.15.0 → 0.15.1)
-./scripts/bump-version.sh major    # bump major (0.15.0 → 1.0.0)
-./scripts/bump-version.sh 1.0.0    # set specific version
-```
-
-This updates both `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (build number). Then update
-`CHANGELOG.md`, which is the source of truth for the changelog, commit, and optionally tag as a
-milestone marker:
-
-```bash
-git tag vX.Y.Z
-git push origin vX.Y.Z
-```
-
-The tag is a marker in `git log`/`git tag` only; it does not trigger a build or a release. The
-next push to `main` (or the same commit, once CI goes green) ships it through the normal
-auto-ship lane.
-
-Notes:
-- Requires GitHub secrets: `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD`,
-  `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
-- The `rolling` release carries `appcast.xml`, `programa-macos.dmg`, `programa-windows.exe`,
-  and the Sparkle enclosures `programa-macos-<build>.dmg` for the newest builds (keep window in
-  `scripts/sparkle_enclosure.js`; older ones are pruned after each promotion). The appcast must
-  point at `rolling`, not the candidate: GitHub serves no assets from a draft, and a candidate
-  URL 404s for every auto-updating client. dSYMs and the versioned EXE live only on the
-  candidate draft.
-- README download button points to `releases/latest/download/programa-macos.dmg`.
-- Versioning: bump the minor version for milestone tags unless explicitly asked otherwise.
-- Changelog: update `CHANGELOG.md`; it is the source of truth for the changelog.
-- `workflow_dispatch` on `release.yml` still runs a dry-run build that uploads an artifact instead
-  of publishing.
+Full details, the required secrets and the release asset layout are in
+[docs/release.md](docs/release.md).
