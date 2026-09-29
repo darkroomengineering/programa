@@ -16,7 +16,7 @@ SWIFTPM_CACHE_DIR="${PROGRAMA_SWIFTPM_CACHE_DIR:-$HOME/Library/Caches/org.swift.
 DERIVED_DATA_DIR="${PROGRAMA_DERIVED_DATA_DIR:-$HOME/Library/Developer/Xcode/DerivedData}"
 TEST_SCOPE="${PROGRAMA_UNIT_TEST_SCOPE:-serial}"
 STATEFUL_TEST_CLASS="programaTests/AppDelegateShortcutRoutingTests"
-# Alphabetical-half sharding for the "Run unit tests" gate. Splitting is by
+# Weight-balanced sharding for the "Run unit tests" gate. Splitting is by
 # class (not method), same reasoning as QUARANTINED_ON_COMPAT below: stable
 # across runs, and every class still compiles in each shard since
 # -only-testing filters which tests *run*, not what the target compiles.
@@ -89,19 +89,39 @@ QUARANTINED_ON_COMPAT=(
 
 RESULT_BUNDLE_ROOT="${PROGRAMA_RESULT_BUNDLE_ROOT:-/tmp/programa-unit-xcresults}"
 
-# Deterministic alphabetical-half class list for this shard, excluding the
-# stateful class (that always runs unsharded, in shard 1, serially).
+# Deterministic weight-balanced class list for this shard. Classes are assigned greedily,
+# heaviest first, to the currently lightest shard (weights: scripts/unit-test-shard-weights.txt).
+# The stateful class always runs unsharded, in shard 1, serially, so its weight is
+# pre-loaded onto shard 1 rather than assigned.
+WEIGHTS_FILE="${PROGRAMA_UNIT_TEST_SHARD_WEIGHTS:-$ROOT_DIR/scripts/unit-test-shard-weights.txt}"
 shard_classes() {
   "$ROOT_DIR/scripts/list-programa-unit-test-classes.sh" \
     | grep -v '^AppDelegateShortcutRoutingTests$' \
-    | awk -v shard="$SHARD" -v count="$SHARD_COUNT" '
-        { classes[NR] = $0; total = NR }
-        END {
-          per = int((total + count - 1) / count)
-          start = (shard - 1) * per + 1
-          stop = start + per - 1
-          if (stop > total) stop = total
-          for (i = start; i <= stop; i++) print classes[i]
+    | awk -v weights_file="$WEIGHTS_FILE" '
+        BEGIN {
+          default_weight = 6
+          while ((getline line < weights_file) > 0) {
+            if (line ~ /^[[:space:]]*(#|$)/) continue
+            split(line, f, " ")
+            if (f[1] == "DEFAULT") default_weight = f[2] + 0
+            else weight[f[1]] = f[2] + 0
+          }
+        }
+        { printf "%d\t%s\n", ($0 in weight) ? weight[$0] : default_weight, $0 }' \
+    | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2 \
+    | awk -F '\t' -v shard="$SHARD" -v count="$SHARD_COUNT" -v weights_file="$WEIGHTS_FILE" '
+        BEGIN {
+          while ((getline line < weights_file) > 0) {
+            split(line, f, " ")
+            if (f[1] == "AppDelegateShortcutRoutingTests") load[1] = f[2] + 0
+          }
+          for (i = 1; i <= count; i++) load[i] += 0
+        }
+        {
+          best = 1
+          for (i = 2; i <= count; i++) if (load[i] < load[best]) best = i
+          load[best] += $1
+          if (best == shard) print $2
         }'
 }
 
