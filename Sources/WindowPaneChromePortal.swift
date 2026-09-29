@@ -670,6 +670,7 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
                 select: { [weak descriptor] in descriptor?.onSelect(tab.id) },
                 close: { [weak descriptor] in descriptor?.onClose(tab.id) },
                 context: { [weak descriptor] action in descriptor?.onContextAction(tab.id, action) },
+                applyTabColor: { [weak descriptor] hex in descriptor?.onApplyTabColor(tab.id, hex) },
                 dragData: { [weak descriptor] in descriptor?.dragPasteboardData(tab.id) },
                 dragState: { [weak descriptor] active in descriptor?.onDragStateChanged(tab.id, active) }
             )
@@ -952,11 +953,16 @@ private final class NativeGlassTabPillView: NSView, NSDraggingSource {
         select: @escaping () -> Void,
         close: @escaping () -> Void,
         context: @escaping (TabContextAction) -> Void,
+        applyTabColor: @escaping (String) -> Void,
         dragData: @escaping () -> Data?,
         dragState: @escaping (Bool) -> Void
     ) {
-        control.update(tab, select: select, close: close, context: context, dragData: dragData, dragState: dragState)
+        control.update(
+            tab, select: select, close: close, context: context,
+            applyTabColor: applyTabColor, dragData: dragData, dragState: dragState
+        )
         isSelected = tab.isSelected
+        customTint = tab.customColorHex.flatMap { NSColor(hex: $0) }
         control.onHoverChanged = { [weak self] hovering in
             self?.isHovered = hovering
             self?.applySurfaceState()
@@ -966,6 +972,8 @@ private final class NativeGlassTabPillView: NSView, NSDraggingSource {
 
     private var isSelected = false
     private var isHovered = false
+    /// User-chosen tab color; when set it replaces the neutral surface tone.
+    private var customTint: NSColor?
 
     /// Maps-style states: the selected pill reads as a solid lit surface,
     /// hover lifts a quiet pill slightly, unselected pills stay quiet glass.
@@ -976,7 +984,12 @@ private final class NativeGlassTabPillView: NSView, NSDraggingSource {
         // control capsules share it; quiet pills stay untinted. labelColor@0.12
         // is a white lift in dark mode, but the same alpha in light mode is a
         // black wash that reads muddy/pressed — halve it there.
-        if isSelected {
+        if let customTint {
+            // Same low-opacity wash as the SwiftUI tab bar (0.2), lifted a little
+            // for hover/selected so those states stay distinguishable.
+            let alpha: CGFloat = isSelected ? 0.4 : (isHovered ? 0.3 : 0.2)
+            glass.tintColor = customTint.withAlphaComponent(alpha)
+        } else if isSelected {
             glass.tintColor = WindowGlassEffect.surfaceLiftTint(for: effectiveAppearance)
         } else if isHovered {
             glass.tintColor = WindowGlassEffect.surfaceLiftTint(for: effectiveAppearance, hover: true)
@@ -1008,6 +1021,7 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
     private var selectAction: (() -> Void)?
     private var closeAction: (() -> Void)?
     private var contextAction: ((TabContextAction) -> Void)?
+    private var applyTabColorAction: ((String) -> Void)?
     private var dragData: (() -> Data?)?
     private var dragState: ((Bool) -> Void)?
     var onHoverChanged: ((Bool) -> Void)?
@@ -1070,6 +1084,7 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         select: @escaping () -> Void,
         close: @escaping () -> Void,
         context: @escaping (TabContextAction) -> Void,
+        applyTabColor: @escaping (String) -> Void,
         dragData: @escaping () -> Data?,
         dragState: @escaping (Bool) -> Void
     ) {
@@ -1077,6 +1092,7 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         selectAction = select
         closeAction = close
         contextAction = context
+        applyTabColorAction = applyTabColor
         self.dragData = dragData
         self.dragState = dragState
         titleField.stringValue = tab.title
@@ -1187,8 +1203,12 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
 
     override func rightMouseDown(with event: NSEvent) {
         guard let tab else { return }
+        NSMenu.popUpContextMenu(makeMenu(from: tab.menuItems), with: event, for: self)
+    }
+
+    private func makeMenu(from items: [BonsplitPaneChromeMenuItem]) -> NSMenu {
         let menu = NSMenu()
-        for item in tab.menuItems {
+        for item in items {
             switch item {
             case .separator:
                 menu.addItem(.separator())
@@ -1198,9 +1218,28 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
                 menuItem.representedObject = ActionBox(action)
                 menuItem.isEnabled = enabled
                 menu.addItem(menuItem)
+            case .submenu(let title, let children):
+                let menuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                menuItem.submenu = makeMenu(from: children)
+                menu.addItem(menuItem)
+            case .tabColor(let title, let hex, let swatch):
+                let menuItem = NSMenuItem(title: title, action: #selector(applyTabColor(_:)), keyEquivalent: "")
+                menuItem.target = self
+                menuItem.representedObject = hex
+                menuItem.image = NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
+                    swatch.setFill()
+                    NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5)).fill()
+                    return true
+                }
+                menu.addItem(menuItem)
             }
         }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
+        return menu
+    }
+
+    @objc private func applyTabColor(_ sender: NSMenuItem) {
+        guard let hex = sender.representedObject as? String else { return }
+        applyTabColorAction?(hex)
     }
 
     @objc private func closePressed() { closeAction?() }

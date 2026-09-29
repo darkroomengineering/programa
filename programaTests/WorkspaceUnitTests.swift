@@ -5364,22 +5364,30 @@ final class SessionPanelSnapshotTabColorTests: XCTestCase {
         )
     }
 
-    func testCustomColorHexRoundTripsThroughEncodeDecode() throws {
-        let original = makeSnapshot(customColorHex: "#1565C0")
-        let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(SessionPanelSnapshot.self, from: data)
-        XCTAssertEqual(decoded.customColorHex, "#1565C0")
-        XCTAssertEqual(decoded.id, original.id)
+    @MainActor
+    func testWorkspaceTabColorSurvivesSessionRestore() throws {
+        let workspace = Workspace()
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        workspace.setPanelColor(panelId: panelId, hex: "#1565C0")
+
+        let snapshot = workspace.sessionSnapshot(includeScrollback: false)
+        XCTAssertEqual(snapshot.panels.first(where: { $0.id == panelId })?.customColorHex, "#1565C0")
+
+        let restored = Workspace()
+        restored.restoreSessionSnapshot(snapshot)
+
+        let restoredPanelId = try XCTUnwrap(restored.focusedPanelId)
+        XCTAssertEqual(restored.panelColorHexes[restoredPanelId], "#1565C0")
+        let restoredTabId = try XCTUnwrap(restored.surfaceIdFromPanelId(restoredPanelId))
+        XCTAssertEqual(restored.bonsplitController.tab(restoredTabId)?.customColorHex, "#1565C0")
     }
 
     func testMissingCustomColorHexKeyDecodesToNil() throws {
         // Simulates a pre-tab-color session snapshot written before this field existed.
         let legacySnapshot = makeSnapshot(customColorHex: nil)
-        var data = try JSONEncoder().encode(legacySnapshot)
-        var object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let data = try JSONEncoder().encode(legacySnapshot)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertNil(object["customColorHex"], "legacy fixture must not already contain the key")
-        object.removeValue(forKey: "customColorHex")
-        data = try JSONSerialization.data(withJSONObject: object)
 
         let decoded = try JSONDecoder().decode(SessionPanelSnapshot.self, from: data)
         XCTAssertNil(decoded.customColorHex)

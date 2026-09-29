@@ -284,6 +284,7 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
                 isPinned: tab.isPinned,
                 isDirty: tab.isDirty,
                 showsNotificationBadge: tab.showsNotificationBadge,
+                customColorHex: tab.customColorHex,
                 accessibilityValue: accessibilityValue(for: tab),
                 menuItems: menuItems(for: tab, at: index, splitController: splitController)
             )
@@ -342,6 +343,10 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
             onContextAction: { [weak pane, weak bonsplitController] tabID, action in
                 guard let pane, let bonsplitController else { return }
                 bonsplitController.requestTabContextAction(action, for: tabID, inPane: pane.id)
+            },
+            onApplyTabColor: { [weak pane, weak bonsplitController] tabID, hex in
+                guard let pane, let bonsplitController else { return }
+                bonsplitController.requestTabColor(hex, for: tabID, inPane: pane.id)
             },
             dragPasteboardData: { [weak pane, weak splitController] tabID in
                 guard let pane, let splitController,
@@ -486,7 +491,38 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
             action: tab.showsNotificationBadge ? .markAsRead : .markAsUnread,
             isEnabled: true
         ))
+        items.append(.separator)
+        items.append(tabColorSubmenu(for: tab))
         return items
+    }
+
+    private func tabColorSubmenu(for tab: TabItem) -> BonsplitPaneChromeMenuItem {
+        var items: [BonsplitPaneChromeMenuItem] = []
+        if tab.customColorHex != nil {
+            items.append(.action(
+                title: localized("contextMenu.clearColor", defaultValue: "Clear Color"),
+                action: .clearTabColor,
+                isEnabled: true
+            ))
+        }
+        items.append(.action(
+            title: localized("contextMenu.chooseCustomColor", defaultValue: "Choose Custom Color…"),
+            action: .chooseCustomTabColor,
+            isEnabled: true
+        ))
+        let palette = bonsplitController?.tabColorPaletteProvider?() ?? []
+        if !palette.isEmpty { items.append(.separator) }
+        for swatch in palette {
+            items.append(.tabColor(title: swatch.name, hex: swatch.hex, swatch: swatch.swatchColor))
+        }
+        return .submenu(
+            title: localized("contextMenu.tabColor", defaultValue: "Tab Color"),
+            items: items
+        )
+    }
+
+    private func localized(_ key: String, defaultValue: String) -> String {
+        Bundle.module.localizedString(forKey: key, value: defaultValue, table: nil)
     }
 
     private func localized(_ value: String) -> String {

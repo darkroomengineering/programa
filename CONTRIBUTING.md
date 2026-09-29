@@ -4,7 +4,7 @@
 
 - macOS 14+
 - Xcode 26+ (Swift 6 and the macOS 26 SDK)
-- [Zig](https://ziglang.org/) (install via `brew install zig`)
+- [Zig](https://ziglang.org/), the exact version printed by `scripts/required-zig-version.sh` (currently 0.16.0). `brew install zig` may install a different version, which fails the GhosttyKit build
 - [Rust](https://rustup.rs/) with Cargo for the shared application core. Add
   `aarch64-apple-darwin` and `x86_64-apple-darwin` targets when building a
   universal macOS release. The Xcode build compiles and links the core automatically.
@@ -28,7 +28,7 @@ in [docs/windows-testing.md](docs/windows-testing.md).
    ```
 
    This will:
-   - Initialize git submodules (ghostty, homebrew-programa)
+   - Initialize git submodules (ghostty)
    - Build the GhosttyKit.xcframework from source
    - Create the necessary symlinks
 
