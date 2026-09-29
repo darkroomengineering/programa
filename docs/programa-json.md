@@ -106,3 +106,74 @@ matches no declared parameter is left **literal** (including its braces) -- it i
 and never stripped. Substituted values are **not** shell-quoted in `command` templates: the user
 typed them, and quoting would break legitimate uses like passing flags. The confirmation dialog
 showing the final substituted string is the control here, not escaping.
+
+## Layout schema
+
+A `workspace` command's `layout` field describes the panes and splits of a workspace. Saved
+layouts (`programa layout save`) use the same schema. A layout is a tree of two node kinds.
+
+A **pane** holds one or more surfaces (tabs):
+
+```jsonc
+{
+  "pane": {
+    "surfaces": [
+      { "type": "terminal", "name": "server", "command": "npm run dev", "cwd": "app", "env": { "PORT": "3000" } },
+      { "type": "browser", "url": "http://localhost:3000", "focus": true }
+    ]
+  }
+}
+```
+
+A **split** divides space between exactly two children:
+
+```jsonc
+{
+  "direction": "horizontal",
+  "split": 0.4,
+  "children": [ { "pane": { /* ... */ } }, { "pane": { /* ... */ } } ]
+}
+```
+
+| Field | Where | Type | Notes |
+|---|---|---|---|
+| `pane` | node | object | Marks a pane node. A node has `pane` or `direction`, never both. |
+| `pane.surfaces` | pane | array | Required, at least one surface. |
+| `direction` | split | `"horizontal" \| "vertical"` | `horizontal` puts the two children side by side, `vertical` stacks them. |
+| `split` | split | number? | Position of the divider between 0 and 1, clamped to 0.1 to 0.9. Default `0.5`. |
+| `children` | split | array | Required, exactly two nodes (panes or splits). |
+| `surfaces[].type` | surface | `"terminal" \| "browser"` | Required. |
+| `surfaces[].name` | surface | string? | Custom tab title. |
+| `surfaces[].command` | surface | string? | Terminal only. Typed into the terminal with a trailing newline once it is ready. |
+| `surfaces[].cwd` | surface | string? | Terminal only. Absolute, `~`-relative, or relative to the workspace's directory. Empty or `.` means the workspace directory. |
+| `surfaces[].env` | surface | object? | Terminal only. Extra environment variables, string to string. |
+| `surfaces[].url` | surface | string? | Browser only. Page to open. |
+| `surfaces[].focus` | surface | bool? | `true` focuses this surface after the layout is applied. The last one wins. |
+
+A workspace's `color` must be a 6-digit hex value (`#RRGGBB`); anything else fails to load.
+
+## Saved layouts
+
+`programa layout save <name>` captures the selected workspace's pane and split geometry into
+`~/.config/programa/layouts/<name>.json`. `programa layout apply <name>` creates a new, unfocused
+workspace from it, or fills an unused workspace given with `--workspace`. `programa layout list`
+lists the saved names. `save` refuses to overwrite an existing layout unless you pass `--force`.
+A name must be non-empty and cannot contain `/`.
+
+The file wraps the layout in an envelope:
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "name": "fullstack-dev",
+  "savedAt": "2026-09-29T10:00:00Z",
+  "layout": { /* a pane or split node, as above */ }
+}
+```
+
+The file name is the layout's name; if you copy or rename a file, its `name` field is ignored.
+A saved layout records geometry, each terminal's directory (relative to the workspace directory
+where possible), each browser's URL and custom tab titles. It does not record running commands,
+environment variables or focus, and markdown panels are skipped. You can add `command`, `env` and
+`focus` by hand. The `layout.save`, `layout.apply` and `layout.list` socket methods work on the
+same files; see [socket-api.md](socket-api.md).
