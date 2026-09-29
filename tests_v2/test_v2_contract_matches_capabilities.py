@@ -38,20 +38,13 @@ def main() -> int:
             raise cmuxError(f"system.capabilities returned an unexpected shape: {caps!r}")
         advertised = set(caps["methods"])
 
-        # A tagged Debug build (the only kind these tests connect to; see CLAUDE.md's
-        # testing policy) always includes the debug.* methods, so this test intentionally
-        # only ever checks the DEBUG-configuration method set. system.capabilities' own
-        # #if DEBUG branch is exercised by the Swift unit test that checks
-        # V2CommandCatalog.baseMethods against the contract directly.
+        # These tests only ever connect to a tagged Debug build (see CLAUDE.md's testing
+        # policy), and a Debug build always advertises the debug.* methods. A build that
+        # advertises only the base set is therefore a failure, not an accepted variant.
         expected_debug = _contract_methods(debug_build=True)
-        expected_base = _contract_methods(debug_build=False)
 
         if advertised == expected_debug:
             print(f"PASS: system.capabilities advertises exactly the contract's {len(expected_debug)} DEBUG-configuration methods")
-            return 0
-
-        if advertised == expected_base:
-            print(f"PASS: system.capabilities advertises exactly the contract's {len(expected_base)} base (Release-configuration) methods")
             return 0
 
         missing_from_server = expected_debug - advertised

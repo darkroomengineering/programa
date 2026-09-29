@@ -1,0 +1,20 @@
+# Relative cost of the heaviest programaTests classes, used by scripts/ci-run-unit-tests.sh to
+# balance unit-test shards greedily. Classes not listed weigh DEFAULT (6, about the mean test
+# count per class). Weights are test-method counts as a proxy for duration; replace them with
+# measured per-class seconds from a CI xcresult when balance drifts. Format: <ClassName> <weight>.
+DEFAULT 6
+AppDelegateShortcutRoutingTests 134
+SessionPersistenceTests 105
+TerminalControllerSocketSecurityTests 41
+WorkspacePanelGitBranchTests 31
+ProgramaConfigDecodingTests 30
+GhosttyMouseFocusTests 30
+BrowserSnapshotJavaScriptPolicyTests 28
+GhosttyConfigTests 27
+CommandPaletteSearchEngineTests 24
+ZshShellIntegrationHandoffTests 24
+KeyboardShortcutSettingsFileStoreTests 23
+GhosttyPasteboardHelperTests 22
+BrowserWindowPortalLifecycleTests 22
+TerminalControllerV2BrowserStateRestoreTests 21
+NotificationDockBadgeTests 21

@@ -35,6 +35,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
+from v2_support import must as _must
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -43,11 +44,6 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 # round trips and UI update latency.
 GRACE_PERIOD_SECONDS = 5.0
 POST_EXPIRY_MARGIN_SECONDS = 3.0
-
-
-def _must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
 
 
 def _wait_for_surface_count(c: cmux, workspace_id: str, expected: int, timeout_s: float = 8.0):

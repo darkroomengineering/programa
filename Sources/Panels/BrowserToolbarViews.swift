@@ -148,27 +148,8 @@ enum BrowserProfilePopoverDebugSettings {
     }
 }
 
-func resolvedBrowserChromeBackgroundColor(
-    for colorScheme: ColorScheme,
-    themeBackgroundColor: NSColor
-) -> NSColor {
-    switch colorScheme {
-    case .dark, .light:
-        return themeBackgroundColor
-    @unknown default:
-        return themeBackgroundColor
-    }
-}
-
-func resolvedBrowserChromeColorScheme(
-    for colorScheme: ColorScheme,
-    themeBackgroundColor: NSColor
-) -> ColorScheme {
-    let backgroundColor = resolvedBrowserChromeBackgroundColor(
-        for: colorScheme,
-        themeBackgroundColor: themeBackgroundColor
-    )
-    return backgroundColor.isLightColor ? .light : .dark
+func resolvedBrowserChromeColorScheme(themeBackgroundColor: NSColor) -> ColorScheme {
+    themeBackgroundColor.isLightColor ? .light : .dark
 }
 
 func resolvedBrowserOmnibarPillBackgroundColor(
@@ -197,20 +178,13 @@ struct BrowserChromeStyle {
         for colorScheme: ColorScheme,
         themeBackgroundColor: NSColor
     ) -> BrowserChromeStyle {
-        let backgroundColor = resolvedBrowserChromeBackgroundColor(
-            for: colorScheme,
-            themeBackgroundColor: themeBackgroundColor
-        )
-        let chromeColorScheme = resolvedBrowserChromeColorScheme(
-            for: colorScheme,
-            themeBackgroundColor: backgroundColor
-        )
+        let chromeColorScheme = resolvedBrowserChromeColorScheme(themeBackgroundColor: themeBackgroundColor)
         let omnibarPillBackgroundColor = resolvedBrowserOmnibarPillBackgroundColor(
             for: chromeColorScheme,
-            themeBackgroundColor: backgroundColor
+            themeBackgroundColor: themeBackgroundColor
         )
         return BrowserChromeStyle(
-            backgroundColor: backgroundColor,
+            backgroundColor: themeBackgroundColor,
             colorScheme: chromeColorScheme,
             omnibarPillBackgroundColor: omnibarPillBackgroundColor
         )

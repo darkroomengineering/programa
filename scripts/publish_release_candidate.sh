@@ -2,7 +2,10 @@
 set -euo pipefail
 
 readonly SEAL_NAME="programa-release-candidate.json"
-readonly EXPECTED_ASSET_COUNT=6
+# macOS-only candidates carry 4 payloads; the Windows EXE pair makes it 6. The state module
+# validates the exact set, this only bounds it.
+readonly MIN_ASSET_COUNT=4
+readonly MAX_ASSET_COUNT=6
 
 die() {
   echo "publish_release_candidate: $*" >&2
@@ -13,14 +16,15 @@ usage() {
   cat >&2 <<'EOF'
 usage: publish_release_candidate.sh \
   --candidate-prefix <safe-prefix> \
-  --destination-tag <safe-release-tag> \
-  --candidate-tag <candidate-prefix><build>[-<three-digit-attempt>] \
+  --destination-tag rolling \
+  --candidate-tag <candidate-prefix><build> \
   --target-sha <40-lowercase-hex> \
   --build <canonical-positive-decimal> \
   --version <major.minor.build> \
   --seal-output <safe-local-path> \
   [--prepare-only] \
   --asset-role <immutable|appcast|stable-alias>=<path> [--asset-role ...]
+  (4 assets without the Windows EXE pair, 6 with it)
 EOF
 }
 
@@ -120,22 +124,9 @@ done
 [[ "${build}" =~ ^[1-9][0-9]*$ ]] || die "build must be a canonical positive decimal string"
 [[ "${candidate_prefix}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*-$ ]] || die "candidate prefix must be safe and end with a hyphen"
 [[ "${destination_tag}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "destination tag must be safe"
-if [[ "${destination_tag}" == "rolling" ]]; then
-  [[ "${candidate_prefix}" == "rolling-candidate-" ]] || die "rolling candidates must use rolling-candidate-"
-  [[ "${candidate_tag}" == "${candidate_prefix}${build}" ]] || die "rolling candidate tag must be ${candidate_prefix}${build}"
-elif [[ "${candidate_prefix}" == "rolling-candidate-" && "${destination_tag}" == "${candidate_prefix}${build}" ]]; then
-  # Archive candidates publish to their own permanent build tag instead of
-  # the mutable rolling tag or a milestone semver tag.
-  [[ "${candidate_tag}" == "${destination_tag}" ]] || \
-    die "archive candidate tag must equal its destination tag ${destination_tag}"
-else
-  [[ "${destination_tag}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || \
-    die "non-rolling destination must be a canonical milestone tag"
-  [[ "${version}" == "${destination_tag#v}" ]] || die "milestone version must equal the destination tag semver"
-  [[ "${candidate_prefix}" == "milestone-candidate-" ]] || die "milestone candidates must use milestone-candidate-"
-  [[ "${candidate_tag}" =~ ^${candidate_prefix}${build}-[0-9]{3}$ ]] || \
-    die "milestone candidate tag must be ${candidate_prefix}${build}-<three-digit-attempt>"
-fi
+[[ "${destination_tag}" == "rolling" ]] || die "destination tag must be rolling"
+[[ "${candidate_prefix}" == "rolling-candidate-" ]] || die "rolling candidates must use rolling-candidate-"
+[[ "${candidate_tag}" == "${candidate_prefix}${build}" ]] || die "rolling candidate tag must be ${candidate_prefix}${build}"
 [[ "${target_sha}" =~ ^[0-9a-f]{40}$ ]] || die "target SHA must be 40 lowercase hexadecimal characters"
 [[ "${version}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || die "version must be a canonical major.minor.build value"
 [[ -n "${seal_output}" ]] || die "--seal-output is required"
@@ -148,7 +139,9 @@ seal_output_parent="${seal_output%/*}"
 [[ "${seal_output_parent}" != "${seal_output}" ]] || seal_output_parent="."
 [[ -d "${seal_output_parent}" && ! -L "${seal_output_parent}" ]] || die "seal output parent must be a real directory"
 [[ ! -L "${seal_output}" && ! -d "${seal_output}" ]] || die "seal output must not be a symlink or directory"
-((${#asset_specs[@]} == EXPECTED_ASSET_COUNT)) || die "exactly ${EXPECTED_ASSET_COUNT} payload assets are required"
+asset_count=${#asset_specs[@]}
+((asset_count == MIN_ASSET_COUNT || asset_count == MAX_ASSET_COUNT)) || \
+  die "exactly ${MIN_ASSET_COUNT} (macOS only) or ${MAX_ASSET_COUNT} (with Windows) payload assets are required"
 
 gh_command="${GH_BIN-gh}"
 [[ -n "${gh_command}" ]] || die "GH_BIN must not be empty"
@@ -204,7 +197,7 @@ done
 
 manifest_input="${temp_dir}/manifest-assets.tsv"
 : > "${manifest_input}"
-for ((index = 0; index < EXPECTED_ASSET_COUNT; index++)); do
+for ((index = 0; index < asset_count; index++)); do
   printf '%s\t%s\t%s\t%s\n' \
     "${names[index]}" "${roles[index]}" "${sizes[index]}" "${hashes[index]}" >> "${manifest_input}"
 done
@@ -212,7 +205,7 @@ done
 manifest_path="${temp_dir}/${SEAL_NAME}"
 state_module="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/rolling_release_state.js"
 appcast_path=""
-for ((index = 0; index < EXPECTED_ASSET_COUNT; index++)); do
+for ((index = 0; index < asset_count; index++)); do
   case "${names[index]}" in
     appcast.xml) appcast_path="${paths[index]}" ;;
   esac
@@ -430,7 +423,7 @@ upload_or_verify_payload() {
 
 upload_payload_named() {
   local wanted="$1" index
-  for ((index = 0; index < EXPECTED_ASSET_COUNT; index++)); do
+  for ((index = 0; index < asset_count; index++)); do
     if [[ "${names[index]}" == "${wanted}" ]]; then
       upload_or_verify_payload "${index}"
       return
@@ -442,7 +435,7 @@ upload_payload_named() {
 refresh_asset_listing
 if asset_metadata "${SEAL_NAME}" >/dev/null; then
   verify_asset "${SEAL_NAME}" "${manifest_path}" "${manifest_size}" "${manifest_hash}"
-  for ((index = 0; index < EXPECTED_ASSET_COUNT; index++)); do
+  for ((index = 0; index < asset_count; index++)); do
     verify_asset "${names[index]}" "${paths[index]}" "${sizes[index]}" "${hashes[index]}"
   done
   verify_release_metadata
@@ -452,7 +445,7 @@ if asset_metadata "${SEAL_NAME}" >/dev/null; then
 fi
 
 # Reject every conflicting existing payload before adding anything to a partial draft.
-for ((index = 0; index < EXPECTED_ASSET_COUNT; index++)); do
+for ((index = 0; index < asset_count; index++)); do
   refresh_asset_listing
   if asset_metadata "${names[index]}" >/dev/null; then
     verify_asset "${names[index]}" "${paths[index]}" "${sizes[index]}" "${hashes[index]}"
@@ -460,12 +453,21 @@ for ((index = 0; index < EXPECTED_ASSET_COUNT; index++)); do
 done
 
 # Keep retry progress deterministic. Runtime payloads precede symbols and aliases.
-upload_payload_named "programa-macos-${build}.dmg"
-upload_payload_named "programa-dSYMs-${build}.zip"
-upload_payload_named "programa-windows-${build}.exe"
-upload_payload_named "appcast.xml"
-upload_payload_named "programa-macos.dmg"
-upload_payload_named "programa-windows.exe"
+for wanted in \
+  "programa-macos-${build}.dmg" \
+  "programa-dSYMs-${build}.zip" \
+  "programa-windows-${build}.exe" \
+  appcast.xml \
+  programa-macos.dmg \
+  programa-windows.exe; do
+  # The Windows pair is absent from macOS-only candidates.
+  for existing_name in "${names[@]}"; do
+    if [[ "${existing_name}" == "${wanted}" ]]; then
+      upload_payload_named "${wanted}"
+      break
+    fi
+  done
+done
 
 verify_release_metadata
 refresh_asset_listing
@@ -481,6 +483,6 @@ verify_asset "${SEAL_NAME}" "${manifest_path}" "${manifest_size}" "${manifest_ha
 
 refresh_asset_listing
 asset_total="$(wc -l < "${temp_dir}/seen-assets" | tr -d '[:space:]')"
-((asset_total == EXPECTED_ASSET_COUNT + 1)) || die "sealed candidate does not contain the exact payload set"
+((asset_total == asset_count + 1)) || die "sealed candidate does not contain the exact payload set"
 verify_release_metadata
 echo "Candidate ${candidate_tag} is sealed and verified."

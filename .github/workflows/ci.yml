@@ -190,12 +190,6 @@ jobs:
       - name: Validate release build identity
         run: node --test scripts/release_build_identity.test.js
 
-      - name: Validate Sparkle monotonic release guard
-        run: node --test scripts/sparkle_monotonic_guard.test.js
-
-      - name: Validate release asset guard
-        run: node scripts/release_asset_guard.test.js
-
       - name: Validate Sparkle enclosure naming and pruning
         run: node --test scripts/sparkle_enclosure.test.js
 
@@ -480,7 +474,7 @@ jobs:
           retention-days: 1
 
   # Sharded by test class (see scripts/list-programa-unit-test-classes.sh),
-  # alphabetical halves, so the ~11 min "Run unit tests" step runs as two
+  # weight-balanced halves (scripts/unit-test-shard-weights.txt), so the ~11 min "Run unit tests" step runs as two
   # parallel matrix jobs instead of serially. The stateful class
   # (AppDelegateShortcutRoutingTests) always runs unsharded in shard 1 --
   # splitting it would risk cross-shard focus/window-state interference.

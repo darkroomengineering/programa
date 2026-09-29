@@ -3,7 +3,7 @@
 # tests. The full suite still runs manually on the VM via
 # scripts/run-tests-v2.sh.
 #
-# Do NOT add: test_ctrl_interactive.py, test_tab_dragging.py,
+# Do NOT add: test_ctrl_interactive.py, test_splits_focus_close_resize.py,
 # test_visual_screenshots.py, test_notifications.py.
 test_cli_id_format_defaults.py
 # test_windows_api.py — excluded on CI: moved surfaces report in_window=false on
@@ -28,3 +28,18 @@ test_agent_state_wait_and_prompt.py
 test_socket_event_subscriptions.py
 test_app_browsers.py
 test_v2_contract_matches_capabilities.py
+# Safety set: worktree create/list/remove (remove must never delete the branch), undoable
+# terminal close, the programa-mcp stdio server, the opencode integration installer, and
+# the tmux-compat command matrix. All need only the built app, its socket, and the CLI/MCP
+# binaries inside the app bundle (scripts/run-tests-v2-ci.sh exports their paths).
+# test_layout_apply_resolves_cwd_relative_to_worktree.py is left out: it types `pwd` into a
+# terminal, which depends on shell readiness rather than the socket API.
+test_worktree_and_layout_cli_argument_contract.py
+test_worktree_branch_already_checked_out_error.py
+test_worktree_create_and_list.py
+test_worktree_open_all_flag_validation.py
+test_worktree_remove_never_deletes_branch.py
+test_terminal_close_undo.py
+test_mcp_server_e2e.py
+test_opencode_install_integration.py
+test_tmux_compat_matrix.py

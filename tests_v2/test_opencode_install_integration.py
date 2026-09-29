@@ -25,15 +25,11 @@ from typing import List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmuxError
+from v2_support import must as _must
 
 
 HOOK_MARKER = "opencode-hook"
 MANAGED_MARKER = "Managed by `programa opencode install-integration`"
-
-
-def _must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
 
 
 def _find_cli_binary() -> str:

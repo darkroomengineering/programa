@@ -3,9 +3,14 @@ name: Release desktop apps
 # Single-lane release pipeline for the macOS and Windows desktop artifacts.
 # - workflow_run: every successful `main` CI run builds and seals a unique draft candidate;
 #     a serialized reconciler advances the mutable aliases, metadata, and ref on `rolling`,
-#     then deletes the previous candidate draft, keeping at most one candidate draft around
-#     as a private (non-public) rollback archive. Candidates are never published, so the
-#     releases page always shows exactly the one `rolling` entry.
+#     then prunes older candidate drafts, keeping the newest few as private (non-public)
+#     rollback archives with their dSYMs. Candidates are never published, so the releases
+#     page always shows exactly the one `rolling` entry.
+# - macOS ships without waiting for Windows: the Windows EXE pair is attached only when
+#     `build-windows` succeeded; otherwise the previous `programa-windows.exe` on `rolling`
+#     stays in place.
+# - A run whose commit is no longer main's head ends successfully with a notice, both
+#     before the builds start and after they finish.
 # - workflow_dispatch: dry-run build that uploads an artifact instead of publishing.
 #
 # Milestone marketing-version bumps (`scripts/bump-version.sh` + `git tag vX.Y.Z`) are git
@@ -46,6 +51,7 @@ jobs:
       target_sha: ${{ steps.version.outputs.target_sha }}
       release_tag: ${{ steps.version.outputs.release_tag }}
       payload_release_tag: ${{ steps.version.outputs.payload_release_tag }}
+      superseded: ${{ steps.provenance.outputs.superseded }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -56,6 +62,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Validate CI provenance against current main
+        id: provenance
         if: github.event_name == 'workflow_run'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
@@ -81,8 +88,11 @@ jobs:
               ref: 'heads/main',
             });
             if (mainRef.data.object.sha !== upstream.head_sha) {
-              core.setFailed(
-                `Upstream CI SHA ${upstream.head_sha} is no longer current main ${mainRef.data.object.sha}.`
+              // A newer main commit will ship its own release; building this one would only
+              // burn runner time and end red.
+              core.setOutput('superseded', 'true');
+              core.notice(
+                `Skipping release: CI SHA ${upstream.head_sha} is no longer current main ${mainRef.data.object.sha}.`
               );
             }
 
@@ -103,8 +113,8 @@ jobs:
           # single strictly-increasing build-number sequence across the one feed. The
           # committed CURRENT_PROJECT_VERSION is only a local-dev default and is
           # intentionally NOT used for shipping: mixing a small committed build with
-          # run-ID builds would make the first milestone tag after any auto-ship fail the
-          # monotonic guard below (and Sparkle would never offer it). Marketing version
+          # run-ID builds would make Sparkle never offer the first milestone build
+          # (publish_rolling_release.sh rejects a build below the public high-water). Marketing version
           # (CFBundleShortVersionString, baked in at build time) carries the human semver.
           EFFECTIVE_BUILD="$(node <<'NODE'
           "use strict";
@@ -153,7 +163,8 @@ jobs:
     needs: [release-identity]
     if: >-
       always() &&
-      needs.release-identity.result == 'success'
+      needs.release-identity.result == 'success' &&
+      needs.release-identity.outputs.superseded != 'true'
     runs-on: macos-15
     timeout-minutes: 60
     env:
@@ -168,22 +179,6 @@ jobs:
         with:
           ref: ${{ needs.release-identity.outputs.target_sha }}
           submodules: recursive
-
-      - name: Guard Sparkle build number is monotonic
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        env:
-          EFFECTIVE_BUILD: ${{ env.EFFECTIVE_BUILD }}
-        with:
-          script: |
-            const { enforceSparkleMonotonicBuild } = require('./scripts/sparkle_monotonic_guard');
-            await enforceSparkleMonotonicBuild({
-              github,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              effectiveBuild: process.env.EFFECTIVE_BUILD,
-            });
-            core.notice(`Sparkle build ${process.env.EFFECTIVE_BUILD} is newer than the latest release.`);
 
       - name: Select Xcode
         run: |
@@ -221,6 +216,12 @@ jobs:
           else
             echo "Installing zig ${ZIG_REQUIRED} from tarball"
             curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-aarch64-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
+            ZIG_SHA256="$(awk -v v="$ZIG_REQUIRED" '$1 == v { print $2 }' scripts/zig-macos-aarch64.sha256)"
+            if [ -z "$ZIG_SHA256" ]; then
+              echo "No checked-in SHA-256 for zig ${ZIG_REQUIRED}; add it to scripts/zig-macos-aarch64.sha256" >&2
+              exit 1
+            fi
+            echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | shasum -a 256 -c -
             tar xf /tmp/zig.tar.xz -C /tmp
             sudo mkdir -p /usr/local/bin /usr/local/lib
             sudo cp -f /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/zig /usr/local/bin/zig
@@ -266,6 +267,14 @@ jobs:
           fi
           DERIVED_PUBLIC_KEY=$(swift scripts/derive_sparkle_public_key.swift "$SPARKLE_PRIVATE_KEY")
           echo "Derived Sparkle public key: $DERIVED_PUBLIC_KEY"
+          # Installed apps only trust updates signed by the key they shipped with, so a
+          # wrong or rotated secret would strand every user. Rotating the key is an
+          # explicit commit that changes scripts/sparkle-public-ed-key.txt.
+          EXPECTED_PUBLIC_KEY="$(tr -d '[:space:]' < scripts/sparkle-public-ed-key.txt)"
+          if [ "$DERIVED_PUBLIC_KEY" != "$EXPECTED_PUBLIC_KEY" ]; then
+            echo "Derived Sparkle public key does not match scripts/sparkle-public-ed-key.txt ($EXPECTED_PUBLIC_KEY)" >&2
+            exit 1
+          fi
           echo "SPARKLE_PUBLIC_KEY=$DERIVED_PUBLIC_KEY" >> "$GITHUB_ENV"
 
       - name: Prepare Rust targets for the shared core
@@ -523,6 +532,9 @@ jobs:
           name: programa-macos-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/programa-macos-payload/
           if-no-files-found: error
+          # The payload carries the dSYMs; keep them well past the default 90-day repo
+          # setting in case it is lowered.
+          retention-days: 90
 
       - name: Cleanup keychain
         if: always()
@@ -535,7 +547,8 @@ jobs:
     needs: [release-identity]
     if: >-
       always() &&
-      needs.release-identity.result == 'success'
+      needs.release-identity.result == 'success' &&
+      needs.release-identity.outputs.superseded != 'true'
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
@@ -582,7 +595,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          dotnet tool install --global --prerelease sign
+          dotnet tool install --global sign --version 1.1.5
           if ($LASTEXITCODE -ne 0) { throw "dotnet tool install sign failed with exit code $LASTEXITCODE." }
 
           $signScript = Join-Path $env:RUNNER_TEMP "sign-programa-windows-exe.ps1"
@@ -664,13 +677,48 @@ jobs:
           path: ${{ runner.temp }}/programa-windows-payload/
           if-no-files-found: error
 
+  # Second half of the supersession check: a newer main commit landing while the builds ran
+  # means this run must not stage or promote. It ends successfully with a notice; the newer
+  # commit's own run ships. (The reconciler re-checks main before every public mutation.)
+  post-build-main-check:
+    needs: [release-identity, build-sign-notarize]
+    if: >-
+      always() &&
+      needs.release-identity.result == 'success' &&
+      needs.build-sign-notarize.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      current: ${{ steps.check.outputs.current }}
+    steps:
+      - name: Confirm the release target is still current main
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TARGET_SHA: ${{ needs.release-identity.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_run" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CURRENT_MAIN="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          if [[ "$CURRENT_MAIN" == "$TARGET_SHA" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping release: ${TARGET_SHA} is no longer current main ${CURRENT_MAIN}."
+          fi
+
   assemble-release:
-    needs: [release-identity, build-sign-notarize, build-windows]
+    needs: [release-identity, build-sign-notarize, build-windows, post-build-main-check]
+    # macOS ships without waiting for Windows: the Windows EXE pair is attached only when
+    # build-windows succeeded (WINDOWS_BUILT below).
     if: >-
       always() &&
       needs.release-identity.result == 'success' &&
       needs.build-sign-notarize.result == 'success' &&
-      needs.build-windows.result == 'success'
+      needs.post-build-main-check.outputs.current == 'true'
     runs-on: ubuntu-latest
     env:
       EFFECTIVE_BUILD: ${{ needs.release-identity.outputs.effective_build }}
@@ -678,6 +726,7 @@ jobs:
       RELEASE_TAG: ${{ needs.release-identity.outputs.release_tag }}
       PAYLOAD_RELEASE_TAG: ${{ needs.release-identity.outputs.payload_release_tag }}
       TARGET_SHA: ${{ needs.release-identity.outputs.target_sha }}
+      WINDOWS_BUILT: ${{ needs.build-windows.result == 'success' }}
     steps:
       - name: Checkout release revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -691,10 +740,15 @@ jobs:
           path: incoming/macos
 
       - name: Download Windows payload
+        if: needs.build-windows.result == 'success'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: programa-windows-${{ github.run_id }}-${{ github.run_attempt }}
           path: incoming/windows
+
+      - name: Note skipped Windows payload
+        if: needs.build-windows.result != 'success'
+        run: echo "::warning::Windows build result was '${{ needs.build-windows.result }}'; shipping macOS only. The previous programa-windows.exe on rolling stays in place."
 
       - name: Assemble exact release payload
         env:
@@ -707,12 +761,15 @@ jobs:
             appcast.xml
             "programa-dSYMs-${EFFECTIVE_BUILD}.zip"
             "programa-macos-${EFFECTIVE_BUILD}.dmg"
-            "programa-windows-${EFFECTIVE_BUILD}.exe"
             programa-macos.dmg
-            programa-windows.exe
           )
+          expected_count=4
           [[ "$(find incoming/macos -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == 4 ]]
-          [[ "$(find incoming/windows -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == 2 ]]
+          if [[ "$WINDOWS_BUILT" == "true" ]]; then
+            expected+=("programa-windows-${EFFECTIVE_BUILD}.exe" programa-windows.exe)
+            expected_count=6
+            [[ "$(find incoming/windows -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == 2 ]]
+          fi
           source_dir="incoming"
           for name in "${expected[@]}"; do
             matches=()
@@ -723,25 +780,30 @@ jobs:
             }
             cp "${matches[0]}" "$PAYLOAD_DIR/$name"
           done
-          [[ "$(find "$PAYLOAD_DIR" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == 6 ]]
+          [[ "$(find "$PAYLOAD_DIR" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == "$expected_count" ]]
           cmp -s "$PAYLOAD_DIR/programa-macos-${EFFECTIVE_BUILD}.dmg" "$PAYLOAD_DIR/programa-macos.dmg"
-          cmp -s "$PAYLOAD_DIR/programa-windows-${EFFECTIVE_BUILD}.exe" "$PAYLOAD_DIR/programa-windows.exe"
+          if [[ "$WINDOWS_BUILT" == "true" ]]; then
+            cmp -s "$PAYLOAD_DIR/programa-windows-${EFFECTIVE_BUILD}.exe" "$PAYLOAD_DIR/programa-windows.exe"
+          fi
+          # One role=path line per payload; the seal and staging steps pass each as --asset-role.
+          ASSET_ROLES_FILE="${RUNNER_TEMP}/programa-asset-roles.txt"
+          {
+            echo "immutable=${PAYLOAD_DIR}/programa-macos-${EFFECTIVE_BUILD}.dmg"
+            echo "immutable=${PAYLOAD_DIR}/programa-dSYMs-${EFFECTIVE_BUILD}.zip"
+            echo "appcast=${PAYLOAD_DIR}/appcast.xml"
+            echo "stable-alias=${PAYLOAD_DIR}/programa-macos.dmg"
+            if [[ "$WINDOWS_BUILT" == "true" ]]; then
+              echo "immutable=${PAYLOAD_DIR}/programa-windows-${EFFECTIVE_BUILD}.exe"
+              echo "stable-alias=${PAYLOAD_DIR}/programa-windows.exe"
+            fi
+          } > "$ASSET_ROLES_FILE"
           echo "PAYLOAD_DIR=${PAYLOAD_DIR}" >> "$GITHUB_ENV"
+          echo "ASSET_ROLES_FILE=${ASSET_ROLES_FILE}" >> "$GITHUB_ENV"
 
-      - name: Require current main before rolling candidate creation
-        if: github.event_name == 'workflow_run'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Verify checkout matches the release target
         run: |
           set -euo pipefail
-          CURRENT_MAIN="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-          CHECKED_OUT_TARGET="$(git rev-parse HEAD)"
-          [[ "$CHECKED_OUT_TARGET" == "$TARGET_SHA" ]]
-          [[ "$CURRENT_MAIN" == "$TARGET_SHA" ]] || {
-            echo "CI-validated target ${TARGET_SHA} is no longer current main ${CURRENT_MAIN}" >&2
-            exit 1
-          }
+          [[ "$(git rev-parse HEAD)" == "$TARGET_SHA" ]]
 
       - name: Prepare combined release candidate seal
         env:
@@ -753,6 +815,8 @@ jobs:
           CANDIDATE_PREFIX=rolling-candidate-
           CANDIDATE_TAG="$PAYLOAD_RELEASE_TAG"
           DESTINATION_TAG="$RELEASE_TAG"
+          ASSET_ROLE_ARGS=()
+          while IFS= read -r spec; do ASSET_ROLE_ARGS+=(--asset-role "$spec"); done < "$ASSET_ROLES_FILE"
           ./scripts/publish_release_candidate.sh \
             --prepare-only \
             --candidate-prefix "$CANDIDATE_PREFIX" \
@@ -762,12 +826,7 @@ jobs:
             --build "$EFFECTIVE_BUILD" \
             --version "$EFFECTIVE_MARKETING_VERSION" \
             --seal-output "$CANDIDATE_SEAL" \
-            --asset-role "immutable=${PAYLOAD_DIR}/programa-macos-${EFFECTIVE_BUILD}.dmg" \
-            --asset-role "immutable=${PAYLOAD_DIR}/programa-dSYMs-${EFFECTIVE_BUILD}.zip" \
-            --asset-role "immutable=${PAYLOAD_DIR}/programa-windows-${EFFECTIVE_BUILD}.exe" \
-            --asset-role "appcast=${PAYLOAD_DIR}/appcast.xml" \
-            --asset-role "stable-alias=${PAYLOAD_DIR}/programa-macos.dmg" \
-            --asset-role "stable-alias=${PAYLOAD_DIR}/programa-windows.exe"
+            "${ASSET_ROLE_ARGS[@]}"
           {
             echo "CANDIDATE_SEAL=${CANDIDATE_SEAL}"
             echo "CANDIDATE_PREFIX=${CANDIDATE_PREFIX}"
@@ -779,13 +838,9 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
-          subject-path: |
-            ${{ env.PAYLOAD_DIR }}/programa-macos-${{ env.EFFECTIVE_BUILD }}.dmg
-            ${{ env.PAYLOAD_DIR }}/programa-dSYMs-${{ env.EFFECTIVE_BUILD }}.zip
-            ${{ env.PAYLOAD_DIR }}/programa-windows-${{ env.EFFECTIVE_BUILD }}.exe
-            ${{ env.PAYLOAD_DIR }}/appcast.xml
-            ${{ env.PAYLOAD_DIR }}/programa-macos.dmg
-            ${{ env.PAYLOAD_DIR }}/programa-windows.exe
+          # The payload directory holds exactly the sealed payload files (4, or 6 with the
+          # Windows pair), which is also what the reconciler verifies attestations for.
+          subject-path: ${{ env.PAYLOAD_DIR }}/*
 
       - name: Attest combined release candidate seal
         if: github.event_name != 'workflow_dispatch'
@@ -800,6 +855,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          ASSET_ROLE_ARGS=()
+          while IFS= read -r spec; do ASSET_ROLE_ARGS+=(--asset-role "$spec"); done < "$ASSET_ROLES_FILE"
           ./scripts/publish_release_candidate.sh \
             --candidate-prefix "$CANDIDATE_PREFIX" \
             --destination-tag "$DESTINATION_TAG" \
@@ -808,12 +865,7 @@ jobs:
             --build "$EFFECTIVE_BUILD" \
             --version "$EFFECTIVE_MARKETING_VERSION" \
             --seal-output "$CANDIDATE_SEAL" \
-            --asset-role "immutable=${PAYLOAD_DIR}/programa-macos-${EFFECTIVE_BUILD}.dmg" \
-            --asset-role "immutable=${PAYLOAD_DIR}/programa-dSYMs-${EFFECTIVE_BUILD}.zip" \
-            --asset-role "immutable=${PAYLOAD_DIR}/programa-windows-${EFFECTIVE_BUILD}.exe" \
-            --asset-role "appcast=${PAYLOAD_DIR}/appcast.xml" \
-            --asset-role "stable-alias=${PAYLOAD_DIR}/programa-macos.dmg" \
-            --asset-role "stable-alias=${PAYLOAD_DIR}/programa-windows.exe"
+            "${ASSET_ROLE_ARGS[@]}"
 
       - name: Upload combined build artifacts (dry-run)
         if: github.event_name == 'workflow_dispatch'

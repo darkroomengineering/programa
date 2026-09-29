@@ -15,6 +15,24 @@ final class ProgramaConfigDecodingTests: XCTestCase {
         return try JSONDecoder().decode(ProgramaConfigFile.self, from: data)
     }
 
+    /// Decoding must fail with an error that names the offending key or rule, so a
+    /// failure for an unrelated reason cannot satisfy the test.
+    private func assertDecodeThrows(
+        _ json: String,
+        mentioning fragment: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertThrowsError(try decode(json), file: file, line: line) { error in
+            XCTAssertTrue(
+                String(describing: error).contains(fragment),
+                "Expected the decode error to mention \"\(fragment)\", got: \(error)",
+                file: file,
+                line: line
+            )
+        }
+    }
+
     // MARK: Simple commands
 
     func testDecodeSimpleCommand() throws {
@@ -328,14 +346,14 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "either a 'pane' key or a 'direction' key")
     }
 
     func testDecodeMissingCommandsKeyThrows() {
         let json = """
         { "notCommands": [] }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "commands")
     }
 
     func testDecodeInvalidSurfaceTypeThrows() {
@@ -353,7 +371,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "invalidType")
     }
 
     // MARK: Command validation
@@ -366,7 +384,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "either 'workspace' or 'command'")
     }
 
     func testDecodeCommandWithBothWorkspaceAndCommandThrows() {
@@ -379,7 +397,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "both 'workspace' and 'command'")
     }
 
     // MARK: Layout validation
@@ -402,7 +420,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "both 'pane' and 'direction'")
     }
 
     func testDecodeSplitWithWrongChildrenCountThrows() {
@@ -421,7 +439,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "exactly 2 children, got 1")
     }
 
     func testDecodeSplitWithThreeChildrenThrows() {
@@ -442,7 +460,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "exactly 2 children, got 3")
     }
 
     func testDecodePaneWithEmptySurfacesThrows() {
@@ -458,7 +476,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "at least one surface")
     }
 
     func testDecodeBlankNameThrows() {
@@ -470,7 +488,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "Command name must not be blank")
     }
 
     func testDecodeWhitespaceOnlyNameThrows() {
@@ -482,7 +500,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "Command name must not be blank")
     }
 
     func testDecodeBlankCommandThrows() {
@@ -494,7 +512,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "blank 'command'")
     }
 
     func testDecodeWhitespaceOnlyCommandThrows() {
@@ -506,7 +524,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "blank 'command'")
     }
 
     // MARK: Recipes
@@ -556,7 +574,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           "recipes": [{ "name": "   ", "prompt": "do something" }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "Recipe name must not be blank")
     }
 
     func testDecodeRecipeWhitespaceOnlyPromptThrows() {
@@ -566,7 +584,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
           "recipes": [{ "name": "test", "prompt": "   " }]
         }
         """
-        XCTAssertThrowsError(try decode(json))
+        assertDecodeThrows(json, mentioning: "blank 'prompt'")
     }
 
     func testDecodeCommandWithParameters() throws {

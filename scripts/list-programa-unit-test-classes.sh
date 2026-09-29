@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deterministic, sorted list of programaTests XCTestCase class names.
-# Used by ci-run-unit-tests.sh to split the suite into alphabetical shards
+# Used by ci-run-unit-tests.sh to split the suite into weight-balanced shards
 # without needing a built test bundle to enumerate classes from.
 set -euo pipefail
 

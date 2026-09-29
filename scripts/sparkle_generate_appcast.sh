@@ -35,7 +35,11 @@ if [[ -z "${SPARKLE_PRIVATE_KEY:-}" ]]; then
   exit 1
 fi
 
-SPARKLE_VERSION="${SPARKLE_VERSION:-2.9.6}"
+# This tool runs next to SPARKLE_PRIVATE_KEY, so it is pinned to an exact commit, not
+# just a tag (tags can be moved). Bump both together; the SHA is the tag's commit
+# (git ls-remote https://github.com/sparkle-project/Sparkle refs/tags/<version>).
+SPARKLE_VERSION="2.9.6"
+SPARKLE_COMMIT="ac2def288cbff5cfc7df3ffef6abdf45b72bcb0a"
 DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://github.com/darkroomengineering/programa/releases/download/$TAG/}"
 RELEASE_NOTES_URL="${RELEASE_NOTES_URL:-https://github.com/darkroomengineering/programa/releases/tag/$TAG}"
 
@@ -47,6 +51,11 @@ trap cleanup EXIT
 
 echo "Cloning Sparkle ${SPARKLE_VERSION}..."
 git clone --depth 1 --branch "$SPARKLE_VERSION" https://github.com/sparkle-project/Sparkle "$work_dir/Sparkle"
+sparkle_head="$(git -C "$work_dir/Sparkle" rev-parse HEAD)"
+if [[ "$sparkle_head" != "$SPARKLE_COMMIT" ]]; then
+  echo "ERROR: Sparkle ${SPARKLE_VERSION} resolved to ${sparkle_head}, expected ${SPARKLE_COMMIT}." >&2
+  exit 1
+fi
 
 echo "Building Sparkle generate_appcast tool..."
 xcodebuild \
