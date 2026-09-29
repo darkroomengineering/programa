@@ -96,6 +96,7 @@ impl Session {
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
+                let _ = crate::paths::remove_session_dir(&id);
                 return Err(error);
             }
         };
@@ -121,7 +122,8 @@ impl Session {
                 let mut child = inner.child.lock().unwrap();
                 let _ = child.child.kill();
                 let _ = child.child.wait();
-                return Err(io::Error::from(error));
+                let _ = crate::paths::remove_session_dir(&id);
+                return Err(error);
             }
         };
         *inner.reader_handle.lock().unwrap() = Some(handle);
