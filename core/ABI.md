@@ -180,7 +180,8 @@ for the feature before using it.
 
 **Session/surface lifecycle:** closing a session that backs a domain surface
 closes that surface too (`session.close` reconciles the domain state before
-returning). The surface is removed outright rather than marked terminated --
+returning), and so does a session whose child exits on its own (reconciled the
+next time `workspace.snapshot` or `workspace.dispatch` runs). The surface is removed outright rather than marked terminated --
 `programa-domain` has no terminated state today, and removal matches what a
 client already does when a terminal process exits. If a future need arises
 for a surface to outlive its session (e.g. showing a "process exited" state

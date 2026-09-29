@@ -48,6 +48,15 @@ The implemented methods are:
 - `session.open`, `session.list`, `session.status`, `session.resize`
 - `session.write`, `session.read`, `session.attach`, `session.detach`,
   `session.close`
+- `workspace.snapshot`, `workspace.dispatch`
+
+`workspace.snapshot` returns the shared `programa-domain` snapshot and
+`workspace.dispatch` applies one domain command (both documented in
+`core/ABI.md`). A command that attaches a new surface must name a session this
+daemon owns, checked under the same lock that applies the command. A surface
+whose session has closed, or whose child has exited or failed, is closed the
+next time the workspace state is read or changed; the session itself stays
+listed until `session.close`.
 
 With no configured password, `auth.login` succeeds without a password and
 returns `{"authenticated":true,"required":false}`. With a password, all
@@ -93,6 +102,8 @@ syncs it, records a recovery intent, and uses atomic renames; startup completes
 an interrupted transaction before opening the WAL. Append or flush failure
 places the session in a visible `failed` state and sends the child `SIGHUP`.
 
+A successful `session.close` deletes the session's `sessions/<id>/` directory.
+
 Client disconnect does not terminate a session. Daemon shutdown does terminate
 tracked children. `--keep-sessions` is explicitly unsupported and exits with an
 error: surviving daemon exit needs a separate persistent fd keeper and restart
@@ -110,6 +121,6 @@ an isolated Ubuntu ARM64 VM using Rust 1.97.1. The Python smoke flow also passed
 against the VM's daemon. This verifies Linux session/attachment replay, descriptor
 cleanup, child reaping, and WAL behavior; macOS runtime tests remain unrun.
 
-Remote networking is not implemented. [docs/remote-transport.md](docs/remote-transport.md)
+Remote networking is not implemented. [remote-transport.md](remote-transport.md)
 records the future transport boundary without expanding this daemon's current
 trust model.

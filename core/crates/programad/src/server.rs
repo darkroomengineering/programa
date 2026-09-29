@@ -33,7 +33,7 @@ pub struct AppState {
     /// two are otherwise independent: closing this lock never blocks on
     /// session I/O and vice versa. See `workspace_dispatch` below and
     /// `core/docs/programad.md` "Process layer" for the reconciliation rule
-    /// applied on `session.close`.
+    /// applied on `session.close` and when a session's child exits.
     pub domain: Mutex<DomainCore>,
 }
 
