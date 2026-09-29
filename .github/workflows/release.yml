@@ -3,9 +3,14 @@ name: Release desktop apps
 # Single-lane release pipeline for the macOS and Windows desktop artifacts.
 # - workflow_run: every successful `main` CI run builds and seals a unique draft candidate;
 #     a serialized reconciler advances the mutable aliases, metadata, and ref on `rolling`,
-#     then deletes the previous candidate draft, keeping at most one candidate draft around
-#     as a private (non-public) rollback archive. Candidates are never published, so the
-#     releases page always shows exactly the one `rolling` entry.
+#     then prunes older candidate drafts, keeping the newest few as private (non-public)
+#     rollback archives with their dSYMs. Candidates are never published, so the releases
+#     page always shows exactly the one `rolling` entry.
+# - macOS ships without waiting for Windows: the Windows EXE pair is attached only when
+#     `build-windows` succeeded; otherwise the previous `programa-windows.exe` on `rolling`
+#     stays in place.
+# - A run whose commit is no longer main's head ends successfully with a notice, both
+#     before the builds start and after they finish.
 # - workflow_dispatch: dry-run build that uploads an artifact instead of publishing.
 #
 # Milestone marketing-version bumps (`scripts/bump-version.sh` + `git tag vX.Y.Z`) are git
@@ -46,6 +51,7 @@ jobs:
       target_sha: ${{ steps.version.outputs.target_sha }}
       release_tag: ${{ steps.version.outputs.release_tag }}
       payload_release_tag: ${{ steps.version.outputs.payload_release_tag }}
+      superseded: ${{ steps.provenance.outputs.superseded }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -56,6 +62,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Validate CI provenance against current main
+        id: provenance
         if: github.event_name == 'workflow_run'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
@@ -81,8 +88,11 @@ jobs:
               ref: 'heads/main',
             });
             if (mainRef.data.object.sha !== upstream.head_sha) {
-              core.setFailed(
-                `Upstream CI SHA ${upstream.head_sha} is no longer current main ${mainRef.data.object.sha}.`
+              // A newer main commit will ship its own release; building this one would only
+              // burn runner time and end red.
+              core.setOutput('superseded', 'true');
+              core.notice(
+                `Skipping release: CI SHA ${upstream.head_sha} is no longer current main ${mainRef.data.object.sha}.`
               );
             }
 
@@ -103,8 +113,8 @@ jobs:
           # single strictly-increasing build-number sequence across the one feed. The
           # committed CURRENT_PROJECT_VERSION is only a local-dev default and is
           # intentionally NOT used for shipping: mixing a small committed build with
-          # run-ID builds would make the first milestone tag after any auto-ship fail the
-          # monotonic guard below (and Sparkle would never offer it). Marketing version
+          # run-ID builds would make Sparkle never offer the first milestone build
+          # (publish_rolling_release.sh rejects a build below the public high-water). Marketing version
           # (CFBundleShortVersionString, baked in at build time) carries the human semver.
           EFFECTIVE_BUILD="$(node <<'NODE'
           "use strict";
@@ -153,7 +163,8 @@ jobs:
     needs: [release-identity]
     if: >-
       always() &&
-      needs.release-identity.result == 'success'
+      needs.release-identity.result == 'success' &&
+      needs.release-identity.outputs.superseded != 'true'
     runs-on: macos-15
     timeout-minutes: 60
     env:
@@ -168,22 +179,6 @@ jobs:
         with:
           ref: ${{ needs.release-identity.outputs.target_sha }}
           submodules: recursive
-
-      - name: Guard Sparkle build number is monotonic
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        env:
-          EFFECTIVE_BUILD: ${{ env.EFFECTIVE_BUILD }}
-        with:
-          script: |
-            const { enforceSparkleMonotonicBuild } = require('./scripts/sparkle_monotonic_guard');
-            await enforceSparkleMonotonicBuild({
-              github,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              effectiveBuild: process.env.EFFECTIVE_BUILD,
-            });
-            core.notice(`Sparkle build ${process.env.EFFECTIVE_BUILD} is newer than the latest release.`);
 
       - name: Select Xcode
         run: |
@@ -221,6 +216,12 @@ jobs:
           else
             echo "Installing zig ${ZIG_REQUIRED} from tarball"
             curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-aarch64-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
+            ZIG_SHA256="$(awk -v v="$ZIG_REQUIRED" '$1 == v { print $2 }' scripts/zig-macos-aarch64.sha256)"
+            if [ -z "$ZIG_SHA256" ]; then
+              echo "No checked-in SHA-256 for zig ${ZIG_REQUIRED}; add it to scripts/zig-macos-aarch64.sha256" >&2
+              exit 1
+            fi
+            echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | shasum -a 256 -c -
             tar xf /tmp/zig.tar.xz -C /tmp
             sudo mkdir -p /usr/local/bin /usr/local/lib
             sudo cp -f /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/zig /usr/local/bin/zig
@@ -266,6 +267,14 @@ jobs:
           fi
           DERIVED_PUBLIC_KEY=$(swift scripts/derive_sparkle_public_key.swift "$SPARKLE_PRIVATE_KEY")
           echo "Derived Sparkle public key: $DERIVED_PUBLIC_KEY"
+          # Installed apps only trust updates signed by the key they shipped with, so a
+          # wrong or rotated secret would strand every user. Rotating the key is an
+          # explicit commit that changes scripts/sparkle-public-ed-key.txt.
+          EXPECTED_PUBLIC_KEY="$(tr -d '[:space:]' < scripts/sparkle-public-ed-key.txt)"
+          if [ "$DERIVED_PUBLIC_KEY" != "$EXPECTED_PUBLIC_KEY" ]; then
+            echo "Derived Sparkle public key does not match scripts/sparkle-public-ed-key.txt ($EXPECTED_PUBLIC_KEY)" >&2
+            exit 1
+          fi
           echo "SPARKLE_PUBLIC_KEY=$DERIVED_PUBLIC_KEY" >> "$GITHUB_ENV"
 
       - name: Prepare Rust targets for the shared core
@@ -523,6 +532,9 @@ jobs:
           name: programa-macos-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/programa-macos-payload/
           if-no-files-found: error
+          # The payload carries the dSYMs; keep them well past the default 90-day repo
+          # setting in case it is lowered.
+          retention-days: 90
 
       - name: Cleanup keychain
         if: always()
@@ -535,7 +547,8 @@ jobs:
     needs: [release-identity]
     if: >-
       always() &&
-      needs.release-identity.result == 'success'
+      needs.release-identity.result == 'success' &&
+      needs.release-identity.outputs.superseded != 'true'
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
@@ -582,7 +595,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          dotnet tool install --global --prerelease sign
+          dotnet tool install --global sign --version 1.1.5
           if ($LASTEXITCODE -ne 0) { throw "dotnet tool install sign failed with exit code $LASTEXITCODE." }
 
           $signScript = Join-Path $env:RUNNER_TEMP "sign-programa-windows-exe.ps1"

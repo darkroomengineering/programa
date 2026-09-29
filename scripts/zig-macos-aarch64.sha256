@@ -1,0 +1,4 @@
+# Checked-in SHA-256 of the macOS arm64 zig tarball, one "<version> <sha256>" per line.
+# Source: https://ziglang.org/download/index.json. Add a line whenever ghostty raises its
+# minimum zig version; the release build fails closed on an unlisted version.
+0.16.0 b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
