@@ -45,7 +45,7 @@ list.
 - Vendored transport: `vendor/CmuxIrohTransport` and `vendor/CMUXMobileCore`,
   one-time source copies from the upstream cmux fork (see their now-deleted
   `PROVENANCE.md`), linked into the iOS project and `tools/mobile-spike` but,
-  per the audit, never actually imported by that code (only `IrohLib` was).
+  in practice never imported by that code (only `IrohLib` was).
 - SPM package: `iroh-ffi` (`MOBB1001` remote package reference, `MOBB1002`
   `IrohLib` product, `MOBB1003` build file) was linked into the macOS
   `programa` target for `MobileBridgeListener`'s QUIC listener.
@@ -118,36 +118,36 @@ reconnect loop, and revoking a device also closed its active session. That
 work is gone with the feature; a reimplementation should not start from
 scratch on those points, it should re-port them.
 
-From the 2026-08-31 audit (`docs/audits/codebase-audit-2026-08-31.md`):
+Review findings from before the removal:
 
-- **J3**: the repo simultaneously called the iOS app "a spike," auto-shipped
+- the repo simultaneously called the iOS app "a spike," auto-shipped
   it to TestFlight, linked an unused transport package (`CmuxIrohTransport`),
   and kept a second executable spike (`tools/mobile-spike`) as reference code.
-  The audit's direction was to promote one implementation or drop
+  The review's direction was to promote one implementation or drop
   auto-shipping — this removal takes the "drop it" branch instead of
   resolving the ambiguity.
-- **H8**: `BridgeConnection.withRequestTimeout` raced the operation against a
+- `BridgeConnection.withRequestTimeout` raced the operation against a
   timeout inside a structured task group, but cancelling the child neither
   removed nor resumed its `pending` continuation, and teardown only ran after
   the timeout helper returned — a silent, authenticated peer could leave the
   app on "Connecting" indefinitely.
-- **M1**: `BridgeConnection.nextBufferedLine` (iOS) appended unbounded 64 KiB
+- `BridgeConnection.nextBufferedLine` (iOS) appended unbounded 64 KiB
   chunks and rescanned from the start every time — O(n^2) and unbounded
   memory for a peer that never sends `\n`. The Mac-side
   `MobileBridgeStreamSupport` had an 8 MiB cap and incremental cursor that the
   iOS side never got ported to.
-- **M2**: the shipped mobile identity was explicitly labeled "spike-grade" in
+- the shipped mobile identity was explicitly labeled "spike-grade" in
   its own source comments — `SecretKeyStore` kept the Iroh private key in
   UserDefaults, and `PairingStore` did the same for the pairing ticket,
   instead of Keychain with a device-only accessibility class.
-- **M8**: iOS reported the first non-unavailable network path as final instead
+- iOS reported the first non-unavailable network path as final instead
   of waiting for Iroh's relay-first settlement to resolve to a direct/private
   path, so users could see "connected" over a slow relay hop that would soon
   upgrade.
-- **M10**: `build-ios-testflight.sh` replaced the entire keychain search list
+- `build-ios-testflight.sh` replaced the entire keychain search list
   with a fixed `ios-build.keychain` and had no EXIT trap, so a local
   (non-CI) run could leave a developer's normal keychains undiscoverable.
-- **M11**: both the iOS project and `tools/mobile-spike` declared a link
+- both the iOS project and `tools/mobile-spike` declared a link
   dependency on `CmuxIrohTransport` but their source only imported `IrohLib`
   directly — the vendored package was dead weight, and the hand-copied
   implementations had already drifted from it on path settlement and line
@@ -176,11 +176,11 @@ deleted if the feature returns: `com.darkroom.programa`,
 ## Why removed and what a future version should do differently
 
 The feature was off by default, had zero consumers in the terminal/workspace/
-browser core, and its own audit trail (J3, H8, M1, M2, M8, M10, M11) shows it
+browser core, and the review findings above show it
 never graduated past spike quality on security or reliability despite
 auto-shipping to TestFlight. Keeping an unfinished second client surface (iOS)
 plus a vendored, partially-unused transport dependency (Iroh/CmuxIrohTransport)
-added real build and audit surface for a feature nobody outside the audit was
+added real build and review surface for a feature nobody outside the review was
 using.
 
 A future version should pick one implementation up front instead of running

@@ -64,9 +64,8 @@ Edited:
 
 ## What we learned
 
-CHANGELOG.md has no entry mentioning custom notification sound files, and neither audit doc
-(`docs/audits/codebase-audit-2026-08-03.md`, `docs/audits/codebase-audit-2026-08-31.md`)
-mentions this feature — there is no recorded bug history or security finding to carry forward.
+CHANGELOG.md has no entry mentioning custom notification sound files, and no code review
+finding mentions this feature — there is no recorded bug history or security finding to carry forward.
 The one design detail worth keeping if this is rebuilt: staged files were content-addressed by
 a hash of the source path (not the file bytes), with a metadata sidecar for change detection,
 so switching between two different source files never collided on disk, and re-selecting the

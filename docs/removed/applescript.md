@@ -45,7 +45,7 @@ Edited:
 ## What we learned
 
 No test file existed for this feature and no CHANGELOG.md entry mentions AppleScript by name,
-so there is no recorded bug history or design rationale to carry forward. No docs/audits entry
+so there is no recorded bug history or design rationale to carry forward. No review finding
 mentions AppleScript. The one design signal in the removed code itself: automation was
 opt-in via a ghostty config key rather than a Settings toggle, and every failure path returned
 a typed `enum` error with a specific localized message (missing action, missing target, window

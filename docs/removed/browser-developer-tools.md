@@ -63,9 +63,7 @@ behavior of a feature outside this cluster."
    `BrowserPanelHostContainerViewTests`, and `BrowserWindowPortalLifecycleTests` classes before and
    after each edit — they are the closest thing to a regression safety net for this code.
 
-## Related audit note
+## Shared portal code
 
-`docs/audits/codebase-audit-2026-08-31.md`'s "Considered and rejected" section notes: "Portal
-duplication: the former browser/terminal transfer duplication now has `WebKitSubviewTransfer`; the
-prior structural complaint is resolved." This confirms `WebKitSubviewTransfer.swift` is shared
-portal infrastructure, not inspector-specific, reinforcing that it should not be deleted wholesale.
+`WebKitSubviewTransfer.swift` is shared browser/terminal portal infrastructure that replaced earlier
+duplicated transfer code. It is not inspector-specific and should not be deleted wholesale.

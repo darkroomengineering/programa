@@ -55,9 +55,6 @@ were treated as different filters, so internationalized domains silently importe
 cookies or history entries until fixed. A future re-implementation needs to normalize domains
 before filtering, not after.
 
-`docs/audits/codebase-audit-2026-08-31.md` does not mention the import wizard specifically. No
-audit finding was found for this feature; if one exists it was not surfaced by this search.
-
 The code's own comments document two deliberate boundaries worth keeping in a rebuild:
 `BrowserAvailability` (installed/running browser detection for `app.browsers`) was kept
 independent of `InstalledBrowserDetector`'s leftover-profile-data scoring specifically so that
