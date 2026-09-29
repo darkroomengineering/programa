@@ -22,7 +22,7 @@ while IFS= read -r path || [[ -n "$path" ]]; do
       RUN_APP_JOBS=true
       ;;
     # Documentation and prose
-    *.md|docs/*|plans/*|AGENTS.md|CHANGELOG.md|PROJECTS.md|TODO.md|README.md|LICENSE*|THIRD_PARTY_LICENSES.md|.editorconfig|.gitattributes|.gitignore|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg)
+    *.md|docs/*|plans/*|AGENTS.md|CHANGELOG.md|TODO.md|README.md|LICENSE*|THIRD_PARTY_LICENSES.md|.editorconfig|.gitattributes|.gitignore|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg)
       continue
       ;;
     # Repository metadata / workflow-only edits are not app/runtime changes

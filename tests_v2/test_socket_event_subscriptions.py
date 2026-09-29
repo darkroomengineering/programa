@@ -9,7 +9,7 @@ scripted agent without polling" -- no real agent is involved, state is driven di
 reads pushed frames (see the HARD-WON LESSONS note below).
 
 Pushed event frames are NOT wrapped in the usual {"id","ok","result"} v2 envelope (see
-docs/v2-api-migration.md "Socket Event Subscriptions (#167)") -- each is its own single-line
+docs/socket-api.md "Socket Event Subscriptions (#167)") -- each is its own single-line
 JSON object with an "event" key, so this test reads raw lines via `client._recv_line` (bypassing
 `cmux._call`'s request/response id matching, which doesn't apply to pushed frames) rather than
 `_call`.

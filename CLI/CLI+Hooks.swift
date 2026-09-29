@@ -2837,7 +2837,7 @@ extension ProgramaCLI {
     - Full command list: `programa help`.
     - Anything not wrapped by a dedicated subcommand is reachable directly: `programa rpc <method> [json-params]` calls any socket API method.
     - `watch-events` streams a live feed of agent-state/output/workspace events over one long-lived connection — it's for dashboards and orchestrators watching many surfaces at once, not for a normal agent loop; use `wait-surface`/`prompt-agent` for "wait for one thing" instead.
-    - Longer walkthrough and the full socket API reference: `docs/agent-skill.md` and `docs/v2-api-migration.md` in the programa repo.
+    - Longer walkthrough and the full socket API reference: `docs/agent-skill.md` and `docs/socket-api.md` in the programa repo.
     """#
 
     /// Identifier used to detect programa-owned skill files during uninstall.

@@ -1960,7 +1960,7 @@ class TerminalController {
             return v2Error(
                 id: nil,
                 code: "v1_removed",
-                message: "The v1 line-based socket protocol has been removed. Use the v2 JSON-RPC protocol (see docs/v2-api-migration.md)."
+                message: "The v1 line-based socket protocol has been removed. Use the v2 JSON-RPC protocol (see docs/socket-api.md)."
             )
         }
 

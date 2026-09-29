@@ -1,7 +1,7 @@
 //! Wire types for Programa's v2 socket protocol.
 //!
 //! This mirrors the JSON-lines protocol implemented by the macOS app's
-//! `TerminalController` (see `docs/v2-api-migration.md` and
+//! `TerminalController` (see `docs/socket-api.md` and
 //! `tests_v2/cmux.py` in the `programa` repo, which this crate does not
 //! depend on or import from at runtime). One JSON object per line, in both
 //! directions, over a Unix domain socket:
@@ -139,7 +139,7 @@ impl ErrorBody {
 }
 
 /// Stable error codes. Matches the existing macOS app's `TerminalController`
-/// codes (`docs/v2-api-migration.md`, `Sources/TerminalController.swift`)
+/// codes (`docs/socket-api.md`, `Sources/TerminalController.swift`)
 /// wherever an equivalent situation exists, so an existing v2 client (the
 /// CLI, `tests_v2/cmux.py`, the MCP bridge) needs no code changes to talk to
 /// `programad` instead of the app.

@@ -2,7 +2,7 @@
 // over a long-lived connection instead of making external tools (dashboards, orchestrators, a
 // menu bar on another machine) poll `surface.list`/`workspace.list` in a loop.
 //
-// Design (see docs/v2-api-migration.md "Socket Event Subscriptions (#167)" for the full spec,
+// Design (see docs/socket-api.md "Socket Event Subscriptions (#167)" for the full spec,
 // written before this was implemented):
 //   - `subscribe` upgrades the calling connection: it keeps answering ordinary v2 requests on
 //     the same connection (including `unsubscribe`), but frames pushed by

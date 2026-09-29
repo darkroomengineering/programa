@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "version": 1,
-  "description": "Wire framing and auth handshake for the Programa v2 socket protocol. See docs/v2-api-migration.md and Sources/TerminalController.swift (processV2Command).",
+  "description": "Wire framing and auth handshake for the Programa v2 socket protocol. See docs/socket-api.md and Sources/TerminalController.swift (processV2Command).",
   "transport": {
     "kind": "unix_domain_socket",
     "framing": "One JSON object per line (newline-delimited). Multi-line JSON is not supported; the server collapses embedded newlines in its own responses. The v1 line-based protocol has been removed: any line not starting with '{' gets a terse 'v1_removed' error instead of a parse failure."

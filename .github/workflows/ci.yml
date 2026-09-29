@@ -196,6 +196,9 @@ jobs:
       - name: Validate v2 socket API contract has no drift
         run: ./scripts/check-v2-contract.sh
 
+      - name: Validate settings and shortcut docs match the code
+        run: python3 scripts/check-settings-docs.py
+
   shared-core:
     runs-on: ubuntu-latest
     permissions:

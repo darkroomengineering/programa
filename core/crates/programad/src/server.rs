@@ -22,7 +22,7 @@ pub struct AppState {
     /// `None` means no password is configured: every method is allowed
     /// without `auth.login`, matching the local-only "off" access mode.
     /// `Some(password)` requires a successful `auth.login` first, matching
-    /// the app's password mode (`docs/v2-api-migration.md`, `auth_required`
+    /// the app's password mode (`docs/socket-api.md`, `auth_required`
     /// / `auth_unconfigured` codes).
     pub password: Option<String>,
     /// The shared state model from `programa-domain`, the same crate the

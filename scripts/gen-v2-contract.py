@@ -5,7 +5,7 @@ Outputs (all overwritten in place, each carrying a "GENERATED, do not edit" head
   - Sources/V2CommandCatalog.swift   (base/debug method-name arrays)
   - CLI/V2MethodNames.swift          (one named constant per v2 method)
 
-Handlers change only after the contract does (see docs/v2-api-migration.md "Contract").
+Handlers change only after the contract does (see docs/socket-api.md "Contract").
 Run scripts/check-v2-contract.sh to verify the checked-in files match this contract.
 """
 from __future__ import annotations
