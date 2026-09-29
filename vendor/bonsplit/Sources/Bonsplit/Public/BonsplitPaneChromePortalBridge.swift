@@ -35,7 +35,7 @@ public struct BonsplitPaneChromeTabDescriptor {
         isPinned: Bool,
         isDirty: Bool,
         showsNotificationBadge: Bool,
-        customColorHex: String?,
+        customColorHex: String? = nil,
         accessibilityValue: String,
         menuItems: [BonsplitPaneChromeMenuItem]
     ) {
@@ -86,7 +86,7 @@ public final class BonsplitPaneChromeDescriptor {
         onSelect: @escaping (TabID) -> Void,
         onClose: @escaping (TabID) -> Void,
         onContextAction: @escaping (TabID, TabContextAction) -> Void,
-        onApplyTabColor: @escaping (TabID, String) -> Void,
+        onApplyTabColor: @escaping (TabID, String) -> Void = { _, _ in },
         dragPasteboardData: @escaping (TabID) -> Data?,
         onDragStateChanged: @escaping (TabID, Bool) -> Void,
         validatedDropIndex: @escaping (Int) -> Int?,
