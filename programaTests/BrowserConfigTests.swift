@@ -4948,3 +4948,82 @@ final class BrowserDownloadFinalizationTests: XCTestCase {
         XCTAssertEqual(failure.retainedTempURL, sourceURL)
     }
 }
+
+final class ExternalOpenPolicyTests: XCTestCase {
+    private func url(_ raw: String) throws -> URL { try XCTUnwrap(URL(string: raw)) }
+
+    func testWebAndMailSchemesOpenWithoutPrompt() throws {
+        for raw in ["http://example.com", "https://example.com/x", "HTTPS://example.com", "mailto:a@b.co"] {
+            XCTAssertEqual(
+                ExternalOpenPolicy.requirement(
+                    for: try url(raw), handlerBundleIdentifier: nil, allowlist: [], targetIsExecutable: false
+                ),
+                .openWithoutPrompt,
+                raw
+            )
+        }
+    }
+
+    func testOtherSchemesPromptAndOfferRememberOnlyWithAHandler() throws {
+        let target = try url("slack://open")
+        XCTAssertEqual(
+            ExternalOpenPolicy.requirement(for: target, handlerBundleIdentifier: "com.tinyspeck.slackmacgap", allowlist: [], targetIsExecutable: false),
+            .prompt(offerAlwaysAllow: true)
+        )
+        XCTAssertEqual(
+            ExternalOpenPolicy.requirement(for: target, handlerBundleIdentifier: nil, allowlist: [], targetIsExecutable: false),
+            .prompt(offerAlwaysAllow: false)
+        )
+    }
+
+    func testAllowlistedAppOpensWithoutPromptButExecutablesAlwaysAsk() throws {
+        let allow = ["com.tinyspeck.slackmacgap", "com.apple.finder"]
+        XCTAssertEqual(
+            ExternalOpenPolicy.requirement(for: try url("slack://open"), handlerBundleIdentifier: "com.tinyspeck.slackmacgap", allowlist: allow, targetIsExecutable: false),
+            .openWithoutPrompt
+        )
+        XCTAssertEqual(
+            ExternalOpenPolicy.requirement(for: URL(fileURLWithPath: "/Applications/Foo.app"), handlerBundleIdentifier: "com.apple.finder", allowlist: allow, targetIsExecutable: true),
+            .prompt(offerAlwaysAllow: false)
+        )
+    }
+
+    func testTargetIsExecutableCoversBundlesScriptsAndExecBit() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let plain = dir.appendingPathComponent("notes.txt")
+        try "x".write(to: plain, atomically: true, encoding: .utf8)
+        XCTAssertFalse(ExternalOpenPolicy.targetIsExecutable(plain))
+
+        let bare = dir.appendingPathComponent("runme")
+        try "#!/bin/sh\n".write(to: bare, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bare.path)
+        XCTAssertTrue(ExternalOpenPolicy.targetIsExecutable(bare))
+
+        for name in ["a.command", "b.sh", "c.tool", "D.app"] {
+            XCTAssertTrue(ExternalOpenPolicy.targetIsExecutable(dir.appendingPathComponent(name)), name)
+        }
+        XCTAssertFalse(ExternalOpenPolicy.targetIsExecutable(dir), "plain directories are not executables")
+        XCTAssertFalse(ExternalOpenPolicy.targetIsExecutable(try url("slack://open")))
+    }
+
+    func testAllowlistRoundTripsThroughDefaults() throws {
+        let suite = "ExternalOpenPolicyTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(ExternalOpenPolicy.allowlist(defaults: defaults), [])
+        ExternalOpenPolicy.addToAllowlist("com.example.app", defaults: defaults)
+        ExternalOpenPolicy.addToAllowlist("com.example.app", defaults: defaults)
+        ExternalOpenPolicy.addToAllowlist("bad\nid", defaults: defaults)
+        XCTAssertEqual(ExternalOpenPolicy.allowlist(defaults: defaults), ["com.example.app"])
+    }
+
+    func testOnlyClicksAndFormSubmitsCountAsUserGestures() {
+        XCTAssertTrue(ExternalOpenPolicy.navigationTypeHasUserGesture(.linkActivated))
+        XCTAssertTrue(ExternalOpenPolicy.navigationTypeHasUserGesture(.formSubmitted))
+        XCTAssertFalse(ExternalOpenPolicy.navigationTypeHasUserGesture(.other))
+        XCTAssertFalse(ExternalOpenPolicy.navigationTypeHasUserGesture(.reload))
+    }
+}
