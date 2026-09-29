@@ -754,23 +754,26 @@ mod tests {
 
     /// `system.capabilities` advertises `IMPLEMENTED_METHODS`; every advertised
     /// method must have a `dispatch` arm, and an unlisted one must not.
-    #[test]
-    fn every_advertised_method_is_dispatched() {
+    #[tokio::test]
+    async fn every_advertised_method_is_dispatched() {
         let state = Arc::new(AppState::new(None));
-        let call = |method: &str| {
-            let req = Request {
-                id: None,
-                method: method.to_string(),
-                // An empty argv makes session.open fail validation instead of
-                // spawning a shell; other methods reject empty params.
-                params: json!({"argv": []}),
-            };
-            let mut authenticated = true;
-            let mut attachments = HashSet::new();
-            dispatch(&req, &state, &mut authenticated, &mut attachments)
+        let call = |method: &'static str| {
+            let state = Arc::clone(&state);
+            async move {
+                let req = Request {
+                    id: None,
+                    method: method.to_string(),
+                    // An empty argv makes session.open fail validation instead of
+                    // spawning a shell; other methods reject empty params.
+                    params: json!({"argv": []}),
+                };
+                let mut authenticated = true;
+                let mut attachments = HashSet::new();
+                dispatch(&req, &state, &mut authenticated, &mut attachments).await
+            }
         };
         for method in IMPLEMENTED_METHODS {
-            if let Err(error) = call(method) {
+            if let Err(error) = call(method).await {
                 assert_ne!(
                     error.code.as_str(),
                     ErrorCode::MethodNotFound.as_str(),
@@ -778,7 +781,10 @@ mod tests {
                 );
             }
         }
-        let unknown = call("system.not_a_method").err().map(|e| e.code.as_str());
+        let unknown = call("system.not_a_method")
+            .await
+            .err()
+            .map(|e| e.code.as_str());
         assert_eq!(unknown, Some(ErrorCode::MethodNotFound.as_str()));
     }
 }

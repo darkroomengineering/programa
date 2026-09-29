@@ -3682,7 +3682,7 @@ final class SocketConnectProbeTests: XCTestCase {
         let path = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("probe-\(shortID).sock").path
         defer { unlink(path) }
 
-        XCTAssertFalse(TerminalController.probeSocketConnect(at: path, timeout: 0.5), "missing socket must fail")
+        XCTAssertFalse(SocketConnectProbe.canConnect(at: path, timeout: 0.5), "missing socket must fail")
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         XCTAssertGreaterThanOrEqual(fd, 0)
@@ -3700,9 +3700,9 @@ final class SocketConnectProbeTests: XCTestCase {
         }
         XCTAssertEqual(bound, 0)
         XCTAssertEqual(listen(fd, 4), 0)
-        XCTAssertTrue(TerminalController.probeSocketConnect(at: path, timeout: 0.5))
+        XCTAssertTrue(SocketConnectProbe.canConnect(at: path, timeout: 0.5))
 
         Darwin.close(fd)
-        XCTAssertFalse(TerminalController.probeSocketConnect(at: path, timeout: 0.5), "a socket file with no listener must fail")
+        XCTAssertFalse(SocketConnectProbe.canConnect(at: path, timeout: 0.5), "a socket file with no listener must fail")
     }
 }

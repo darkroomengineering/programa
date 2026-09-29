@@ -2661,7 +2661,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return
         }
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let reachable = TerminalController.probeSocketConnect(at: expectedPath, timeout: 0.5)
+            let reachable = SocketConnectProbe.canConnect(at: expectedPath, timeout: 0.5)
             guard !reachable else { return }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {

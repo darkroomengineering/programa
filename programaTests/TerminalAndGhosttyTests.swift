@@ -5864,7 +5864,7 @@ final class TerminalControllerV2RefInvariantTests: XCTestCase {
 
 final class BrowserStateExportPolicyTests: XCTestCase {
     func testCookieDomainsMatchOnlyTheCurrentSite() {
-        let match = TerminalController.V2BrowserStateExport.cookieMatchesSite
+        let match = BrowserStateExport.cookieMatchesSite
         XCTAssertTrue(match("example.com", "example.com"))
         XCTAssertTrue(match(".example.com", "www.example.com"), "parent-domain cookies apply to the host")
         XCTAssertTrue(match("api.example.com", "example.com"), "subdomain cookies of the host are part of the site")
@@ -5884,7 +5884,7 @@ final class BrowserStateExportPolicyTests: XCTestCase {
         try Data("old".utf8).write(to: target)
         try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: target.path)
 
-        try TerminalController.V2BrowserStateExport.writePrivateFile(Data("new".utf8), to: target.path)
+        try BrowserStateExport.writePrivateFile(Data("new".utf8), to: target.path)
 
         XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "new")
         let mode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)
@@ -5894,7 +5894,7 @@ final class BrowserStateExportPolicyTests: XCTestCase {
 
     func testPrivateFileWriteFailsWhenDirectoryIsMissing() {
         XCTAssertThrowsError(
-            try TerminalController.V2BrowserStateExport.writePrivateFile(
+            try BrowserStateExport.writePrivateFile(
                 Data("x".utf8),
                 to: "/nonexistent-\(UUID().uuidString)/state.json"
             )

@@ -1328,41 +1328,6 @@ class TerminalController {
         )
     }
 
-    /// True when a client can connect to the listener at `socketPath` within `timeout`.
-    /// Connects and closes without sending anything, so it needs no authentication.
-    nonisolated static func probeSocketConnect(at socketPath: String, timeout: TimeInterval) -> Bool {
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
-        let flags = fcntl(fd, F_GETFL)
-        guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0 else { return false }
-
-        var addr = sockaddr_un()
-        memset(&addr, 0, MemoryLayout<sockaddr_un>.size)
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let maxLen = MemoryLayout.size(ofValue: addr.sun_path)
-        guard socketPath.utf8.count < maxLen else { return false }
-        socketPath.withCString { ptr in
-            withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
-                let buf = UnsafeMutableRawPointer(pathPtr).assumingMemoryBound(to: CChar.self)
-                strncpy(buf, ptr, maxLen - 1)
-            }
-        }
-        let result = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
-                Darwin.connect(fd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        if result == 0 { return true }
-        guard errno == EINPROGRESS else { return false }
-        var pollFD = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-        guard poll(&pollFD, 1, Int32(timeout * 1000)) == 1 else { return false }
-        var soError: Int32 = 0
-        var length = socklen_t(MemoryLayout<Int32>.size)
-        guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &length) == 0 else { return false }
-        return soError == 0
-    }
-
     nonisolated static func probeSocketPing(at socketPath: String, timeout: TimeInterval) -> String? {
         struct PingResponse: Decodable {
             struct Result: Decodable {
@@ -1537,50 +1502,34 @@ class TerminalController {
     private func passwordLoginV2ResponseIfNeeded(
         for command: String,
         authenticated: inout Bool,
-        failureLimiter: inout SocketAuthFailureLimiter,
-        shouldCloseConnection: inout Bool
+        failureLimiter: inout SocketAuthFailureLimiter
     ) -> String? {
-        guard command.hasPrefix("{"),
-              let data = command.data(using: .utf8),
-              let dict = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] else {
-            return nil
-        }
-        let id = dict["id"]
-        let method = (dict["method"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard method == "auth.login" else {
-            return nil
-        }
-
-        guard let params = dict["params"] as? [String: Any],
-              let provided = params["password"] as? String else {
+        guard let (id, outcome) = SocketPasswordLogin.evaluate(
+            command,
+            credentials: { withListenerState { socketPasswordCredentialSource } },
+            limiter: &failureLimiter
+        ) else { return nil }
+        switch outcome {
+        case .invalidParams:
             return v2Error(id: id, code: "invalid_params", message: "auth.login requires params.password")
-        }
-
-        let credentialSource = withListenerState {
-            socketPasswordCredentialSource
-        }
-
-        guard credentialSource.hasConfiguredPassword() else {
+        case .unconfigured:
             return v2Error(
                 id: id,
                 code: "auth_unconfigured",
                 message: "Password mode is enabled but no socket password is configured in Settings."
             )
-        }
-
-        guard credentialSource.verify(provided) else {
-            shouldCloseConnection = failureLimiter.recordFailure()
+        case .failed:
             return v2Error(id: id, code: "auth_failed", message: "Invalid password")
+        case .succeeded:
+            authenticated = true
+            return v2Ok(id: id, result: ["authenticated": true])
         }
-        authenticated = true
-        return v2Ok(id: id, result: ["authenticated": true])
     }
 
     private func authResponseIfNeeded(
         for command: String,
         authenticated: inout Bool,
         failureLimiter: inout SocketAuthFailureLimiter,
-        shouldCloseConnection: inout Bool,
         requestPolicy: SocketRequestPolicy
     ) -> String? {
         guard requestPolicy.requiresPasswordAuthentication else {
@@ -1589,8 +1538,7 @@ class TerminalController {
         if let v2Response = passwordLoginV2ResponseIfNeeded(
             for: command,
             authenticated: &authenticated,
-            failureLimiter: &failureLimiter,
-            shouldCloseConnection: &shouldCloseConnection
+            failureLimiter: &failureLimiter
         ) {
             return v2Response
         }
@@ -1913,16 +1861,14 @@ class TerminalController {
                 let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { continue }
 
-                var closeAfterResponse = false
                 if let authResponse = authResponseIfNeeded(
                     for: trimmed,
                     authenticated: &authenticated,
                     failureLimiter: &failureLimiter,
-                    shouldCloseConnection: &closeAfterResponse,
                     requestPolicy: requestPolicy
                 ) {
                     connection.writeLine(authResponse)
-                    if closeAfterResponse {
+                    if failureLimiter.isExhausted {
                         closeReason = "auth_failed_limit"
                         break connectionLoop
                     }

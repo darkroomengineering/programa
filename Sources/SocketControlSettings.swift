@@ -66,10 +66,89 @@ struct SocketAuthFailureLimiter {
     static let maxFailures = 5
     private var failures = 0
 
-    /// Returns true when the connection has used up its attempts and must be closed.
+    /// True once the connection has used up its attempts and must be closed.
+    var isExhausted: Bool { failures >= Self.maxFailures }
+
+    /// Records one failed attempt and returns `isExhausted`.
+    @discardableResult
     mutating func recordFailure() -> Bool {
         failures += 1
-        return failures >= Self.maxFailures
+        return isExhausted
+    }
+}
+
+/// Parses one `auth.login` request and checks it against the configured password.
+enum SocketPasswordLogin {
+    enum Outcome {
+        case invalidParams
+        case unconfigured
+        case failed
+        case succeeded
+    }
+
+    /// Returns nil when `command` is not an `auth.login` request. `credentials` is read only
+    /// for login requests, so ordinary commands never touch the password store.
+    static func evaluate(
+        _ command: String,
+        credentials: () -> TerminalController.SocketPasswordCredentialSource,
+        limiter: inout SocketAuthFailureLimiter
+    ) -> (id: Any?, outcome: Outcome)? {
+        guard command.hasPrefix("{"),
+              let data = command.data(using: .utf8),
+              let dict = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any],
+              (dict["method"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == "auth.login" else {
+            return nil
+        }
+        let id = dict["id"]
+        guard let params = dict["params"] as? [String: Any],
+              let provided = params["password"] as? String else {
+            return (id, .invalidParams)
+        }
+        let source = credentials()
+        guard source.hasConfiguredPassword() else { return (id, .unconfigured) }
+        guard source.verify(provided) else {
+            limiter.recordFailure()
+            return (id, .failed)
+        }
+        return (id, .succeeded)
+    }
+}
+
+/// Checks whether the control socket still accepts connections.
+enum SocketConnectProbe {
+    /// True when a client can connect to the listener at `socketPath` within `timeout`.
+    /// Connects and closes without sending anything, so it needs no authentication.
+    static func canConnect(at socketPath: String, timeout: TimeInterval) -> Bool {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        let flags = fcntl(fd, F_GETFL)
+        guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0 else { return false }
+
+        var addr = sockaddr_un()
+        memset(&addr, 0, MemoryLayout<sockaddr_un>.size)
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let maxLen = MemoryLayout.size(ofValue: addr.sun_path)
+        guard socketPath.utf8.count < maxLen else { return false }
+        socketPath.withCString { ptr in
+            withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
+                let buf = UnsafeMutableRawPointer(pathPtr).assumingMemoryBound(to: CChar.self)
+                strncpy(buf, ptr, maxLen - 1)
+            }
+        }
+        let result = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                Darwin.connect(fd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        if result == 0 { return true }
+        guard errno == EINPROGRESS else { return false }
+        var pollFD = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+        guard poll(&pollFD, 1, Int32(timeout * 1000)) == 1 else { return false }
+        var soError: Int32 = 0
+        var length = socklen_t(MemoryLayout<Int32>.size)
+        guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &length) == 0 else { return false }
+        return soError == 0
     }
 }
 
