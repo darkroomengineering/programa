@@ -63,12 +63,11 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Incoming notifications no longer reset a valid keyboard selection in the Notifications page.
 - Socket and typing-lag CI jobs cache the DerivedData paths they actually build into.
 - Release publishing accepts the previous ten-asset candidate manifests again, so the first ship after the remote daemon removal no longer fails.
-- Remote and local CLI clients now share the v2 JSON-RPC and `programa-relay-auth` contracts, password-protected sockets work through MCP, and remote bootstrap files, tmux wait signals, relay diagnostics, and downloaded daemon artifacts have bounded ownership and lifetime.
+- Password-protected sockets work through MCP, and tmux wait signals have bounded ownership and lifetime.
 - Session recovery now rejects oversized or structurally invalid snapshots before reconstruction, quarantines corrupt primaries, caps history scanning, elects escrow holders without unlinking live or indeterminate sockets, and terminates timed-out subprocess trees without leaving descendants or pipe readers behind.
-- The iOS client now uses device-only Keychain credentials, bounded newline framing, cancellation-safe request and pairing deadlines, settled path selection, server-reconciled CloudKit subscriptions, and a generation-owned reconnect loop. The completed duplicate macOS transport spike has been removed.
-- Browser extensions now require explicit permission consent and support revocation; browser downloads, history, review diffs, VS Code discovery output, and automation state enforce bounds while data is read.
-- Port settings are validated within the TCP range without trapping arithmetic, managed settings and directory trust mutations are serialized, notification routing explicitly enters the main actor, and TestFlight signing restores the developer state it temporarily changes.
-- CI now pins every external action by commit, builds and locates artifacts through job-specific DerivedData paths, enforces the repository's Zig 0.16.0 source of truth, and builds the remote daemon with Go 1.26.7.
+- Browser downloads, history, review diffs, and automation state enforce bounds while data is read.
+- Port settings are validated within the TCP range without trapping arithmetic, managed settings and directory trust mutations are serialized, and notification routing explicitly enters the main actor.
+- CI now pins every external action by commit, builds and locates artifacts through job-specific DerivedData paths and enforces the repository's Zig 0.16.0 source of truth.
 - Sparkle is updated to 2.9.6, which hardens delta-update destinations against symlinks, rejects package installation after signing validation fails, and safely moves installer archives.
 - Provider usage now completes the Codex app-server handshake before reading limits, verifies Claude's current login before trusting its bounded fresh cache, hides signed-out providers, refreshes whenever its compact sidebar control opens, and sizes the popover to its visible content.
 - The provider usage popover no longer reports that Claude and Codex usage could not be read: reading the Codex app server's silent stderr through `FileHandle.bytes` blocked Foundation's shared pipe reader, so both probes timed out together. A signed-out Claude CLI now hides the provider instead of showing an error, and the sidebar help and usage icons sit on a slightly wider pitch.
@@ -80,13 +79,11 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Browser downloads now keep the completed temporary file available when moving it to the destination fails, so a finalization error cannot silently discard the download.
 - An ordinary documentation-only commit on `main` can no longer strand the latest green app revision; it now starts CI and can drive the exact-tip release pipeline.
 - Browser automation now reuses element references within a page, caps their count and selector bytes, bounds DOM visits and every snapshot payload field, preserves state across successful tab transfers, and finalizes failed transfers or closed tabs, workspaces, and windows exactly once.
-- Revoking a paired mobile device now also blocks connections still being admitted, and disabling the bridge closes active phone sessions.
 - An unreadable browser history file no longer causes repeated disk reads on every omnibar keystroke.
 - Clearing browser history now stays cleared after a temporary disk deletion failure or app termination.
 - Escape now cancels in-progress terminal input for Japanese, Chinese, and Korean keyboards even while the command palette is still opening or has just closed.
 - Cmd+D now confirms only the close alert in the window that received the shortcut, so another window's alert can no longer close the wrong tab or steal a split command.
 - Concurrent Programa launches now use exact process identities and a durable per-target responsive state so overlapping contenders cannot force-close a healthy instance. Requests keep generation-owned cleanup, recognized stale state is pruned in bounded batches, live requesters are authenticated from running code, and an unresponsive instance can only be force-closed through a Cancel-first data-loss warning.
-- Browser imports now treat Unicode domains and their Punycode forms as the same filter, so internationalized domains no longer silently import zero matching cookies or history entries.
 - Socket automation no longer hangs on split Unicode requests or unsubscribe races, and malformed telemetry can no longer crash the app or grow retained workspace state without bounds.
 - Large command output no longer deadlocks the CLI or background Git checks, and stalled Git probes now time out instead of accumulating work.
 - Browser favicons now have strict download and decode limits, so a hostile or broken site cannot consume unbounded memory or restore a stale icon after navigation.
