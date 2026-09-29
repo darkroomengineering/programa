@@ -4580,17 +4580,17 @@ final class BrowserLinkOpenSettingsTests: XCTestCase {
         XCTAssertEqual(workspace.openedWithApplicationURLs.map(\.1), [workspace.applicationURLOverride])
     }
 
-    func testOpenExternallyKeepsNonWebSchemesOnSystemHandlerEvenWithPreferredBrowser() throws {
+    // Other schemes (slack://, vscode://) now go through ExternalOpenPolicy's confirmation,
+    // covered by the policy tests; only mailto still opens directly on the system handler.
+    func testOpenExternallyKeepsMailtoOnSystemHandlerEvenWithPreferredBrowser() throws {
         defaults.set("com.apple.Safari", forKey: BrowserLinkOpenSettings.externalBrowserBundleIdentifierKey)
         let workspace = BrowserExternalOpenRecordingWorkspace()
         workspace.applicationURLOverride = URL(fileURLWithPath: "/Applications/Safari.app")
         let mailto = try XCTUnwrap(URL(string: "mailto:someone@example.com"))
-        let deepLink = try XCTUnwrap(URL(string: "slack://open?team=T1"))
 
         XCTAssertTrue(BrowserLinkOpenSettings.openExternally(mailto, defaults: defaults, workspace: workspace))
-        XCTAssertTrue(BrowserLinkOpenSettings.openExternally(deepLink, defaults: defaults, workspace: workspace))
 
-        XCTAssertEqual(workspace.openedURLs, [mailto, deepLink])
+        XCTAssertEqual(workspace.openedURLs, [mailto])
         XCTAssertTrue(workspace.openedWithApplicationURLs.isEmpty)
     }
 }

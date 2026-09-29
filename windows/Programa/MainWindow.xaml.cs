@@ -129,7 +129,7 @@ public sealed partial class MainWindow : Window
         finally { _projecting = false; }
         // Rebuilding the tree drops keyboard focus. Refocus once the new tree has been laid out,
         // unless a dialog is open and should keep it.
-        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             if (!_dialogOpen) ActiveTerminal()?.FocusTerminal();
         });
