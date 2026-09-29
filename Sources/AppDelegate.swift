@@ -16,6 +16,60 @@ private enum ProgramaThemeNotifications {
     static let reloadConfig = Notification.Name("com.darkroom.programa.themes.reload-config")
 }
 
+/// Debounces distributed theme-reload requests and skips a reload when the config files are
+/// byte-for-byte as they were at the previous reload (same modification date and size).
+@MainActor
+final class ThemeReloadCoalescer {
+    private let debounce: TimeInterval
+    private var pending: DispatchWorkItem?
+    private var lastFingerprint: [String]?
+
+    init(debounce: TimeInterval = 0.25) {
+        self.debounce = debounce
+    }
+
+    func request(fingerprint: @escaping () -> [String], reload: @escaping () -> Void) {
+        pending?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let current = fingerprint()
+                if current == self.lastFingerprint { return }
+                self.lastFingerprint = current
+                reload()
+            }
+        }
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + debounce, execute: work)
+    }
+
+    /// Modification date and size of every config file a theme change can touch.
+    static func configFingerprint(fileManager: FileManager = .default) -> [String] {
+        var paths: [String] = []
+        let home = fileManager.homeDirectoryForCurrentUser
+        if let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            var bundleIdentifiers = ["com.darkroom.programa", "com.mitchellh.ghostty"]
+            if let current = Bundle.main.bundleIdentifier, !bundleIdentifiers.contains(current) {
+                bundleIdentifiers.append(current)
+            }
+            for id in bundleIdentifiers {
+                for name in ["config", "config.ghostty"] {
+                    paths.append(appSupport.appendingPathComponent(id).appendingPathComponent(name).path)
+                }
+            }
+        }
+        for name in ["config", "config.ghostty"] {
+            paths.append(home.appendingPathComponent(".config/ghostty/\(name)").path)
+        }
+        return paths.map { path in
+            guard let attributes = try? fileManager.attributesOfItem(atPath: path) else { return "\(path)|missing" }
+            let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            let size = (attributes[.size] as? NSNumber)?.intValue ?? -1
+            return "\(path)|\(modified)|\(size)"
+        }
+    }
+}
+
 /// Association key for retaining `MainWindowToolbarDelegate` on its window --
 /// `NSToolbar.delegate` is weak, so without this the delegate is deallocated
 /// immediately and the toolbar silently loses its item provider.
@@ -859,6 +913,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     var shortcutLayoutCharacterProvider: (UInt16, NSEvent.ModifierFlags) -> String? = KeyboardLayout.character(forKeyCode:modifierFlags:)
     private var workspaceObserver: NSObjectProtocol?
     private var lifecycleSnapshotObservers: [NSObjectProtocol] = []
+    private let themeReloadCoalescer = ThemeReloadCoalescer()
     private var windowKeyObserver: NSObjectProtocol?
     private var mainWindowFullScreenToolbarObservers: [NSObjectProtocol] = []
     private var shortcutMonitor: Any?
@@ -10772,7 +10827,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
 private extension AppDelegate {
     @objc func handleThemesReloadNotification(_ notification: Notification) {
-        DispatchQueue.main.async {
+        themeReloadCoalescer.request(fingerprint: { ThemeReloadCoalescer.configFingerprint() }) {
             GhosttyApp.shared.reloadConfiguration(source: "distributed.cmux.themes")
         }
     }
