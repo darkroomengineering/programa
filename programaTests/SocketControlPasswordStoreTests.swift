@@ -331,3 +331,25 @@ final class ProgramaCLIPathInstallerTests: XCTestCase {
         XCTAssertTrue(installer.isInstalled())
     }
 }
+
+final class SocketPasswordHardeningTests: XCTestCase {
+    func testConstantTimeEqualityMatchesOnlyIdenticalPasswords() {
+        XCTAssertTrue(SocketControlPasswordStore.constantTimeEquals("hunter2", "hunter2"))
+        XCTAssertFalse(SocketControlPasswordStore.constantTimeEquals("hunter2", "hunter3"))
+        XCTAssertFalse(SocketControlPasswordStore.constantTimeEquals("hunter2", "hunter22"))
+        XCTAssertFalse(SocketControlPasswordStore.constantTimeEquals("", "x"))
+    }
+
+    func testVerifyUsesTheConfiguredPassword() {
+        let env = [SocketControlSettings.socketPasswordEnvKey: "s3cret"]
+        XCTAssertTrue(SocketControlPasswordStore.verify(password: "s3cret", environment: env))
+        XCTAssertFalse(SocketControlPasswordStore.verify(password: "s3cret ", environment: env))
+        XCTAssertFalse(SocketControlPasswordStore.verify(password: "", environment: [:]))
+    }
+
+    func testConnectionIsClosedAfterFiveFailedLogins() {
+        var limiter = SocketAuthFailureLimiter()
+        for _ in 0..<4 { XCTAssertFalse(limiter.recordFailure()) }
+        XCTAssertTrue(limiter.recordFailure())
+    }
+}
