@@ -186,9 +186,9 @@ impl EventListener for EventProxy {
                 *lock(&self.0.title) = None;
                 self.0.changed();
             }
-            Event::Wakeup
-            | Event::CursorBlinkingChange
-            | Event::MouseCursorDirty => self.0.changed(),
+            Event::Wakeup | Event::CursorBlinkingChange | Event::MouseCursorDirty => {
+                self.0.changed()
+            }
             Event::Exit | Event::ChildExit(_) => {
                 self.0.terminated.store(true, Ordering::Release);
                 self.0.changed();
