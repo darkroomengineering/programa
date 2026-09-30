@@ -156,6 +156,17 @@ def main() -> int:
         cap = _run_cli(cli, ["capture-pane", "--workspace", ws, "--surface", s1, "--scrollback"])
         _must(capture_token in cap.stdout, f"capture-pane missing token: {cap.stdout!r}")
 
+        # The tmux shim captures the visible screen unless -S reaches into history.
+        scroll_prefix = f"TMUXSCROLL_{stamp}_"
+        c.send_surface(s1, f"for i in $(seq 1 400); do echo {scroll_prefix}$i; done\n")
+        _wait_for(lambda: _surface_has(c, ws, s1, f"{scroll_prefix}400"))
+        shim_target = f"%{p1}"
+        visible = _run_cli(cli, ["__tmux-compat", "capture-pane", "-p", "-t", shim_target]).stdout.splitlines()
+        history = _run_cli(cli, ["__tmux-compat", "capture-pane", "-p", "-S", "-", "-t", shim_target]).stdout.splitlines()
+        _must(f"{scroll_prefix}400" in visible, "shim capture-pane should include the last line on screen")
+        _must(f"{scroll_prefix}1" not in visible, "shim capture-pane without -S should not return scrollback")
+        _must(f"{scroll_prefix}1" in history, "shim capture-pane -S - should return scrollback")
+
         pipe_file = Path(tempfile.gettempdir()) / f"cmux_pipe_pane_{stamp}.log"
         _run_cli(cli, ["pipe-pane", "--workspace", ws, "--surface", s1, "--command", f"cat > {pipe_file}"])
         piped = pipe_file.read_text() if pipe_file.exists() else ""
@@ -204,19 +215,38 @@ def main() -> int:
         out, err = signaler.communicate(timeout=5)
         _must(signaler.returncode == 0, f"wait-for signal/wait failed: out={out!r} err={err!r}")
 
+        # Option order must not change which token is the channel name.
+        wait_name2 = f"tmux_wait_opt_{stamp}"
+        waiter2 = subprocess.Popen(
+            [cli, "--socket", SOCKET_PATH, "wait-for", "--timeout", "5", wait_name2],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={k: v for k, v in os.environ.items() if k not in {"PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID"}},
+        )
+        time.sleep(0.2)
+        _run_cli(cli, ["wait-for", "-S", wait_name2])
+        out2, err2 = waiter2.communicate(timeout=5)
+        _must(waiter2.returncode == 0, f"wait-for --timeout <n> <name> should wait on <name>: out={out2!r} err={err2!r}")
+
         title = f"tmux-title-{stamp}"
         _run_cli(cli, ["rename-window", "--workspace", ws, title])
         find = _run_cli(cli, ["find-window", title])
         _must(title in find.stdout, f"find-window title search failed: {find.stdout!r}")
 
+        # workspace.create inserts after the selected workspace without selecting it, so the
+        # order of ws/ws2/ws3 depends on creation order; read the actual order for next-window.
         ws2 = c.new_workspace()
         ws3 = c.new_workspace()
         c.select_workspace(ws)
+        order = [wid for _idx, wid, _title, _sel in c.list_workspaces()]
+        _must(ws in order and ws2 in order and ws3 in order, f"new workspaces missing from list: {order}")
+        ws_next = order[(order.index(ws) + 1) % len(order)]
         c.select_workspace(ws2)
         _run_cli(cli, ["last-window"])
         _must(c.current_workspace() == ws, f"last-window should navigate history back to ws={ws}")
         _run_cli(cli, ["next-window"])
-        _must(c.current_workspace() == ws2, f"next-window should move to ws2={ws2}")
+        _must(c.current_workspace() == ws_next, f"next-window should move to the workspace after ws: {ws_next}")
         _run_cli(cli, ["previous-window"])
         _must(c.current_workspace() == ws, f"previous-window should move back to ws={ws}")
         c.select_workspace(ws)
@@ -271,6 +301,13 @@ def main() -> int:
             _must(proc.returncode != 0 and "not supported" in merged, f"Expected not_supported for {cmd}, got: {merged!r}")
 
         resize_target, resize_flag, resize_axis = _pick_resize_target(c, current_panes)
+        pre_extent = _pane_extent(c, resize_target, resize_axis)
+        # The shim's -R/-D <n> moves the border n cells, not n pixels.
+        _run_cli(cli, ["__tmux-compat", "resize-pane", "-t", f"%{resize_target}", resize_flag, "3"])
+        _wait_for(
+            lambda: _pane_extent(c, resize_target, resize_axis) > pre_extent + 8.0,
+            timeout_s=3.0,
+        )
         pre_extent = _pane_extent(c, resize_target, resize_axis)
         _run_cli(cli, ["resize-pane", "--pane", resize_target, resize_flag, "--amount", "80"])
         _wait_for(
