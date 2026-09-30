@@ -277,9 +277,6 @@ jobs:
           fi
           echo "SPARKLE_PUBLIC_KEY=$DERIVED_PUBLIC_KEY" >> "$GITHUB_ENV"
 
-      - name: Prepare Rust targets for the shared core
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
-
       - name: Build universal app (Release)
         run: |
           xcodebuild -scheme programa -configuration Release -derivedDataPath build-universal \

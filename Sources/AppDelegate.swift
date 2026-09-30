@@ -803,12 +803,6 @@ func shouldSuppressWindowMoveForFolderDrag(window: NSWindow, event: NSEvent) -> 
     return shouldSuppressWindowMoveForFolderDrag(hitView: hitView)
 }
 
-struct ProgramaSingleInstanceProcessKey: Equatable, Sendable {
-    let startSeconds: Int64
-    let startMicroseconds: Int64
-    let processIdentifier: pid_t
-}
-
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuItemValidation {
     nonisolated(unsafe) static var shared: AppDelegate?
@@ -1074,13 +1068,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// asynchronous, and a session the holder refused to hand over must not be revived either.
     private var startupEndedHiddenSessionIds = Set<String>()
     var isApplyingStartupSessionRestore = false
-    lazy var startupHandoff = StartupSessionHandoff(
-        olderProcess: StartupSessionHandoff.authenticatedOlderProcess,
-        isLive: { Self.singleInstanceProcessKey(for: $0.processIdentifier) == $0 },
-        onReady: { [weak self] in self?.resumeStartupSessionAfterHandoff() }
-    )
-    private var startupHandoffPrimaryWindowId: UUID?
-    private var acknowledgedDuplicateShutdown: (target: ProgramaSingleInstanceProcessKey, generation: UUID, url: URL)?
     let sessionPersistenceQueue = DispatchQueue(
         label: "com.cmuxterm.app.sessionPersistence",
         qos: .utility
@@ -1214,6 +1201,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
     }
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        if !isRunningUnderXCTest(ProcessInfo.processInfo.environment) {
+            deferToExistingInstanceIfNeeded()
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         let env = ProcessInfo.processInfo.environment
         let isRunningUnderXCTest = isRunningUnderXCTest(env)
@@ -1249,27 +1242,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 #endif
 
-        let forceDuplicateLaunchObserver = env["PROGRAMA_UI_TEST_ENABLE_DUPLICATE_LAUNCH_OBSERVER"] == "1"
-
         // UI tests frequently time out waiting for the main window if we do heavyweight
-        // LaunchServices registration / single-instance enforcement synchronously at startup.
-        // Skip these during XCTest (the app-under-test) so the window can appear quickly.
+        // LaunchServices registration synchronously at startup. Skip it during XCTest
+        // (the app-under-test) so the window can appear quickly.
         if !isRunningUnderXCTest {
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.scheduleLaunchServicesBundleRegistration()
-                self.enforceSingleInstance()
-                self.startupHandoff.initialArbitrationCompleted()
-                self.observeDuplicateLaunches()
-            }
-        } else if forceDuplicateLaunchObserver {
-            // Some UI regressions specifically exercise launch-observer behavior while still
-            // running under XCTest. Give the initial window and accessibility hierarchy a
-            // bounded head start before opting into process inspection for those cases only.
-            dilog("single_instance", "pid=\(getpid()) outcome=scheduled reason=ui_test_observer")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                dilog("single_instance", "pid=\(getpid()) outcome=installed reason=ui_test_observer")
-                self?.observeDuplicateLaunches()
+                self?.scheduleLaunchServicesBundleRegistration()
             }
         }
         NSWindow.allowsAutomaticWindowTabbing = false
@@ -1565,57 +1543,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if !startupHandoff.hasCompletedInitialArbitration {
-            enforceSingleInstance()
-            startupHandoff.initialArbitrationCompleted()
-        }
-        if startupHandoff.isWaiting { appLifecycleCoordinator.confirmSingleInstanceLoser() }
-        // Validate the exact-process arbitration request and publish an acknowledgment before
-        // synchronous persistence begins. Requesters treat that acknowledgment as proof that
-        // this process is responsive and cannot prompt or force-close us during teardown.
-        let hasValidatedDuplicateShutdownRequest = acknowledgeValidatedDuplicateShutdownRequest()
         let lifecycleDecision = appLifecycleCoordinator.beginTermination(
-            hasValidatedDuplicateShutdownRequest: hasValidatedDuplicateShutdownRequest,
             isTaggedDevBuild: SocketControlSettings.isTaggedDevBuild(),
             isQuitWarningEnabled: QuitWarningSettings.isEnabled()
         )
         SessionMachineryGate.isApplicationTerminating = true
-        let terminationPolicy = Self.singleInstanceTerminationPersistencePolicy(
-            isDiscardedDuplicate: appLifecycleCoordinator.isSingleInstanceLoser
-        )
         // A warning dialog can still cancel this termination request. The final
         // `applicationWillTerminate` callback is the only point that records a clean exit.
-        if terminationPolicy.persistPreTerminationSnapshot {
-            let saved = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
-            if !saved && !mainWindowContexts.isEmpty {
-                revokeAcknowledgedDuplicateShutdown()
-                appLifecycleCoordinator.cancelTermination()
-                SessionMachineryGate.isApplicationTerminating = false
-                dilog("session.save", "outcome=quit_cancelled reason=snapshot_write_failed")
+        let saved = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+        if !saved && !mainWindowContexts.isEmpty {
+            appLifecycleCoordinator.cancelTermination()
+            SessionMachineryGate.isApplicationTerminating = false
+            dilog("session.save", "outcome=quit_cancelled reason=snapshot_write_failed")
 #if DEBUG
-                if let debugQuitSaveFailureAlertForTesting {
-                    debugQuitSaveFailureAlertForTesting()
-                    return .terminateCancel
-                }
-#endif
-                let alert = NSAlert()
-                alert.alertStyle = .critical
-                alert.messageText = String(localized: "dialog.quitSaveFailed.title", defaultValue: "Couldn’t Save Sessions")
-                alert.informativeText = String(
-                    localized: "dialog.quitSaveFailed.message",
-                    defaultValue: "Programa stayed open because it couldn’t save your sessions. Check available disk space and try quitting again."
-                )
-                alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
-                alert.runModal()
+            if let debugQuitSaveFailureAlertForTesting {
+                debugQuitSaveFailureAlertForTesting()
                 return .terminateCancel
             }
+#endif
+            let alert = NSAlert()
+            alert.alertStyle = .critical
+            alert.messageText = String(localized: "dialog.quitSaveFailed.title", defaultValue: "Couldn’t Save Sessions")
+            alert.informativeText = String(
+                localized: "dialog.quitSaveFailed.message",
+                defaultValue: "Programa stayed open because it couldn’t save your sessions. Check available disk space and try quitting again."
+            )
+            alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
+            alert.runModal()
+            return .terminateCancel
         }
 
         guard lifecycleDecision.shouldWarn else {
-            dilog("single_instance", "pid=\(getpid()) outcome=terminate_now reason=\(lifecycleDecision.logReason)")
+            dilog("app.quit", "pid=\(getpid()) outcome=terminate_now reason=\(lifecycleDecision.logReason)")
             return .terminateNow
         }
-        dilog("single_instance", "pid=\(getpid()) outcome=warning reason=ordinary_quit")
+        dilog("app.quit", "pid=\(getpid()) outcome=warning reason=ordinary_quit")
 
         // Show the same confirmation dialog used by the Cmd+Q shortcut path,
         // then reply asynchronously so we can return .terminateLater now.
@@ -1638,7 +1600,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             if shouldQuit {
                 self.appLifecycleCoordinator.confirmQuit()
             } else {
-                self.revokeAcknowledgedDuplicateShutdown()
                 // Reset so that the next quit attempt can show the dialog again.
                 self.appLifecycleCoordinator.cancelTermination()
                 // Must be reset in lockstep, or a cancelled quit would leave
@@ -1654,13 +1615,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     func applicationWillTerminate(_ notification: Notification) {
         appLifecycleCoordinator.willTerminate()
         SessionMachineryGate.isApplicationTerminating = true
-        let terminationPolicy = Self.singleInstanceTerminationPersistencePolicy(
-            isDiscardedDuplicate: appLifecycleCoordinator.isSingleInstanceLoser
-        )
-        if terminationPolicy.persistCleanShutdownSnapshot {
-            saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false, cleanShutdown: true)
-        }
-        guard terminationPolicy.performProcessLocalTeardown else { return }
+        saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false, cleanShutdown: true)
         // Finalize any terminal closes still sitting in their undo grace period so a staged close
         // doesn't quietly leak instead of tearing down cleanly on quit.
         for context in mainWindowContexts.values {
@@ -1733,7 +1688,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func prepareStartupSessionSnapshotIfNeeded() {
         guard !didPrepareStartupSessionSnapshot else { return }
-        guard !startupHandoff.shouldDefer() else { return }
         didPrepareStartupSessionSnapshot = true
         // Archive whatever the previous launch left behind before any code path below (or
         // later in startup) can overwrite it -- including a launch that skips restore entirely
@@ -1837,7 +1791,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func attemptStartupSessionRestoreIfNeeded(primaryWindow: NSWindow) {
         guard !didAttemptStartupSessionRestore else { return }
-        guard !startupHandoff.shouldDefer() else { return }
         prepareStartupSessionSnapshotIfNeeded()
         didAttemptStartupSessionRestore = true
         guard !didHandleExplicitOpenIntentAtStartup else { return }
@@ -1940,17 +1893,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         saveSessionSnapshot(includeScrollback: false)
         reconcileOrphanedEscrowedSessions()
         ScrollbackPersistenceSettings.retryLegacyMigration()
-    }
-
-    private func resumeStartupSessionAfterHandoff() {
-        guard !isTerminatingApp else { return }
-        prepareStartupSessionSnapshotIfNeeded()
-        let primary = mainWindowContexts.values.first(where: { $0.windowId == startupHandoffPrimaryWindowId })
-            ?? mainWindowContexts.values.first
-        if let primary, let window = primary.window ?? windowForMainWindowId(primary.windowId) {
-            attemptStartupSessionRestoreIfNeeded(primaryWindow: window)
-            _ = saveSessionSnapshot(includeScrollback: false)
-        }
     }
 
     /// Ends the shells of windows the user had closed before the previous run ended.
@@ -2812,9 +2754,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             context = newContext
         }
         installMainWindowCloseObserver(for: context, window: window)
-        if startupHandoff.shouldDefer() && startupHandoffPrimaryWindowId == nil {
-            startupHandoffPrimaryWindowId = windowId
-        }
         CommandPaletteController.windowLifecycle.reset(windowId: windowId)
 
 #if DEBUG
@@ -8649,1405 +8588,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 #endif
 
-    struct SingleInstanceShutdownRequest: Codable, Equatable, Sendable {
-        static let currentVersion = 1
+    typealias InstanceCandidate = (processIdentifier: pid_t, launchDate: Date?, isTerminated: Bool)
 
-        let version: Int
-        let generation: UUID
-        let targetStartSeconds: Int64
-        let targetStartMicroseconds: Int64
-        let targetProcessIdentifier: pid_t
-        let requesterStartSeconds: Int64
-        let requesterStartMicroseconds: Int64
-        let requesterProcessIdentifier: pid_t
-        let createdAtUnixSeconds: TimeInterval
-
-        init(
-            version: Int = Self.currentVersion,
-            generation: UUID = UUID(),
-            target: ProgramaSingleInstanceProcessKey,
-            requester: ProgramaSingleInstanceProcessKey,
-            createdAtUnixSeconds: TimeInterval
-        ) {
-            self.version = version
-            self.generation = generation
-            targetStartSeconds = target.startSeconds
-            targetStartMicroseconds = target.startMicroseconds
-            targetProcessIdentifier = target.processIdentifier
-            requesterStartSeconds = requester.startSeconds
-            requesterStartMicroseconds = requester.startMicroseconds
-            requesterProcessIdentifier = requester.processIdentifier
-            self.createdAtUnixSeconds = createdAtUnixSeconds
+    /// First instance wins. Returns the pid of a live instance that launched before this one, if
+    /// any. Launch order (pid breaks ties) keeps two simultaneous launches from both deferring.
+    nonisolated static func existingInstanceProcessIdentifier(
+        among candidates: [InstanceCandidate],
+        own: (processIdentifier: pid_t, launchDate: Date?)
+    ) -> pid_t? {
+        func launchedEarlier(_ lhs: (pid_t, Date?), than rhs: (pid_t, Date?)) -> Bool {
+            let lhsDate = lhs.1 ?? .distantPast, rhsDate = rhs.1 ?? .distantPast
+            return lhsDate != rhsDate ? lhsDate < rhsDate : lhs.0 < rhs.0
         }
-
-        var target: ProgramaSingleInstanceProcessKey {
-            ProgramaSingleInstanceProcessKey(
-                startSeconds: targetStartSeconds,
-                startMicroseconds: targetStartMicroseconds,
-                processIdentifier: targetProcessIdentifier
-            )
-        }
-
-        var requester: ProgramaSingleInstanceProcessKey {
-            ProgramaSingleInstanceProcessKey(
-                startSeconds: requesterStartSeconds,
-                startMicroseconds: requesterStartMicroseconds,
-                processIdentifier: requesterProcessIdentifier
-            )
-        }
+        return candidates
+            .filter { $0.processIdentifier != own.processIdentifier && !$0.isTerminated }
+            .filter { launchedEarlier(($0.processIdentifier, $0.launchDate), than: (own.processIdentifier, own.launchDate)) }
+            .min { launchedEarlier(($0.processIdentifier, $0.launchDate), than: ($1.processIdentifier, $1.launchDate)) }?
+            .processIdentifier
     }
 
-    struct SingleInstanceShutdownAcknowledgment: Codable, Equatable, Sendable {
-        static let currentVersion = 1
-
-        let version: Int
-        let acceptedGeneration: UUID
-        let targetStartSeconds: Int64
-        let targetStartMicroseconds: Int64
-        let targetProcessIdentifier: pid_t
-        let createdAtUnixSeconds: TimeInterval
-
-        init(
-            version: Int = Self.currentVersion,
-            acceptedGeneration: UUID,
-            target: ProgramaSingleInstanceProcessKey,
-            createdAtUnixSeconds: TimeInterval
-        ) {
-            self.version = version
-            self.acceptedGeneration = acceptedGeneration
-            targetStartSeconds = target.startSeconds
-            targetStartMicroseconds = target.startMicroseconds
-            targetProcessIdentifier = target.processIdentifier
-            self.createdAtUnixSeconds = createdAtUnixSeconds
+    /// Runs from `applicationWillFinishLaunching`, before the socket listener, session restore,
+    /// or any window exists, so a losing launch has no side effects. Waits briefly for an
+    /// exiting instance (quit-then-relaunch, Sparkle relaunch) before deferring to it.
+    private func deferToExistingInstanceIfNeeded() {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
+        let ownPid = getpid()
+        let ownLaunchDate = NSRunningApplication.current.launchDate
+        let embeddedCLIURL = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Resources/bin/programa", isDirectory: false)
+            .standardizedFileURL.resolvingSymlinksInPath()
+        func liveExistingInstance() -> NSRunningApplication? {
+            let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+                .filter { $0.executableURL?.standardizedFileURL.resolvingSymlinksInPath() != embeddedCLIURL }
+            guard let pid = Self.existingInstanceProcessIdentifier(
+                among: apps.map { ($0.processIdentifier, $0.launchDate, $0.isTerminated) },
+                own: (ownPid, ownLaunchDate)
+            ) else { return nil }
+            return apps.first { $0.processIdentifier == pid }
         }
-
-        var target: ProgramaSingleInstanceProcessKey {
-            ProgramaSingleInstanceProcessKey(
-                startSeconds: targetStartSeconds,
-                startMicroseconds: targetStartMicroseconds,
-                processIdentifier: targetProcessIdentifier
-            )
+        guard liveExistingInstance() != nil else { return }
+        let deadline = Date().addingTimeInterval(2)
+        while liveExistingInstance() != nil, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
-    }
-
-    enum SingleInstanceForcePromptResponse: Equatable, Sendable {
-        case forceClose
-        case cancel
-    }
-
-    enum SingleInstanceForcePromptButton: Equatable, Sendable {
-        case primary
-        case secondary
-        case escape
-    }
-
-    struct SingleInstanceCodeIdentity: Equatable, Sendable {
-        let signingIdentifier: String?
-        let teamIdentifier: String?
-    }
-
-    struct SingleInstanceTerminationPersistencePolicy: Equatable, Sendable {
-        let persistPreTerminationSnapshot: Bool
-        let persistCleanShutdownSnapshot: Bool
-        let performProcessLocalTeardown: Bool
-    }
-
-    enum SingleInstanceFallbackAction: Equatable, Sendable {
-        case skip
-        case waitForAcknowledgedExit
-        case prompt
-        case force
-        case exitNewer
-    }
-
-    nonisolated static func singleInstanceProcessKey(
-        for processIdentifier: pid_t
-    ) -> ProgramaSingleInstanceProcessKey? {
-        var processInfo = kinfo_proc()
-        var processInfoSize = MemoryLayout<kinfo_proc>.size
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, processIdentifier]
-        guard sysctl(&mib, UInt32(mib.count), &processInfo, &processInfoSize, nil, 0) == 0,
-              processInfoSize == MemoryLayout<kinfo_proc>.size,
-              processInfo.kp_proc.p_pid == processIdentifier else {
-            return nil
+        guard let existing = liveExistingInstance() else {
+            dilog("single_instance", "pid=\(ownPid) outcome=launch reason=previous_instance_exited")
+            return
         }
-
-        let startTime = processInfo.kp_proc.p_starttime
-        guard startTime.tv_sec > 0 || startTime.tv_usec > 0 else { return nil }
-        return ProgramaSingleInstanceProcessKey(
-            startSeconds: Int64(startTime.tv_sec),
-            startMicroseconds: Int64(startTime.tv_usec),
-            processIdentifier: processIdentifier
-        )
-    }
-
-    nonisolated static func shouldTerminateDuplicateInstance(
-        current: ProgramaSingleInstanceProcessKey,
-        other: ProgramaSingleInstanceProcessKey
-    ) -> Bool {
-        if current.startSeconds != other.startSeconds {
-            return current.startSeconds > other.startSeconds
+        dilog("single_instance", "pid=\(ownPid) outcome=exit reason=existing_instance existing=\(existing.processIdentifier)")
+        // This launch holds activation; hand it over so focus does not fall back to the
+        // previous app when we exit.
+        NSApp.yieldActivation(to: existing)
+        existing.activate(from: .current)
+        // Opening the app sends a reopen event, so the existing instance shows a window even
+        // when it hid them all instead of quitting.
+        if let bundleURL = existing.bundleURL {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration) { _, _ in exit(0) }
+            RunLoop.current.run(until: Date().addingTimeInterval(2))
+        } else {
+            existing.activate()
         }
-        if current.startMicroseconds != other.startMicroseconds {
-            return current.startMicroseconds > other.startMicroseconds
-        }
-        return current.processIdentifier > other.processIdentifier
-    }
-
-    private nonisolated static let duplicateShutdownRequestMaxAge: TimeInterval = 10
-    private nonisolated static let duplicateShutdownRequestMaxBytes = 4_096
-    private nonisolated static let duplicateTerminationGraceInterval: TimeInterval = 8
-    private nonisolated static let duplicateStateDirectoryMaxEntries = 128
-    private nonisolated static let duplicateStateDirectoryScanLimit = 512
-    private nonisolated static let duplicateStateDirectoryMaxPrunePasses = 8
-    private nonisolated static let duplicateTargetRequestScanLimit = 32
-
-    nonisolated static func shouldAcceptDuplicateShutdownRequest(
-        _ request: SingleInstanceShutdownRequest?,
-        currentProcessKey: ProgramaSingleInstanceProcessKey,
-        now: TimeInterval,
-        resolvedRequesterKey: ProgramaSingleInstanceProcessKey?,
-        requesterIsProgramaGUI: Bool
-    ) -> Bool {
-        guard let request,
-              request.version == SingleInstanceShutdownRequest.currentVersion,
-              request.target == currentProcessKey,
-              request.createdAtUnixSeconds.isFinite else {
-            return false
-        }
-
-        let age = now - request.createdAtUnixSeconds
-        guard age >= 0, age <= duplicateShutdownRequestMaxAge,
-              request.requester != currentProcessKey,
-              resolvedRequesterKey == request.requester,
-              requesterIsProgramaGUI else {
-            return false
-        }
-
-        return shouldTerminateDuplicateInstance(current: request.requester, other: currentProcessKey)
+        exit(0)
     }
 
     nonisolated static func shouldWarnBeforeTermination(
         isTaggedDevBuild: Bool,
         isQuitWarningConfirmed: Bool,
-        isInternalSingleInstanceLoserExit: Bool,
-        hasValidatedDuplicateShutdownRequest: Bool,
         isQuitWarningEnabled: Bool
     ) -> Bool {
-        guard !isTaggedDevBuild,
-              !isQuitWarningConfirmed,
-              !isInternalSingleInstanceLoserExit,
-              !hasValidatedDuplicateShutdownRequest else {
-            return false
-        }
+        guard !isTaggedDevBuild, !isQuitWarningConfirmed else { return false }
         return isQuitWarningEnabled
     }
 
-    nonisolated static func shouldAcceptDuplicateShutdownAcknowledgment(
-        _ acknowledgment: SingleInstanceShutdownAcknowledgment?,
-        expectedTarget: ProgramaSingleInstanceProcessKey,
-        requestCreatedAt: TimeInterval,
-        now: TimeInterval
-    ) -> Bool {
-        guard let acknowledgment,
-              acknowledgment.version == SingleInstanceShutdownAcknowledgment.currentVersion,
-              acknowledgment.target == expectedTarget,
-              acknowledgment.createdAtUnixSeconds.isFinite else {
-            return false
-        }
-        let requestDistance = abs(acknowledgment.createdAtUnixSeconds - requestCreatedAt)
-        return acknowledgment.createdAtUnixSeconds <= now + 1
-            && requestDistance <= duplicateShutdownRequestMaxAge
-    }
-
-    nonisolated static func shouldScheduleDuplicateFallback(
-        requestWasWritten: Bool,
-        gracefulTerminationAccepted: Bool
-    ) -> Bool {
-        requestWasWritten
-    }
-
-    nonisolated static func duplicateForcePromptResponse(
-        button: SingleInstanceForcePromptButton
-    ) -> SingleInstanceForcePromptResponse {
-        switch button {
-        case .primary, .escape: return .cancel
-        case .secondary: return .forceClose
-        }
-    }
-
-    nonisolated static func shouldTrustDuplicateCodeIdentity(
-        current: SingleInstanceCodeIdentity,
-        candidate: SingleInstanceCodeIdentity,
-        designatedRequirementMatches: Bool,
-        isDebugBuild: Bool
-    ) -> Bool {
-        guard designatedRequirementMatches,
-              let currentSigningIdentifier = current.signingIdentifier,
-              !currentSigningIdentifier.isEmpty,
-              candidate.signingIdentifier == currentSigningIdentifier else {
-            return false
-        }
-        if isDebugBuild, current.teamIdentifier == nil, candidate.teamIdentifier == nil {
-            return true
-        }
-        guard let currentTeamIdentifier = current.teamIdentifier,
-              !currentTeamIdentifier.isEmpty else {
-            return false
-        }
-        return candidate.teamIdentifier == currentTeamIdentifier
-    }
-
-    nonisolated static func singleInstanceTerminationPersistencePolicy(
-        isDiscardedDuplicate: Bool
-    ) -> SingleInstanceTerminationPersistencePolicy {
-        SingleInstanceTerminationPersistencePolicy(
-            persistPreTerminationSnapshot: !isDiscardedDuplicate,
-            persistCleanShutdownSnapshot: !isDiscardedDuplicate,
-            performProcessLocalTeardown: true
-        )
-    }
-
-    nonisolated static func shouldTrustDuplicateRunningCode(
-        expectedProcessKey: ProgramaSingleInstanceProcessKey,
-        resolvedProcessKeyBeforeValidation: ProgramaSingleInstanceProcessKey?,
-        resolvedProcessKeyAfterValidation: ProgramaSingleInstanceProcessKey?,
-        currentIdentity: SingleInstanceCodeIdentity,
-        candidateIdentity: SingleInstanceCodeIdentity,
-        dynamicRequirementMatches: Bool,
-        isDebugBuild: Bool
-    ) -> Bool {
-        guard resolvedProcessKeyBeforeValidation == expectedProcessKey,
-              resolvedProcessKeyAfterValidation == expectedProcessKey else {
-            return false
-        }
-        return shouldTrustDuplicateCodeIdentity(
-            current: currentIdentity,
-            candidate: candidateIdentity,
-            designatedRequirementMatches: dynamicRequirementMatches,
-            isDebugBuild: isDebugBuild
-        )
-    }
-
-    nonisolated static func duplicateFallbackAction(
-        hasValidTargetAcknowledgment: Bool,
-        requestGenerationIsPending: Bool,
-        processIdentityMatches: Bool,
-        isTerminated: Bool,
-        response: SingleInstanceForcePromptResponse?
-    ) -> SingleInstanceFallbackAction {
-        guard requestGenerationIsPending,
-              processIdentityMatches,
-              !isTerminated else {
-            return .skip
-        }
-        if hasValidTargetAcknowledgment { return .waitForAcknowledgedExit }
-        guard let response else { return .prompt }
-        switch response {
-        case .forceClose: return .force
-        case .cancel: return .exitNewer
-        }
-    }
-
-    nonisolated static func shouldConsiderDuplicateApplication(
-        candidateBundleIdentifier: String?,
-        candidateProcessIdentifier: pid_t,
-        candidateExecutableURL: URL?,
-        expectedBundleIdentifier: String,
-        currentProcessIdentifier: pid_t,
-        embeddedCLIURL: URL
-    ) -> Bool {
-        guard candidateBundleIdentifier == expectedBundleIdentifier else {
-            dilog("single_instance", "pid=\(candidateProcessIdentifier) outcome=ignored reason=bundle_mismatch")
-            return false
-        }
-        guard candidateProcessIdentifier != currentProcessIdentifier else {
-            dilog("single_instance", "pid=\(candidateProcessIdentifier) outcome=ignored reason=current_process")
-            return false
-        }
-        guard let candidateExecutableURL else {
-            dilog("single_instance", "pid=\(candidateProcessIdentifier) outcome=ignored reason=missing_executable")
-            return false
-        }
-        guard candidateExecutableURL.standardizedFileURL.resolvingSymlinksInPath()
-                != embeddedCLIURL.standardizedFileURL.resolvingSymlinksInPath() else {
-            dilog("single_instance", "pid=\(candidateProcessIdentifier) outcome=ignored reason=embedded_cli")
-            return false
-        }
-        dilog("single_instance", "pid=\(candidateProcessIdentifier) outcome=accepted reason=gui_candidate")
-        return true
-    }
-
-    nonisolated private static func dynamicCodeForCurrentProcess() -> SecCode? {
-        var dynamicCode: SecCode?
-        guard SecCodeCopySelf(SecCSFlags(rawValue: 0), &dynamicCode) == errSecSuccess,
-              let dynamicCode else {
-            return nil
-        }
-        return dynamicCode
-    }
-
-    nonisolated private static func dynamicCode(
-        for processIdentifier: pid_t
-    ) -> SecCode? {
-        let attributes = [
-            kSecGuestAttributePid as String: NSNumber(value: processIdentifier),
-        ] as CFDictionary
-        var dynamicCode: SecCode?
-        guard SecCodeCopyGuestWithAttributes(
-            nil,
-            attributes,
-            SecCSFlags(rawValue: 0),
-            &dynamicCode
-        ) == errSecSuccess,
-              let dynamicCode else {
-            return nil
-        }
-        return dynamicCode
-    }
-
-    nonisolated private static func singleInstanceCodeIdentity(
-        for staticCode: SecStaticCode
-    ) -> SingleInstanceCodeIdentity? {
-        var signingInformation: CFDictionary?
-        guard SecCodeCopySigningInformation(
-            staticCode,
-            SecCSFlags(rawValue: kSecCSSigningInformation),
-            &signingInformation
-        ) == errSecSuccess,
-              let signingInformation else {
-            return nil
-        }
-        let dictionary = signingInformation as NSDictionary
-        return SingleInstanceCodeIdentity(
-            signingIdentifier: dictionary[kSecCodeInfoIdentifier] as? String,
-            teamIdentifier: dictionary[kSecCodeInfoTeamIdentifier] as? String
-        )
-    }
-
-    nonisolated private static func singleInstanceCodeIdentity(
-        for dynamicCode: SecCode
-    ) -> SingleInstanceCodeIdentity? {
-        // Security.framework documents SecCodeCopySigningInformation as valid for dynamic
-        // SecCode objects, but Swift imports its parameter as SecStaticCode. Both are CF
-        // code-object references; this bridge preserves the dynamic object rather than
-        // resolving a mutable on-disk static-code origin.
-        let signingInformationCode = unsafeBitCast(dynamicCode, to: SecStaticCode.self)
-        return singleInstanceCodeIdentity(for: signingInformationCode)
-    }
-
-    nonisolated static func isAuthenticatedProgramaApplication(
-        expectedProcessKey: ProgramaSingleInstanceProcessKey
-    ) -> Bool {
-        let processIdentifier = expectedProcessKey.processIdentifier
-        let processKeyBeforeValidation = singleInstanceProcessKey(for: processIdentifier)
-        guard let currentCode = dynamicCodeForCurrentProcess(),
-              processKeyBeforeValidation == expectedProcessKey,
-              let candidateCode = dynamicCode(for: processIdentifier),
-              let currentIdentity = singleInstanceCodeIdentity(for: currentCode),
-              let candidateIdentity = singleInstanceCodeIdentity(for: candidateCode) else {
-            dilog("single_instance", "pid=\(processIdentifier) outcome=rejected reason=signing_metadata")
-            return false
-        }
-        let currentRequirementCode = unsafeBitCast(currentCode, to: SecStaticCode.self)
-        var designatedRequirement: SecRequirement?
-        guard SecCodeCopyDesignatedRequirement(
-            currentRequirementCode,
-            SecCSFlags(rawValue: 0),
-            &designatedRequirement
-        ) == errSecSuccess,
-              let designatedRequirement else {
-            dilog("single_instance", "pid=\(processIdentifier) outcome=rejected reason=signing_requirement")
-            return false
-        }
-        let validationFlags = SecCSFlags(rawValue: 0)
-        let designatedRequirementMatches = SecCodeCheckValidity(
-            candidateCode,
-            validationFlags,
-            designatedRequirement
-        ) == errSecSuccess
-        let processKeyAfterValidation = singleInstanceProcessKey(for: processIdentifier)
 #if DEBUG
-        let isDebugBuild = true
-#else
-        let isDebugBuild = false
-#endif
-        let trusted = shouldTrustDuplicateRunningCode(
-            expectedProcessKey: expectedProcessKey,
-            resolvedProcessKeyBeforeValidation: processKeyBeforeValidation,
-            resolvedProcessKeyAfterValidation: processKeyAfterValidation,
-            currentIdentity: currentIdentity,
-            candidateIdentity: candidateIdentity,
-            dynamicRequirementMatches: designatedRequirementMatches,
-            isDebugBuild: isDebugBuild
-        )
-        dilog(
-            "single_instance",
-            "pid=\(processIdentifier) outcome=\(trusted ? "accepted" : "rejected") reason=code_identity"
-        )
-        return trusted
-    }
-
-    private static func scheduleDuplicateTermination(
-        requestTermination: () -> Bool,
-        scheduleGrace: (@escaping @MainActor () -> Void) -> Void,
-        performFallbackAfterGrace: @escaping @MainActor () -> Void
-    ) {
-        guard requestTermination() else { return }
-        scheduleGrace {
-            performFallbackAfterGrace()
-        }
-    }
-
-    nonisolated private static func acknowledgmentForAcceptedRequest(
-        _ request: SingleInstanceShutdownRequest,
-        currentProcessKey: ProgramaSingleInstanceProcessKey,
-        now: TimeInterval
-    ) -> SingleInstanceShutdownAcknowledgment? {
-        guard request.target == currentProcessKey,
-              request.version == SingleInstanceShutdownRequest.currentVersion else {
-            return nil
-        }
-        return SingleInstanceShutdownAcknowledgment(
-            acceptedGeneration: request.generation,
-            target: currentProcessKey,
-            createdAtUnixSeconds: now
-        )
-    }
-
-#if DEBUG
-    nonisolated static func duplicateRequestURLForTesting(
-        rootDirectory: URL,
-        target: ProgramaSingleInstanceProcessKey,
-        generation: UUID
-    ) -> URL {
-        duplicateShutdownRequestURL(
-            rootDirectory: rootDirectory,
-            target: target,
-            generation: generation
-        )
-    }
-
-    nonisolated static func acknowledgmentForAcceptedRequestForTesting(
-        _ request: SingleInstanceShutdownRequest,
-        currentProcessKey: ProgramaSingleInstanceProcessKey,
-        now: TimeInterval
-    ) -> SingleInstanceShutdownAcknowledgment? {
-        acknowledgmentForAcceptedRequest(
-            request,
-            currentProcessKey: currentProcessKey,
-            now: now
-        )
-    }
-
-    nonisolated static func duplicateFallbackActionForTesting(
-        hasValidTargetAcknowledgment: Bool,
-        requestGenerationIsPending: Bool,
-        processIdentityMatches: Bool,
-        isTerminated: Bool,
-        response: SingleInstanceForcePromptResponse?
-    ) -> SingleInstanceFallbackAction {
-        duplicateFallbackAction(
-            hasValidTargetAcknowledgment: hasValidTargetAcknowledgment,
-            requestGenerationIsPending: requestGenerationIsPending,
-            processIdentityMatches: processIdentityMatches,
-            isTerminated: isTerminated,
-            response: response
-        )
-    }
-
-    nonisolated static func duplicateAcknowledgmentURLForTesting(
-        rootDirectory: URL,
-        target: ProgramaSingleInstanceProcessKey,
-        generation: UUID
-    ) -> URL {
-        _ = generation
-        return duplicateShutdownAcknowledgmentURL(
-            rootDirectory: rootDirectory,
-            target: target
-        )
-    }
-
-    nonisolated static func writeDuplicateRequestForTesting(
-        rootDirectory: URL,
-        request: SingleInstanceShutdownRequest
-    ) -> URL? {
-        let url = duplicateShutdownRequestURL(
-            rootDirectory: rootDirectory,
-            target: request.target,
-            generation: request.generation
-        )
-        return writeBoundedSingleInstanceJSON(request, to: url) ? url : nil
-    }
-
-    nonisolated static func removeDuplicateStateForTesting(
-        rootDirectory: URL,
-        request: SingleInstanceShutdownRequest
-    ) -> Bool {
-        let pending = PendingSingleInstanceShutdown(
-            request: request,
-            requestURL: duplicateShutdownRequestURL(
-                rootDirectory: rootDirectory,
-                target: request.target,
-                generation: request.generation
-            ),
-            acknowledgmentURL: duplicateShutdownAcknowledgmentURL(
-                rootDirectory: rootDirectory,
-                target: request.target
-            )
-        )
-        let existed = isExactRequestPending(pending)
-        removeExactShutdownState(pending)
-        return existed
-    }
-
-    nonisolated static func prepareDuplicateStateForTesting(
-        rootDirectory: URL,
-        now: TimeInterval,
-        isProcessLive: (ProgramaSingleInstanceProcessKey) -> Bool
-    ) -> Bool {
-        preparedSingleInstanceStateURLs(
-            in: rootDirectory,
-            now: now,
-            isProcessLive: isProcessLive
-        ) != nil
-    }
-
-    nonisolated static func shouldAcceptDuplicateShutdownAcknowledgmentForTesting(
-        _ acknowledgment: SingleInstanceShutdownAcknowledgment?,
-        expectedRequest: SingleInstanceShutdownRequest,
-        now: TimeInterval
-    ) -> Bool {
-        shouldAcceptDuplicateShutdownAcknowledgment(
-            acknowledgment,
-            expectedTarget: expectedRequest.target,
-            requestCreatedAt: expectedRequest.createdAtUnixSeconds,
-            now: now
-        )
-    }
-
-    nonisolated static func shouldScheduleDuplicateFallbackForTesting(
-        requestWasWritten: Bool,
-        gracefulTerminationAccepted: Bool
-    ) -> Bool {
-        shouldScheduleDuplicateFallback(
-            requestWasWritten: requestWasWritten,
-            gracefulTerminationAccepted: gracefulTerminationAccepted
-        )
-    }
-
-    nonisolated static func duplicateForcePromptResponseForTesting(
-        button: SingleInstanceForcePromptButton
-    ) -> SingleInstanceForcePromptResponse {
-        duplicateForcePromptResponse(button: button)
-    }
-
-    nonisolated static func shouldTrustDuplicateCodeIdentityForTesting(
-        current: SingleInstanceCodeIdentity,
-        candidate: SingleInstanceCodeIdentity,
-        designatedRequirementMatches: Bool,
-        isDebugBuild: Bool
-    ) -> Bool {
-        shouldTrustDuplicateCodeIdentity(
-            current: current,
-            candidate: candidate,
-            designatedRequirementMatches: designatedRequirementMatches,
-            isDebugBuild: isDebugBuild
-        )
-    }
-
-    nonisolated static func shouldTrustDuplicateRunningCodeForTesting(
-        expectedProcessKey: ProgramaSingleInstanceProcessKey,
-        resolvedProcessKeyBeforeValidation: ProgramaSingleInstanceProcessKey?,
-        resolvedProcessKeyAfterValidation: ProgramaSingleInstanceProcessKey?,
-        currentIdentity: SingleInstanceCodeIdentity,
-        candidateIdentity: SingleInstanceCodeIdentity,
-        dynamicRequirementMatches: Bool,
-        isDebugBuild: Bool
-    ) -> Bool {
-        shouldTrustDuplicateRunningCode(
-            expectedProcessKey: expectedProcessKey,
-            resolvedProcessKeyBeforeValidation: resolvedProcessKeyBeforeValidation,
-            resolvedProcessKeyAfterValidation: resolvedProcessKeyAfterValidation,
-            currentIdentity: currentIdentity,
-            candidateIdentity: candidateIdentity,
-            dynamicRequirementMatches: dynamicRequirementMatches,
-            isDebugBuild: isDebugBuild
-        )
-    }
-
-    nonisolated static func singleInstanceTerminationPersistencePolicyForTesting(
-        isDiscardedDuplicate: Bool
-    ) -> SingleInstanceTerminationPersistencePolicy {
-        singleInstanceTerminationPersistencePolicy(isDiscardedDuplicate: isDiscardedDuplicate)
-    }
-
-    nonisolated static var duplicateTerminationGraceIntervalForTesting: TimeInterval {
-        duplicateTerminationGraceInterval
-    }
-
-    nonisolated static func publishDuplicateAcknowledgmentForTesting(
-        rootDirectory: URL,
-        request: SingleInstanceShutdownRequest,
-        currentProcessKey: ProgramaSingleInstanceProcessKey,
-        now: TimeInterval,
-        allowWrite: Bool = true
-    ) -> Bool {
-        publishDuplicateAcknowledgment(
-            rootDirectory: rootDirectory,
-            request: request,
-            currentProcessKey: currentProcessKey,
-            now: now,
-            write: { acknowledgment, url in
-                allowWrite && writeBoundedSingleInstanceJSON(acknowledgment, to: url)
-            }
-        )
-    }
-
-    nonisolated static func hasValidDuplicateAcknowledgmentForTesting(
-        rootDirectory: URL,
-        request: SingleInstanceShutdownRequest,
-        now: TimeInterval
-    ) -> Bool {
-        let pending = PendingSingleInstanceShutdown(
-            request: request,
-            requestURL: duplicateShutdownRequestURL(
-                rootDirectory: rootDirectory,
-                target: request.target,
-                generation: request.generation
-            ),
-            acknowledgmentURL: duplicateShutdownAcknowledgmentURL(
-                rootDirectory: rootDirectory,
-                target: request.target
-            )
-        )
-        return isExactRequestPending(pending) && hasValidAcknowledgment(for: pending, now: now)
-    }
-
-    nonisolated static func shouldAcceptDuplicateShutdownRequestForTesting(
-        _ request: SingleInstanceShutdownRequest?,
-        currentProcessKey: ProgramaSingleInstanceProcessKey,
-        now: TimeInterval,
-        resolvedRequesterKey: ProgramaSingleInstanceProcessKey?,
-        requesterIsProgramaGUI: Bool
-    ) -> Bool {
-        shouldAcceptDuplicateShutdownRequest(
-            request,
-            currentProcessKey: currentProcessKey,
-            now: now,
-            resolvedRequesterKey: resolvedRequesterKey,
-            requesterIsProgramaGUI: requesterIsProgramaGUI
-        )
-    }
-
     nonisolated static func shouldWarnBeforeTerminationForTesting(
         isTaggedDevBuild: Bool,
         isQuitWarningConfirmed: Bool,
-        isInternalSingleInstanceLoserExit: Bool,
-        hasValidatedDuplicateShutdownRequest: Bool,
         isQuitWarningEnabled: Bool
     ) -> Bool {
         shouldWarnBeforeTermination(
             isTaggedDevBuild: isTaggedDevBuild,
             isQuitWarningConfirmed: isQuitWarningConfirmed,
-            isInternalSingleInstanceLoserExit: isInternalSingleInstanceLoserExit,
-            hasValidatedDuplicateShutdownRequest: hasValidatedDuplicateShutdownRequest,
             isQuitWarningEnabled: isQuitWarningEnabled
         )
     }
-
-    static func scheduleDuplicateTerminationForTesting(
-        requestTermination: () -> Bool,
-        scheduleGrace: (@escaping @MainActor () -> Void) -> Void,
-        performFallbackAfterGrace: @escaping @MainActor () -> Void
-    ) {
-        scheduleDuplicateTermination(
-            requestTermination: requestTermination,
-            scheduleGrace: scheduleGrace,
-            performFallbackAfterGrace: performFallbackAfterGrace
-        )
-    }
-
 #endif
 
-    private struct PendingSingleInstanceShutdown: Sendable {
-        let request: SingleInstanceShutdownRequest
-        let requestURL: URL
-        let acknowledgmentURL: URL
-    }
-
-    nonisolated private static func singleInstanceStateDirectoryURL(
-        rootDirectory: URL = FileManager.default.temporaryDirectory
-    ) -> URL {
-        rootDirectory.appendingPathComponent(
-            "programa-single-instance-\(getuid())",
-            isDirectory: true
-        )
-    }
-
-    nonisolated private static func singleInstanceTargetComponent(
-        _ target: ProgramaSingleInstanceProcessKey
-    ) -> String {
-        "\(target.processIdentifier)-\(target.startSeconds)-\(target.startMicroseconds)"
-    }
-
-    nonisolated private static func duplicateShutdownRequestURL(
-        rootDirectory: URL,
-        target: ProgramaSingleInstanceProcessKey,
-        generation: UUID
-    ) -> URL {
-        rootDirectory.appendingPathComponent(
-            "request-\(singleInstanceTargetComponent(target))-\(generation.uuidString.lowercased()).json",
-            isDirectory: false
-        )
-    }
-
-    nonisolated private static func duplicateShutdownAcknowledgmentURL(
-        rootDirectory: URL,
-        target: ProgramaSingleInstanceProcessKey
-    ) -> URL {
-        rootDirectory.appendingPathComponent(
-            "ack-\(singleInstanceTargetComponent(target)).json",
-            isDirectory: false
-        )
-    }
-
-    nonisolated private static func publishDuplicateAcknowledgment(
-        rootDirectory: URL,
-        request: SingleInstanceShutdownRequest,
-        currentProcessKey: ProgramaSingleInstanceProcessKey,
-        now: TimeInterval,
-        write: (SingleInstanceShutdownAcknowledgment, URL) -> Bool
-    ) -> Bool {
-        guard let acknowledgment = acknowledgmentForAcceptedRequest(
-            request,
-            currentProcessKey: currentProcessKey,
-            now: now
-        ) else {
-            return false
-        }
-        let url = duplicateShutdownAcknowledgmentURL(
-            rootDirectory: rootDirectory,
-            target: currentProcessKey
-        )
-        return write(acknowledgment, url)
-    }
-
-    nonisolated private static func validatedSingleInstanceStateDirectory() -> URL? {
-        let fileManager = FileManager.default
-        let directoryURL = singleInstanceStateDirectoryURL()
-        do {
-            try fileManager.createDirectory(
-                at: directoryURL,
-                withIntermediateDirectories: true,
-                attributes: [.posixPermissions: 0o700]
-            )
-            let values = try directoryURL.resourceValues(forKeys: [
-                .isDirectoryKey,
-                .isSymbolicLinkKey,
-            ])
-            let attributes = try fileManager.attributesOfItem(atPath: directoryURL.path)
-            guard values.isDirectory == true,
-                  values.isSymbolicLink != true,
-                  let owner = attributes[.ownerAccountID] as? NSNumber,
-                  owner.uint32Value == getuid() else {
-                return nil
-            }
-            try fileManager.setAttributes(
-                [.posixPermissions: 0o700],
-                ofItemAtPath: directoryURL.path
-            )
-            return directoryURL
-        } catch {
-            return nil
-        }
-    }
-
-    nonisolated private static func readBoundedSingleInstanceJSON<Value: Decodable>(
-        _ type: Value.Type,
-        from url: URL
-    ) -> Value? {
-        guard let values = try? url.resourceValues(forKeys: [
-            .fileSizeKey,
-            .isRegularFileKey,
-            .isSymbolicLinkKey,
-        ]),
-              values.isRegularFile == true,
-              values.isSymbolicLink != true,
-              let fileSize = values.fileSize,
-              fileSize <= duplicateShutdownRequestMaxBytes,
-              let fileHandle = try? FileHandle(forReadingFrom: url) else {
-            return nil
-        }
-        defer { try? fileHandle.close() }
-        guard let data = try? fileHandle.read(upToCount: duplicateShutdownRequestMaxBytes + 1),
-              data.count <= duplicateShutdownRequestMaxBytes else {
-            return nil
-        }
-        return try? JSONDecoder().decode(type, from: data)
-    }
-
-    nonisolated private static func writeBoundedSingleInstanceJSON<Value: Encodable>(
-        _ value: Value,
-        to url: URL
-    ) -> Bool {
-        do {
-            let data = try JSONEncoder().encode(value)
-            guard data.count <= duplicateShutdownRequestMaxBytes else { return false }
-            try data.write(to: url, options: .atomic)
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    nonisolated private static func isExactRequestPending(
-        _ pending: PendingSingleInstanceShutdown
-    ) -> Bool {
-        readBoundedSingleInstanceJSON(
-            SingleInstanceShutdownRequest.self,
-            from: pending.requestURL
-        ) == pending.request
-    }
-
-    @discardableResult
-    nonisolated private static func removeExactRequest(
-        _ pending: PendingSingleInstanceShutdown
-    ) -> Bool {
-        guard isExactRequestPending(pending) else {
-            return !FileManager.default.fileExists(atPath: pending.requestURL.path)
-        }
-        do {
-            try FileManager.default.removeItem(at: pending.requestURL)
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    @discardableResult
-    nonisolated static func removeExactAcknowledgment(
-        target: ProgramaSingleInstanceProcessKey,
-        acceptedGeneration: UUID? = nil,
-        url: URL
-    ) -> Bool {
-        guard let acknowledgment = readBoundedSingleInstanceJSON(
-            SingleInstanceShutdownAcknowledgment.self,
-            from: url
-        ) else {
-            return !FileManager.default.fileExists(atPath: url.path)
-        }
-        guard acknowledgment.version == SingleInstanceShutdownAcknowledgment.currentVersion,
-              acknowledgment.target == target,
-              acceptedGeneration == nil || acknowledgment.acceptedGeneration == acceptedGeneration else {
-            return false
-        }
-        do {
-            try FileManager.default.removeItem(at: url)
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    nonisolated private static func removeExactShutdownState(
-        _ pending: PendingSingleInstanceShutdown
-    ) {
-        _ = removeExactRequest(pending)
-    }
-
-    nonisolated private static func preparedSingleInstanceStateURLs(
-        in directoryURL: URL,
-        now: TimeInterval,
-        isProcessLive: (ProgramaSingleInstanceProcessKey) -> Bool
-    ) -> [URL]? {
-        for _ in 0..<duplicateStateDirectoryMaxPrunePasses {
-            guard let enumerator = FileManager.default.enumerator(
-                at: directoryURL,
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-            ) else {
-                return nil
-            }
-
-            var requests: [(URL, SingleInstanceShutdownRequest)] = []
-            var acknowledgments: [(URL, SingleInstanceShutdownAcknowledgment)] = []
-            var scannedCount = 0
-            var exceededScanLimit = false
-            for case let url as URL in enumerator {
-                guard scannedCount < duplicateStateDirectoryScanLimit else {
-                    exceededScanLimit = true
-                    break
-                }
-                scannedCount += 1
-
-                if url.lastPathComponent.hasPrefix("request-"),
-                   let request = readBoundedSingleInstanceJSON(
-                       SingleInstanceShutdownRequest.self,
-                       from: url
-                   ),
-                   duplicateShutdownRequestURL(
-                       rootDirectory: directoryURL,
-                       target: request.target,
-                       generation: request.generation
-                   ).standardizedFileURL == url.standardizedFileURL {
-                    let age = now - request.createdAtUnixSeconds
-                    guard request.version == SingleInstanceShutdownRequest.currentVersion,
-                          request.createdAtUnixSeconds.isFinite,
-                          age >= 0 else { return nil }
-                    requests.append((url, request))
-                    continue
-                }
-
-                if url.lastPathComponent.hasPrefix("ack-"),
-                   let acknowledgment = readBoundedSingleInstanceJSON(
-                       SingleInstanceShutdownAcknowledgment.self,
-                       from: url
-                   ),
-                   duplicateShutdownAcknowledgmentURL(
-                       rootDirectory: directoryURL,
-                       target: acknowledgment.target
-                   ).standardizedFileURL == url.standardizedFileURL {
-                    let age = now - acknowledgment.createdAtUnixSeconds
-                    guard acknowledgment.version == SingleInstanceShutdownAcknowledgment.currentVersion,
-                          acknowledgment.createdAtUnixSeconds.isFinite,
-                          age >= 0 else { return nil }
-                    acknowledgments.append((url, acknowledgment))
-                    continue
-                }
-
-                return nil
-            }
-
-            var retainedURLs: [URL] = []
-            var removedCount = 0
-            for (url, request) in requests {
-                let age = now - request.createdAtUnixSeconds
-                let isStale = age > duplicateShutdownRequestMaxAge
-                    && (!isProcessLive(request.target) || !isProcessLive(request.requester))
-                if isStale {
-                    let pending = PendingSingleInstanceShutdown(
-                        request: request,
-                        requestURL: url,
-                        acknowledgmentURL: duplicateShutdownAcknowledgmentURL(
-                            rootDirectory: directoryURL,
-                            target: request.target
-                        )
-                    )
-                    guard removeExactRequest(pending) else { return nil }
-                    removedCount += 1
-                } else {
-                    retainedURLs.append(url)
-                }
-            }
-            for (url, acknowledgment) in acknowledgments {
-                let age = now - acknowledgment.createdAtUnixSeconds
-                let isStale = age > duplicateShutdownRequestMaxAge
-                    && !isProcessLive(acknowledgment.target)
-                if isStale {
-                    guard removeExactAcknowledgment(
-                        target: acknowledgment.target,
-                        url: url
-                    ) else { return nil }
-                    removedCount += 1
-                } else {
-                    retainedURLs.append(url)
-                }
-            }
-
-            if exceededScanLimit {
-                guard removedCount > 0 else { return nil }
-                continue
-            }
-            guard retainedURLs.count <= duplicateStateDirectoryMaxEntries else { return nil }
-            return retainedURLs
-        }
-        return nil
-    }
-
-    nonisolated private static func hasValidAcknowledgment(
-        for pending: PendingSingleInstanceShutdown,
-        now: TimeInterval
-    ) -> Bool {
-        let acknowledgment = readBoundedSingleInstanceJSON(
-            SingleInstanceShutdownAcknowledgment.self,
-            from: pending.acknowledgmentURL
-        )
-        return shouldAcceptDuplicateShutdownAcknowledgment(
-            acknowledgment,
-            expectedTarget: pending.request.target,
-            requestCreatedAt: pending.request.createdAtUnixSeconds,
-            now: now
-        )
-    }
-
-    private static func writeDuplicateShutdownRequest(
-        target: ProgramaSingleInstanceProcessKey,
-        requester: ProgramaSingleInstanceProcessKey
-    ) -> PendingSingleInstanceShutdown? {
-        guard let directoryURL = validatedSingleInstanceStateDirectory(),
-              preparedSingleInstanceStateURLs(
-                  in: directoryURL,
-                  now: Date().timeIntervalSince1970,
-                  isProcessLive: { singleInstanceProcessKey(for: $0.processIdentifier) == $0 }
-              ) != nil else {
-            dilog("single_instance", "pid=\(target.processIdentifier) outcome=rejected reason=state_directory")
-            return nil
-        }
-        let request = SingleInstanceShutdownRequest(
-            target: target,
-            requester: requester,
-            createdAtUnixSeconds: Date().timeIntervalSince1970
-        )
-        let pending = PendingSingleInstanceShutdown(
-            request: request,
-            requestURL: duplicateShutdownRequestURL(
-                rootDirectory: directoryURL,
-                target: target,
-                generation: request.generation
-            ),
-            acknowledgmentURL: duplicateShutdownAcknowledgmentURL(
-                rootDirectory: directoryURL,
-                target: target
-            )
-        )
-        guard writeBoundedSingleInstanceJSON(request, to: pending.requestURL) else {
-            dilog("single_instance", "pid=\(target.processIdentifier) outcome=failed reason=request_write")
-            return nil
-        }
-        dilog("single_instance", "pid=\(target.processIdentifier) outcome=written reason=shutdown_request")
-        return pending
-    }
-
-    private func acknowledgeValidatedDuplicateShutdownRequest() -> Bool {
-        let currentProcessIdentifier = getpid()
-        guard let currentKey = Self.singleInstanceProcessKey(for: currentProcessIdentifier),
-              let bundleIdentifier = Bundle.main.bundleIdentifier,
-              let directoryURL = Self.validatedSingleInstanceStateDirectory(),
-              let stateURLs = Self.preparedSingleInstanceStateURLs(
-                  in: directoryURL,
-                  now: Date().timeIntervalSince1970,
-                  isProcessLive: { Self.singleInstanceProcessKey(for: $0.processIdentifier) == $0 }
-              ) else {
-            dilog("single_instance", "pid=\(currentProcessIdentifier) outcome=rejected reason=state_directory")
-            return false
-        }
-        let requestPrefix = "request-\(Self.singleInstanceTargetComponent(currentKey))-"
-        let embeddedCLIURL = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/Resources/bin/programa", isDirectory: false)
-            .standardizedFileURL
-            .resolvingSymlinksInPath()
-        let targetRequestURLs = stateURLs.filter {
-            $0.lastPathComponent.hasPrefix(requestPrefix)
-        }
-        guard targetRequestURLs.count <= Self.duplicateTargetRequestScanLimit else {
-            dilog("single_instance", "pid=\(currentProcessIdentifier) outcome=rejected reason=request_limit")
-            return false
-        }
-        for requestURL in targetRequestURLs.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-            guard let request = Self.readBoundedSingleInstanceJSON(
-                SingleInstanceShutdownRequest.self,
-                from: requestURL
-            ) else {
-                continue
-            }
-            let requesterApplication = NSRunningApplication(
-                processIdentifier: request.requesterProcessIdentifier
-            )
-            let requesterIsProgramaGUI = requesterApplication.map { application in
-                Self.shouldConsiderDuplicateApplication(
-                    candidateBundleIdentifier: application.bundleIdentifier,
-                    candidateProcessIdentifier: application.processIdentifier,
-                    candidateExecutableURL: application.executableURL,
-                    expectedBundleIdentifier: bundleIdentifier,
-                    currentProcessIdentifier: currentProcessIdentifier,
-                    embeddedCLIURL: embeddedCLIURL
-                )
-                && Self.isAuthenticatedProgramaApplication(
-                    expectedProcessKey: request.requester
-                )
-            } ?? false
-            guard Self.shouldAcceptDuplicateShutdownRequest(
-                request,
-                currentProcessKey: currentKey,
-                now: Date().timeIntervalSince1970,
-                resolvedRequesterKey: Self.singleInstanceProcessKey(
-                    for: request.requesterProcessIdentifier
-                ),
-                requesterIsProgramaGUI: requesterIsProgramaGUI
-            ) else {
-                continue
-            }
-            let published = Self.publishDuplicateAcknowledgment(
-                rootDirectory: directoryURL,
-                request: request,
-                currentProcessKey: currentKey,
-                now: Date().timeIntervalSince1970,
-                write: { acknowledgment, url in
-                    Self.writeBoundedSingleInstanceJSON(acknowledgment, to: url)
-                }
-            )
-            if !published {
-                dilog("single_instance", "pid=\(currentProcessIdentifier) outcome=rejected reason=ack_write")
-                continue
-            }
-            acknowledgedDuplicateShutdown = (
-                currentKey, request.generation,
-                Self.duplicateShutdownAcknowledgmentURL(rootDirectory: directoryURL, target: currentKey)
-            )
-            dilog("single_instance", "pid=\(currentProcessIdentifier) outcome=accepted reason=shutdown_request")
-            return true
-        }
-        dilog("single_instance", "pid=\(currentProcessIdentifier) outcome=missing reason=shutdown_request")
-        return false
-    }
-
-    private func revokeAcknowledgedDuplicateShutdown() {
-        guard let ack = acknowledgedDuplicateShutdown else { return }
-        _ = Self.removeExactAcknowledgment(
-            target: ack.target, acceptedGeneration: ack.generation, url: ack.url
-        )
-        acknowledgedDuplicateShutdown = nil
-    }
-
-    private static func duplicateFallbackState(
-        app: NSRunningApplication,
-        pending: PendingSingleInstanceShutdown,
-        response: SingleInstanceForcePromptResponse?
-    ) -> (SingleInstanceFallbackAction, NSRunningApplication?) {
-        let processIdentifier = pending.request.target.processIdentifier
-        let resolvedApplication = NSRunningApplication(processIdentifier: processIdentifier)
-        let action = duplicateFallbackAction(
-            hasValidTargetAcknowledgment: hasValidAcknowledgment(
-                for: pending,
-                now: Date().timeIntervalSince1970
-            ),
-            requestGenerationIsPending: isExactRequestPending(pending),
-            processIdentityMatches: singleInstanceProcessKey(for: processIdentifier) == pending.request.target,
-            isTerminated: resolvedApplication?.isTerminated ?? app.isTerminated,
-            response: response
-        )
-        return (action, resolvedApplication)
-    }
-
-    @MainActor
-    private static func promptForDuplicateForceClose() -> SingleInstanceForcePromptResponse {
-        let alert = NSAlert()
-        alert.alertStyle = .critical
-        alert.messageText = String(
-            localized: "dialog.singleInstanceNotResponding.title",
-            defaultValue: "Existing Programa Is Still Open"
-        )
-        alert.informativeText = String(
-            localized: "dialog.singleInstanceNotResponding.message",
-            defaultValue: "The existing Programa instance did not quit. Force closing it may lose unsaved terminal or session state."
-        )
-        let cancelButton = alert.addButton(
-            withTitle: String(localized: "common.cancel", defaultValue: "Cancel")
-        )
-        cancelButton.keyEquivalent = "\u{1b}"
-        let forceCloseButton = alert.addButton(withTitle: String(
-            localized: "dialog.singleInstanceNotResponding.forceClose",
-            defaultValue: "Force Close"
-        ))
-        forceCloseButton.keyEquivalent = ""
-        alert.window.defaultButtonCell = cancelButton.cell as? NSButtonCell
-
-        let button: SingleInstanceForcePromptButton
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: button = .primary
-        case .alertSecondButtonReturn: button = .secondary
-        default: button = .escape
-        }
-        return duplicateForcePromptResponse(button: button)
-    }
-
-    @MainActor
-    private static func handleDuplicateShutdownFallback(
-        app: NSRunningApplication,
-        pending: PendingSingleInstanceShutdown
-    ) {
-        let processIdentifier = pending.request.target.processIdentifier
-        let (initialAction, _) = duplicateFallbackState(app: app, pending: pending, response: nil)
-        if initialAction == .waitForAcknowledgedExit {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { @MainActor in handleDuplicateShutdownFallback(app: app, pending: pending) }
-            return
-        }
-        guard initialAction == .prompt else {
-            removeExactShutdownState(pending)
-            dilog("single_instance", "pid=\(processIdentifier) outcome=skipped reason=fallback_revalidated")
-            return
-        }
-
-        dilog("single_instance", "pid=\(processIdentifier) outcome=prompted reason=grace_expired")
-        let response = promptForDuplicateForceClose()
-        switch response {
-        case .forceClose:
-            dilog("single_instance", "pid=\(processIdentifier) outcome=consented reason=force_close")
-        case .cancel:
-            dilog("single_instance", "pid=\(processIdentifier) outcome=cancelled reason=user_cancel")
-        }
-        let (action, resolvedApplication) = duplicateFallbackState(
-            app: app,
-            pending: pending,
-            response: response
-        )
-        switch action {
-        case .force:
-            guard let resolvedApplication else {
-                removeExactShutdownState(pending)
-                dilog("single_instance", "pid=\(processIdentifier) outcome=skipped reason=no_longer_running")
-                return
-            }
-            let forced = resolvedApplication.forceTerminate()
-            removeExactShutdownState(pending)
-            dilog(
-                "single_instance",
-                "pid=\(processIdentifier) outcome=\(forced ? "forced" : "force_rejected") reason=user_consent"
-            )
-        case .exitNewer:
-            removeExactShutdownState(pending)
-            resolvedApplication?.activate(options: [.activateAllWindows])
-            AppDelegate.shared?.appLifecycleCoordinator.confirmSingleInstanceLoser()
-            dilog("single_instance", "pid=\(processIdentifier) outcome=exiting_newer reason=user_cancel")
-            NSApp.terminate(nil)
-        case .skip:
-            removeExactShutdownState(pending)
-            dilog("single_instance", "pid=\(processIdentifier) outcome=skipped reason=post_prompt_revalidation")
-        case .waitForAcknowledgedExit:
-            handleDuplicateShutdownFallback(app: app, pending: pending)
-        case .prompt:
-            removeExactShutdownState(pending)
-            dilog("single_instance", "pid=\(processIdentifier) outcome=skipped reason=invalid_prompt_state")
-        }
-    }
-
-    private static func terminateDuplicateApplication(
-        _ app: NSRunningApplication,
-        expectedProcessKey: ProgramaSingleInstanceProcessKey,
-        requesterProcessKey: ProgramaSingleInstanceProcessKey
-    ) {
-        let processIdentifier = app.processIdentifier
-        var pendingShutdown: PendingSingleInstanceShutdown?
-        scheduleDuplicateTermination(
-            requestTermination: {
-                guard let pending = writeDuplicateShutdownRequest(
-                    target: expectedProcessKey,
-                    requester: requesterProcessKey
-                ) else {
-                    return false
-                }
-                pendingShutdown = pending
-                let accepted = app.terminate()
-                dilog(
-                    "single_instance",
-                    "pid=\(processIdentifier) outcome=\(accepted ? "requested" : "request_rejected") reason=graceful_terminate"
-                )
-                return shouldScheduleDuplicateFallback(
-                    requestWasWritten: true,
-                    gracefulTerminationAccepted: accepted
-                )
-            },
-            scheduleGrace: { action in
-                DispatchQueue.main.asyncAfter(deadline: .now() + duplicateTerminationGraceInterval) { @MainActor in
-                    action()
-                }
-            },
-            performFallbackAfterGrace: {
-                guard let pendingShutdown else {
-                    dilog("single_instance", "pid=\(processIdentifier) outcome=skipped reason=missing_generation")
-                    return
-                }
-                handleDuplicateShutdownFallback(app: app, pending: pendingShutdown)
-            }
-        )
-    }
-
-    private func enforceSingleInstance() {
-        guard let bundleId = Bundle.main.bundleIdentifier else { return }
-        let embeddedCLIURL = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/Resources/bin/programa", isDirectory: false)
-            .standardizedFileURL
-            .resolvingSymlinksInPath()
-        let currentPid = NSRunningApplication.current.processIdentifier
-        guard let currentKey = Self.singleInstanceProcessKey(for: currentPid) else { return }
-
-        for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleId) {
-            guard Self.shouldConsiderDuplicateApplication(
-                candidateBundleIdentifier: app.bundleIdentifier,
-                candidateProcessIdentifier: app.processIdentifier,
-                candidateExecutableURL: app.executableURL,
-                expectedBundleIdentifier: bundleId,
-                currentProcessIdentifier: currentPid,
-                embeddedCLIURL: embeddedCLIURL
-            ) else {
-                continue
-            }
-            guard let otherKey = Self.singleInstanceProcessKey(for: app.processIdentifier) else {
-                continue
-            }
-            guard Self.isAuthenticatedProgramaApplication(expectedProcessKey: otherKey) else {
-                continue
-            }
-            guard Self.shouldTerminateDuplicateInstance(current: currentKey, other: otherKey) else {
-                dilog("single_instance", "pid=\(app.processIdentifier) outcome=ignored reason=election")
-                continue
-            }
-            Self.terminateDuplicateApplication(
-                app,
-                expectedProcessKey: otherKey,
-                requesterProcessKey: currentKey
-            )
-        }
-    }
-
-    private func observeDuplicateLaunches() {
-        guard workspaceObserver == nil else { return }
-        guard let bundleId = Bundle.main.bundleIdentifier else { return }
-        let embeddedCLIURL = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/Resources/bin/programa", isDirectory: false)
-            .standardizedFileURL
-            .resolvingSymlinksInPath()
-        let currentPid = NSRunningApplication.current.processIdentifier
-        guard let currentKey = Self.singleInstanceProcessKey(for: currentPid) else { return }
-
-        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didLaunchApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard self != nil else { return }
-            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
-            guard Self.shouldConsiderDuplicateApplication(
-                candidateBundleIdentifier: app.bundleIdentifier,
-                candidateProcessIdentifier: app.processIdentifier,
-                candidateExecutableURL: app.executableURL,
-                expectedBundleIdentifier: bundleId,
-                currentProcessIdentifier: currentPid,
-                embeddedCLIURL: embeddedCLIURL
-            ) else {
-                return
-            }
-            guard let otherKey = Self.singleInstanceProcessKey(for: app.processIdentifier) else {
-                return
-            }
-            guard Self.isAuthenticatedProgramaApplication(expectedProcessKey: otherKey) else {
-                return
-            }
-            guard Self.shouldTerminateDuplicateInstance(current: currentKey, other: otherKey) else {
-                dilog("single_instance", "pid=\(app.processIdentifier) outcome=ignored reason=election")
-                return
-            }
-            MainActor.assumeIsolated {
-                Self.terminateDuplicateApplication(
-                    app,
-                    expectedProcessKey: otherKey,
-                    requesterProcessKey: currentKey
-                )
-                NSRunningApplication.current.activate(options: [.activateAllWindows])
-            }
-        }
-    }
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,

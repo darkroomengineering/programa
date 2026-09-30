@@ -244,7 +244,6 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         app.launchEnvironment["PROGRAMA_SOCKET_ENABLE"] = "1"
         app.launchEnvironment["PROGRAMA_UI_TEST_SOCKET_SANITY"] = "1"
         app.launchEnvironment["PROGRAMA_UI_TEST_NOTIFY_SOURCE_TERMINAL_READY"] = "1"
-        app.launchEnvironment["PROGRAMA_UI_TEST_ENABLE_DUPLICATE_LAUNCH_OBSERVER"] = "1"
         app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         app.launch()
         XCTAssertTrue(

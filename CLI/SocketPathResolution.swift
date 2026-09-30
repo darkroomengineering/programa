@@ -109,7 +109,6 @@ enum CLISocketPathResolver {
             candidates.append(requestedPath)
         }
         candidates.append(defaultSocketPath)
-        candidates.append(requestedPath)
         candidates.append(legacyDefaultSocketPath)
         candidates.append(fallbackSocketPath)
         candidates.append(stagingSocketPath)

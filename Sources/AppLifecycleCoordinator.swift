@@ -12,12 +12,10 @@ final class AppLifecycleCoordinator {
     private(set) var isTerminating = false
     private(set) var isAwaitingPowerOff = false
     private(set) var isQuitWarningConfirmed = false
-    private(set) var isSingleInstanceLoser = false
     private var didInstallSnapshotObservers = false
     private var didDisableSuddenTermination = false
 
     func beginTermination(
-        hasValidatedDuplicateShutdownRequest: Bool,
         isTaggedDevBuild: Bool,
         isQuitWarningEnabled: Bool
     ) -> TerminationDecision {
@@ -25,14 +23,9 @@ final class AppLifecycleCoordinator {
         let shouldWarn = AppDelegate.shouldWarnBeforeTermination(
             isTaggedDevBuild: isTaggedDevBuild,
             isQuitWarningConfirmed: isQuitWarningConfirmed,
-            isInternalSingleInstanceLoserExit: isSingleInstanceLoser,
-            hasValidatedDuplicateShutdownRequest: hasValidatedDuplicateShutdownRequest,
             isQuitWarningEnabled: isQuitWarningEnabled
         )
-        let reason = hasValidatedDuplicateShutdownRequest
-            ? "duplicate_request"
-            : (isSingleInstanceLoser ? "discarded_duplicate" : "warning_bypassed")
-        return TerminationDecision(shouldWarn: shouldWarn, logReason: reason)
+        return TerminationDecision(shouldWarn: shouldWarn, logReason: "warning_bypassed")
     }
 
     func confirmQuit() {
@@ -64,10 +57,6 @@ final class AppLifecycleCoordinator {
     func beginUpdateRelaunch() {
         isTerminating = true
         isQuitWarningConfirmed = true
-    }
-
-    func confirmSingleInstanceLoser() {
-        isSingleInstanceLoser = true
     }
 
     func claimSnapshotObserverInstallation() -> Bool {

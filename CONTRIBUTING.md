@@ -5,9 +5,8 @@
 - macOS 14+
 - Xcode 26+ (Swift 6 and the macOS 26 SDK)
 - [Zig](https://ziglang.org/), the exact version printed by `scripts/required-zig-version.sh` (currently 0.16.0). `brew install zig` may install a different version, which fails the GhosttyKit build
-- [Rust](https://rustup.rs/) with Cargo for the shared application core. Add
-  `aarch64-apple-darwin` and `x86_64-apple-darwin` targets when building a
-  universal macOS release. The Xcode build compiles and links the core automatically.
+- [Rust](https://rustup.rs/) with Cargo, only when working on the Windows app or the
+  `core/` crates. The macOS app does not build or link the Rust core.
 
 For the native WinUI frontend, use Windows with the .NET SDK and Rust MSVC
 toolchain described in [windows/README.md](windows/README.md). Its build script
