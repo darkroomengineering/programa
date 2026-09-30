@@ -309,7 +309,7 @@ def main() -> int:
             timeout_s=3.0,
         )
         pre_extent = _pane_extent(c, resize_target, resize_axis)
-        _run_cli(cli, ["resize-pane", "--pane", resize_target, resize_flag, "--amount", "80"])
+        _run_cli(cli, ["resize-pane", "--pane", resize_target, resize_flag, "--amount", "10"])
         _wait_for(
             lambda: _pane_extent(c, resize_target, resize_axis) > pre_extent + 1.0,
             timeout_s=3.0,
