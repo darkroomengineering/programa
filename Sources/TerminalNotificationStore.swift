@@ -283,7 +283,9 @@ final class TerminalNotificationStore: ObservableObject {
         logAuthorization("app became active deferred=\(hasDeferredAuthorizationRequest)")
         if hasDeferredAuthorizationRequest {
             hasDeferredAuthorizationRequest = false
-            ensureAuthorization(origin: .settingsButton) { _ in }
+            // Only delivery-triggered requests defer, so the replay keeps that origin and stays
+            // under the automatic-request rules (once per launch, never under automated tests).
+            ensureAuthorization(origin: .notificationDelivery) { _ in }
             return
         }
         refreshAuthorizationStatus()
