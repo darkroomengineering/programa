@@ -7,7 +7,7 @@ namespace Programa.Tests;
 public sealed class CoreProjectionTests
 {
     [TestMethod]
-    public void NativeCoreDispatchPreservesTerminalSessionAcrossReorder()
+    public void NativeCoreDispatchReordersSurfaces()
     {
         using var core = new CoreClient();
         var created = core.Dispatch(new { command = "create_workspace", workspace_id = "w", pane_id = "p", surface_id = "s1", session_id = "session-1" });
@@ -18,11 +18,10 @@ public sealed class CoreProjectionTests
         Assert.AreEqual(2UL, second.Revision);
         Assert.AreEqual(3UL, reordered.Revision);
         CollectionAssert.AreEqual(new[] { "s2", "s1" }, reordered.Workspaces[0].Panes[0].Surfaces.Select(surface => surface.Id).ToArray());
-        Assert.AreEqual("session-2", reordered.Workspaces[0].Panes[0].Surfaces[0].SessionId);
     }
 
     [TestMethod]
-    public void RecursiveLayoutAndSessionIdentityDeserializeFromCoreSnapshot()
+    public void RecursiveLayoutDeserializesFromCoreSnapshot()
     {
         const string json = """
         {"abi_version":1,"revision":9,"selected_workspace_id":"w","workspaces":[{"id":"w","selected_pane_id":"p2","panes":[{"id":"p1","selected_surface_id":"s1","surfaces":[{"id":"s1","session_id":"session-1","is_pinned":false}]},{"id":"p2","selected_surface_id":"s2","surfaces":[{"id":"s2","session_id":"session-2","is_pinned":true}]}],"layout":{"type":"split","id":"x","direction":"vertical","ratio":0.4,"first":{"type":"pane","pane_id":"p1"},"second":{"type":"pane","pane_id":"p2"}}}]}
@@ -31,7 +30,7 @@ public sealed class CoreProjectionTests
 
         Assert.IsNotNull(snapshot);
         Assert.AreEqual(9UL, snapshot.Revision);
-        Assert.AreEqual("session-2", snapshot.Workspaces[0].SelectedPane!.SelectedSurface!.SessionId);
+        Assert.AreEqual("s2", snapshot.Workspaces[0].SelectedPane!.SelectedSurface!.Id);
         Assert.AreEqual("p2", snapshot.Workspaces[0].Layout.Second!.PaneId);
     }
 

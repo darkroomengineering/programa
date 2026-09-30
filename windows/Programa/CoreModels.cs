@@ -27,7 +27,6 @@ public sealed record PaneSnapshot(
 
 public sealed record SurfaceSnapshot(
     [property: JsonPropertyName("id")] string Id,
-    [property: JsonPropertyName("session_id")] string SessionId,
     [property: JsonPropertyName("is_pinned")] bool IsPinned);
 
 public sealed record LayoutSnapshot

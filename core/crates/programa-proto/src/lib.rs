@@ -190,28 +190,37 @@ impl ErrorCode {
     }
 }
 
-/// Methods `programad` implements, advertised verbatim by
-/// `system.capabilities`. Kept as a plain list (not an enum) because the
-/// method namespace is intentionally open-ended; see README for the
-/// authoritative list alongside what the macOS app implements that
-/// `programad` does not (yet).
-pub const IMPLEMENTED_METHODS: &[&str] = &[
-    "system.ping",
-    "system.capabilities",
-    "system.identify",
-    "auth.login",
-    "session.open",
-    "session.list",
-    "session.status",
-    "session.resize",
-    "session.close",
-    "session.write",
-    "session.read",
-    "session.attach",
-    "session.detach",
-    "workspace.snapshot",
-    "workspace.dispatch",
-];
+/// Declares each method name once: as a constant in `method` (matched by the
+/// server's dispatch) and in `IMPLEMENTED_METHODS` (advertised by
+/// `system.capabilities`). The method namespace is intentionally open-ended;
+/// see README for the authoritative list alongside what the macOS app
+/// implements that `programad` does not (yet).
+macro_rules! methods {
+    ($($name:ident = $wire:literal,)*) => {
+        pub mod method {
+            $(pub const $name: &str = $wire;)*
+        }
+        pub const IMPLEMENTED_METHODS: &[&str] = &[$(method::$name),*];
+    };
+}
+
+methods! {
+    SYSTEM_PING = "system.ping",
+    SYSTEM_CAPABILITIES = "system.capabilities",
+    SYSTEM_IDENTIFY = "system.identify",
+    AUTH_LOGIN = "auth.login",
+    SESSION_OPEN = "session.open",
+    SESSION_LIST = "session.list",
+    SESSION_STATUS = "session.status",
+    SESSION_RESIZE = "session.resize",
+    SESSION_CLOSE = "session.close",
+    SESSION_WRITE = "session.write",
+    SESSION_READ = "session.read",
+    SESSION_ATTACH = "session.attach",
+    SESSION_DETACH = "session.detach",
+    WORKSPACE_SNAPSHOT = "workspace.snapshot",
+    WORKSPACE_DISPATCH = "workspace.dispatch",
+}
 
 pub const IMPLEMENTATION_NAME: &str = "programad";
 pub const IMPLEMENTATION_VERSION: &str = env!("CARGO_PKG_VERSION");
