@@ -155,6 +155,7 @@ struct SharedState {
     generation: AtomicU64,
     terminated: AtomicBool,
     error: Mutex<Option<String>>,
+    title: Mutex<Option<String>>,
     signal: Signal,
     sender: Mutex<Option<EventLoopSender>>,
 }
@@ -177,9 +178,15 @@ struct EventProxy(Arc<SharedState>);
 impl EventListener for EventProxy {
     fn send_event(&self, event: Event) {
         match event {
+            Event::Title(title) => {
+                *lock(&self.0.title) = Some(title);
+                self.0.changed();
+            }
+            Event::ResetTitle => {
+                *lock(&self.0.title) = None;
+                self.0.changed();
+            }
             Event::Wakeup
-            | Event::Title(_)
-            | Event::ResetTitle
             | Event::CursorBlinkingChange
             | Event::MouseCursorDirty => self.0.changed(),
             Event::Exit | Event::ChildExit(_) => {
@@ -252,6 +259,7 @@ impl ProgramaTerminalSession {
             generation: AtomicU64::new(1),
             terminated: AtomicBool::new(false),
             error: Mutex::new(None),
+            title: Mutex::new(None),
             signal: Signal::new()?,
             sender: Mutex::new(None),
         });
@@ -330,6 +338,7 @@ struct Snapshot {
     selection: Option<SelectionSnapshot>,
     cells: Vec<CellSnapshot>,
     terminated: bool,
+    title: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -452,6 +461,7 @@ fn snapshot(session: &ProgramaTerminalSession) -> Snapshot {
         selection,
         cells,
         terminated: session.state.terminated.load(Ordering::Acquire),
+        title: lock(&session.state.title).clone(),
     }
 }
 
@@ -968,6 +978,7 @@ mod tests {
             generation: AtomicU64::new(0),
             terminated: AtomicBool::new(false),
             error: Mutex::new(None),
+            title: Mutex::new(None),
             signal: Signal::new().unwrap(),
             sender: Mutex::new(None),
         });

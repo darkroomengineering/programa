@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use base64::Engine;
 use programa_domain::{Command as DomainCommand, Core as DomainCore, Snapshot as DomainSnapshot};
 use programa_proto::{
-    ErrorBody, ErrorCode, Request, Response, IMPLEMENTATION_NAME, IMPLEMENTATION_VERSION,
+    method, ErrorBody, ErrorCode, Request, Response, IMPLEMENTATION_NAME, IMPLEMENTATION_VERSION,
     IMPLEMENTED_METHODS,
 };
 use serde_json::{json, Value};
@@ -209,25 +209,25 @@ async fn dispatch(
     attachments: &mut HashSet<(String, Uuid)>,
 ) -> Result<Dispatched, ErrorBody> {
     match req.method.as_str() {
-        "system.ping" => Ok(json!({"pong": true}).into()),
-        "system.capabilities" => Ok(json!({"methods": IMPLEMENTED_METHODS}).into()),
-        "system.identify" => Ok(json!({
+        method::SYSTEM_PING => Ok(json!({"pong": true}).into()),
+        method::SYSTEM_CAPABILITIES => Ok(json!({"methods": IMPLEMENTED_METHODS}).into()),
+        method::SYSTEM_IDENTIFY => Ok(json!({
             "implementation": IMPLEMENTATION_NAME,
             "version": IMPLEMENTATION_VERSION,
         })
         .into()),
-        "auth.login" => auth_login(req, state, authenticated).map(Into::into),
-        "session.open" => session_open(req, state).map(Into::into),
-        "session.list" => session_list(state).map(Into::into),
-        "session.status" => session_status(req, state).map(Into::into),
-        "session.resize" => session_resize(req, state, attachments).map(Into::into),
-        "session.close" => session_close(req, state).await.map(Into::into),
-        "session.write" => session_write(req, state).map(Into::into),
-        "session.read" => session_read(req, state).map(Into::into),
-        "session.detach" => session_detach(req, state, attachments).map(Into::into),
-        "session.attach" => attach(req, state),
-        "workspace.snapshot" => workspace_snapshot(state).map(Into::into),
-        "workspace.dispatch" => workspace_dispatch(req, state).map(Into::into),
+        method::AUTH_LOGIN => auth_login(req, state, authenticated).map(Into::into),
+        method::SESSION_OPEN => session_open(req, state).map(Into::into),
+        method::SESSION_LIST => session_list(state).map(Into::into),
+        method::SESSION_STATUS => session_status(req, state).map(Into::into),
+        method::SESSION_RESIZE => session_resize(req, state, attachments).map(Into::into),
+        method::SESSION_CLOSE => session_close(req, state).await.map(Into::into),
+        method::SESSION_WRITE => session_write(req, state).map(Into::into),
+        method::SESSION_READ => session_read(req, state).map(Into::into),
+        method::SESSION_DETACH => session_detach(req, state, attachments).map(Into::into),
+        method::SESSION_ATTACH => attach(req, state),
+        method::WORKSPACE_SNAPSHOT => workspace_snapshot(state).map(Into::into),
+        method::WORKSPACE_DISPATCH => workspace_dispatch(req, state).map(Into::into),
         _ => Err(ErrorBody::new(ErrorCode::MethodNotFound, "Unknown method")),
     }
 }

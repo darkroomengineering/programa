@@ -127,6 +127,12 @@ public sealed class TerminalView : UserControl, IDisposable
     /// <summary>Raised once, on the UI thread, when the shell has exited. The owner closes the surface.</summary>
     internal event Action<string>? Exited;
 
+    /// <summary>The window title the shell program set (OSC 0/2), or null when none is set.</summary>
+    internal string? Title { get; private set; }
+
+    /// <summary>Raised on the UI thread with the surface id when <see cref="Title"/> changes.</summary>
+    internal event Action<string>? TitleChanged;
+
     /// <summary>True once at least one terminal snapshot has been painted. Used by the
     /// `--smoke` CI launch check to confirm the native terminal session actually produced
     /// output, not just that the window opened.</summary>
@@ -242,6 +248,12 @@ public sealed class TerminalView : UserControl, IDisposable
             lock (_snapshotGate) _snapshot = snapshot;
             _automationValue = BuildAccessibleText(snapshot);
             _paintedGeneration = snapshot.Generation;
+            var title = string.IsNullOrWhiteSpace(snapshot.Title) ? null : snapshot.Title;
+            if (title != Title)
+            {
+                Title = title;
+                TitleChanged?.Invoke(SurfaceId);
+            }
             UpdateInputProxyLayout(snapshot.Cursor, _composing);
             _canvas.Invalidate();
             FrameworkElementAutomationPeer.FromElement(this)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
@@ -516,8 +528,18 @@ public sealed class TerminalView : UserControl, IDisposable
         else if (ctrl && (int)key == 219) character = 27; // Ctrl+[
         else if (ctrl && (int)key == 220) character = 28; // Ctrl+\
         else if (ctrl && (int)key == 221) character = 29; // Ctrl+]
+        else if (alt && !ctrl && key == VirtualKey.Space) character = ' ';
+        else if (alt && !ctrl && !shift && IsPunctuationKey(key) && KeyboardLayout.UnshiftedCharacter(key) is { } punctuation) character = punctuation;
         else return null;
         return alt ? [27, (byte)character] : [(byte)character];
+    }
+
+    /// <summary>OEM punctuation keys and the numpad operators. Alt+these is sent as ESC plus the
+    /// layout's own character; without Alt the text box already delivers the typed character.</summary>
+    private static bool IsPunctuationKey(VirtualKey key)
+    {
+        var code = (int)key;
+        return code is >= 186 and <= 192 or >= 219 and <= 222 or 106 or 107 or 109 or 110 or 111;
     }
 
     private void PointerPressed(object sender, PointerRoutedEventArgs args)
@@ -661,8 +683,25 @@ internal static class TerminalJson
     internal static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 }
 
-internal sealed record TerminalSnapshot(ulong Generation, int Columns, int Rows, int DisplayOffset, TerminalCursor Cursor, TerminalSelection? Selection, List<TerminalCell> Cells, bool Terminated);
+internal sealed record TerminalSnapshot(ulong Generation, int Columns, int Rows, int DisplayOffset, TerminalCursor Cursor, TerminalSelection? Selection, List<TerminalCell> Cells, bool Terminated, string? Title = null);
 internal sealed record TerminalCursor(int Column, int Row, bool Visible);
 internal sealed record TerminalSelection(int StartColumn, int StartRow, int EndColumn, int EndRow, bool Block);
 internal sealed record TerminalCell(int Column, int Row, string Text, int Width, TerminalColor Foreground, bool ExplicitForeground, TerminalColor Background, bool ExplicitBackground, bool Selected, bool Bold, bool Italic, bool Underline, bool Undercurl, bool Strikethrough);
 internal sealed record TerminalColor(byte R, byte G, byte B, byte A) { internal Color ToColor() => Color.FromArgb(A, R, G, B); }
+
+internal static class KeyboardLayout
+{
+    private const uint MapVkToChar = 2;
+
+    [DllImport("user32.dll", EntryPoint = "MapVirtualKeyW")]
+    private static extern uint MapVirtualKey(uint code, uint mapType);
+
+    /// <summary>The printable ASCII character a key types without modifiers on the active layout,
+    /// or null for dead keys and anything outside ASCII.</summary>
+    internal static int? UnshiftedCharacter(VirtualKey key)
+    {
+        var mapped = MapVirtualKey((uint)key, MapVkToChar);
+        // The high bit marks a dead key.
+        return mapped is >= 0x20 and < 0x7F ? (int)mapped : null;
+    }
+}

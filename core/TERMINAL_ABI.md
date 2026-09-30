@@ -122,13 +122,15 @@ Snapshot writes one JSON object describing the visible viewport:
         "selected": false, "bold": false, "italic": false,
         "underline": false, "undercurl": false, "strikethrough": false
       }],
-      "terminated": false
+      "terminated": false,
+      "title": "vim"
     }
 
 cells has one entry per grid cell, row by row. width is 1, 2 for a wide
 character, or 0 for the spacer that follows it; text is empty for blank cells.
 selection is null when nothing is selected. The cursor is hidden while the view
-is scrolled into scrollback. terminated is true once the shell has exited.
+is scrolled into scrollback. terminated is true once the shell has exited. title is the window title the
+program set (OSC 0/2), or null when none is set.
 
 Generation increases on every screen, title, selection, size, or lifecycle
 change. On Windows, event_handle returns a manual-reset event HANDLE owned by
@@ -160,4 +162,4 @@ terminal semantics: soft-wrapped lines are joined and trailing blanks trimmed.
 
 is_terminated is true after the shell exits, and for a null handle. last_error
 writes the most recent I/O failure message, or an empty buffer when there has
-been none. The terminal does not expose the window title.
+been none.
