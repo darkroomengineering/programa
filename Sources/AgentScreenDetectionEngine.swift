@@ -4,7 +4,7 @@
 //
 // Phase A trigger research outcome (plan §4 risk #1, resolved during implementation): shell
 // integration's foreground-command telemetry (`surface.report_shell_state` /
-// `_cmux_report_shell_activity_state` in the zsh/bash/fish integration scripts) only ever sends
+// `_programa_report_shell_activity_state` in the zsh/bash/fish integration scripts) only ever sends
 // a bare "prompt"/"running" state -- the actual command string (`$1` in zsh's `preexec`) is read
 // locally by the shell script but never put on the wire. So there is no usable foreground-command
 // signal to hook Phase A recognition off of today. Per the plan's documented fallback (§4 risk 1),

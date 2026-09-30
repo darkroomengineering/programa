@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -43,15 +43,15 @@ def _derive_log_path(socket_path: str) -> str:
     if LOG_PATH_OVERRIDE:
         return LOG_PATH_OVERRIDE
     base = os.path.basename(socket_path)
-    if base.startswith("cmux-debug-") and base.endswith(".sock"):
-        slug = base[len("cmux-debug-") : -len(".sock")]
+    if base.startswith("programa-debug-") and base.endswith(".sock"):
+        slug = base[len("programa-debug-") : -len(".sock")]
         return f"/tmp/programa-debug-{slug}.log"
     return "/tmp/programa-debug.log"
 
 
 def _read_new_lines(log_path: str, offset: int) -> tuple[list[str], int]:
     if not os.path.exists(log_path):
-        raise cmuxError(f"debug log not found at {log_path}")
+        raise ProgramaClientError(f"debug log not found at {log_path}")
     with open(log_path, "rb") as f:
         f.seek(offset)
         data = f.read()
@@ -87,14 +87,14 @@ def _panel_for_pane(layout_payload: dict, pane: dict) -> str:
     selected = _selected_panel_by_pane(layout_payload)
     panel_id = str(selected.get(pane_id) or "")
     if not panel_id:
-        raise cmuxError(f"missing selected panel for pane: pane_id={pane_id} selected={selected}")
+        raise ProgramaClientError(f"missing selected panel for pane: pane_id={pane_id} selected={selected}")
     return panel_id
 
 
 def _rightmost_panel(layout_payload: dict) -> str:
     panes = (layout_payload.get("layout") or {}).get("panes") or []
     if len(panes) < 2:
-        raise cmuxError(f"expected >=2 panes to find rightmost panel, got {len(panes)}")
+        raise ProgramaClientError(f"expected >=2 panes to find rightmost panel, got {len(panes)}")
     rightmost = max(panes, key=_pane_sort_key)
     return _panel_for_pane(layout_payload, rightmost)
 
@@ -102,12 +102,12 @@ def _rightmost_panel(layout_payload: dict) -> str:
 def _bottom_right_panel(layout_payload: dict) -> str:
     panes = (layout_payload.get("layout") or {}).get("panes") or []
     if len(panes) < 3:
-        raise cmuxError(f"expected >=3 panes to find bottom-right panel, got {len(panes)}")
+        raise ProgramaClientError(f"expected >=3 panes to find bottom-right panel, got {len(panes)}")
     bottom_right = max(panes, key=_pane_sort_key)
     return _panel_for_pane(layout_payload, bottom_right)
 
 
-def _wait_for_panes(c: cmux, target_panes: int, *, timeout_s: float, context: str) -> dict:
+def _wait_for_panes(c: ProgramaClient, target_panes: int, *, timeout_s: float, context: str) -> dict:
     deadline = time.time() + timeout_s
     last = None
     while time.time() < deadline:
@@ -115,16 +115,16 @@ def _wait_for_panes(c: cmux, target_panes: int, *, timeout_s: float, context: st
         if _pane_count(last) == target_panes:
             return last
         time.sleep(POLL_S)
-    raise cmuxError(
+    raise ProgramaClientError(
         f"timed out waiting for {target_panes} panes ({context}); "
         f"last_panes={_pane_count(last or {})} last_layout={last}"
     )
 
 
-def _portal_stats(c: cmux, *, timeout_s: float) -> dict:
+def _portal_stats(c: ProgramaClient, *, timeout_s: float) -> dict:
     stats = c._call("debug.portal.stats", timeout_s=timeout_s) or {}
     if not isinstance(stats, dict):
-        raise cmuxError(f"debug.portal.stats returned non-dict payload: {stats!r}")
+        raise ProgramaClientError(f"debug.portal.stats returned non-dict payload: {stats!r}")
     return stats
 
 
@@ -162,7 +162,7 @@ def _portal_integrity_error(stats: dict) -> str | None:
     return None
 
 
-def _wait_for_portal_integrity(c: cmux, *, timeout_s: float, context: str) -> None:
+def _wait_for_portal_integrity(c: ProgramaClient, *, timeout_s: float, context: str) -> None:
     deadline = time.time() + timeout_s
     last = None
     error = None
@@ -175,10 +175,10 @@ def _wait_for_portal_integrity(c: cmux, *, timeout_s: float, context: str) -> No
         if error is None:
             return
         time.sleep(POLL_S)
-    raise cmuxError(f"{context}: {error}; stats={last}")
+    raise ProgramaClientError(f"{context}: {error}; stats={last}")
 
 
-def _close_bottom_right_via_ctrl_d(c: cmux, *, bottom_right_panel_id: str, context: str) -> dict:
+def _close_bottom_right_via_ctrl_d(c: ProgramaClient, *, bottom_right_panel_id: str, context: str) -> dict:
     c.send_key_surface(bottom_right_panel_id, "ctrl-d")
     next_retry_at = time.time() + CTRL_D_RETRY_INTERVAL_S
     extra = 0
@@ -196,7 +196,7 @@ def _close_bottom_right_via_ctrl_d(c: cmux, *, bottom_right_panel_id: str, conte
             next_retry_at = time.time() + CTRL_D_RETRY_INTERVAL_S
         time.sleep(POLL_S)
 
-    raise cmuxError(
+    raise ProgramaClientError(
         f"{context}: timed out collapsing back to 2 panes after ctrl-d "
         f"(extra_ctrl_d={extra}, panel={bottom_right_panel_id}); last_layout={last}"
     )
@@ -241,10 +241,10 @@ def _find_close_rebind_violations(lines: list[str]) -> tuple[int, list[str]]:
 def main() -> int:
     log_path = _derive_log_path(SOCKET_PATH)
     if not os.path.exists(log_path):
-        raise cmuxError(f"debug log not found at {log_path} for socket={SOCKET_PATH}")
+        raise ProgramaClientError(f"debug log not found at {log_path} for socket={SOCKET_PATH}")
     log_offset = os.path.getsize(log_path)
 
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         c.activate_app()
         workspace_id = c.new_workspace()
         c.select_workspace(workspace_id)
@@ -282,10 +282,10 @@ def main() -> int:
     lines, _ = _read_new_lines(log_path, log_offset)
     close_count, violations = _find_close_rebind_violations(lines)
     if close_count == 0:
-        raise cmuxError("no surface.close.childExited events captured; test did not exercise close path")
+        raise ProgramaClientError("no surface.close.childExited events captured; test did not exercise close path")
     if violations:
         sample = "\n".join(violations[:5])
-        raise cmuxError(
+        raise ProgramaClientError(
             "detected close->visible rebind race (closed surface became visible before deinit):\n"
             f"{sample}"
         )

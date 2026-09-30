@@ -70,11 +70,11 @@ private final class LocalTTYReportFixture {
         rm -f '\(countPath)'
         _PROGRAMA_TTY_NAME=ttys999
         _PROGRAMA_TTY_REPORTED=0
-        _cmux_report_tty_once
+        _programa_report_tty_once
         first=$_PROGRAMA_TTY_REPORTED
-        _cmux_report_tty_once
+        _programa_report_tty_once
         second=$_PROGRAMA_TTY_REPORTED
-        _cmux_report_tty_once
+        _programa_report_tty_once
         printf 'TTY_STATES=%s,%s,%s\\n' "$first" "$second" "$_PROGRAMA_TTY_REPORTED"
         printf 'TTY_ATTEMPTS=%s\\n' "$(cat '\(countPath)' 2>/dev/null)"
         """ }
@@ -83,11 +83,11 @@ private final class LocalTTYReportFixture {
         rm -f '\(countPath)'
         set -g _PROGRAMA_TTY_NAME ttys999
         set -g _PROGRAMA_TTY_REPORTED 0
-        _cmux_report_tty_once
+        _programa_report_tty_once
         set first $_PROGRAMA_TTY_REPORTED
-        _cmux_report_tty_once
+        _programa_report_tty_once
         set second $_PROGRAMA_TTY_REPORTED
-        _cmux_report_tty_once
+        _programa_report_tty_once
         printf 'TTY_STATES=%s,%s,%s\\n' $first $second $_PROGRAMA_TTY_REPORTED
         printf 'TTY_ATTEMPTS=%s\\n' (cat '\(countPath)' 2>/dev/null)
         """ }
@@ -107,10 +107,10 @@ final class SidebarPathFormatterTests: XCTestCase {
     func testShortenedPathReplacesHomeDirectoryPrefix() {
         XCTAssertEqual(
             SidebarPathFormatter.shortenedPath(
-                "/Users/example/projects/cmux",
+                "/Users/example/projects/programa",
                 homeDirectoryPath: "/Users/example"
             ),
-            "~/projects/cmux"
+            "~/projects/programa"
         )
     }
 
@@ -246,7 +246,7 @@ final class GhosttyConfigTests: XCTestCase {
 
     func testLoadThemeResolvesPairedThemeValueByColorScheme() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ghostty-theme-pair-\(UUID().uuidString)")
+            .appendingPathComponent("programa-ghostty-theme-pair-\(UUID().uuidString)")
         let themesDir = root.appendingPathComponent("themes")
         try FileManager.default.createDirectory(at: themesDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -296,7 +296,7 @@ final class GhosttyConfigTests: XCTestCase {
 
     func testLoadThemeResolvesBuiltinAliasFromGhosttyResourcesDir() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ghostty-themes-\(UUID().uuidString)")
+            .appendingPathComponent("programa-ghostty-themes-\(UUID().uuidString)")
         let themesDir = root.appendingPathComponent("themes")
         try FileManager.default.createDirectory(at: themesDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -320,7 +320,7 @@ final class GhosttyConfigTests: XCTestCase {
 
     func testLoadThemeResolvesITerm2SolarizedLightAliasToLegacyThemeName() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ghostty-solarized-light-\(UUID().uuidString)")
+            .appendingPathComponent("programa-ghostty-solarized-light-\(UUID().uuidString)")
         let themesDir = root.appendingPathComponent("themes")
         try FileManager.default.createDirectory(at: themesDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -346,7 +346,7 @@ final class GhosttyConfigTests: XCTestCase {
 
     func testLoadThemeResolvesITerm2SolarizedDarkAliasToLegacyThemeName() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ghostty-solarized-dark-\(UUID().uuidString)")
+            .appendingPathComponent("programa-ghostty-solarized-dark-\(UUID().uuidString)")
         let themesDir = root.appendingPathComponent("themes")
         try FileManager.default.createDirectory(at: themesDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -474,7 +474,7 @@ final class GhosttyConfigTests: XCTestCase {
             )
 
             XCTAssertEqual(
-                GhosttyApp.cmuxAppSupportConfigURLs(
+                GhosttyApp.programaAppSupportConfigURLs(
                     currentBundleIdentifier: "com.darkroom.programa.debug",
                     appSupportDirectory: appSupportDirectory
                 ),
@@ -499,7 +499,7 @@ final class GhosttyConfigTests: XCTestCase {
             )
 
             XCTAssertEqual(
-                GhosttyApp.cmuxAppSupportConfigURLs(
+                GhosttyApp.programaAppSupportConfigURLs(
                     currentBundleIdentifier: "com.darkroom.programa.debug.issue-829",
                     appSupportDirectory: appSupportDirectory
                 ),
@@ -518,7 +518,7 @@ final class GhosttyConfigTests: XCTestCase {
             )
 
             XCTAssertTrue(
-                GhosttyApp.cmuxAppSupportConfigURLs(
+                GhosttyApp.programaAppSupportConfigURLs(
                     currentBundleIdentifier: "com.example.other-app",
                     appSupportDirectory: appSupportDirectory
                 ).isEmpty
@@ -536,7 +536,7 @@ final class GhosttyConfigTests: XCTestCase {
             )
 
             XCTAssertTrue(
-                GhosttyApp.cmuxAppSupportConfigURLs(
+                GhosttyApp.programaAppSupportConfigURLs(
                     currentBundleIdentifier: "com.darkroom.programa.debug",
                     appSupportDirectory: appSupportDirectory
                 ).isEmpty
@@ -608,7 +608,7 @@ final class GhosttyConfigTests: XCTestCase {
     }
 
     func testClaudeCodeIntegrationDefaultsToEnabledWhenUnset() {
-        let suiteName = "cmux.tests.claude-hooks.\(UUID().uuidString)"
+        let suiteName = "programa.tests.claude-hooks.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             XCTFail("Failed to create isolated user defaults suite")
             return
@@ -622,7 +622,7 @@ final class GhosttyConfigTests: XCTestCase {
     }
 
     func testClaudeCodeIntegrationRespectsStoredPreference() {
-        let suiteName = "cmux.tests.claude-hooks.\(UUID().uuidString)"
+        let suiteName = "programa.tests.claude-hooks.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             XCTFail("Failed to create isolated user defaults suite")
             return
@@ -657,7 +657,7 @@ final class GhosttyConfigTests: XCTestCase {
     ) throws {
         let fileManager = FileManager.default
         let directory = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-app-support-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-app-support-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: directory) }
         try body(directory)
@@ -789,42 +789,42 @@ final class WindowTransparencyDecisionTests: XCTestCase {
             if WindowGlassEffect.isAvailable {
                 // Inverted layout: the glass backdrop is stock, and it samples
                 // behind the window — transparency is on regardless of opacity.
-                XCTAssertTrue(cmuxShouldUseTransparentBackgroundWindow())
-                XCTAssertTrue(cmuxShouldUseClearWindowBackground(for: 1.0))
+                XCTAssertTrue(programaShouldUseTransparentBackgroundWindow())
+                XCTAssertTrue(programaShouldUseClearWindowBackground(for: 1.0))
             } else {
                 // Pre-26: opt-in off means only a translucent terminal clears it.
-                XCTAssertFalse(cmuxShouldUseTransparentBackgroundWindow())
-                XCTAssertFalse(cmuxShouldUseClearWindowBackground(for: 1.0))
+                XCTAssertFalse(programaShouldUseTransparentBackgroundWindow())
+                XCTAssertFalse(programaShouldUseClearWindowBackground(for: 1.0))
             }
-            XCTAssertTrue(cmuxShouldUseClearWindowBackground(for: 0.80))
+            XCTAssertTrue(programaShouldUseClearWindowBackground(for: 0.80))
         }
     }
 
     func testGlassIsStockWhenAvailableAndOptInOtherwise() {
         // Legacy opt-in still decides when the native glass is unavailable.
         XCTAssertTrue(
-            cmuxShouldApplyWindowGlass(bgGlassEnabled: true, glassEffectAvailable: false)
+            programaShouldApplyWindowGlass(bgGlassEnabled: true, glassEffectAvailable: false)
         )
         XCTAssertFalse(
-            cmuxShouldApplyWindowGlass(bgGlassEnabled: false, glassEffectAvailable: false)
+            programaShouldApplyWindowGlass(bgGlassEnabled: false, glassEffectAvailable: false)
         )
         // Inverted layout: glass is the stock treatment whenever available.
         XCTAssertTrue(
-            cmuxShouldApplyWindowGlass(bgGlassEnabled: false, glassEffectAvailable: true)
+            programaShouldApplyWindowGlass(bgGlassEnabled: false, glassEffectAvailable: true)
         )
         XCTAssertTrue(
-            cmuxShouldApplyWindowGlass(bgGlassEnabled: true, glassEffectAvailable: true)
+            programaShouldApplyWindowGlass(bgGlassEnabled: true, glassEffectAvailable: true)
         )
         // The startup performance override wins in both directions.
         XCTAssertTrue(
-            cmuxShouldApplyWindowGlass(
+            programaShouldApplyWindowGlass(
                 bgGlassEnabled: false,
                 glassEffectAvailable: false,
                 performanceOverride: true
             )
         )
         XCTAssertFalse(
-            cmuxShouldApplyWindowGlass(
+            programaShouldApplyWindowGlass(
                 bgGlassEnabled: true,
                 glassEffectAvailable: true,
                 performanceOverride: false
@@ -972,8 +972,8 @@ final class WindowTransparencyDecisionTests: XCTestCase {
             defaults.set("withinWindow", forKey: sidebarBlendModeKey)
             defaults.set(true, forKey: bgGlassEnabledKey)
 
-            XCTAssertTrue(cmuxShouldUseTransparentBackgroundWindow())
-            XCTAssertTrue(cmuxShouldUseClearWindowBackground(for: 1.0))
+            XCTAssertTrue(programaShouldUseTransparentBackgroundWindow())
+            XCTAssertTrue(programaShouldUseClearWindowBackground(for: 1.0))
         }
     }
 
@@ -1070,7 +1070,7 @@ final class GhosttyTerminalStartupEnvironmentTests: XCTestCase {
         XCTAssertTrue(protectedKeys.contains("TERM_PROGRAM"))
     }
 
-    func testMergedStartupEnvironmentAllowsArbitraryAdditionalAndInitialEnvCMUXKeys() {
+    func testMergedStartupEnvironmentAllowsArbitraryAdditionalAndInitialEnvPROGRAMAKeys() {
         let arbitraryValue = "arbitrary-\(UUID().uuidString)"
         let merged = TerminalSurface.mergedStartupEnvironment(
             base: [
@@ -1496,7 +1496,9 @@ final class RecentlyClosedBrowserStackTests: XCTestCase {
 final class SocketControlSettingsTests: XCTestCase {
     func testMigrateModeSupportsExpandedSocketModes() {
         XCTAssertEqual(SocketControlSettings.migrateMode("off"), .off)
-        XCTAssertEqual(SocketControlSettings.migrateMode("cmuxOnly"), .cmuxOnly)
+        XCTAssertEqual(SocketControlSettings.migrateMode("programaOnly"), .programaOnly)
+        // Legacy cmux name, still read so existing socket mode settings keep working.
+        XCTAssertEqual(SocketControlSettings.migrateMode("cmuxOnly"), .programaOnly)
         XCTAssertEqual(SocketControlSettings.migrateMode("automation"), .automation)
         XCTAssertEqual(SocketControlSettings.migrateMode("password"), .password)
         XCTAssertEqual(SocketControlSettings.migrateMode("allow-all"), .allowAll)
@@ -1508,7 +1510,7 @@ final class SocketControlSettingsTests: XCTestCase {
 
     func testSocketModePermissions() {
         XCTAssertEqual(SocketControlMode.off.socketFilePermissions, 0o600)
-        XCTAssertEqual(SocketControlMode.cmuxOnly.socketFilePermissions, 0o600)
+        XCTAssertEqual(SocketControlMode.programaOnly.socketFilePermissions, 0o600)
         XCTAssertEqual(SocketControlMode.automation.socketFilePermissions, 0o600)
         XCTAssertEqual(SocketControlMode.password.socketFilePermissions, 0o600)
         XCTAssertEqual(SocketControlMode.allowAll.socketFilePermissions, 0o666)
@@ -1737,7 +1739,7 @@ final class UITestLaunchManifestTests: XCTestCase {
     func testManifestPathReadsArgumentValue() {
         XCTAssertEqual(
             UITestLaunchManifest.manifestPath(
-                from: ["programa", "-cmuxUITestLaunchManifest", "/tmp/programa-ui-test-launch.json"]
+                from: ["programa", "-programaUITestLaunchManifest", "/tmp/programa-ui-test-launch.json"]
             ),
             "/tmp/programa-ui-test-launch.json"
         )
@@ -1746,7 +1748,7 @@ final class UITestLaunchManifestTests: XCTestCase {
     func testManifestPathReturnsNilWithoutValue() {
         XCTAssertNil(
             UITestLaunchManifest.manifestPath(
-                from: ["programa", "-cmuxUITestLaunchManifest"]
+                from: ["programa", "-programaUITestLaunchManifest"]
             )
         )
     }
@@ -1850,7 +1852,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
         body: (String) -> Void
     ) throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -1977,7 +1979,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
     }
 
     func testUserConfigContainsCJKCodepointMapReturnsFalseForMissingFiles() {
-        let path = NSTemporaryDirectory() + "cmux-nonexistent-\(UUID().uuidString)/config"
+        let path = NSTemporaryDirectory() + "programa-nonexistent-\(UUID().uuidString)/config"
         XCTAssertFalse(
             GhosttyApp.userConfigContainsCJKCodepointMap(configPaths: [path])
         )
@@ -1985,7 +1987,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
 
     func testUserConfigContainsCJKCodepointMapFollowsConfigFileIncludes() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-include-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-include-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -2002,7 +2004,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
 
     func testUserConfigContainsCJKCodepointMapFollowsRelativeIncludes() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-rel-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-rel-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -2019,7 +2021,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
 
     func testUserConfigContainsCJKCodepointMapHandlesOptionalInclude() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-opt-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-opt-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -2036,7 +2038,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
 
     func testUserConfigContainsCJKCodepointMapHandlesCyclicIncludes() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-cycle-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-cycle-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -2077,7 +2079,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
 
     func testUserConfigHasExplicitFontFamilyFallbackChainFollowsConfigFileIncludes() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-font-family-include-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-font-family-include-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -2108,7 +2110,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
 
     func testUserConfigHasExplicitFontFamilyFallbackChainIgnoresDuplicateFamilies() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-font-family-duplicate-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-font-family-duplicate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -2129,7 +2131,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
 
     func testUserConfigHasExplicitFontFamilyFallbackChainMatchesGhosttyIncludeLoadOrder() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-font-family-order-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-font-family-order-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -2154,7 +2156,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
 
     func testUserConfigHasExplicitFontFamilyFallbackChainRespectsConfigFileReset() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-font-family-config-file-reset-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-font-family-config-file-reset-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -2229,11 +2231,11 @@ final class GhosttyMouseFocusTests: XCTestCase {
 
     func testLoadedCJKScanPathsSkipsReleaseAppSupportWhenTaggedConfigExists() throws {
         let appSupport = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-cjk-app-support-\(UUID().uuidString)")
+            .appendingPathComponent("programa-test-cjk-app-support-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: appSupport) }
 
-        let taggedDir = appSupport.appendingPathComponent("com.example.cmux-dev", isDirectory: true)
+        let taggedDir = appSupport.appendingPathComponent("com.example.programa-dev", isDirectory: true)
         try FileManager.default.createDirectory(at: taggedDir, withIntermediateDirectories: true)
         let taggedConfig = taggedDir.appendingPathComponent("config", isDirectory: false)
         try "font-family = JetBrains Mono\n"
@@ -2246,7 +2248,7 @@ final class GhosttyMouseFocusTests: XCTestCase {
             .write(to: releaseConfig, atomically: true, encoding: .utf8)
 
         let paths = GhosttyApp.loadedCJKScanPaths(
-            currentBundleIdentifier: "com.example.cmux-dev",
+            currentBundleIdentifier: "com.example.programa-dev",
             appSupportDirectory: appSupport
         )
 
@@ -2416,7 +2418,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testLocalTTYReportRetriesDeniedCLIThenDeduplicatesAcknowledgmentInZsh() throws {
         let fixture = try LocalTTYReportFixture()
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false, cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false, programaLoadShellIntegration: true,
             command: fixture.posixCommand, extraEnvironment: fixture.environment
         )
         XCTAssertTrue(output.contains("TTY_ATTEMPTS=2"), output)
@@ -2426,14 +2428,14 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testLocalTTYReportRetriesDeniedCLIThenDeduplicatesAcknowledgmentInBash() throws {
         let fixture = try LocalTTYReportFixture()
         let output = try runInteractiveBash(
-            cmuxLoadShellIntegration: true, command: fixture.posixCommand,
+            programaLoadShellIntegration: true, command: fixture.posixCommand,
             extraEnvironment: fixture.environment
         )
         XCTAssertTrue(output.stdout.contains("TTY_ATTEMPTS=2"), output.stdout + output.stderr)
         XCTAssertTrue(output.stdout.contains("TTY_STATES=0,1,1"), output.stdout + output.stderr)
     }
     func testGhosttyPromptHooksLoadWhenProgramaRequestsZshIntegration() throws {
-        let output = try runInteractiveZsh(cmuxLoadGhosttyIntegration: true)
+        let output = try runInteractiveZsh(programaLoadGhosttyIntegration: true)
 
         XCTAssertTrue(output.contains("PRECMD=1"), output)
         XCTAssertTrue(output.contains("PREEXEC=1"), output)
@@ -2441,7 +2443,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     }
 
     func testGhosttyPromptHooksDoNotLoadWithoutProgramaHandoffFlag() throws {
-        let output = try runInteractiveZsh(cmuxLoadGhosttyIntegration: false)
+        let output = try runInteractiveZsh(programaLoadGhosttyIntegration: false)
 
         XCTAssertTrue(output.contains("PRECMD=0"), output)
         XCTAssertTrue(output.contains("PREEXEC=0"), output)
@@ -2449,12 +2451,12 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testGhosttySemanticPatchRetriesAfterDeferredInitCreatesLiveHooks() throws {
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: true,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: true,
+            programaLoadShellIntegration: true,
             command: """
-            _cmux_patch_ghostty_semantic_redraw
+            _programa_patch_ghostty_semantic_redraw
             (( $+functions[_ghostty_deferred_init] )) && _ghostty_deferred_init >/dev/null 2>&1
-            _cmux_patch_ghostty_semantic_redraw
+            _programa_patch_ghostty_semantic_redraw
             print -r -- "PRECMD_BODY=${functions[_ghostty_precmd]}"
             print -r -- "PREEXEC_BODY=${functions[_ghostty_preexec]}"
             """
@@ -2467,8 +2469,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testShellIntegrationWinchGuardDoesNotPrintSpacerLineOnResize() throws {
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
             print -r -- BEFORE
             TRAPWINCH
@@ -2481,8 +2483,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testShellIntegrationPreservesStartupTermForThemeSelectionBeforeRestoringManagedTerm() throws {
         let output = try runPromptInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
             print -r -- "CMD=$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}" >> "$PROGRAMA_TEST_OUTPUT"
             """,
@@ -2494,16 +2496,16 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
               export PROGRAMA_STARTUP_THEME_BRANCH=basic
             fi
 
-            cmux_test_ready() {
+            programa_test_ready() {
               # Run once: precmd fires again before the next prompt (e.g. right
               # before "exit" is read), which would otherwise clobber this
               # snapshot with post-restoration TERM values before the test
               # harness's own "CMD=..." append runs.
-              precmd_functions=(${precmd_functions:#cmux_test_ready})
+              precmd_functions=(${precmd_functions:#programa_test_ready})
               print -r -- "PRE=$PROGRAMA_STARTUP_THEME_TERM|$PROGRAMA_STARTUP_THEME_BRANCH|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}" > "$PROGRAMA_TEST_OUTPUT"
               : > "$PROGRAMA_TEST_READY"
             }
-            precmd_functions+=(cmux_test_ready)
+            precmd_functions+=(programa_test_ready)
             """
         )
 
@@ -2516,8 +2518,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testShellIntegrationDoesNotSpoofManagedTermForInteractiveCommandMode() throws {
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
             print -r -- "$PROGRAMA_STARTUP_TERM|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}"
             """,
@@ -2531,8 +2533,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testShellIntegrationDoesNotSpoofManagedTermWhenIntegrationDisabled() throws {
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: false,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: false,
             command: """
             print -r -- "$PROGRAMA_STARTUP_TERM|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}"
             """,
@@ -2546,8 +2548,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testShellIntegrationDoesNotSpoofManagedTermWhenUserZshEnvDisablesIntegration() throws {
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
             print -r -- "$PROGRAMA_STARTUP_TERM|$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}|${PROGRAMA_SHELL_INTEGRATION:-unset}"
             """,
@@ -2564,8 +2566,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testShellIntegrationDoesNotRegisterPromptTimeTermRestoreHooks() throws {
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
             print -r -- "${(j:,:)precmd_functions}"
             """
@@ -2573,17 +2575,17 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
         XCTAssertEqual(
             output,
-            "_cmux_precmd,_cmux_fix_path",
+            "_programa_precmd,_programa_fix_path",
             output
         )
     }
 
     func testShellIntegrationRestoresManagedTermDuringPreexec() throws {
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
-            _cmux_preexec 'echo $TERM'
+            _programa_preexec 'echo $TERM'
             print -r -- "$TERM|${PROGRAMA_ZSH_RESTORE_TERM-unset}"
             """,
             extraEnvironment: [
@@ -2602,7 +2604,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testShellIntegrationPublishesOnlyWorkspaceScopedProgramaEnvironmentToTmuxServerAutomatically() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-zsh-tmux-publish-\(UUID().uuidString)")
+            .appendingPathComponent("programa-zsh-tmux-publish-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("tmux.log", isDirectory: false)
 
@@ -2622,9 +2624,9 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
 
         _ = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
-            command: "_cmux_preexec tmux; print -r -- READY",
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
+            command: "_programa_preexec tmux; print -r -- READY",
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
                 "PROGRAMA_SOCKET_PATH": "/tmp/programa-current.sock",
@@ -2647,7 +2649,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testShellIntegrationClearsStaleSurfaceScopedTmuxEnvironmentAutomatically() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-zsh-tmux-clear-\(UUID().uuidString)")
+            .appendingPathComponent("programa-zsh-tmux-clear-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("tmux.log", isDirectory: false)
 
@@ -2669,9 +2671,9 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
 
         _ = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
-            command: "_cmux_preexec tmux; print -r -- READY",
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
+            command: "_programa_preexec tmux; print -r -- READY",
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
                 "PROGRAMA_SOCKET_PATH": "/tmp/programa-current.sock",
@@ -2691,7 +2693,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testShellIntegrationRefreshesWorkspaceScopedProgramaEnvironmentFromTmuxWithoutOverwritingSurfaceScope() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-zsh-tmux-refresh-\(UUID().uuidString)")
+            .appendingPathComponent("programa-zsh-tmux-refresh-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
 
         try fileManager.createDirectory(at: binDir, withIntermediateDirectories: true)
@@ -2715,9 +2717,9 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
 
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
-            command: "_cmux_precmd; print -r -- \"$PROGRAMA_TAG|$PROGRAMA_SOCKET_PATH|$PROGRAMA_WORKSPACE_ID|$PROGRAMA_SURFACE_ID|$PROGRAMA_PANEL_ID\"",
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
+            command: "_programa_precmd; print -r -- \"$PROGRAMA_TAG|$PROGRAMA_SOCKET_PATH|$PROGRAMA_WORKSPACE_ID|$PROGRAMA_SURFACE_ID|$PROGRAMA_PANEL_ID\"",
             extraEnvironment: [
                 "PATH": "\(binDir.path):/usr/bin:/bin:/usr/sbin:/sbin",
                 "TMUX": "/tmp/tmux-stale,123,0",
@@ -2738,11 +2740,11 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testShellIntegrationReportsTTYFromTmuxWithoutUsingPanelScope() throws {
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
             _PROGRAMA_TTY_NAME=ttys999
-            print -r -- "$(_cmux_report_tty_payload)"
+            print -r -- "$(_programa_report_tty_payload)"
             """,
             extraEnvironment: [
                 "TMUX": "/tmp/tmux-current,123,0",
@@ -2760,7 +2762,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testShellIntegrationRelayReportTTYUsesWorkspaceIDInZsh() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-zsh-relay-report-tty-\(UUID().uuidString)")
+            .appendingPathComponent("programa-zsh-relay-report-tty-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
 
@@ -2777,12 +2779,12 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
 
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
             _PROGRAMA_TTY_NAME=ttys777
-            _cmux_report_tty_via_relay
+            _programa_report_tty_via_relay
             cat "\(logPath.path)"
             """,
             extraEnvironment: [
@@ -2803,7 +2805,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testShellIntegrationRelayPortsKickOmitsSurfaceIDUntilAvailableInZsh() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-zsh-relay-kick-\(UUID().uuidString)")
+            .appendingPathComponent("programa-zsh-relay-kick-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
 
@@ -2820,11 +2822,11 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
 
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
-            _cmux_ports_kick_via_relay refresh
+            _programa_ports_kick_via_relay refresh
             repeat 20; do
               [[ -s "\(logPath.path)" ]] && break
               sleep 0.05
@@ -2850,7 +2852,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testShellIntegrationRelayPromptRefreshUsesRefreshReasonInZsh() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-zsh-relay-precmd-\(UUID().uuidString)")
+            .appendingPathComponent("programa-zsh-relay-precmd-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
 
@@ -2867,13 +2869,13 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
 
         let output = try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: false,
-            cmuxLoadShellIntegration: true,
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
             _PROGRAMA_TTY_REPORTED=1
             _PROGRAMA_PORTS_LAST_RUN=-999
-            _cmux_precmd
+            _programa_precmd
             repeat 20; do
               [[ -s "\(logPath.path)" ]] && break
               sleep 0.05
@@ -2898,7 +2900,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testShellIntegrationRelayReportTTYUsesWorkspaceIDInBash() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-bash-relay-report-tty-\(UUID().uuidString)")
+            .appendingPathComponent("programa-bash-relay-report-tty-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
 
@@ -2915,11 +2917,11 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
 
         let result = try runInteractiveBash(
-            cmuxLoadShellIntegration: true,
+            programaLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
             _PROGRAMA_TTY_NAME=ttys888
-            _cmux_report_tty_via_relay
+            _programa_report_tty_via_relay
             cat "\(logPath.path)"
             """,
             extraEnvironment: [
@@ -2940,7 +2942,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testShellIntegrationRelayPreexecWorksBeforeSurfaceIDExistsInBash() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-bash-relay-preexec-no-surface-\(UUID().uuidString)")
+            .appendingPathComponent("programa-bash-relay-preexec-no-surface-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
 
@@ -2957,13 +2959,13 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
 
         let result = try runInteractiveBash(
-            cmuxLoadShellIntegration: true,
+            programaLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
             _PROGRAMA_TTY_NAME=ttys889
             _PROGRAMA_TTY_REPORTED=0
-            _cmux_preexec_command "python3 -m http.server 8899"
-            for _cmux_i in $(seq 1 20); do
+            _programa_preexec_command "python3 -m http.server 8899"
+            for _programa_i in $(seq 1 20); do
               grep -q ports_kick "\(logPath.path)" 2>/dev/null && break
               sleep 0.05
             done
@@ -2992,7 +2994,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     func testShellIntegrationRelayPromptRefreshUsesRefreshReasonInBashWithoutPromptNoise() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-bash-relay-prompt-\(UUID().uuidString)")
+            .appendingPathComponent("programa-bash-relay-prompt-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
 
@@ -3009,13 +3011,13 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         )
 
         let result = try runInteractiveBash(
-            cmuxLoadShellIntegration: true,
+            programaLoadShellIntegration: true,
             command: """
             : > "\(logPath.path)"
             _PROGRAMA_TTY_REPORTED=1
             _PROGRAMA_PORTS_LAST_RUN=-999
-            _cmux_prompt_command
-            for _cmux_i in $(seq 1 20); do
+            _programa_prompt_command
+            for _programa_i in $(seq 1 20); do
               [ -s "\(logPath.path)" ] && break
               sleep 0.05
             done
@@ -3030,7 +3032,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             ]
         )
 
-        XCTAssertFalse(result.stderr.contains("_cmux_report_tmux_state"), result.stderr)
+        XCTAssertFalse(result.stderr.contains("_programa_report_tmux_state"), result.stderr)
         XCTAssertTrue(
             result.stdout.contains(#"rpc surface.ports_kick {"workspace_id":"11111111-1111-1111-1111-111111111111","reason":"refresh","surface_id":"22222222-2222-2222-2222-222222222222"}"#),
             result.stdout
@@ -3063,7 +3065,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
                 "starship_precmd was dropped from PROMPT_COMMAND at prompt \(i); the bootstrap took exclusive ownership instead of composing with the user's hook. PROMPT_COMMAND=<\(pc)>" + debug
             )
             XCTAssertTrue(
-                pc.contains("_cmux_prompt_command"),
+                pc.contains("_programa_prompt_command"),
                 "Programa's own prompt hook is missing from PROMPT_COMMAND at prompt \(i): <\(pc)>" + debug
             )
             XCTAssertFalse(
@@ -3107,7 +3109,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             // programa-bash-integration.bash ever tweaks its PROMPT_COMMAND
             // merge.
             XCTAssertTrue(
-                pc.contains("_cmux_prompt_command"),
+                pc.contains("_programa_prompt_command"),
                 "plain-bash bootstrap did not install Programa's prompt hook at prompt \(i): <\(pc)>" + debug
             )
             XCTAssertFalse(
@@ -3148,7 +3150,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             .joined(separator: "\n")
 
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-bash-bootstrap-starship-\(UUID().uuidString)")
+            .appendingPathComponent("programa-bash-bootstrap-starship-\(UUID().uuidString)")
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: root) }
 
@@ -3244,10 +3246,10 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         return fields
     }
 
-    private func runInteractiveZsh(cmuxLoadGhosttyIntegration: Bool) throws -> String {
+    private func runInteractiveZsh(programaLoadGhosttyIntegration: Bool) throws -> String {
         try runInteractiveZsh(
-            cmuxLoadGhosttyIntegration: cmuxLoadGhosttyIntegration,
-            cmuxLoadShellIntegration: false,
+            programaLoadGhosttyIntegration: programaLoadGhosttyIntegration,
+            programaLoadShellIntegration: false,
             command: "(( $+functions[_ghostty_deferred_init] )) && _ghostty_deferred_init >/dev/null 2>&1; " +
                 "print -r -- \"PRECMD=${+functions[_ghostty_precmd]} " +
                 "PREEXEC=${+functions[_ghostty_preexec]} PRECMDS=${(j:,:)precmd_functions}\""
@@ -3255,8 +3257,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     }
 
     private func runInteractiveZsh(
-        cmuxLoadGhosttyIntegration: Bool,
-        cmuxLoadShellIntegration: Bool,
+        programaLoadGhosttyIntegration: Bool,
+        programaLoadShellIntegration: Bool,
         command: String,
         extraEnvironment: [String: String] = [:],
         userZshEnvContents: String? = nil,
@@ -3264,7 +3266,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     ) throws -> String {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-zsh-shell-integration-\(UUID().uuidString)")
+            .appendingPathComponent("programa-zsh-shell-integration-\(UUID().uuidString)")
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: root) }
 
@@ -3300,7 +3302,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let cmuxZdotdir = repoRoot.appendingPathComponent("Resources/shell-integration")
+        let programaZdotdir = repoRoot.appendingPathComponent("Resources/shell-integration")
         let ghosttyResources = repoRoot.appendingPathComponent("ghostty/src")
 
         let process = Process()
@@ -3314,18 +3316,18 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             "TERM": "xterm-256color",
             "SHELL": "/bin/zsh",
             "USER": NSUserName(),
-            "ZDOTDIR": cmuxZdotdir.path,
+            "ZDOTDIR": programaZdotdir.path,
             "PROGRAMA_ZSH_ZDOTDIR": userZdotdir.path,
             "PROGRAMA_SHELL_INTEGRATION": "0",
             "GHOSTTY_RESOURCES_DIR": ghosttyResources.path,
         ]
-        if cmuxLoadGhosttyIntegration {
+        if programaLoadGhosttyIntegration {
             process.environment?["PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "1"
         }
-        if cmuxLoadShellIntegration {
+        if programaLoadShellIntegration {
             process.environment?["PROGRAMA_SHELL_INTEGRATION"] = "1"
-            process.environment?["PROGRAMA_SHELL_INTEGRATION_DIR"] = cmuxZdotdir.path
-            process.environment?["PROGRAMA_SOCKET_PATH"] = root.appendingPathComponent("cmux-test.sock").path
+            process.environment?["PROGRAMA_SHELL_INTEGRATION_DIR"] = programaZdotdir.path
+            process.environment?["PROGRAMA_SOCKET_PATH"] = root.appendingPathComponent("programa-test.sock").path
             process.environment?["PROGRAMA_TAB_ID"] = "tab-test"
             process.environment?["PROGRAMA_PANEL_ID"] = "panel-test"
         }
@@ -3357,8 +3359,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     }
 
     private func runPromptInteractiveZsh(
-        cmuxLoadGhosttyIntegration: Bool,
-        cmuxLoadShellIntegration: Bool,
+        programaLoadGhosttyIntegration: Bool,
+        programaLoadShellIntegration: Bool,
         command: String,
         extraEnvironment: [String: String] = [:],
         userZshEnvContents: String? = nil,
@@ -3366,7 +3368,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     ) throws -> String {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-zsh-prompt-integration-\(UUID().uuidString)")
+            .appendingPathComponent("programa-zsh-prompt-integration-\(UUID().uuidString)")
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: root) }
 
@@ -3402,7 +3404,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let cmuxZdotdir = repoRoot.appendingPathComponent("Resources/shell-integration")
+        let programaZdotdir = repoRoot.appendingPathComponent("Resources/shell-integration")
         let ghosttyResources = repoRoot.appendingPathComponent("ghostty/src")
         let readyPath = root.appendingPathComponent("ready", isDirectory: false)
         let outputPath = root.appendingPathComponent("output.log", isDirectory: false)
@@ -3427,20 +3429,20 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             "TERM": "xterm-256color",
             "SHELL": "/bin/zsh",
             "USER": NSUserName(),
-            "ZDOTDIR": cmuxZdotdir.path,
+            "ZDOTDIR": programaZdotdir.path,
             "PROGRAMA_ZSH_ZDOTDIR": userZdotdir.path,
             "PROGRAMA_SHELL_INTEGRATION": "0",
             "GHOSTTY_RESOURCES_DIR": ghosttyResources.path,
             "PROGRAMA_TEST_READY": readyPath.path,
             "PROGRAMA_TEST_OUTPUT": outputPath.path,
         ]
-        if cmuxLoadGhosttyIntegration {
+        if programaLoadGhosttyIntegration {
             process.environment?["PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION"] = "1"
         }
-        if cmuxLoadShellIntegration {
+        if programaLoadShellIntegration {
             process.environment?["PROGRAMA_SHELL_INTEGRATION"] = "1"
-            process.environment?["PROGRAMA_SHELL_INTEGRATION_DIR"] = cmuxZdotdir.path
-            process.environment?["PROGRAMA_SOCKET_PATH"] = root.appendingPathComponent("cmux-test.sock").path
+            process.environment?["PROGRAMA_SHELL_INTEGRATION_DIR"] = programaZdotdir.path
+            process.environment?["PROGRAMA_SOCKET_PATH"] = root.appendingPathComponent("programa-test.sock").path
             process.environment?["PROGRAMA_TAB_ID"] = "tab-test"
             process.environment?["PROGRAMA_PANEL_ID"] = "panel-test"
         }
@@ -3520,13 +3522,13 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     }
 
     private func runInteractiveBash(
-        cmuxLoadShellIntegration: Bool,
+        programaLoadShellIntegration: Bool,
         command: String,
         extraEnvironment: [String: String] = [:]
     ) throws -> (stdout: String, stderr: String) {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-bash-shell-integration-\(UUID().uuidString)")
+            .appendingPathComponent("programa-bash-shell-integration-\(UUID().uuidString)")
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: root) }
 
@@ -3536,7 +3538,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         let integrationPath = repoRoot.appendingPathComponent("Resources/shell-integration/programa-bash-integration.bash")
         let rcfilePath = root.appendingPathComponent(".bashrc")
         let rcfileContents: String = {
-            guard cmuxLoadShellIntegration else { return ":\n" }
+            guard programaLoadShellIntegration else { return ":\n" }
             return """
             . "\(integrationPath.path)"
             """
@@ -3557,8 +3559,8 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
             "SHELL": "/bin/bash",
             "USER": NSUserName(),
         ]
-        if cmuxLoadShellIntegration {
-            process.environment?["PROGRAMA_SOCKET_PATH"] = root.appendingPathComponent("cmux-test.sock").path
+        if programaLoadShellIntegration {
+            process.environment?["PROGRAMA_SOCKET_PATH"] = root.appendingPathComponent("programa-test.sock").path
             process.environment?["PROGRAMA_TAB_ID"] = "tab-test"
             process.environment?["PROGRAMA_PANEL_ID"] = "panel-test"
         }
@@ -3659,7 +3661,7 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
         let output = try runInteractiveFish(
             command: """
             set -g _PROGRAMA_TTY_NAME ttys999
-            _cmux_report_tty_payload
+            _programa_report_tty_payload
             """,
             extraEnvironment: [
                 "PROGRAMA_TAB_ID": "11111111-1111-1111-1111-111111111111",
@@ -3677,7 +3679,7 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
         let output = try runInteractiveFish(
             command: """
             set -g _PROGRAMA_TTY_NAME ttys555
-            _cmux_report_tty_payload
+            _programa_report_tty_payload
             """,
             extraEnvironment: [
                 "TMUX": "/tmp/tmux-current,123,0",
@@ -3696,7 +3698,7 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
     func testFishRelayReportTtyUsesWorkspaceId() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-fish-relay-report-tty-\(UUID().uuidString)")
+            .appendingPathComponent("programa-fish-relay-report-tty-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
 
@@ -3716,7 +3718,7 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
             command: """
             : > "\(logPath.path)"
             set -g _PROGRAMA_TTY_NAME ttys777
-            _cmux_report_tty_via_relay
+            _programa_report_tty_via_relay
             cat "\(logPath.path)"
             """,
             extraEnvironment: [
@@ -3737,7 +3739,7 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
     func testFishRelayPortsKickOmitsSurfaceIdUntilAvailable() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-fish-relay-kick-\(UUID().uuidString)")
+            .appendingPathComponent("programa-fish-relay-kick-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("relay.log", isDirectory: false)
 
@@ -3756,8 +3758,8 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
         let output = try runInteractiveFish(
             command: """
             : > "\(logPath.path)"
-            _cmux_ports_kick_via_relay refresh
-            for _cmux_i in (seq 1 20)
+            _programa_ports_kick_via_relay refresh
+            for _programa_i in (seq 1 20)
                 test -s "\(logPath.path)"; and break
                 sleep 0.05
             end
@@ -3781,7 +3783,7 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
     func testFishTmuxSyncPublishesOnlyWorkspaceScopedProgramaEnvironment() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-fish-tmux-publish-\(UUID().uuidString)")
+            .appendingPathComponent("programa-fish-tmux-publish-\(UUID().uuidString)")
         let binDir = root.appendingPathComponent("bin", isDirectory: true)
         let logPath = root.appendingPathComponent("tmux.log", isDirectory: false)
 
@@ -3802,7 +3804,7 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
 
         let output = try runInteractiveFish(
             command: """
-            _cmux_tmux_sync_cmux_environment
+            _programa_tmux_sync_programa_environment
             cat "\(logPath.path)"
             """,
             extraEnvironment: [
@@ -3827,7 +3829,7 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
 
     func testFishResetTerminalKeyboardProtocolsPrintsSequenceWhenForced() throws {
         let output = try runInteractiveFish(
-            command: "_cmux_reset_terminal_keyboard_protocols",
+            command: "_programa_reset_terminal_keyboard_protocols",
             extraEnvironment: [
                 "PROGRAMA_TEST_FORCE_KEYBOARD_RESET": "1",
             ]
@@ -3864,7 +3866,7 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
 
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-fish-shell-integration-\(UUID().uuidString)")
+            .appendingPathComponent("programa-fish-shell-integration-\(UUID().uuidString)")
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: root) }
 

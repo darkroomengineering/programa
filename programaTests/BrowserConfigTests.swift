@@ -121,30 +121,30 @@ final class BrowserSearchSuggestionServicePrivacyTests: XCTestCase {
     }
 }
 
-var cmuxUnitTestInspectorAssociationKey: UInt8 = 0
-var cmuxUnitTestInspectorOverrideInstalled = false
-var cmuxUnitTestWKWebViewPerformKeyEquivalentOverrideInstalled = false
-var cmuxUnitTestWKWebViewPerformKeyEquivalentHook: ((WKWebView, NSEvent) -> Bool?)?
+var programaUnitTestInspectorAssociationKey: UInt8 = 0
+var programaUnitTestInspectorOverrideInstalled = false
+var programaUnitTestWKWebViewPerformKeyEquivalentOverrideInstalled = false
+var programaUnitTestWKWebViewPerformKeyEquivalentHook: ((WKWebView, NSEvent) -> Bool?)?
 
 extension ProgramaWebView {
-    @objc func cmuxUnitTestInspector() -> NSObject? {
-        objc_getAssociatedObject(self, &cmuxUnitTestInspectorAssociationKey) as? NSObject
+    @objc func programaUnitTestInspector() -> NSObject? {
+        objc_getAssociatedObject(self, &programaUnitTestInspectorAssociationKey) as? NSObject
     }
 }
 
 extension WKWebView {
-    @objc func cmuxUnitTest_performKeyEquivalent(with event: NSEvent) -> Bool {
-        if let hook = cmuxUnitTestWKWebViewPerformKeyEquivalentHook,
+    @objc func programaUnitTest_performKeyEquivalent(with event: NSEvent) -> Bool {
+        if let hook = programaUnitTestWKWebViewPerformKeyEquivalentHook,
            let result = hook(self, event) {
             return result
         }
-        return cmuxUnitTest_performKeyEquivalent(with: event)
+        return programaUnitTest_performKeyEquivalent(with: event)
     }
 
-    func cmuxSetUnitTestInspector(_ inspector: NSObject?) {
+    func programaSetUnitTestInspector(_ inspector: NSObject?) {
         objc_setAssociatedObject(
             self,
-            &cmuxUnitTestInspectorAssociationKey,
+            &programaUnitTestInspectorAssociationKey,
             inspector,
             .OBJC_ASSOCIATION_RETAIN_NONATOMIC
         )
@@ -152,11 +152,11 @@ extension WKWebView {
 }
 
 func installProgramaUnitTestInspectorOverride() {
-    guard !cmuxUnitTestInspectorOverrideInstalled else { return }
+    guard !programaUnitTestInspectorOverrideInstalled else { return }
 
     guard let replacementMethod = class_getInstanceMethod(
         ProgramaWebView.self,
-        #selector(ProgramaWebView.cmuxUnitTestInspector)
+        #selector(ProgramaWebView.programaUnitTestInspector)
     ) else {
         fatalError("Unable to locate test inspector replacement method")
     }
@@ -171,14 +171,14 @@ func installProgramaUnitTestInspectorOverride() {
         fatalError("Unable to install ProgramaWebView _inspector test override")
     }
 
-    cmuxUnitTestInspectorOverrideInstalled = true
+    programaUnitTestInspectorOverrideInstalled = true
 }
 
 func installProgramaUnitTestWKWebViewPerformKeyEquivalentOverride() {
-    guard !cmuxUnitTestWKWebViewPerformKeyEquivalentOverrideInstalled else { return }
+    guard !programaUnitTestWKWebViewPerformKeyEquivalentOverrideInstalled else { return }
 
     let originalSelector = #selector(NSResponder.performKeyEquivalent(with:))
-    let swizzledSelector = #selector(WKWebView.cmuxUnitTest_performKeyEquivalent(with:))
+    let swizzledSelector = #selector(WKWebView.programaUnitTest_performKeyEquivalent(with:))
 
     guard let originalMethod = class_getInstanceMethod(WKWebView.self, originalSelector),
           let swizzledMethod = class_getInstanceMethod(WKWebView.self, swizzledSelector) else {
@@ -203,7 +203,7 @@ func installProgramaUnitTestWKWebViewPerformKeyEquivalentOverride() {
         method_exchangeImplementations(originalMethod, swizzledMethod)
     }
 
-    cmuxUnitTestWKWebViewPerformKeyEquivalentOverrideInstalled = true
+    programaUnitTestWKWebViewPerformKeyEquivalentOverrideInstalled = true
 }
 
 private final class BrowserMarkedTextProbeTextView: NSTextView {
@@ -809,7 +809,7 @@ final class ProgramaWebViewKeyEquivalentTests: XCTestCase {
         defer { window.orderOut(nil) }
 
         _ = window.makeFirstResponder(nil)
-        cmuxWithWindowFirstResponderBypass {
+        programaWithWindowFirstResponderBypass {
             XCTAssertFalse(
                 window.makeFirstResponder(responder),
                 "Bypass scope should block transient first-responder changes during devtools auto-restore"
@@ -958,7 +958,7 @@ final class ProgramaWebViewKeyEquivalentTests: XCTestCase {
         webView.addSubview(inspectorView)
 
         var forwardedEvents: [NSEvent] = []
-        cmuxUnitTestWKWebViewPerformKeyEquivalentHook = { currentWebView, event in
+        programaUnitTestWKWebViewPerformKeyEquivalentHook = { currentWebView, event in
             guard currentWebView === webView else { return nil }
             forwardedEvents.append(event)
             return true
@@ -966,7 +966,7 @@ final class ProgramaWebViewKeyEquivalentTests: XCTestCase {
 
         window.makeKeyAndOrderFront(nil)
         defer {
-            cmuxUnitTestWKWebViewPerformKeyEquivalentHook = nil
+            programaUnitTestWKWebViewPerformKeyEquivalentHook = nil
             window.orderOut(nil)
         }
 
@@ -2441,7 +2441,7 @@ final class BrowserSessionHistoryRestoreTests: XCTestCase {
 
     func testGoBackPrefersLiveWKWebViewHistoryBeforeRestoredFallback() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-browser-history-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-browser-history-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -2665,7 +2665,7 @@ final class BrowserDeveloperToolsVisibilityPersistenceTests: XCTestCase {
     ) -> (BrowserPanel, FakeInspector) {
         let panel = BrowserPanel(workspaceId: UUID())
         let inspector = FakeInspector(hideBehavior: hideBehavior)
-        panel.webView.cmuxSetUnitTestInspector(inspector)
+        panel.webView.programaSetUnitTestInspector(inspector)
         return (panel, inspector)
     }
 

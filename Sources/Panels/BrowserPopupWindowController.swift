@@ -106,7 +106,7 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
         }
 
         // Create popup web view with WebKit's supplied configuration after
-        // overlaying the opener's browser context so OAuth popups keep cmux's
+        // overlaying the opener's browser context so OAuth popups keep programa's
         // shared cookie/storage scope and opener linkage.
         let webView = ProgramaWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true

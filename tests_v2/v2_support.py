@@ -8,12 +8,12 @@ behaviorally identical live here; test-specific variants stay in their own files
 import time
 from typing import Callable
 
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 def must(cond: bool, msg: str) -> None:
     if not cond:
-        raise cmuxError(msg)
+        raise ProgramaClientError(msg)
 
 
 def wait_until(
@@ -27,7 +27,7 @@ def wait_until(
         if predicate():
             return
         time.sleep(interval_s)
-    raise cmuxError(message)
+    raise ProgramaClientError(message)
 
 
 def wait_for(pred: Callable[[], bool], timeout_s: float = 5.0, step_s: float = 0.05) -> None:
@@ -36,9 +36,9 @@ def wait_for(pred: Callable[[], bool], timeout_s: float = 5.0, step_s: float = 0
         if pred():
             return
         time.sleep(step_s)
-    raise cmuxError("Timed out waiting for condition")
+    raise ProgramaClientError("Timed out waiting for condition")
 
 
-def palette_visible(client: cmux, window_id: str) -> bool:
+def palette_visible(client: ProgramaClient, window_id: str) -> bool:
     payload = client._call("debug.command_palette.visible", {"window_id": window_id}) or {}
     return bool(payload.get("visible"))

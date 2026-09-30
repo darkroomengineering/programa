@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 CONTRACT_PATH = Path(__file__).parent.parent / "contracts" / "v2" / "methods.json"
@@ -32,10 +32,10 @@ def _contract_methods(debug_build: bool) -> set:
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         caps = c._call("system.capabilities")
         if not isinstance(caps, dict) or "methods" not in caps:
-            raise cmuxError(f"system.capabilities returned an unexpected shape: {caps!r}")
+            raise ProgramaClientError(f"system.capabilities returned an unexpected shape: {caps!r}")
         advertised = set(caps["methods"])
 
         # These tests only ever connect to a tagged Debug build (see CLAUDE.md's testing
@@ -54,7 +54,7 @@ def main() -> int:
             details.append(f"in contract but not advertised: {sorted(missing_from_server)}")
         if extra_on_server:
             details.append(f"advertised but not in contract: {sorted(extra_on_server)}")
-        raise cmuxError(
+        raise ProgramaClientError(
             "system.capabilities method set does not match contracts/v2/methods.json. "
             + "; ".join(details)
         )

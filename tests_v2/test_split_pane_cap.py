@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -24,7 +24,7 @@ SPLIT_WAIT = 0.25
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         c.activate_app()
         time.sleep(0.2)
 
@@ -38,21 +38,21 @@ def main() -> int:
 
         panes = c.list_panes()
         if len(panes) != MAX_PANES:
-            raise cmuxError(f"expected {MAX_PANES} panes at the cap, got {len(panes)}: {panes}")
+            raise ProgramaClientError(f"expected {MAX_PANES} panes at the cap, got {len(panes)}: {panes}")
 
         # The split past the cap is refused.
         try:
             c.new_split("right")
-        except cmuxError:
+        except ProgramaClientError:
             pass
         else:
-            raise cmuxError(f"split past the {MAX_PANES}-pane cap unexpectedly succeeded")
+            raise ProgramaClientError(f"split past the {MAX_PANES}-pane cap unexpectedly succeeded")
         time.sleep(SPLIT_WAIT)
 
         # The refusal left the existing layout intact.
         panes = c.list_panes()
         if len(panes) != MAX_PANES:
-            raise cmuxError(f"expected {MAX_PANES} panes after refused split, got {len(panes)}: {panes}")
+            raise ProgramaClientError(f"expected {MAX_PANES} panes after refused split, got {len(panes)}: {panes}")
 
     print("OK: split refused at the 4-pane cap; layout intact")
     return 0

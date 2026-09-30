@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import List
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -28,17 +28,17 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _find_cli_binary() -> str:
-    env_cli = os.environ.get("CMUXTERM_CLI")
+    env_cli = os.environ.get("PROGRAMA_CLI")
     if env_cli and os.path.isfile(env_cli) and os.access(env_cli, os.X_OK):
         return env_cli
 
     candidates = glob.glob(os.path.expanduser(
-        "~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"
+        "~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/programa"
     ), recursive=True)
     candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
-        raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
+        raise ProgramaClientError("Could not locate programa CLI binary; set PROGRAMA_CLI")
     candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return candidates[0]
 
@@ -53,7 +53,7 @@ def _run_tmux_compat(cli: str, args: List[str]) -> subprocess.CompletedProcess[s
     return subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
 
 
-def test_pane_list_geometry_fields(c: cmux) -> None:
+def test_pane_list_geometry_fields(c: ProgramaClient) -> None:
     """pane.list response includes geometry fields for each pane."""
     print("  test_pane_list_geometry_fields ... ", end="", flush=True)
     panes_raw = c.list_panes()
@@ -126,7 +126,7 @@ def test_list_panes_geometry_format(cli: str) -> None:
     print("PASS")
 
 
-def test_list_panes_pane_target(cli: str, c: cmux) -> None:
+def test_list_panes_pane_target(cli: str, c: ProgramaClient) -> None:
     """list-panes -t %<pane-uuid> resolves pane target to workspace."""
     print("  test_list_panes_pane_target ... ", end="", flush=True)
     panes_raw = c.list_panes()
@@ -154,7 +154,7 @@ def test_display_geometry_format(cli: str) -> None:
     print("PASS")
 
 
-def test_multi_pane_geometry(cli: str, c: cmux) -> None:
+def test_multi_pane_geometry(cli: str, c: ProgramaClient) -> None:
     """After splitting, two panes have different pane_left values and halved widths."""
     print("  test_multi_pane_geometry ... ", end="", flush=True)
     ws = c.new_workspace()
@@ -211,7 +211,7 @@ def main() -> int:
     failed = 0
     errors = []
 
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         tests = [
             ("test_pane_list_geometry_fields", lambda: test_pane_list_geometry_fields(c)),
             ("test_tmux_version", lambda: test_tmux_version(cli)),

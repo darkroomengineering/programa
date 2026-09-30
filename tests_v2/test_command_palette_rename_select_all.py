@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import palette_visible as _palette_visible, wait_until as _wait_until
 
 
@@ -92,7 +92,7 @@ def _exercise_rename_selection(client, window_id, cycles):
 
 
 def main():
-    with cmux(SOCKET_PATH) as client:
+    with ProgramaClient(SOCKET_PATH) as client:
         client.activate_app()
         time.sleep(0.2)
 

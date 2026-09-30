@@ -759,7 +759,7 @@ class TabManager: ObservableObject {
     /// `closeRuntimeSurfaceWithConfirmation`, the v2 socket close handler).
     let closedTerminalUndoStore = ClosedTerminalUndoStore()
     private let initialWorkspaceGitProbeQueue = DispatchQueue(
-        label: "com.cmux.initial-workspace-git-probe",
+        label: "com.darkroom.programa.initial-workspace-git-probe",
         qos: .utility
     )
     /// The seam to core-owned concerns (git probes, port scanning). See

@@ -660,7 +660,7 @@ extension TerminalController {
                 }
 
                 guard let raw = window.identifier?.rawValue else { return (nil, nil) }
-                let prefix = "cmux.main."
+                let prefix = "programa.main."
                 guard raw.hasPrefix(prefix),
                       let parsedWindowId = UUID(uuidString: String(raw.dropFirst(prefix.count))) else {
                     return (nil, nil)

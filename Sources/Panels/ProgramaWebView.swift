@@ -269,7 +269,7 @@ enum BrowserImageCopyPasteboardBuilder {
 /// WKWebView tends to consume some Command-key equivalents (e.g. Cmd+N/Cmd+W),
 /// preventing the app menu/SwiftUI Commands from receiving them. Route app/menu
 /// shortcuts first by default, but allow browser content to try the Find command
-/// family before cmux falls back to its own browser find overlay.
+/// family before programa falls back to its own browser find overlay.
 final class ProgramaWebView: WKWebView {
     /// Timestamp of the most recent `compositionend` event received via the JS bridge.
     /// Used to detect when WKWebView has already cleared marked text before

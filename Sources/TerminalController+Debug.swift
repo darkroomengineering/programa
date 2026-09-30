@@ -822,7 +822,7 @@ extension TerminalController {
             NSApp.unhide(nil)
             let hasMainTerminalWindow = NSApp.windows.contains { window in
                 guard let raw = window.identifier?.rawValue else { return false }
-                return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+                return raw == "programa.main" || raw.hasPrefix("programa.main.")
             }
 
             if !hasMainTerminalWindow {
@@ -833,7 +833,7 @@ extension TerminalController {
                 ?? NSApp.keyWindow
                 ?? NSApp.windows.first(where: { win in
                     guard let raw = win.identifier?.rawValue else { return false }
-                    return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+                    return raw == "programa.main" || raw.hasPrefix("programa.main.")
                 })
                 ?? NSApp.windows.first {
                 window.makeKeyAndOrderFront(nil)
@@ -1288,7 +1288,7 @@ extension TerminalController {
 
     static nonisolated func debugCaptureOutputURL(label: String, captureID: String) -> URL {
         let outputDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-screenshots", isDirectory: true)
+            .appendingPathComponent("programa-screenshots", isDirectory: true)
         let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedLabel.isEmpty else {
             return outputDirectory.appendingPathComponent("\(captureID).png")

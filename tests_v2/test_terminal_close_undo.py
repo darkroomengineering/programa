@@ -34,7 +34,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -46,7 +46,7 @@ GRACE_PERIOD_SECONDS = 5.0
 POST_EXPIRY_MARGIN_SECONDS = 3.0
 
 
-def _wait_for_surface_count(c: cmux, workspace_id: str, expected: int, timeout_s: float = 8.0):
+def _wait_for_surface_count(c: ProgramaClient, workspace_id: str, expected: int, timeout_s: float = 8.0):
     deadline = time.time() + timeout_s
     last = []
     while time.time() < deadline:
@@ -54,13 +54,13 @@ def _wait_for_surface_count(c: cmux, workspace_id: str, expected: int, timeout_s
         if len(last) == expected:
             return last
         time.sleep(0.1)
-    raise cmuxError(
+    raise ProgramaClientError(
         f"Timed out waiting for surface count == {expected}. Last surfaces: {last!r}"
     )
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         c.activate_app()
         time.sleep(0.2)
 

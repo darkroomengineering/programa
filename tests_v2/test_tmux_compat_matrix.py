@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable, List, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must, wait_for as _wait_for
 
 
@@ -20,19 +20,19 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _find_cli_binary() -> str:
-    env_cli = os.environ.get("CMUXTERM_CLI")
+    env_cli = os.environ.get("PROGRAMA_CLI")
     if env_cli and os.path.isfile(env_cli) and os.access(env_cli, os.X_OK):
         return env_cli
 
-    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/cmux-tests-v2/Build/Products/Debug/cmux")
+    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/programa-tests-v2/Build/Products/Debug/programa")
     if os.path.isfile(fixed) and os.access(fixed, os.X_OK):
         return fixed
 
-    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
+    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/programa"), recursive=True)
     candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
-        raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
+        raise ProgramaClientError("Could not locate programa CLI binary; set PROGRAMA_CLI")
     candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return candidates[0]
 
@@ -51,41 +51,41 @@ def _run_cli(
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env, timeout=timeout_s)
     except subprocess.TimeoutExpired as exc:
-        raise cmuxError(f"CLI timed out after {timeout_s}s ({' '.join(cmd)})") from exc
+        raise ProgramaClientError(f"CLI timed out after {timeout_s}s ({' '.join(cmd)})") from exc
     if expect_ok and proc.returncode != 0:
         merged = f"{proc.stdout}\n{proc.stderr}".strip()
-        raise cmuxError(f"CLI failed ({' '.join(cmd)}): {merged}")
+        raise ProgramaClientError(f"CLI failed ({' '.join(cmd)}): {merged}")
     return proc
 
 
-def _pane_selected_surface(c: cmux, pane_id: str) -> str:
+def _pane_selected_surface(c: ProgramaClient, pane_id: str) -> str:
     rows = c.list_pane_surfaces(pane_id)
     for _idx, sid, _title, selected in rows:
         if selected:
             return sid
     if rows:
         return rows[0][1]
-    raise cmuxError(f"pane {pane_id} has no surfaces")
+    raise ProgramaClientError(f"pane {pane_id} has no surfaces")
 
 
-def _pane_surface_ids(c: cmux, pane_id: str) -> List[str]:
+def _pane_surface_ids(c: ProgramaClient, pane_id: str) -> List[str]:
     rows = c.list_pane_surfaces(pane_id)
     return [sid for _idx, sid, _title, _selected in rows]
 
 
-def _surface_has(c: cmux, workspace_id: str, surface_id: str, token: str) -> bool:
+def _surface_has(c: ProgramaClient, workspace_id: str, surface_id: str, token: str) -> bool:
     payload = c._call("surface.read_text", {"workspace_id": workspace_id, "surface_id": surface_id, "scrollback": True}) or {}
     return token in str(payload.get("text") or "")
 
 
-def _layout_panes(c: cmux) -> List[dict]:
+def _layout_panes(c: ProgramaClient) -> List[dict]:
     layout_payload = c.layout_debug() or {}
     layout = layout_payload.get("layout") or {}
     panes = layout.get("panes") or []
     return list(panes)
 
 
-def _pane_extent(c: cmux, pane_id: str, axis: str) -> float:
+def _pane_extent(c: ProgramaClient, pane_id: str, axis: str) -> float:
     panes = _layout_panes(c)
     for pane in panes:
         pid = str(pane.get("paneId") or pane.get("pane_id") or "")
@@ -93,13 +93,13 @@ def _pane_extent(c: cmux, pane_id: str, axis: str) -> float:
             continue
         frame = pane.get("frame") or {}
         return float(frame.get(axis) or 0.0)
-    raise cmuxError(f"Pane {pane_id} missing from debug layout panes: {panes}")
+    raise ProgramaClientError(f"Pane {pane_id} missing from debug layout panes: {panes}")
 
 
-def _pick_resize_target(c: cmux, pane_ids: List[str]) -> Tuple[str, str, str]:
+def _pick_resize_target(c: ProgramaClient, pane_ids: List[str]) -> Tuple[str, str, str]:
     panes = [p for p in _layout_panes(c) if str(p.get("paneId") or p.get("pane_id") or "") in pane_ids]
     if len(panes) < 2:
-        raise cmuxError(f"Need >=2 panes for resize test, got {panes}")
+        raise ProgramaClientError(f"Need >=2 panes for resize test, got {panes}")
 
     def x_of(p: dict) -> float:
         return float((p.get("frame") or {}).get("x") or 0.0)
@@ -122,7 +122,7 @@ def main() -> int:
     cli = _find_cli_binary()
     stamp = int(time.time() * 1000)
 
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         caps = c.capabilities() or {}
         methods = set(caps.get("methods") or [])
         for method in [
@@ -167,7 +167,7 @@ def main() -> int:
         _must(f"{scroll_prefix}1" not in visible, "shim capture-pane without -S should not return scrollback")
         _must(f"{scroll_prefix}1" in history, "shim capture-pane -S - should return scrollback")
 
-        pipe_file = Path(tempfile.gettempdir()) / f"cmux_pipe_pane_{stamp}.log"
+        pipe_file = Path(tempfile.gettempdir()) / f"programa_pipe_pane_{stamp}.log"
         _run_cli(cli, ["pipe-pane", "--workspace", ws, "--surface", s1, "--command", f"cat > {pipe_file}"])
         piped = pipe_file.read_text() if pipe_file.exists() else ""
         _must(capture_token in piped, f"pipe-pane output missing token: {piped!r}")

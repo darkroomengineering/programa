@@ -251,7 +251,7 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
         originalPATHForGHStub = currentPath
 
         let binDir = fileManager.temporaryDirectory.appendingPathComponent(
-            "cmux-gh-stub-\(UUID().uuidString)",
+            "programa-gh-stub-\(UUID().uuidString)",
             isDirectory: true
         )
         do {
@@ -526,7 +526,7 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
     func testTrackedWorkspaceGitMetadataPollCandidatesExcludeDirectoriesWithoutResolvedGitMetadata() throws {
         let fileManager = FileManager.default
         let directoryURL = fileManager.temporaryDirectory.appendingPathComponent(
-            "cmux-git-nonrepo-candidate-\(UUID().uuidString)",
+            "programa-git-nonrepo-candidate-\(UUID().uuidString)",
             isDirectory: true
         )
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
@@ -554,15 +554,15 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
     func testInheritedBackgroundWorkspaceFetchesGitBranchWithoutSelection() throws {
         let fileManager = FileManager.default
         let repoURL = fileManager.temporaryDirectory.appendingPathComponent(
-            "cmux-git-inherited-background-\(UUID().uuidString)",
+            "programa-git-inherited-background-\(UUID().uuidString)",
             isDirectory: true
         )
         try fileManager.createDirectory(at: repoURL, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: repoURL) }
 
         try runGit(["init", "-b", "main"], in: repoURL)
-        try runGit(["config", "user.name", "cmux tests"], in: repoURL)
-        try runGit(["config", "user.email", "cmux@example.invalid"], in: repoURL)
+        try runGit(["config", "user.name", "programa tests"], in: repoURL)
+        try runGit(["config", "user.email", "programa@example.invalid"], in: repoURL)
         try "seed\n".write(
             to: repoURL.appendingPathComponent("README.md"),
             atomically: true,
@@ -629,13 +629,13 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
 
     func testPeriodicWorkspaceGitMetadataRefreshUpdatesMainWorkspaceAfterCheckoutToFeatureBranch() throws {
         let fileManager = FileManager.default
-        let repoURL = fileManager.temporaryDirectory.appendingPathComponent("cmux-git-main-refresh-\(UUID().uuidString)")
+        let repoURL = fileManager.temporaryDirectory.appendingPathComponent("programa-git-main-refresh-\(UUID().uuidString)")
         try fileManager.createDirectory(at: repoURL, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: repoURL) }
 
         try runGit(["init", "-b", "main"], in: repoURL)
-        try runGit(["config", "user.name", "cmux tests"], in: repoURL)
-        try runGit(["config", "user.email", "cmux@example.invalid"], in: repoURL)
+        try runGit(["config", "user.name", "programa tests"], in: repoURL)
+        try runGit(["config", "user.email", "programa@example.invalid"], in: repoURL)
         try "seed\n".write(
             to: repoURL.appendingPathComponent("README.md"),
             atomically: true,
@@ -676,15 +676,15 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
     func testPeriodicWorkspaceGitMetadataRefreshRestoresClearedBranchForStaleTerminal() throws {
         let fileManager = FileManager.default
         let repoURL = fileManager.temporaryDirectory.appendingPathComponent(
-            "cmux-git-stale-branch-refresh-\(UUID().uuidString)",
+            "programa-git-stale-branch-refresh-\(UUID().uuidString)",
             isDirectory: true
         )
         try fileManager.createDirectory(at: repoURL, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: repoURL) }
 
         try runGit(["init", "-b", "main"], in: repoURL)
-        try runGit(["config", "user.name", "cmux tests"], in: repoURL)
-        try runGit(["config", "user.email", "cmux@example.invalid"], in: repoURL)
+        try runGit(["config", "user.name", "programa tests"], in: repoURL)
+        try runGit(["config", "user.email", "programa@example.invalid"], in: repoURL)
         try "seed\n".write(
             to: repoURL.appendingPathComponent("README.md"),
             atomically: true,
@@ -721,13 +721,13 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
     func testResolvedCommandPathFallsBackOutsideAppPATH() throws {
         let fileManager = FileManager.default
         let tempDir = fileManager.temporaryDirectory.appendingPathComponent(
-            "cmux-command-path-\(UUID().uuidString)",
+            "programa-command-path-\(UUID().uuidString)",
             isDirectory: true
         )
         try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: tempDir) }
 
-        let executableName = "cmux-gh-test-\(UUID().uuidString)"
+        let executableName = "programa-gh-test-\(UUID().uuidString)"
         let executableURL = tempDir.appendingPathComponent(executableName)
         try """
         #!/bin/sh
@@ -747,13 +747,13 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
 
     func testPeriodicWorkspaceGitMetadataRefreshClearsStalePullRequestAfterBranchReset() throws {
         let fileManager = FileManager.default
-        let repoURL = fileManager.temporaryDirectory.appendingPathComponent("cmux-git-refresh-\(UUID().uuidString)")
+        let repoURL = fileManager.temporaryDirectory.appendingPathComponent("programa-git-refresh-\(UUID().uuidString)")
         try fileManager.createDirectory(at: repoURL, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: repoURL) }
 
         try runGit(["init", "-b", "main"], in: repoURL)
-        try runGit(["config", "user.name", "cmux tests"], in: repoURL)
-        try runGit(["config", "user.email", "cmux@example.invalid"], in: repoURL)
+        try runGit(["config", "user.name", "programa tests"], in: repoURL)
+        try runGit(["config", "user.email", "programa@example.invalid"], in: repoURL)
         try "seed\n".write(
             to: repoURL.appendingPathComponent("README.md"),
             atomically: true,

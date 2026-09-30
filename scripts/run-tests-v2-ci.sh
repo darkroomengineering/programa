@@ -3,7 +3,7 @@ set -euo pipefail
 
 # CI runner for a curated stable subset of tests_v2 (see tests_v2/ci_subset.txt).
 #
-# Unlike scripts/run-tests-v2.sh (which is guarded to only run on the cmux-vm
+# Unlike scripts/run-tests-v2.sh (which is guarded to only run on the programa-vm
 # and runs the entire tests_v2 suite), this script is intended to run as a
 # required PR-gating job on GitHub-hosted macOS runners. It expects the
 # `programa` scheme to already be built (see the `socket-integration-tests` job in
@@ -52,14 +52,14 @@ APP="$($APP_LOCATOR \
   --primary "Programa DEV" \
   --derived-data-root "$DERIVED_DATA_ROOT")"
 
-# Tests locate the programa CLI via CMUXTERM_CLI; the fallback search paths are
+# Tests locate the programa CLI via PROGRAMA_CLI; the fallback search paths are
 # VM-shaped and never match on a CI runner. The CLI ships inside the app bundle.
-CMUXTERM_CLI="$APP/Contents/Resources/bin/programa"
-if [ ! -x "$CMUXTERM_CLI" ]; then
-  echo "ERROR: CLI binary not found or not executable at $CMUXTERM_CLI" >&2
+PROGRAMA_CLI="$APP/Contents/Resources/bin/programa"
+if [ ! -x "$PROGRAMA_CLI" ]; then
+  echo "ERROR: CLI binary not found or not executable at $PROGRAMA_CLI" >&2
   exit 1
 fi
-export CMUXTERM_CLI
+export PROGRAMA_CLI
 
 # test_mcp_server_e2e.py looks in DerivedData paths a CI runner does not use, so hand it the
 # binary shipped inside the app bundle.
@@ -122,14 +122,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.getcwd(), "tests_v2"))
-from cmux import cmux  # type: ignore
+from programa_client import ProgramaClient  # type: ignore
 
 deadline = time.time() + 30.0
 last = None
 client = None
 while time.time() < deadline:
     try:
-        client = cmux()
+        client = ProgramaClient()
         client.connect()
         break
     except Exception as e:
@@ -162,7 +162,7 @@ probe_deadline = time.time() + 10.0
 while time.time() < probe_deadline:
     probe = None
     try:
-        probe = cmux()
+        probe = ProgramaClient()
         probe.connect()
         if not probe.ping():
             raise RuntimeError("ping returned false")

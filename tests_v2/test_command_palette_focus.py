@@ -12,19 +12,19 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import palette_visible as _palette_visible
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
-def _focused_surface_id(client: cmux) -> str:
+def _focused_surface_id(client: ProgramaClient) -> str:
     surfaces = client.list_surfaces()
     for _, sid, focused in surfaces:
         if focused:
             return sid
-    raise cmuxError(f"No focused surface in list_surfaces: {surfaces}")
+    raise ProgramaClientError(f"No focused surface in list_surfaces: {surfaces}")
 
 
 def _wait_until(predicate, timeout_s: float = 3.0, interval_s: float = 0.05, message: str = "timeout") -> None:
@@ -33,14 +33,14 @@ def _wait_until(predicate, timeout_s: float = 3.0, interval_s: float = 0.05, mes
         if predicate():
             return
         time.sleep(interval_s)
-    raise cmuxError(message)
+    raise ProgramaClientError(message)
 
 
 def main() -> int:
     token = "PROGRAMA_PALETTE_FOCUS_PROBE_9412"
     restore_token = "PROGRAMA_PALETTE_RESTORE_PROBE_7731"
 
-    with cmux(SOCKET_PATH) as client:
+    with ProgramaClient(SOCKET_PATH) as client:
         client.new_workspace()
         client.activate_app()
         time.sleep(0.2)
@@ -69,7 +69,7 @@ def main() -> int:
         post_text = client.read_terminal_text(panel_id)
 
         if token in post_text and token not in pre_text:
-            raise cmuxError("typed probe text leaked into terminal while palette is open")
+            raise ProgramaClientError("typed probe text leaked into terminal while palette is open")
 
         # Close palette and ensure focus returns to previously-focused terminal.
         client._call("debug.command_palette.toggle", {"window_id": window_id})
@@ -83,7 +83,7 @@ def main() -> int:
         time.sleep(0.15)
         restore_text = client.read_terminal_text(panel_id)
         if restore_token not in restore_text:
-            raise cmuxError("terminal did not receive typing after closing command palette")
+            raise ProgramaClientError("terminal did not receive typing after closing command palette")
 
     print("PASS: command palette steals and restores terminal focus")
     return 0

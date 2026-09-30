@@ -3,7 +3,7 @@ import Foundation
 #if DEBUG
 /// Debug-only counters for Bonsplit internal behavior.
 ///
-/// These are intended for automated tests (via cmuxterm's debug socket) to
+/// These are intended for automated tests (via programa's debug socket) to
 /// detect transient structural updates that can cause visible flashes.
 public enum BonsplitDebugCounters {
     public private(set) static var arrangedSubviewUnderflowCount: Int = 0

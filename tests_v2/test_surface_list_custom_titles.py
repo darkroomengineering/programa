@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -20,19 +20,19 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _find_cli_binary() -> str:
-    env_cli = os.environ.get("CMUXTERM_CLI")
+    env_cli = os.environ.get("PROGRAMA_CLI")
     if env_cli and os.path.isfile(env_cli) and os.access(env_cli, os.X_OK):
         return env_cli
 
-    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/cmux-tests-v2/Build/Products/Debug/cmux")
+    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/programa-tests-v2/Build/Products/Debug/programa")
     if os.path.isfile(fixed) and os.access(fixed, os.X_OK):
         return fixed
 
-    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
+    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/programa"), recursive=True)
     candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
-        raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
+        raise ProgramaClientError("Could not locate programa CLI binary; set PROGRAMA_CLI")
     candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return candidates[0]
 
@@ -46,11 +46,11 @@ def _run_cli_json(cli: str, args: list[str]) -> dict:
     )
     if proc.returncode != 0:
         merged = f"{proc.stdout}\n{proc.stderr}".strip()
-        raise cmuxError(f"CLI failed ({' '.join(args)}): {merged}")
+        raise ProgramaClientError(f"CLI failed ({' '.join(args)}): {merged}")
     try:
         return json.loads(proc.stdout or "{}")
     except Exception as exc:  # noqa: BLE001
-        raise cmuxError(f"Invalid JSON output: {proc.stdout!r} ({exc})")
+        raise ProgramaClientError(f"Invalid JSON output: {proc.stdout!r} ({exc})")
 
 
 def main() -> int:
@@ -58,7 +58,7 @@ def main() -> int:
     workspace_id = ""
 
     try:
-        with cmux(SOCKET_PATH) as client:
+        with ProgramaClient(SOCKET_PATH) as client:
             workspace_id = client.new_workspace()
             client.select_workspace(workspace_id)
             time.sleep(0.2)
@@ -85,7 +85,7 @@ def main() -> int:
             _must(str(cli_row.get("title") or "") == title, f"list-panels should return custom title {title!r}: {cli_row}")
     finally:
         if workspace_id:
-            with cmux(SOCKET_PATH) as cleanup_client:
+            with ProgramaClient(SOCKET_PATH) as cleanup_client:
                 try:
                     cleanup_client.close_workspace(workspace_id)
                 except Exception:

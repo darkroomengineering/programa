@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -53,11 +53,11 @@ def _selected_panels_by_pane(payload: dict) -> dict[str, dict]:
 def _assert_stable_layout(payload: dict, *, expected_panes: int, min_wh: float = 80.0) -> None:
     panes = _sorted_panes_by_x(payload)
     if len(panes) != expected_panes:
-        raise cmuxError(f"expected {expected_panes} panes, got {len(panes)}")
+        raise ProgramaClientError(f"expected {expected_panes} panes, got {len(panes)}")
 
     selected_by_pane = _selected_panels_by_pane(payload)
     if len(selected_by_pane) < expected_panes:
-        raise cmuxError(f"layout_debug missing selectedPanels (got {len(selected_by_pane)} for {expected_panes} panes)")
+        raise ProgramaClientError(f"layout_debug missing selectedPanels (got {len(selected_by_pane)} for {expected_panes} panes)")
 
     for p in panes:
         pid = str(p.get("paneId"))
@@ -65,30 +65,30 @@ def _assert_stable_layout(payload: dict, *, expected_panes: int, min_wh: float =
         w = float(frame.get("width", 0.0))
         h = float(frame.get("height", 0.0))
         if w < min_wh or h < min_wh:
-            raise cmuxError(f"pane collapsed: paneId={pid} frame={frame}")
+            raise ProgramaClientError(f"pane collapsed: paneId={pid} frame={frame}")
 
         row = selected_by_pane.get(pid)
         if not row:
-            raise cmuxError(f"missing selectedPanels entry for paneId={pid}")
+            raise ProgramaClientError(f"missing selectedPanels entry for paneId={pid}")
 
         panel_id = row.get("panelId")
         if not panel_id:
-            raise cmuxError(f"missing panelId for paneId={pid}")
+            raise ProgramaClientError(f"missing panelId for paneId={pid}")
 
         if row.get("inWindow") is not True:
-            raise cmuxError(f"panel not in window: paneId={pid} panelId={panel_id} inWindow={row.get('inWindow')}")
+            raise ProgramaClientError(f"panel not in window: paneId={pid} panelId={panel_id} inWindow={row.get('inWindow')}")
 
         if row.get("hidden") is True:
-            raise cmuxError(f"panel hidden: paneId={pid} panelId={panel_id}")
+            raise ProgramaClientError(f"panel hidden: paneId={pid} panelId={panel_id}")
 
         view_frame = row.get("viewFrame") or {}
         vw = float(view_frame.get("width", 0.0))
         vh = float(view_frame.get("height", 0.0))
         if vw < min_wh or vh < min_wh:
-            raise cmuxError(f"panel viewFrame collapsed: paneId={pid} panelId={panel_id} viewFrame={view_frame}")
+            raise ProgramaClientError(f"panel viewFrame collapsed: paneId={pid} panelId={panel_id} viewFrame={view_frame}")
 
 
-def _take_screenshot(c: cmux, label: str) -> str:
+def _take_screenshot(c: ProgramaClient, label: str) -> str:
     info = c.screenshot(label)
     sid = str(info.get("screenshot_id") or "").strip()
     path = str(info.get("path") or "").strip()
@@ -96,7 +96,7 @@ def _take_screenshot(c: cmux, label: str) -> str:
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         c.new_workspace()
         time.sleep(0.35)
 
@@ -107,13 +107,13 @@ def main() -> int:
         first = c.layout_debug()
         panes = _sorted_panes_by_x(first)
         if len(panes) < 2:
-            raise cmuxError(f"expected >=2 panes after first split, got {len(panes)}")
+            raise ProgramaClientError(f"expected >=2 panes after first split, got {len(panes)}")
 
         left_pane_id = str(panes[0].get("paneId"))
         right_pane_id = str(panes[-1].get("paneId"))
 
         if not left_pane_id or not right_pane_id:
-            raise cmuxError(f"missing pane IDs: left={left_pane_id} right={right_pane_id}")
+            raise ProgramaClientError(f"missing pane IDs: left={left_pane_id} right={right_pane_id}")
 
         # Focus the rightmost pane.
         c.focus_pane(right_pane_id)
@@ -143,13 +143,13 @@ def main() -> int:
                 # Looks good.
                 print("PASS: nested split preserved existing panes")
                 return 0
-            except cmuxError as e:
+            except ProgramaClientError as e:
                 last_err = str(e)
                 time.sleep(0.05)
 
         # Failure: capture a screenshot to aid debugging.
         shot = _take_screenshot(c, "nested_split_failure")
-        raise cmuxError(f"nested split layout never stabilized: {last_err}; screenshot: {shot}; payload_keys={list((last_payload or {}).keys())}")
+        raise ProgramaClientError(f"nested split layout never stabilized: {last_err}; screenshot: {shot}; payload_keys={list((last_payload or {}).keys())}")
 
 
 if __name__ == "__main__":

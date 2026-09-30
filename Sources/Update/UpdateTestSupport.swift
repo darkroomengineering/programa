@@ -85,13 +85,13 @@ enum UpdateTestSupport {
 
     private static func makeAppcastItem(displayVersion: String) -> SUAppcastItem? {
         let enclosure: [String: Any] = [
-            "url": "https://example.com/cmux.zip",
+            "url": "https://example.com/programa.zip",
             "length": "1024",
             "sparkle:version": displayVersion,
             "sparkle:shortVersionString": displayVersion,
         ]
         let dict: [String: Any] = [
-            "title": "cmux \(displayVersion)",
+            "title": "programa \(displayVersion)",
             "pubDate": "Wed, 25 Mar 2026 12:00:00 +0000",
             "enclosure": enclosure,
         ]

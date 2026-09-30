@@ -251,7 +251,7 @@ file-set key wins over the Settings UI until removed). Top-level sections and ev
 - `workspaceColors`: `indicatorStyle`, `selectionColor`, `notificationBadgeColor`, `colors`.
 - `sidebarAppearance`: `matchTerminalBackground`, `tintColor`, `lightModeTintColor`,
   `darkModeTintColor`, `tintOpacity`, `showClaudeQuota`.
-- `automation`: `socketControlMode` (`off|cmuxOnly|automation|password|allowAll|openAccess|
+- `automation`: `socketControlMode` (`off|programaOnly|automation|password|allowAll|openAccess|
   fullOpenAccess|notifications|full`), `socketPassword`, `claudeCodeIntegration`,
   `openBrowserWithAgentSplits`, `claudeBinaryPath`, `portBase`, `portRange`.
 - `customCommands`: `trustedDirectories`.
@@ -268,7 +268,7 @@ Swift source of truth: `Sources/ProgramaSettingsFileStore.swift`,
 **`programa.json`** (`docs/programa-json.md`, `Sources/ProgramaConfig.swift`,
 `Sources/ProgramaConfigExecutor.swift`). Command-palette entries, walked up from the focused
 workspace's cwd plus a global `~/.config/programa/programa.json` fallback (legacy names
-`cmux.json`/`~/.config/cmux/cmux.json` still read). Two entry kinds: `commands` (either a
+`programa.json`/`~/.config/programa/programa.json` still read). Two entry kinds: `commands` (either a
 `workspace` command — opens/recreates a named workspace with a saved layout — or a `command`
 command — types+submits shell text) and `recipes` (fills a prompt template and types it into the
 focused terminal **without** auto-submitting, so a cloned repo can't fire attacker-chosen text
@@ -413,7 +413,7 @@ from (`git checkout 903027ccef -- <paths>`) and a "what we learned" section (not
 - **`inline-vscode.md`** — inline VS Code / `serve-web` integration
   (`Sources/VSCodeIntegration.swift`).
 - **`mobile-bridge-and-ios.md`** — Mobile Bridge and an iOS companion app
-  (`Sources/MobileBridge`, `ios/`, `vendor/CmuxIrohTransport`, `vendor/CMUXMobileCore`, iOS
+  (`Sources/MobileBridge`, `ios/`, `vendor/ProgramaIrohTransport`, `vendor/PROGRAMAMobileCore`, iOS
   TestFlight CI workflows).
 - **`ssh-remote-workspaces.md`** — SSH remote workspaces: the largest removal, a full remote
   daemon/session/proxy stack (`Sources/Workspace+Remote.swift` and ~15 sibling files,

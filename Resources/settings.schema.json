@@ -258,8 +258,8 @@
       "properties": {
         "socketControlMode": {
           "type": "string",
-          "enum": ["off", "cmuxOnly", "automation", "password", "allowAll", "openAccess", "fullOpenAccess", "notifications", "full"],
-          "default": "cmuxOnly",
+          "enum": ["off", "programaOnly", "cmuxOnly", "automation", "password", "allowAll", "openAccess", "fullOpenAccess", "notifications", "full"],
+          "default": "programaOnly",
           "description": "Socket control mode. Legacy aliases are accepted and normalized."
         },
         "socketPassword": {

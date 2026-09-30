@@ -75,7 +75,7 @@ enum UpdateSettings {
     }
 }
 
-/// Controller for managing Sparkle updates in cmux.
+/// Controller for managing Sparkle updates in programa.
 class UpdateController {
     private(set) var updater: SPUUpdater
     private let userDriver: UpdateDriver

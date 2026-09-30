@@ -364,7 +364,7 @@ final class MCPSocketBridgeTests: XCTestCase {
     }
 
     /// `PROGRAMA_SOCKET` is the fallback when `PROGRAMA_SOCKET_PATH` is unset -- the same
-    /// precedence `tests_v2/cmux.py` and the CLI rely on.
+    /// precedence `tests_v2/programa_client.py` and the CLI rely on.
     func testResolveSocketPathFallsBackToProgramaSocketWhenPathUnset() {
         let resolved = MCPSocketBridge.resolveSocketPath(environment: [
             "PROGRAMA_SOCKET": "/tmp/mcp-bridge-test-explicit-b.sock",

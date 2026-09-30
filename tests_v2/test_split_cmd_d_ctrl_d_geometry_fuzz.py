@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -67,7 +67,7 @@ def _largest_split_frame(layout_payload: dict) -> dict:
                 best = {"x": x, "y": y, "width": width, "height": height}
 
     if best is None:
-        raise cmuxError(f"layout_debug contains no usable split-view frame: {layout_payload}")
+        raise ProgramaClientError(f"layout_debug contains no usable split-view frame: {layout_payload}")
     return best
 
 
@@ -105,7 +105,7 @@ def _assert_same_frame(
     }
     shifted = {k: v for k, v in deltas.items() if v > EPSILON}
     if shifted:
-        raise cmuxError(
+        raise ProgramaClientError(
             "Outer split container shifted during fuzz churn "
             f"(step={step}, sample={sample}, action={action}, action_index={action_index}, seed={seed}, "
             f"baseline={baseline}, current={current}, deltas={deltas}, epsilon={EPSILON})"
@@ -113,7 +113,7 @@ def _assert_same_frame(
         )
 
 
-def _warm_start_split(c: cmux) -> dict:
+def _warm_start_split(c: ProgramaClient) -> dict:
     # Ensure we have at least one split so the container frame exists in layout_debug.
     c.simulate_shortcut("cmd+d")
     deadline = time.time() + 2.0
@@ -124,7 +124,7 @@ def _warm_start_split(c: cmux) -> dict:
         if _pane_count(payload) >= 2:
             return payload
         time.sleep(0.02)
-    raise cmuxError(f"Timed out waiting for first split to appear: {last}")
+    raise ProgramaClientError(f"Timed out waiting for first split to appear: {last}")
 
 
 def main() -> int:
@@ -132,7 +132,7 @@ def main() -> int:
     recent_actions: deque[str] = deque(maxlen=max(8, TRACE_TAIL))
     total_actions = 0
 
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         ws = c.new_workspace()
         c.select_workspace(ws)
         c.activate_app()
@@ -144,7 +144,7 @@ def main() -> int:
         initial = _warm_start_split(c)
         baseline = _container_frame(initial)
         if _pane_count(initial) < 2:
-            raise cmuxError("Expected at least 2 panes after warm start split")
+            raise ProgramaClientError("Expected at least 2 panes after warm start split")
 
         for step in range(1, FUZZ_STEPS + 1):
             burst = rng.randint(1, max(1, BURST_MAX))
@@ -195,11 +195,11 @@ def main() -> int:
 
         underflows = c.bonsplit_underflow_count()
         if ASSERT_NO_UNDERFLOW and underflows != 0:
-            raise cmuxError(f"bonsplit arranged-subview underflow observed during fuzz run: {underflows}")
+            raise ProgramaClientError(f"bonsplit arranged-subview underflow observed during fuzz run: {underflows}")
 
         flashes = c.empty_panel_count()
         if ASSERT_NO_EMPTY_PANEL and flashes != 0:
-            raise cmuxError(f"EmptyPanelView appeared during fuzz run (count={flashes})")
+            raise ProgramaClientError(f"EmptyPanelView appeared during fuzz run (count={flashes})")
 
     print(
         "PASS: cmd+d/ctrl+d fuzz geometry invariant "

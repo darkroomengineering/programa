@@ -631,8 +631,8 @@ private func browserFindCommandEquivalent(for event: NSEvent) -> BrowserFindComm
     }
 }
 
-/// For browser content, let the page try the Find command family before cmux's menu fallback.
-/// This preserves native web-app shortcuts like VS Code's Cmd+F while still allowing cmux's
+/// For browser content, let the page try the Find command family before programa's menu fallback.
+/// This preserves native web-app shortcuts like VS Code's Cmd+F while still allowing programa's
 /// browser find overlay to keep owning its visible Find UI shortcuts.
 func shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
     _ event: NSEvent,
@@ -660,27 +660,27 @@ func shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
     return true
 }
 
-func cmuxOwningGhosttyView(for responder: NSResponder?) -> GhosttyNSView? {
+func programaOwningGhosttyView(for responder: NSResponder?) -> GhosttyNSView? {
     guard let responder else { return nil }
     if let ghosttyView = responder as? GhosttyNSView {
         return ghosttyView
     }
 
     if let view = responder as? NSView,
-       let ghosttyView = cmuxOwningGhosttyView(for: view) {
+       let ghosttyView = programaOwningGhosttyView(for: view) {
         return ghosttyView
     }
 
     if let textView = responder as? NSTextView {
         if textView.isFieldEditor,
            let ownerView = programaFieldEditorOwnerView(textView),
-           let ghosttyView = cmuxOwningGhosttyView(for: ownerView) {
+           let ghosttyView = programaOwningGhosttyView(for: ownerView) {
             return ghosttyView
         }
 
         if !textView.isFieldEditor,
            let delegateView = textView.delegate as? NSView,
-           let ghosttyView = cmuxOwningGhosttyView(for: delegateView) {
+           let ghosttyView = programaOwningGhosttyView(for: delegateView) {
             return ghosttyView
         }
     }
@@ -691,7 +691,7 @@ func cmuxOwningGhosttyView(for responder: NSResponder?) -> GhosttyNSView? {
             return ghosttyView
         }
         if let view = next as? NSView,
-           let ghosttyView = cmuxOwningGhosttyView(for: view) {
+           let ghosttyView = programaOwningGhosttyView(for: view) {
             return ghosttyView
         }
         current = next.nextResponder
@@ -714,7 +714,7 @@ private func programaFieldEditorOwnerView(_ editor: NSTextView) -> NSView? {
     return editor.superview
 }
 
-private func cmuxOwningGhosttyView(for view: NSView) -> GhosttyNSView? {
+private func programaOwningGhosttyView(for view: NSView) -> GhosttyNSView? {
     if let ghosttyView = view as? GhosttyNSView {
         return ghosttyView
     }
@@ -1069,7 +1069,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var startupEndedHiddenSessionIds = Set<String>()
     var isApplyingStartupSessionRestore = false
     let sessionPersistenceQueue = DispatchQueue(
-        label: "com.cmuxterm.app.sessionPersistence",
+        label: "com.darkroom.programa.app.sessionPersistence",
         qos: .utility
     )
     var sessionSnapshotWriter: @Sendable (AppSessionSnapshot) -> Bool = {
@@ -1080,7 +1080,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     // `SessionAutosaveCoordinator.configure` for why this two-step exists.
     let sessionAutosave = SessionAutosaveCoordinator(
         sessionPersistenceQueue: DispatchQueue(
-            label: "com.cmuxterm.app.sessionPersistence.autosave-placeholder",
+            label: "com.darkroom.programa.app.sessionPersistence.autosave-placeholder",
             qos: .utility
         ),
         snapshotProvider: { _ in nil },
@@ -1089,7 +1089,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         isRunningUnderXCTest: { false }
     )
     private nonisolated static let launchServicesRegistrationQueue = DispatchQueue(
-        label: "com.cmuxterm.app.launchServicesRegistration",
+        label: "com.darkroom.programa.app.launchServicesRegistration",
         qos: .utility
     )
     private nonisolated static func enqueueLaunchServicesRegistrationWork(_ work: @escaping @Sendable () -> Void) {
@@ -3598,7 +3598,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         _ responder: NSResponder,
         in window: NSWindow
     ) -> Bool {
-        if let ghosttyView = cmuxOwningGhosttyView(for: responder) {
+        if let ghosttyView = programaOwningGhosttyView(for: responder) {
             if ghosttyView.window !== window {
                 return false
             }
@@ -3953,7 +3953,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
            let window = ctx.window {
             return window
         }
-        let expectedIdentifier = "cmux.main.\(windowId.uuidString)"
+        let expectedIdentifier = "programa.main.\(windowId.uuidString)"
         return NSApp.windows.first(where: { $0.identifier?.rawValue == expectedIdentifier })
     }
 
@@ -3970,7 +3970,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func mainWindowId(from window: NSWindow) -> UUID? {
         guard let raw = window.identifier?.rawValue else { return nil }
-        let prefix = "cmux.main."
+        let prefix = "programa.main."
         guard raw.hasPrefix(prefix) else { return nil }
         let suffix = String(raw.dropFirst(prefix.count))
         return UUID(uuidString: suffix)
@@ -4106,8 +4106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return context.windowId
         }
         guard let rawIdentifier = window.identifier?.rawValue,
-              rawIdentifier.hasPrefix("cmux.main.") else { return nil }
-        let idPart = String(rawIdentifier.dropFirst("cmux.main.".count))
+              rawIdentifier.hasPrefix("programa.main.") else { return nil }
+        let idPart = String(rawIdentifier.dropFirst("programa.main.".count))
         return UUID(uuidString: idPart)
     }
 
@@ -4364,7 +4364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let responder = targetWindow?.firstResponder
             ?? NSApp.keyWindow?.firstResponder
             ?? NSApp.mainWindow?.firstResponder
-        guard let ghosttyView = cmuxOwningGhosttyView(for: responder),
+        guard let ghosttyView = programaOwningGhosttyView(for: responder),
               let workspaceId = ghosttyView.tabId,
               let panelId = ghosttyView.terminalSurface?.id,
               let manager = resolveShortcutTabManager(for: workspaceId, preferredWindow: targetWindow) else {
@@ -4989,7 +4989,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if shortcutEventHasAddressableWindow(event) {
             if let eventWindow = resolvedShortcutEventWindow(event),
                programaWindowShouldOwnCloseShortcut(eventWindow) {
-                // Auxiliary cmux windows do not own a terminal tab manager. Let them fall back
+                // Auxiliary programa windows do not own a terminal tab manager. Let them fall back
                 // to the active main terminal window so app shortcuts like Cmd+W still route.
             } else {
 #if DEBUG
@@ -6296,7 +6296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let commandPaletteEffectiveInTargetWindow = commandPaletteState.isEffectiveInTargetWindow
         let terminalHasMarkedTextInEventWindow = !normalizedFlags.contains(.command)
             && resolvedEventWindow.flatMap {
-                cmuxOwningGhosttyView(for: $0.firstResponder)
+                programaOwningGhosttyView(for: $0.firstResponder)
             }?.hasMarkedText() == true
 
 #if DEBUG
@@ -6479,7 +6479,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // (e.g., split that doesn't properly blur the address bar). If the first responder
         // is a terminal surface, the address bar can't be focused.
         if browserAddressBarFocusedPanelId != nil,
-           cmuxOwningGhosttyView(for: NSApp.keyWindow?.firstResponder) != nil {
+           programaOwningGhosttyView(for: NSApp.keyWindow?.firstResponder) != nil {
 #if DEBUG
             let stalePanelToken = browserAddressBarFocusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
             let firstResponderType = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
@@ -7059,7 +7059,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private func handleCloseOtherTabsInPaneShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .closeOtherTabsInPane) else { return nil }
         if let targetWindow = event.window ?? NSApp.keyWindow ?? NSApp.mainWindow,
-           targetWindow.identifier?.rawValue == "cmux.settings" {
+           targetWindow.identifier?.rawValue == "programa.settings" {
             targetWindow.performClose(nil)
         } else {
             let targetWindow = event.window ?? NSApp.keyWindow ?? NSApp.mainWindow
@@ -8957,7 +8957,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return true
         }
         guard let raw = window.identifier?.rawValue else { return false }
-        return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+        return raw == "programa.main" || raw.hasPrefix("programa.main.")
     }
 
     private func contextContainingTabId(_ tabId: UUID) -> MainWindowContext? {
@@ -8986,7 +8986,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     func closeMainWindowContainingTabId(_ tabId: UUID) {
         guard let context = contextContainingTabId(tabId) else { return }
-        let expectedIdentifier = "cmux.main.\(context.windowId.uuidString)"
+        let expectedIdentifier = "programa.main.\(context.windowId.uuidString)"
         let window: NSWindow? = context.window ?? NSApp.windows.first(where: { $0.identifier?.rawValue == expectedIdentifier })
         if let window { disposeMainWindow(window) }
     }
@@ -9034,7 +9034,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     private func openNotificationInContext(_ context: MainWindowContext, tabId: UUID, surfaceId: UUID?, notificationId: UUID?) -> Bool {
-        let expectedIdentifier = "cmux.main.\(context.windowId.uuidString)"
+        let expectedIdentifier = "programa.main.\(context.windowId.uuidString)"
         let window: NSWindow? = context.window ?? NSApp.windows.first(where: { $0.identifier?.rawValue == expectedIdentifier })
         guard let window else {
 #if DEBUG
@@ -9399,7 +9399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // NSGlassEffectView path vs the older NSVisualEffectView fallback is chosen
         // inside WindowGlassEffect.apply.
         let currentThemeBackground = GhosttyBackgroundTheme.currentColor()
-        let shouldApplyWindowGlass = cmuxShouldApplyWindowGlass(
+        let shouldApplyWindowGlass = programaShouldApplyWindowGlass(
             bgGlassEnabled: bgGlassEnabled,
             glassEffectAvailable: WindowGlassEffect.isAvailable
         )
@@ -9459,7 +9459,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 private extension AppDelegate {
     @objc func handleThemesReloadNotification(_ notification: Notification) {
         themeReloadCoalescer.request(fingerprint: { ThemeReloadCoalescer.configFingerprint() }) {
-            GhosttyApp.shared.reloadConfiguration(source: "distributed.cmux.themes")
+            GhosttyApp.shared.reloadConfiguration(source: "distributed.programa.themes")
         }
     }
 }

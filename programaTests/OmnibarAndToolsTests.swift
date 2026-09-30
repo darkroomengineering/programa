@@ -17,7 +17,7 @@ import Darwin
 final class FinderServicePathResolverTests: XCTestCase {
     private func withTemporaryDirectory<T>(_ body: (URL) throws -> T) throws -> T {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "cmux-finder-service-tests-\(UUID().uuidString)",
+            "programa-finder-service-tests-\(UUID().uuidString)",
             isDirectory: true
         )
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -62,13 +62,13 @@ final class FinderServicePathResolverTests: XCTestCase {
     }
 
     func testOrderedUniqueDirectoriesSkipsBundleAndEmbeddedPathsWhenExcludingBundleRoot() {
-        let bundleURL = URL(fileURLWithPath: "/Applications/Tools/../cmux.app", isDirectory: true)
+        let bundleURL = URL(fileURLWithPath: "/Applications/Tools/../programa.app", isDirectory: true)
         let input: [URL] = [
             bundleURL,
-            URL(fileURLWithPath: "/Applications/cmux.app/Contents/MacOS/cmux", isDirectory: false),
-            URL(fileURLWithPath: "/Applications/cmux.app/Contents/Resources/bin/cmux", isDirectory: false),
-            URL(fileURLWithPath: "/Users/tester/Projects/cmux", isDirectory: true),
-            URL(fileURLWithPath: "/Users/tester/Projects/cmux/README.md", isDirectory: false),
+            URL(fileURLWithPath: "/Applications/programa.app/Contents/MacOS/programa", isDirectory: false),
+            URL(fileURLWithPath: "/Applications/programa.app/Contents/Resources/bin/programa", isDirectory: false),
+            URL(fileURLWithPath: "/Users/tester/Projects/programa", isDirectory: true),
+            URL(fileURLWithPath: "/Users/tester/Projects/programa/README.md", isDirectory: false),
         ]
 
         let directories = FinderServicePathResolver.orderedUniqueDirectories(
@@ -79,16 +79,16 @@ final class FinderServicePathResolverTests: XCTestCase {
         XCTAssertEqual(
             directories,
             [
-                "/Users/tester/Projects/cmux",
+                "/Users/tester/Projects/programa",
             ]
         )
     }
 
     func testOrderedUniqueDirectoriesExclusionDoesNotFilterSiblingPaths() {
-        let bundleURL = URL(fileURLWithPath: "/Applications/cmux.app", isDirectory: true)
+        let bundleURL = URL(fileURLWithPath: "/Applications/programa.app", isDirectory: true)
         let input: [URL] = [
-            URL(fileURLWithPath: "/Applications/cmux.app backup/project", isDirectory: true),
-            URL(fileURLWithPath: "/Applications/cmux.app.beta/project/file.txt", isDirectory: false),
+            URL(fileURLWithPath: "/Applications/programa.app backup/project", isDirectory: true),
+            URL(fileURLWithPath: "/Applications/programa.app.beta/project/file.txt", isDirectory: false),
         ]
 
         let directories = FinderServicePathResolver.orderedUniqueDirectories(
@@ -99,8 +99,8 @@ final class FinderServicePathResolverTests: XCTestCase {
         XCTAssertEqual(
             directories,
             [
-                "/Applications/cmux.app backup/project",
-                "/Applications/cmux.app.beta/project",
+                "/Applications/programa.app backup/project",
+                "/Applications/programa.app.beta/project",
             ]
         )
     }
@@ -128,8 +128,8 @@ final class FinderServicePathResolverTests: XCTestCase {
     func testOrderedUniqueDirectoriesResolvesSymlinksOnlyForExcludedRootComparison() throws {
         try withTemporaryDirectory { root in
             let applicationsDirectory = root.appendingPathComponent("Applications", isDirectory: true)
-            let actualBundle = applicationsDirectory.appendingPathComponent("cmux.app", isDirectory: true)
-            let actualBinary = actualBundle.appendingPathComponent("Contents/MacOS/cmux", isDirectory: false)
+            let actualBundle = applicationsDirectory.appendingPathComponent("programa.app", isDirectory: true)
+            let actualBinary = actualBundle.appendingPathComponent("Contents/MacOS/programa", isDirectory: false)
             let aliasApplications = root.appendingPathComponent("Launcher", isDirectory: true)
             let aliasWorkspace = aliasApplications.appendingPathComponent("workspace", isDirectory: true)
 
@@ -143,8 +143,8 @@ final class FinderServicePathResolverTests: XCTestCase {
 
             let directories = FinderServicePathResolver.orderedUniqueDirectories(
                 from: [
-                    aliasApplications.appendingPathComponent("cmux.app", isDirectory: true),
-                    aliasApplications.appendingPathComponent("cmux.app/Contents/MacOS/cmux", isDirectory: false),
+                    aliasApplications.appendingPathComponent("programa.app", isDirectory: true),
+                    aliasApplications.appendingPathComponent("programa.app/Contents/MacOS/programa", isDirectory: false),
                     aliasWorkspace,
                 ],
                 excludingDescendantsOf: [actualBundle]

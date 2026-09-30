@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import palette_visible as _palette_visible, wait_until as _wait_until
 
 
@@ -59,7 +59,7 @@ def _open_rename_input(client, window_id):
 
 
 def main():
-    with cmux(SOCKET_PATH) as client:
+    with ProgramaClient(SOCKET_PATH) as client:
         client.activate_app()
         time.sleep(0.2)
         window_id = client.current_window()
@@ -83,7 +83,7 @@ def main():
                 and selection_location in (-1, 0)
                 and selection_length == text_length
             ):
-                raise cmuxError(
+                raise ProgramaClientError(
                     "rename input was not select-all on open: "
                     f"text_length={text_length} selection=({selection_location}, {selection_length})"
                 )
@@ -102,13 +102,13 @@ def main():
                     break
                 time.sleep(0.05)
             if not first_backspace_cleared:
-                raise cmuxError(
+                raise ProgramaClientError(
                     "first backspace did not clear rename input: "
                     f"selection={last_selection} results={_palette_results(client, window_id)}"
                 )
             after_first = _palette_results(client, window_id)
             if str(after_first.get("mode") or "") != "rename_input":
-                raise cmuxError(f"palette exited rename mode too early after first backspace: {after_first}")
+                raise ProgramaClientError(f"palette exited rename mode too early after first backspace: {after_first}")
 
             client._call(
                 "debug.command_palette.rename_input.delete_backward",
@@ -121,7 +121,7 @@ def main():
             )
 
             if not _palette_visible(client, window_id):
-                raise cmuxError("palette closed unexpectedly instead of navigating back to command list")
+                raise ProgramaClientError("palette closed unexpectedly instead of navigating back to command list")
 
         finally:
             if _palette_visible(client, window_id):

@@ -126,8 +126,8 @@ struct ProgramaPortRangeAssignment: Equatable, Sendable {
 }
 
 enum ProgramaPortRangePolicy {
-    static let baseDefaultsKey = "cmuxPortBase"
-    static let rangeDefaultsKey = "cmuxPortRange"
+    static let baseDefaultsKey = "programaPortBase"
+    static let rangeDefaultsKey = "programaPortRange"
     static let defaultBase = 9_100
     static let defaultRange = 10
     static let minimumPort = 1

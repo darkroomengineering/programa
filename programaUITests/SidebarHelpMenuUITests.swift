@@ -76,7 +76,7 @@ final class SidebarHelpMenuUITests: XCTestCase {
     func testHelpMenuCheckForUpdatesTriggersSidebarUpdatePill() {
         let app = XCUIApplication()
         app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["PROGRAMA_UI_TEST_FEED_URL"] = "https://cmux.test/appcast.xml"
+        app.launchEnvironment["PROGRAMA_UI_TEST_FEED_URL"] = "https://programa.test/appcast.xml"
         app.launchEnvironment["PROGRAMA_UI_TEST_FEED_MODE"] = "available"
         app.launchEnvironment["PROGRAMA_UI_TEST_UPDATE_VERSION"] = "9.9.9"
         app.launchEnvironment["PROGRAMA_UI_TEST_AUTO_ALLOW_PERMISSION"] = "1"
@@ -179,9 +179,9 @@ final class SidebarHelpMenuUITests: XCTestCase {
 
 final class CommandPaletteAllSurfacesUITests: XCTestCase {
     private var socketPath = ""
-    private let hiddenSurfaceToken = "cmux-command-palette-hidden-surface"
-    private let visibleSurfaceToken = "cmux-command-palette-visible-surface"
-    private let noMatchWorkspaceQuery = "cmux-command-palette-no-match"
+    private let hiddenSurfaceToken = "programa-command-palette-hidden-surface"
+    private let visibleSurfaceToken = "programa-command-palette-visible-surface"
+    private let noMatchWorkspaceQuery = "programa-command-palette-no-match"
 
     override func setUp() {
         super.setUp()
@@ -435,12 +435,12 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             at: diagnosticsPath,
             timeout: 3.0
         ) { data in
-            data["keyWindowIdentifier"] == "cmux.settings" && data["settingsWindowIsKey"] == "1"
+            data["keyWindowIdentifier"] == "programa.settings" && data["settingsWindowIsKey"] == "1"
         }
 
         XCTAssertEqual(
             diagnostics?["keyWindowIdentifier"],
-            "cmux.settings",
+            "programa.settings",
             "Expected the Settings window to remain key after toggling minimal mode. diagnostics=\(diagnostics ?? [:])"
         )
         XCTAssertEqual(
@@ -453,7 +453,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
                 at: diagnosticsPath,
                 duration: 0.8
             ) { data in
-                data["keyWindowIdentifier"] == "cmux.settings" && data["settingsWindowIsKey"] == "1"
+                data["keyWindowIdentifier"] == "programa.settings" && data["settingsWindowIsKey"] == "1"
             },
             "Expected the Settings window to stay key after toggling minimal mode. diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])"
         )

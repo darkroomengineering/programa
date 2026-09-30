@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -119,15 +119,15 @@ WKWEBVIEW_NOT_SUPPORTED = {
 }
 
 
-def _expect_not_supported(c: cmux, method: str, params: dict) -> str:
+def _expect_not_supported(c: ProgramaClient, method: str, params: dict) -> str:
     try:
         c._call(method, params)
-    except cmuxError as exc:
+    except ProgramaClientError as exc:
         text = str(exc)
         if text.startswith("not_supported:"):
             return text
-        raise cmuxError(f"Expected not_supported for {method}, got: {text}")
-    raise cmuxError(f"Expected not_supported for {method}, but call succeeded")
+        raise ProgramaClientError(f"Expected not_supported for {method}, got: {text}")
+    raise ProgramaClientError(f"Expected not_supported for {method}, but call succeeded")
 
 
 def _error_data(text: str) -> dict:
@@ -136,13 +136,13 @@ def _error_data(text: str) -> dict:
     try:
         data = ast.literal_eval(serialized[:-1])
     except (SyntaxError, ValueError) as exc:
-        raise cmuxError(f"Expected parseable error data payload, got: {text}") from exc
+        raise ProgramaClientError(f"Expected parseable error data payload, got: {text}") from exc
     _must(isinstance(data, dict), f"Expected dictionary error data, got: {data}")
     return data
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         caps = c.capabilities() or {}
         methods = set(caps.get("methods") or [])
 

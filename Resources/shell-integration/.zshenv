@@ -1,16 +1,16 @@
 # vim:ft=zsh
 #
-# cmux ZDOTDIR bootstrap for zsh.
+# programa ZDOTDIR bootstrap for zsh.
 #
 # GhosttyKit already uses a ZDOTDIR injection mechanism for zsh (setting ZDOTDIR
-# to Ghostty's integration dir). cmux also needs to run its integration, but
+# to Ghostty's integration dir). programa also needs to run its integration, but
 # we must restore the user's real ZDOTDIR immediately so that:
 # - /etc/zshrc sets HISTFILE relative to the real ZDOTDIR/HOME (shared history)
 # - zsh loads the user's real .zprofile/.zshrc normally (no wrapper recursion)
 #
 # We restore ZDOTDIR from (in priority order):
 # - GHOSTTY_ZSH_ZDOTDIR (set by GhosttyKit when it overwrote ZDOTDIR)
-# - PROGRAMA_ZSH_ZDOTDIR (set by cmux when it overwrote a user-provided ZDOTDIR)
+# - PROGRAMA_ZSH_ZDOTDIR (set by programa when it overwrote a user-provided ZDOTDIR)
 # - unset (zsh treats unset ZDOTDIR as $HOME)
 
 if [[ -n "${GHOSTTY_ZSH_ZDOTDIR+X}" ]]; then
@@ -25,8 +25,8 @@ fi
 
 {
     # zsh treats unset ZDOTDIR as if it were HOME. We do the same.
-    builtin typeset _cmux_file="${ZDOTDIR-$HOME}/.zshenv"
-    [[ ! -r "$_cmux_file" ]] || builtin source -- "$_cmux_file"
+    builtin typeset _programa_file="${ZDOTDIR-$HOME}/.zshenv"
+    [[ ! -r "$_programa_file" ]] || builtin source -- "$_programa_file"
 
     if [[ -o interactive \
        && -z "${ZSH_EXECUTION_STRING:-}" \
@@ -47,23 +47,23 @@ fi
         # zsh integration if available.
         #
         # We can't rely on GHOSTTY_ZSH_ZDOTDIR here because Ghostty's own zsh
-        # bootstrap unsets it before chaining into this cmux wrapper.
+        # bootstrap unsets it before chaining into this programa wrapper.
         if [[ "${PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION:-0}" == "1" ]]; then
             if [[ -n "${PROGRAMA_SHELL_INTEGRATION_DIR:-}" ]]; then
-                builtin typeset _cmux_ghostty="$PROGRAMA_SHELL_INTEGRATION_DIR/ghostty-integration.zsh"
+                builtin typeset _programa_ghostty="$PROGRAMA_SHELL_INTEGRATION_DIR/ghostty-integration.zsh"
             fi
-            if [[ ! -r "${_cmux_ghostty:-}" && -n "${GHOSTTY_RESOURCES_DIR:-}" ]]; then
-                builtin typeset _cmux_ghostty="$GHOSTTY_RESOURCES_DIR/shell-integration/zsh/ghostty-integration"
+            if [[ ! -r "${_programa_ghostty:-}" && -n "${GHOSTTY_RESOURCES_DIR:-}" ]]; then
+                builtin typeset _programa_ghostty="$GHOSTTY_RESOURCES_DIR/shell-integration/zsh/ghostty-integration"
             fi
-            [[ -r "$_cmux_ghostty" ]] && builtin source -- "$_cmux_ghostty"
+            [[ -r "$_programa_ghostty" ]] && builtin source -- "$_programa_ghostty"
         fi
 
-        # Load cmux integration (unless disabled)
+        # Load programa integration (unless disabled)
         if [[ "${PROGRAMA_SHELL_INTEGRATION:-1}" != "0" && -n "${PROGRAMA_SHELL_INTEGRATION_DIR:-}" ]]; then
-            builtin typeset _cmux_integ="$PROGRAMA_SHELL_INTEGRATION_DIR/programa-zsh-integration.zsh"
-            [[ -r "$_cmux_integ" ]] && builtin source -- "$_cmux_integ"
+            builtin typeset _programa_integ="$PROGRAMA_SHELL_INTEGRATION_DIR/programa-zsh-integration.zsh"
+            [[ -r "$_programa_integ" ]] && builtin source -- "$_programa_integ"
         fi
     fi
 
-    builtin unset _cmux_file _cmux_ghostty _cmux_integ
+    builtin unset _programa_file _programa_ghostty _programa_integ
 }

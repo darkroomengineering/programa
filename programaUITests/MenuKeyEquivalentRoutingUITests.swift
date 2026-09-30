@@ -106,7 +106,7 @@ final class MenuKeyEquivalentRoutingUITests: XCTestCase {
                 data["browserPageTitle"] == "cmdf-handled" &&
                     data["browserFindVisible"] == "false"
             },
-            "Expected Cmd+F to reach browser content before cmux find overlay. data=\(loadGotoSplit() ?? [:])"
+            "Expected Cmd+F to reach browser content before programa find overlay. data=\(loadGotoSplit() ?? [:])"
         )
     }
 
@@ -137,7 +137,7 @@ final class MenuKeyEquivalentRoutingUITests: XCTestCase {
         )
     }
 
-    func testVisibleBrowserFindBarKeepsCmdGAndCmdShiftFOwnedByCmux() {
+    func testVisibleBrowserFindBarKeepsCmdGAndCmdShiftFOwnedByPrograma() {
         let app = launchWithBrowserSetup(browserURL: makeVisibleBrowserFindOwnershipPageURL())
 
         XCTAssertTrue(
@@ -160,7 +160,7 @@ final class MenuKeyEquivalentRoutingUITests: XCTestCase {
                     data["browserFindSelected"] == "1" &&
                     data["browserFindTotal"] == "3"
             },
-            "Expected cmux browser find bar to open and capture the query before page-focus checks. data=\(loadGotoSplit() ?? [:])"
+            "Expected programa browser find bar to open and capture the query before page-focus checks. data=\(loadGotoSplit() ?? [:])"
         )
 
         guard let browserPanelId = loadGotoSplit()?["browserPanelId"], !browserPanelId.isEmpty else {
@@ -178,7 +178,7 @@ final class MenuKeyEquivalentRoutingUITests: XCTestCase {
                     data["browserFindSelected"] == "2" &&
                     data["browserFindTotal"] == "3"
             },
-            "Expected visible cmux browser find bar to keep Cmd+G ownership after page refocus. data=\(loadGotoSplit() ?? [:])"
+            "Expected visible programa browser find bar to keep Cmd+G ownership after page refocus. data=\(loadGotoSplit() ?? [:])"
         )
 
         clickBrowserPane(app: app, browserPanelId: browserPanelId)
@@ -189,7 +189,7 @@ final class MenuKeyEquivalentRoutingUITests: XCTestCase {
                 data["browserPageTitle"] == "find-owner-idle" &&
                     data["browserFindVisible"] == "false"
             },
-            "Expected visible cmux browser find bar to keep Cmd+Shift+F ownership after page refocus. data=\(loadGotoSplit() ?? [:])"
+            "Expected visible programa browser find bar to keep Cmd+Shift+F ownership after page refocus. data=\(loadGotoSplit() ?? [:])"
         )
     }
 
@@ -403,7 +403,7 @@ final class SplitCloseRightBlankRegressionUITests: XCTestCase {
         diagnosticsPath = "/tmp/programa-ui-test-diagnostics-\(UUID().uuidString).json"
         // Prefer a globally accessible dir so we can pull screenshots from the VM for debugging.
         // If sandbox rules prevent this, fall back to the runner's container temp dir.
-        let leaf = "cmux-ui-test-split-close-right-shots-\(UUID().uuidString)"
+        let leaf = "programa-ui-test-split-close-right-shots-\(UUID().uuidString)"
         let preferredURL = URL(fileURLWithPath: "/private/tmp").appendingPathComponent(leaf)
         let fallbackURL = FileManager.default.temporaryDirectory.appendingPathComponent(leaf)
         // Attempt to create the preferred dir; if it fails, use fallback.

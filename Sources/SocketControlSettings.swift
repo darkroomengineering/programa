@@ -7,7 +7,7 @@ import Security
 
 enum SocketControlMode: String, CaseIterable, Identifiable, Sendable {
     case off
-    case cmuxOnly
+    case programaOnly
     case automation
     case password
     /// Full open access (all local users/processes) with no ancestry or password gate.
@@ -15,14 +15,14 @@ enum SocketControlMode: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    static var uiCases: [SocketControlMode] { [.off, .cmuxOnly, .automation, .password, .allowAll] }
+    static var uiCases: [SocketControlMode] { [.off, .programaOnly, .automation, .password, .allowAll] }
 
     var displayName: String {
         switch self {
         case .off:
             return String(localized: "socketControl.off.name", defaultValue: "Off")
-        case .cmuxOnly:
-            return String(localized: "socketControl.cmuxOnly.name", defaultValue: "Programa processes only")
+        case .programaOnly:
+            return String(localized: "socketControl.programaOnly.name", defaultValue: "Programa processes only")
         case .automation:
             return String(localized: "socketControl.automation.name", defaultValue: "Automation mode")
         case .password:
@@ -36,8 +36,8 @@ enum SocketControlMode: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .off:
             return String(localized: "socketControl.off.description", defaultValue: "Disable the local control socket.")
-        case .cmuxOnly:
-            return String(localized: "socketControl.cmuxOnly.description", defaultValue: "Only processes started inside Programa terminals can send commands.")
+        case .programaOnly:
+            return String(localized: "socketControl.programaOnly.description", defaultValue: "Only processes started inside Programa terminals can send commands.")
         case .automation:
             return String(localized: "socketControl.automation.description", defaultValue: "Allow external local automation clients from this macOS user (no ancestry check).")
         case .password:
@@ -51,7 +51,7 @@ enum SocketControlMode: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .allowAll:
             return 0o666
-        case .off, .cmuxOnly, .automation, .password:
+        case .off, .programaOnly, .automation, .password:
             return 0o600
         }
     }
@@ -433,8 +433,9 @@ struct SocketControlSettings {
         switch normalizeMode(raw) {
         case "off":
             return .off
-        case "cmuxonly":
-            return .cmuxOnly
+        // Legacy cmux name, still read so existing socket mode settings keep working.
+        case "cmuxonly", "programaonly":
+            return .programaOnly
         case "automation":
             return .automation
         case "password":
@@ -457,7 +458,7 @@ struct SocketControlSettings {
     }
 
     static var defaultMode: SocketControlMode {
-        return .cmuxOnly
+        return .programaOnly
     }
 
     private static var isDebugBuild: Bool {
@@ -591,7 +592,7 @@ struct SocketControlSettings {
 
     static func userScopedStableSocketPath(currentUserID: uid_t = getuid()) -> String {
         stableSocketDirectoryURL()?
-            .appendingPathComponent("cmux-\(currentUserID).sock", isDirectory: false)
+            .appendingPathComponent("programa-\(currentUserID).sock", isDirectory: false)
             .path ?? "/tmp/programa-\(currentUserID).sock"
     }
 
@@ -772,7 +773,7 @@ struct SocketControlSettings {
             if let overrideMode = envOverrideMode(environment: environment) {
                 return overrideMode
             }
-            return userMode == .off ? .cmuxOnly : userMode
+            return userMode == .off ? .programaOnly : userMode
         }
 
         if let overrideMode = envOverrideMode(environment: environment) {

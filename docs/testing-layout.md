@@ -26,7 +26,7 @@ creation, and release assets. The four python files here (`test_cli_*.py`) drive
 as a subprocess through `PROGRAMA_CLI_BIN`.
 
 **`tests_v2/`** — the thing under test is app behaviour you can observe over the
-socket. Everything here talks to a live instance, whether through `cmux.py` or
+socket. Everything here talks to a live instance, whether through `programa.py` or
 by speaking JSON-RPC directly. The lag/perf/CPU harnesses live here for that
 reason. See `docs/cpu-harness.md` for the CPU measurement harness specifically.
 

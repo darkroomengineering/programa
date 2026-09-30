@@ -4,7 +4,7 @@ returns the panel + diff file list, review.comment.add/list round-trips, and
 review.send_comments delivers the serialized `path:line — comment` text into the reviewed
 terminal surface.
 
-Uses the `cmux` v2 socket client directly (not the CLI subprocess) so the test exercises
+Uses the `programa` v2 socket client directly (not the CLI subprocess) so the test exercises
 `TerminalController+Review.swift`'s socket handlers precisely; `CLI/CLI+Review.swift` wraps the
 exact same `review.*` methods, so this also covers the CLI's wire contract.
 """
@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -56,7 +56,7 @@ def _make_dirty_git_repo() -> Path:
     return repo_dir
 
 
-def _read_terminal_text_until(c: cmux, surface_id: str, needle: str, timeout_s: float = 10.0) -> str:
+def _read_terminal_text_until(c: ProgramaClient, surface_id: str, needle: str, timeout_s: float = 10.0) -> str:
     deadline = time.time() + timeout_s
     last_text = ""
     while time.time() < deadline:
@@ -64,7 +64,7 @@ def _read_terminal_text_until(c: cmux, surface_id: str, needle: str, timeout_s: 
         if needle in last_text:
             return last_text
         time.sleep(0.2)
-    raise cmuxError(f"Timed out waiting for marker {needle!r} in terminal output: {last_text!r}")
+    raise ProgramaClientError(f"Timed out waiting for marker {needle!r} in terminal output: {last_text!r}")
 
 
 def main() -> int:
@@ -72,7 +72,7 @@ def main() -> int:
     workspace_id = ""
 
     try:
-        with cmux(SOCKET_PATH) as c:
+        with ProgramaClient(SOCKET_PATH) as c:
             created = c._call("workspace.create", {"cwd": str(repo_dir)}, timeout_s=15.0) or {}
             workspace_id = str(created.get("workspace_id") or "")
             _must(bool(workspace_id), f"workspace.create returned no workspace_id: {created}")
@@ -170,7 +170,7 @@ def main() -> int:
     finally:
         if workspace_id:
             try:
-                with cmux(SOCKET_PATH) as c:
+                with ProgramaClient(SOCKET_PATH) as c:
                     c.close_workspace(workspace_id)
             except Exception:
                 pass

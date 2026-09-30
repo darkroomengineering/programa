@@ -31,7 +31,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError  # noqa: E402
+from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
 from v2_support import must as _must
 from pane_resize_test_support import (  # noqa: E402
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
@@ -58,7 +58,7 @@ sleep 30
 
 
 def _surface_wait_agent_state(
-    client: cmux, workspace_id: str, surface_id: str, *, agent_state: str, timeout_ms: int
+    client: ProgramaClient, workspace_id: str, surface_id: str, *, agent_state: str, timeout_ms: int
 ) -> dict:
     params = {
         "workspace_id": workspace_id,
@@ -82,7 +82,7 @@ def main() -> int:
             script_path = script_file.name
         os.chmod(script_path, os.stat(script_path).st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
-        with cmux(SOCKET_PATH) as client:
+        with ProgramaClient(SOCKET_PATH) as client:
             workspace_id = client.new_workspace()
             client.select_workspace(workspace_id)
 
@@ -142,7 +142,7 @@ def main() -> int:
     finally:
         if workspace_id:
             try:
-                with cmux(SOCKET_PATH) as cleanup_client:
+                with ProgramaClient(SOCKET_PATH) as cleanup_client:
                     cleanup_client.close_workspace(workspace_id)
             except Exception:
                 pass

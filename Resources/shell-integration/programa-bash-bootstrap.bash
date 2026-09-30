@@ -17,7 +17,7 @@
 # script (the marker is the last occurrence, so the greedy ## match lands on
 # it), which leaves exactly the user's appended tail. Then trim the leading
 # separator and let programa-bash-integration.bash's PROMPT_COMMAND merge
-# prepend _cmux_prompt_command.
+# prepend _programa_prompt_command.
 #
 # This file is the single source of truth. Sources/GhosttyTerminalView.swift
 # reads it (stripping these comments) and exports it as PROMPT_COMMAND, and

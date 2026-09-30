@@ -458,11 +458,11 @@ fallback one-shot path is needed instead).
    Resolve first, before committing to Phase 2's schedule.
 
    **Resolved during implementation: no usable signal exists.** Read the shell-integration
-   scripts (`Resources/shell-integration/programa-zsh-integration.zsh`'s `_cmux_preexec` /
-   `_cmux_report_shell_activity_state`) and their Swift-side handler
+   scripts (`Resources/shell-integration/programa-zsh-integration.zsh`'s `_programa_preexec` /
+   `_programa_report_shell_activity_state`) and their Swift-side handler
    (`TerminalController+Telemetry.swift`'s `v2SurfaceReportShellState`): the zsh `preexec` hook
    *does* have the foreground command locally (`$1`), and uses it for local heuristics (git-force
-   flags, nested-shell detection), but `_cmux_report_shell_activity_state` only ever puts a bare
+   flags, nested-shell detection), but `_programa_report_shell_activity_state` only ever puts a bare
    `"prompt"` / `"running"` state on the wire — the command string itself is never sent. Changing
    that would mean touching the shipped shell-integration scripts for three shells (zsh/bash/fish)
    plus the wire schema, a materially bigger change than this plan scoped for v1.

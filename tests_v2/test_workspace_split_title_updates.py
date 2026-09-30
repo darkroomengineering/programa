@@ -33,7 +33,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from cmux import cmux
+from programa_client import ProgramaClient
 
 # How long the shell holds a title before the prompt returns and shell
 # integration resets it. Generous for slow CI runners; workspaces are closed
@@ -57,7 +57,7 @@ class TestResult:
         self.message = msg
 
 
-def _workspace_title(client: cmux, workspace_id: str) -> Optional[str]:
+def _workspace_title(client: ProgramaClient, workspace_id: str) -> Optional[str]:
     for _, wsid, title, _ in client.list_workspaces():
         if wsid == workspace_id:
             return title
@@ -65,7 +65,7 @@ def _workspace_title(client: cmux, workspace_id: str) -> Optional[str]:
 
 
 def _wait_for_title(
-    client: cmux, workspace_id: str, expected: str, timeout: float = WAIT_TIMEOUT
+    client: ProgramaClient, workspace_id: str, expected: str, timeout: float = WAIT_TIMEOUT
 ) -> Tuple[bool, Optional[str]]:
     deadline = time.time() + timeout
     last: Optional[str] = None
@@ -78,7 +78,7 @@ def _wait_for_title(
 
 
 def _assert_title_never(
-    client: cmux, workspace_id: str, forbidden: str, window: float = 3.0
+    client: ProgramaClient, workspace_id: str, forbidden: str, window: float = 3.0
 ) -> Tuple[bool, Optional[str]]:
     deadline = time.time() + window
     last: Optional[str] = None
@@ -90,18 +90,18 @@ def _assert_title_never(
     return True, last
 
 
-def _set_title(client: cmux, surface_id: str, title: str) -> None:
+def _set_title(client: ProgramaClient, surface_id: str, title: str) -> None:
     client.send_surface(
         surface_id,
         f"printf '\\033]0;{title}\\007'; sleep {TITLE_HOLD_SECONDS}\\n",
     )
 
 
-def _surfaces(client: cmux, workspace_id: str) -> List[Tuple[int, str, bool]]:
+def _surfaces(client: ProgramaClient, workspace_id: str) -> List[Tuple[int, str, bool]]:
     return client.list_surfaces(workspace=workspace_id)
 
 
-def _new_background_workspace(client: cmux) -> Tuple[str, str]:
+def _new_background_workspace(client: ProgramaClient) -> Tuple[str, str]:
     """Create a workspace, wait for its shell, and return (home_ws, new_ws)."""
     home = client.current_workspace()
     ws = client.new_workspace()
@@ -111,7 +111,7 @@ def _new_background_workspace(client: cmux) -> Tuple[str, str]:
     return home, ws
 
 
-def _split_workspace(client: cmux, workspace_id: str) -> Tuple[str, str]:
+def _split_workspace(client: ProgramaClient, workspace_id: str) -> Tuple[str, str]:
     """Split `workspace_id` (selecting it first) and return (original_surface,
     new_focused_surface)."""
     client.select_workspace(workspace_id)
@@ -127,14 +127,14 @@ def _split_workspace(client: cmux, workspace_id: str) -> Tuple[str, str]:
     return original, focused[0][1]
 
 
-def _close_workspace_quietly(client: cmux, workspace_id: str) -> None:
+def _close_workspace_quietly(client: ProgramaClient, workspace_id: str) -> None:
     try:
         client.close_workspace(workspace_id)
     except Exception:
         pass
 
 
-def test_single_panel_background_title(client: cmux) -> TestResult:
+def test_single_panel_background_title(client: ProgramaClient) -> TestResult:
     result = TestResult("Single-panel background workspace title updates")
     home, ws = _new_background_workspace(client)
     try:
@@ -152,7 +152,7 @@ def test_single_panel_background_title(client: cmux) -> TestResult:
     return result
 
 
-def test_split_focused_pane_background_workspace(client: cmux) -> TestResult:
+def test_split_focused_pane_background_workspace(client: ProgramaClient) -> TestResult:
     result = TestResult("Split workspace: focused pane titles it while backgrounded")
     home, ws = _new_background_workspace(client)
     try:
@@ -174,7 +174,7 @@ def test_split_focused_pane_background_workspace(client: cmux) -> TestResult:
     return result
 
 
-def test_split_focus_switch_rederives_title(client: cmux) -> TestResult:
+def test_split_focus_switch_rederives_title(client: ProgramaClient) -> TestResult:
     result = TestResult("Split workspace: focus switch re-derives the title")
     home, ws = _new_background_workspace(client)
     try:
@@ -210,7 +210,7 @@ def test_split_focus_switch_rederives_title(client: cmux) -> TestResult:
 
 def run_tests() -> int:
     results = []
-    with cmux() as client:
+    with ProgramaClient() as client:
         results.append(test_single_panel_background_title(client))
         results.append(test_split_focused_pane_background_workspace(client))
         results.append(test_split_focus_switch_rederives_title(client))

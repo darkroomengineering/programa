@@ -22,13 +22,13 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
-def _wait_for_terminal_focus(c: cmux, panel_id: str, timeout_s: float = 6.0) -> bool:
+def _wait_for_terminal_focus(c: ProgramaClient, panel_id: str, timeout_s: float = 6.0) -> bool:
     start = time.time()
     while time.time() - start < timeout_s:
         try:
@@ -55,7 +55,7 @@ def _wait_for_terminal_focus(c: cmux, panel_id: str, timeout_s: float = 6.0) -> 
     return False
 
 
-def _panel_snapshot_retry(c: cmux, panel_id: str, label: str, timeout_s: float = 3.0) -> dict:
+def _panel_snapshot_retry(c: ProgramaClient, panel_id: str, label: str, timeout_s: float = 3.0) -> dict:
     start = time.time()
     last_err: Exception | None = None
     while time.time() - start < timeout_s:
@@ -66,7 +66,7 @@ def _panel_snapshot_retry(c: cmux, panel_id: str, label: str, timeout_s: float =
             if "Failed to capture panel image" not in str(e):
                 raise
             time.sleep(0.05)
-    raise cmuxError(f"Timed out waiting for panel_snapshot: panel_id={panel_id} label={label}: {last_err!r}")
+    raise ProgramaClientError(f"Timed out waiting for panel_snapshot: panel_id={panel_id} label={label}: {last_err!r}")
 
 
 def _ratio(changed_pixels: int, width: int, height: int) -> float:
@@ -75,7 +75,7 @@ def _ratio(changed_pixels: int, width: int, height: int) -> float:
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         c.activate_app()
         time.sleep(0.2)
 
@@ -89,7 +89,7 @@ def main() -> int:
 
         panes = c.list_panes()
         if len(panes) < 2:
-            raise cmuxError(f"expected multiple panes, got: {panes}")
+            raise ProgramaClientError(f"expected multiple panes, got: {panes}")
 
         mid = len(panes) // 2
         c.focus_pane(mid)
@@ -125,12 +125,12 @@ def main() -> int:
         w2 = int(s2.get("width") or 0)
         h2 = int(s2.get("height") or 0)
         if w1 <= 0 or h1 <= 0 or (w1, h1) != (w2, h2):
-            raise cmuxError(f"panel_snapshot dims differ: {(w1,h1)} {(w2,h2)}; paths: {s1.get('path')} {s2.get('path')}")
+            raise ProgramaClientError(f"panel_snapshot dims differ: {(w1,h1)} {(w2,h2)}; paths: {s1.get('path')} {s2.get('path')}")
 
         noise_px = int(s1.get("changed_pixels") or 0)
         change_px = int(s2.get("changed_pixels") or 0)
         if noise_px < 0 or change_px < 0:
-            raise cmuxError(
+            raise ProgramaClientError(
                 "panel_snapshot diff unavailable (size mismatch or missing previous).\n"
                 f"  noise_changed_pixels={noise_px}\n"
                 f"  change_changed_pixels={change_px}\n"
@@ -158,7 +158,7 @@ def main() -> int:
                             "continuing in v2 VM mode"
                         )
                     else:
-                        raise cmuxError(
+                        raise ProgramaClientError(
                             "New tab did not render output immediately after typing.\n"
                             f"  noise_ratio={noise:.5f}\n"
                             f"  change_ratio={change:.5f} (threshold={threshold:.5f})\n"

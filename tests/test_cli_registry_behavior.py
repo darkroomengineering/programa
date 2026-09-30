@@ -846,7 +846,7 @@ def main() -> int:
                 if mode == "authenticated-fragments":
                     args += ["--password", "framing-secret"]
                 args += ["rpc", "surface.read_text", json.dumps({"surface_id": SURFACE_ID})]
-                process = run_cli(recorder.path, args, env_overrides={"CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC": "1"})
+                process = run_cli(recorder.path, args, env_overrides={"PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC": "1"})
             expected_methods = (["auth.login"] if mode == "authenticated-fragments" else []) + ["surface.read_text"]
             check([frame.get("method") for frame in recorder.frames] == expected_methods,
                   f"{mode}: wrong request sequence: {recorder.frames!r}")

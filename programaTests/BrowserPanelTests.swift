@@ -2876,12 +2876,12 @@ final class BrowserWindowPortalLifecycleTests: XCTestCase {
         }
 
         @objc(_enterInWindow)
-        func cmuxUnitTestEnterInWindow() {
+        func programaUnitTestEnterInWindow() {
             reattachRenderingStateCount += 1
         }
 
         @objc(_endDeferringViewInWindowChangesSync)
-        func cmuxUnitTestEndDeferringViewInWindowChangesSync() {
+        func programaUnitTestEndDeferringViewInWindowChangesSync() {
             reattachRenderingStateCount += 1
         }
     }

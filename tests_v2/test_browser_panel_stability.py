@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Stability regression test: browser panels should not crash cmux when:
+Stability regression test: browser panels should not crash programa when:
   1) Creating a browser surface then immediately creating a new terminal surface
   2) Rapidly switching focus between panes when one pane is a loaded browser
 
 This test uses the control socket only (no osascript / Accessibility required).
 
 Requires:
-  - cmux running
+  - programa running
 """
 
 import os
@@ -17,7 +17,7 @@ from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 def wait_for_socket(path: str, timeout_s: float = 5.0) -> None:
@@ -28,7 +28,7 @@ def wait_for_socket(path: str, timeout_s: float = 5.0) -> None:
         time.sleep(0.1)
 
 
-def ensure_webview_focused(client: cmux, panel_id: str, timeout_s: float = 2.0) -> None:
+def ensure_webview_focused(client: ProgramaClient, panel_id: str, timeout_s: float = 2.0) -> None:
     """
     Best-effort: focus the surface, then force WKWebView first responder, and verify it stuck.
     This is important because the crash regression only reproduces when WebKit is actually first responder.
@@ -47,7 +47,7 @@ def ensure_webview_focused(client: cmux, panel_id: str, timeout_s: float = 2.0) 
     raise RuntimeError(f"Timed out waiting for webview focus (panel={panel_id}): {last_error}")
 
 
-def test_open_browser_then_new_surface_loop(client: cmux) -> tuple[bool, str]:
+def test_open_browser_then_new_surface_loop(client: ProgramaClient) -> tuple[bool, str]:
     ws_id = client.new_workspace()
     client.select_workspace(ws_id)
     time.sleep(0.5)
@@ -101,7 +101,7 @@ def test_open_browser_then_new_surface_loop(client: cmux) -> tuple[bool, str]:
     return True, "Repeated open browser + new surface did not crash"
 
 
-def test_focus_panes_with_loaded_browser(client: cmux) -> tuple[bool, str]:
+def test_focus_panes_with_loaded_browser(client: ProgramaClient) -> tuple[bool, str]:
     ws_id = client.new_workspace()
     client.select_workspace(ws_id)
     time.sleep(0.5)
@@ -155,11 +155,11 @@ def test_focus_panes_with_loaded_browser(client: cmux) -> tuple[bool, str]:
 
 def run_tests() -> int:
     print("=" * 60)
-    print("cmux Browser Panel Stability Test")
+    print("programa Browser Panel Stability Test")
     print("=" * 60)
     print()
 
-    probe = cmux()
+    probe = ProgramaClient()
     wait_for_socket(probe.socket_path, timeout_s=5.0)
 
     tests = [
@@ -171,7 +171,7 @@ def run_tests() -> int:
     failed = 0
 
     try:
-        with cmux(socket_path=probe.socket_path) as client:
+        with ProgramaClient(socket_path=probe.socket_path) as client:
             for name, fn in tests:
                 print(f"  Running: {name} ... ", end="", flush=True)
                 try:
@@ -184,7 +184,7 @@ def run_tests() -> int:
                     passed += 1
                 else:
                     failed += 1
-    except cmuxError as e:
+    except ProgramaClientError as e:
         print(f"Error: {e}")
         return 1
 

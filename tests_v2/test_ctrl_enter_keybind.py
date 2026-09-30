@@ -3,7 +3,7 @@
 Automated test for ctrl+enter keybind using real keystrokes.
 
 Requires:
-  - cmux running
+  - programa running
   - Accessibility permissions for System Events (osascript)
   - keybind = ctrl+enter=text:\\r (or \\n/\\x0d) configured in Ghostty config
 """
@@ -15,10 +15,10 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-# Add the directory containing cmux.py to the path
+# Add the directory containing programa.py to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 class SkipTest(Exception):
@@ -102,7 +102,7 @@ def find_config_with_keybind() -> Optional[Path]:
     return None
 
 
-def test_ctrl_enter_keybind(client: cmux) -> tuple[bool, str]:
+def test_ctrl_enter_keybind(client: ProgramaClient) -> tuple[bool, str]:
     marker = Path("/tmp") / f"ghostty_ctrl_enter_{os.getpid()}"
     marker.unlink(missing_ok=True)
 
@@ -143,14 +143,14 @@ def test_ctrl_enter_keybind(client: cmux) -> tuple[bool, str]:
 
 def run_tests() -> int:
     print("=" * 60)
-    print("cmux Ctrl+Enter Keybind Test")
+    print("programa Ctrl+Enter Keybind Test")
     print("=" * 60)
     print()
 
-    socket_path = cmux.DEFAULT_SOCKET_PATH
+    socket_path = ProgramaClient.DEFAULT_SOCKET_PATH
     if not os.path.exists(socket_path):
         print(f"Error: Socket not found at {socket_path}")
-        print("Please make sure cmux is running.")
+        print("Please make sure programa is running.")
         return 1
 
     config_path = find_config_with_keybind()
@@ -163,12 +163,12 @@ def run_tests() -> int:
     print()
 
     try:
-        with cmux() as client:
+        with ProgramaClient() as client:
             ok, message = test_ctrl_enter_keybind(client)
             status = "✅" if ok else "❌"
             print(f"{status} {message}")
             return 0 if ok else 1
-    except cmuxError as e:
+    except ProgramaClientError as e:
         print(f"Error: {e}")
         return 1
     except SkipTest as e:

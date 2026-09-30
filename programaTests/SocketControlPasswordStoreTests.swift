@@ -19,7 +19,7 @@ final class SocketControlPasswordStoreTests: XCTestCase {
 
     func testSaveLoadAndClearRoundTripUsesFileStorage() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -38,7 +38,7 @@ final class SocketControlPasswordStoreTests: XCTestCase {
 
     func testConfiguredPasswordPrefersEnvironmentOverStoredFile() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -123,7 +123,7 @@ final class SocketControlPasswordStoreTests: XCTestCase {
 
     func testConfiguredPasswordPrefersStoredFileOverLazyKeychainFallback() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -176,7 +176,7 @@ final class SocketControlPasswordStoreTests: XCTestCase {
 
     func testDefaultPasswordFileURLUsesProgramaAppSupportPath() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -190,12 +190,12 @@ final class SocketControlPasswordStoreTests: XCTestCase {
 
     func testLegacyKeychainMigrationCopiesPasswordDeletesLegacyAndRunsOnlyOnce() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-socket-password-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let fileURL = tempDir.appendingPathComponent("socket-password.txt", isDirectory: false)
-        let defaultsSuiteName = "cmux-socket-password-migration-tests-\(UUID().uuidString)"
+        let defaultsSuiteName = "programa-socket-password-migration-tests-\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: defaultsSuiteName) else {
             XCTFail("Expected isolated UserDefaults suite for migration test")
             return
@@ -245,19 +245,19 @@ final class ProgramaCLIPathInstallerTests: XCTestCase {
     func testInstallAndUninstallRoundTripWithoutAdministratorPrivileges() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-cli-installer-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-cli-installer-tests-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: root) }
 
         let bundledCLIURL = root
-            .appendingPathComponent("cmux.app/Contents/Resources/bin/cmux", isDirectory: false)
+            .appendingPathComponent("programa.app/Contents/Resources/bin/programa", isDirectory: false)
         try fileManager.createDirectory(
             at: bundledCLIURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try "#!/bin/sh\necho cmux\n".write(to: bundledCLIURL, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\necho programa\n".write(to: bundledCLIURL, atomically: true, encoding: .utf8)
 
-        let destinationURL = root.appendingPathComponent("usr/local/bin/cmux", isDirectory: false)
+        let destinationURL = root.appendingPathComponent("usr/local/bin/programa", isDirectory: false)
 
         var privilegedInstallCallCount = 0
         var privilegedUninstallCallCount = 0
@@ -290,19 +290,19 @@ final class ProgramaCLIPathInstallerTests: XCTestCase {
     func testInstallFallsBackToAdministratorFlowWhenDestinationIsNotWritable() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("cmux-cli-installer-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-cli-installer-tests-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: root) }
 
         let bundledCLIURL = root
-            .appendingPathComponent("cmux.app/Contents/Resources/bin/cmux", isDirectory: false)
+            .appendingPathComponent("programa.app/Contents/Resources/bin/programa", isDirectory: false)
         try fileManager.createDirectory(
             at: bundledCLIURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try "#!/bin/sh\necho cmux\n".write(to: bundledCLIURL, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\necho programa\n".write(to: bundledCLIURL, atomically: true, encoding: .utf8)
 
-        let destinationURL = root.appendingPathComponent("usr/local/bin/cmux", isDirectory: false)
+        let destinationURL = root.appendingPathComponent("usr/local/bin/programa", isDirectory: false)
         let destinationDir = destinationURL.deletingLastPathComponent()
         try fileManager.createDirectory(at: destinationDir, withIntermediateDirectories: true)
         try fileManager.setAttributes([.posixPermissions: 0o555], ofItemAtPath: destinationDir.path)

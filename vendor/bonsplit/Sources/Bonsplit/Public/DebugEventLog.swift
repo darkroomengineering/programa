@@ -8,7 +8,7 @@ public final class DebugEventLog: @unchecked Sendable {
 
     private var entries: [String] = []
     private let capacity = 500
-    private let queue = DispatchQueue(label: "cmux.debug-event-log")
+    private let queue = DispatchQueue(label: "programa.debug-event-log")
     private static let logPath = resolveLogPath()
 
     private static let formatter: DateFormatter = {
@@ -29,6 +29,7 @@ public final class DebugEventLog: @unchecked Sendable {
            !explicit.isEmpty {
             return explicit
         }
+        // Legacy cmux name, still read so existing shells keep working.
         if let explicit = env["CMUX_DEBUG_LOG"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !explicit.isEmpty {
             return explicit
@@ -38,6 +39,7 @@ public final class DebugEventLog: @unchecked Sendable {
            !tag.isEmpty {
             return "/tmp/programa-debug-\(sanitizePathToken(tag)).log"
         }
+        // Legacy cmux name, still read so existing shells keep working.
         if let tag = env["CMUX_TAG"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !tag.isEmpty {
             return "/tmp/cmux-debug-\(sanitizePathToken(tag)).log"
@@ -50,6 +52,7 @@ public final class DebugEventLog: @unchecked Sendable {
                 return "/tmp/\(socketBase).log"
             }
         }
+        // Legacy cmux name, still read so existing shells keep working.
         if let socketPath = env["CMUX_SOCKET_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !socketPath.isEmpty {
             let socketBase = URL(fileURLWithPath: socketPath).deletingPathExtension().lastPathComponent
@@ -59,7 +62,7 @@ public final class DebugEventLog: @unchecked Sendable {
         }
 
         if let bundleId = Bundle.main.bundleIdentifier,
-           bundleId != "com.cmuxterm.app.debug", bundleId != "com.darkroom.programa.debug" {
+           bundleId != "com.cmuxterm.app.debug", /* legacy cmux bundle id */ bundleId != "com.darkroom.programa.debug" {
             return "/tmp/programa-debug-\(sanitizePathToken(bundleId)).log"
         }
         return "/tmp/programa-debug.log"

@@ -33,7 +33,7 @@ struct ProgramaCommandDefinition: Codable, Sendable, Identifiable, Equatable {
     var parameters: [ProgramaParameterDefinition]?
 
     var id: String {
-        "cmux.config.command." + (name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? name)
+        "programa.config.command." + (name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? name)
     }
 
     init(
@@ -117,7 +117,7 @@ struct ProgramaRecipeDefinition: Codable, Sendable, Identifiable, Equatable {
     var parameters: [ProgramaParameterDefinition]?
 
     var id: String {
-        "cmux.config.recipe." + (name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? name)
+        "programa.config.recipe." + (name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? name)
     }
 
     init(
@@ -355,17 +355,16 @@ final class ProgramaConfigStore: ObservableObject {
     var globalConfigPath: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let newPath = (home as NSString).appendingPathComponent(".config/programa/programa.json")
+        // Legacy cmux name, still read so existing ~/.config/cmux/cmux.json files keep working.
         let legacyPath = (home as NSString).appendingPathComponent(".config/cmux/cmux.json")
         let fm = FileManager.default
-        // Prefer the new path; transparently fall back to the legacy cmux path so
-        // existing users' ~/.config/cmux/cmux.json keeps working after the rebrand.
         if fm.fileExists(atPath: newPath) { return newPath }
         if fm.fileExists(atPath: legacyPath) { return legacyPath }
         return newPath
     }()
 
     private var cancellables = Set<AnyCancellable>()
-    private let watchQueue = DispatchQueue(label: "com.cmux.config-file-watch")
+    private let watchQueue = DispatchQueue(label: "com.darkroom.programa.config-file-watch")
     private let localFileWatcher: FileWatcher
     private let globalFileWatcher: FileWatcher
 
@@ -432,7 +431,7 @@ final class ProgramaConfigStore: ObservableObject {
         var current = directory
         let fs = FileManager.default
         while true {
-            // Prefer programa.json; accept legacy cmux.json so existing project roots keep working.
+            // Legacy cmux name, still read so existing project roots keep working.
             for name in ["programa.json", "cmux.json"] {
                 let candidate = (current as NSString).appendingPathComponent(name)
                 if fs.fileExists(atPath: candidate) {

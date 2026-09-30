@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -48,7 +48,7 @@ def main() -> int:
     try:
         repo_path = _create_git_repo(temp_root)
 
-        with cmux(SOCKET_PATH) as c:
+        with ProgramaClient(SOCKET_PATH) as c:
             baseline_workspace = c.current_workspace()
 
             payload = c._call(
@@ -92,7 +92,7 @@ def main() -> int:
     finally:
         if created_workspace:
             try:
-                with cmux(SOCKET_PATH) as c:
+                with ProgramaClient(SOCKET_PATH) as c:
                     c.close_workspace(created_workspace)
             except Exception:
                 pass

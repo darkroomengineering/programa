@@ -1540,7 +1540,7 @@ struct SidebarBackdrop: View {
             )
         }
 
-        let usesWholeWindowGlass = cmuxShouldUseTransparentBackgroundWindow()
+        let usesWholeWindowGlass = programaShouldUseTransparentBackgroundWindow()
 
         if accessibilityReduceTransparency {
             return AnyView(adaptiveSurface(opaque: true))
