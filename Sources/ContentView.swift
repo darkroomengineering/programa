@@ -1334,6 +1334,13 @@ struct ContentView: View {
                 }
                 removeSidebarResizerPointerMonitor()
             }
+            // The monitor's closure captures this view (and so the window's TabManager);
+            // a closed window's hosting view is not guaranteed an onDisappear, so the
+            // window close itself removes it.
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
+                guard let closing = note.object as? NSWindow, closing === observedWindow else { return }
+                removeSidebarResizerPointerMonitor()
+            }
     }
 
     @ViewBuilder

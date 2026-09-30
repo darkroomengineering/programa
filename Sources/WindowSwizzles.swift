@@ -77,11 +77,6 @@ extension NSApplication {
 // Widened from `private extension` to `extension`: AppDelegate.installWindowResponderSwizzles()
 // (in AppDelegate.swift) references these @objc methods via #selector(...) for method swizzling. Refs #95.
 extension NSWindow {
-    @objc func programa_close() {
-        if AppDelegate.shared?.preserveMainWindowOnClose(self) == true { return }
-        programa_close()
-    }
-
     @objc func programa_makeFirstResponder(_ responder: NSResponder?) -> Bool {
         if programaIsWindowFirstResponderBypassActive() {
 #if DEBUG
