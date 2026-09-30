@@ -126,8 +126,9 @@ struct ProgramaPortRangeAssignment: Equatable, Sendable {
 }
 
 enum ProgramaPortRangePolicy {
-    static let baseDefaultsKey = "programaPortBase"
-    static let rangeDefaultsKey = "programaPortRange"
+    // Legacy cmux names, kept because existing installs store the port settings under them.
+    static let baseDefaultsKey = "cmuxPortBase"
+    static let rangeDefaultsKey = "cmuxPortRange"
     static let defaultBase = 9_100
     static let defaultRange = 10
     static let minimumPort = 1
