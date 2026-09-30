@@ -966,13 +966,17 @@ struct programaApp: App {
         let workspace = manager.selectedWorkspace
         let workspaceIndex = workspace.flatMap { selectedWorkspaceIndex(in: manager, workspaceId: $0.id) }
         let windowMoveTargets = selectedWorkspaceWindowMoveTargets(in: manager)
+        let hasWorkspace = workspace != nil
+
+        // Action closures resolve the active manager when invoked. Capturing `manager` or
+        // `workspace` would pin the window's TabManager in the main menu after that window closes.
 
         Button(
             workspace?.isPinned == true
                 ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
                 : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace")
         ) {
-            toggleSelectedWorkspacePinned(in: manager)
+            toggleSelectedWorkspacePinned(in: activeTabManager)
         }
         .disabled(workspace == nil)
 
@@ -988,30 +992,30 @@ struct programaApp: App {
 
         if workspace?.hasCustomTitle == true {
             Button(String(localized: "contextMenu.removeCustomWorkspaceName", defaultValue: "Remove Custom Workspace Name")) {
-                clearSelectedWorkspaceCustomName(in: manager)
+                clearSelectedWorkspaceCustomName(in: activeTabManager)
             }
         }
 
         Divider()
 
         Button(String(localized: "contextMenu.moveUp", defaultValue: "Move Up")) {
-            moveSelectedWorkspace(in: manager, by: -1)
+            moveSelectedWorkspace(in: activeTabManager, by: -1)
         }
         .disabled(workspaceIndex == nil || workspaceIndex == 0)
 
         Button(String(localized: "contextMenu.moveDown", defaultValue: "Move Down")) {
-            moveSelectedWorkspace(in: manager, by: 1)
+            moveSelectedWorkspace(in: activeTabManager, by: 1)
         }
         .disabled(workspaceIndex == nil || workspaceIndex == manager.tabs.count - 1)
 
         Button(String(localized: "contextMenu.moveToTop", defaultValue: "Move to Top")) {
-            moveSelectedWorkspaceToTop(in: manager)
+            moveSelectedWorkspaceToTop(in: activeTabManager)
         }
         .disabled(workspace == nil || workspaceIndex == 0)
 
         Menu(String(localized: "contextMenu.moveWorkspaceToWindow", defaultValue: "Move Workspace to Window")) {
             Button(String(localized: "contextMenu.newWindow", defaultValue: "New Window")) {
-                moveSelectedWorkspaceToNewWindow(in: manager)
+                moveSelectedWorkspaceToNewWindow(in: activeTabManager)
             }
             .disabled(workspace == nil)
 
@@ -1021,9 +1025,9 @@ struct programaApp: App {
 
             ForEach(windowMoveTargets) { target in
                 Button(target.label) {
-                    moveSelectedWorkspace(in: manager, toWindow: target.windowId)
+                    moveSelectedWorkspace(in: activeTabManager, toWindow: target.windowId)
                 }
-                .disabled(target.isCurrentWindow || workspace == nil)
+                .disabled(target.isCurrentWindow || !hasWorkspace)
             }
         }
         .disabled(workspace == nil)
@@ -1031,34 +1035,34 @@ struct programaApp: App {
         Divider()
 
         Button(String(localized: "menu.file.closeWorkspace", defaultValue: "Close Workspace")) {
-            manager.closeCurrentWorkspaceWithConfirmation()
+            activeTabManager.closeCurrentWorkspaceWithConfirmation()
         }
         .disabled(workspace == nil)
 
         Button(String(localized: "contextMenu.closeOtherWorkspaces", defaultValue: "Close Other Workspaces")) {
-            closeOtherSelectedWorkspacePeers(in: manager)
+            closeOtherSelectedWorkspacePeers(in: activeTabManager)
         }
         .disabled(workspace == nil || manager.tabs.count <= 1)
 
         Button(String(localized: "contextMenu.closeWorkspacesBelow", defaultValue: "Close Workspaces Below")) {
-            closeSelectedWorkspacesBelow(in: manager)
+            closeSelectedWorkspacesBelow(in: activeTabManager)
         }
         .disabled(workspaceIndex == nil || workspaceIndex == manager.tabs.count - 1)
 
         Button(String(localized: "contextMenu.closeWorkspacesAbove", defaultValue: "Close Workspaces Above")) {
-            closeSelectedWorkspacesAbove(in: manager)
+            closeSelectedWorkspacesAbove(in: activeTabManager)
         }
         .disabled(workspaceIndex == nil || workspaceIndex == 0)
 
         Divider()
 
         Button(String(localized: "contextMenu.markWorkspaceRead", defaultValue: "Mark Workspace as Read")) {
-            markSelectedWorkspaceRead(in: manager)
+            markSelectedWorkspaceRead(in: activeTabManager)
         }
         .disabled(!selectedWorkspaceHasUnreadNotifications(in: manager))
 
         Button(String(localized: "contextMenu.markWorkspaceUnread", defaultValue: "Mark Workspace as Unread")) {
-            markSelectedWorkspaceUnread(in: manager)
+            markSelectedWorkspaceUnread(in: activeTabManager)
         }
         .disabled(!selectedWorkspaceHasReadNotifications(in: manager))
     }

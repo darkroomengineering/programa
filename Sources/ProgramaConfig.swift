@@ -387,15 +387,17 @@ final class ProgramaConfigStore: ObservableObject {
     func wireDirectoryTracking(tabManager: TabManager) {
         cancellables.removeAll()
 
+        // The pipeline keeps only the workspace id and its directory publisher. Operators such as
+        // removeDuplicates retain their last value, and holding the Workspace itself would pin a
+        // closed window's workspace until the next wiring.
         tabManager.$selectedTabId
-            .compactMap { [weak tabManager] tabId -> Workspace? in
-                guard let tabId, let tabManager else { return nil }
-                return tabManager.tabs.first(where: { $0.id == tabId })
+            .compactMap { [weak tabManager] tabId -> (id: UUID, directory: AnyPublisher<String, Never>)? in
+                guard let tabId,
+                      let workspace = tabManager?.tabs.first(where: { $0.id == tabId }) else { return nil }
+                return (workspace.id, workspace.$currentDirectory.eraseToAnyPublisher())
             }
             .removeDuplicates(by: { $0.id == $1.id })
-            .map { workspace -> AnyPublisher<String, Never> in
-                workspace.$currentDirectory.eraseToAnyPublisher()
-            }
+            .map(\.directory)
             .switchToLatest()
             .removeDuplicates()
             .receive(on: DispatchQueue.main)

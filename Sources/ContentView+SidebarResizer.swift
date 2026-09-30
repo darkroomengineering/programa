@@ -206,7 +206,12 @@ extension ContentView {
         if isResizerBandActive { isResizerBandActive = false }
         isSidebarResizerCursorActive = false
         stopSidebarResizerCursorStabilizer()
-        scheduleSidebarResizerCursorRelease(force: true)
+        // Release synchronously. A deferred work item held in @State captures this view, and
+        // once the view has left the hierarchy the state write that clears it is dropped, so a
+        // pending item would pin the window's TabManager.
+        sidebarResizerCursorReleaseWorkItem?.cancel()
+        sidebarResizerCursorReleaseWorkItem = nil
+        releaseSidebarResizerCursorIfNeeded(force: true)
     }
 
     private func sidebarResizerHandleOverlay(
