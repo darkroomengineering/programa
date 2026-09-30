@@ -6194,6 +6194,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         )
     }
 
+    private static let closeConfirmationTitles = [
+        String(localized: "dialog.closeWorkspace.title", defaultValue: "Close workspace?"),
+        String(localized: "dialog.closeWorkspaces.title", defaultValue: "Close workspaces?"),
+        String(localized: "dialog.closeTab.title", defaultValue: "Close tab?"),
+        String(localized: "dialog.closeOtherTabs.title", defaultValue: "Close other tabs?"),
+        String(localized: "dialog.closeWindow.title", defaultValue: "Close window?"),
+    ]
+
     private func handleCustomShortcut(event: NSEvent) -> Bool {
         // `charactersIgnoringModifiers` can be nil for some synthetic NSEvents and certain special keys.
         // Treat nil as "" and rely on keyCode/layout-aware fallback logic where needed.
@@ -6234,24 +6242,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         // Don't steal shortcuts from close-confirmation alerts. Keep standard alert key
         // equivalents working and avoid surprising actions while the confirmation is up.
-        let closeConfirmationTitles = [
-            String(localized: "dialog.closeWorkspace.title", defaultValue: "Close workspace?"),
-            String(localized: "dialog.closeWorkspaces.title", defaultValue: "Close workspaces?"),
-            String(localized: "dialog.closeTab.title", defaultValue: "Close tab?"),
-            String(localized: "dialog.closeOtherTabs.title", defaultValue: "Close other tabs?"),
-            String(localized: "dialog.closeWindow.title", defaultValue: "Close window?"),
-        ]
         let resolvedEventWindow = resolvedShortcutEventWindow(event)
             ?? (event.windowNumber <= 0 ? NSApp.keyWindow : nil)
         let closeConfirmationPanel = matchingCloseConfirmationPanel(
             in: NSApp.modalWindow,
-            titles: closeConfirmationTitles
+            titles: Self.closeConfirmationTitles
         ) ?? matchingCloseConfirmationPanel(
             in: resolvedEventWindow,
-            titles: closeConfirmationTitles
+            titles: Self.closeConfirmationTitles
         ) ?? matchingCloseConfirmationPanel(
             in: resolvedEventWindow?.attachedSheet,
-            titles: closeConfirmationTitles
+            titles: Self.closeConfirmationTitles
         )
         if let closeConfirmationPanel {
             // Special-case: Cmd+D should confirm destructive close on alerts.
@@ -6617,17 +6618,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         )
     }
 
-    // Extracted verbatim from the tail of handleCustomShortcut(event:) -- the flat table of
-    // ~55 app-level shortcut checks (lowest precedence phase; only reached once the palette
-    // and browser/terminal pre-checks above have declined the event). Evaluation order is
-    // preserved exactly: this is pure code motion, not a reordering. Refs #95.
-    //
-    // Precedence is now expressed as two explicit ordered arrays of
-    // KeyboardShortcutSettings.Action (split by the two hardcoded legacy Ctrl+Tab checks, which
-    // aren't driven by the Action enum) instead of a flat if-chain. handleConfiguredShortcutAction
-    // below is an *exhaustive* switch over Action, so the compiler now forces every future case
-    // to be handled (even if only to opt out) instead of silently no-op'ing like the old if-chain
-    // would for a forgotten case.
+    // App-level shortcuts, the lowest-precedence phase of handleCustomShortcut(event:): only
+    // reached once the palette and browser/terminal pre-checks have declined the event.
+    // Precedence is two ordered arrays of KeyboardShortcutSettings.Action, split by the two
+    // hardcoded Ctrl+Tab checks. handleConfiguredShortcutAction is an exhaustive switch, so the
+    // compiler forces every new action to be handled, even if only to opt out.
     private static let appShortcutPrecedenceOrderBeforeLegacyTabNavigation: [KeyboardShortcutSettings.Action] = [
         .commandPalette, .goToWorkspace, .quit, .openSettings, .reloadConfiguration, .toggleFullScreen,
         .toggleSidebar, .newTab, .newClaudeWorkspace, .newWindow, .openFolder, .showNotifications, .sendFeedback,

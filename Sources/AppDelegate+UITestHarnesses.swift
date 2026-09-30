@@ -157,10 +157,10 @@ extension AppDelegate {
         if useGhosttyConfig {
             // Keep the test hermetic: ensure the app does not accidentally pass using a persisted
             // KeyboardShortcutSettings override instead of the Ghostty config-trigger path.
-            UserDefaults.standard.removeObject(forKey: KeyboardShortcutSettings.focusLeftKey)
-            UserDefaults.standard.removeObject(forKey: KeyboardShortcutSettings.focusRightKey)
-            UserDefaults.standard.removeObject(forKey: KeyboardShortcutSettings.focusUpKey)
-            UserDefaults.standard.removeObject(forKey: KeyboardShortcutSettings.focusDownKey)
+            KeyboardShortcutSettings.resetShortcut(for: .focusLeft)
+            KeyboardShortcutSettings.resetShortcut(for: .focusRight)
+            KeyboardShortcutSettings.resetShortcut(for: .focusUp)
+            KeyboardShortcutSettings.resetShortcut(for: .focusDown)
         } else {
             // For this UI test we want a letter-based shortcut (Cmd+Ctrl+H) to drive pane navigation,
             // since arrow keys can't be recorded by the shortcut recorder.
