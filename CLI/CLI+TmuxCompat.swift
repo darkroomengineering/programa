@@ -839,26 +839,47 @@ extension ProgramaCLI {
         return nil
     }
 
-    private func tmuxSendKeysText(from tokens: [String], literal: Bool) -> String {
+    enum TmuxSendKeysSegment: Equatable {
+        case text(String)
+        case key(String)
+    }
+
+    /// Cursor keys encode differently in application cursor mode, so they go through
+    /// `surface.send_key` (Ghostty's mode-aware encoder) instead of fixed escape text.
+    private static let tmuxCursorKeyNames: [String: String] = [
+        "up": "up", "down": "down", "left": "left", "right": "right", "home": "home", "end": "end",
+    ]
+
+    func tmuxSendKeysSegments(from tokens: [String], literal: Bool) -> [TmuxSendKeysSegment] {
         if literal {
-            return tokens.joined(separator: " ")
+            let text = tokens.joined(separator: " ")
+            return text.isEmpty ? [] : [.text(text)]
         }
 
-        var result = ""
+        var segments: [TmuxSendKeysSegment] = []
+        var text = ""
         var pendingSpace = false
         for token in tokens {
+            if let keyName = Self.tmuxCursorKeyNames[token.lowercased()] {
+                if !text.isEmpty { segments.append(.text(text)) }
+                text = ""
+                segments.append(.key(keyName))
+                pendingSpace = false
+                continue
+            }
             if let special = tmuxSpecialKeyText(token) {
-                result += special
+                text += special
                 pendingSpace = false
                 continue
             }
             if pendingSpace {
-                result += " "
+                text += " "
             }
-            result += token
+            text += token
             pendingSpace = true
         }
-        return result
+        if !text.isEmpty { segments.append(.text(text)) }
+        return segments
     }
 
     private func prependPathEntries(_ newEntries: [String], to currentPath: String?) -> String {
@@ -1222,13 +1243,16 @@ extension ProgramaCLI {
         case "send-keys", "send":
             let parsed = try parseTmuxArguments(rawArgs, valueFlags: ["-t"], boolFlags: ["-l"])
             let target = try tmuxResolveSurfaceTarget(parsed.value("-t"), client: client)
-            let text = tmuxSendKeysText(from: parsed.positional, literal: parsed.hasFlag("-l"))
-            if !text.isEmpty {
-                _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: [
-                    "workspace_id": target.workspaceId,
-                    "surface_id": target.surfaceId,
-                    "text": text
-                ])
+            for segment in tmuxSendKeysSegments(from: parsed.positional, literal: parsed.hasFlag("-l")) {
+                var params: [String: Any] = ["workspace_id": target.workspaceId, "surface_id": target.surfaceId]
+                switch segment {
+                case .text(let text):
+                    params["text"] = text
+                    _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
+                case .key(let key):
+                    params["key"] = key
+                    _ = try client.sendV2(method: V2MethodNames.surfaceSendKey, params: params)
+                }
             }
 
         case "capture-pane", "capturep":
