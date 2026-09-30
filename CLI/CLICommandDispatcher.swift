@@ -198,22 +198,12 @@ struct CLICommandDispatcher {
         return
     }
 
-    // Codex hook handler: gracefully no-op when not inside programa
-    // (before socket connection, so it doesn't fail when no socket exists)
-    if command == "codex-hook" {
-        guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else {
-            print("{}")
-            return
-        }
-    }
-
-    // OpenCode hook handler: gracefully no-op when not inside programa
-    // (before socket connection, so it doesn't fail when no socket exists)
-    if command == "opencode-hook" {
-        guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else {
-            print("{}")
-            return
-        }
+    // Codex and OpenCode hooks no-op when not inside programa, before any socket
+    // connection, so they don't fail when no socket exists.
+    if command == "codex-hook" || command == "opencode-hook",
+       ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] == nil {
+        print("{}")
+        return
     }
 
     guard descriptor.connectionPolicy == .socket else {
@@ -226,14 +216,22 @@ struct CLICommandDispatcher {
     let resolvedSocketPath = resolveSocketPath()
 
     let client = SocketClient(path: resolvedSocketPath)
-    try client.connectWithTransientRetry()
     defer { client.close() }
 
-    try cli.authenticateClientIfNeeded(
-        client,
-        explicitPassword: socketPasswordArg,
-        socketPath: resolvedSocketPath
-    )
+    do {
+        try client.connectWithTransientRetry()
+        try cli.authenticateClientIfNeeded(
+            client,
+            explicitPassword: socketPasswordArg,
+            socketPath: resolvedSocketPath
+        )
+    } catch {
+        // An agent hook must never fail because programa is not reachable (app quit,
+        // restarting, or the socket missing): it acks like a handled event and exits 0.
+        guard let ack = cli.failOpenHookAck(command: command) else { throw error }
+        print(ack)
+        return
+    }
 
     // If the user explicitly targets a window, focus it first so commands route correctly.
     if let windowId {

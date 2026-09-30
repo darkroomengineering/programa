@@ -84,10 +84,10 @@ extension ProgramaCLI {
         _ = try? client.sendV2(method: "agent.needs_input", params: params)
     }
 
-    /// Clears a surface's reported agent activity state, then reports a matching
-    /// `agent.event`, in that order, with the same workspace/surface ids -- combines the
-    /// two adjacent calls that used to sit back-to-back at each session-end call site in
-    /// CLI+Hooks.swift. Same two socket sends, same order, same arguments as before.
+    /// Reports the matching `agent.event`, then clears the surface's reported agent
+    /// activity state, with the same workspace/surface ids. The event goes first because
+    /// `session.exited` alone already clears the state and supervision record, so the one
+    /// request that matters lands early when a hook runs under a tight time budget.
     func clearAgentStateAndReportEvent(
         client: SocketClient,
         provider: String,
@@ -96,8 +96,8 @@ extension ProgramaCLI {
         surfaceId: String,
         sessionId: String? = nil
     ) {
-        clearAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId)
         reportAgentEvent(client: client, provider: provider, eventType: eventType, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: sessionId)
+        clearAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId)
     }
 
     /// Maps a classified notification subtitle ("Permission" / "Waiting") to the matching
