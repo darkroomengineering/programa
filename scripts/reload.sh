@@ -244,6 +244,28 @@ fi
 
 "$ENSURE_GHOSTTYKIT_COMMAND"
 
+# A changed GhosttyKit.xcframework leaves stale precompiled headers and module
+# caches in the shared DerivedData; drop them so the build does not fail on them.
+if [[ "$ISOLATED" -eq 0 && "$DERIVED_SET" -eq 0 && -d "$DERIVED_DATA" ]]; then
+  GHOSTTYKIT_LINK="GhosttyKit.xcframework"
+  GHOSTTYKIT_STAMP_FILE="$DERIVED_DATA/.programa-ghosttykit-stamp"
+  if [[ -e "$GHOSTTYKIT_LINK" ]]; then
+    GHOSTTYKIT_STAMP="$(cd "$GHOSTTYKIT_LINK" && pwd -P) $(stat -f %m "$GHOSTTYKIT_LINK/")"
+    if [[ "$(cat "$GHOSTTYKIT_STAMP_FILE" 2>/dev/null || true)" != "$GHOSTTYKIT_STAMP" ]]; then
+      # Another build may be reading these caches; clear them only while this build
+      # holds the cache lock exclusively, and retry on the next run otherwise.
+      if python3 -c 'import fcntl, os, sys; fcntl.flock(int(os.environ["PROGRAMA_RELOAD_LOCK_FD"]), fcntl.LOCK_EX | fcntl.LOCK_NB)' 2>/dev/null; then
+        echo "GhosttyKit.xcframework changed since the last shared build; clearing precompiled header and module caches"
+        rm -rf "$DERIVED_DATA/Build/Intermediates.noindex/PrecompiledHeaders" "$DERIVED_DATA/ModuleCache.noindex"
+        printf '%s\n' "$GHOSTTYKIT_STAMP" > "$GHOSTTYKIT_STAMP_FILE"
+        python3 -c 'import fcntl, os; fcntl.flock(int(os.environ["PROGRAMA_RELOAD_LOCK_FD"]), fcntl.LOCK_SH)'
+      else
+        echo "GhosttyKit.xcframework changed, but another build is using the shared caches; not clearing them this run"
+      fi
+    fi
+  fi
+fi
+
 XCODEBUILD_ARGS=(
   -project GhosttyTabs.xcodeproj
   -scheme programa

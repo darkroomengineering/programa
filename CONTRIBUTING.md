@@ -92,7 +92,7 @@ git checkout -b my-feature
 # make changes
 git add .
 git commit -m "Description of changes"
-git push darkroom my-feature
+git push origin my-feature
 ```
 
 ### Keeping the fork updated
@@ -102,7 +102,7 @@ cd ghostty
 git fetch origin
 git checkout main
 git merge origin/main
-git push darkroom main
+git push origin main
 ```
 
 Then update the parent repo:

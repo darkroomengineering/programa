@@ -246,7 +246,7 @@ enum PreferredEditorSettings {
 #endif
 
         guard let command = resolvedCommand() else {
-            NSWorkspace.shared.open(url)
+            openWithSystem(url)
             return
         }
         let path = url.path
@@ -262,10 +262,20 @@ enum PreferredEditorSettings {
             DispatchQueue.global(qos: .userInitiated).async {
                 process.waitUntilExit()
                 if process.terminationStatus != 0 {
-                    DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+                    DispatchQueue.main.async { openWithSystem(url) }
                 }
             }
         } catch {
+            openWithSystem(url)
+        }
+    }
+
+    /// System open for a path from terminal content. An executable or app bundle would
+    /// launch rather than open for editing, so it goes through the external-open prompt.
+    private static func openWithSystem(_ url: URL) {
+        if ExternalOpenPolicy.targetIsExecutable(url) {
+            _ = ExternalOpenPolicy.confirmAndOpen(url)
+        } else {
             NSWorkspace.shared.open(url)
         }
     }

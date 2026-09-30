@@ -3796,7 +3796,7 @@ struct ProgramaCLI {
         guard isUUID(origin) || isHandleRef(origin) else { return nil }
 
         let params: [String: Any] = workspaceHandle.map { ["workspace_id": $0] } ?? [:]
-        let listed = try client.sendV2(method: "surface.list", params: params)
+        let listed = try client.sendV2(method: V2MethodNames.surfaceList, params: params)
         guard let surfaces = listed["surfaces"] as? [[String: Any]] else {
             throw CLIError(message: "Invalid surface.list response: missing surfaces")
         }

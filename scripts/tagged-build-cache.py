@@ -76,7 +76,7 @@ def main():
         # Builds can overlap. Cleanup requires no managed build in progress, and
         # new builds wait until removal finishes. flock releases on crash/exit.
         fcntl.flock(lock, fcntl.LOCK_SH)
-        environment = dict(os.environ, PROGRAMA_RELOAD_CACHE_MANAGED="1")
+        environment = dict(os.environ, PROGRAMA_RELOAD_CACHE_MANAGED="1", PROGRAMA_RELOAD_LOCK_FD=str(lock.fileno()))
         result = subprocess.run(command, env=environment, pass_fds=(lock.fileno(),))
         if result.returncode != 0:
             return result.returncode
