@@ -922,6 +922,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var pendingConfiguredShortcutChord: PendingConfiguredShortcutChord?
     private var activeConfiguredShortcutChordPrefixForCurrentEvent: ShortcutStroke?
     private var configuredShortcutChordActions: [KeyboardShortcutSettings.Action] = []
+    /// Modifier combinations (raw `NSEvent.ModifierFlags` values) that any app-level shortcut
+    /// stroke requires, including the hardcoded Ctrl+Tab pair. `nil` until the defaults observer
+    /// has populated it, in which case no event is skipped.
+    private var configuredShortcutTriggerModifierMasks: Set<UInt>?
     private var ghosttyConfigObserver: NSObjectProtocol?
     var ghosttyGotoSplitLeftShortcut: StoredShortcut?
     var ghosttyGotoSplitRightShortcut: StoredShortcut?
@@ -5840,6 +5844,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         configuredShortcutChordActions = KeyboardShortcutSettings.Action.allCases.filter {
             KeyboardShortcutSettings.shortcut(for: $0).hasChord
         }
+        // Every stroke matcher first requires the event's modifiers to equal the stroke's, so a
+        // modifier combination outside this set cannot match any first stroke. Legacy Ctrl+Tab
+        // and Ctrl+Shift+Tab are not actions, so they are added explicitly.
+        var masks: Set<UInt> = [
+            NSEvent.ModifierFlags.control.rawValue,
+            NSEvent.ModifierFlags([.control, .shift]).rawValue,
+        ]
+        for action in KeyboardShortcutSettings.Action.allCases {
+            masks.insert(KeyboardShortcutSettings.shortcut(for: action).firstStroke.modifierFlags.rawValue)
+        }
+        configuredShortcutTriggerModifierMasks = masks
     }
 
     private func clearConfiguredShortcutChordState() {
@@ -6583,6 +6598,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         hasFocusedAddressBarInShortcutContext: Bool
     ) -> Bool {
         if activeConfiguredShortcutChordPrefixForCurrentEvent == nil,
+           !eventModifiersCanTriggerAppShortcut(event) {
+            return false
+        }
+
+        if activeConfiguredShortcutChordPrefixForCurrentEvent == nil,
            armConfiguredShortcutChordIfNeeded(event: event) {
             return true
         }
@@ -6621,6 +6641,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         return false
+    }
+
+    /// Cheap pre-filter for the precedence walk: false only when the event's modifiers equal no
+    /// configured first stroke and no ghostty goto_split stroke, so no matcher in the walk can
+    /// accept it. Callers must not use it while a chord prefix is pending (second strokes are
+    /// not part of the mask set).
+    private func eventModifiersCanTriggerAppShortcut(_ event: NSEvent) -> Bool {
+        guard let masks = configuredShortcutTriggerModifierMasks else { return true }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            .subtracting([.numericPad, .function, .capsLock])
+        if masks.contains(flags.rawValue) { return true }
+        func matches(_ shortcut: StoredShortcut?) -> Bool {
+            shortcut?.firstStroke.modifierFlags == flags
+        }
+        return matches(ghosttyGotoSplitLeftShortcut) || matches(ghosttyGotoSplitRightShortcut)
+            || matches(ghosttyGotoSplitUpShortcut) || matches(ghosttyGotoSplitDownShortcut)
     }
 
     // Exhaustive dispatch for a single KeyboardShortcutSettings.Action: returns nil when this
