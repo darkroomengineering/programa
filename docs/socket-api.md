@@ -177,11 +177,11 @@ Individual methods add their own codes (for example `invalid_state`, `not_suppor
 
 ### Units
 
-`pane.resize` takes `amount` in pixels along the resize axis. The handler defaults `amount` to 1
+`pane.resize` takes `amount` in layout points along the resize axis. The handler defaults `amount` to 1
 when it is omitted, although the contract marks it required. `programa resize-pane --amount <n>`
-sends `n` as pixels. The tmux-compatible `resize-pane -x <columns>` converts columns to pixels
-with the pane's cell width before it calls the method; its directional forms send the amount
-unchanged.
+sends `n` as points. The tmux shim (`resize-pane -L|-R|-U|-D [n]`) takes `n` in terminal cells
+(default 1) and `-x <columns>` / `-y <rows>` take absolute sizes; both convert to points with the
+pane's `cell_width` / `cell_height` (cell size in layout points, from `pane.list`) before they call the method.
 
 ## Protocol sketch
 
