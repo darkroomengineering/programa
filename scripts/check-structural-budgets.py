@@ -37,14 +37,14 @@ FILES = (
     FileBudget("CLI/CLICommandDispatcher.swift", 0, 255, "CLICommandDispatcher"),
     FileBudget("CLI/CLI+Hooks.swift", 4_381,     3610, "hook provider primitives"),
     FileBudget("CLI/HookInstallationCoordinator.swift", 0, 168, "HookInstallationCoordinator"),
-    FileBudget("Sources/TerminalController.swift", 3_149, 3_021, "terminal RPC adapter"),
+    FileBudget("Sources/TerminalController.swift", 3_149, 3_014, "terminal RPC adapter"),
     FileBudget(
         "Sources/TerminalController+BrowserAutomation.swift",
         6_297,
-        6_148,
+        6_063,
         "browser automation effects",
     ),
-    FileBudget("Sources/BrowserRPCDispatcher.swift", 0, 247, "BrowserRPCDispatcher/BrowserRPCState"),
+    FileBudget("Sources/BrowserRPCDispatcher.swift", 0, 232, "BrowserRPCDispatcher/BrowserRPCState"),
 )
 
 FAMILIES = (
@@ -80,7 +80,7 @@ FAMILIES = (
             "Sources/BrowserRPCDispatcher.swift",
         ),
         9_446,
-        9_413,
+        9_309,
         "BrowserRPCDispatcher + BrowserRPCState",
     ),
 )

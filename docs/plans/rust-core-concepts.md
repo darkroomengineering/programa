@@ -235,9 +235,7 @@ Embedded browser source: `Sources/Panels/BrowserPanel.swift` + companions
 `BrowserToolbarViews.swift`, `BrowserUserProxySettings.swift`, `BrowserWebDialogPresenter.swift`,
 `Omnibar.swift`/`OmnibarSuggestionsView.swift`/`OmnibarTextField.swift`, `InspectorDock.swift`,
 `DesignMode.swift`. Depends on WebKit (`WKWebView`) — there is no Chrome DevTools Protocol
-underneath, so Playwright-shaped tools (`browser_viewport_set`, `browser_network_route`,
-`browser_input_mouse`, etc.) return `not_supported` deliberately rather than failing as unknown
-tools (`docs/mcp-server.md:135-141`).
+underneath.
 
 ## 7. Configuration
 

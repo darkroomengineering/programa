@@ -134,12 +134,6 @@ changes, so poll if you need to follow along.
 
 ## Browser tools
 
-Programa's browser panels are per-workspace `WKWebView`s, not a Chromium/CDP surface --
-there is no DevTools Protocol underneath, so a handful of Playwright-shaped tools
-(`browser_viewport_set`, `browser_network_route`, `browser_input_mouse`, and similar) always
-return a `not_supported` error on this platform. They stay in the tool list so calling one
-gets a clear error instead of an unknown-tool failure.
-
 Typical flow: `browser_open_split` (or `browser_tab_new`) to open a tab, `browser_navigate`
 to load a URL, then `browser_snapshot`, `browser_get_text`, or `browser_screenshot` to read
 the page, `browser_click`/`browser_fill`/`browser_press` and friends to interact with it, and

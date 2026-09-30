@@ -76,10 +76,7 @@ EXPECTED_TOOL_NAMES = {
     "browser_cookies_get", "browser_cookies_set", "browser_cookies_clear", "browser_storage_get", "browser_storage_set",
     "browser_storage_clear", "browser_tab_new", "browser_tab_list", "browser_tab_close", "browser_console_list",
     "browser_console_clear", "browser_errors_list", "browser_highlight", "browser_state_save", "browser_state_load",
-    "browser_addinitscript", "browser_addscript", "browser_addstyle", "browser_viewport_set", "browser_geolocation_set",
-    "browser_offline_set", "browser_trace_start", "browser_trace_stop", "browser_network_route", "browser_network_unroute",
-    "browser_network_requests", "browser_screencast_start", "browser_screencast_stop", "browser_input_mouse", "browser_input_keyboard",
-    "browser_input_touch", "browser_design_mode_toggle",
+    "browser_addinitscript", "browser_addscript", "browser_addstyle", "browser_design_mode_toggle",
     "layout_apply", "layout_list", "layout_save", "notification_clear", "notification_create",
     "notification_create_for_surface", "notification_create_for_target", "notification_list", "pane_break", "pane_create",
     "pane_join", "pane_list", "pane_resize", "pane_surfaces", "pane_swap",
@@ -318,10 +315,10 @@ def _assert_tools_list_matches_exact_catalog(mcp: ProgramaMcpClient) -> None:
     extra = actual_names - EXPECTED_TOOL_NAMES
     _must(
         not missing and not extra,
-        f"tools/list catalog drifted from the expected 187-tool set -- missing={sorted(missing)}, "
+        f"tools/list catalog drifted from the expected tool set -- missing={sorted(missing)}, "
         f"unexpected={sorted(extra)}",
     )
-    _must(len(actual_names) == 187, f"expected exactly 187 tools, got {len(actual_names)}")
+    _must(len(actual_names) == len(EXPECTED_TOOL_NAMES), f"expected exactly {len(EXPECTED_TOOL_NAMES)} tools, got {len(actual_names)}")
 
     focus_names = {name for name in actual_names if name.startswith("focus_")}
     _must(

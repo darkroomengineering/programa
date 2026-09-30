@@ -1967,28 +1967,6 @@
       },
       "threading": "main"
     },
-    "browser.geolocation.set": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (set).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserGeolocationSet",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
-    },
     "browser.get.attr": {
       "auth_required": true,
       "debug_only": false,
@@ -2267,72 +2245,6 @@
       },
       "threading": "off_main"
     },
-    "browser.input_keyboard": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (input keyboard).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserInputKeyboard",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
-    },
-    "browser.input_mouse": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (input mouse).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserInputMouse",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
-    },
-    "browser.input_touch": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (input touch).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserInputTouch",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
-    },
     "browser.is.checked": {
       "auth_required": true,
       "debug_only": false,
@@ -2575,107 +2487,6 @@
       },
       "threading": "main"
     },
-    "browser.network.requests": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (requests).",
-      "errors": [
-        "not_supported"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserNetworkRequests",
-      "params": {
-        "additionalProperties": false,
-        "properties": {
-          "surface_id": {
-            "format": "surface:N",
-            "type": "string"
-          }
-        },
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "main"
-    },
-    "browser.network.route": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (route).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserNetworkRoute",
-      "params": {
-        "additionalProperties": false,
-        "properties": {
-          "surface_id": {
-            "format": "surface:N",
-            "type": "string"
-          }
-        },
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "main"
-    },
-    "browser.network.unroute": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (unroute).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserNetworkUnroute",
-      "params": {
-        "additionalProperties": false,
-        "properties": {
-          "surface_id": {
-            "format": "surface:N",
-            "type": "string"
-          }
-        },
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "main"
-    },
-    "browser.offline.set": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (set).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserOfflineSet",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
-    },
     "browser.open_split": {
       "auth_required": true,
       "debug_only": false,
@@ -2779,50 +2590,6 @@
       ],
       "focus_intent": false,
       "handler": "v2BrowserReload",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
-    },
-    "browser.screencast.start": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (start).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserScreencastStart",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
-    },
-    "browser.screencast.stop": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (stop).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserScreencastStop",
       "params": {
         "additionalProperties": false,
         "properties": {},
@@ -3446,50 +3213,6 @@
       },
       "threading": "main"
     },
-    "browser.trace.start": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (start).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserTraceStart",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
-    },
-    "browser.trace.stop": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (stop).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserTraceStop",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
-    },
     "browser.type": {
       "auth_required": true,
       "debug_only": false,
@@ -3577,28 +3300,6 @@
         "type": "object"
       },
       "threading": "main"
-    },
-    "browser.viewport.set": {
-      "auth_required": true,
-      "debug_only": false,
-      "description": "Embedded browser automation (Playwright-like RPC surface). (set).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2BrowserViewportSet",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "off_main"
     },
     "browser.wait": {
       "auth_required": true,

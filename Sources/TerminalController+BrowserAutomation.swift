@@ -1244,10 +1244,6 @@ extension TerminalController {
             ?? v2String(params, "ref")
     }
 
-    nonisolated func v2BrowserNotSupported(_ method: String, details: String) -> V2CallResult {
-        .err(code: "not_supported", message: "\(method) is not supported on WKWebView", data: ["details": details])
-    }
-
     func v2BrowserBumpNavigationGeneration(forSurface surfaceId: UUID) {
         browserRPCState.advanceNavigationGeneration(for: surfaceId)
     }
@@ -1905,15 +1901,6 @@ extension TerminalController {
             return nil
         }
         return result
-    }
-
-    func v2BrowserRecordUnsupportedRequest(surfaceId: UUID, request: [String: Any]) {
-        var logs = v2BrowserUnsupportedNetworkRequestsBySurface[surfaceId] ?? []
-        logs.append(request)
-        if logs.count > 256 {
-            logs.removeFirst(logs.count - 256)
-        }
-        v2BrowserUnsupportedNetworkRequestsBySurface[surfaceId] = logs
     }
 
     @MainActor
@@ -6073,76 +6060,4 @@ extension TerminalController {
             ])
         }
     }
-
-    nonisolated func v2BrowserViewportSet(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.viewport.set", details: "WKWebView does not provide a per-tab programmable viewport emulation API equivalent to CDP")
-    }
-
-    nonisolated func v2BrowserGeolocationSet(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.geolocation.set", details: "WKWebView does not expose per-tab geolocation spoofing hooks equivalent to Playwright/CDP")
-    }
-
-    nonisolated func v2BrowserOfflineSet(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.offline.set", details: "WKWebView does not expose reliable per-tab offline emulation")
-    }
-
-    nonisolated func v2BrowserTraceStart(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.trace.start", details: "Playwright trace artifacts are not available on WKWebView")
-    }
-
-    nonisolated func v2BrowserTraceStop(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.trace.stop", details: "Playwright trace artifacts are not available on WKWebView")
-    }
-
-    nonisolated func v2BrowserNetworkRoute(params: [String: Any]) -> V2CallResult {
-        if let surfaceId = v2UUID(params, "surface_id") {
-            v2MainSync {
-                v2BrowserRecordUnsupportedRequest(surfaceId: surfaceId, request: ["action": "route", "params": params])
-            }
-        }
-        return v2BrowserNotSupported("browser.network.route", details: "WKWebView does not provide CDP-style request interception/mocking")
-    }
-
-    nonisolated func v2BrowserNetworkUnroute(params: [String: Any]) -> V2CallResult {
-        if let surfaceId = v2UUID(params, "surface_id") {
-            v2MainSync {
-                v2BrowserRecordUnsupportedRequest(surfaceId: surfaceId, request: ["action": "unroute", "params": params])
-            }
-        }
-        return v2BrowserNotSupported("browser.network.unroute", details: "WKWebView does not provide CDP-style request interception/mocking")
-    }
-
-    nonisolated func v2BrowserNetworkRequests(params: [String: Any]) -> V2CallResult {
-        if let surfaceId = v2UUID(params, "surface_id") {
-            let items: [[String: Any]] = v2MainSync {
-                v2BrowserUnsupportedNetworkRequestsBySurface[surfaceId] ?? []
-            }
-            return .err(code: "not_supported", message: "browser.network.requests is not supported on WKWebView", data: [
-                "details": "Request interception logs are unavailable without CDP network hooks",
-                "recorded_requests": items
-            ])
-        }
-        return v2BrowserNotSupported("browser.network.requests", details: "Request interception logs are unavailable without CDP network hooks")
-    }
-
-    nonisolated func v2BrowserScreencastStart(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.screencast.start", details: "WKWebView does not expose CDP screencast streaming")
-    }
-
-    nonisolated func v2BrowserScreencastStop(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.screencast.stop", details: "WKWebView does not expose CDP screencast streaming")
-    }
-
-    nonisolated func v2BrowserInputMouse(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.input_mouse", details: "Raw CDP mouse injection is unavailable; use browser.click/hover/scroll")
-    }
-
-    nonisolated func v2BrowserInputKeyboard(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.input_keyboard", details: "Raw CDP keyboard injection is unavailable; use browser.press/keydown/keyup")
-    }
-
-    nonisolated func v2BrowserInputTouch(params _: [String: Any]) -> V2CallResult {
-        v2BrowserNotSupported("browser.input_touch", details: "Raw CDP touch injection is unavailable on WKWebView")
-    }
-
 }
