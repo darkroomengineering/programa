@@ -70,20 +70,7 @@ def _wait_selector(c: cmux, surface_id: str, selector: str, timeout_s: float = 6
 
 def _wait_function(c: cmux, surface_id: str, expression: str, timeout_s: float = 6.0) -> None:
     timeout_ms = max(1, int(timeout_s * 1000.0))
-    try:
-        c._call("browser.wait", {"surface_id": surface_id, "function": expression, "timeout_ms": timeout_ms})
-        return
-    except cmuxError as exc:
-        if "timeout" not in str(exc):
-            raise
-
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        probe = c._call("browser.eval", {"surface_id": surface_id, "script": expression}) or {}
-        if bool(probe.get("value")):
-            return
-        time.sleep(0.05)
-    raise cmuxError(f"Timed out waiting for function: {expression}")
+    c._call("browser.wait", {"surface_id": surface_id, "function": expression, "timeout_ms": timeout_ms})
 
 
 def _test_browser_wait_allows_concurrent_exact_query(c: cmux, surface_id: str) -> None:
@@ -219,6 +206,43 @@ def _test_browser_wait_allows_concurrent_exact_query(c: cmux, surface_id: str) -
     _must(not wait_errors, f"browser.wait client failed: {wait_errors}")
     _must(wait_finished.is_set(), "browser.wait client did not finish after release")
     _must(wait_result.get("waited") is True, f"Expected browser.wait waited=true: {wait_result}")
+
+
+def _test_browser_eval_concurrent_clients(c: cmux, surface_id: str) -> None:
+    """Simultaneous browser.eval calls from separate connections must each get their own result."""
+    rounds = 10
+    errors: list[str] = []
+
+    def _eval_on_own_client(tag: str) -> None:
+        try:
+            with cmux(SOCKET_PATH) as client:
+                for round_index in range(rounds):
+                    expected = f"{tag}-{round_index}"
+                    payload = client._call(
+                        "browser.eval",
+                        {
+                            "surface_id": surface_id,
+                            "script": f"new Promise((resolve) => setTimeout(() => resolve('{expected}'), 300))",
+                        },
+                        timeout_s=15.0,
+                    ) or {}
+                    if payload.get("value") != expected:
+                        errors.append(f"{tag} round {round_index}: expected {expected!r}, got {payload}")
+        except Exception as exc:  # surfaced on the controlling thread
+            errors.append(f"{tag}: {exc}")
+
+    threads = [threading.Thread(target=_eval_on_own_client, args=(tag,), daemon=True) for tag in ("a", "b")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=60.0)
+    _must(not any(thread.is_alive() for thread in threads), "Concurrent browser.eval clients did not finish")
+    _must(not errors, f"Concurrent browser.eval failures: {errors}")
+
+
+def _test_browser_wait_function_sees_page_globals(c: cmux, surface_id: str) -> None:
+    c._call("browser.eval", {"surface_id": surface_id, "script": "window.__programaPageFlag = true"})
+    _wait_function(c, surface_id, "window.__programaPageFlag === true", timeout_s=3.0)
 
 
 def _test_download_path_wait_allows_concurrent_exact_query(c: cmux, surface_id: str) -> None:
@@ -726,6 +750,8 @@ def main() -> int:
             _wait_selector(c, sid, "#action-btn", timeout_s=7.0)
             _test_browser_wait_allows_concurrent_exact_query(c, sid)
             _test_browser_screenshot_allows_concurrent_exact_query(c, sid)
+            _test_browser_eval_concurrent_clients(c, sid)
+            _test_browser_wait_function_sees_page_globals(c, sid)
 
             find_role = c._call("browser.find.role", {"surface_id": sid, "role": "button", "name": "submit"}) or {}
             role_ref = str(find_role.get("element_ref") or "")

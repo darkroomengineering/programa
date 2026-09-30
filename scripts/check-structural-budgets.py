@@ -41,7 +41,7 @@ FILES = (
     FileBudget(
         "Sources/TerminalController+BrowserAutomation.swift",
         6_297,
-        6_153,
+        6_148,
         "browser automation effects",
     ),
     FileBudget("Sources/BrowserRPCDispatcher.swift", 0, 247, "BrowserRPCDispatcher/BrowserRPCState"),
@@ -80,7 +80,7 @@ FAMILIES = (
             "Sources/BrowserRPCDispatcher.swift",
         ),
         9_446,
-        9_421,
+        9_413,
         "BrowserRPCDispatcher + BrowserRPCState",
     ),
 )
