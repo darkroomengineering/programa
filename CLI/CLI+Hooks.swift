@@ -17,7 +17,7 @@ struct ClaudeHookParsedInput {
     let transcriptPath: String?
 }
 
-struct ClaudeHookSessionRecord: Codable {
+struct ClaudeHookSessionRecord: Codable, Equatable {
     var sessionId: String
     var workspaceId: String
     var surfaceId: String
@@ -29,7 +29,7 @@ struct ClaudeHookSessionRecord: Codable {
     var updatedAt: TimeInterval
 }
 
-private struct ClaudeHookSessionStoreFile: Codable {
+private struct ClaudeHookSessionStoreFile: Codable, Equatable {
     var version: Int = 1
     var sessions: [String: ClaudeHookSessionRecord] = [:]
 }
@@ -57,12 +57,14 @@ final class ClaudeHookSessionStore {
         self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     }
 
-    func lookup(sessionId: String) throws -> ClaudeHookSessionRecord? {
+    func lookup(sessionId: String) -> ClaudeHookSessionRecord? {
         let normalized = normalizeSessionId(sessionId)
         guard !normalized.isEmpty else { return nil }
-        return try withLockedState { state in
-            state.sessions[normalized]
-        }
+        // Read-only: writers replace the file atomically, so a reader needs no lock and
+        // must not rewrite the file (or quarantine one it merely failed to decode).
+        var state = (try? loadUnlocked()) ?? ClaudeHookSessionStoreFile()
+        pruneExpired(&state)
+        return state.sessions[normalized]
     }
 
     func upsert(
@@ -169,22 +171,33 @@ final class ClaudeHookSessionStore {
         }
         defer { _ = flock(fd, LOCK_UN) }
 
-        var state = loadUnlocked()
+        let original: ClaudeHookSessionStoreFile
+        do {
+            original = try loadUnlocked()
+        } catch is DecodingError {
+            // Keep the unreadable file for inspection instead of silently wiping every
+            // other session it may still describe.
+            _ = try? fileManager.removeItem(atPath: statePath + ".corrupt")
+            try fileManager.moveItem(atPath: statePath, toPath: statePath + ".corrupt")
+            original = ClaudeHookSessionStoreFile()
+        }
+        var state = original
         pruneExpired(&state)
         let result = try body(&state)
-        try saveUnlocked(state)
+        if state != original {
+            try saveUnlocked(state)
+        }
         return result
     }
 
-    private func loadUnlocked() -> ClaudeHookSessionStoreFile {
+    /// An absent file is an empty store. A file that exists but cannot be read throws,
+    /// so a writer never overwrites state it could not see.
+    private func loadUnlocked() throws -> ClaudeHookSessionStoreFile {
         guard fileManager.fileExists(atPath: statePath) else {
             return ClaudeHookSessionStoreFile()
         }
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: statePath)),
-              let decoded = try? decoder.decode(ClaudeHookSessionStoreFile.self, from: data) else {
-            return ClaudeHookSessionStoreFile()
-        }
-        return decoded
+        let data = try Data(contentsOf: URL(fileURLWithPath: statePath))
+        return try decoder.decode(ClaudeHookSessionStoreFile.self, from: data)
     }
 
     private func saveUnlocked(_ state: ClaudeHookSessionStoreFile) throws {
@@ -220,457 +233,685 @@ let codexHookWrapperProcessNames: Set<String> = [
     "env"
 ]
 
+/// Notification content a provider adapter derives from its hook payload.
+struct AgentHookNotification {
+    let subtitle: String
+    let body: String
+    /// Decides whether the notification blocks the agent ("Permission"/"Waiting" do).
+    /// Equals `subtitle` except for providers whose notification event is always one kind.
+    let classifiedSubtitle: String
+}
+
+/// Completion notice a provider adapter derives from its `stop` payload, plus what the
+/// session store remembers about it for a later `notification` event.
+struct AgentHookCompletion {
+    let subtitle: String
+    let body: String
+    let storedSubtitle: String
+    let storedBody: String?
+}
+
+/// Per-invocation inputs the shared hook state machine hands to its handlers.
+struct AgentHookContext {
+    let client: SocketClient
+    let parsed: ClaudeHookParsedInput
+    let store: ClaudeHookSessionStore
+    let workspaceArg: String?
+    let surfaceArg: String?
+}
+
+/// Everything that differs between the Claude Code, Codex and OpenCode hooks. The
+/// shared state machine (`runAgentHook`) drives the socket traffic; a provider only
+/// names its identifiers and translates its payloads.
+struct AgentHookProvider {
+    let commandName: String
+    /// Provider name on `agent.event` / `surface.report_agent_state`.
+    let provider: String
+    /// Notification title.
+    let title: String
+    /// `workspace.set_status` / `workspace.set_agent_pid` key for the status entry.
+    let statusKey: String
+    /// Stdout token printed once an event is handled (Codex and OpenCode expect JSON).
+    let ack: String
+    let helpLine: String
+    /// Codex and OpenCode hooks can be invoked from any terminal, so they no-op outside programa.
+    let requiresSurfaceEnv: Bool
+    /// Fixed store file under ~/.programa; nil honors PROGRAMA_CLAUDE_HOOK_STATE_PATH.
+    let stateFileName: String?
+    /// When set, `session-end` also finishes this host's helper tasks for the session.
+    let taskHost: String?
+    /// Re-register the agent pid on every event, not only at session start.
+    let refreshesAgentPid: Bool
+    let pidKey: (String?) -> String
+    let startPid: () -> Int?
+    let inferPid: () -> Int?
+    let completion: (ClaudeHookParsedInput, ClaudeHookSessionRecord?) -> AgentHookCompletion?
+    let notification: (ClaudeHookParsedInput, ClaudeHookSessionRecord?) -> AgentHookNotification
+    /// Provider-only events, keyed by subcommand.
+    let extraEvents: [String: (AgentHookContext) -> Void]
+}
+
 extension ProgramaCLI {
-    func runClaudeHook(
+    func runClaudeHook(commandArgs: [String], client: SocketClient) throws {
+        try runAgentHook(claudeHookProvider(), commandArgs: commandArgs, client: client)
+    }
+
+    /// Codex hook handler. Gracefully no-ops when not running inside programa.
+    func runCodexHook(commandArgs: [String], client: SocketClient) throws {
+        try runAgentHook(codexHookProvider(), commandArgs: commandArgs, client: client)
+    }
+
+    /// OpenCode plugin hook handler. Gracefully no-ops when not running inside programa.
+    ///
+    /// Unlike claude-hook/codex-hook, OpenCode has no shell-hook config to gate
+    /// invocation on $PROGRAMA_SURFACE_ID: the local plugin (`openCodePluginJS`) calls
+    /// `programa opencode-hook <event> --cwd ... --session ...` directly, so the guard
+    /// lives in the provider (also gated earlier in `run()` and
+    /// `validateRegisteredArguments`, before any socket connection is attempted).
+    /// The plugin passes `--cwd`/`--session` as CLI args rather than stdin JSON; stdin
+    /// is still read and tolerated. session.idle and permission.asked can fire close
+    /// together; the writes are idempotent, so repeated firing is harmless.
+    func runOpenCodeHook(commandArgs: [String], client: SocketClient) throws {
+        try runAgentHook(openCodeHookProvider(), commandArgs: commandArgs, client: client)
+    }
+
+    /// The stdout token an agent hook prints when programa is unreachable, or nil for a
+    /// command that is not an agent hook.
+    func failOpenHookAck(command: String) -> String? {
+        switch command {
+        case "claude-hook": return claudeHookProvider().ack
+        case "codex-hook": return codexHookProvider().ack
+        case "opencode-hook": return openCodeHookProvider().ack
+        default: return nil
+        }
+    }
+
+    private func claudeHookProvider() -> AgentHookProvider {
+        AgentHookProvider(
+            commandName: "claude-hook",
+            provider: "claude-code",
+            title: "Claude Code",
+            statusKey: "claude_code",
+            ack: "OK",
+            helpLine: "programa claude-hook <session-start|stop|session-end|notification|prompt-submit|pre-tool-use|subagent-start|subagent-stop> [--workspace <id|index>] [--surface <id|index>]",
+            requiresSurfaceEnv: false,
+            stateFileName: nil,
+            taskHost: "claude",
+            refreshesAgentPid: false,
+            pidKey: { _ in "claude_code" },
+            startPid: {
+                guard let raw = ProcessInfo.processInfo.environment["PROGRAMA_CLAUDE_PID"]?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    let pid = Int(raw),
+                    pid > 0 else {
+                    return nil
+                }
+                return pid
+            },
+            inferPid: { nil },
+            completion: { parsed, session in
+                self.summarizeClaudeHookStop(parsedInput: parsed, sessionRecord: session).map {
+                    AgentHookCompletion(subtitle: $0.subtitle, body: $0.body, storedSubtitle: $0.subtitle, storedBody: $0.body)
+                }
+            },
+            notification: { parsed, session in
+                self.savedBodyNotification(self.summarizeClaudeHookNotification(parsedInput: parsed), session: session)
+            },
+            extraEvents: [
+                "pre-tool-use": { self.runClaudePreToolUse($0) },
+                "subagent-start": { self.runClaudeSubagentStart($0) },
+                "subagent-stop": { self.runClaudeSubagentStop($0) },
+            ]
+        )
+    }
+
+    private func codexHookProvider() -> AgentHookProvider {
+        AgentHookProvider(
+            commandName: "codex-hook",
+            provider: "codex",
+            title: "Codex",
+            statusKey: "codex",
+            ack: "{}",
+            helpLine: "programa codex-hook <session-start|prompt-submit|stop|notification|session-end> [--workspace <id>] [--surface <id>]",
+            requiresSurfaceEnv: true,
+            stateFileName: "codex-hook-sessions.json",
+            taskHost: nil,
+            refreshesAgentPid: true,
+            pidKey: { Self.sessionScopedPIDKey("codex", sessionId: $0) },
+            startPid: { self.inferredCodexAgentPID() },
+            inferPid: { self.inferredCodexAgentPID() },
+            completion: { parsed, session in
+                self.plainStopCompletion(
+                    name: "Codex",
+                    messageKeys: ["last_assistant_message", "lastAssistantMessage"],
+                    parsed: parsed,
+                    session: session
+                )
+            },
+            notification: { parsed, session in
+                self.savedBodyNotification(self.summarizeCodexHookNotification(parsedInput: parsed), session: session)
+            },
+            extraEvents: [:]
+        )
+    }
+
+    private func openCodeHookProvider() -> AgentHookProvider {
+        AgentHookProvider(
+            commandName: "opencode-hook",
+            provider: "opencode",
+            title: "OpenCode",
+            statusKey: "opencode",
+            ack: "{}",
+            helpLine: "programa opencode-hook <session-start|prompt-submit|stop|notification|session-end> [--cwd <path>] [--session <id>] [--workspace <id>] [--surface <id>]",
+            requiresSurfaceEnv: true,
+            stateFileName: "opencode-hook-sessions.json",
+            taskHost: nil,
+            refreshesAgentPid: true,
+            pidKey: { Self.sessionScopedPIDKey("opencode", sessionId: $0) },
+            startPid: { self.inferredCodexAgentPID() },
+            inferPid: { self.inferredCodexAgentPID() },
+            // session.idle carries no transcript/message payload, so the completion body
+            // stays generic unless a future stdin JSON payload supplies one.
+            completion: { parsed, session in
+                self.plainStopCompletion(
+                    name: "OpenCode",
+                    messageKeys: ["message", "last_assistant_message", "lastAssistantMessage", "body", "text"],
+                    parsed: parsed,
+                    session: session
+                )
+            },
+            // The notification hook only ever fires for permission.asked, so it is always a
+            // blocking approval prompt; there is no ambiguous "Attention" case to classify.
+            notification: { parsed, _ in
+                let message = parsed.object.flatMap {
+                    self.firstString(in: $0, keys: ["message", "body", "text", "reason", "description"])
+                }
+                return AgentHookNotification(
+                    subtitle: "Attention",
+                    body: message.map { self.normalizedSingleLine($0) } ?? "OpenCode needs your attention",
+                    classifiedSubtitle: "Permission"
+                )
+            },
+            extraEvents: [:]
+        )
+    }
+
+    private static func sessionScopedPIDKey(_ name: String, sessionId: String?) -> String {
+        guard let sessionId = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !sessionId.isEmpty else {
+            return name
+        }
+        return "\(name).\(sessionId)"
+    }
+
+    private func plainStopCompletion(
+        name: String,
+        messageKeys: [String],
+        parsed: ClaudeHookParsedInput,
+        session: ClaudeHookSessionRecord?
+    ) -> AgentHookCompletion {
+        let projectName: String? = (parsed.cwd ?? session?.cwd).flatMap { cwd in
+            cwd.isEmpty ? nil : URL(fileURLWithPath: NSString(string: cwd).expandingTildeInPath).lastPathComponent
+        }
+        let lastMessage = parsed.object.flatMap { firstString(in: $0, keys: messageKeys) }
+        var subtitle = "Completed"
+        if let projectName, !projectName.isEmpty {
+            subtitle = "Completed in \(projectName)"
+        }
+        return AgentHookCompletion(
+            subtitle: subtitle,
+            body: lastMessage.map { truncate(normalizedSingleLine($0), maxLength: 200) } ?? "\(name) session completed",
+            storedSubtitle: "Completed",
+            storedBody: lastMessage.map { truncate($0, maxLength: 200) }
+        )
+    }
+
+    /// A generic "needs your attention" notification takes the question or message the
+    /// session store saved from the preceding hook, when there is one.
+    private func savedBodyNotification(
+        _ summary: (subtitle: String, body: String),
+        session: ClaudeHookSessionRecord?
+    ) -> AgentHookNotification {
+        var summary = summary
+        if let session,
+           let savedBody = session.lastBody, !savedBody.isEmpty,
+           summary.body.contains("needs your attention") || summary.body.contains("needs your input") {
+            summary = (subtitle: session.lastSubtitle ?? summary.subtitle, body: savedBody)
+        }
+        return AgentHookNotification(subtitle: summary.subtitle, body: summary.body, classifiedSubtitle: summary.subtitle)
+    }
+
+    /// The shared hook state machine: every provider event maps onto the same
+    /// `agent.event` / `surface.report_agent_state` reporting. A socket failure that only
+    /// means programa is gone or torn down (see `shouldIgnoreClaudeHookTeardownError`)
+    /// must never block the agent's next hook, so it still prints the provider's ack.
+    func runAgentHook(
+        _ hook: AgentHookProvider,
         commandArgs: [String],
         client: SocketClient
     ) throws {
-        let subcommand = commandArgs.first?.lowercased() ?? "help"
+        let env = ProcessInfo.processInfo.environment
+        if hook.requiresSurfaceEnv, env["PROGRAMA_SURFACE_ID"] == nil {
+            print(hook.ack)
+            return
+        }
+
+        let rawSubcommand = commandArgs.first?.lowercased() ?? "help"
+        let subcommand = ["active": "session-start", "idle": "stop", "notify": "notification"][rawSubcommand] ?? rawSubcommand
         let hookArgs = Array(commandArgs.dropFirst())
         let hookWsFlag = optionValue(hookArgs, name: "--workspace")
-        let workspaceArg = hookWsFlag ?? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
-        let surfaceArg = optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
         let rawInput = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let parsedInput = parseClaudeHookInput(rawInput: rawInput)
-        let sessionStore = ClaudeHookSessionStore()
+        let context = AgentHookContext(
+            client: client,
+            parsed: parseAgentHookInput(rawInput: rawInput, hookArgs: hookArgs),
+            store: ClaudeHookSessionStore(
+                processEnv: hook.stateFileName.map {
+                    env.merging(["PROGRAMA_CLAUDE_HOOK_STATE_PATH": "~/.programa/\($0)"], uniquingKeysWith: { _, new in new })
+                } ?? env
+            ),
+            workspaceArg: hookWsFlag ?? env["PROGRAMA_WORKSPACE_ID"],
+            surfaceArg: optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? env["PROGRAMA_SURFACE_ID"] : nil)
+        )
 
-        switch subcommand {
-        case "session-start", "active":
-            // Wrapped in do/catch like "stop"/"idle": a Programa quit mid-session
-            // must not block the agent's next hook invocation on a dead socket.
-            do {
-                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: nil,
-                    fallback: workspaceArg,
-                    client: client
-                )
-                let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: nil,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
-                let claudePid: Int? = {
-                    guard let raw = ProcessInfo.processInfo.environment["PROGRAMA_CLAUDE_PID"]?
-                        .trimmingCharacters(in: .whitespacesAndNewlines),
-                        let pid = Int(raw),
-                        pid > 0 else {
-                        return nil
-                    }
-                    return pid
-                }()
-                if let sessionId = parsedInput.sessionId {
-                    try? sessionStore.upsert(
-                        sessionId: sessionId,
-                        workspaceId: workspaceId,
-                        surfaceId: surfaceId,
-                        cwd: parsedInput.cwd,
-                        pid: claudePid
-                    )
+        do {
+            switch subcommand {
+            case "session-start": try agentHookSessionStart(hook, context)
+            case "prompt-submit": try agentHookPromptSubmit(hook, context)
+            case "stop": try agentHookStop(hook, context)
+            case "notification": try agentHookNotification(hook, context)
+            case "session-end": agentHookSessionEnd(hook, context)
+            case "help", "--help", "-h":
+                print(hook.helpLine)
+                return
+            default:
+                guard let extra = hook.extraEvents[subcommand] else {
+                    throw CLIError(message: "Unknown \(hook.commandName) subcommand: \(subcommand)")
                 }
-                // Register PID for stale-session detection and OSC suppression,
-                // but don't set a visible status. "Running" only appears when the
-                // user submits a prompt (UserPromptSubmit) or Claude starts working
-                // (PreToolUse).
-                if let claudePid {
-                    _ = try? client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
-                        "workspace_id": workspaceId,
-                        "key": "claude_code",
-                        "pid": claudePid,
-                    ])
-                }
-                reportAgentEvent(client: client, provider: "claude-code", eventType: "session.started", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: parsedInput.sessionId)
-                print("OK")
-            } catch {
-                if shouldIgnoreClaudeHookTeardownError(error) {
-                    print("OK")
-                    return
-                }
-                throw error
+                extra(context)
             }
+            print(hook.ack)
+        } catch {
+            guard shouldIgnoreClaudeHookTeardownError(error) else { throw error }
+            print(hook.ack)
+        }
+    }
 
-        case "stop", "idle":
-            do {
-                // Turn ended. Don't consume session or clear PID — Claude is still alive.
-                // Notification hook handles user-facing notifications; SessionEnd handles cleanup.
-                let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: mappedSession?.workspaceId,
-                    fallback: workspaceArg,
-                    client: client
-                )
-                let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
+    private func agentHookSessionStart(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
+        let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(preferred: nil, fallback: ctx.workspaceArg, client: ctx.client)
+        let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+            preferred: nil, fallback: ctx.surfaceArg, workspaceId: workspaceId, client: ctx.client
+        )
+        let pid = hook.startPid()
+        if let sessionId = ctx.parsed.sessionId {
+            try? ctx.store.upsert(sessionId: sessionId, workspaceId: workspaceId, surfaceId: surfaceId, cwd: ctx.parsed.cwd, pid: pid)
+        }
+        // Registers the pid for stale-session detection and OSC suppression but sets no
+        // visible status: "Running" only appears once a prompt is submitted or work starts.
+        if let pid {
+            setAgentPid(hook, ctx, workspaceId: workspaceId, sessionId: ctx.parsed.sessionId, pid: pid)
+        }
+        reportAgentEvent(client: ctx.client, provider: hook.provider, eventType: "session.started", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: ctx.parsed.sessionId)
+    }
 
-                // Update session with transcript summary and send completion notification.
-                let completion = summarizeClaudeHookStop(
-                    parsedInput: parsedInput,
-                    sessionRecord: mappedSession
-                )
-                if let sessionId = parsedInput.sessionId, let completion {
-                    try? sessionStore.upsert(
-                        sessionId: sessionId,
-                        workspaceId: workspaceId,
-                        surfaceId: surfaceId,
-                        cwd: parsedInput.cwd,
-                        lastSubtitle: completion.subtitle,
-                        lastBody: completion.body
-                    )
-                }
-
-                if let completion {
-                    _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
-                        "workspace_id": workspaceId,
-                        "surface_id": surfaceId,
-                        "title": "Claude Code",
-                        "subtitle": sanitizeNotificationField(completion.subtitle),
-                        "body": sanitizeNotificationField(completion.body),
-                    ])
-                }
-
-                try? setClaudeStatus(
-                    client: client,
-                    workspaceId: workspaceId,
-                    value: "Idle",
-                    icon: "pause.circle.fill",
-                    color: "#8E8E93"
-                )
-                reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "turn.completed", workspaceId: workspaceId, surfaceId: surfaceId, state: .idle, sessionId: parsedInput.sessionId)
-                print("OK")
-            } catch {
-                if shouldIgnoreClaudeHookTeardownError(error) {
-                    print("OK")
-                    return
-                }
-                throw error
-            }
-
-        case "prompt-submit":
-            // Wrapped in do/catch like "stop"/"idle": a Programa quit mid-session
-            // must not block the agent's next prompt on a dead socket.
-            do {
-                let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: mappedSession?.workspaceId,
-                    fallback: workspaceArg,
-                    client: client
-                )
-                let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
-                _ = try client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "turn.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: parsedInput.sessionId)
-                print("OK")
-            } catch {
-                if shouldIgnoreClaudeHookTeardownError(error) {
-                    print("OK")
-                    return
-                }
-                throw error
-            }
-
-        case "notification", "notify":
-            var summary = summarizeClaudeHookNotification(parsedInput: parsedInput)
-
-            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-            let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                preferred: mappedSession?.workspaceId,
-                fallback: workspaceArg,
-                client: client
-            )
-            if let mappedSession,
-               let savedBody = mappedSession.lastBody, !savedBody.isEmpty,
-               summary.body.contains("needs your attention") || summary.body.contains("needs your input") {
-                summary = (subtitle: mappedSession.lastSubtitle ?? summary.subtitle, body: savedBody)
-            }
-
-            let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                preferred: mappedSession?.surfaceId,
-                fallback: surfaceArg,
-                workspaceId: workspaceId,
-                client: client
-            )
-
-            let title = "Claude Code"
-            let subtitle = sanitizeNotificationField(summary.subtitle)
-            let body = sanitizeNotificationField(summary.body)
-
-            if let sessionId = parsedInput.sessionId {
-                try? sessionStore.upsert(
+    private func agentHookPromptSubmit(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
+        let mapped = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+        let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
+            preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
+        )
+        if hook.refreshesAgentPid {
+            let pid = mapped?.pid ?? hook.inferPid()
+            if let sessionId = ctx.parsed.sessionId, let mapped {
+                try? ctx.store.upsert(
                     sessionId: sessionId,
                     workspaceId: workspaceId,
-                    surfaceId: surfaceId,
-                    cwd: parsedInput.cwd,
-                    lastSubtitle: summary.subtitle,
-                    lastBody: summary.body
+                    surfaceId: mapped.surfaceId,
+                    cwd: ctx.parsed.cwd ?? mapped.cwd,
+                    pid: pid
                 )
             }
+            if let pid {
+                setAgentPid(hook, ctx, workspaceId: workspaceId, sessionId: ctx.parsed.sessionId ?? mapped?.sessionId, pid: pid)
+            }
+        }
+        _ = try? ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
+        let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+            preferred: mapped?.surfaceId, fallback: ctx.surfaceArg, workspaceId: workspaceId, client: ctx.client
+        )
+        reportAgentStateAndEvent(client: ctx.client, provider: hook.provider, eventType: "turn.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId)
+    }
 
-            reportClassifiedAgentNotification(
-                client: client,
-                provider: "claude-code",
+    private func agentHookStop(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
+        // The turn ended, not the agent: keep the session and its pid. The Notification
+        // hook handles user-facing attention; SessionEnd handles cleanup.
+        let mapped = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+        let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
+            preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
+        )
+        let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+            preferred: mapped?.surfaceId, fallback: ctx.surfaceArg, workspaceId: workspaceId, client: ctx.client
+        )
+        let pid = mapped?.pid ?? hook.inferPid()
+        let completion = hook.completion(ctx.parsed, mapped)
+
+        if let sessionId = ctx.parsed.sessionId, let completion {
+            try? ctx.store.upsert(
+                sessionId: sessionId,
                 workspaceId: workspaceId,
                 surfaceId: surfaceId,
-                title: title,
-                subtitle: subtitle,
-                body: body,
-                classifiedSubtitle: summary.subtitle,
-                sessionId: parsedInput.sessionId,
-                pid: mappedSession?.pid
+                cwd: ctx.parsed.cwd ?? mapped?.cwd,
+                pid: pid,
+                lastSubtitle: completion.storedSubtitle,
+                lastBody: completion.storedBody
             )
-            print("OK")
+        }
+        if hook.refreshesAgentPid, let pid {
+            setAgentPid(hook, ctx, workspaceId: workspaceId, sessionId: ctx.parsed.sessionId ?? mapped?.sessionId, pid: pid)
+        }
+        if let completion {
+            _ = try? ctx.client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
+                "workspace_id": workspaceId,
+                "surface_id": surfaceId,
+                "title": hook.title,
+                "subtitle": sanitizeNotificationField(completion.subtitle),
+                "body": sanitizeNotificationField(completion.body),
+            ])
+        }
+        try? setAgentStatus(
+            client: ctx.client, key: hook.statusKey, workspaceId: workspaceId,
+            value: "Idle", icon: "pause.circle.fill", color: "#8E8E93"
+        )
+        reportAgentStateAndEvent(client: ctx.client, provider: hook.provider, eventType: "turn.completed", workspaceId: workspaceId, surfaceId: surfaceId, state: .idle, sessionId: ctx.parsed.sessionId)
+    }
 
-        case "subagent-start":
-            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-            guard let externalAgentId = firstString(in: parsedInput.object ?? [:], keys: ["agent_id"]),
-                  let workspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: mappedSession?.workspaceId,
-                    fallback: workspaceArg,
-                    client: client
-                  ) else {
-                print("OK")
-                return
+    private func agentHookNotification(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
+        let mapped = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+        let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
+            preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
+        )
+        let notification = hook.notification(ctx.parsed, mapped)
+        let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
+            preferred: mapped?.surfaceId, fallback: ctx.surfaceArg, workspaceId: workspaceId, client: ctx.client
+        )
+        let pid = mapped?.pid ?? hook.inferPid()
+
+        if let sessionId = ctx.parsed.sessionId {
+            try? ctx.store.upsert(
+                sessionId: sessionId,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                cwd: ctx.parsed.cwd,
+                pid: pid,
+                lastSubtitle: notification.subtitle,
+                lastBody: notification.body
+            )
+        }
+        if hook.refreshesAgentPid, let pid {
+            setAgentPid(hook, ctx, workspaceId: workspaceId, sessionId: ctx.parsed.sessionId ?? mapped?.sessionId, pid: pid)
+        }
+        reportClassifiedAgentNotification(
+            client: ctx.client,
+            provider: hook.provider,
+            workspaceId: workspaceId,
+            surfaceId: surfaceId,
+            title: hook.title,
+            subtitle: sanitizeNotificationField(notification.subtitle),
+            body: sanitizeNotificationField(notification.body),
+            classifiedSubtitle: notification.classifiedSubtitle,
+            sessionId: ctx.parsed.sessionId,
+            pid: pid
+        )
+    }
+
+    /// Final cleanup when the agent process exits (also covers a Stop that never fired).
+    /// The hook runs under a ~1 s budget, so nothing before the state clear may touch the
+    /// socket: the session is consumed from the local store first, and only when that
+    /// finds nothing are workspace/surface refs resolved for the fallback match. The
+    /// surface's agent state is then cleared before the secondary cleanups.
+    private func agentHookSessionEnd(_ hook: AgentHookProvider, _ ctx: AgentHookContext) {
+        let sessionId = ctx.parsed.sessionId
+        let mapped = sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+        func local(_ raw: String?) -> String? {
+            nonEmptyClaudeHookIdentifier(raw).flatMap { isUUID($0) ? $0 : nil }
+        }
+        let localWorkspaceId = local(mapped?.workspaceId) ?? local(ctx.workspaceArg)
+        let localSurfaceId = local(mapped?.surfaceId) ?? local(ctx.surfaceArg)
+        var consumed = try? ctx.store.consume(sessionId: sessionId, workspaceId: localWorkspaceId, surfaceId: localSurfaceId)
+        if consumed == nil, localWorkspaceId == nil || localSurfaceId == nil {
+            let workspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
+                preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
+            )
+            let surfaceId = workspaceId.flatMap {
+                try? resolvePreferredSurfaceIdForClaudeHook(
+                    preferred: mapped?.surfaceId, fallback: ctx.surfaceArg, workspaceId: $0, client: ctx.client
+                )
             }
+            consumed = try? ctx.store.consume(sessionId: sessionId, workspaceId: workspaceId, surfaceId: surfaceId)
+        }
+
+        if let consumed, !consumed.surfaceId.isEmpty {
+            clearAgentStateAndReportEvent(client: ctx.client, provider: hook.provider, eventType: "session.exited", workspaceId: consumed.workspaceId, surfaceId: consumed.surfaceId, sessionId: sessionId)
+        }
+        if let taskHost = hook.taskHost, let sessionId {
+            _ = try? ctx.client.sendV2(method: V2MethodNames.agentTaskFinishSession, params: [
+                "host": taskHost,
+                "session": sessionId,
+                "state": "cancelled",
+            ])
+        }
+        if let consumed {
+            let workspaceId = consumed.workspaceId
+            _ = try? ctx.client.sendV2(method: V2MethodNames.workspaceClearStatus, params: ["workspace_id": workspaceId, "key": hook.statusKey])
+            _ = try? ctx.client.sendV2(method: V2MethodNames.workspaceClearAgentPid, params: [
+                "workspace_id": workspaceId,
+                "key": hook.pidKey(sessionId ?? consumed.sessionId),
+            ])
+            _ = try? ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
+        }
+    }
+
+    private func setAgentPid(
+        _ hook: AgentHookProvider,
+        _ ctx: AgentHookContext,
+        workspaceId: String,
+        sessionId: String?,
+        pid: Int
+    ) {
+        _ = try? ctx.client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
+            "workspace_id": workspaceId,
+            "key": hook.pidKey(sessionId),
+            "pid": pid,
+        ])
+    }
+
+    /// Claude-only: clears "Needs input" status and notification when Claude resumes work
+    /// (e.g. after permission grant). Runs async so it doesn't block tool execution.
+    private func runClaudePreToolUse(_ ctx: AgentHookContext) {
+        let client = ctx.client
+        let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+
+        // Deliberately best-effort, for the same reason as the surfaceId resolution
+        // further down. A throw here used to abort the hook before any of the three
+        // independent clears below, while Claude Code continued with a stale red
+        // "blocked" badge that nothing would clear.
+        //
+        // Nothing recovers from that. There is no TTL or watchdog on agent state, and
+        // AgentScreenDetectionEngine deliberately refuses to touch a surface a hook has
+        // claimed (its `hooksOwned` guard), so the terminal can be visibly running a
+        // command while the sidebar still reads "Claude needs your permission" until the
+        // session ends.
+        //
+        // Falling back to the identifiers the Notification hook recorded is the whole
+        // point: those are the exact workspace and surface it marked blocked, so they
+        // are the right things to clear even when a live re-resolution is unavailable.
+        let resolvedWorkspaceId = (try? resolvePreferredWorkspaceIdForClaudeHook(
+            preferred: mappedSession?.workspaceId,
+            fallback: ctx.workspaceArg,
+            client: client
+        ))
+            ?? nonEmptyClaudeHookIdentifier(mappedSession?.workspaceId).flatMap { isUUID($0) ? $0 : nil }
+            ?? nonEmptyClaudeHookIdentifier(ctx.workspaceArg).flatMap { isUUID($0) ? $0 : nil }
+
+        // Only when there is genuinely no workspace to name is there nothing to clear.
+        guard let workspaceId = resolvedWorkspaceId else { return }
+        let claudePid = mappedSession?.pid
+
+        // AskUserQuestion means Claude is about to ask the user something.
+        // Save question text in session so the Notification handler can use it
+        // instead of the generic "Claude Code needs your attention".
+        if let toolName = ctx.parsed.object?["tool_name"] as? String,
+           toolName == "AskUserQuestion",
+           let question = describeAskUserQuestion(ctx.parsed.object),
+           let sessionId = ctx.parsed.sessionId {
+            // Preserve the existing surfaceId from SessionStart; passing ""
+            // would overwrite it and cause notifications to target the wrong workspace.
+            let existingSurfaceId = ctx.store.lookup(sessionId: sessionId)?.surfaceId ?? ""
+            try? ctx.store.upsert(
+                sessionId: sessionId,
+                workspaceId: workspaceId,
+                surfaceId: existingSurfaceId,
+                cwd: ctx.parsed.cwd,
+                lastSubtitle: "Waiting",
+                lastBody: question
+            )
+            // Don't clear notifications or set status here.
+            // The Notification hook fires right after and will use the saved question.
+            return
+        }
+
+        // Best-effort, and deliberately not `try`: a throw here aborted the whole hook
+        // before any of the three clears below, stranding the red "blocked" badge lit
+        // while Claude was already running again. Hook failures don't block tool
+        // execution, so the user saw Claude working under a permission badge that
+        // nothing would ever clear. Only reportAgentState needs a surface; the
+        // notification and status clears are workspace-scoped and must still run.
+        let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
+            preferred: mappedSession?.surfaceId,
+            fallback: ctx.surfaceArg,
+            workspaceId: workspaceId,
+            client: client
+        )
+
+        // Clear the badge first: it is the indicator a user reads as "Claude is stuck",
+        // and it is the only one of the three that can't be re-derived from anything else.
+        if let surfaceId {
+            reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "item.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId, pid: claudePid)
+        }
+
+        _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
+
+        // The sidebar badge (SidebarAgentIndicator) carries "Working" on its own; the
+        // metadata-row status entry is opt-in verbose detail only, and only when there's
+        // actual tool text to show -- no generic "Running" row.
+        if UserDefaults.standard.bool(forKey: "claudeCodeVerboseStatus"),
+           let toolStatus = describeToolUse(ctx.parsed.object) {
+            // Best-effort: benign if TabManager is already torn down.
+            try? setAgentStatus(
+                client: client,
+                key: "claude_code",
+                workspaceId: workspaceId,
+                value: toolStatus,
+                icon: "bolt.fill",
+                color: "#4C8DFF",
+                pid: claudePid
+            )
+        }
+    }
+
+    /// Claude-only: tracks a helper (subagent) as a virtual task record in Agent Overview.
+    private func runClaudeSubagentStart(_ ctx: AgentHookContext) {
+        let client = ctx.client
+        let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+        guard let externalAgentId = firstString(in: ctx.parsed.object ?? [:], keys: ["agent_id"]),
+              let workspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
+                preferred: mappedSession?.workspaceId,
+                fallback: ctx.workspaceArg,
+                client: client
+              ) else {
+            return
+        }
+        let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
+            preferred: mappedSession?.surfaceId,
+            fallback: ctx.surfaceArg,
+            workspaceId: workspaceId,
+            client: client
+        )
+        let taskId = claudeSubagentTaskIdentifier(
+            scope: ctx.parsed.sessionId ?? workspaceId,
+            externalAgentId: externalAgentId
+        )
+        let agentType = firstString(in: ctx.parsed.object ?? [:], keys: ["agent_type"])
+        var startParams: [String: Any] = [
+            "agent_id": taskId,
+            "workspace_id": workspaceId,
+            "host": "claude",
+            "placement": "runs_with_parent",
+            "state": "working",
+        ]
+        if let surfaceId { startParams["surface_id"] = surfaceId }
+        if let sessionId = ctx.parsed.sessionId { startParams["session"] = sessionId }
+        if let agentType {
+            startParams["role"] = agentType
+            startParams["task"] = agentType
+        }
+        do {
+            _ = try client.sendV2(method: V2MethodNames.agentTaskStart, params: startParams)
+        } catch {
+            var updateParams: [String: Any] = ["agent_id": taskId, "state": "working"]
+            if let sessionId = ctx.parsed.sessionId { updateParams["session"] = sessionId }
+            if let agentType {
+                updateParams["role"] = agentType
+                updateParams["task"] = agentType
+            }
+            _ = try? client.sendV2(method: V2MethodNames.agentTaskUpdate, params: updateParams)
+        }
+    }
+
+    private func runClaudeSubagentStop(_ ctx: AgentHookContext) {
+        let client = ctx.client
+        let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+        guard let externalAgentId = firstString(in: ctx.parsed.object ?? [:], keys: ["agent_id"]),
+              let workspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
+                preferred: mappedSession?.workspaceId,
+                fallback: ctx.workspaceArg,
+                client: client
+              ) else {
+            return
+        }
+        let taskId = claudeSubagentTaskIdentifier(
+            scope: ctx.parsed.sessionId ?? workspaceId,
+            externalAgentId: externalAgentId
+        )
+        if (try? client.sendV2(method: V2MethodNames.agentTaskFinish, params: [
+            "agent_id": taskId,
+            "state": "completed",
+        ])) == nil {
             let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
                 preferred: mappedSession?.surfaceId,
-                fallback: surfaceArg,
+                fallback: ctx.surfaceArg,
                 workspaceId: workspaceId,
                 client: client
             )
-            let taskId = claudeSubagentTaskIdentifier(
-                scope: parsedInput.sessionId ?? workspaceId,
-                externalAgentId: externalAgentId
-            )
-            let agentType = firstString(in: parsedInput.object ?? [:], keys: ["agent_type"])
-            var startParams: [String: Any] = [
+            let agentType = firstString(in: ctx.parsed.object ?? [:], keys: ["agent_type"])
+            var completedParams: [String: Any] = [
                 "agent_id": taskId,
                 "workspace_id": workspaceId,
                 "host": "claude",
                 "placement": "runs_with_parent",
-                "state": "working",
-            ]
-            if let surfaceId { startParams["surface_id"] = surfaceId }
-            if let sessionId = parsedInput.sessionId { startParams["session"] = sessionId }
-            if let agentType {
-                startParams["role"] = agentType
-                startParams["task"] = agentType
-            }
-            do {
-                _ = try client.sendV2(method: V2MethodNames.agentTaskStart, params: startParams)
-            } catch {
-                var updateParams: [String: Any] = ["agent_id": taskId, "state": "working"]
-                if let sessionId = parsedInput.sessionId { updateParams["session"] = sessionId }
-                if let agentType {
-                    updateParams["role"] = agentType
-                    updateParams["task"] = agentType
-                }
-                _ = try? client.sendV2(method: V2MethodNames.agentTaskUpdate, params: updateParams)
-            }
-            print("OK")
-
-        case "subagent-stop":
-            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-            guard let externalAgentId = firstString(in: parsedInput.object ?? [:], keys: ["agent_id"]),
-                  let workspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: mappedSession?.workspaceId,
-                    fallback: workspaceArg,
-                    client: client
-                  ) else {
-                print("OK")
-                return
-            }
-            let taskId = claudeSubagentTaskIdentifier(
-                scope: parsedInput.sessionId ?? workspaceId,
-                externalAgentId: externalAgentId
-            )
-            if (try? client.sendV2(method: V2MethodNames.agentTaskFinish, params: [
-                "agent_id": taskId,
                 "state": "completed",
-            ])) == nil {
-                let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
-                let agentType = firstString(in: parsedInput.object ?? [:], keys: ["agent_type"])
-                var completedParams: [String: Any] = [
-                    "agent_id": taskId,
-                    "workspace_id": workspaceId,
-                    "host": "claude",
-                    "placement": "runs_with_parent",
-                    "state": "completed",
-                ]
-                if let surfaceId { completedParams["surface_id"] = surfaceId }
-                if let sessionId = parsedInput.sessionId { completedParams["session"] = sessionId }
-                if let agentType {
-                    completedParams["role"] = agentType
-                    completedParams["task"] = agentType
-                }
-                _ = try? client.sendV2(method: V2MethodNames.agentTaskStart, params: completedParams)
+            ]
+            if let surfaceId { completedParams["surface_id"] = surfaceId }
+            if let sessionId = ctx.parsed.sessionId { completedParams["session"] = sessionId }
+            if let agentType {
+                completedParams["role"] = agentType
+                completedParams["task"] = agentType
             }
-            print("OK")
-
-        case "session-end":
-            // Final cleanup when Claude process exits.
-            // Only clear when we are the primary cleanup path (Stop didn't fire first).
-            // If Stop already consumed the session, consumedSession is nil and we skip
-            // to avoid wiping the completion notification that Stop just delivered.
-            if let sessionId = parsedInput.sessionId {
-                _ = try? client.sendV2(method: V2MethodNames.agentTaskFinishSession, params: [
-                    "host": "claude",
-                    "session": sessionId,
-                    "state": "cancelled",
-                ])
-            }
-            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-            let fallbackWorkspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
-                preferred: mappedSession?.workspaceId,
-                fallback: workspaceArg,
-                client: client
-            )
-            let fallbackSurfaceId: String? = {
-                guard let fallbackWorkspaceId else { return nil }
-                return try? resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: fallbackWorkspaceId,
-                    client: client
-                )
-            }()
-            let consumedSession = try? sessionStore.consume(
-                sessionId: parsedInput.sessionId,
-                workspaceId: fallbackWorkspaceId,
-                surfaceId: fallbackSurfaceId
-            )
-            if let consumedSession {
-                let workspaceId = consumedSession.workspaceId
-                _ = try? clearClaudeStatus(client: client, workspaceId: workspaceId)
-                _ = try? client.sendV2(method: V2MethodNames.workspaceClearAgentPid, params: ["workspace_id": workspaceId, "key": "claude_code"])
-                _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                if !consumedSession.surfaceId.isEmpty {
-                    clearAgentStateAndReportEvent(client: client, provider: "claude-code", eventType: "session.exited", workspaceId: workspaceId, surfaceId: consumedSession.surfaceId, sessionId: parsedInput.sessionId)
-                }
-            }
-            print("OK")
-
-        case "pre-tool-use":
-            // Clears "Needs input" status and notification when Claude resumes work
-            // (e.g. after permission grant). Runs async so it doesn't block tool execution.
-            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-
-            // Deliberately best-effort, for the same reason as the surfaceId resolution
-            // further down. A throw here used to abort the hook before any of the three
-            // independent clears below, while Claude Code continued with a stale red
-            // "blocked" badge that nothing would clear.
-            //
-            // Nothing recovers from that. There is no TTL or watchdog on agent state, and
-            // AgentScreenDetectionEngine deliberately refuses to touch a surface a hook has
-            // claimed (its `hooksOwned` guard), so the terminal can be visibly running a
-            // command while the sidebar still reads "Claude needs your permission" until the
-            // session ends.
-            //
-            // Falling back to the identifiers the Notification hook recorded is the whole
-            // point: those are the exact workspace and surface it marked blocked, so they
-            // are the right things to clear even when a live re-resolution is unavailable.
-            let resolvedWorkspaceId = (try? resolvePreferredWorkspaceIdForClaudeHook(
-                preferred: mappedSession?.workspaceId,
-                fallback: workspaceArg,
-                client: client
-            ))
-                ?? nonEmptyClaudeHookIdentifier(mappedSession?.workspaceId).flatMap { isUUID($0) ? $0 : nil }
-                ?? nonEmptyClaudeHookIdentifier(workspaceArg).flatMap { isUUID($0) ? $0 : nil }
-
-            // Only when there is genuinely no workspace to name is there nothing to clear.
-            guard let workspaceId = resolvedWorkspaceId else {
-                print("OK")
-                return
-            }
-            let claudePid = mappedSession?.pid
-
-            // AskUserQuestion means Claude is about to ask the user something.
-            // Save question text in session so the Notification handler can use it
-            // instead of the generic "Claude Code needs your attention".
-            if let toolName = parsedInput.object?["tool_name"] as? String,
-               toolName == "AskUserQuestion",
-               let question = describeAskUserQuestion(parsedInput.object),
-               let sessionId = parsedInput.sessionId {
-                // Preserve the existing surfaceId from SessionStart; passing ""
-                // would overwrite it and cause notifications to target the wrong workspace.
-                let existingSurfaceId = (try? sessionStore.lookup(sessionId: sessionId))?.surfaceId ?? ""
-                try? sessionStore.upsert(
-                    sessionId: sessionId,
-                    workspaceId: workspaceId,
-                    surfaceId: existingSurfaceId,
-                    cwd: parsedInput.cwd,
-                    lastSubtitle: "Waiting",
-                    lastBody: question
-                )
-                // Don't clear notifications or set status here.
-                // The Notification hook fires right after and will use the saved question.
-                print("OK")
-                return
-            }
-
-            // Best-effort, and deliberately not `try`: a throw here aborted the whole hook
-            // before any of the three clears below, stranding the red "blocked" badge lit
-            // while Claude was already running again. Hook failures don't block tool
-            // execution, so the user saw Claude working under a permission badge that
-            // nothing would ever clear. Only reportAgentState needs a surface; the
-            // notification and status clears are workspace-scoped and must still run.
-            let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
-                preferred: mappedSession?.surfaceId,
-                fallback: surfaceArg,
-                workspaceId: workspaceId,
-                client: client
-            )
-
-            // Clear the badge first: it is the indicator a user reads as "Claude is stuck",
-            // and it is the only one of the three that can't be re-derived from anything else.
-            if let surfaceId {
-                reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "item.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: parsedInput.sessionId, pid: claudePid)
-            }
-
-            _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-
-            // The sidebar badge (SidebarAgentIndicator) now carries "Working" on its own;
-            // the metadata-row status entry is opt-in verbose detail only, and only when
-            // there's actual tool text to show -- no more generic "Running" row.
-            if UserDefaults.standard.bool(forKey: "claudeCodeVerboseStatus"),
-               let toolStatus = describeToolUse(parsedInput.object) {
-                // Best-effort: benign if TabManager is already torn down.
-                try? setClaudeStatus(
-                    client: client,
-                    workspaceId: workspaceId,
-                    value: toolStatus,
-                    icon: "bolt.fill",
-                    color: "#4C8DFF",
-                    pid: claudePid
-                )
-            }
-            print("OK")
-
-        case "help", "--help", "-h":
-            print(
-                """
-                programa claude-hook <session-start|stop|session-end|notification|prompt-submit|pre-tool-use|subagent-start|subagent-stop> [--workspace <id|index>] [--surface <id|index>]
-                """
-            )
-
-        default:
-            throw CLIError(message: "Unknown claude-hook subcommand: \(subcommand)")
+            _ = try? client.sendV2(method: V2MethodNames.agentTaskStart, params: completedParams)
         }
     }
 
-    private func setClaudeStatus(
+    private func setAgentStatus(
         client: SocketClient,
+        key: String,
         workspaceId: String,
         value: String,
         icon: String,
@@ -679,7 +920,7 @@ extension ProgramaCLI {
     ) throws {
         var params: [String: Any] = [
             "workspace_id": workspaceId,
-            "key": "claude_code",
+            "key": key,
             "value": value,
             "icon": icon,
             "color": color,
@@ -688,10 +929,6 @@ extension ProgramaCLI {
             params["pid"] = pid
         }
         _ = try client.sendV2(method: V2MethodNames.workspaceSetStatus, params: params)
-    }
-
-    private func clearClaudeStatus(client: SocketClient, workspaceId: String) throws {
-        _ = try client.sendV2(method: V2MethodNames.workspaceClearStatus, params: ["workspace_id": workspaceId, "key": "claude_code"])
     }
 
     // MARK: - Agent activity state (issue #164, v1 hook tier)
@@ -3041,7 +3278,7 @@ extension ProgramaCLI {
         }
         existing["hooks"] = hooks
 
-        let newJsonData = try JSONSerialization.data(withJSONObject: existing, options: [.prettyPrinted, .sortedKeys])
+        let newJsonData = try JSONSerialization.data(withJSONObject: existing, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         let newContent = String(data: newJsonData, encoding: .utf8) ?? ""
         let settingsChanged = existingSettingsContent != newContent
 
@@ -3084,7 +3321,7 @@ extension ProgramaCLI {
         }
 
         if settingsChanged {
-            try newJsonData.write(to: URL(fileURLWithPath: settingsPath), options: .atomic)
+            try writeClaudeSettings(newJsonData, replacing: existingSettingsContent, at: settingsPath)
         }
         if skillState.changed {
             try writeAgentSkillFile(path: skillPath)
@@ -3093,6 +3330,20 @@ extension ProgramaCLI {
         print("")
         print("Installed. The Claude Code integration now works from any terminal, not just programa's.")
         print("To remove: programa claude uninstall-integration")
+    }
+
+    /// Writes settings.json through a symlink (an atomic write to the link path would
+    /// replace the user's link with a regular file) and only while the file still holds
+    /// the content the change was computed from, under the same sidecar lock the Codex
+    /// installer uses, so a concurrent edit is reported instead of overwritten.
+    private func writeClaudeSettings(_ data: Data, replacing previous: String?, at path: String) throws {
+        let target = try codexResolveConfigTarget(path)
+        try withCodexHooksLock(at: (path as NSString).deletingLastPathComponent) {
+            guard (try? String(contentsOfFile: target, encoding: .utf8)) == previous else {
+                throw CLIError(message: "\(path) changed while the integration was being updated. Re-run this command.")
+            }
+            try data.write(to: URL(fileURLWithPath: target), options: .atomic)
+        }
     }
 
     func runClaudeUninstallIntegration() throws {
@@ -3128,7 +3379,7 @@ extension ProgramaCLI {
             }
             if removedCount > 0 {
                 parsed["hooks"] = hooks
-                let newJsonData = try JSONSerialization.data(withJSONObject: parsed, options: [.prettyPrinted, .sortedKeys])
+                let newJsonData = try JSONSerialization.data(withJSONObject: parsed, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
                 let newContent = String(data: newJsonData, encoding: .utf8) ?? ""
                 let oldContent = String(data: data, encoding: .utf8) ?? ""
                 hooksRemoval = (newJsonData, newContent, oldContent)
@@ -3159,7 +3410,7 @@ extension ProgramaCLI {
         }
 
         if let hooksRemoval {
-            try hooksRemoval.newJsonData.write(to: URL(fileURLWithPath: settingsPath), options: .atomic)
+            try writeClaudeSettings(hooksRemoval.newJsonData, replacing: hooksRemoval.oldContent, at: settingsPath)
         }
         if skillContent != nil {
             try removeAgentSkillFileIfManaged(path: skillPath)
@@ -3257,307 +3508,6 @@ extension ProgramaCLI {
         return result.reversed()
     }
 
-    /// Codex hook handler. Gracefully no-ops when not running inside programa.
-    func runCodexHook(
-        commandArgs: [String],
-        client: SocketClient
-    ) throws {
-        let env = ProcessInfo.processInfo.environment
-
-        // Graceful no-op: if not inside programa, exit silently with valid JSON
-        guard env["PROGRAMA_SURFACE_ID"] != nil else {
-            print("{}")
-            return
-        }
-
-        let subcommand = commandArgs.first?.lowercased() ?? "help"
-        let hookArgs = Array(commandArgs.dropFirst())
-        let hookWsFlag = optionValue(hookArgs, name: "--workspace")
-        let workspaceArg = hookWsFlag ?? env["PROGRAMA_WORKSPACE_ID"]
-        let surfaceArg = optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? env["PROGRAMA_SURFACE_ID"] : nil)
-        let rawInput = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let parsedInput = parseClaudeHookInput(rawInput: rawInput)
-        let sessionStore = ClaudeHookSessionStore(
-            processEnv: env.merging(
-                ["PROGRAMA_CLAUDE_HOOK_STATE_PATH": "~/.programa/codex-hook-sessions.json"],
-                uniquingKeysWith: { _, new in new }
-            )
-        )
-
-        switch subcommand {
-        case "session-start":
-            // Wrapped in do/catch like "stop": a Programa quit mid-session must
-            // not block the agent's next hook invocation on a dead socket.
-            do {
-                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: nil,
-                    fallback: workspaceArg,
-                    client: client
-                )
-                let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: nil,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
-                let agentPIDKey = codexAgentPIDKey(sessionId: parsedInput.sessionId)
-                let codexPid = inferredCodexAgentPID()
-                if let sessionId = parsedInput.sessionId {
-                    try? sessionStore.upsert(
-                        sessionId: sessionId,
-                        workspaceId: workspaceId,
-                        surfaceId: surfaceId,
-                        cwd: parsedInput.cwd,
-                        pid: codexPid
-                    )
-                }
-                if let codexPid {
-                    _ = try? client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
-                        "workspace_id": workspaceId,
-                        "key": agentPIDKey,
-                        "pid": codexPid,
-                    ])
-                }
-                reportAgentEvent(client: client, provider: "codex", eventType: "session.started", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: parsedInput.sessionId)
-                print("{}")
-            } catch {
-                if shouldIgnoreClaudeHookTeardownError(error) {
-                    print("{}")
-                    return
-                }
-                throw error
-            }
-
-        case "prompt-submit":
-            // Wrapped in do/catch like "stop": a Programa quit mid-session must
-            // not block the agent's next prompt on a dead socket.
-            do {
-                let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: mappedSession?.workspaceId,
-                    fallback: workspaceArg,
-                    client: client
-                )
-                let agentPIDKey = codexAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
-                let codexPid = mappedSession?.pid ?? inferredCodexAgentPID()
-                if let sessionId = parsedInput.sessionId, let mappedSession {
-                    try? sessionStore.upsert(
-                        sessionId: sessionId,
-                        workspaceId: workspaceId,
-                        surfaceId: mappedSession.surfaceId,
-                        cwd: parsedInput.cwd ?? mappedSession.cwd,
-                        pid: codexPid
-                    )
-                }
-                if let codexPid {
-                    _ = try? client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
-                        "workspace_id": workspaceId,
-                        "key": agentPIDKey,
-                        "pid": codexPid,
-                    ])
-                }
-                _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                let promptSubmitSurfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
-                reportAgentStateAndEvent(client: client, provider: "codex", eventType: "turn.started", workspaceId: workspaceId, surfaceId: promptSubmitSurfaceId, state: .working, sessionId: parsedInput.sessionId)
-                print("{}")
-            } catch {
-                if shouldIgnoreClaudeHookTeardownError(error) {
-                    print("{}")
-                    return
-                }
-                throw error
-            }
-
-        case "stop":
-            do {
-                let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: mappedSession?.workspaceId,
-                    fallback: workspaceArg,
-                    client: client
-                )
-                let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
-                let agentPIDKey = codexAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
-
-                // Build completion notification from Codex stop payload
-                let lastMessage = parsedInput.object?["last_assistant_message"] as? String
-                    ?? parsedInput.object?["lastAssistantMessage"] as? String
-                let cwd = parsedInput.cwd ?? mappedSession?.cwd
-                let codexPid = mappedSession?.pid ?? inferredCodexAgentPID()
-                let projectName: String? = {
-                    guard let cwd, !cwd.isEmpty else { return nil }
-                    return URL(fileURLWithPath: NSString(string: cwd).expandingTildeInPath).lastPathComponent
-                }()
-
-                if let sessionId = parsedInput.sessionId {
-                    try? sessionStore.upsert(
-                        sessionId: sessionId,
-                        workspaceId: workspaceId,
-                        surfaceId: surfaceId,
-                        cwd: cwd,
-                        pid: codexPid,
-                        lastSubtitle: "Completed",
-                        lastBody: lastMessage.map { truncate($0, maxLength: 200) }
-                    )
-                }
-                if let codexPid {
-                    _ = try? client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
-                        "workspace_id": workspaceId,
-                        "key": agentPIDKey,
-                        "pid": codexPid,
-                    ])
-                }
-
-                // Send completion notification
-                var subtitle = "Completed"
-                if let projectName, !projectName.isEmpty {
-                    subtitle = "Completed in \(projectName)"
-                }
-                let body = sanitizeNotificationField(
-                    lastMessage.map { truncate(normalizedSingleLine($0), maxLength: 200) }
-                        ?? "Codex session completed"
-                )
-                _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
-                    "workspace_id": workspaceId,
-                    "surface_id": surfaceId,
-                    "title": "Codex",
-                    "subtitle": sanitizeNotificationField(subtitle),
-                    "body": body,
-                ])
-
-                try? setCodexStatus(
-                    client: client,
-                    workspaceId: workspaceId,
-                    value: "Idle",
-                    icon: "pause.circle.fill",
-                    color: "#8E8E93"
-                )
-                reportAgentStateAndEvent(client: client, provider: "codex", eventType: "turn.completed", workspaceId: workspaceId, surfaceId: surfaceId, state: .idle, sessionId: parsedInput.sessionId)
-                print("{}")
-            } catch {
-                if shouldIgnoreClaudeHookTeardownError(error) {
-                    print("{}")
-                    return
-                }
-                throw error
-            }
-
-        case "notification", "notify":
-            var summary = summarizeCodexHookNotification(parsedInput: parsedInput)
-
-            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-            let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                preferred: mappedSession?.workspaceId,
-                fallback: workspaceArg,
-                client: client
-            )
-            if let mappedSession,
-               let savedBody = mappedSession.lastBody, !savedBody.isEmpty,
-               summary.body.contains("needs your attention") || summary.body.contains("needs your input") {
-                summary = (subtitle: mappedSession.lastSubtitle ?? summary.subtitle, body: savedBody)
-            }
-
-            let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                preferred: mappedSession?.surfaceId,
-                fallback: surfaceArg,
-                workspaceId: workspaceId,
-                client: client
-            )
-            let agentPIDKey = codexAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
-            let codexPid = mappedSession?.pid ?? inferredCodexAgentPID()
-
-            let title = "Codex"
-            let subtitle = sanitizeNotificationField(summary.subtitle)
-            let body = sanitizeNotificationField(summary.body)
-
-            if let sessionId = parsedInput.sessionId {
-                try? sessionStore.upsert(
-                    sessionId: sessionId,
-                    workspaceId: workspaceId,
-                    surfaceId: surfaceId,
-                    cwd: parsedInput.cwd,
-                    pid: codexPid,
-                    lastSubtitle: summary.subtitle,
-                    lastBody: summary.body
-                )
-            }
-            if let codexPid {
-                _ = try? client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
-                    "workspace_id": workspaceId,
-                    "key": agentPIDKey,
-                    "pid": codexPid,
-                ])
-            }
-
-            reportClassifiedAgentNotification(
-                client: client,
-                provider: "codex",
-                workspaceId: workspaceId,
-                surfaceId: surfaceId,
-                title: title,
-                subtitle: subtitle,
-                body: body,
-                classifiedSubtitle: summary.subtitle,
-                sessionId: parsedInput.sessionId,
-                pid: codexPid
-            )
-            print("{}")
-
-        case "session-end":
-            // Final cleanup when Codex process exits (e.g. Ctrl+C or kill), covering
-            // the case where Stop never fires. If Stop already consumed the session,
-            // consumedSession is nil here and we skip to avoid wiping the completion
-            // notification that Stop just delivered.
-            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-            let fallbackWorkspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
-                preferred: mappedSession?.workspaceId,
-                fallback: workspaceArg,
-                client: client
-            )
-            let fallbackSurfaceId: String? = {
-                guard let fallbackWorkspaceId else { return nil }
-                return try? resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: fallbackWorkspaceId,
-                    client: client
-                )
-            }()
-            let consumedSession = try? sessionStore.consume(
-                sessionId: parsedInput.sessionId,
-                workspaceId: fallbackWorkspaceId,
-                surfaceId: fallbackSurfaceId
-            )
-            if let consumedSession {
-                let workspaceId = consumedSession.workspaceId
-                let agentPIDKey = codexAgentPIDKey(sessionId: parsedInput.sessionId ?? consumedSession.sessionId)
-                _ = try? clearCodexStatus(client: client, workspaceId: workspaceId)
-                _ = try? client.sendV2(method: V2MethodNames.workspaceClearAgentPid, params: ["workspace_id": workspaceId, "key": agentPIDKey])
-                _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                if !consumedSession.surfaceId.isEmpty {
-                    clearAgentStateAndReportEvent(client: client, provider: "codex", eventType: "session.exited", workspaceId: workspaceId, surfaceId: consumedSession.surfaceId, sessionId: parsedInput.sessionId)
-                }
-            }
-            print("{}")
-
-        case "help", "--help", "-h":
-            print("programa codex-hook <session-start|prompt-submit|stop|notification|session-end> [--workspace <id>] [--surface <id>]")
-
-        default:
-            throw CLIError(message: "Unknown codex-hook subcommand: \(subcommand)")
-        }
-    }
-
     private func summarizeCodexHookNotification(parsedInput: ClaudeHookParsedInput) -> (subtitle: String, body: String) {
         guard let object = parsedInput.object else {
             if let fallback = parsedInput.rawFallback, !fallback.isEmpty {
@@ -3608,34 +3558,6 @@ extension ProgramaCLI {
             return ("Attention", message)
         }
         return ("Attention", "Codex needs your attention")
-    }
-
-    private func setCodexStatus(
-        client: SocketClient,
-        workspaceId: String,
-        value: String,
-        icon: String,
-        color: String
-    ) throws {
-        _ = try client.sendV2(method: V2MethodNames.workspaceSetStatus, params: [
-            "workspace_id": workspaceId,
-            "key": "codex",
-            "value": value,
-            "icon": icon,
-            "color": color,
-        ])
-    }
-
-    private func clearCodexStatus(client: SocketClient, workspaceId: String) throws {
-        _ = try client.sendV2(method: V2MethodNames.workspaceClearStatus, params: ["workspace_id": workspaceId, "key": "codex"])
-    }
-
-    private func codexAgentPIDKey(sessionId: String?) -> String {
-        guard let sessionId = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !sessionId.isEmpty else {
-            return "codex"
-        }
-        return "codex.\(sessionId)"
     }
 
     private func inferredCodexAgentPID() -> Int? {
@@ -3693,8 +3615,8 @@ extension ProgramaCLI {
 
     // MARK: - OpenCode hooks
 
-    private func parseOpenCodeHookInput(hookArgs: [String]) -> ClaudeHookParsedInput {
-        let rawInput = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    /// Parses stdin JSON; the OpenCode plugin passes `--cwd`/`--session` as flags, which win.
+    private func parseAgentHookInput(rawInput: String, hookArgs: [String]) -> ClaudeHookParsedInput {
         let base = parseClaudeHookInput(rawInput: rawInput)
         let cwdArg = optionValue(hookArgs, name: "--cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let sessionArg = optionValue(hookArgs, name: "--session")?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3705,345 +3627,6 @@ extension ProgramaCLI {
             cwd: (cwdArg?.isEmpty == false ? cwdArg : nil) ?? base.cwd,
             transcriptPath: base.transcriptPath
         )
-    }
-
-    /// OpenCode plugin hook handler. Gracefully no-ops when not running inside programa.
-    ///
-    /// Unlike claude-hook/codex-hook, OpenCode has no shell-hook config to gate
-    /// invocation on $PROGRAMA_SURFACE_ID — the local plugin (embedded as
-    /// `openCodePluginJS` below) calls `programa opencode-hook <event> --cwd ... --session ...`
-    /// directly via Bun's `$`, so this function carries its own guard, mirroring
-    /// codex-hook's belt-and-suspenders pattern (also gated earlier in `run()` and
-    /// `validateRegisteredArguments` before any socket connection is attempted).
-    ///
-    /// The plugin passes `--cwd`/`--session` as CLI args rather than stdin JSON;
-    /// stdin is still read and tolerated (ignored if empty/absent) for parity with
-    /// the other hook handlers and in case a richer payload is added later.
-    ///
-    /// session.idle and permission.asked can fire close together on OpenCode's event
-    /// bus; the status/notification writes below are idempotent (same as
-    /// claude-hook/codex-hook), so repeated firing is harmless.
-    func runOpenCodeHook(
-        commandArgs: [String],
-        client: SocketClient
-    ) throws {
-        let env = ProcessInfo.processInfo.environment
-
-        guard env["PROGRAMA_SURFACE_ID"] != nil else {
-            print("{}")
-            return
-        }
-
-        let subcommand = commandArgs.first?.lowercased() ?? "help"
-        let hookArgs = Array(commandArgs.dropFirst())
-        let hookWsFlag = optionValue(hookArgs, name: "--workspace")
-        let workspaceArg = hookWsFlag ?? env["PROGRAMA_WORKSPACE_ID"]
-        let surfaceArg = optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? env["PROGRAMA_SURFACE_ID"] : nil)
-        let parsedInput = parseOpenCodeHookInput(hookArgs: hookArgs)
-        let sessionStore = ClaudeHookSessionStore(
-            processEnv: env.merging(
-                ["PROGRAMA_CLAUDE_HOOK_STATE_PATH": "~/.programa/opencode-hook-sessions.json"],
-                uniquingKeysWith: { _, new in new }
-            )
-        )
-
-        switch subcommand {
-        case "session-start":
-            // Wrapped in do/catch like "stop": a Programa quit mid-session must
-            // not block the agent's next hook invocation on a dead socket.
-            do {
-                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: nil,
-                    fallback: workspaceArg,
-                    client: client
-                )
-                let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: nil,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
-                let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId)
-                let opencodePid = inferredCodexAgentPID()
-                if let sessionId = parsedInput.sessionId {
-                    try? sessionStore.upsert(
-                        sessionId: sessionId,
-                        workspaceId: workspaceId,
-                        surfaceId: surfaceId,
-                        cwd: parsedInput.cwd,
-                        pid: opencodePid
-                    )
-                }
-                if let opencodePid {
-                    _ = try? client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
-                        "workspace_id": workspaceId,
-                        "key": agentPIDKey,
-                        "pid": opencodePid,
-                    ])
-                }
-                reportAgentEvent(client: client, provider: "opencode", eventType: "session.started", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: parsedInput.sessionId)
-                print("{}")
-            } catch {
-                if shouldIgnoreClaudeHookTeardownError(error) {
-                    print("{}")
-                    return
-                }
-                throw error
-            }
-
-        case "prompt-submit":
-            // Wrapped in do/catch like "stop": a Programa quit mid-session must
-            // not block the agent's next prompt on a dead socket.
-            do {
-                let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: mappedSession?.workspaceId,
-                    fallback: workspaceArg,
-                    client: client
-                )
-                let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
-                let opencodePid = mappedSession?.pid ?? inferredCodexAgentPID()
-                if let sessionId = parsedInput.sessionId, let mappedSession {
-                    try? sessionStore.upsert(
-                        sessionId: sessionId,
-                        workspaceId: workspaceId,
-                        surfaceId: mappedSession.surfaceId,
-                        cwd: parsedInput.cwd ?? mappedSession.cwd,
-                        pid: opencodePid
-                    )
-                }
-                if let opencodePid {
-                    _ = try? client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
-                        "workspace_id": workspaceId,
-                        "key": agentPIDKey,
-                        "pid": opencodePid,
-                    ])
-                }
-                _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                let promptSubmitSurfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
-                reportAgentStateAndEvent(client: client, provider: "opencode", eventType: "turn.started", workspaceId: workspaceId, surfaceId: promptSubmitSurfaceId, state: .working, sessionId: parsedInput.sessionId)
-                print("{}")
-            } catch {
-                if shouldIgnoreClaudeHookTeardownError(error) {
-                    print("{}")
-                    return
-                }
-                throw error
-            }
-
-        case "stop":
-            do {
-                let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-                let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                    preferred: mappedSession?.workspaceId,
-                    fallback: workspaceArg,
-                    client: client
-                )
-                let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: workspaceId,
-                    client: client
-                )
-                let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
-                let cwd = parsedInput.cwd ?? mappedSession?.cwd
-                let opencodePid = mappedSession?.pid ?? inferredCodexAgentPID()
-                let projectName: String? = {
-                    guard let cwd, !cwd.isEmpty else { return nil }
-                    return URL(fileURLWithPath: NSString(string: cwd).expandingTildeInPath).lastPathComponent
-                }()
-                // OpenCode's session.idle event carries no transcript/message payload
-                // (unlike Claude/Codex Stop hooks), so the completion body stays generic
-                // unless a future stdin JSON payload supplies one.
-                let lastMessage = parsedInput.object.flatMap {
-                    firstString(in: $0, keys: ["message", "last_assistant_message", "lastAssistantMessage", "body", "text"])
-                }
-
-                if let sessionId = parsedInput.sessionId {
-                    try? sessionStore.upsert(
-                        sessionId: sessionId,
-                        workspaceId: workspaceId,
-                        surfaceId: surfaceId,
-                        cwd: cwd,
-                        pid: opencodePid,
-                        lastSubtitle: "Completed",
-                        lastBody: lastMessage.map { truncate($0, maxLength: 200) }
-                    )
-                }
-                if let opencodePid {
-                    _ = try? client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
-                        "workspace_id": workspaceId,
-                        "key": agentPIDKey,
-                        "pid": opencodePid,
-                    ])
-                }
-
-                var subtitle = "Completed"
-                if let projectName, !projectName.isEmpty {
-                    subtitle = "Completed in \(projectName)"
-                }
-                let body = sanitizeNotificationField(
-                    lastMessage.map { truncate(normalizedSingleLine($0), maxLength: 200) }
-                        ?? "OpenCode session completed"
-                )
-                _ = try? client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
-                    "workspace_id": workspaceId,
-                    "surface_id": surfaceId,
-                    "title": "OpenCode",
-                    "subtitle": sanitizeNotificationField(subtitle),
-                    "body": body,
-                ])
-
-                try? setOpenCodeStatus(
-                    client: client,
-                    workspaceId: workspaceId,
-                    value: "Idle",
-                    icon: "pause.circle.fill",
-                    color: "#8E8E93"
-                )
-                reportAgentStateAndEvent(client: client, provider: "opencode", eventType: "turn.completed", workspaceId: workspaceId, surfaceId: surfaceId, state: .idle, sessionId: parsedInput.sessionId)
-                print("{}")
-            } catch {
-                if shouldIgnoreClaudeHookTeardownError(error) {
-                    print("{}")
-                    return
-                }
-                throw error
-            }
-
-        case "notification", "notify":
-            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-            let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
-                preferred: mappedSession?.workspaceId,
-                fallback: workspaceArg,
-                client: client
-            )
-            let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
-                preferred: mappedSession?.surfaceId,
-                fallback: surfaceArg,
-                workspaceId: workspaceId,
-                client: client
-            )
-            let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId ?? mappedSession?.sessionId)
-            let opencodePid = mappedSession?.pid ?? inferredCodexAgentPID()
-
-            // permission.asked carries no message payload from the plugin either;
-            // tolerate a stdin-supplied one for future-proofing, else use a generic message.
-            let messageFromInput = parsedInput.object.flatMap {
-                firstString(in: $0, keys: ["message", "body", "text", "reason", "description"])
-            }
-            let subtitle = "Attention"
-            let body = messageFromInput.map { normalizedSingleLine($0) } ?? "OpenCode needs your attention"
-
-            if let sessionId = parsedInput.sessionId {
-                try? sessionStore.upsert(
-                    sessionId: sessionId,
-                    workspaceId: workspaceId,
-                    surfaceId: surfaceId,
-                    cwd: parsedInput.cwd,
-                    pid: opencodePid,
-                    lastSubtitle: subtitle,
-                    lastBody: body
-                )
-            }
-            if let opencodePid {
-                _ = try? client.sendV2(method: V2MethodNames.workspaceSetAgentPid, params: [
-                    "workspace_id": workspaceId,
-                    "key": agentPIDKey,
-                    "pid": opencodePid,
-                ])
-            }
-
-            // OpenCode's notification hook is only ever invoked for permission.asked (see
-            // openCodePluginJS below) — unlike Claude/Codex, there's no ambiguous "Attention"
-            // catch-all to classify, so this is unconditionally a blocking approval prompt.
-            reportAgentNeedsInput(
-                client: client,
-                provider: "opencode",
-                workspaceId: workspaceId,
-                surfaceId: surfaceId,
-                title: "OpenCode",
-                subtitle: sanitizeNotificationField(subtitle),
-                body: sanitizeNotificationField(body),
-                sessionId: parsedInput.sessionId,
-                pid: opencodePid,
-                kind: "permission"
-            )
-            reportAgentEvent(client: client, provider: "opencode", eventType: "request.opened", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: parsedInput.sessionId)
-            print("{}")
-
-        case "session-end":
-            let mappedSession = parsedInput.sessionId.flatMap { try? sessionStore.lookup(sessionId: $0) }
-            let fallbackWorkspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
-                preferred: mappedSession?.workspaceId,
-                fallback: workspaceArg,
-                client: client
-            )
-            let fallbackSurfaceId: String? = {
-                guard let fallbackWorkspaceId else { return nil }
-                return try? resolvePreferredSurfaceIdForClaudeHook(
-                    preferred: mappedSession?.surfaceId,
-                    fallback: surfaceArg,
-                    workspaceId: fallbackWorkspaceId,
-                    client: client
-                )
-            }()
-            let consumedSession = try? sessionStore.consume(
-                sessionId: parsedInput.sessionId,
-                workspaceId: fallbackWorkspaceId,
-                surfaceId: fallbackSurfaceId
-            )
-            if let consumedSession {
-                let workspaceId = consumedSession.workspaceId
-                let agentPIDKey = opencodeAgentPIDKey(sessionId: parsedInput.sessionId ?? consumedSession.sessionId)
-                _ = try? clearOpenCodeStatus(client: client, workspaceId: workspaceId)
-                _ = try? client.sendV2(method: V2MethodNames.workspaceClearAgentPid, params: ["workspace_id": workspaceId, "key": agentPIDKey])
-                _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
-                if !consumedSession.surfaceId.isEmpty {
-                    clearAgentStateAndReportEvent(client: client, provider: "opencode", eventType: "session.exited", workspaceId: workspaceId, surfaceId: consumedSession.surfaceId, sessionId: parsedInput.sessionId)
-                }
-            }
-            print("{}")
-
-        case "help", "--help", "-h":
-            print("programa opencode-hook <session-start|prompt-submit|stop|notification|session-end> [--cwd <path>] [--session <id>] [--workspace <id>] [--surface <id>]")
-
-        default:
-            throw CLIError(message: "Unknown opencode-hook subcommand: \(subcommand)")
-        }
-    }
-
-    private func setOpenCodeStatus(
-        client: SocketClient,
-        workspaceId: String,
-        value: String,
-        icon: String,
-        color: String
-    ) throws {
-        _ = try client.sendV2(method: V2MethodNames.workspaceSetStatus, params: [
-            "workspace_id": workspaceId,
-            "key": "opencode",
-            "value": value,
-            "icon": icon,
-            "color": color,
-        ])
-    }
-
-    private func clearOpenCodeStatus(client: SocketClient, workspaceId: String) throws {
-        _ = try client.sendV2(method: V2MethodNames.workspaceClearStatus, params: ["workspace_id": workspaceId, "key": "opencode"])
-    }
-
-    private func opencodeAgentPIDKey(sessionId: String?) -> String {
-        guard let sessionId = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !sessionId.isEmpty else {
-            return "opencode"
-        }
-        return "opencode.\(sessionId)"
     }
 
     /// The local OpenCode plugin programa installs into

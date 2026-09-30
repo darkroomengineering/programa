@@ -711,6 +711,54 @@ extension ProgramaCLI {
         }
     }
 
+    /// The `pane.list` entry (with `columns`, `rows`, `cell_width_px`, `cell_height_px`) for a
+    /// pane, or the focused pane when `paneId` is nil.
+    private func tmuxPaneMetrics(
+        workspaceId: String,
+        paneId: String?,
+        client: SocketClient
+    ) throws -> [String: Any]? {
+        let payload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": workspaceId])
+        let panes = payload["panes"] as? [[String: Any]] ?? []
+        if let paneId {
+            return panes.first { ($0["id"] as? String) == paneId }
+        }
+        return panes.first { ($0["focused"] as? Bool) == true } ?? panes.first
+    }
+
+    /// Moves a pane border by `cells` terminal cells. `pane.resize` takes layout points, so the
+    /// cell count is converted with the pane's cell size (`cell_width`/`cell_height`) along the axis.
+    private func tmuxResizePane(
+        workspaceId: String,
+        paneId: String,
+        directions: [String],
+        cells: Int,
+        pane: [String: Any],
+        client: SocketClient
+    ) throws {
+        let horizontal = directions.contains { $0 == "left" || $0 == "right" }
+        guard let cellSize = (pane[horizontal ? "cell_width" : "cell_height"] as? NSNumber)?.doubleValue, cellSize > 0 else {
+            throw CLIError(message: "resize-pane: cell size unavailable for pane \(paneId)")
+        }
+        let amount = max(1, Int((Double(cells) * cellSize).rounded()))
+        // A pane grows or shrinks by moving whichever border it has; try each candidate direction.
+        var lastError: Error?
+        for direction in directions {
+            do {
+                _ = try client.sendV2(method: V2MethodNames.paneResize, params: [
+                    "workspace_id": workspaceId,
+                    "pane_id": paneId,
+                    "direction": direction,
+                    "amount": amount
+                ])
+                return
+            } catch {
+                lastError = error
+            }
+        }
+        if let lastError { throw lastError }
+    }
+
     private func tmuxShellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
@@ -733,50 +781,105 @@ extension ProgramaCLI {
     }
 
     private func tmuxSpecialKeyText(_ token: String) -> String? {
-        switch token.lowercased() {
-        case "enter", "c-m", "kpenter":
+        let lower = token.lowercased()
+        switch lower {
+        case "enter", "kpenter":
             return "\r"
-        case "tab", "c-i":
+        case "tab":
             return "\t"
+        case "btab":
+            return "\u{1b}[Z"
         case "space":
             return " "
         case "bspace", "backspace":
             return "\u{7f}"
-        case "escape", "esc", "c-[":
+        case "escape", "esc":
             return "\u{1b}"
-        case "c-c":
-            return "\u{03}"
-        case "c-d":
-            return "\u{04}"
-        case "c-z":
-            return "\u{1a}"
-        case "c-l":
-            return "\u{0c}"
+        case "up":
+            return "\u{1b}[A"
+        case "down":
+            return "\u{1b}[B"
+        case "right":
+            return "\u{1b}[C"
+        case "left":
+            return "\u{1b}[D"
+        case "home":
+            return "\u{1b}[H"
+        case "end":
+            return "\u{1b}[F"
+        case "ppage", "pageup", "pgup":
+            return "\u{1b}[5~"
+        case "npage", "pagedown", "pgdn":
+            return "\u{1b}[6~"
+        case "ic", "insert":
+            return "\u{1b}[2~"
+        case "dc", "delete":
+            return "\u{1b}[3~"
         default:
-            return nil
+            break
         }
+
+        // C-<x>: control character. Letters map to 0x01...0x1a; @ [ \ ] ^ _ to 0x00, 0x1b...0x1f.
+        if lower.hasPrefix("c-"), lower.unicodeScalars.count == 3, let key = lower.unicodeScalars.last {
+            switch key.value {
+            case 0x61...0x7a:
+                return String(UnicodeScalar(key.value - 0x60) ?? key)
+            case 0x40, 0x5b...0x5f:
+                return String(UnicodeScalar(key.value - 0x40) ?? key)
+            default:
+                return nil
+            }
+        }
+
+        // M-<x>: Meta sends ESC followed by the key. Keep the original case of the key.
+        if lower.hasPrefix("m-"), token.unicodeScalars.count >= 3 {
+            let rest = String(token.dropFirst(2))
+            return "\u{1b}" + (tmuxSpecialKeyText(rest) ?? rest)
+        }
+        return nil
     }
 
-    private func tmuxSendKeysText(from tokens: [String], literal: Bool) -> String {
+    enum TmuxSendKeysSegment: Equatable {
+        case text(String)
+        case key(String)
+    }
+
+    /// Cursor keys encode differently in application cursor mode, so they go through
+    /// `surface.send_key` (Ghostty's mode-aware encoder) instead of fixed escape text.
+    private static let tmuxCursorKeyNames: [String: String] = [
+        "up": "up", "down": "down", "left": "left", "right": "right", "home": "home", "end": "end",
+    ]
+
+    func tmuxSendKeysSegments(from tokens: [String], literal: Bool) -> [TmuxSendKeysSegment] {
         if literal {
-            return tokens.joined(separator: " ")
+            let text = tokens.joined(separator: " ")
+            return text.isEmpty ? [] : [.text(text)]
         }
 
-        var result = ""
+        var segments: [TmuxSendKeysSegment] = []
+        var text = ""
         var pendingSpace = false
         for token in tokens {
+            if let keyName = Self.tmuxCursorKeyNames[token.lowercased()] {
+                if !text.isEmpty { segments.append(.text(text)) }
+                text = ""
+                segments.append(.key(keyName))
+                pendingSpace = false
+                continue
+            }
             if let special = tmuxSpecialKeyText(token) {
-                result += special
+                text += special
                 pendingSpace = false
                 continue
             }
             if pendingSpace {
-                result += " "
+                text += " "
             }
-            result += token
+            text += token
             pendingSpace = true
         }
-        return result
+        if !text.isEmpty { segments.append(.text(text)) }
+        return segments
     }
 
     private func prependPathEntries(_ newEntries: [String], to currentPath: String?) -> String {
@@ -1140,13 +1243,16 @@ extension ProgramaCLI {
         case "send-keys", "send":
             let parsed = try parseTmuxArguments(rawArgs, valueFlags: ["-t"], boolFlags: ["-l"])
             let target = try tmuxResolveSurfaceTarget(parsed.value("-t"), client: client)
-            let text = tmuxSendKeysText(from: parsed.positional, literal: parsed.hasFlag("-l"))
-            if !text.isEmpty {
-                _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: [
-                    "workspace_id": target.workspaceId,
-                    "surface_id": target.surfaceId,
-                    "text": text
-                ])
+            for segment in tmuxSendKeysSegments(from: parsed.positional, literal: parsed.hasFlag("-l")) {
+                var params: [String: Any] = ["workspace_id": target.workspaceId, "surface_id": target.surfaceId]
+                switch segment {
+                case .text(let text):
+                    params["text"] = text
+                    _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
+                case .key(let key):
+                    params["key"] = key
+                    _ = try client.sendV2(method: V2MethodNames.surfaceSendKey, params: params)
+                }
             }
 
         case "capture-pane", "capturep":
@@ -1156,13 +1262,23 @@ extension ProgramaCLI {
                 boolFlags: ["-J", "-N", "-p"]
             )
             let target = try tmuxResolveSurfaceTarget(parsed.value("-t"), client: client)
+            // tmux captures only the visible pane unless -S reaches into history:
+            // "-S -" starts at the top of the scrollback, "-S -N" starts N lines above the screen.
             var params: [String: Any] = [
                 "workspace_id": target.workspaceId,
-                "surface_id": target.surfaceId,
-                "scrollback": true
+                "surface_id": target.surfaceId
             ]
-            if let start = parsed.value("-S"), let lines = Int(start), lines < 0 {
-                params["lines"] = abs(lines)
+            if let start = parsed.value("-S") {
+                if start == "-" {
+                    params["scrollback"] = true
+                } else if let historyLines = Int(start), historyLines < 0 {
+                    let visibleRows = try tmuxPaneMetrics(
+                        workspaceId: target.workspaceId,
+                        paneId: target.paneId,
+                        client: client
+                    )?["rows"] as? Int ?? 0
+                    params["lines"] = abs(historyLines) + visibleRows
+                }
             }
             let payload = try client.sendV2(method: V2MethodNames.surfaceReadText, params: params)
             let text = (payload["text"] as? String) ?? ""
@@ -1268,26 +1384,41 @@ extension ProgramaCLI {
                 || parsed.hasFlag("-U")
                 || parsed.hasFlag("-D")
             let target = try tmuxResolvePaneTarget(parsed.value("-t"), client: client)
+            guard let pane = try tmuxPaneMetrics(workspaceId: target.workspaceId, paneId: target.paneId, client: client) else {
+                throw CLIError(message: "resize-pane: pane not found: \(target.paneId)")
+            }
 
-            if !hasDirectionalFlags, let absWidth = parsed.value("-x").flatMap({ Int($0.replacingOccurrences(of: "%", with: "")) }) {
-                // Absolute width: resize-pane -t <pane> -x <columns>
-                // Compute pixel delta from current width to desired width.
-                let panePayload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": target.workspaceId])
-                let panes = panePayload["panes"] as? [[String: Any]] ?? []
-                if let matchingPane = panes.first(where: { ($0["id"] as? String) == target.paneId }),
-                   let cellW = matchingPane["cell_width_px"] as? Int, cellW > 0,
-                   let currentCols = matchingPane["columns"] as? Int {
-                    let delta = absWidth - currentCols
-                    if delta != 0 {
-                        _ = try? client.sendV2(method: V2MethodNames.paneResize, params: [
-                            "workspace_id": target.workspaceId,
-                            "pane_id": target.paneId,
-                            "direction": delta > 0 ? "right" : "left",
-                            "amount": abs(delta) * cellW
-                        ])
-                    }
+            // -x / -y set an absolute size in columns / rows (a trailing % is ignored).
+            // pane.resize can only move a border outward (grow the pane), and a pane has its
+            // border on the right/bottom when it is a first child and left/top when it is a second.
+            for (flag, current, growing) in [
+                ("-x", pane["columns"] as? Int, ["right", "left"]),
+                ("-y", pane["rows"] as? Int, ["down", "up"]),
+            ] {
+                guard let raw = parsed.value(flag) else { continue }
+                guard let wanted = Int(raw.replacingOccurrences(of: "%", with: "")), wanted > 0 else {
+                    throw CLIError(message: "resize-pane \(flag) requires a positive size")
                 }
-            } else if hasDirectionalFlags {
+                guard let current else {
+                    throw CLIError(message: "resize-pane: pane size unavailable for \(target.paneId)")
+                }
+                let delta = wanted - current
+                if delta < 0 {
+                    FileHandle.standardError.write(Data("resize-pane \(flag): shrinking to an absolute size is not supported; pane left at \(current)\n".utf8))
+                } else if delta > 0 {
+                    try tmuxResizePane(
+                        workspaceId: target.workspaceId,
+                        paneId: target.paneId,
+                        directions: growing,
+                        cells: delta,
+                        pane: pane,
+                        client: client
+                    )
+                }
+            }
+
+            // -L/-R/-U/-D <cells> moves that border by N cells (default 1).
+            if hasDirectionalFlags {
                 let direction: String
                 if parsed.hasFlag("-L") {
                     direction = "left"
@@ -1298,15 +1429,20 @@ extension ProgramaCLI {
                 } else {
                     direction = "right"
                 }
-                let rawAmount = (parsed.value("-x") ?? parsed.value("-y") ?? "5")
-                    .replacingOccurrences(of: "%", with: "")
-                let amount = Int(rawAmount) ?? 5
-                _ = try client.sendV2(method: V2MethodNames.paneResize, params: [
-                    "workspace_id": target.workspaceId,
-                    "pane_id": target.paneId,
-                    "direction": direction,
-                    "amount": max(1, amount)
-                ])
+                let cells = try parsed.positional.first.map { raw -> Int in
+                    guard let value = Int(raw), value > 0 else {
+                        throw CLIError(message: "resize-pane adjustment must be a positive number of cells")
+                    }
+                    return value
+                } ?? 1
+                try tmuxResizePane(
+                    workspaceId: target.workspaceId,
+                    paneId: target.paneId,
+                    directions: [direction],
+                    cells: cells,
+                    pane: pane,
+                    client: client
+                )
             }
 
         case "wait-for":
@@ -1701,10 +1837,11 @@ extension ProgramaCLI {
             }
 
         case "wait-for":
-            let signal = commandArgs.contains("-S") || commandArgs.contains("--signal")
-            let timeoutRaw = optionValue(commandArgs, name: "--timeout")
+            // Strip --timeout together with its value so the value is never mistaken for the channel name.
+            let (timeoutRaw, remaining) = parseOption(commandArgs, name: "--timeout")
+            let signal = remaining.contains("-S") || remaining.contains("--signal")
             let timeout = timeoutRaw.flatMap { Double($0) } ?? 30.0
-            let name = commandArgs.first(where: { !$0.hasPrefix("-") }) ?? ""
+            let name = remaining.first(where: { !$0.hasPrefix("-") }) ?? ""
             guard !name.isEmpty else {
                 throw CLIError(message: "wait-for requires a name")
             }

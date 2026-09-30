@@ -60,6 +60,10 @@ extension TerminalController {
                         dict["rows"] = Int(size.rows)
                         dict["cell_width_px"] = Int(size.cell_width_px)
                         dict["cell_height_px"] = Int(size.cell_height_px)
+                        // Cell size in layout points, the unit pane.resize takes for `amount`.
+                        let scale = max(1, panel.hostedView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1)
+                        dict["cell_width"] = Double(size.cell_width_px) / Double(scale)
+                        dict["cell_height"] = Double(size.cell_height_px) / Double(scale)
                     }
                 }
 

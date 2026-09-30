@@ -683,6 +683,43 @@ def main() -> int:
             check(remaining is not None and "first-run-session" not in remaining.get("sessions", {}),
                   f"session cleanup did not persist removal: {remaining!r}")
 
+    # Agent hooks fail open: with programa unreachable they ack like a handled event
+    # and exit 0, so a quit or restarting app never blocks the agent.
+    with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
+        dead_socket = os.path.join(directory, "missing.sock")
+        for hook_command, ack in (("claude-hook", "OK"), ("codex-hook", "{}"), ("opencode-hook", "{}")):
+            dead = run_cli(
+                dead_socket,
+                [hook_command, "notification"],
+                env_overrides=dict(hook_env, PROGRAMA_CLAUDE_HOOK_STATE_PATH=str(Path(directory) / "sessions.json")),
+                input_text=json.dumps({"session_id": "dead-socket-session"}),
+            )
+            check(dead.returncode == 0, f"{hook_command} failed on a dead socket: {merged_output(dead)!r}")
+            check(dead.stdout.strip() == ack, f"{hook_command} dead-socket stdout={dead.stdout!r}, want {ack!r}")
+            check(dead.stderr.strip() == "", f"{hook_command} dead-socket stderr={dead.stderr!r}")
+
+    # A corrupt session store is never rewritten by a lookup, and a write moves it
+    # aside instead of silently wiping it.
+    with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
+        state_path = Path(directory) / "sessions.json"
+        corrupt_path = Path(str(state_path) + ".corrupt")
+        corrupt_env = dict(hook_env, PROGRAMA_CLAUDE_HOOK_STATE_PATH=str(state_path))
+        payload = json.dumps({"session_id": "corrupt-store-session"})
+        state_path.write_text("{not json", encoding="utf-8")
+        with SocketRecorder(directory) as recorder:
+            looked_up = run_cli(recorder.path, ["claude-hook", "prompt-submit"],
+                                env_overrides=corrupt_env, input_text=payload)
+            check(looked_up.returncode == 0, f"lookup on corrupt store failed: {merged_output(looked_up)!r}")
+            check(state_path.read_text(encoding="utf-8") == "{not json" and not corrupt_path.exists(),
+                  "a session lookup rewrote or quarantined the corrupt store")
+            started = run_cli(recorder.path, ["claude-hook", "session-start"],
+                              env_overrides=corrupt_env, input_text=payload)
+            check(started.returncode == 0, f"write on corrupt store failed: {merged_output(started)!r}")
+        check(corrupt_path.exists() and corrupt_path.read_text(encoding="utf-8") == "{not json",
+              "a write did not move the corrupt store aside")
+        check("corrupt-store-session" in json.loads(state_path.read_text(encoding="utf-8")).get("sessions", {}),
+              "a write on a corrupt store did not start a fresh store")
+
     # The implicit password file is security-sensitive: only a regular,
     # user-owned, private file may contribute an auth frame.
     def password_file_frames(kind: str) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
