@@ -684,8 +684,14 @@ final class TerminalNotificationStore: ObservableObject {
                 case .authorized, .provisional, .ephemeral:
                     completion(true)
                 case .denied:
-                    self.logAuthorization("ensure denied origin=\(origin.rawValue) prompting_settings")
-                    self.promptToEnableNotifications()
+                    // The settings sheet takes key focus, which swallows typed input in UI
+                    // regressions and can never be dismissed there.
+                    if SessionRestorePolicy.isRunningUnderAutomatedTests() {
+                        self.logAuthorization("ensure denied origin=\(origin.rawValue) prompt_skipped_automated_tests")
+                    } else {
+                        self.logAuthorization("ensure denied origin=\(origin.rawValue) prompting_settings")
+                        self.promptToEnableNotifications()
+                    }
                     completion(false)
                 case .notDetermined:
                     if Self.shouldDeferAutomaticAuthorizationRequest(
