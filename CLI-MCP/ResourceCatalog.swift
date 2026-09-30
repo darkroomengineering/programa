@@ -42,7 +42,7 @@ enum ResourceCatalog {
         }
 
         await server.withMethodHandler(ReadResource.self) { params in
-            try Self.read(uri: params.uri)
+            try await Self.read(uri: params.uri)
         }
     }
 
@@ -50,7 +50,7 @@ enum ResourceCatalog {
     /// or unrecognized URI throws `MCPError.invalidParams`, which the SDK's dispatcher turns
     /// into a clean JSON-RPC error response (`Sources/MCP/Server/Server.swift`'s
     /// `handleRequest`) rather than crashing or hanging.
-    private static func read(uri: String) throws -> ReadResource.Result {
+    private static func read(uri: String) async throws -> ReadResource.Result {
         guard let components = URLComponents(string: uri), components.scheme == "programa" else {
             throw MCPError.invalidParams("Malformed resource URI: \(uri)")
         }
@@ -58,13 +58,13 @@ enum ResourceCatalog {
 
         switch components.host {
         case "tree":
-            return ReadResource.Result(contents: try TreeResource.read(queryItems: queryItems))
+            return ReadResource.Result(contents: try await TreeResource.read(queryItems: queryItems))
         case "surface":
             let segments = components.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
             guard segments.count == 2, segments[1] == "text" else {
                 throw MCPError.invalidParams("Unknown surface resource URI: \(uri)")
             }
-            return ReadResource.Result(contents: try SurfaceTextResource.read(surfaceId: segments[0], queryItems: queryItems))
+            return ReadResource.Result(contents: try await SurfaceTextResource.read(surfaceId: segments[0], queryItems: queryItems))
         default:
             throw MCPError.invalidParams("Unknown resource URI: \(uri)")
         }

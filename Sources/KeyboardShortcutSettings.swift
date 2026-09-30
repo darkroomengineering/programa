@@ -305,7 +305,24 @@ enum KeyboardShortcutSettings {
         }
     }
 
+    // Key handling asks for every action's shortcut on each unclaimed keystroke, so resolved
+    // shortcuts are cached. Every write goes through postDidChangeNotification, which clears it.
+    private static let resolvedShortcutsLock = NSLock()
+    private static var resolvedShortcuts: [Action: StoredShortcut] = [:]
+
     static func shortcut(for action: Action) -> StoredShortcut {
+        resolvedShortcutsLock.lock()
+        let cached = resolvedShortcuts[action]
+        resolvedShortcutsLock.unlock()
+        if let cached { return cached }
+        let resolved = resolveShortcut(for: action)
+        resolvedShortcutsLock.lock()
+        resolvedShortcuts[action] = resolved
+        resolvedShortcutsLock.unlock()
+        return resolved
+    }
+
+    private static func resolveShortcut(for action: Action) -> StoredShortcut {
         if let managedShortcut = settingsFileStore.override(for: action) {
             return managedShortcut
         }
@@ -363,6 +380,9 @@ enum KeyboardShortcutSettings {
         action: Action? = nil,
         center: NotificationCenter = .default
     ) {
+        resolvedShortcutsLock.lock()
+        resolvedShortcuts.removeAll()
+        resolvedShortcutsLock.unlock()
         var userInfo: [AnyHashable: Any] = [:]
         if let action {
             userInfo[actionUserInfoKey] = action.rawValue
@@ -375,12 +395,6 @@ enum KeyboardShortcutSettings {
     }
 
     // MARK: - Backwards-Compatible API (call-sites can migrate gradually)
-
-    // Keys (used by debug socket command + UI tests)
-    static let focusLeftKey = Action.focusLeft.defaultsKey
-    static let focusRightKey = Action.focusRight.defaultsKey
-    static let focusUpKey = Action.focusUp.defaultsKey
-    static let focusDownKey = Action.focusDown.defaultsKey
 
     // Defaults (used by settings reset + recorder button initial title)
     static let showNotificationsDefault = Action.showNotifications.defaultShortcut

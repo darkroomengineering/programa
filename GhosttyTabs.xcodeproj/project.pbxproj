@@ -233,6 +233,9 @@
 		B9000002A1B2C3D4E5F60719 /* programa.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000001A1B2C3D4E5F60719 /* programa.swift */; };
 		BA930A082EE6778208DFF1D5 /* programa-mcp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34A6F1F29768816E717790E5 /* programa-mcp.swift */; };
 		21C3DEC154B0CB6666377FEC /* MCPServer+Capabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5780162BC419AEE022390A45 /* MCPServer+Capabilities.swift */; };
+		5C0A7E42B93D2F6A18E4D057 /* SocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0A7E41B93D2F6A18E4D057 /* SocketClient.swift */; };
+		5C0A7E43B93D2F6A18E4D057 /* SocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0A7E41B93D2F6A18E4D057 /* SocketClient.swift */; };
+		5C0A7E44B93D2F6A18E4D057 /* SocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0A7E41B93D2F6A18E4D057 /* SocketClient.swift */; };
 		F796E92ACEB543370DEF3E6A /* SocketPathResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE22E2E37BA6C8A7447AD12D /* SocketPathResolution.swift */; };
 		FC26678DC2FE51F6815CFB85 /* SocketPathResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE22E2E37BA6C8A7447AD12D /* SocketPathResolution.swift */; };
 		386AE1E1270DD8B6AA427C61 /* SocketPathResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE22E2E37BA6C8A7447AD12D /* SocketPathResolution.swift */; };
@@ -654,6 +657,7 @@
 		B9000001A1B2C3D4E5F60719 /* programa.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = programa.swift; sourceTree = "<group>"; };
 		34A6F1F29768816E717790E5 /* programa-mcp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "programa-mcp.swift"; sourceTree = "<group>"; };
 		5780162BC419AEE022390A45 /* MCPServer+Capabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MCPServer+Capabilities.swift"; sourceTree = "<group>"; };
+		5C0A7E41B93D2F6A18E4D057 /* SocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketClient.swift; sourceTree = "<group>"; };
 		FE22E2E37BA6C8A7447AD12D /* SocketPathResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketPathResolution.swift; sourceTree = "<group>"; };
 		A9A8BC17CBD749D48C344001 /* MCPSocketBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSocketBridgeTests.swift; sourceTree = "<group>"; };
 		ED79E527F994DBDC0A46043A /* MCPSocketBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSocketBridge.swift; sourceTree = "<group>"; };
@@ -1120,6 +1124,7 @@
 				RVPN0000000000000000000F /* CLI+Review.swift */,
 				RCAP000002 /* CLI+Recap.swift */,
 				FE22E2E37BA6C8A7447AD12D /* SocketPathResolution.swift */,
+				5C0A7E41B93D2F6A18E4D057 /* SocketClient.swift */,
 			);
 			path = CLI;
 			sourceTree = "<group>";
@@ -1734,6 +1739,7 @@
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */,
 					F6D8BDB710C64A444F3DE4F0 /* MCPSocketBridgeTests.swift in Sources */,
 					386AE1E1270DD8B6AA427C61 /* SocketPathResolution.swift in Sources */,
+					5C0A7E44B93D2F6A18E4D057 /* SocketClient.swift in Sources */,
 					7B3E9C21A4F0D85E63C1470B /* MCPSocketBridge.swift in Sources */,
 					E3A7C19D5B2F48D06C1E9A73 /* V2MethodNames.swift in Sources */,
 				);
@@ -1761,6 +1767,7 @@
 				C7A10002 /* V2MethodNames.swift in Sources */,
 				H1HK0002 /* HookInstallationCoordinator.swift in Sources */,
 				F796E92ACEB543370DEF3E6A /* SocketPathResolution.swift in Sources */,
+				5C0A7E42B93D2F6A18E4D057 /* SocketClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1772,6 +1779,7 @@
 				B0F65D90C522CCE8ECCBE4AF /* V2MethodNames.swift in Sources */,
 				21C3DEC154B0CB6666377FEC /* MCPServer+Capabilities.swift in Sources */,
 				FC26678DC2FE51F6815CFB85 /* SocketPathResolution.swift in Sources */,
+				5C0A7E43B93D2F6A18E4D057 /* SocketClient.swift in Sources */,
 				35911EB4D71E31E20BE3DACA /* MCPSocketBridge.swift in Sources */,
 				2EFFCCB7C0F0B14D04B041AD /* MCPErrorMapping.swift in Sources */,
 				A06CCD2517BF88BFE4F43D51 /* ToolCatalog.swift in Sources */,
