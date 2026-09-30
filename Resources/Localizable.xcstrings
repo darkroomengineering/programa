@@ -9589,57 +9589,6 @@
         }
       }
     },
-    "dialog.singleInstanceNotResponding.forceClose": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Force Close"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "強制終了"
-          }
-        }
-      }
-    },
-    "dialog.singleInstanceNotResponding.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The existing Programa instance did not quit. Force closing it may lose unsaved terminal or session state."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "既存のProgramaインスタンスは終了しませんでした。強制終了すると、保存されていないターミナルやセッションの状態が失われる可能性があります。"
-          }
-        }
-      }
-    },
-    "dialog.singleInstanceNotResponding.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Existing Programa Is Still Open"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "既存の Programa が開いたままです"
-          }
-        }
-      }
-    },
     "dialog.clipboardConfirmation.allow": {
       "extractionState": "manual",
       "localizations": {
