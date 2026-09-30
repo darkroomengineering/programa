@@ -84,8 +84,7 @@ final class MCPSocketBridgeTests: XCTestCase {
 
     /// Accepts exactly one connection, reads one newline-delimited request line (discarded --
     /// these tests only care about the canned response path), writes `responseLine` back, and
-    /// closes the connection immediately so `MCPSocketBridge.readResponse` doesn't have to wait
-    /// out its idle-gap timeout.
+    /// closes the connection immediately
     @discardableResult
     private func serveOneCannedResponse(
         listenerFD: Int32,

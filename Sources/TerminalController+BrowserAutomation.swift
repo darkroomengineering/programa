@@ -1112,30 +1112,25 @@ extension TerminalController {
         start: (@escaping (T) -> Void) -> Void
     ) -> T? {
         if Thread.isMainThread {
-            let runLoop = CFRunLoopGetCurrent()
+            // Each nested wait polls its own flag, so another client's completion cannot end it.
+            // The main-thread wait stays because v2BrowserWithPanel bodies run inside v2MainSync
+            // and WebKit completes on main.
             var resolved = false
-            var timedOut = false
             var result: T?
-
-            let finish: (T) -> Void = { value in
+            start { value in
                 guard !resolved else { return }
                 resolved = true
                 result = value
-                CFRunLoopStop(runLoop)
             }
-
-            start(finish)
-            guard !resolved else { return result }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-                guard !resolved else { return }
-                resolved = true
-                timedOut = true
-                CFRunLoopStop(runLoop)
+            let deadline = Date().addingTimeInterval(timeout)
+            while !resolved && Date() < deadline {
+                CFRunLoopRunInMode(.defaultMode, 0.05, true)
             }
-
-            CFRunLoopRun()
-            return timedOut ? nil : result
+            guard resolved else {
+                resolved = true  // a callback arriving after the deadline is dropped
+                return nil
+            }
+            return result
         }
 
         let semaphore = DispatchSemaphore(value: 0)
@@ -1159,7 +1154,8 @@ extension TerminalController {
         _ webView: WKWebView,
         surfaceId: UUID,
         conditionScript: String,
-        timeoutMs: Int
+        timeoutMs: Int,
+        pageWorld: Bool = false
     ) -> Bool {
         let timeout = Double(timeoutMs) / 1000.0
         let waitScript = """
@@ -1231,7 +1227,8 @@ extension TerminalController {
             surfaceId: surfaceId,
             script: waitScript,
             timeout: timeout + 1.0,
-            useEval: false
+            useEval: false,
+            pageWorld: pageWorld
         ) {
         case .success(let value):
             return (value as? Bool) == true
@@ -1630,7 +1627,8 @@ extension TerminalController {
         surfaceId: UUID,
         script: String,
         timeout: TimeInterval = 5.0,
-        useEval: Bool = true
+        useEval: Bool = true,
+        pageWorld: Bool = false
     ) -> V2BrowserJavaScriptExecutionOutcome {
         let scriptLiteral = v2JSONLiteral(script)
         let framePrelude: String
@@ -1694,16 +1692,12 @@ extension TerminalController {
             script: asyncFunctionBody,
             timeout: timeout,
             preferAsync: true,
-            contentWorld: useEval ? .page : .defaultClient
+            contentWorld: (useEval || pageWorld) ? .page : .defaultClient
         )
 
-        // Non-eval callers (browser.wait, generated selector actions, and the snapshot
-        // collector) run in the isolated `.defaultClient` world above, but the page-world
-        // script environment can still transiently fail right after a fresh navigation (e.g.
-        // browser.open_split returns before the page-world script context is ready). Retry once
-        // against `.page` before giving up so a single transient failure doesn't turn into an
-        // immediate false/timeout instead of the caller's normal polling/retry behavior.
-        if !useEval, case .failure(let isolatedMessage) = rawResult {
+        // Non-eval callers run isolated in `.defaultClient`, which can fail transiently right after a
+        // fresh navigation. Retry once in `.page` so one failure doesn't become an immediate false/timeout.
+        if !useEval, !pageWorld, case .failure(let isolatedMessage) = rawResult {
             let pageWorldResult = v2RunJavaScript(
                 webView,
                 script: asyncFunctionBody,
@@ -1753,14 +1747,16 @@ extension TerminalController {
         surfaceId: UUID,
         script: String,
         timeout: TimeInterval = 5.0,
-        useEval: Bool = true
+        useEval: Bool = true,
+        pageWorld: Bool = false
     ) -> V2JavaScriptResult {
         switch v2RunBrowserJavaScriptOutcome(
             webView,
             surfaceId: surfaceId,
             script: script,
             timeout: timeout,
-            useEval: useEval
+            useEval: useEval,
+            pageWorld: pageWorld
         ) {
         case .completed(let value):
             return .success(value)
@@ -3350,6 +3346,9 @@ extension TerminalController {
         let timeoutMs = max(1, v2Int(params, "timeout_ms") ?? 5_000)
         let selectorRaw = v2BrowserSelector(params)
 
+        // A `function` condition is page script (like browser.eval), so it must see page globals.
+        let conditionRunsInPageWorld = selectorRaw == nil && v2String(params, "function") != nil
+            && ["url_contains", "text_contains", "load_state"].allSatisfy { v2String(params, $0) == nil }
         let conditionScriptBase: String = {
             if let urlContains = v2String(params, "url_contains") {
                 let literal = v2JSONLiteral(urlContains)
@@ -3428,7 +3427,8 @@ extension TerminalController {
             webView,
             surfaceId: surfaceIdOut,
             conditionScript: conditionScript,
-            timeoutMs: timeoutMs
+            timeoutMs: timeoutMs,
+            pageWorld: conditionRunsInPageWorld
         ) {
             return .ok([
                 "workspace_id": workspaceId.uuidString,
