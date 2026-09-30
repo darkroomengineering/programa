@@ -33,7 +33,7 @@ FILES = (
     FileBudget("Sources/AppLifecycleCoordinator.swift", 0, 114, "AppLifecycleCoordinator"),
     FileBudget("Sources/ContentView.swift", 5_949, 5_728, "command palette view adapter"),
     FileBudget("Sources/CommandPaletteController.swift", 71, 283, "CommandPaletteController"),
-    FileBudget("CLI/programa.swift", 7_886, 7_584, "ProgramaCLI entrypoint"),
+    FileBudget("CLI/programa.swift", 7_886, 6_864, "ProgramaCLI entrypoint"),
     FileBudget("CLI/CLICommandDispatcher.swift", 0, 257, "CLICommandDispatcher"),
     FileBudget("CLI/CLI+Hooks.swift", 4_381, 4_257, "hook provider primitives"),
     FileBudget("CLI/HookInstallationCoordinator.swift", 0, 168, "HookInstallationCoordinator"),
@@ -69,7 +69,7 @@ FAMILIES = (
             "CLI/HookInstallationCoordinator.swift",
         ),
         12_267,
-        12_266,
+        11_512,
         "CLICommandDispatcher + HookInstallationCoordinator",
     ),
     FamilyBudget(

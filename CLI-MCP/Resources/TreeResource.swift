@@ -11,7 +11,7 @@ import MCP
 enum TreeResource {
     static let uri = "programa://tree"
 
-    static func read(queryItems: [URLQueryItem]) throws -> [Resource.Content] {
+    static func read(queryItems: [URLQueryItem]) async throws -> [Resource.Content] {
         var params: [String: Any] = [:]
         for item in queryItems {
             guard let value = item.value, !value.isEmpty else { continue }
@@ -30,7 +30,7 @@ enum TreeResource {
 
         let bridge = MCPSocketBridge()
         do {
-            let result = try bridge.send(method: V2MethodNames.systemTree, params: params)
+            let result = try await bridge.sendAsync(method: V2MethodNames.systemTree, params: params)
             return [try ResourceCatalog.jsonContent(for: result, uri: uri)]
         } catch {
             throw MCPErrorMapping.mcpError(for: error)

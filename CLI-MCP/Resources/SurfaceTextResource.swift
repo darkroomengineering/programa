@@ -17,7 +17,7 @@ enum SurfaceTextResource {
     /// context in a single call.
     static let maxLines = 10_000
 
-    static func read(surfaceId: String, queryItems: [URLQueryItem]) throws -> [Resource.Content] {
+    static func read(surfaceId: String, queryItems: [URLQueryItem]) async throws -> [Resource.Content] {
         guard !surfaceId.isEmpty else {
             throw MCPError.invalidParams("programa://surface/{surface_id}/text requires a non-empty surface_id")
         }
@@ -30,7 +30,7 @@ enum SurfaceTextResource {
 
         let bridge = MCPSocketBridge()
         do {
-            let result = try bridge.send(method: V2MethodNames.surfaceReadText, params: params)
+            let result = try await bridge.sendAsync(method: V2MethodNames.surfaceReadText, params: params)
             let text = (result["text"] as? String) ?? ""
             return [.text(text, uri: "programa://surface/\(surfaceId)/text", mimeType: "text/plain")]
         } catch {

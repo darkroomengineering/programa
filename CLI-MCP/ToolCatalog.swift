@@ -215,7 +215,7 @@ enum ToolCatalog {
             let socketParams = tool.makeParams(arguments)
             let bridge = MCPSocketBridge()
             do {
-                let result = try bridge.send(method: tool.socketMethod, params: socketParams)
+                let result = try await bridge.sendAsync(method: tool.socketMethod, params: socketParams)
                 return Self.successResult(result)
             } catch {
                 return MCPErrorMapping.toolResult(for: error)
