@@ -195,7 +195,7 @@ struct TabItemView: View {
         )
         .padding(.bottom, isSelected ? 1 : 0)
         .background(tabBackground.saturation(saturation))
-        .animation(.easeInOut(duration: 0.14), value: showsShortcutHint)
+        .animation(.easeOut(duration: 0.14), value: showsShortcutHint)
         .contentShape(Rectangle())
         // Middle click to close (macOS convention).
         // The overlay only hit-tests for middle-button events, so left click selection and
@@ -318,7 +318,7 @@ struct TabItemView: View {
             minHeight: TabBarMetrics.closeButtonSize,
             alignment: .center
         )
-        .animation(.easeInOut(duration: 0.14), value: showsShortcutHint)
+        .animation(.easeOut(duration: 0.14), value: showsShortcutHint)
     }
 
     private func updateGlobeFallback() {

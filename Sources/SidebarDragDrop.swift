@@ -577,11 +577,27 @@ enum SidebarDragAutoScrollPlanner {
     }
 }
 
+private final class DisplayLinkTarget: NSObject {
+    private let onFrame: (CADisplayLink) -> Void
+
+    init(onFrame: @escaping (CADisplayLink) -> Void) {
+        self.onFrame = onFrame
+    }
+
+    @objc func step(_ link: CADisplayLink) {
+        onFrame(link)
+    }
+}
+
 @MainActor
 final class SidebarDragAutoScrollController: ObservableObject {
     private weak var scrollView: NSScrollView?
-    private var timer: Timer?
+    private var displayLink: CADisplayLink?
+    private var displayLinkTarget: DisplayLinkTarget?
     private var activePlan: SidebarAutoScrollPlan?
+    /// autoscroll(with:) moves a fixed distance per call, so ticks keep the 60 Hz cadence;
+    /// the manual path scales by the elapsed time instead.
+    private var tickElapsed: CFTimeInterval = 0
 
     func attach(scrollView: NSScrollView?) {
         self.scrollView = scrollView
@@ -597,27 +613,34 @@ final class SidebarDragAutoScrollController: ObservableObject {
             return
         }
         activePlan = plan
-        startTimerIfNeeded()
+        startDisplayLinkIfNeeded()
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
+        displayLink?.invalidate()
+        displayLink = nil
+        displayLinkTarget = nil
         activePlan = nil
+        tickElapsed = 0
     }
 
-    private func startTimerIfNeeded() {
-        guard timer == nil else { return }
-        let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.tick()
-            }
+    /// Points-per-tick values in `SidebarDragAutoScrollPlanner` are defined at 60 Hz.
+    private static let referenceFrameDuration: CFTimeInterval = 1.0 / 60.0
+
+    private func startDisplayLinkIfNeeded() {
+        guard displayLink == nil, let scrollView else { return }
+        // Scoped to an active drag: created when autoscroll starts and invalidated
+        // in stop(), so it is not an app-level display link loop.
+        let target = DisplayLinkTarget { [weak self] link in
+            self?.tick(frameDuration: link.targetTimestamp - link.timestamp)
         }
-        self.timer = timer
-        RunLoop.main.add(timer, forMode: .eventTracking)
+        let link = scrollView.displayLink(target: target, selector: #selector(DisplayLinkTarget.step(_:)))
+        link.add(to: .main, forMode: .common)
+        displayLinkTarget = target
+        displayLink = link
     }
 
-    private func tick() {
+    private func tick(frameDuration: CFTimeInterval) {
         guard NSEvent.pressedMouseButtons != 0 else {
             stop()
             return
@@ -628,7 +651,13 @@ final class SidebarDragAutoScrollController: ObservableObject {
         }
 
         // AppKit drag/drop autoscroll guidance recommends autoscroll(with:)
-        // when periodic drag updates are available; use it first.
+        // when periodic drag updates are available; use it first, at 60 Hz.
+        tickElapsed += max(frameDuration, 0)
+        if tickElapsed + 0.001 < Self.referenceFrameDuration {
+            return
+        }
+        let elapsed = tickElapsed
+        tickElapsed = 0
         if applyNativeAutoscroll(to: scrollView) {
             activePlan = plan(for: scrollView)
             if activePlan == nil {
@@ -642,7 +671,8 @@ final class SidebarDragAutoScrollController: ObservableObject {
             stop()
             return
         }
-        _ = apply(plan: plan, to: scrollView)
+        let frameScale = CGFloat(min(elapsed / Self.referenceFrameDuration, 4))
+        _ = apply(plan: plan, to: scrollView, frameScale: frameScale)
     }
 
     private func applyNativeAutoscroll(to scrollView: NSScrollView) -> Bool {
@@ -696,7 +726,7 @@ final class SidebarDragAutoScrollController: ObservableObject {
         currentPlan(for: scrollView)
     }
 
-    private func apply(plan: SidebarAutoScrollPlan, to scrollView: NSScrollView) -> Bool {
+    private func apply(plan: SidebarAutoScrollPlan, to scrollView: NSScrollView, frameScale: CGFloat) -> Bool {
         guard let documentView = scrollView.documentView else { return false }
         let clipView = scrollView.contentView
         let maxOriginY = max(0, documentView.bounds.height - clipView.bounds.height)
@@ -704,7 +734,7 @@ final class SidebarDragAutoScrollController: ObservableObject {
 
         let directionMultiplier: CGFloat = (plan.direction == .down) ? 1 : -1
         let flippedMultiplier: CGFloat = documentView.isFlipped ? 1 : -1
-        let delta = directionMultiplier * flippedMultiplier * plan.pointsPerTick
+        let delta = directionMultiplier * flippedMultiplier * plan.pointsPerTick * frameScale
         let currentY = clipView.bounds.origin.y
         let targetY = min(max(currentY + delta, 0), maxOriginY)
         guard abs(targetY - currentY) > 0.01 else { return false }

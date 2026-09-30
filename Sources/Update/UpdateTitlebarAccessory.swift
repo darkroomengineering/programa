@@ -379,7 +379,7 @@ struct TitlebarControlsView: View {
             .contentShape(Rectangle())
             .opacity(shouldShowControls ? 1 : 0)
             .allowsHitTesting(shouldShowControls)
-            .animation(.easeInOut(duration: 0.14), value: shouldShowControls)
+            .animation(.easeOut(duration: 0.14), value: shouldShowControls)
             .background(
                 WindowAccessor { window in
                     modifierKeyMonitor.setHostWindow(window)
@@ -566,7 +566,7 @@ struct TitlebarControlsView: View {
                     .offset(x: item.leftEdge, y: yOffset)
             }
         }
-        .animation(.easeInOut(duration: 0.14), value: shouldShowTitlebarShortcutHints)
+        .animation(.easeOut(duration: 0.14), value: shouldShowTitlebarShortcutHints)
         .transition(.opacity)
         .allowsHitTesting(false)
     }
