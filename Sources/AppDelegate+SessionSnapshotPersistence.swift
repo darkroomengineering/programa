@@ -16,10 +16,6 @@ extension AppDelegate {
         prebuiltSnapshot: AppSessionSnapshot? = nil,
         completion: SessionAutosaveCoordinator.SaveCompletion? = nil
     ) -> Bool {
-        if startupHandoff.shouldDefer() {
-            completion?(false)
-            return false
-        }
         if Self.shouldSkipSessionSaveDuringStartupRestore(
             isApplyingStartupSessionRestore: isApplyingStartupSessionRestore,
             includeScrollback: includeScrollback
