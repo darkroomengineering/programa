@@ -55,7 +55,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
             case 5:
                 title = "Restart CLI Listener \(index)"
                 subtitle = "Global"
-                keywords = ["restart", "cli", "listener", "socket", "cmux"]
+                keywords = ["restart", "cli", "listener", "socket", "programa"]
             case 6:
                 title = "Show Notifications \(index)"
                 subtitle = "Notifications"
@@ -81,7 +81,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
             let keywords = CommandPaletteSwitcherSearchIndexer.keywords(
                 baseKeywords: ["workspace", "switch", "go", title],
                 metadata: CommandPaletteSwitcherSearchMetadata(
-                    directories: ["/Users/example/dev/cmuxterm-hq/worktrees/feature-\(index)-rename-tab"],
+                    directories: ["/Users/example/dev/programa-hq/worktrees/feature-\(index)-rename-tab"],
                     branches: ["feature/rename-tab-\(index)"],
                     ports: [3000 + (index % 20), 9200 + (index % 5)]
                 ),
@@ -669,7 +669,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                             id: workspaceID,
                             displayName: "Workspace Alpha",
                             metadata: CommandPaletteSwitcherSearchMetadata(
-                                directories: ["/Users/example/dev/cmuxterm"],
+                                directories: ["/Users/example/dev/programa"],
                                 branches: ["feature/search-speed"],
                                 ports: [3000]
                             ),
@@ -711,7 +711,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                             id: workspaceID,
                             displayName: "Workspace Beta",
                             metadata: CommandPaletteSwitcherSearchMetadata(
-                                directories: ["/Users/example/dev/cmuxterm"],
+                                directories: ["/Users/example/dev/programa"],
                                 branches: ["feature/search-speed"],
                                 ports: [3000]
                             ),

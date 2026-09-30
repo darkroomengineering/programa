@@ -208,7 +208,7 @@ extension ProgramaCLI {
                     if let labelArg { params["label"] = labelArg }
                     if let resolutionArg { params["resolution"] = resolutionArg }
 
-                    let payload = try ctx.client.sendV2(method: "agent.event", params: params)
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.agentEvent, params: params)
                     if ctx.jsonOutput {
                         print(self.jsonString(payload))
                     } else if let state = payload["state"] as? String {

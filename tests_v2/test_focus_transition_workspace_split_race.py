@@ -10,24 +10,24 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
-def _focused_surface(client: cmux, workspace_id: str) -> str:
+def _focused_surface(client: ProgramaClient, workspace_id: str) -> str:
     rows = client.list_surfaces(workspace=workspace_id)
     focused = [surface_id for _index, surface_id, is_focused in rows if is_focused]
     if len(focused) != 1:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"expected exactly one model-focused surface in {workspace_id}: {rows!r}"
         )
     return focused[0]
 
 
 def _wait_for_focus_convergence(
-    client: cmux,
+    client: ProgramaClient,
     *,
     workspace_id: str,
     surface_id: str,
@@ -55,11 +55,11 @@ def _wait_for_focus_convergence(
             return
         time.sleep(0.025)
 
-    raise cmuxError(f"focus transition did not converge: {last_state}")
+    raise ProgramaClientError(f"focus transition did not converge: {last_state}")
 
 
 def _assert_input_routes_only_to_target(
-    client: cmux,
+    client: ProgramaClient,
     *,
     target_surface_id: str,
     excluded_surface_ids: list[str],
@@ -74,7 +74,7 @@ def _assert_input_routes_only_to_target(
             break
         time.sleep(0.05)
     else:
-        raise cmuxError(f"typed input did not reach target surface {target_surface_id}")
+        raise ProgramaClientError(f"typed input did not reach target surface {target_surface_id}")
 
     wrongly_routed = [
         surface_id
@@ -82,7 +82,7 @@ def _assert_input_routes_only_to_target(
         if marker in client.read_terminal_text(surface_id)
     ]
     if wrongly_routed:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"typed input reached non-target surfaces {wrongly_routed}; target={target_surface_id}"
         )
 
@@ -90,7 +90,7 @@ def _assert_input_routes_only_to_target(
 def main() -> int:
     created_workspaces: list[str] = []
     try:
-        with cmux(SOCKET_PATH) as client:
+        with ProgramaClient(SOCKET_PATH) as client:
             workspace_a = client.new_workspace()
             workspace_b = client.new_workspace()
             created_workspaces.extend([workspace_a, workspace_b])
@@ -117,12 +117,12 @@ def main() -> int:
                 ) or {}
                 split_surface = str(split_result.get("surface_id") or "")
                 if not split_surface:
-                    raise cmuxError(f"surface.split returned no surface: {split_result!r}")
+                    raise ProgramaClientError(f"surface.split returned no surface: {split_result!r}")
 
                 if client.current_workspace() != workspace_b:
-                    raise cmuxError("background non-focus split stole workspace selection")
+                    raise ProgramaClientError("background non-focus split stole workspace selection")
                 if _focused_surface(client, workspace_a) != surface_a:
-                    raise cmuxError("background non-focus split stole model focus")
+                    raise ProgramaClientError("background non-focus split stole model focus")
 
                 # Do not sleep between selections: stale async work from B and the split must
                 # be rejected when the final transition returns to A.
@@ -151,7 +151,7 @@ def main() -> int:
                 )
 
     finally:
-        with cmux(SOCKET_PATH) as cleanup_client:
+        with ProgramaClient(SOCKET_PATH) as cleanup_client:
             for workspace_id in reversed(created_workspaces):
                 try:
                     cleanup_client.close_workspace(workspace_id)

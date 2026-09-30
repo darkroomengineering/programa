@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import palette_visible as _palette_visible
 
 
@@ -28,19 +28,19 @@ def _wait_until(predicate, timeout_s: float = 5.0, interval_s: float = 0.05, mes
         if predicate():
             return
         time.sleep(interval_s)
-    raise cmuxError(message)
+    raise ProgramaClientError(message)
 
 
-def _palette_results(client: cmux, window_id: str, limit: int = 20) -> dict:
+def _palette_results(client: ProgramaClient, window_id: str, limit: int = 20) -> dict:
     return client.command_palette_results(window_id=window_id, limit=limit)
 
 
-def _palette_input_selection(client: cmux, window_id: str) -> dict:
+def _palette_input_selection(client: ProgramaClient, window_id: str) -> dict:
     return client._call("debug.command_palette.rename_input.selection", {"window_id": window_id}) or {}
 
 
 def _wait_for_palette_input_caret_at_end(
-    client: cmux,
+    client: ProgramaClient,
     window_id: str,
     expected_text_length: int,
     message: str,
@@ -62,12 +62,12 @@ def _wait_for_palette_input_caret_at_end(
     _wait_until(_matches, timeout_s=timeout_s, message=message)
 
 
-def _results_contain_command(client: cmux, window_id: str, command_id: str, limit: int = 20) -> bool:
+def _results_contain_command(client: ProgramaClient, window_id: str, command_id: str, limit: int = 20) -> bool:
     rows = _palette_results(client, window_id, limit=limit).get("results") or []
     return any(str((row or {}).get("command_id") or "") == command_id for row in rows)
 
 
-def _set_palette_visible(client: cmux, window_id: str, visible: bool) -> None:
+def _set_palette_visible(client: ProgramaClient, window_id: str, visible: bool) -> None:
     if _palette_visible(client, window_id) == visible:
         return
     client._call("debug.command_palette.toggle", {"window_id": window_id})
@@ -79,7 +79,7 @@ def _set_palette_visible(client: cmux, window_id: str, visible: bool) -> None:
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as client:
+    with ProgramaClient(SOCKET_PATH) as client:
         client.activate_app()
         time.sleep(0.2)
 
@@ -129,10 +129,10 @@ def main() -> int:
         )
         switched_rows = (_palette_results(client, window_id, limit=12).get("results") or [])
         if not switched_rows:
-            raise cmuxError("switcher returned no rows for workspace query")
+            raise ProgramaClientError("switcher returned no rows for workspace query")
         top_id = str((switched_rows[0] or {}).get("command_id") or "")
         if not top_id.startswith("switcher."):
-            raise cmuxError(f"expected switcher row on top for cmd+p query, got: {switched_rows[0]}")
+            raise ProgramaClientError(f"expected switcher row on top for cmd+p query, got: {switched_rows[0]}")
 
         client.simulate_shortcut("enter")
         _wait_until(
@@ -163,10 +163,10 @@ def main() -> int:
 
         command_rows = (_palette_results(client, window_id, limit=8).get("results") or [])
         if not command_rows:
-            raise cmuxError("commands mode returned no rows")
+            raise ProgramaClientError("commands mode returned no rows")
         top_command_id = str((command_rows[0] or {}).get("command_id") or "")
         if not top_command_id.startswith("palette."):
-            raise cmuxError(f"expected command row in commands mode, got: {command_rows[0]}")
+            raise ProgramaClientError(f"expected command row in commands mode, got: {command_rows[0]}")
 
         # Repeating either shortcut should toggle visibility.
         client.simulate_shortcut("cmd+shift+p")

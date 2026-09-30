@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -66,7 +66,7 @@ def _largest_split_frame(layout_payload: dict) -> dict:
                 best_area = area
                 best = {"x": x, "y": y, "width": width, "height": height}
     if best is None:
-        raise cmuxError(f"layout_debug contains no usable split-view frame: {layout_payload}")
+        raise ProgramaClientError(f"layout_debug contains no usable split-view frame: {layout_payload}")
     return best
 
 
@@ -122,7 +122,7 @@ def _assert_same_frame(
     }
     shifted = {k: v for k, v in deltas.items() if v > EPSILON}
     if shifted:
-        raise cmuxError(
+        raise ProgramaClientError(
             "Container frame shifted "
             f"(workspace={workspace_index}, cycle={cycle}, phase={phase}, sample={sample}, "
             f"baseline={baseline}, current={current}, deltas={deltas}, epsilon={EPSILON}); "
@@ -133,20 +133,20 @@ def _assert_same_frame(
 def _assert_two_panes_left_right(layout_payload: dict, *, workspace_index: int, cycle: int, trace: list[str]) -> None:
     panes = _pane_frames_sorted_x(layout_payload)
     if len(panes) != 2:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"Expected exactly 2 panes in two-pane phase, got {len(panes)} "
             f"(workspace={workspace_index}, cycle={cycle}); panes={panes}; recent_actions={trace}"
         )
 
     left, right = panes[0], panes[1]
     if left["width"] <= 0.0 or left["height"] <= 0.0 or right["width"] <= 0.0 or right["height"] <= 0.0:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"Collapsed pane in two-pane phase (workspace={workspace_index}, cycle={cycle}): "
             f"left={left} right={right}; recent_actions={trace}"
         )
 
     if left["x"] >= right["x"]:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"Two-pane geometry is not left/right (workspace={workspace_index}, cycle={cycle}): "
             f"left={left} right={right}; recent_actions={trace}"
         )
@@ -165,10 +165,10 @@ def _selected_panel_by_pane(layout_payload: dict) -> dict[str, str]:
 def _rightmost_pane_id(layout_payload: dict) -> str:
     panes = _pane_frames_sorted_x(layout_payload)
     if len(panes) < 2:
-        raise cmuxError(f"Expected at least 2 panes to resolve rightmost pane: {panes}")
+        raise ProgramaClientError(f"Expected at least 2 panes to resolve rightmost pane: {panes}")
     pane_id = str(panes[-1].get("pane_id") or "")
     if not pane_id:
-        raise cmuxError(f"Rightmost pane is missing pane_id: {panes[-1]}")
+        raise ProgramaClientError(f"Rightmost pane is missing pane_id: {panes[-1]}")
     return pane_id
 
 
@@ -177,38 +177,38 @@ def _rightmost_panel_id(layout_payload: dict) -> str:
     selected = _selected_panel_by_pane(layout_payload)
     panel_id = str(selected.get(pane_id) or "")
     if not panel_id:
-        raise cmuxError(f"Missing selected panel for rightmost pane: pane_id={pane_id}, selected={selected}")
+        raise ProgramaClientError(f"Missing selected panel for rightmost pane: pane_id={pane_id}, selected={selected}")
     return panel_id
 
 
-def _safe_layout_debug(c: cmux, *, timeout_state: dict[str, int], context: str) -> dict:
+def _safe_layout_debug(c: ProgramaClient, *, timeout_state: dict[str, int], context: str) -> dict:
     for attempt in range(0, max(0, LAYOUT_TIMEOUT_RETRIES) + 1):
         try:
             return c.layout_debug()
-        except cmuxError as exc:
+        except ProgramaClientError as exc:
             if "timed out waiting for response" not in str(exc).lower():
                 raise
 
             timeout_state["count"] = timeout_state.get("count", 0) + 1
             count = timeout_state["count"]
             if count > max(0, MAX_LAYOUT_TIMEOUTS):
-                raise cmuxError(
+                raise ProgramaClientError(
                     f"Exceeded layout_debug timeout budget (count={count}, max={MAX_LAYOUT_TIMEOUTS}, context={context})"
                 ) from exc
 
             if attempt >= max(0, LAYOUT_TIMEOUT_RETRIES):
-                raise cmuxError(
+                raise ProgramaClientError(
                     f"layout_debug timed out after retries (attempts={attempt + 1}, count={count}, context={context})"
                 ) from exc
 
             if LAYOUT_TIMEOUT_RETRY_SLEEP_S > 0:
                 time.sleep(LAYOUT_TIMEOUT_RETRY_SLEEP_S)
 
-    raise cmuxError(f"layout_debug retry loop exhausted unexpectedly (context={context})")
+    raise ProgramaClientError(f"layout_debug retry loop exhausted unexpectedly (context={context})")
 
 
 def _sample_while(
-    c: cmux,
+    c: ProgramaClient,
     *,
     baseline: dict,
     deadline: float,
@@ -238,7 +238,7 @@ def _sample_while(
 
         panes_now = _pane_count(payload)
         if panes_now > 2:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"Observed >2 panes in strict two-pane fuzz "
                 f"(workspace={workspace_index}, cycle={cycle}, phase={phase}, panes={panes_now}); "
                 f"recent_actions={trace}"
@@ -250,7 +250,7 @@ def _sample_while(
 
 
 def _wait_for_panes(
-    c: cmux,
+    c: ProgramaClient,
     *,
     target_panes: int,
     baseline: dict,
@@ -285,7 +285,7 @@ def _wait_for_panes(
 
         panes_now = _pane_count(payload)
         if panes_now > 2:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"Observed >2 panes in strict two-pane fuzz while waiting "
                 f"(workspace={workspace_index}, cycle={cycle}, phase={phase}, panes={panes_now}); "
                 f"recent_actions={trace}"
@@ -296,7 +296,7 @@ def _wait_for_panes(
         if LAYOUT_POLL_SLEEP_S > 0:
             time.sleep(LAYOUT_POLL_SLEEP_S)
 
-    raise cmuxError(
+    raise ProgramaClientError(
         f"Timed out waiting for {target_panes} panes "
         f"(workspace={workspace_index}, cycle={cycle}, phase={phase}, sampled={sampled}, "
         f"last_panes={_pane_count(last or {})}, timeout_s={timeout_s}); recent_actions={trace}"
@@ -304,7 +304,7 @@ def _wait_for_panes(
 
 
 def _wait_for_single_pane_after_ctrl_d(
-    c: cmux,
+    c: ProgramaClient,
     *,
     baseline: dict,
     workspace_index: int,
@@ -341,7 +341,7 @@ def _wait_for_single_pane_after_ctrl_d(
 
         panes_now = _pane_count(payload)
         if panes_now > 2:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"Observed >2 panes in strict two-pane fuzz while waiting "
                 f"(workspace={workspace_index}, cycle={cycle}, phase={phase}, panes={panes_now}); "
                 f"recent_actions={trace}"
@@ -354,7 +354,7 @@ def _wait_for_single_pane_after_ctrl_d(
             retry_right_panel_id = _rightmost_panel_id(payload)
             try:
                 c.send_key_surface(retry_right_panel_id, "ctrl-d")
-            except cmuxError as exc:
+            except ProgramaClientError as exc:
                 # Pane/surface can disappear between layout sample and send call under heavy churn.
                 # Skip this retry tick and re-sample.
                 if "not_found" in str(exc).lower():
@@ -374,7 +374,7 @@ def _wait_for_single_pane_after_ctrl_d(
         if LAYOUT_POLL_SLEEP_S > 0:
             time.sleep(LAYOUT_POLL_SLEEP_S)
 
-    raise cmuxError(
+    raise ProgramaClientError(
         f"Timed out waiting for 1 pane after ctrl+d "
         f"(workspace={workspace_index}, cycle={cycle}, phase={phase}, sampled={sampled}, "
         f"extra_ctrl_d={extra_ctrl_d}, last_panes={_pane_count(last or {})}, timeout_s={timeout_s}); "
@@ -390,7 +390,7 @@ def main() -> int:
     total_extra_ctrl_d = 0
     timeout_state: dict[str, int] = {"count": 0}
 
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         c.activate_app()
 
         for workspace_index in range(1, WORKSPACES + 1):
@@ -403,7 +403,7 @@ def main() -> int:
             baseline = _container_frame(start)
             start_panes = _pane_count(start)
             if start_panes != 1:
-                raise cmuxError(f"New workspace did not start as single pane (workspace={workspace_index}, panes={start_panes})")
+                raise ProgramaClientError(f"New workspace did not start as single pane (workspace={workspace_index}, panes={start_panes})")
 
             for cycle in range(1, CYCLES_PER_WORKSPACE + 1):
                 total_cycles += 1

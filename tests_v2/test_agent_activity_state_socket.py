@@ -14,36 +14,36 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
-def _surface_agent_state(client: cmux, workspace_id: str, surface_id: str) -> object:
+def _surface_agent_state(client: ProgramaClient, workspace_id: str, surface_id: str) -> object:
     listed = client._call("surface.list", {"workspace_id": workspace_id}) or {}
     for surface in listed.get("surfaces") or []:
         if str(surface.get("id")) == surface_id:
             return surface.get("agent_state")
-    raise cmuxError(f"surface {surface_id} not found in surface.list: {listed}")
+    raise ProgramaClientError(f"surface {surface_id} not found in surface.list: {listed}")
 
 
-def _surface_agent_state_source(client: cmux, workspace_id: str, surface_id: str) -> object:
+def _surface_agent_state_source(client: ProgramaClient, workspace_id: str, surface_id: str) -> object:
     """Additive sibling field (screen-manifest detection, docs/plans/screen-manifest-detection.md)
     -- must never affect the exact-string `agent_state` assertions above/below this file."""
     listed = client._call("surface.list", {"workspace_id": workspace_id}) or {}
     for surface in listed.get("surfaces") or []:
         if str(surface.get("id")) == surface_id:
             return surface.get("agent_state_source")
-    raise cmuxError(f"surface {surface_id} not found in surface.list: {listed}")
+    raise ProgramaClientError(f"surface {surface_id} not found in surface.list: {listed}")
 
 
 def main() -> int:
     workspace_id = ""
 
     try:
-        with cmux(SOCKET_PATH) as client:
+        with ProgramaClient(SOCKET_PATH) as client:
             workspace_id = client.new_workspace()
             surfaces = client.list_surfaces(workspace_id)
             _must(bool(surfaces), f"new workspace should have at least one surface: {surfaces}")
@@ -82,7 +82,7 @@ def main() -> int:
                     "surface.report_agent_state",
                     {"workspace_id": workspace_id, "surface_id": surface_id, "state": "not-a-real-state"},
                 )
-            except cmuxError:
+            except ProgramaClientError:
                 rejected = True
             _must(rejected, "surface.report_agent_state should reject an unrecognized state value")
 
@@ -102,7 +102,7 @@ def main() -> int:
     finally:
         if workspace_id:
             try:
-                with cmux(SOCKET_PATH) as cleanup_client:
+                with ProgramaClient(SOCKET_PATH) as cleanup_client:
                     cleanup_client.close_workspace(workspace_id)
             except Exception:
                 pass

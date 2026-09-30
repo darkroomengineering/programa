@@ -759,7 +759,7 @@ class TabManager: ObservableObject {
     /// `closeRuntimeSurfaceWithConfirmation`, the v2 socket close handler).
     let closedTerminalUndoStore = ClosedTerminalUndoStore()
     private let initialWorkspaceGitProbeQueue = DispatchQueue(
-        label: "com.cmux.initial-workspace-git-probe",
+        label: "com.darkroom.programa.initial-workspace-git-probe",
         qos: .utility
     )
     /// The seam to core-owned concerns (git probes, port scanning). See
@@ -821,7 +821,6 @@ class TabManager: ObservableObject {
     // which owns the setup functions that mutate this state, can see it across files.
     var didSetupSplitCloseRightUITest = false
     var didSetupUITestFocusShortcuts = false
-    var didSetupChildExitSplitUITest = false
     var didSetupChildExitKeyboardUITest = false
     var uiTestCancellables = Set<AnyCancellable>()
 #endif
@@ -882,7 +881,6 @@ class TabManager: ObservableObject {
 #if DEBUG
         setupUITestFocusShortcutsIfNeeded()
         setupSplitCloseRightUITestIfNeeded()
-        setupChildExitSplitUITestIfNeeded()
         setupChildExitKeyboardUITestIfNeeded()
 #endif
     }

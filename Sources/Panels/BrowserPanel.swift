@@ -190,10 +190,10 @@ final class BrowserPanel: Panel, ObservableObject {
           return "cleared:noneditable";
         }
 
-        let id = active.getAttribute("data-cmux-addressbar-focus-id");
+        let id = active.getAttribute("data-programa-addressbar-focus-id");
         if (!id) {
-          id = "cmux-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
-          active.setAttribute("data-cmux-addressbar-focus-id", id);
+          id = "programa-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+          active.setAttribute("data-programa-addressbar-focus-id", id);
         }
 
         const state = { id, selectionStart: null, selectionEnd: null };
@@ -244,10 +244,10 @@ final class BrowserPanel: Panel, ObservableObject {
         };
 
         const ensureFocusId = (el) => {
-          let id = el.getAttribute("data-cmux-addressbar-focus-id");
+          let id = el.getAttribute("data-programa-addressbar-focus-id");
           if (!id) {
-            id = "cmux-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
-            el.setAttribute("data-cmux-addressbar-focus-id", id);
+            id = "programa-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+            el.setAttribute("data-programa-addressbar-focus-id", id);
           }
           return id;
         };
@@ -472,7 +472,7 @@ final class BrowserPanel: Panel, ObservableObject {
           return "no_state";
         }
 
-        const selector = '[data-cmux-addressbar-focus-id="' + state.id + '"]';
+        const selector = '[data-programa-addressbar-focus-id="' + state.id + '"]';
         const findTarget = (doc) => {
           if (!doc) return null;
           const direct = doc.querySelector(selector);

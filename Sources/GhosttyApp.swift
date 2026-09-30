@@ -217,7 +217,7 @@ class GhosttyApp {
     var effectiveTerminalBackgroundOpacity: Double {
         ProgramaGlassSettings.effectiveTerminalBackgroundOpacity(
             configuredOpacity: defaultBackgroundOpacity,
-            windowGlassEnabled: cmuxShouldUseTransparentBackgroundWindow()
+            windowGlassEnabled: programaShouldUseTransparentBackgroundWindow()
         )
     }
     private(set) var usesHostLayerBackground = true
@@ -658,7 +658,7 @@ class GhosttyApp {
             #endif
 
             // If the user config is invalid, prefer a minimal fallback configuration so
-            // cmux still launches with working terminals.
+            // programa still launches with working terminals.
             ghostty_config_free(primaryConfig)
 
             guard let fallbackConfig = ghostty_config_new() else {
@@ -669,7 +669,7 @@ class GhosttyApp {
             loadInlineGhosttyConfig(
                 "macos-background-from-layer = true",
                 into: fallbackConfig,
-                prefix: "cmux-layer-bg",
+                prefix: "programa-layer-bg",
                 logLabel: "layer background (fallback)"
             )
             usesHostLayerBackground = true
@@ -786,11 +786,11 @@ class GhosttyApp {
             loadInlineGhosttyConfig(
                 "macos-background-from-layer = false",
                 into: config,
-                prefix: "cmux-layer-bg-image-override",
+                prefix: "programa-layer-bg-image-override",
                 logLabel: "layer background image override"
             )
         } else {
-            // cmux provides the terminal background via backgroundView (CALayer)
+            // programa provides the terminal background via backgroundView (CALayer)
             // instead of the GPU full-screen bg pass, so the layer can provide
             // instant coverage during sidebar toggle and other layout transitions.
             //
@@ -800,7 +800,7 @@ class GhosttyApp {
             loadInlineGhosttyConfig(
                 "macos-background-from-layer = true",
                 into: config,
-                prefix: "cmux-layer-bg",
+                prefix: "programa-layer-bg",
                 logLabel: "layer background"
             )
         }
@@ -828,7 +828,7 @@ class GhosttyApp {
         loadInlineGhosttyConfig(
             lines,
             into: config,
-            prefix: "cmux-cjk-font-fallback",
+            prefix: "programa-cjk-font-fallback",
             logLabel: "CJK font fallback"
         )
     }
@@ -849,7 +849,7 @@ class GhosttyApp {
     ]
 
     /// Representative scalars used to detect whether the configured primary
-    /// font already covers the ranges cmux would otherwise auto-map.
+    /// font already covers the ranges programa would otherwise auto-map.
     private static let cjkCoverageSampleCharactersByRange: [String: [UniChar]] = [
         "U+3000-U+303F": [0x3001, 0x300C],
         "U+4E00-U+9FFF": [0x4E00, 0x65E5, 0x6C34],
@@ -939,7 +939,7 @@ class GhosttyApp {
         return mappings.isEmpty ? nil : mappings
     }
 
-    /// Returns only the CJK mappings cmux should auto-inject after respecting
+    /// Returns only the CJK mappings programa should auto-inject after respecting
     /// explicit user overrides and the glyph coverage of the configured
     /// primary font family.
     static func autoInjectedCJKFontMappings(
@@ -973,7 +973,7 @@ class GhosttyApp {
 
     /// Checks whether the user's Ghostty config files already contain
     /// a `font-codepoint-map` entry covering CJK ranges. Also checks
-    /// application-support config paths that cmux may load at runtime.
+    /// application-support config paths that programa may load at runtime.
     static func userConfigContainsCJKCodepointMap(
         configPaths: [String] = loadedCJKScanPaths()
     ) -> Bool {
@@ -1075,7 +1075,7 @@ class GhosttyApp {
         return summary
     }
 
-    /// Returns the top-level config paths that cmux will actually load before
+    /// Returns the top-level config paths that programa will actually load before
     /// recursive `config-file` processing.
     static func loadedCJKScanPaths(
         currentBundleIdentifier: String? = Bundle.main.bundleIdentifier,
@@ -1093,7 +1093,7 @@ class GhosttyApp {
               !bundleId.isEmpty,
               let appSupportDirectory else { return paths }
 
-        let appSupportConfigURLs = cmuxAppSupportConfigURLs(
+        let appSupportConfigURLs = programaAppSupportConfigURLs(
             currentBundleIdentifier: bundleId,
             appSupportDirectory: appSupportDirectory
         )
@@ -1122,7 +1122,7 @@ class GhosttyApp {
         return size.intValue
     }
 
-    /// Scans a single config file for font settings relevant to cmux's
+    /// Scans a single config file for font settings relevant to programa's
     /// injected CJK fallback and updates the pending recursive config-file
     /// queue using Ghostty's repeatable path semantics.
     private static func scanFontConfigFile(
@@ -1220,7 +1220,7 @@ class GhosttyApp {
         return true
     }
 
-    static func cmuxAppSupportConfigURLs(
+    static func programaAppSupportConfigURLs(
         currentBundleIdentifier: String?,
         appSupportDirectory: URL,
         fileManager: FileManager = .default
@@ -1276,7 +1276,7 @@ class GhosttyApp {
         guard let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
         guard let currentBundleIdentifier = Bundle.main.bundleIdentifier,
               !currentBundleIdentifier.isEmpty else { return }
-        let urls = Self.cmuxAppSupportConfigURLs(
+        let urls = Self.programaAppSupportConfigURLs(
             currentBundleIdentifier: currentBundleIdentifier,
             appSupportDirectory: appSupport,
             fileManager: fm
@@ -1291,7 +1291,7 @@ class GhosttyApp {
 
 #if DEBUG
         dlog(
-            "loaded cmux app support ghostty config from: \(urls.map(\.path).joined(separator: ", "))"
+            "loaded programa app support ghostty config from: \(urls.map(\.path).joined(separator: ", "))"
         )
 #endif
         #endif
@@ -1833,7 +1833,7 @@ class GhosttyApp {
         if action.tag == GHOSTTY_ACTION_SHOW_CHILD_EXITED {
             // The child (shell) exited. Ghostty will fall back to printing
             // "Process exited. Press any key..." into the terminal unless the host
-            // handles this action. For cmux, the correct behavior is to close
+            // handles this action. For programa, the correct behavior is to close
             // the panel immediately (no prompt).
 #if DEBUG
             dlog(
@@ -2304,7 +2304,7 @@ class GhosttyApp {
             }
             if !BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowser() {
                 #if DEBUG
-                dlog("link.openURL cmuxBrowser=disabled, opening externally url=\(target.url)")
+                dlog("link.openURL programaBrowser=disabled, opening externally url=\(target.url)")
                 #endif
                 return performOnMain {
                     BrowserLinkOpenSettings.openExternally(target.url)
@@ -2417,7 +2417,7 @@ class GhosttyApp {
 
     private func applyBackgroundToKeyWindow() {
         guard let window = activeMainWindow() else { return }
-        if cmuxShouldUseClearWindowBackground(for: defaultBackgroundOpacity) {
+        if programaShouldUseClearWindowBackground(for: defaultBackgroundOpacity) {
             window.backgroundColor = programaTransparentWindowBaseColor()
             window.isOpaque = false
             applyWindowBlurIfNeeded(window)
@@ -2447,12 +2447,12 @@ class GhosttyApp {
     private func activeMainWindow() -> NSWindow? {
         let keyWindow = NSApp.keyWindow
         if let raw = keyWindow?.identifier?.rawValue,
-           raw == "cmux.main" || raw.hasPrefix("cmux.main.") {
+           raw == "programa.main" || raw.hasPrefix("programa.main.") {
             return keyWindow
         }
         return NSApp.windows.first(where: { window in
             guard let raw = window.identifier?.rawValue else { return false }
-            return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+            return raw == "programa.main" || raw.hasPrefix("programa.main.")
         })
     }
 
@@ -2467,7 +2467,7 @@ class GhosttyApp {
         let sequence = backgroundLogSequence
         backgroundLogLock.unlock()
         let line =
-            "\(timestamp) seq=\(sequence) t+\(String(format: "%.3f", uptimeMs))ms thread=\(threadLabel) frame60=\(frame60) frame120=\(frame120) cmux bg: \(message)\n"
+            "\(timestamp) seq=\(sequence) t+\(String(format: "%.3f", uptimeMs))ms thread=\(threadLabel) frame60=\(frame60) frame120=\(frame120) programa bg: \(message)\n"
         backgroundLogWriter.append(line)
     }
 

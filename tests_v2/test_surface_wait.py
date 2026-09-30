@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError  # noqa: E402
+from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
 from v2_support import must as _must
 from pane_resize_test_support import (  # noqa: E402
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
@@ -36,7 +36,7 @@ def _new_marker(label: str) -> str:
 
 
 def _surface_wait(
-    client: cmux,
+    client: ProgramaClient,
     workspace_id: str,
     surface_id: str,
     *,
@@ -54,7 +54,7 @@ def _surface_wait(
     return client._call("surface.wait", params, timeout_s=(timeout_ms / 1000.0) + 5.0) or {}
 
 
-def _test_pattern_resolves_after_delay(client: cmux, workspace_id: str, surface_id: str) -> None:
+def _test_pattern_resolves_after_delay(client: ProgramaClient, workspace_id: str, surface_id: str) -> None:
     """A command that sleeps 2s before printing its marker should still resolve the wait --
     proves surface.wait is actually watching, not just checking once and giving up."""
     marker = _new_marker("DELAYED")
@@ -77,7 +77,7 @@ def _test_pattern_resolves_after_delay(client: cmux, workspace_id: str, surface_
     _must(1.5 <= elapsed <= 7.5, f"expected ~2s wait, took {elapsed:.2f}s")
 
 
-def _test_pattern_already_present_resolves_immediately(client: cmux, workspace_id: str, surface_id: str) -> None:
+def _test_pattern_already_present_resolves_immediately(client: ProgramaClient, workspace_id: str, surface_id: str) -> None:
     """A marker already sitting in scrollback when the call arrives must be caught by the
     atomic 'already satisfied?' check -- not missed, and not force the caller to actually
     block for it (waited: false distinguishes this from a real wait)."""
@@ -97,7 +97,7 @@ def _test_pattern_already_present_resolves_immediately(client: cmux, workspace_i
     _must(elapsed < 1.0, f"an already-satisfied wait should return promptly, took {elapsed:.2f}s")
 
 
-def _test_concurrent_marker_is_not_missed(client: cmux, socket_path: str, workspace_id: str, surface_id: str) -> None:
+def _test_concurrent_marker_is_not_missed(client: ProgramaClient, socket_path: str, workspace_id: str, surface_id: str) -> None:
     """The literal 'a parallel state change can't be missed' case from #166: fire the marker
     from a background thread with only a small jitter while the main thread issues
     surface.wait essentially concurrently, so the two race in wall-clock time. Whichever
@@ -111,7 +111,7 @@ def _test_concurrent_marker_is_not_missed(client: cmux, socket_path: str, worksp
         # request/response pairs on the same socket ("Mismatched response id" on CI).
         try:
             time.sleep(0.05)
-            with cmux(socket_path) as bg_client:
+            with ProgramaClient(socket_path) as bg_client:
                 bg_client.send_surface(surface_id, f"echo {marker}\n")
         except Exception as exc:  # pragma: no cover - surfaced via errors list
             errors.append(exc)
@@ -127,21 +127,21 @@ def _test_concurrent_marker_is_not_missed(client: cmux, socket_path: str, worksp
     _must(result.get("match") == marker, f"race case: expected match={marker!r}, got {result}")
 
 
-def _test_pattern_timeout(client: cmux, workspace_id: str, surface_id: str) -> None:
+def _test_pattern_timeout(client: ProgramaClient, workspace_id: str, surface_id: str) -> None:
     """A pattern that never appears must time out cleanly (not hang) within roughly the
     requested budget."""
     marker = _new_marker("NEVER")
     started = time.time()
     try:
         _surface_wait(client, workspace_id, surface_id, pattern=marker, timeout_ms=1_500)
-        raise cmuxError("expected surface.wait to time out, but it returned success")
-    except cmuxError as exc:
+        raise ProgramaClientError("expected surface.wait to time out, but it returned success")
+    except ProgramaClientError as exc:
         _must("timeout" in str(exc).lower(), f"expected a timeout error, got: {exc}")
     elapsed = time.time() - started
     _must(elapsed < 4.0, f"timeout case took too long: {elapsed:.2f}s")
 
 
-def _test_exit_condition(client: cmux, workspace_id: str) -> None:
+def _test_exit_condition(client: ProgramaClient, workspace_id: str) -> None:
     """Light coverage for the `exit` condition on a dedicated second surface, so it doesn't
     interfere with (or get torn down by) the pattern-focused surface used above."""
     surface_id = client.new_surface(panel_type="terminal")
@@ -158,7 +158,7 @@ def _test_exit_condition(client: cmux, workspace_id: str) -> None:
 def _run_once(socket_path: str) -> int:
     workspace_id = ""
     try:
-        with cmux(socket_path) as client:
+        with ProgramaClient(socket_path) as client:
             workspace_id = client.new_workspace()
             client.select_workspace(workspace_id)
 
@@ -181,7 +181,7 @@ def _run_once(socket_path: str) -> int:
     finally:
         if workspace_id:
             try:
-                with cmux(socket_path) as cleanup_client:
+                with ProgramaClient(socket_path) as cleanup_client:
                     cleanup_client.close_workspace(workspace_id)
             except Exception:
                 pass
@@ -196,7 +196,7 @@ def main() -> int:
     for socket_path in DEFAULT_SOCKET_PATHS:
         try:
             return _run_once(socket_path)
-        except cmuxError as exc:
+        except ProgramaClientError as exc:
             text = str(exc)
             recoverable = ("Failed to connect", "Socket not found")
             if not any(token in text for token in recoverable):
@@ -206,7 +206,7 @@ def main() -> int:
 
     if last_error is not None:
         raise last_error
-    raise cmuxError("No socket candidates configured")
+    raise ProgramaClientError("No socket candidates configured")
 
 
 if __name__ == "__main__":

@@ -44,7 +44,7 @@ instead of the one you meant, the environment is overriding the choice; see
 Common symptoms:
 
 - `Access denied — only processes started inside Programa can connect`: the socket is in the
-  default `cmuxOnly` mode and the caller was not started from a Programa terminal. Change
+  default `programaOnly` mode and the caller was not started from a Programa terminal. Change
   `automation.socketControlMode` or run the command from inside Programa.
 - `auth_required` or `auth_failed`: the socket is in `password` mode. Pass `--password`, or set
   `PROGRAMA_SOCKET_PASSWORD`.

@@ -154,19 +154,7 @@ public final class BonsplitController {
         }
 
         // Create internal TabItem
-        let tabItem = TabItem(
-            id: tabId.id,
-            title: title,
-            hasCustomTitle: hasCustomTitle,
-            icon: icon,
-            iconImageData: iconImageData,
-            kind: kind,
-            isDirty: isDirty,
-            showsNotificationBadge: showsNotificationBadge,
-            isLoading: isLoading,
-            isPinned: isPinned,
-            customColorHex: customColorHex
-        )
+        let tabItem = TabItem(from: tab)
         internalController.addTab(tabItem, toPane: PaneID(id: targetPane.id), atIndex: insertIndex)
 
         // Notify delegate

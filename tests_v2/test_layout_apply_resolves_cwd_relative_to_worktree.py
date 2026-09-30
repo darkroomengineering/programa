@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -76,7 +76,7 @@ def _write_layout_fixture(name: str) -> Path:
     return path
 
 
-def _pwd_via_terminal(c: cmux, surface_id: str, timeout_s: float = 8.0) -> str:
+def _pwd_via_terminal(c: ProgramaClient, surface_id: str, timeout_s: float = 8.0) -> str:
     token = f"WORKTREE_CWD_CHECK_{int(time.time() * 1000)}"
     c.send_surface(surface_id, f"printf '{token}:%s\\n' \"$(pwd)\"\\n")
 
@@ -88,7 +88,7 @@ def _pwd_via_terminal(c: cmux, surface_id: str, timeout_s: float = 8.0) -> str:
             if line.startswith(f"{token}:"):
                 return line[len(token) + 1:].strip()
         time.sleep(0.1)
-    raise cmuxError(f"Timed out waiting for pwd marker {token!r} in surface output: {last_text!r}")
+    raise ProgramaClientError(f"Timed out waiting for pwd marker {token!r} in surface output: {last_text!r}")
 
 
 def main() -> int:
@@ -105,7 +105,7 @@ def main() -> int:
         repo_path = _create_git_repo_with_subdir(temp_root)
         layout_path = _write_layout_fixture(layout_name)
 
-        with cmux(SOCKET_PATH) as c:
+        with ProgramaClient(SOCKET_PATH) as c:
             payload = c._call(
                 "worktree.create",
                 {
@@ -139,7 +139,7 @@ def main() -> int:
     finally:
         if created_workspace:
             try:
-                with cmux(SOCKET_PATH) as c:
+                with ProgramaClient(SOCKET_PATH) as c:
                     c._call(
                         "worktree.remove",
                         {"repo": str(temp_root / "repo"), "branch": "feature-layout-relcwd"},

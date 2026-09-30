@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Regression test: `cmux --version` must not scan huge sibling app lists just to
+Regression test: `programa --version` must not scan huge sibling app lists just to
 resolve optional version metadata.
 """
 
@@ -64,19 +64,19 @@ def copy_runtime_frameworks(cli_path: str, fixture_contents: str) -> None:
 
 
 def build_fixture(root: str, cli_path: str) -> str:
-    app_path = os.path.join(root, "cmux.app")
+    app_path = os.path.join(root, "programa.app")
     contents_path = os.path.join(app_path, "Contents")
     resources_path = os.path.join(contents_path, "Resources")
     bin_path = os.path.join(resources_path, "bin")
     os.makedirs(bin_path, exist_ok=True)
 
-    fixture_cli = os.path.join(bin_path, "cmux")
+    fixture_cli = os.path.join(bin_path, "programa")
     shutil.copy2(cli_path, fixture_cli)
     copy_runtime_frameworks(cli_path, contents_path)
 
     info = {
-        "CFBundleExecutable": "cmux",
-        "CFBundleIdentifier": "test.cmux.version-memory-guard",
+        "CFBundleExecutable": "programa",
+        "CFBundleIdentifier": "test.programa.version-memory-guard",
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": "9.9.9",
         "CFBundleVersion": "999",
@@ -150,12 +150,12 @@ def main() -> int:
         print(f"FAIL: {exc}")
         return 1
 
-    with tempfile.TemporaryDirectory(prefix="cmux-version-memory-guard-") as root:
+    with tempfile.TemporaryDirectory(prefix="programa-version-memory-guard-") as root:
         fixture_cli = build_fixture(root, cli_path)
         result = run_with_limits(fixture_cli, "--version")
 
     if result["failure_reason"]:
-        print("FAIL: `cmux --version` exceeded runtime guard")
+        print("FAIL: `programa --version` exceeded runtime guard")
         print(f"reason={result['failure_reason']}")
         print(f"elapsed={result['elapsed']:.2f}s")
         print(f"peak_rss_kb={result['peak_rss_kb']}")
@@ -164,7 +164,7 @@ def main() -> int:
         return 1
 
     if result["exit_code"] != 0:
-        print("FAIL: `cmux --version` exited non-zero")
+        print("FAIL: `programa --version` exited non-zero")
         print(f"exit={result['exit_code']}")
         print(f"stdout={result['stdout']}")
         print(f"stderr={result['stderr']}")
@@ -177,7 +177,7 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: `cmux --version` exits within memory/time limits "
+        "PASS: `programa --version` exits within memory/time limits "
         f"(peak_rss_kb={result['peak_rss_kb']}, elapsed={result['elapsed']:.2f}s)"
     )
     return 0

@@ -631,8 +631,8 @@ private func browserFindCommandEquivalent(for event: NSEvent) -> BrowserFindComm
     }
 }
 
-/// For browser content, let the page try the Find command family before cmux's menu fallback.
-/// This preserves native web-app shortcuts like VS Code's Cmd+F while still allowing cmux's
+/// For browser content, let the page try the Find command family before programa's menu fallback.
+/// This preserves native web-app shortcuts like VS Code's Cmd+F while still allowing programa's
 /// browser find overlay to keep owning its visible Find UI shortcuts.
 func shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
     _ event: NSEvent,
@@ -660,27 +660,27 @@ func shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
     return true
 }
 
-func cmuxOwningGhosttyView(for responder: NSResponder?) -> GhosttyNSView? {
+func programaOwningGhosttyView(for responder: NSResponder?) -> GhosttyNSView? {
     guard let responder else { return nil }
     if let ghosttyView = responder as? GhosttyNSView {
         return ghosttyView
     }
 
     if let view = responder as? NSView,
-       let ghosttyView = cmuxOwningGhosttyView(for: view) {
+       let ghosttyView = programaOwningGhosttyView(for: view) {
         return ghosttyView
     }
 
     if let textView = responder as? NSTextView {
         if textView.isFieldEditor,
            let ownerView = programaFieldEditorOwnerView(textView),
-           let ghosttyView = cmuxOwningGhosttyView(for: ownerView) {
+           let ghosttyView = programaOwningGhosttyView(for: ownerView) {
             return ghosttyView
         }
 
         if !textView.isFieldEditor,
            let delegateView = textView.delegate as? NSView,
-           let ghosttyView = cmuxOwningGhosttyView(for: delegateView) {
+           let ghosttyView = programaOwningGhosttyView(for: delegateView) {
             return ghosttyView
         }
     }
@@ -691,7 +691,7 @@ func cmuxOwningGhosttyView(for responder: NSResponder?) -> GhosttyNSView? {
             return ghosttyView
         }
         if let view = next as? NSView,
-           let ghosttyView = cmuxOwningGhosttyView(for: view) {
+           let ghosttyView = programaOwningGhosttyView(for: view) {
             return ghosttyView
         }
         current = next.nextResponder
@@ -714,7 +714,7 @@ private func programaFieldEditorOwnerView(_ editor: NSTextView) -> NSView? {
     return editor.superview
 }
 
-private func cmuxOwningGhosttyView(for view: NSView) -> GhosttyNSView? {
+private func programaOwningGhosttyView(for view: NSView) -> GhosttyNSView? {
     if let ghosttyView = view as? GhosttyNSView {
         return ghosttyView
     }
@@ -848,9 +848,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let sidebarState: SidebarState
         let sidebarSelectionState: SidebarSelectionState
         weak var window: NSWindow?
-        // SwiftUI owns the primary window; keep it alive while it is ordered out.
-        var hiddenWindow: NSWindow?
-        var hiddenAt: Date?
         weak var observedWindow: NSWindow?
         var willCloseObserver: NSObjectProtocol?
         var willCloseObserverGeneration: UUID?
@@ -971,11 +968,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         method_exchangeImplementations(originalMethod, swizzledMethod)
     }()
-    private static let didInstallWindowCloseSwizzle: Void = {
-        guard let original = class_getInstanceMethod(NSWindow.self, #selector(NSWindow.close)),
-              let replacement = class_getInstanceMethod(NSWindow.self, #selector(NSWindow.programa_close)) else { return }
-        method_exchangeImplementations(original, replacement)
-    }()
     private static let didInstallApplicationSendEventSwizzle: Void = {
         let targetClass: AnyClass = NSApplication.self
         let originalSelector = #selector(NSApplication.sendEvent(_:))
@@ -1054,7 +1046,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     var mainWindowContexts: [ObjectIdentifier: MainWindowContext] = [:]
-    private var disposingMainWindows: Set<ObjectIdentifier> = []
     private var mainWindowControllers: [MainWindowController] = []
 
     /// Tracks the cascade point for new windows, matching Ghostty's upstream algorithm.
@@ -1069,7 +1060,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var startupEndedHiddenSessionIds = Set<String>()
     var isApplyingStartupSessionRestore = false
     let sessionPersistenceQueue = DispatchQueue(
-        label: "com.cmuxterm.app.sessionPersistence",
+        label: "com.darkroom.programa.app.sessionPersistence",
         qos: .utility
     )
     var sessionSnapshotWriter: @Sendable (AppSessionSnapshot) -> Bool = {
@@ -1080,7 +1071,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     // `SessionAutosaveCoordinator.configure` for why this two-step exists.
     let sessionAutosave = SessionAutosaveCoordinator(
         sessionPersistenceQueue: DispatchQueue(
-            label: "com.cmuxterm.app.sessionPersistence.autosave-placeholder",
+            label: "com.darkroom.programa.app.sessionPersistence.autosave-placeholder",
             qos: .utility
         ),
         snapshotProvider: { _ in nil },
@@ -1089,7 +1080,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         isRunningUnderXCTest: { false }
     )
     private nonisolated static let launchServicesRegistrationQueue = DispatchQueue(
-        label: "com.cmuxterm.app.launchServicesRegistration",
+        label: "com.darkroom.programa.app.launchServicesRegistration",
         qos: .utility
     )
     private nonisolated static func enqueueLaunchServicesRegistrationWork(_ work: @escaping @Sendable () -> Void) {
@@ -1805,10 +1796,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // sessions silently. Say what happened.
             notifyUncleanShutdownRecovery()
         }
-        // Windows the user had closed before quitting are not shown again: their escrowed
-        // shells are ended here, before the orphan reconciler below could revive them into a
-        // recovery window. Until 2026-09-18 they were restored as ordinary visible windows,
-        // so every window ever closed with the red button came back on the next launch.
+        // Windows flagged closed in the snapshot are not shown again: their escrowed shells
+        // are ended here, before the orphan reconciler below could revive them into a
+        // recovery window.
         let windowsToRestore = startupSnapshot.map { SessionPersistenceStore.windowsToRestore(from: $0) } ?? []
         if let startupSnapshot {
             endShellsOfHiddenWindows(SessionPersistenceStore.hiddenWindows(from: startupSnapshot))
@@ -1896,10 +1886,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     /// Ends the shells of windows the user had closed before the previous run ended.
-    /// `preserveMainWindowOnClose` keeps a closed window's PTYs alive so the Dock can reopen
-    /// it in the same run, and quit escrows them like any other session -- but a closed
-    /// window must not come back on relaunch, and without this the orphan reconciler would
-    /// revive those shells into a recovery window instead. Each session is retrieved from the
+    /// Snapshots written by older builds flag closed windows `isHidden` and their PTYs were
+    /// escrowed at quit. A closed window must not come back on relaunch, and without this the
+    /// orphan reconciler would revive those shells into a recovery window instead. Each session is retrieved from the
     /// holder exactly like a reattach, then hung up (SIGHUP to the child, master fd closed)
     /// and its WAL directory removed. Runs synchronously on the main actor at launch, before
     /// any window restore, with the same per-session retrieve timeout a reattach pays.
@@ -2783,7 +2772,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     struct WindowMoveTarget: Identifiable {
         let windowId: UUID
         let label: String
-        let tabManager: TabManager
         let isCurrentWindow: Bool
 
         var id: UUID { windowId }
@@ -2821,12 +2809,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let orderedSummaries = orderedMainWindowSummaries(referenceWindowId: referenceWindowId)
         let labels = windowLabelsById(orderedSummaries: orderedSummaries, referenceWindowId: referenceWindowId)
         return orderedSummaries.compactMap { summary in
-            guard let manager = tabManagerFor(windowId: summary.windowId) else { return nil }
+            guard tabManagerFor(windowId: summary.windowId) != nil else { return nil }
             let label = labels[summary.windowId] ?? "Window"
             return WindowMoveTarget(
                 windowId: summary.windowId,
                 label: label,
-                tabManager: manager,
                 isCurrentWindow: summary.windowId == referenceWindowId
             )
         }
@@ -3598,7 +3585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         _ responder: NSResponder,
         in window: NSWindow
     ) -> Bool {
-        if let ghosttyView = cmuxOwningGhosttyView(for: responder) {
+        if let ghosttyView = programaOwningGhosttyView(for: responder) {
             if ghosttyView.window !== window {
                 return false
             }
@@ -3801,54 +3788,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return true
     }
 
-    /// Explicit workspace/panel and socket disposal still ends the owned sessions.
+    /// Closing a main window frees it: its workspaces and sessions end with it.
     func disposeMainWindow(_ window: NSWindow) {
-        let key = ObjectIdentifier(window)
-        guard disposingMainWindows.insert(key).inserted else { return }
-        defer { disposingMainWindows.remove(key) }
-        contextForMainTerminalWindow(window)?.hiddenWindow = nil
         window.close()
-    }
-
-    /// Ordinary window close hides the UI without destroying its workspaces or PTYs.
-    func preserveMainWindowOnClose(_ window: NSWindow) -> Bool {
-        guard !isTerminatingApp,
-              !disposingMainWindows.contains(ObjectIdentifier(window)),
-              let context = contextForMainTerminalWindow(window) else { return false }
-        context.hiddenWindow = window
-        context.hiddenAt = Date()
-        NotificationCenter.default.post(
-            name: .commandPaletteDismissRequested,
-            object: window,
-            userInfo: ["restoreFocus": false]
-        )
-        teardownCommandPaletteState(for: context.windowId)
-        dismissNotificationsPopoverIfShown()
-        if let panelId = browserAddressBarFocusedPanelId,
-           context.tabManager.tabs.contains(where: { $0.panels[panelId] != nil }) {
-            browserAddressBarFocusedPanelId = nil
-            stopBrowserOmnibarSelectionRepeat()
-        }
-        persistWindowGeometry(from: window)
-        window.orderOut(nil)
-        _ = saveSessionSnapshot(includeScrollback: false)
-        return true
-    }
-
-    @discardableResult
-    func reopenMostRecentlyHiddenMainWindow(onlyIfNoVisibleMainWindows: Bool = true) -> Bool {
-        if onlyIfNoVisibleMainWindows,
-           mainWindowContexts.values.contains(where: {
-               guard let window = $0.window else { return false }
-               return window.isVisible || window.isMiniaturized
-           }) { return false }
-        guard let context = mainWindowContexts.values
-            .filter({ $0.hiddenWindow != nil })
-            .max(by: { ($0.hiddenAt ?? .distantPast) < ($1.hiddenAt ?? .distantPast) }),
-              let window = context.hiddenWindow else { return false }
-        CommandPaletteController.windowLifecycle.reset(windowId: context.windowId)
-        bringToFront(window)
-        return window.isVisible
     }
 
     private func orderedMainWindowSummaries(referenceWindowId: UUID?) -> [MainWindowSummary] {
@@ -3953,7 +3895,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
            let window = ctx.window {
             return window
         }
-        let expectedIdentifier = "cmux.main.\(windowId.uuidString)"
+        let expectedIdentifier = "programa.main.\(windowId.uuidString)"
         return NSApp.windows.first(where: { $0.identifier?.rawValue == expectedIdentifier })
     }
 
@@ -3970,7 +3912,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func mainWindowId(from window: NSWindow) -> UUID? {
         guard let raw = window.identifier?.rawValue else { return nil }
-        let prefix = "cmux.main."
+        let prefix = "programa.main."
         guard raw.hasPrefix(prefix) else { return nil }
         let suffix = String(raw.dropFirst(prefix.count))
         return UUID(uuidString: suffix)
@@ -4106,8 +4048,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return context.windowId
         }
         guard let rawIdentifier = window.identifier?.rawValue,
-              rawIdentifier.hasPrefix("cmux.main.") else { return nil }
-        let idPart = String(rawIdentifier.dropFirst("cmux.main.".count))
+              rawIdentifier.hasPrefix("programa.main.") else { return nil }
+        let idPart = String(rawIdentifier.dropFirst("programa.main.".count))
         return UUID(uuidString: idPart)
     }
 
@@ -4364,7 +4306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let responder = targetWindow?.firstResponder
             ?? NSApp.keyWindow?.firstResponder
             ?? NSApp.mainWindow?.firstResponder
-        guard let ghosttyView = cmuxOwningGhosttyView(for: responder),
+        guard let ghosttyView = programaOwningGhosttyView(for: responder),
               let workspaceId = ghosttyView.tabId,
               let panelId = ghosttyView.terminalSurface?.id,
               let manager = resolveShortcutTabManager(for: workspaceId, preferredWindow: targetWindow) else {
@@ -4478,14 +4420,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     @objc func openNewMainWindow(_ sender: Any?) {
-        if reopenMostRecentlyHiddenMainWindow() { return }
         _ = createMainWindow()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        // AppKit's flag includes Settings and other auxiliary windows.
-        if reopenMostRecentlyHiddenMainWindow() { return false }
-        return true
+        true
     }
 
     /// Shows the "Open Folder" panel and creates a workspace for the selected directory.
@@ -4989,7 +4928,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if shortcutEventHasAddressableWindow(event) {
             if let eventWindow = resolvedShortcutEventWindow(event),
                programaWindowShouldOwnCloseShortcut(eventWindow) {
-                // Auxiliary cmux windows do not own a terminal tab manager. Let them fall back
+                // Auxiliary programa windows do not own a terminal tab manager. Let them fall back
                 // to the active main terminal window so app shortcuts like Cmd+W still route.
             } else {
 #if DEBUG
@@ -5778,7 +5717,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     static func installWindowResponderSwizzlesForTesting() {
-        _ = didInstallWindowCloseSwizzle
         _ = didInstallWindowKeyEquivalentSwizzle
         _ = didInstallWindowFirstResponderSwizzle
         _ = didInstallWindowSendEventSwizzle
@@ -5797,7 +5735,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     private func installWindowResponderSwizzles() {
-        _ = Self.didInstallWindowCloseSwizzle
         _ = Self.didInstallApplicationSendEventSwizzle
         _ = Self.didInstallWindowKeyEquivalentSwizzle
         _ = Self.didInstallWindowFirstResponderSwizzle
@@ -6296,7 +6233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let commandPaletteEffectiveInTargetWindow = commandPaletteState.isEffectiveInTargetWindow
         let terminalHasMarkedTextInEventWindow = !normalizedFlags.contains(.command)
             && resolvedEventWindow.flatMap {
-                cmuxOwningGhosttyView(for: $0.firstResponder)
+                programaOwningGhosttyView(for: $0.firstResponder)
             }?.hasMarkedText() == true
 
 #if DEBUG
@@ -6479,7 +6416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // (e.g., split that doesn't properly blur the address bar). If the first responder
         // is a terminal surface, the address bar can't be focused.
         if browserAddressBarFocusedPanelId != nil,
-           cmuxOwningGhosttyView(for: NSApp.keyWindow?.firstResponder) != nil {
+           programaOwningGhosttyView(for: NSApp.keyWindow?.firstResponder) != nil {
 #if DEBUG
             let stalePanelToken = browserAddressBarFocusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
             let firstResponderType = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
@@ -6884,7 +6821,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func handleNewTabShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .newTab) else { return nil }
-        if reopenMostRecentlyHiddenMainWindow() { return true }
 #if DEBUG
         dlog("shortcut.action name=newWorkspace \(debugShortcutRouteSnapshot(event: event))")
 #endif
@@ -7059,7 +6995,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private func handleCloseOtherTabsInPaneShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .closeOtherTabsInPane) else { return nil }
         if let targetWindow = event.window ?? NSApp.keyWindow ?? NSApp.mainWindow,
-           targetWindow.identifier?.rawValue == "cmux.settings" {
+           targetWindow.identifier?.rawValue == "programa.settings" {
             targetWindow.performClose(nil)
         } else {
             let targetWindow = event.window ?? NSApp.keyWindow ?? NSApp.mainWindow
@@ -8858,10 +8794,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func setActiveMainWindow(_ window: NSWindow) {
         guard let context = contextForMainTerminalWindow(window) else { return }
-        if window.isVisible {
-            context.hiddenWindow = nil
-            context.hiddenAt = nil
-        }
 #if DEBUG
         let beforeManagerToken = debugManagerToken(tabManager)
 #endif
@@ -8938,6 +8870,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         teardownMainWindowContext(removed)
+        releaseClosedMainWindowContent(window)
 
         // During app termination we already persisted a full snapshot (with scrollback)
         // in applicationShouldTerminate/applicationWillTerminate. Saving again here would
@@ -8952,12 +8885,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
     }
 
+    /// Drops the hosting view of a closed main window so its SwiftUI graph (and the
+    /// TabManager, workspaces and bonsplit controllers it observes) is freed even if
+    /// AppKit or SwiftUI keeps the NSWindow itself alive a little longer.
+    private func releaseClosedMainWindowContent(_ window: NSWindow) {
+        guard !isTerminatingApp else { return }
+        DispatchQueue.main.async { [weak window] in
+            window?.contentView = nil
+        }
+    }
+
     private func isMainTerminalWindow(_ window: NSWindow) -> Bool {
         if mainWindowContexts[ObjectIdentifier(window)] != nil {
             return true
         }
         guard let raw = window.identifier?.rawValue else { return false }
-        return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+        return raw == "programa.main" || raw.hasPrefix("programa.main.")
     }
 
     private func contextContainingTabId(_ tabId: UUID) -> MainWindowContext? {
@@ -8986,7 +8929,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     func closeMainWindowContainingTabId(_ tabId: UUID) {
         guard let context = contextContainingTabId(tabId) else { return }
-        let expectedIdentifier = "cmux.main.\(context.windowId.uuidString)"
+        let expectedIdentifier = "programa.main.\(context.windowId.uuidString)"
         let window: NSWindow? = context.window ?? NSApp.windows.first(where: { $0.identifier?.rawValue == expectedIdentifier })
         if let window { disposeMainWindow(window) }
     }
@@ -9034,7 +8977,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     private func openNotificationInContext(_ context: MainWindowContext, tabId: UUID, surfaceId: UUID?, notificationId: UUID?) -> Bool {
-        let expectedIdentifier = "cmux.main.\(context.windowId.uuidString)"
+        let expectedIdentifier = "programa.main.\(context.windowId.uuidString)"
         let window: NSWindow? = context.window ?? NSApp.windows.first(where: { $0.identifier?.rawValue == expectedIdentifier })
         guard let window else {
 #if DEBUG
@@ -9253,10 +9196,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             window.deminiaturize(nil)
         }
         window.makeKeyAndOrderFront(nil)
-        if let context = contextForMainTerminalWindow(window) {
-            context.hiddenWindow = nil
-            context.hiddenAt = nil
-        }
         // Improve reliability across Spaces / when other helper panels are key.
         NSRunningApplication.current.activate(options: [.activateAllWindows])
     }
@@ -9399,7 +9338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // NSGlassEffectView path vs the older NSVisualEffectView fallback is chosen
         // inside WindowGlassEffect.apply.
         let currentThemeBackground = GhosttyBackgroundTheme.currentColor()
-        let shouldApplyWindowGlass = cmuxShouldApplyWindowGlass(
+        let shouldApplyWindowGlass = programaShouldApplyWindowGlass(
             bgGlassEnabled: bgGlassEnabled,
             glassEffectAvailable: WindowGlassEffect.isAvailable
         )
@@ -9459,7 +9398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 private extension AppDelegate {
     @objc func handleThemesReloadNotification(_ notification: Notification) {
         themeReloadCoalescer.request(fingerprint: { ThemeReloadCoalescer.configFingerprint() }) {
-            GhosttyApp.shared.reloadConfiguration(source: "distributed.cmux.themes")
+            GhosttyApp.shared.reloadConfiguration(source: "distributed.programa.themes")
         }
     }
 }

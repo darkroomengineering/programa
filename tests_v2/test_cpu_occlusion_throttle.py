@@ -42,7 +42,7 @@ Scenarios (see run_scenario / main):
                hidden-busy if the throttle is working).
   idle:        N hidden, non-busy panes (baseline).
 
-Socket commands used to build the scenarios (tests_v2/cmux.py):
+Socket commands used to build the scenarios (tests_v2/programa_client.py):
   workspace.create / workspace.select   -- create + occlude/reveal workspaces
   surface.list                          -- find each new workspace's default pane
   surface.split ("right")               -- add visible split panes in one workspace
@@ -66,7 +66,7 @@ from typing import Optional
 
 _TESTS_V2_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests_v2"))
 sys.path.insert(0, _TESTS_V2_DIR)
-from cmux import cmux, cmuxError  # noqa: E402
+from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
 
 DEFAULT_PANES = int(os.environ.get("PROGRAMA_CPU_HARNESS_PANES", "4"))
 DEFAULT_DURATION_S = float(os.environ.get("PROGRAMA_CPU_HARNESS_DURATION_S", "30.0"))
@@ -205,14 +205,14 @@ def sample_cpu(app_pid: int, window_s: float) -> SampleResult:
 def resolve_target_socket(explicit: Optional[str]) -> str:
     socket_path = explicit or os.environ.get("PROGRAMA_SOCKET_PATH")
     if not socket_path:
-        raise cmuxError(
+        raise ProgramaClientError(
             "PROGRAMA_SOCKET_PATH is required (or pass --socket). Point it to a "
             "tagged dev socket (for example /tmp/programa-debug-<tag>.sock). "
             "Never run this harness against an untagged Programa DEV.app."
         )
     base = os.path.basename(socket_path)
     if not ALLOW_MAIN_SOCKET and base in {"programa.sock", "programa-debug.sock"}:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"Refusing to run against main socket '{socket_path}'. Set "
             "PROGRAMA_SOCKET_PATH to a tagged dev instance."
         )
@@ -246,28 +246,28 @@ def resolve_app_pid(socket_path: str, override_pid: Optional[int]) -> int:
         if lines:
             return int(lines[0])
 
-    raise cmuxError(
+    raise ProgramaClientError(
         f"Could not resolve app pid for socket {socket_path}. Pass --pid explicitly."
     )
 
 
-def close_workspaces(client: cmux, workspace_ids: list[str]) -> None:
+def close_workspaces(client: ProgramaClient, workspace_ids: list[str]) -> None:
     for wid in reversed(workspace_ids):
         try:
             client.close_workspace(wid)
-        except cmuxError:
+        except ProgramaClientError:
             pass
 
 
-def default_surface_id(client: cmux, workspace_id: str) -> str:
+def default_surface_id(client: ProgramaClient, workspace_id: str) -> str:
     surfaces = client.list_surfaces(workspace_id)
     if not surfaces:
-        raise cmuxError(f"New workspace {workspace_id} has no default surface")
+        raise ProgramaClientError(f"New workspace {workspace_id} has no default surface")
     return surfaces[0][1]
 
 
 def run_hidden_scenario(
-    client: cmux,
+    client: ProgramaClient,
     app_pid: int,
     n: int,
     duration_s: float,
@@ -299,7 +299,7 @@ def run_hidden_scenario(
 
 
 def run_visible_busy_scenario(
-    client: cmux,
+    client: ProgramaClient,
     app_pid: int,
     n: int,
     duration_s: float,
@@ -406,7 +406,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     print("CPU Occlusion Throttle Harness")
     print("=" * 64)
 
-    client: Optional[cmux] = None
+    client: Optional[ProgramaClient] = None
     try:
         target_socket = resolve_target_socket(args.socket)
         app_pid = resolve_app_pid(target_socket, args.pid)
@@ -414,7 +414,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"App pid: {app_pid}")
         print(f"Panes requested: {args.panes}  duration: {args.duration}s  busy_sleep_s: {args.busy_sleep_s}")
 
-        client = cmux(socket_path=target_socket)
+        client = ProgramaClient(socket_path=target_socket)
         client.connect()
 
         command = busy_command(args.busy_sleep_s)
@@ -442,7 +442,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(results_to_json(results, app_pid))
         return 0
 
-    except cmuxError as e:
+    except ProgramaClientError as e:
         print(f"FAIL: {e}")
         return 1
     finally:

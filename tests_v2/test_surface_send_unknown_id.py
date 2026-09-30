@@ -16,22 +16,22 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
-def _expect_not_found(c: cmux, method: str, params: dict[str, Any]) -> None:
+def _expect_not_found(c: ProgramaClient, method: str, params: dict[str, Any]) -> None:
     try:
         c._call(method, params)
-    except cmuxError as error:
+    except ProgramaClientError as error:
         if "not_found" not in str(error):
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"{method} returned the wrong error for params={params!r}: {error}"
             ) from error
         return
-    raise cmuxError(f"{method} unexpectedly succeeded for params={params!r}")
+    raise ProgramaClientError(f"{method} unexpectedly succeeded for params={params!r}")
 
 
 def main() -> int:
@@ -41,7 +41,7 @@ def main() -> int:
     for var in ("PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID", "PROGRAMA_PANEL_ID", "PROGRAMA_TAB_ID"):
         os.environ.pop(var, None)
 
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         unknown_surface_id = str(uuid.uuid4())
 
         # (1) Unknown surface_id, no workspace context: must be not_found, not

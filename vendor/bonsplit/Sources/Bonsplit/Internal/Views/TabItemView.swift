@@ -195,11 +195,12 @@ struct TabItemView: View {
         )
         .padding(.bottom, isSelected ? 1 : 0)
         .background(tabBackground.saturation(saturation))
-        .animation(.easeInOut(duration: 0.14), value: showsShortcutHint)
+        .animation(.easeOut(duration: 0.14), value: showsShortcutHint)
         .contentShape(Rectangle())
         // Middle click to close (macOS convention).
-        // Uses an AppKit event monitor so it doesn't interfere with left click selection or drag/reorder.
-        .background(MiddleClickMonitorView(onMiddleClick: {
+        // The overlay only hit-tests for middle-button events, so left click selection and
+        // drag/reorder pass through untouched and no global event monitor is needed.
+        .overlay(MiddleClickView(onMiddleClick: {
             guard !tab.isPinned else { return }
             onClose()
         }))
@@ -317,7 +318,7 @@ struct TabItemView: View {
             minHeight: TabBarMetrics.closeButtonSize,
             alignment: .center
         )
-        .animation(.easeInOut(duration: 0.14), value: showsShortcutHint)
+        .animation(.easeOut(duration: 0.14), value: showsShortcutHint)
     }
 
     private func updateGlobeFallback() {
@@ -544,51 +545,47 @@ private struct FaviconIconView: NSViewRepresentable {
     }
 }
 
-private struct MiddleClickMonitorView: NSViewRepresentable {
+private struct MiddleClickView: NSViewRepresentable {
     let onMiddleClick: () -> Void
 
-    final class Coordinator {
+    final class ClickView: NSView {
         var onMiddleClick: (() -> Void)?
-        weak var view: NSView?
-        var monitor: Any?
 
-        deinit {
-            if let monitor {
-                NSEvent.removeMonitor(monitor)
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            switch NSApp.currentEvent?.type {
+            case .otherMouseDown, .otherMouseUp:
+                return super.hitTest(point)
+            default:
+                return nil
             }
+        }
+
+        override func otherMouseDown(with event: NSEvent) {
+            guard event.buttonNumber == 2 else {
+                super.otherMouseDown(with: event)
+                return
+            }
+        }
+
+        override func otherMouseUp(with event: NSEvent) {
+            guard event.buttonNumber == 2 else {
+                super.otherMouseUp(with: event)
+                return
+            }
+            let p = convert(event.locationInWindow, from: nil)
+            guard bounds.contains(p) else { return }
+            onMiddleClick?()
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.clear.cgColor
-
-        context.coordinator.view = view
-        context.coordinator.onMiddleClick = onMiddleClick
-
-        // Monitor only middle clicks so we don't break drag/reorder or normal selection.
-        let coordinator = context.coordinator
-        coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: [.otherMouseUp]) { [weak coordinator] event in
-            guard event.buttonNumber == 2 else { return event }
-            guard let coordinator, let v = coordinator.view, let w = v.window else { return event }
-            guard event.window === w else { return event }
-
-            let p = v.convert(event.locationInWindow, from: nil)
-            guard v.bounds.contains(p) else { return event }
-
-            coordinator.onMiddleClick?()
-            return nil // swallow so it doesn't also select the tab
-        }
-
+    func makeNSView(context: Context) -> ClickView {
+        let view = ClickView(frame: .zero)
+        view.onMiddleClick = onMiddleClick
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.view = nsView
-        context.coordinator.onMiddleClick = onMiddleClick
+    func updateNSView(_ nsView: ClickView, context: Context) {
+        nsView.onMiddleClick = onMiddleClick
     }
 }
 

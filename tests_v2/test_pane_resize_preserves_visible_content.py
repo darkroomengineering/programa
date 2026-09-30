@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from pane_resize_test_support import (
     focused_pane_id as _focused_pane_id,
     pane_extent as _pane_extent,
@@ -29,7 +29,7 @@ DEFAULT_SOCKET_PATHS = ["/tmp/programa-debug.sock", "/tmp/programa.sock"]
 def _run_once(socket_path: str) -> int:
     workspace_id = ""
     try:
-        with cmux(socket_path) as client:
+        with ProgramaClient(socket_path) as client:
             workspace_id = client.new_workspace()
             client.select_workspace(workspace_id)
 
@@ -122,7 +122,7 @@ def _run_once(socket_path: str) -> int:
     finally:
         if workspace_id:
             try:
-                with cmux(socket_path) as cleanup_client:
+                with ProgramaClient(socket_path) as cleanup_client:
                     cleanup_client.close_workspace(workspace_id)
             except Exception:
                 pass
@@ -137,7 +137,7 @@ def main() -> int:
     for socket_path in DEFAULT_SOCKET_PATHS:
         try:
             return _run_once(socket_path)
-        except cmuxError as exc:
+        except ProgramaClientError as exc:
             text = str(exc)
             recoverable = (
                 "Failed to connect",
@@ -150,7 +150,7 @@ def main() -> int:
 
     if last_error is not None:
         raise last_error
-    raise cmuxError("No socket candidates configured")
+    raise ProgramaClientError("No socket candidates configured")
 
 
 if __name__ == "__main__":

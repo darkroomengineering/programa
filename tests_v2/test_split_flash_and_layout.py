@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Layout/flash regression tests for cmux splits.
+Layout/flash regression tests for programa splits.
 
 Goals:
   1) Ensure programmatic splits don't transiently render EmptyPanelView (visible flash).
@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -47,7 +47,7 @@ def _rect_intersection_area(a: dict, b: dict) -> float:
 def _assert_selected_panels_healthy(payload: dict, *, min_wh: float = 80.0) -> None:
     selected = payload.get("selectedPanels") or []
     if not selected:
-        raise cmuxError("layout_debug returned no selectedPanels")
+        raise ProgramaClientError("layout_debug returned no selectedPanels")
 
     for i, row in enumerate(selected):
         pane_id = row.get("paneId")
@@ -56,19 +56,19 @@ def _assert_selected_panels_healthy(payload: dict, *, min_wh: float = 80.0) -> N
 
         panel_id = row.get("panelId")
         if not panel_id:
-            raise cmuxError(f"selectedPanels[{i}] missing panelId (pane={pane_id})")
+            raise ProgramaClientError(f"selectedPanels[{i}] missing panelId (pane={pane_id})")
 
         if row.get("inWindow") is not True:
-            raise cmuxError(f"selectedPanels[{i}] panel not in window (pane={pane_id}, panel={panel_id})")
+            raise ProgramaClientError(f"selectedPanels[{i}] panel not in window (pane={pane_id}, panel={panel_id})")
 
         if row.get("hidden") is True:
-            raise cmuxError(f"selectedPanels[{i}] panel is hidden (pane={pane_id}, panel={panel_id})")
+            raise ProgramaClientError(f"selectedPanels[{i}] panel is hidden (pane={pane_id}, panel={panel_id})")
 
         if not view_frame:
-            raise cmuxError(f"selectedPanels[{i}] missing viewFrame (pane={pane_id}, panel={panel_id})")
+            raise ProgramaClientError(f"selectedPanels[{i}] missing viewFrame (pane={pane_id}, panel={panel_id})")
 
         if float(view_frame.get("width", 0.0)) < min_wh or float(view_frame.get("height", 0.0)) < min_wh:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"selectedPanels[{i}] viewFrame too small: {view_frame} (pane={pane_id}, panel={panel_id})"
             )
 
@@ -79,14 +79,14 @@ def _assert_selected_panels_healthy(payload: dict, *, min_wh: float = 80.0) -> N
             denom = min(_rect_area(pane_frame), _rect_area(view_frame))
             ratio = inter / denom if denom > 0 else 0.0
             if ratio < 0.50:
-                raise cmuxError(
+                raise ProgramaClientError(
                     f"selectedPanels[{i}] bounds mismatch (overlap={ratio:.2f}). "
                     f"pane={pane_frame} view={view_frame} pane_id={pane_id} panel={panel_id}"
                 )
 
 
 def _assert_no_transient_detach_or_hide(
-    c: cmux,
+    c: ProgramaClient,
     *,
     duration_s: float = 1.0,
     cadence_s: float = 0.005,
@@ -113,14 +113,14 @@ def _assert_no_transient_detach_or_hide(
     detached = {k: v for k, v in false_in_window.items() if v > max_false_samples}
     hidden = {k: v for k, v in hidden_true.items() if v > max_false_samples}
     if detached or hidden:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"Transient detach/hide during split exceeds tolerance "
             f"(detached={detached}, hidden={hidden})"
         )
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         # Run on a fresh workspace to avoid state carry-over from restored sessions.
         test_workspace = c.new_workspace()
         c.select_workspace(test_workspace)
@@ -138,13 +138,13 @@ def main() -> int:
         time.sleep(0.3)
         flashes = c.empty_panel_count()
         if flashes != 0:
-            raise cmuxError(f"EmptyPanelView appeared during split (count={flashes})")
+            raise ProgramaClientError(f"EmptyPanelView appeared during split (count={flashes})")
 
         after = c.layout_debug()
         # Expect at least 2 panes after split (exact count can vary if user already has splits).
         panes = after.get("layout", {}).get("panes") or []
         if len(panes) < 2:
-            raise cmuxError(f"Expected >= 2 panes after split, got {len(panes)}")
+            raise ProgramaClientError(f"Expected >= 2 panes after split, got {len(panes)}")
         _assert_selected_panels_healthy(after)
 
         # Drag-to-split from a single-surface pane should also avoid EmptyPanelView flashes.
@@ -155,10 +155,10 @@ def main() -> int:
         _assert_selected_panels_healthy(drag_before)
         drag_selected = drag_before.get("selectedPanels") or []
         if not drag_selected:
-            raise cmuxError("layout_debug returned no selectedPanels for drag split setup")
+            raise ProgramaClientError("layout_debug returned no selectedPanels for drag split setup")
         drag_panel_id = drag_selected[0].get("panelId")
         if not drag_panel_id:
-            raise cmuxError("drag split setup selected panel has no panelId")
+            raise ProgramaClientError("drag split setup selected panel has no panelId")
         drag_panes_before = len(drag_before.get("layout", {}).get("panes") or [])
 
         c.reset_empty_panel_count()
@@ -167,12 +167,12 @@ def main() -> int:
         time.sleep(0.4)
         flashes = c.empty_panel_count()
         if flashes != 0:
-            raise cmuxError(f"EmptyPanelView appeared during drag split (count={flashes})")
+            raise ProgramaClientError(f"EmptyPanelView appeared during drag split (count={flashes})")
 
         drag_after = c.layout_debug()
         drag_panes_after = len(drag_after.get("layout", {}).get("panes") or [])
         if drag_panes_after < drag_panes_before + 1:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"Expected drag split to add a pane: before={drag_panes_before} after={drag_panes_after}"
             )
         _assert_selected_panels_healthy(drag_after)
@@ -183,7 +183,7 @@ def main() -> int:
         time.sleep(0.4)
         flashes = c.empty_panel_count()
         if flashes != 0:
-            raise cmuxError(f"EmptyPanelView appeared during browser split (count={flashes})")
+            raise ProgramaClientError(f"EmptyPanelView appeared during browser split (count={flashes})")
 
         after_browser = c.layout_debug()
         _assert_selected_panels_healthy(after_browser)

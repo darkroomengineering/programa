@@ -66,11 +66,11 @@ struct ProgramaConfigExecutor {
         guard insertRecipePrompt(resolvedPrompt, sendInput: terminal.sendInput) else {
             let alert = NSAlert()
             alert.messageText = String(
-                localized: "dialog.cmuxConfig.invalidRecipe.title",
+                localized: "dialog.programaConfig.invalidRecipe.title",
                 defaultValue: "Prompt Needs Correction"
             )
             alert.informativeText = String(
-                localized: "dialog.cmuxConfig.invalidRecipe.message",
+                localized: "dialog.programaConfig.invalidRecipe.message",
                 defaultValue: "Recipe prompts and parameter values must be a single line without control characters. Remove any line breaks, tabs, or control characters and try again. Nothing was inserted into the terminal."
             )
             alert.alertStyle = .warning
@@ -156,30 +156,30 @@ struct ProgramaConfigExecutor {
         switch kind {
         case .command:
             title = String(
-                localized: "dialog.cmuxConfig.confirmCommand.title",
+                localized: "dialog.programaConfig.confirmCommand.title",
                 defaultValue: "Run Command"
             )
             messageFormat = String(
-                localized: "dialog.cmuxConfig.confirmCommand.messageWithCommand",
+                localized: "dialog.programaConfig.confirmCommand.messageWithCommand",
                 defaultValue: "This will run the following command:\n\n%@"
             )
             affirmativeButtonTitle = String(
-                localized: "dialog.cmuxConfig.confirmCommand.run",
+                localized: "dialog.programaConfig.confirmCommand.run",
                 defaultValue: "Run"
             )
         case .recipe:
             title = String(
-                localized: "dialog.cmuxConfig.confirmRecipe.title",
+                localized: "dialog.programaConfig.confirmRecipe.title",
                 defaultValue: "Insert Prompt"
             )
             // Single literal, not a `+` expression: `defaultValue` takes a
             // `String.LocalizationValue`, which only accepts a literal.
             messageFormat = String(
-                localized: "dialog.cmuxConfig.confirmRecipe.messageWithPrompt",
+                localized: "dialog.programaConfig.confirmRecipe.messageWithPrompt",
                 defaultValue: "This will insert the following prompt into the focused terminal (it will not be sent until you press Return):\n\n%@"
             )
             affirmativeButtonTitle = String(
-                localized: "dialog.cmuxConfig.confirmRecipe.insert",
+                localized: "dialog.programaConfig.confirmRecipe.insert",
                 defaultValue: "Insert"
             )
         }
@@ -219,7 +219,7 @@ struct ProgramaConfigExecutor {
         let workspaceName = workspace.name ?? command.name
         var lines = [String(
             format: String(
-                localized: "dialog.cmuxConfig.confirmCommand.workspaceSummary",
+                localized: "dialog.programaConfig.confirmCommand.workspaceSummary",
                 defaultValue: "Open workspace \"%@\""
             ),
             sanitizeForDisplay(workspaceName)
@@ -310,7 +310,7 @@ struct ProgramaConfigExecutor {
         var informativeText = String(format: messageFormat, detail)
         if configChanged {
             let changedWarning = String(
-                localized: "dialog.cmuxConfig.confirmCommand.configChanged",
+                localized: "dialog.programaConfig.confirmCommand.configChanged",
                 defaultValue: "This folder's programa.json has changed since you trusted it."
             )
             informativeText = changedWarning + "\n\n" + informativeText
@@ -319,14 +319,14 @@ struct ProgramaConfigExecutor {
         alert.alertStyle = .warning
         alert.addButton(withTitle: affirmativeButtonTitle)
         alert.addButton(withTitle: String(
-            localized: "dialog.cmuxConfig.confirmCommand.cancel",
+            localized: "dialog.programaConfig.confirmCommand.cancel",
             defaultValue: "Cancel"
         ))
 
         var checkbox: NSButton?
         if configPath != nil {
             let box = NSButton(checkboxWithTitle: String(
-                localized: "dialog.cmuxConfig.confirmCommand.trustDirectory",
+                localized: "dialog.programaConfig.confirmCommand.trustDirectory",
                 defaultValue: "Always trust commands from this folder"
             ), target: nil, action: nil)
             box.state = .off
@@ -363,18 +363,18 @@ struct ProgramaConfigExecutor {
             alert.messageText = label
             alert.informativeText = String.localizedStringWithFormat(
                 String(
-                    localized: "dialog.cmuxConfig.parameter.message",
+                    localized: "dialog.programaConfig.parameter.message",
                     defaultValue: "Enter a value for \"%@\"."
                 ),
                 sanitizedEntryName
             )
             alert.alertStyle = .informational
             alert.addButton(withTitle: String(
-                localized: "dialog.cmuxConfig.parameter.continue",
+                localized: "dialog.programaConfig.parameter.continue",
                 defaultValue: "Continue"
             ))
             alert.addButton(withTitle: String(
-                localized: "dialog.cmuxConfig.confirmCommand.cancel",
+                localized: "dialog.programaConfig.confirmCommand.cancel",
                 defaultValue: "Cancel"
             ))
 
@@ -476,7 +476,7 @@ struct ProgramaConfigExecutor {
 
         guard trimmed.count > maxDisplayValueLength else { return trimmed }
         let truncationMarker = String(
-            localized: "dialog.cmuxConfig.confirmCommand.truncated",
+            localized: "dialog.programaConfig.confirmCommand.truncated",
             defaultValue: "… (truncated)"
         )
         return trimmed.prefix(maxDisplayValueLength) + truncationMarker
@@ -501,16 +501,16 @@ struct ProgramaConfigExecutor {
             case .confirm:
                 let alert = NSAlert()
                 alert.messageText = String(
-                    localized: "dialog.cmuxConfig.confirmRestart.title",
+                    localized: "dialog.programaConfig.confirmRestart.title",
                     defaultValue: "Workspace Already Exists"
                 )
                 alert.informativeText = String(
-                    localized: "dialog.cmuxConfig.confirmRestart.message",
+                    localized: "dialog.programaConfig.confirmRestart.message",
                     defaultValue: "A workspace with this name already exists. Close it and create a new one?"
                 )
                 alert.alertStyle = .warning
-                alert.addButton(withTitle: String(localized: "dialog.cmuxConfig.confirmRestart.recreate", defaultValue: "Recreate"))
-                alert.addButton(withTitle: String(localized: "dialog.cmuxConfig.confirmRestart.cancel", defaultValue: "Cancel"))
+                alert.addButton(withTitle: String(localized: "dialog.programaConfig.confirmRestart.recreate", defaultValue: "Recreate"))
+                alert.addButton(withTitle: String(localized: "dialog.programaConfig.confirmRestart.cancel", defaultValue: "Cancel"))
                 guard alert.runModal() == .alertFirstButtonReturn else {
                     tabManager.selectWorkspace(existing)
                     return

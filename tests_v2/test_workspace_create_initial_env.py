@@ -8,14 +8,14 @@ import base64
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
-def _wait_for_text(c: cmux, workspace_id: str, needle: str, timeout_s: float = 8.0) -> str:
+def _wait_for_text(c: ProgramaClient, workspace_id: str, needle: str, timeout_s: float = 8.0) -> str:
     deadline = time.time() + timeout_s
     last_text = ""
     while time.time() < deadline:
@@ -32,11 +32,11 @@ def _wait_for_text(c: cmux, workspace_id: str, needle: str, timeout_s: float = 8
         if needle in last_text:
             return last_text
         time.sleep(0.1)
-    raise cmuxError(f"Timed out waiting for {needle!r} in panel text: {last_text!r}")
+    raise ProgramaClientError(f"Timed out waiting for {needle!r} in panel text: {last_text!r}")
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         baseline_workspace = c.current_workspace()
         created_workspace = ""
         try:

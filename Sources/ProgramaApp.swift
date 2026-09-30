@@ -5,7 +5,7 @@ import Bonsplit
 import UniformTypeIdentifiers
 
 enum UITestLaunchManifest {
-    static let argumentName = "-cmuxUITestLaunchManifest"
+    static let argumentName = "-programaUITestLaunchManifest"
 
     struct Payload: Decodable {
         let environment: [String: String]
@@ -140,7 +140,7 @@ struct programaApp: App {
                 defaults.set(migrated.rawValue, forKey: SocketControlSettings.appStorageKey)
             }
         } else if let legacy = defaults.object(forKey: SocketControlSettings.legacyEnabledKey) as? Bool {
-            defaults.set(legacy ? SocketControlMode.cmuxOnly.rawValue : SocketControlMode.off.rawValue,
+            defaults.set(legacy ? SocketControlMode.programaOnly.rawValue : SocketControlMode.off.rawValue,
                          forKey: SocketControlSettings.appStorageKey)
         }
         // Skip keychain migration for DEV/staging builds. Each tagged build gets a
@@ -516,7 +516,6 @@ struct programaApp: App {
 
                 splitCommandButton(title: String(localized: "menu.file.newWorkspace", defaultValue: "New Workspace"), shortcut: menuShortcut(for: .newTab)) {
                     if let appDelegate = AppDelegate.shared {
-                        if appDelegate.reopenMostRecentlyHiddenMainWindow() { return }
                         if appDelegate.addWorkspaceInPreferredMainWindow(debugSource: "menu.newWorkspace") == nil {
 #if DEBUG
                             FocusLogStore.shared.append(
@@ -1111,8 +1110,8 @@ struct programaApp: App {
 }
 
 private let programaAuxiliaryWindowIdentifiers: Set<String> = [
-    "cmux.settings",
-    "cmux.about",
+    "programa.settings",
+    "programa.about",
     "programa.licenses",
     "programa.browser-popup",
     "programa.settingsAboutTitlebarDebug",
@@ -1161,9 +1160,9 @@ enum SettingsAboutWindowKind: String, CaseIterable, Identifiable {
     var windowIdentifier: String {
         switch self {
         case .settings:
-            return "cmux.settings"
+            return "programa.settings"
         case .about:
-            return "cmux.about"
+            return "programa.about"
         }
     }
 
@@ -1452,7 +1451,7 @@ private final class AboutWindowController: NSWindowController, NSWindowDelegate 
             defer: false
         )
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.about")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.about")
         window.center()
         window.contentView = NSHostingView(rootView: AboutPanelView())
         SettingsAboutTitlebarStyleStore.shared.applyCurrentOptions(to: window, for: .about)
@@ -1551,7 +1550,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             width: SettingsWindowMetrics.maxContentWidth,
             height: SettingsWindowMetrics.maxContentHeight
         )
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.settings")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.settings")
         window.center()
         window.contentView = NSHostingView(rootView: SettingsRootView())
         SettingsAboutTitlebarStyleStore.shared.applyCurrentOptions(to: window, for: .settings)

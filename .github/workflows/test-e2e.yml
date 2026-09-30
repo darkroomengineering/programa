@@ -371,7 +371,7 @@ jobs:
           path: /tmp/test-recording.mp4
           if-no-files-found: warn
 
-      - name: Post results to cmux-dev-artifacts
+      - name: Post results to programa-dev-artifacts
         if: always()
         continue-on-error: true
         env:

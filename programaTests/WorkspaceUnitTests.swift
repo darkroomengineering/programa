@@ -371,7 +371,7 @@ final class WorkspaceRenameShortcutDefaultsTests: XCTestCase {
 
 final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
     private var originalSettingsFileStore: KeyboardShortcutSettingsFileStore!
-    private let settingsFileBackupsDefaultsKey = "cmux.settingsFile.backups.v1"
+    private let settingsFileBackupsDefaultsKey = "programa.settingsFile.backups.v1"
 
     override func setUp() {
         super.setUp()
@@ -655,7 +655,7 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directoryURL) }
 
         let settingsFileURL = directoryURL
-            .appendingPathComponent(".config/cmux", isDirectory: true)
+            .appendingPathComponent(".config/programa", isDirectory: true)
             .appendingPathComponent("settings.json", isDirectory: false)
 
         let store = KeyboardShortcutSettingsFileStore(
@@ -5150,7 +5150,7 @@ final class ReviewPanelWorkspaceTransferTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.main.\(UUID().uuidString)")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.main.\(UUID().uuidString)")
 
         let manager = TabManager()
         manager.tabs = workspaces

@@ -586,7 +586,7 @@ struct ContentView: View {
     @AppStorage("debugTitlebarLeadingExtra") private var debugTitlebarLeadingExtra: Double = 0
 
     @State private var titlebarLeadingInset: CGFloat = 12
-    private var windowIdentifier: String { "cmux.main.\(windowId.uuidString)" }
+    private var windowIdentifier: String { "programa.main.\(windowId.uuidString)" }
     private var fakeTitlebarTextColor: Color {
         _ = titlebarThemeGeneration
         let ghosttyBackground = GhosttyApp.shared.defaultBackgroundColor
@@ -1334,6 +1334,13 @@ struct ContentView: View {
                 }
                 removeSidebarResizerPointerMonitor()
             }
+            // The monitor's closure captures this view (and so the window's TabManager);
+            // a closed window's hosting view is not guaranteed an onDisappear, so the
+            // window close itself removes it.
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
+                guard let closing = note.object as? NSWindow, closing === observedWindow else { return }
+                removeSidebarResizerPointerMonitor()
+            }
     }
 
     @ViewBuilder
@@ -1629,7 +1636,7 @@ struct ContentView: View {
     }
 
     private func setTitlebarControlsHidden(_ hidden: Bool, in window: NSWindow) {
-        let controlsId = NSUserInterfaceItemIdentifier("cmux.titlebarControls")
+        let controlsId = NSUserInterfaceItemIdentifier("programa.titlebarControls")
         for accessory in window.titlebarAccessoryViewControllers {
             if accessory.view.identifier == controlsId {
                 accessory.isHidden = hidden
@@ -3657,7 +3664,7 @@ struct ContentView: View {
                 commandId: "palette.restartSocketListener",
                 title: constant(String(localized: "command.restartSocketListener.title", defaultValue: "Restart CLI Listener")),
                 subtitle: constant(String(localized: "command.restartSocketListener.subtitle", defaultValue: "Global")),
-                keywords: ["restart", "socket", "listener", "cli", "cmux", "control"]
+                keywords: ["restart", "socket", "listener", "cli", "programa", "control"]
             )
         )
 
@@ -4167,7 +4174,7 @@ struct ContentView: View {
             )
         )
 
-        let programaConfigDefaultSubtitle = constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "programa.json"))
+        let programaConfigDefaultSubtitle = constant(String(localized: "command.programaConfig.subtitle", defaultValue: "programa.json"))
         for command in programaConfigStore.loadedCommands {
             let commandName = sanitizeProgramaConfigPaletteText(command.name)
             let subtitle = command.description
@@ -4177,7 +4184,7 @@ struct ContentView: View {
             contributions.append(
                 CommandPaletteCommandContribution(
                     commandId: command.id,
-                    title: constant(String(localized: "command.cmuxConfig.customTitle", defaultValue: "Custom: \(commandName)")),
+                    title: constant(String(localized: "command.programaConfig.customTitle", defaultValue: "Custom: \(commandName)")),
                     subtitle: subtitle,
                     keywords: command.keywords ?? []
                 )
@@ -4193,7 +4200,7 @@ struct ContentView: View {
             contributions.append(
                 CommandPaletteCommandContribution(
                     commandId: recipe.id,
-                    title: constant(String(localized: "command.cmuxConfig.recipeTitle", defaultValue: "Recipe: \(recipeName)")),
+                    title: constant(String(localized: "command.programaConfig.recipeTitle", defaultValue: "Recipe: \(recipeName)")),
                     subtitle: subtitle,
                     keywords: recipe.keywords ?? []
                 )
@@ -5058,7 +5065,7 @@ struct ContentView: View {
     }
 
     private func commandPaletteBackdropFocusTarget(for responder: NSResponder) -> CommandPaletteRestoreFocusTarget? {
-        if let terminalView = cmuxOwningGhosttyView(for: responder),
+        if let terminalView = programaOwningGhosttyView(for: responder),
            let workspaceId = terminalView.tabId,
            let panelId = terminalView.terminalSurface?.id,
            tabManager.tabs.contains(where: { $0.id == workspaceId }) {
@@ -5329,7 +5336,9 @@ struct ContentView: View {
         guard let data = UserDefaults.standard.data(forKey: Self.commandPaletteUsageDefaultsKey) else {
             return [:]
         }
-        return (try? JSONDecoder().decode([String: CommandPaletteUsageEntry].self, from: data)) ?? [:]
+        let history = (try? JSONDecoder().decode([String: CommandPaletteUsageEntry].self, from: data)) ?? [:]
+        // Legacy cmux name, still read so existing custom-command usage history keeps working.
+        return Dictionary(history.map { ($0.key.replacingOccurrences(of: "cmux.config.", with: "programa.config.", options: .anchored), $0.value) }) { current, _ in current }
     }
 
     private func persistCommandPaletteUsageHistory(_ history: [String: CommandPaletteUsageEntry]) {

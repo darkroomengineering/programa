@@ -66,7 +66,7 @@ final class UpdatePillUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
         app.launchEnvironment["PROGRAMA_UI_TEST_DETECTED_UPDATE_VERSION"] = "9.9.9"
-        app.launchEnvironment["PROGRAMA_UI_TEST_FEED_URL"] = "https://cmux.test/appcast.xml"
+        app.launchEnvironment["PROGRAMA_UI_TEST_FEED_URL"] = "https://programa.test/appcast.xml"
         app.launchEnvironment["PROGRAMA_UI_TEST_FEED_MODE"] = "none"
         launchAndActivate(app)
 
@@ -90,7 +90,7 @@ final class UpdatePillUITests: XCTestCase {
         let systemSettings = XCUIApplication(bundleIdentifier: "com.apple.systempreferences")
         systemSettings.terminate()
         let timingPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-timing-\(UUID().uuidString).json")
+            .appendingPathComponent("programa-ui-test-timing-\(UUID().uuidString).json")
         let app = XCUIApplication()
         app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
         app.launchEnvironment["PROGRAMA_UI_TEST_UPDATE_STATE"] = "notFound"
@@ -134,7 +134,7 @@ final class UpdatePillUITests: XCTestCase {
         let systemSettings = XCUIApplication(bundleIdentifier: "com.apple.systempreferences")
         systemSettings.terminate()
         let timingPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-timing-\(UUID().uuidString).json")
+            .appendingPathComponent("programa-ui-test-timing-\(UUID().uuidString).json")
         let app = launchAppWithMockFeed(mode: "none", version: "9.9.9", timingPath: timingPath)
 
         let pill = pillButton(app: app, expectedLabel: "No Updates Available")
@@ -260,7 +260,7 @@ final class UpdatePillUITests: XCTestCase {
     ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["PROGRAMA_UI_TEST_FEED_URL"] = "https://cmux.test/appcast.xml"
+        app.launchEnvironment["PROGRAMA_UI_TEST_FEED_URL"] = "https://programa.test/appcast.xml"
         app.launchEnvironment["PROGRAMA_UI_TEST_FEED_MODE"] = mode
         app.launchEnvironment["PROGRAMA_UI_TEST_UPDATE_VERSION"] = version
         app.launchEnvironment["PROGRAMA_UI_TEST_AUTO_ALLOW_PERMISSION"] = "1"

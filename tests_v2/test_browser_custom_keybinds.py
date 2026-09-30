@@ -9,7 +9,7 @@ Why this exists:
     so matching must use keyCode fallbacks.
 
 Requires:
-  - cmux running
+  - programa running
   - Debug socket commands enabled (`set_shortcut`, `simulate_shortcut`)
 """
 
@@ -19,16 +19,16 @@ import time
 from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cmux import cmux
+from programa_client import ProgramaClient
 
-def focused_pane_id(client: cmux) -> Optional[str]:
+def focused_pane_id(client: ProgramaClient) -> Optional[str]:
     for _idx, pane_id, _count, is_focused in client.list_panes():
         if is_focused:
             return pane_id
     return None
 
 
-def wait_url_contains(client: cmux, panel_id: str, needle: str, timeout_s: float = 10.0) -> None:
+def wait_url_contains(client: ProgramaClient, panel_id: str, needle: str, timeout_s: float = 10.0) -> None:
     start = time.time()
     while time.time() - start < timeout_s:
         url = client.get_url(panel_id).strip()
@@ -38,7 +38,7 @@ def wait_url_contains(client: cmux, panel_id: str, needle: str, timeout_s: float
     raise RuntimeError(f"Timed out waiting for url to contain '{needle}': {url!r}")
 
 
-def test_cmd_ctrl_h_goto_split_left_from_webview(client: cmux) -> tuple[bool, str]:
+def test_cmd_ctrl_h_goto_split_left_from_webview(client: ProgramaClient) -> tuple[bool, str]:
     """
     Verifies: Cmd+Ctrl+H moves pane focus left while WKWebView is first responder.
     This uses the app shortcut override path so the test is hermetic.
@@ -88,7 +88,7 @@ def test_cmd_ctrl_h_goto_split_left_from_webview(client: cmux) -> tuple[bool, st
         except Exception:
             pass
 
-def test_cmd_opt_left_arrow_goto_split_left_from_webview(client: cmux) -> tuple[bool, str]:
+def test_cmd_opt_left_arrow_goto_split_left_from_webview(client: ProgramaClient) -> tuple[bool, str]:
     """
     Baseline: default pane navigation (Cmd+Option+Left Arrow) moves pane focus
     left while WKWebView is first responder.
@@ -129,9 +129,9 @@ def test_cmd_opt_left_arrow_goto_split_left_from_webview(client: cmux) -> tuple[
 
 
 def main() -> int:
-    print("cmux Browser Custom Keybind Tests")
+    print("programa Browser Custom Keybind Tests")
     print("=" * 50)
-    client = cmux()
+    client = ProgramaClient()
     client.connect()
 
     tests = [

@@ -1650,12 +1650,12 @@ private struct BackgroundDebugView: View {
         let window: NSWindow? = {
             if let key = NSApp.keyWindow,
                let raw = key.identifier?.rawValue,
-               raw == "cmux.main" || raw.hasPrefix("cmux.main.") {
+               raw == "programa.main" || raw.hasPrefix("programa.main.") {
                 return key
             }
             return NSApp.windows.first(where: {
                 guard let raw = $0.identifier?.rawValue else { return false }
-                return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+                return raw == "programa.main" || raw.hasPrefix("programa.main.")
             })
         }()
         guard let window else { return }

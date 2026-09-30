@@ -20,14 +20,14 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import wait_for as _wait_for
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
-def _wait_for_surface_focus(c: cmux, panel_id: str, timeout_s: float = 5.0) -> None:
+def _wait_for_surface_focus(c: ProgramaClient, panel_id: str, timeout_s: float = 5.0) -> None:
     panel_lower = panel_id.lower()
     start = time.time()
     while time.time() - start < timeout_s:
@@ -53,10 +53,10 @@ def _wait_for_surface_focus(c: cmux, panel_id: str, timeout_s: float = 5.0) -> N
 
         time.sleep(0.05)
 
-    raise cmuxError(f"Timed out waiting for surface focus: {panel_id}")
+    raise ProgramaClientError(f"Timed out waiting for surface focus: {panel_id}")
 
 
-def _wait_for_render_context(c: cmux, panel_id: str, timeout_s: float = 5.0) -> dict:
+def _wait_for_render_context(c: ProgramaClient, panel_id: str, timeout_s: float = 5.0) -> dict:
     """Wait until terminal view is attached for interactive checks."""
     start = time.time()
     last = {}
@@ -69,13 +69,13 @@ def _wait_for_render_context(c: cmux, panel_id: str, timeout_s: float = 5.0) -> 
         if bool(last.get("inWindow")):
             return last
         time.sleep(0.1)
-    raise cmuxError(f"Expected inWindow render context, got: {last}")
+    raise ProgramaClientError(f"Expected inWindow render context, got: {last}")
 
 
 def main() -> int:
     token = f"PROGRAMA_INIT_{int(time.time() * 1000)}"
     tmp = f"/tmp/programa_init_{token}.txt"
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         c.activate_app()
         time.sleep(0.2)
 
@@ -85,7 +85,7 @@ def main() -> int:
 
         surfaces = c.list_surfaces()
         if not surfaces:
-            raise cmuxError("Expected at least 1 surface after new_workspace")
+            raise ProgramaClientError("Expected at least 1 surface after new_workspace")
         panel_id = next((sid for _i, sid, focused in surfaces if focused), surfaces[0][1])
 
         # Ensure the first terminal is focused without requiring any manual interaction.

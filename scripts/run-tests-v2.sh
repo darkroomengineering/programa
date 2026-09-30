@@ -81,14 +81,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.getcwd(), "tests_v2"))
-from cmux import cmux  # type: ignore
+from programa_client import ProgramaClient  # type: ignore
 
 deadline = time.time() + 30.0
 last = None
 client = None
 while time.time() < deadline:
     try:
-        client = cmux()
+        client = ProgramaClient()
         client.connect()
         break
     except Exception as e:
@@ -122,7 +122,7 @@ probe_deadline = time.time() + 10.0
 while time.time() < probe_deadline:
     probe = None
     try:
-        probe = cmux()
+        probe = ProgramaClient()
         probe.connect()
         if not probe.ping():
             raise RuntimeError("ping returned false")

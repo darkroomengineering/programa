@@ -264,11 +264,14 @@ final class SplitViewController {
             rootNode = newRoot
         }
 
-        // Focus the sibling or first available pane
-        if let siblingPaneId {
-            focusedPaneId = siblingPaneId
-        } else if let firstPane = rootNode.allPaneIds.first {
-            focusedPaneId = firstPane
+        // Move focus only when the closed pane held it or the focused pane is gone.
+        let focusedPaneStillExists = focusedPaneId.map { rootNode.findPane($0) != nil } ?? false
+        if focusedPaneId == paneId || !focusedPaneStillExists {
+            if let siblingPaneId {
+                focusedPaneId = siblingPaneId
+            } else if let firstPane = rootNode.allPaneIds.first {
+                focusedPaneId = firstPane
+            }
         }
 
         if let zoomedPaneId, rootNode.findPane(zoomedPaneId) == nil {
@@ -301,14 +304,7 @@ final class SplitViewController {
 
             // Recursively check children
             let (newFirst, focusFromFirst) = closePaneRecursively(node: splitState.first, targetPaneId: targetPaneId)
-            if newFirst == nil {
-                return (splitState.second, splitState.second.allPaneIds.first)
-            }
-
             let (newSecond, focusFromSecond) = closePaneRecursively(node: splitState.second, targetPaneId: targetPaneId)
-            if newSecond == nil {
-                return (splitState.first, splitState.first.allPaneIds.first)
-            }
 
             if let newFirst { splitState.first = newFirst }
             if let newSecond { splitState.second = newSecond }

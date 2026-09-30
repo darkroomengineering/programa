@@ -77,7 +77,7 @@ enum NotificationSoundSettings {
     }
 
     private static let customCommandQueue = DispatchQueue(
-        label: "com.cmuxterm.notification-custom-command",
+        label: "com.darkroom.programa.notification-custom-command",
         qos: .utility
     )
 

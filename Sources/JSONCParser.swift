@@ -9,7 +9,7 @@ import Foundation
 /// so a comment marker or trailing comma inside a quoted string is left alone.
 ///
 /// Shared by `ProgramaConfigStore` (`~/.config/programa/programa.json` and
-/// project-local `programa.json`/`cmux.json`) and `ProgramaSettingsFileStore`
+/// project-local `programa.json`/legacy `cmux.json`) and `ProgramaSettingsFileStore`
 /// (`~/.config/programa/settings.json`) so both config surfaces accept the
 /// same JSONC dialect.
 enum JSONCParser {

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import palette_visible as _palette_visible
 
 
@@ -22,14 +22,14 @@ def _wait_until(predicate, timeout_s: float = 6.0, interval_s: float = 0.05, mes
         if predicate():
             return
         time.sleep(interval_s)
-    raise cmuxError(message)
+    raise ProgramaClientError(message)
 
 
-def _palette_results(client: cmux, window_id: str, limit: int = 20) -> dict:
+def _palette_results(client: ProgramaClient, window_id: str, limit: int = 20) -> dict:
     return client.command_palette_results(window_id=window_id, limit=limit)
 
 
-def _set_palette_visible(client: cmux, window_id: str, visible: bool) -> None:
+def _set_palette_visible(client: ProgramaClient, window_id: str, visible: bool) -> None:
     if _palette_visible(client, window_id) == visible:
         return
     client._call("debug.command_palette.toggle", {"window_id": window_id})
@@ -39,7 +39,7 @@ def _set_palette_visible(client: cmux, window_id: str, visible: bool) -> None:
     )
 
 
-def _open_switcher(client: cmux, window_id: str) -> None:
+def _open_switcher(client: ProgramaClient, window_id: str) -> None:
     _set_palette_visible(client, window_id, False)
     client.simulate_shortcut("cmd+p")
     _wait_until(
@@ -52,7 +52,7 @@ def _open_switcher(client: cmux, window_id: str) -> None:
     )
 
 
-def _rename_surface(client: cmux, surface_id: str, title: str) -> None:
+def _rename_surface(client: ProgramaClient, surface_id: str, title: str) -> None:
     client._call(
         "surface.action",
         {
@@ -63,13 +63,13 @@ def _rename_surface(client: cmux, surface_id: str, title: str) -> None:
     )
 
 
-def _current_surface_id(client: cmux, workspace_id: str) -> str:
+def _current_surface_id(client: ProgramaClient, workspace_id: str) -> str:
     payload = client._call("surface.current", {"workspace_id": workspace_id}) or {}
     return str(payload.get("surface_id") or "")
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as client:
+    with ProgramaClient(SOCKET_PATH) as client:
         client.activate_app()
         time.sleep(0.2)
 
@@ -94,7 +94,7 @@ def main() -> int:
         payload = client._call("surface.list", {"workspace_id": workspace_id}) or {}
         rows = payload.get("surfaces") or []
         if len(rows) < 2:
-            raise cmuxError(f"expected at least two surfaces after split: {payload}")
+            raise ProgramaClientError(f"expected at least two surfaces after split: {payload}")
 
         left_surface_id = ""
         for row in rows:
@@ -103,7 +103,7 @@ def main() -> int:
                 left_surface_id = sid
                 break
         if not left_surface_id:
-            raise cmuxError(f"failed to resolve left surface id: {payload}")
+            raise ProgramaClientError(f"failed to resolve left surface id: {payload}")
 
         token = f"renamed-surface-{int(time.time() * 1000)}"
         _rename_surface(client, right_surface_id, token)
@@ -121,17 +121,17 @@ def main() -> int:
 
         result_rows = (_palette_results(client, window_id, limit=24).get("results") or [])
         if not result_rows:
-            raise cmuxError("switcher returned no rows for renamed surface query")
+            raise ProgramaClientError("switcher returned no rows for renamed surface query")
 
         top_row = result_rows[0] or {}
         top_id = str(top_row.get("command_id") or "")
         top_title = str(top_row.get("title") or "")
         if not top_id.startswith("switcher.surface."):
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"expected renamed surface row on top, got top={top_id!r} rows={result_rows}"
             )
         if top_title != token:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"expected top surface row title to match renamed title {token!r}, got {top_title!r}"
             )
 

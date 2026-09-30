@@ -10,7 +10,7 @@ import Bonsplit
 // freeze the UI.
 extension UNUserNotificationCenter {
     private static let removalQueue = DispatchQueue(
-        label: "com.cmuxterm.notification-removal",
+        label: "com.darkroom.programa.notification-removal",
         qos: .utility
     )
 
@@ -67,7 +67,7 @@ enum AppFocusState {
         // Only treat the app as "focused" for notification suppression when a main terminal window
         // is key. If Settings/About/debug panels are key, we still want notifications to show.
         if let raw = keyWindow.identifier?.rawValue {
-            return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+            return raw == "programa.main" || raw.hasPrefix("programa.main.")
         }
         return false
     }
@@ -283,7 +283,9 @@ final class TerminalNotificationStore: ObservableObject {
         logAuthorization("app became active deferred=\(hasDeferredAuthorizationRequest)")
         if hasDeferredAuthorizationRequest {
             hasDeferredAuthorizationRequest = false
-            ensureAuthorization(origin: .settingsButton) { _ in }
+            // Only delivery-triggered requests defer, so the replay keeps that origin and stays
+            // under the automatic-request rules (once per launch, never under automated tests).
+            ensureAuthorization(origin: .notificationDelivery) { _ in }
             return
         }
         refreshAuthorizationStatus()
@@ -684,8 +686,14 @@ final class TerminalNotificationStore: ObservableObject {
                 case .authorized, .provisional, .ephemeral:
                     completion(true)
                 case .denied:
-                    self.logAuthorization("ensure denied origin=\(origin.rawValue) prompting_settings")
-                    self.promptToEnableNotifications()
+                    // The settings sheet takes key focus, which swallows typed input in UI
+                    // regressions and can never be dismissed there.
+                    if SessionRestorePolicy.isRunningUnderAutomatedTests() {
+                        self.logAuthorization("ensure denied origin=\(origin.rawValue) prompt_skipped_automated_tests")
+                    } else {
+                        self.logAuthorization("ensure denied origin=\(origin.rawValue) prompting_settings")
+                        self.promptToEnableNotifications()
+                    }
                     completion(false)
                 case .notDetermined:
                     if Self.shouldDeferAutomaticAuthorizationRequest(

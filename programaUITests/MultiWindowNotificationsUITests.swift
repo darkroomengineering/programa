@@ -7,7 +7,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
     private var dataPath = ""
     private var socketPath = ""
     private var launchTag = ""
-    private let cmuxBundleIdentifier = "com.darkroom.programa.debug"
+    private let programaBundleIdentifier = "com.darkroom.programa.debug"
     private var launchedApplication: XCUIApplication?
 
     override func setUp() {
@@ -220,7 +220,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         XCTAssertTrue(clearAllButton.waitForExistence(timeout: 2.0), "Expected Clear All button in empty notifications popover")
         XCTAssertFalse(clearAllButton.isEnabled, "Expected Clear All button to be disabled with no notifications")
 
-        let marker = "cmux_notif_block_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))"
+        let marker = "programa_notif_block_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))"
         let before = readCurrentTerminalText() ?? ""
         XCTAssertFalse(before.contains(marker), "Unexpected marker precondition collision")
 
@@ -308,16 +308,16 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         let title = "focus-regression-\(UUID().uuidString.prefix(8))"
         let commandResultStem = UUID().uuidString
         let commandStatusPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-notify-\(commandResultStem).status")
+            .appendingPathComponent("programa-ui-test-notify-\(commandResultStem).status")
             .path
         let commandStdoutPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-notify-\(commandResultStem).stdout")
+            .appendingPathComponent("programa-ui-test-notify-\(commandResultStem).stdout")
             .path
         let commandStderrPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-notify-\(commandResultStem).stderr")
+            .appendingPathComponent("programa-ui-test-notify-\(commandResultStem).stderr")
             .path
         let commandScriptPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-notify-\(commandResultStem).sh")
+            .appendingPathComponent("programa-ui-test-notify-\(commandResultStem).sh")
             .path
         defer {
             try? FileManager.default.removeItem(atPath: commandStatusPath)
@@ -326,8 +326,8 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             try? FileManager.default.removeItem(atPath: commandScriptPath)
         }
 
-        guard let bundledCLIPath = resolveCmuxCLIPaths(strategy: .bundledOnly).first else {
-            XCTFail("Failed to locate bundled cmux CLI for notify regression test")
+        guard let bundledCLIPath = resolveProgramaCLIPaths(strategy: .bundledOnly).first else {
+            XCTFail("Failed to locate bundled programa CLI for notify regression test")
             return
         }
 
@@ -342,7 +342,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             try notifyScript.write(toFile: commandScriptPath, atomically: true, encoding: .utf8)
         } catch {
             XCTFail(
-                "Failed to write delayed bundled `cmux notify` script. " +
+                "Failed to write delayed bundled `programa notify` script. " +
                 "path=\(commandScriptPath) error=\(error)"
             )
             return
@@ -355,7 +355,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         finder.activate()
         XCTAssertTrue(
             waitForAppToLeaveForeground(app, timeout: 8.0),
-            "Expected cmux to move to background before delayed notify command runs. state=\(app.state.rawValue)"
+            "Expected programa to move to background before delayed notify command runs. state=\(app.state.rawValue)"
         )
 
         XCTAssertTrue(
@@ -364,7 +364,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
                 app: app,
                 timeout: 15.0
             ),
-            "Expected delayed bundled `cmux notify` command to finish without foregrounding cmux. state=\(app.state.rawValue) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")"
+            "Expected delayed bundled `programa notify` command to finish without foregrounding programa. state=\(app.state.rawValue) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")"
         )
 
         let notifyExitStatus = readTrimmedFile(atPath: commandStatusPath) ?? "<missing>"
@@ -374,11 +374,11 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         XCTAssertFalse(
             isAppFrontmost(app),
-            "Expected cmux to remain in background after bundled `cmux notify`. state=\(app.state.rawValue) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") stderr=\(notifyStderr)"
+            "Expected programa to remain in background after bundled `programa notify`. state=\(app.state.rawValue) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") stderr=\(notifyStderr)"
         )
         guard notifyExitStatus == "0" else {
             XCTFail(
-                "Expected bundled `cmux notify` launched from the in-app shell to succeed. " +
+                "Expected bundled `programa notify` launched from the in-app shell to succeed. " +
                 "status=\(notifyExitStatus) stdout=\(notifyStdout) stderr=\(notifyStderr)"
             )
             return
@@ -473,11 +473,11 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         }
     }
 
-    private func waitForCmuxPing(timeout: TimeInterval) -> (stdout: String?, stderr: String?) {
+    private func waitForProgramaPing(timeout: TimeInterval) -> (stdout: String?, stderr: String?) {
         var lastStdout: String?
         var lastStderr: String?
         let didSucceed = waitForCondition(timeout: timeout) {
-            let result = self.runCmuxCommand(
+            let result = self.runProgramaCommand(
                 socketPath: self.socketPath,
                 arguments: ["ping"],
                 responseTimeoutSeconds: 2.0
@@ -503,7 +503,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             return ("PONG", lastStderr)
         }
 
-        let result = runCmuxCommand(socketPath: socketPath, arguments: ["ping"], responseTimeoutSeconds: 2.0)
+        let result = runProgramaCommand(socketPath: socketPath, arguments: ["ping"], responseTimeoutSeconds: 2.0)
         let stdout = result.stdout.isEmpty ? nil : result.stdout
         let stderr = result.stderr.isEmpty ? nil : result.stderr
         if isSocketPermissionFailure(stderr), waitForSocketPong(timeout: 0.5) == "PONG" {
@@ -520,7 +520,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         guard let frontmost = NSWorkspace.shared.frontmostApplication else {
             return app.state == .runningForeground
         }
-        return frontmost.bundleIdentifier == cmuxBundleIdentifier
+        return frontmost.bundleIdentifier == programaBundleIdentifier
     }
 
     private func waitForCommandCompletionWhileBackgrounded(
@@ -610,7 +610,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         guard let paneId = firstPaneIdViaCLI(forWorkspaceId: workspaceId) else {
             return firstSurfaceId(forWorkspaceId: workspaceId)
         }
-        let result = runCmuxCommand(
+        let result = runProgramaCommand(
             socketPath: socketPath,
             arguments: [
                 "list-pane-surfaces",
@@ -633,7 +633,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
     }
 
     private func firstPaneIdViaCLI(forWorkspaceId workspaceId: String) -> String? {
-        let result = runCmuxCommand(
+        let result = runProgramaCommand(
             socketPath: socketPath,
             arguments: [
                 "list-panes",
@@ -666,13 +666,13 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         return nil
     }
 
-    private func runCmuxNotify(
+    private func runProgramaNotify(
         socketPath: String,
         workspaceId: String,
         surfaceId: String,
         title: String
     ) -> (terminationStatus: Int32, stdout: String, stderr: String) {
-        runCmuxCommand(
+        runProgramaCommand(
             socketPath: socketPath,
             arguments: [
                 "notify",
@@ -692,29 +692,29 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         )
     }
 
-    private func runCmuxCommand(
+    private func runProgramaCommand(
         socketPath: String,
         arguments: [String],
         responseTimeoutSeconds: Double = 3.0,
-        cliStrategy: CmuxCLIStrategy = .any
+        cliStrategy: ProgramaCLIStrategy = .any
     ) -> (terminationStatus: Int32, stdout: String, stderr: String) {
         var args = ["--socket", socketPath]
         args.append(contentsOf: arguments)
         var environment = ProcessInfo.processInfo.environment
-        environment["CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC"] = String(responseTimeoutSeconds)
+        environment["PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC"] = String(responseTimeoutSeconds)
 
-        let cliPaths = resolveCmuxCLIPaths(strategy: cliStrategy)
+        let cliPaths = resolveProgramaCLIPaths(strategy: cliStrategy)
         if cliPaths.isEmpty, cliStrategy == .bundledOnly {
             return (
                 terminationStatus: -1,
                 stdout: "",
-                stderr: "Failed to locate bundled cmux CLI"
+                stderr: "Failed to locate bundled programa CLI"
             )
         }
 
         var lastPermissionFailure: (terminationStatus: Int32, stdout: String, stderr: String)?
         for cliPath in cliPaths {
-            let result = executeCmuxCommand(
+            let result = executeProgramaCommand(
                 executablePath: cliPath,
                 arguments: args,
                 environment: environment
@@ -733,12 +733,12 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             return lastPermissionFailure ?? (
                 terminationStatus: -1,
                 stdout: "",
-                stderr: "Bundled cmux CLI command failed without an executable path"
+                stderr: "Bundled programa CLI command failed without an executable path"
             )
         }
 
-        let fallbackArgs = ["cmux"] + args
-        let fallbackResult = executeCmuxCommand(
+        let fallbackArgs = ["programa"] + args
+        let fallbackResult = executeProgramaCommand(
             executablePath: "/usr/bin/env",
             arguments: fallbackArgs,
             environment: environment
@@ -749,7 +749,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         return lastPermissionFailure ?? fallbackResult
     }
 
-    private enum CmuxCLIStrategy: Equatable {
+    private enum ProgramaCLIStrategy: Equatable {
         case any
         case bundledOnly
     }
@@ -762,14 +762,14 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             "signals=\(data["socketFailureSignals"] ?? "")"
     }
 
-    private func resolveCmuxCLIPaths(strategy: CmuxCLIStrategy) -> [String] {
+    private func resolveProgramaCLIPaths(strategy: ProgramaCLIStrategy) -> [String] {
         let fileManager = FileManager.default
         let env = ProcessInfo.processInfo.environment
         var candidates: [String] = []
         var productDirectories: [String] = []
 
         if strategy == .any {
-            for key in ["PROGRAMA_UI_TEST_CLI_PATH", "CMUXTERM_CLI"] {
+            for key in ["PROGRAMA_UI_TEST_CLI_PATH", "PROGRAMA_CLI"] {
                 if let value = env[key], !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     candidates.append(value)
                 }
@@ -830,7 +830,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
     private func appendCLIPathCandidates(
         fromProductsDirectory productsDir: String,
-        strategy: CmuxCLIStrategy,
+        strategy: ProgramaCLIStrategy,
         to candidates: inout [String]
     ) {
         candidates.append("\(productsDir)/Programa DEV.app/Contents/Resources/bin/programa")
@@ -860,7 +860,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         }
     }
 
-    private func executeCmuxCommand(
+    private func executeProgramaCommand(
         executablePath: String,
         arguments: [String],
         environment: [String: String]
@@ -882,7 +882,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             return (
                 terminationStatus: -1,
                 stdout: "",
-                stderr: "Failed to run cmux command: \(error.localizedDescription) (cliPath=\(executablePath))"
+                stderr: "Failed to run programa command: \(error.localizedDescription) (cliPath=\(executablePath))"
             )
         }
 
@@ -988,8 +988,8 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
     private func stableSocketPath() -> String {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("cmux", isDirectory: true)
-            .appendingPathComponent("cmux.sock", isDirectory: false)
+            .appendingPathComponent("programa", isDirectory: true)
+            .appendingPathComponent("programa.sock", isDirectory: false)
             .path ?? "/tmp/programa.sock"
     }
 
@@ -1014,7 +1014,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             return []
         }
 
-        let matches = entries.filter { $0.hasPrefix("cmux") && $0.hasSuffix(".sock") }
+        let matches = entries.filter { $0.hasPrefix("programa") && $0.hasSuffix(".sock") }
         let sorted = matches.compactMap { entry -> (path: String, mtime: Date)? in
             let fullPath = (tmpPath as NSString).appendingPathComponent(entry)
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath) else {

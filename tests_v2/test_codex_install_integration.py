@@ -4,13 +4,13 @@
 Runs entirely against the CLI binary with no app/socket involved — the `codex`
 command branch is dispatched before any socket connection is opened. Exercises:
 - Fresh install: writes all five lifecycle hook events into hooks.json, and
-  config.toml gains `codex_hooks = true` under `[features]`.
+  config.toml gains one marker-delimited block holding the hook trust tables.
 - Idempotency: a second install run makes no further changes.
 - Preservation: unrelated user hooks and other event keys are left alone; a
   stale programa entry is replaced (not duplicated) on reinstall.
 - Uninstall: programa entries are removed, user hooks and unrelated event
   keys survive, emptied event keys are dropped, and config.toml's
-  `codex_hooks` key is removed.
+  Programa block is removed.
 - Declining the confirmation prompt leaves the files untouched.
 - Legacy alias: `programa codex install-hooks` / `uninstall-hooks` behave
   identically to `install-integration` / `uninstall-integration`.
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmuxError
+from programa_client import ProgramaClientError
 from v2_support import must as _must
 
 
@@ -41,19 +41,19 @@ EXPECTED_EVENTS = [
 
 
 def _find_cli_binary() -> str:
-    env_cli = os.environ.get("CMUXTERM_CLI")
+    env_cli = os.environ.get("PROGRAMA_CLI")
     if env_cli and os.path.isfile(env_cli) and os.access(env_cli, os.X_OK):
         return env_cli
 
-    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/cmux-tests-v2/Build/Products/Debug/cmux")
+    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/programa-tests-v2/Build/Products/Debug/programa")
     if os.path.isfile(fixed) and os.access(fixed, os.X_OK):
         return fixed
 
-    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
+    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/programa"), recursive=True)
     candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
-        raise cmuxError("Could not locate programa CLI binary; set CMUXTERM_CLI")
+        raise ProgramaClientError("Could not locate programa CLI binary; set PROGRAMA_CLI")
     candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return candidates[0]
 
@@ -91,16 +91,6 @@ def _hooks_commands(hooks: Dict[str, Any], event: str) -> List[str]:
     return commands
 
 
-def _has_codex_hooks_feature(config_toml: str) -> bool:
-    for line in config_toml.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            continue
-        if stripped.replace(" ", "") == "codex_hooks=true":
-            return True
-    return False
-
-
 def test_fresh_install(cli: str) -> None:
     with tempfile.TemporaryDirectory() as codex_home:
         proc = _run(cli, ["codex", "install-integration", "--yes"], codex_home)
@@ -121,12 +111,14 @@ def test_fresh_install(cli: str) -> None:
 
         config_path = Path(codex_home) / "config.toml"
         _must(config_path.exists(), f"config.toml should be created at {config_path}")
+        config_text = config_path.read_text(encoding="utf-8")
         _must(
-            _has_codex_hooks_feature(config_path.read_text(encoding="utf-8")),
-            "config.toml should gain codex_hooks = true under [features]",
+            "# BEGIN programa (managed by Programa, do not edit)" in config_text
+            and "# END programa" in config_text,
+            f"config.toml should gain the Programa block, got: {config_text!r}",
         )
 
-        print("  PASS: fresh install writes all five lifecycle hook events and config.toml feature flag")
+        print("  PASS: fresh install writes all five lifecycle hook events and the config.toml block")
 
 
 def test_idempotent_reinstall(cli: str) -> None:
@@ -257,11 +249,11 @@ def test_preserves_user_hooks_and_replaces_stale_entry(cli: str) -> None:
         config_path = Path(codex_home) / "config.toml"
         config_after = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
         _must(
-            not _has_codex_hooks_feature(config_after),
-            f"config.toml codex_hooks key should be removed after uninstall, got: {config_after!r}",
+            "programa" not in config_after,
+            f"config.toml Programa block should be removed after uninstall, got: {config_after!r}",
         )
 
-        print("  PASS: uninstall removes programa entries, preserves user hooks, drops empty keys, and config.toml key")
+        print("  PASS: uninstall removes programa entries, preserves user hooks, drops empty keys, and config.toml block")
 
 
 def test_decline_confirmation_leaves_file_untouched(cli: str) -> None:

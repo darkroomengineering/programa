@@ -13,25 +13,25 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import wait_until as _wait_until
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
-def _sidebar_visible(client: cmux, window_id: str) -> bool:
+def _sidebar_visible(client: ProgramaClient, window_id: str) -> bool:
     payload = client._call("debug.sidebar.visible", {"window_id": window_id}) or {}
     return bool(payload.get("visible"))
 
 
-def _surface_count(client: cmux, workspace_id: str) -> int:
+def _surface_count(client: ProgramaClient, workspace_id: str) -> int:
     payload = client._call("surface.list", {"workspace_id": workspace_id}) or {}
     return len(payload.get("surfaces") or [])
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as client:
+    with ProgramaClient(SOCKET_PATH) as client:
         client.activate_app()
         time.sleep(0.2)
 
@@ -58,7 +58,7 @@ def main() -> int:
         a_after = _sidebar_visible(client, window_a)
         b_after = _sidebar_visible(client, window_b)
         if b_after != b_before:
-            raise cmuxError("Cmd+B in window A incorrectly toggled sidebar in window B")
+            raise ProgramaClientError("Cmd+B in window A incorrectly toggled sidebar in window B")
 
         client.focus_window(window_b)
         client.activate_app()
@@ -70,7 +70,7 @@ def main() -> int:
             message="Cmd+B did not toggle sidebar in active window B",
         )
         if _sidebar_visible(client, window_a) != a_after:
-            raise cmuxError("Cmd+B in window B incorrectly toggled sidebar in window A")
+            raise ProgramaClientError("Cmd+B in window B incorrectly toggled sidebar in window A")
 
         client.focus_window(window_a)
         client.activate_app()
@@ -89,7 +89,7 @@ def main() -> int:
 
         count_b_after = _surface_count(client, workspace_b)
         if count_b_after != count_b_before:
-            raise cmuxError("Cmd+T in window A incorrectly created a surface in window B")
+            raise ProgramaClientError("Cmd+T in window A incorrectly created a surface in window B")
 
     print("PASS: window-scoped shortcuts stay in the active window (Cmd+B, Cmd+T)")
     return 0

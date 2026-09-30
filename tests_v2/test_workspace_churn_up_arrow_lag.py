@@ -34,13 +34,13 @@ from typing import Callable, Optional
 
 # This is the only python test wired into CI (.github/workflows/ci.yml,
 # tests-build-and-lag job) that speaks the socket protocol. It has been
-# ported off the retired v1 line-protocol client (tests/cmux.py) onto the
-# v2 JSON-RPC client (tests_v2/cmux.py) so nothing CI-gated depends on v1.
+# ported off the retired v1 line-protocol client (tests/programa.py) onto the
+# v2 JSON-RPC client (tests_v2/programa_client.py) so nothing CI-gated depends on v1.
 _TESTS_V2_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests_v2")
 )
 sys.path.insert(0, _TESTS_V2_DIR)
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 NEW_WORKSPACES = int(os.environ.get("PROGRAMA_LAG_NEW_WORKSPACES", "20"))
 SWITCH_PASSES = int(os.environ.get("PROGRAMA_LAG_SWITCH_PASSES", "1"))
@@ -82,11 +82,11 @@ class LatencyStats:
 class RawSocketClient:
     """Minimal v2 JSON-RPC client used only for the latency-critical simulate_shortcut loop.
 
-    Speaks the same one-JSON-object-per-line framing as tests_v2/cmux.py
+    Speaks the same one-JSON-object-per-line framing as tests_v2/programa_client.py
     (``{"id": N, "method": ..., "params": {...}}`` in, ``{"id": N, "ok": ...}``
     out), but skips the full client's id-resolution helpers so the measured
     round trip is just: write one line, read one line. Kept separate from the
-    full v2 cmux client (rather than reusing it) so the timing-loop shape and
+    full v2 programa client (rather than reusing it) so the timing-loop shape and
     per-call overhead stay identical to the pre-port v1 measurement.
     """
 
@@ -118,7 +118,7 @@ class RawSocketClient:
 
     def call(self, method: str, params: Optional[dict] = None, timeout_s: float = 2.0) -> dict:
         if self.sock is None:
-            raise cmuxError("Raw socket client not connected")
+            raise ProgramaClientError("Raw socket client not connected")
 
         req_id = self._next_id
         self._next_id += 1
@@ -133,24 +133,24 @@ class RawSocketClient:
 
             remaining = deadline - time.time()
             if remaining <= 0:
-                raise cmuxError(f"Timed out waiting for response to: {method}")
+                raise ProgramaClientError(f"Timed out waiting for response to: {method}")
 
             ready, _, _ = select.select([self.sock], [], [], remaining)
             if not ready:
-                raise cmuxError(f"Timed out waiting for response to: {method}")
+                raise ProgramaClientError(f"Timed out waiting for response to: {method}")
 
             chunk = self.sock.recv(8192)
             if not chunk:
-                raise cmuxError("Socket closed while waiting for response")
+                raise ProgramaClientError("Socket closed while waiting for response")
             self.recv_buffer += chunk.decode("utf-8", errors="replace")
 
         try:
             resp = json.loads(line)
         except json.JSONDecodeError as e:
-            raise cmuxError(f"Invalid JSON response: {e}: {line[:200]}")
+            raise ProgramaClientError(f"Invalid JSON response: {e}: {line[:200]}")
 
         if not isinstance(resp, dict) or resp.get("id") != req_id:
-            raise cmuxError(f"Mismatched or invalid response to {method}: {line[:200]}")
+            raise ProgramaClientError(f"Mismatched or invalid response to {method}: {line[:200]}")
 
         if resp.get("ok") is True:
             return resp.get("result") or {}
@@ -158,7 +158,7 @@ class RawSocketClient:
         err = resp.get("error") or {}
         code = err.get("code") or "error"
         msg = err.get("message") or "Unknown error"
-        raise cmuxError(f"{code}: {msg}")
+        raise ProgramaClientError(f"{code}: {msg}")
 
 
 def wait_for(predicate: Callable[[], bool], timeout_s: float, step_s: float = 0.05) -> None:
@@ -167,7 +167,7 @@ def wait_for(predicate: Callable[[], bool], timeout_s: float, step_s: float = 0.
         if predicate():
             return
         time.sleep(step_s)
-    raise cmuxError("Timed out waiting for condition")
+    raise ProgramaClientError("Timed out waiting for condition")
 
 
 def percentile(values: list[float], p: float) -> float:
@@ -194,7 +194,7 @@ def compute_stats(values_ms: list[float]) -> LatencyStats:
     )
 
 
-def get_cmux_pid_for_socket(socket_path: Optional[str]) -> Optional[int]:
+def get_programa_pid_for_socket(socket_path: Optional[str]) -> Optional[int]:
     if socket_path and os.path.exists(socket_path):
         result = subprocess.run(["lsof", "-t", socket_path], capture_output=True, text=True)
         if result.returncode == 0:
@@ -223,12 +223,12 @@ def get_cmux_pid_for_socket(socket_path: Optional[str]) -> Optional[int]:
 def resolve_target_socket() -> str:
     socket_path = os.environ.get("PROGRAMA_SOCKET_PATH")
     if not socket_path:
-        raise cmuxError(
+        raise ProgramaClientError(
             "PROGRAMA_SOCKET_PATH is required. Point it to a tagged dev socket (for example /tmp/programa-debug-<tag>.sock)."
         )
     base = os.path.basename(socket_path)
     if not ALLOW_MAIN_SOCKET and base in {"programa.sock", "programa-debug.sock"}:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"Refusing to run against main socket '{socket_path}'. Set PROGRAMA_SOCKET_PATH to a tagged dev instance."
         )
     return socket_path
@@ -265,7 +265,7 @@ class CPUMonitor:
         self._thread.join(timeout=2.0)
 
 
-def keep_only_first_workspace(client: cmux) -> str:
+def keep_only_first_workspace(client: ProgramaClient) -> str:
     # The app may still be settling when this runs right after socket connect
     # (workspaces closing/restoring from the previous session), so a workspace
     # listed one moment can be gone by the time we select/close it, surfacing
@@ -275,7 +275,7 @@ def keep_only_first_workspace(client: cmux) -> str:
     # client. Re-snapshot and retry instead of failing the whole run on that
     # startup race.
     deadline = time.time() + 10.0
-    last_error: Optional[cmuxError] = None
+    last_error: Optional[ProgramaClientError] = None
     while True:
         try:
             workspaces = sorted(client.list_workspaces(), key=lambda row: row[0])
@@ -297,14 +297,14 @@ def keep_only_first_workspace(client: cmux) -> str:
 
             wait_for(only_first, timeout_s=6.0)
             return first_id
-        except cmuxError as e:
+        except ProgramaClientError as e:
             if "not found" not in str(e).lower() or time.time() >= deadline:
                 raise
             last_error = e
             time.sleep(0.25)
 
 
-def create_workspaces(client: cmux, count: int) -> list[str]:
+def create_workspaces(client: ProgramaClient, count: int) -> list[str]:
     created: list[str] = []
     for _ in range(count):
         wid = client.new_workspace()
@@ -313,7 +313,7 @@ def create_workspaces(client: cmux, count: int) -> list[str]:
     return created
 
 
-def cycle_all_workspaces(client: cmux, passes: int, delay_s: float) -> list[str]:
+def cycle_all_workspaces(client: ProgramaClient, passes: int, delay_s: float) -> list[str]:
     ids = [wid for _idx, wid, _title, _selected in sorted(client.list_workspaces(), key=lambda row: row[0])]
     for _ in range(passes):
         for wid in ids:
@@ -322,10 +322,10 @@ def cycle_all_workspaces(client: cmux, passes: int, delay_s: float) -> list[str]
     return ids
 
 
-def focused_terminal_panel(client: cmux) -> str:
+def focused_terminal_panel(client: ProgramaClient) -> str:
     surfaces = client.list_surfaces()
     if not surfaces:
-        raise cmuxError("No surfaces available in selected workspace")
+        raise ProgramaClientError("No surfaces available in selected workspace")
     focused = next(((idx, sid) for idx, sid, is_focused in surfaces if is_focused), None)
     if focused is None:
         idx, sid, _ = surfaces[0]
@@ -334,17 +334,17 @@ def focused_terminal_panel(client: cmux) -> str:
     return focused[1]
 
 
-def send_line(client: cmux, text: str) -> None:
-    # tests_v2/cmux.py mirrors most of the v1 client's convenience API but
+def send_line(client: ProgramaClient, text: str) -> None:
+    # tests_v2/programa_client.py mirrors most of the v1 client's convenience API but
     # doesn't ship a send_line helper, so this is a small local shim rather
     # than a change to the shared v2 client. client.send() already unescapes
     # backslash-n into a real newline, matching v1's send_line semantics.
     client.send(text + "\\n")
 
 
-def seed_history(client: cmux, lines: int) -> None:
+def seed_history(client: ProgramaClient, lines: int) -> None:
     for i in range(lines):
-        send_line(client, f"echo cmux-lag-seed-{i}")
+        send_line(client, f"echo programa-lag-seed-{i}")
 
 
 def run_shortcut_latency_burst(
@@ -389,7 +389,7 @@ def print_stats(label: str, stats: LatencyStats) -> None:
     print(f"  max_ms:   {stats.max_ms:.2f}")
 
 
-def run_baseline_scenario(client: cmux, socket_path: str) -> tuple[str, LatencyStats]:
+def run_baseline_scenario(client: ProgramaClient, socket_path: str) -> tuple[str, LatencyStats]:
     first_workspace_id = keep_only_first_workspace(client)
     client.select_workspace(first_workspace_id)
     panel_id = focused_terminal_panel(client)
@@ -403,7 +403,7 @@ def run_baseline_scenario(client: cmux, socket_path: str) -> tuple[str, LatencyS
     return panel_id, compute_stats(latencies)
 
 
-def run_churn_scenario(client: cmux, socket_path: str, first_workspace_id: str) -> tuple[str, LatencyStats]:
+def run_churn_scenario(client: ProgramaClient, socket_path: str, first_workspace_id: str) -> tuple[str, LatencyStats]:
     first_workspace_id = keep_only_first_workspace(client)
     _ = create_workspaces(client, NEW_WORKSPACES)
     ordered_ids = cycle_all_workspaces(client, SWITCH_PASSES, SWITCH_DELAY_S)
@@ -429,19 +429,19 @@ def main() -> int:
     print("Workspace Churn + Up-Arrow Latency Regression")
     print("=" * 64)
 
-    client: Optional[cmux] = None
+    client: Optional[ProgramaClient] = None
     pid: Optional[int] = None
     first_workspace_id: Optional[str] = None
 
     try:
         target_socket = resolve_target_socket()
-        client = cmux(socket_path=target_socket)
+        client = ProgramaClient(socket_path=target_socket)
         client.connect()
         print(f"Using socket: {client.socket_path}")
 
-        pid = get_cmux_pid_for_socket(client.socket_path)
+        pid = get_programa_pid_for_socket(client.socket_path)
         if pid is None:
-            print("SKIP: cmux process not found for socket")
+            print("SKIP: programa process not found for socket")
             return 0
 
         cpu_monitor = CPUMonitor(pid)
@@ -510,7 +510,7 @@ def main() -> int:
             print("\nFAIL")
             for item in failures:
                 print(f"  - {item}")
-            sample_path = maybe_write_sample(pid, "cmux_workspace_churn_up_arrow_lag")
+            sample_path = maybe_write_sample(pid, "programa_workspace_churn_up_arrow_lag")
             if sample_path:
                 print(f"  sample_path: {sample_path}")
             return 1
@@ -518,9 +518,9 @@ def main() -> int:
         print("\nPASS")
         return 0
 
-    except cmuxError as e:
+    except ProgramaClientError as e:
         print(f"FAIL: {e}")
-        sample_path = maybe_write_sample(pid, "cmux_workspace_churn_up_arrow_error")
+        sample_path = maybe_write_sample(pid, "programa_workspace_churn_up_arrow_error")
         if sample_path:
             print(f"sample_path: {sample_path}")
         return 1

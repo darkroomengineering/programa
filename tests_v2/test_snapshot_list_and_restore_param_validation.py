@@ -16,7 +16,7 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -24,7 +24,7 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         listed = c._call("snapshot.list", {}, timeout_s=10.0) or {}
         _must("snapshots" in listed, f"snapshot.list should return a 'snapshots' key: {listed}")
         _must(
@@ -36,7 +36,7 @@ def main() -> int:
         raised = False
         try:
             c._call("snapshot.restore", {"id": unknown_id}, timeout_s=10.0)
-        except cmuxError as exc:
+        except ProgramaClientError as exc:
             raised = True
             message = str(exc).lower()
             _must(

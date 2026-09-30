@@ -73,7 +73,7 @@ struct MCPSocketBridge {
 
     /// Resolves the Programa control socket path the same way the CLI does
     /// (`CLI/programa.swift`'s `run()`, lines ~1387-1405): `PROGRAMA_SOCKET_PATH`
-    /// takes priority over `PROGRAMA_SOCKET` (matching `tests_v2/cmux.py:58-60`),
+    /// takes priority over `PROGRAMA_SOCKET` (matching `tests_v2/programa_client.py:58-60`),
     /// then falls back to `CLISocketPathResolver`'s tagged-debug / discovery /
     /// stable-default logic, shared via `CLI/SocketPathResolution.swift`.
     static func resolveSocketPath(environment: [String: String] = ProcessInfo.processInfo.environment) -> String {

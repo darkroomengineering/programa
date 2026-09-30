@@ -608,7 +608,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
 // MARK: - JSONC (comments + trailing commas) config parsing
 //
 // Regression coverage for a real user pain point: a project's programa.json (ported from
-// ~/.config/cmux/cmux.json) failed to parse with "Unexpected character '/' at line 5 col 4"
+// ~/.config/programa/programa.json) failed to parse with "Unexpected character '/' at line 5 col 4"
 // because plain JSONDecoder rejects `//`/`/* */` comments and trailing commas. These tests
 // exercise the same JSONCParser.preprocess -> JSONDecoder pipeline ProgramaConfigStore uses
 // at runtime, not just the parser in isolation.
@@ -786,12 +786,12 @@ final class ProgramaCommandIdentityTests: XCTestCase {
 
     func testCommandIdIsDeterministic() {
         let cmd = ProgramaCommandDefinition(name: "Run tests", command: "test")
-        XCTAssertEqual(cmd.id, "cmux.config.command.Run%20tests")
+        XCTAssertEqual(cmd.id, "programa.config.command.Run%20tests")
     }
 
     func testCommandIdEncodesSpecialCharacters() {
         let cmd = ProgramaCommandDefinition(name: "build & deploy", command: "make")
-        XCTAssertTrue(cmd.id.hasPrefix("cmux.config.command."))
+        XCTAssertTrue(cmd.id.hasPrefix("programa.config.command."))
         XCTAssertFalse(cmd.id.contains("&"))
         XCTAssertFalse(cmd.id.contains(" "))
     }
@@ -804,7 +804,7 @@ final class ProgramaCommandIdentityTests: XCTestCase {
 
     func testCommandIdDoesNotCollideWithBuiltinPrefix() {
         let cmd = ProgramaCommandDefinition(name: "palette.newWorkspace", command: "echo")
-        XCTAssertTrue(cmd.id.hasPrefix("cmux.config.command."))
+        XCTAssertTrue(cmd.id.hasPrefix("programa.config.command."))
         XCTAssertNotEqual(cmd.id, "palette.newWorkspace")
     }
 }

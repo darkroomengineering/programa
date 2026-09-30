@@ -19,7 +19,7 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -27,7 +27,7 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 LAYOUTS_DIR = Path(os.path.expanduser("~/.config/programa/layouts"))
 
 
-def _pwd_via_terminal(c: cmux, surface_id: str, timeout_s: float = 8.0) -> str:
+def _pwd_via_terminal(c: ProgramaClient, surface_id: str, timeout_s: float = 8.0) -> str:
     token = f"PWD_CHECK_{int(time.time() * 1000)}"
     c.send_surface(surface_id, f"printf '{token}:%s\\n' \"$(pwd)\"\\n")
 
@@ -39,10 +39,10 @@ def _pwd_via_terminal(c: cmux, surface_id: str, timeout_s: float = 8.0) -> str:
             if line.startswith(f"{token}:"):
                 return line[len(token) + 1:].strip()
         time.sleep(0.1)
-    raise cmuxError(f"Timed out waiting for pwd marker {token!r} in surface output: {last_text!r}")
+    raise ProgramaClientError(f"Timed out waiting for pwd marker {token!r} in surface output: {last_text!r}")
 
 
-def _shell_ack(c: cmux, surface_id: str) -> int:
+def _shell_ack(c: ProgramaClient, surface_id: str) -> int:
     nonce = "LIVE_" + uuid.uuid4().hex
     # Direct RPC preserves the printf escape and sends an actual Return once.
     c._call("surface.send_text", {"surface_id": surface_id, "text": f"printf '{nonce}:%s\\n' \"$$\"\n"})
@@ -54,7 +54,7 @@ def _shell_ack(c: cmux, surface_id: str) -> int:
                 if pid.isdigit():
                     return int(pid)
         time.sleep(0.1)
-    raise cmuxError("Original terminal did not acknowledge fresh nonce")
+    raise ProgramaClientError("Original terminal did not acknowledge fresh nonce")
 
 
 def main() -> int:
@@ -66,7 +66,7 @@ def main() -> int:
     live_workspace = ""
 
     try:
-        with cmux(SOCKET_PATH) as c:
+        with ProgramaClient(SOCKET_PATH) as c:
             created = c._call("workspace.create", {"cwd": str(source_dir)}, timeout_s=15.0) or {}
             source_workspace = str(created.get("workspace_id") or "")
             _must(bool(source_workspace), f"workspace.create returned no workspace_id: {created}")
@@ -99,10 +99,10 @@ def main() -> int:
                 selected_before = c.current_workspace()
                 try:
                     c._call("layout.apply", {"name": layout_name, "workspace_id": target}, timeout_s=15.0)
-                except cmuxError as error:
+                except ProgramaClientError as error:
                     _must("invalid_state" in str(error), f"Expected nonpristine target rejection: {error}")
                 else:
-                    raise cmuxError("layout.apply replaced an existing live terminal")
+                    raise ProgramaClientError("layout.apply replaced an existing live terminal")
                 after_rows = (c._call("surface.list", {"workspace_id": target}) or {}).get("surfaces") or []
                 _must([(r.get("id"), r.get("pane_id")) for r in after_rows] == [(r.get("id"), r.get("pane_id")) for r in before_rows], "Rejected apply changed terminal identity/layout")
                 _must(c.current_workspace() == selected_before, "Rejected apply changed workspace selection")
@@ -142,7 +142,7 @@ def main() -> int:
             if not workspace_id:
                 continue
             try:
-                with cmux(SOCKET_PATH) as c:
+                with ProgramaClient(SOCKET_PATH) as c:
                     c.close_workspace(workspace_id)
             except Exception:
                 pass

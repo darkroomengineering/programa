@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import palette_visible as _palette_visible, wait_until as _wait_until
 
 
@@ -27,7 +27,7 @@ def _focused_pane_id(client):
     panes = client.list_panes()
     focused = [row for row in panes if bool(row[3])]
     if not focused:
-        raise cmuxError(f"no focused pane: {panes}")
+        raise ProgramaClientError(f"no focused pane: {panes}")
     return str(focused[0][1])
 
 
@@ -35,12 +35,12 @@ def _selected_surface_title(client, pane_id):
     rows = client.list_pane_surfaces(pane_id)
     selected = [row for row in rows if bool(row[3])]
     if not selected:
-        raise cmuxError(f"no selected surface in pane {pane_id}: {rows}")
+        raise ProgramaClientError(f"no selected surface in pane {pane_id}: {rows}")
     return str(selected[0][2])
 
 
 def main():
-    with cmux(SOCKET_PATH) as client:
+    with ProgramaClient(SOCKET_PATH) as client:
         client.activate_app()
         time.sleep(0.2)
 
@@ -83,7 +83,7 @@ def main():
 
         new_title = _selected_surface_title(client, pane_id)
         if new_title != rename_to:
-            raise cmuxError(f"rename not applied: expected '{rename_to}', got '{new_title}'")
+            raise ProgramaClientError(f"rename not applied: expected '{rename_to}', got '{new_title}'")
 
     print("PASS: command-palette rename flow accepts Enter in input")
     return 0

@@ -17,6 +17,7 @@ public sealed partial class MainWindow : Window
     private const string TabDragDataKey = "com.darkroom.programa.surface-drag";
     private readonly CoreClient _core = new();
     private readonly Dictionary<string, TerminalView> _terminals = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TabViewItem> _tabItems = new(StringComparer.Ordinal);
     private CoreSnapshot _snapshot;
     private ShortcutSettings _shortcuts;
     private string? _startupSettingsError;
@@ -233,21 +234,35 @@ public sealed partial class MainWindow : Window
             {
                 terminal = new TerminalView(surface.Id);
                 terminal.Exited += OnTerminalExited;
+                terminal.TitleChanged += OnTerminalTitleChanged;
                 _terminals.Add(surface.Id, terminal);
             }
             var item = new TabViewItem
             {
-                Header = Localizer.Get("Terminal"),
+                Header = TabTitle(terminal),
                 IconSource = new SymbolIconSource { Symbol = Symbol.Document },
                 IsClosable = true,
                 Content = terminal,
                 Tag = new SurfaceTag(workspaceId, pane.Id, surface.Id),
             };
-            AutomationProperties.SetName(item, $"{Localizer.Get("Terminal")} {surfaceIndex + 1}");
+            AutomationProperties.SetName(item, string.IsNullOrEmpty(terminal.Title) ? $"{Localizer.Get("Terminal")} {surfaceIndex + 1}" : terminal.Title);
+            _tabItems[surface.Id] = item;
             tabs.TabItems.Add(item);
             if (surface.Id == pane.SelectedSurfaceId) tabs.SelectedItem = item;
         }
         return tabs;
+    }
+
+    private static string TabTitle(TerminalView terminal) =>
+        string.IsNullOrEmpty(terminal.Title) ? Localizer.Get("Terminal") : terminal.Title;
+
+    private void OnTerminalTitleChanged(string surfaceId)
+    {
+        if (_tabItems.TryGetValue(surfaceId, out var item) && _terminals.TryGetValue(surfaceId, out var terminal))
+        {
+            item.Header = TabTitle(terminal);
+            if (!string.IsNullOrEmpty(terminal.Title)) AutomationProperties.SetName(item, terminal.Title);
+        }
     }
 
     private static void ResizeVisualSplit(Grid grid, string direction, DragDeltaEventArgs args)
@@ -528,6 +543,7 @@ public sealed partial class MainWindow : Window
         {
             _terminals[id].Dispose();
             _terminals.Remove(id);
+            _tabItems.Remove(id);
         }
     }
 

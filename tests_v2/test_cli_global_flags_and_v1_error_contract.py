@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmuxError
+from programa_client import ProgramaClientError
 from v2_support import must as _must
 
 
@@ -19,19 +19,19 @@ LAST_SOCKET_HINT_PATH = Path("/tmp/programa-last-socket-path")
 
 
 def _find_cli_binary() -> str:
-    env_cli = os.environ.get("CMUXTERM_CLI")
+    env_cli = os.environ.get("PROGRAMA_CLI")
     if env_cli and os.path.isfile(env_cli) and os.access(env_cli, os.X_OK):
         return env_cli
 
-    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/cmux-tests-v2/Build/Products/Debug/cmux")
+    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/programa-tests-v2/Build/Products/Debug/programa")
     if os.path.isfile(fixed) and os.access(fixed, os.X_OK):
         return fixed
 
-    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
+    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/programa"), recursive=True)
     candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
-        raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
+        raise ProgramaClientError("Could not locate programa CLI binary; set PROGRAMA_CLI")
     candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return candidates[0]
 
@@ -51,7 +51,7 @@ def main() -> int:
     version_proc = _run([cli, "--version"])
     version_out = _merged_output(version_proc).lower()
     _must(version_proc.returncode == 0, f"--version should succeed: {version_proc.returncode} {version_out!r}")
-    _must("cmux" in version_out, f"--version output should mention cmux: {version_out!r}")
+    _must("programa" in version_out, f"--version output should mention programa: {version_out!r}")
 
     # Debug builds should auto-resolve the active debug socket via /tmp/programa-last-socket-path
     # when PROGRAMA_SOCKET_PATH is not set.
@@ -78,7 +78,7 @@ def main() -> int:
             pass
 
     # Global --password should parse as a flag (not a command name) and still allow non-password sockets.
-    ping_proc = _run([cli, "--socket", SOCKET_PATH, "--password", "ignored-in-cmuxonly", "ping"])
+    ping_proc = _run([cli, "--socket", SOCKET_PATH, "--password", "ignored-in-programaonly", "ping"])
     ping_out = _merged_output(ping_proc).lower()
     _must(ping_proc.returncode == 0, f"ping with --password should succeed: {ping_proc.returncode} {ping_out!r}")
     _must("pong" in ping_out, f"ping should still return pong: {ping_out!r}")

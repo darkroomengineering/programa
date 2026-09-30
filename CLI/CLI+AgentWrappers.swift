@@ -13,7 +13,9 @@ extension ProgramaCLI {
         guard let data = FileManager.default.contents(atPath: path) else { return false }
         let prefixData = data.prefix(512)
         guard let prefix = String(data: prefixData, encoding: .utf8) else { return false }
-        return prefix.contains("cmux claude wrapper - injects hooks and session tracking")
+        // Legacy cmux name, still matched so wrappers installed by older versions are recognized.
+        return prefix.contains("programa claude wrapper - injects hooks and session tracking")
+            || prefix.contains("cmux claude wrapper - injects hooks and session tracking")
     }
 
     func resolveExecutableInSearchPath(
@@ -138,7 +140,7 @@ extension ProgramaCLI {
 
     private func createClaudeNodeOptionsRestoreModule() throws -> URL {
         let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("cmux-claude-node-options", isDirectory: true)
+            .appendingPathComponent("programa-claude-node-options", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: nil)
         let restoreModuleURL = root.appendingPathComponent("restore-node-options.cjs", isDirectory: false)
         try writeShimIfChanged(Self.claudeNodeOptionsRestoreModule, to: restoreModuleURL)
@@ -320,7 +322,7 @@ extension ProgramaCLI {
                 preLaunch: nil,
                 createShimDir: { try self.createClaudeTeamsShimDirectory() },
                 beforeConfigure: nil,
-                tmuxPathPrefix: "cmux-claude-teams",
+                tmuxPathPrefix: "programa-claude-teams",
                 programaBinEnvVar: "PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN",
                 termOverrideEnvVar: "PROGRAMA_CLAUDE_TEAMS_TERM",
                 extraEnvVars: { _ in
@@ -473,7 +475,7 @@ extension ProgramaCLI {
             "dependencies": [
                 Self.omoPluginName: "latest"
             ],
-            "name": "cmux-omo-shadow",
+            "name": "programa-omo-shadow",
             "private": true
         ]
         let output = try JSONSerialization.data(withJSONObject: packageManifest, options: [.prettyPrinted, .sortedKeys])
@@ -798,7 +800,7 @@ extension ProgramaCLI {
                     )
                     return ["OPENCODE_PORT": openCodePort]
                 },
-                tmuxPathPrefix: "cmux-omo",
+                tmuxPathPrefix: "programa-omo",
                 programaBinEnvVar: "PROGRAMA_OMO_PROGRAMA_BIN",
                 termOverrideEnvVar: "PROGRAMA_OMO_TERM",
                 extraEnvVars: { launcherEnvironment in
@@ -846,7 +848,7 @@ extension ProgramaCLI {
                 preLaunch: nil,
                 createShimDir: { try self.createOMXShimDirectory() },
                 beforeConfigure: nil,
-                tmuxPathPrefix: "cmux-omx",
+                tmuxPathPrefix: "programa-omx",
                 programaBinEnvVar: "PROGRAMA_OMX_PROGRAMA_BIN",
                 termOverrideEnvVar: "PROGRAMA_OMX_TERM",
                 extraEnvVars: { _ in [] },
@@ -885,7 +887,7 @@ extension ProgramaCLI {
                 preLaunch: nil,
                 createShimDir: { try self.createOMCShimDirectory() },
                 beforeConfigure: nil,
-                tmuxPathPrefix: "cmux-omc",
+                tmuxPathPrefix: "programa-omc",
                 programaBinEnvVar: "PROGRAMA_OMC_PROGRAMA_BIN",
                 termOverrideEnvVar: "PROGRAMA_OMC_TERM",
                 extraEnvVars: { _ in [] },

@@ -22,7 +22,7 @@ private var programaWindowFirstResponderBypassDepth = 0
 private var programaFieldEditorOwningWebViewAssociationKey: UInt8 = 0
 
 @discardableResult
-func cmuxWithWindowFirstResponderBypass<T>(_ body: () -> T) -> T {
+func programaWithWindowFirstResponderBypass<T>(_ body: () -> T) -> T {
     programaWindowFirstResponderBypassDepth += 1
     defer {
         programaWindowFirstResponderBypassDepth = max(0, programaWindowFirstResponderBypassDepth - 1)
@@ -77,11 +77,6 @@ extension NSApplication {
 // Widened from `private extension` to `extension`: AppDelegate.installWindowResponderSwizzles()
 // (in AppDelegate.swift) references these @objc methods via #selector(...) for method swizzling. Refs #95.
 extension NSWindow {
-    @objc func programa_close() {
-        if AppDelegate.shared?.preserveMainWindowOnClose(self) == true { return }
-        programa_close()
-    }
-
     @objc func programa_makeFirstResponder(_ responder: NSResponder?) -> Bool {
         if programaIsWindowFirstResponderBypassActive() {
 #if DEBUG
@@ -385,7 +380,7 @@ extension NSWindow {
         // Command shortcuts when the terminal is focused — the local event monitor
         // (handleCustomShortcut) already handles app-level shortcuts, and anything
         // remaining should be menu items.
-        let firstResponderGhosttyView = cmuxOwningGhosttyView(for: self.firstResponder)
+        let firstResponderGhosttyView = programaOwningGhosttyView(for: self.firstResponder)
         let firstResponderWebView = self.firstResponder.flatMap {
             Self.programaOwningWebView(for: $0, in: self, event: event)
         }

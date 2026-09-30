@@ -84,7 +84,7 @@ final class BrowserPaneNavigationKeybindUITests: XCTestCase {
 
         let home = fileManager.homeDirectoryForCurrentUser
         let configContents = """
-        # cmux ui test
+        # programa ui test
         working-directory = \(home.path)
         keybind = cmd+ctrl+h=goto_split:left
         """

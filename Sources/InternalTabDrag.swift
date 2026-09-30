@@ -3,7 +3,7 @@ import SwiftUI
 #if compiler(>=6.2)
 @available(macOS 26.0, *)
 enum InternalTabDragConfigurationProvider {
-    // These drags only make sense inside cmux. Outside the app, Finder should
+    // These drags only make sense inside programa. Outside the app, Finder should
     // reject them instead of materializing placeholder files from the payload.
     static let value = DragConfiguration(
         operationsWithinApp: .init(allowCopy: false, allowMove: true, allowDelete: false),

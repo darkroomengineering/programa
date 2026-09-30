@@ -35,10 +35,9 @@ final class ProgramaSettingsFileStore {
     static var defaultPrimaryPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let newPath = (home as NSString).appendingPathComponent(".config/programa/settings.json")
+        // Legacy cmux name, still read so existing ~/.config/cmux/settings.json files keep working.
         let legacyPath = (home as NSString).appendingPathComponent(".config/cmux/settings.json")
         let fm = FileManager.default
-        // Prefer the new path; fall back to the legacy cmux path so existing users'
-        // ~/.config/programa/settings.json keeps working after the rebrand.
         if fm.fileExists(atPath: newPath) { return newPath }
         if fm.fileExists(atPath: legacyPath) { return legacyPath }
         return newPath
@@ -663,7 +662,7 @@ final class ProgramaSettingsFileStore {
     ) {
         if let raw = jsonString(section["socketControlMode"]) {
             let knownModes = Set([
-                "off", "cmuxonly", "automation", "password", "allowall", "openaccess", "fullopenaccess",
+                "off", "cmuxonly", "programaonly", "automation", "password", "allowall", "openaccess", "fullopenaccess",
                 "notifications", "full",
             ])
             let normalizedRaw = raw.replacingOccurrences(of: "-", with: "").lowercased()
@@ -1853,7 +1852,7 @@ private enum BackupValue: Codable, Equatable {
 }
 
 // JSONCParser (comments + trailing-comma stripping) now lives in Sources/JSONCParser.swift,
-// shared with ProgramaConfigStore's programa.json/cmux.json parsing.
+// shared with ProgramaConfigStore's programa.json (and legacy cmux.json) parsing.
 
 // NOTE (drift, refs #100): unlike ProgramaConfigStore's local/global config watchers, this
 // watcher has no delayed retry/backoff at all — on delete/rename it re-evaluates and
@@ -1874,7 +1873,7 @@ private final class ShortcutSettingsFileWatcher {
         self.path = path
         self.fileManager = fileManager
         self.onChange = onChange
-        self.watcher = FileWatcher(queue: DispatchQueue(label: "com.cmux.shortcut-settings-file-watch"))
+        self.watcher = FileWatcher(queue: DispatchQueue(label: "com.darkroom.programa.shortcut-settings-file-watch"))
         start()
     }
 

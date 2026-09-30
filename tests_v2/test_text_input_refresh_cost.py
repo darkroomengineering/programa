@@ -43,12 +43,12 @@ from typing import Optional
 
 # Mirrors tests_v2/test_workspace_churn_up_arrow_lag.py: speak the v2 JSON-RPC
 # protocol directly for the tight simulate-keystroke loop, and reuse
-# tests_v2/cmux.py only for its error type.
+# tests_v2/programa_client.py only for its error type.
 _TESTS_V2_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests_v2")
 )
 sys.path.insert(0, _TESTS_V2_DIR)
-from cmux import cmuxError  # noqa: E402
+from programa_client import ProgramaClientError  # noqa: E402
 
 KEY_EVENTS = int(os.environ.get("PROGRAMA_REFRESH_COST_KEY_EVENTS", "200"))
 KEY_DELAY_S = float(os.environ.get("PROGRAMA_REFRESH_COST_KEY_DELAY_S", "0.0"))
@@ -65,7 +65,7 @@ class RawSocketClient:
     """Minimal v2 JSON-RPC client for the simulate-keystroke loop.
 
     Copied in shape from RawSocketClient in
-    tests_v2/test_workspace_churn_up_arrow_lag.py: skips the full tests_v2/cmux.py
+    tests_v2/test_workspace_churn_up_arrow_lag.py: skips the full tests_v2/programa_client.py
     client's id-resolution helpers so per-call overhead stays minimal. Not
     shared with that file directly since it is out of scope for this change.
     """
@@ -98,7 +98,7 @@ class RawSocketClient:
 
     def call(self, method: str, params: Optional[dict] = None, timeout_s: float = 2.0) -> dict:
         if self.sock is None:
-            raise cmuxError("Raw socket client not connected")
+            raise ProgramaClientError("Raw socket client not connected")
 
         req_id = self._next_id
         self._next_id += 1
@@ -113,24 +113,24 @@ class RawSocketClient:
 
             remaining = deadline - time.time()
             if remaining <= 0:
-                raise cmuxError(f"Timed out waiting for response to: {method}")
+                raise ProgramaClientError(f"Timed out waiting for response to: {method}")
 
             ready, _, _ = select.select([self.sock], [], [], remaining)
             if not ready:
-                raise cmuxError(f"Timed out waiting for response to: {method}")
+                raise ProgramaClientError(f"Timed out waiting for response to: {method}")
 
             chunk = self.sock.recv(8192)
             if not chunk:
-                raise cmuxError("Socket closed while waiting for response")
+                raise ProgramaClientError("Socket closed while waiting for response")
             self.recv_buffer += chunk.decode("utf-8", errors="replace")
 
         try:
             resp = json.loads(line)
         except json.JSONDecodeError as e:
-            raise cmuxError(f"Invalid JSON response: {e}: {line[:200]}")
+            raise ProgramaClientError(f"Invalid JSON response: {e}: {line[:200]}")
 
         if not isinstance(resp, dict) or resp.get("id") != req_id:
-            raise cmuxError(f"Mismatched or invalid response to {method}: {line[:200]}")
+            raise ProgramaClientError(f"Mismatched or invalid response to {method}: {line[:200]}")
 
         if resp.get("ok") is True:
             return resp.get("result") or {}
@@ -138,7 +138,7 @@ class RawSocketClient:
         err = resp.get("error") or {}
         code = err.get("code") or "error"
         msg = err.get("message") or "Unknown error"
-        raise cmuxError(f"{code}: {msg}")
+        raise ProgramaClientError(f"{code}: {msg}")
 
 
 def resolve_target_socket() -> str:
@@ -146,12 +146,12 @@ def resolve_target_socket() -> str:
     # never target the main/untagged socket from an automated harness.
     socket_path = os.environ.get("PROGRAMA_SOCKET_PATH")
     if not socket_path:
-        raise cmuxError(
+        raise ProgramaClientError(
             "PROGRAMA_SOCKET_PATH is required. Point it to a tagged dev socket (for example /tmp/programa-debug-<tag>.sock)."
         )
     base = os.path.basename(socket_path)
     if not ALLOW_MAIN_SOCKET and base in {"programa.sock", "programa-debug.sock"}:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"Refusing to run against main socket '{socket_path}'. Set PROGRAMA_SOCKET_PATH to a tagged dev instance."
         )
     return socket_path
@@ -174,7 +174,7 @@ def main() -> int:
 
     try:
         target_socket = resolve_target_socket()
-    except cmuxError as e:
+    except ProgramaClientError as e:
         print(f"FAIL: {e}")
         return 1
 
@@ -199,7 +199,7 @@ def main() -> int:
                     time.sleep(KEY_DELAY_S)
 
             result = client.call("debug.samples.stats", {"bucket": BUCKET})
-    except cmuxError as e:
+    except ProgramaClientError as e:
         print(f"FAIL: {e}")
         return 1
 

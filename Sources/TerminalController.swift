@@ -57,7 +57,7 @@ class TerminalController {
     #endif
     private nonisolated let listenerStateLock = NSLock()
     var tabManager: TabManager?
-    private nonisolated(unsafe) var accessMode: SocketControlMode = .cmuxOnly
+    private nonisolated(unsafe) var accessMode: SocketControlMode = .programaOnly
     private let myPid = getpid()
     private nonisolated(unsafe) static var socketCommandPolicyDepth: Int = 0
     private nonisolated static let socketCommandPolicyLock = NSLock()
@@ -736,7 +736,7 @@ class TerminalController {
     // `internal` (not `private`) so the dedup logic can be exercised by
     // `TerminalControllerSocketSecurityTests` via `@testable import` (regression #6618).
     final class SocketFastPathState: @unchecked Sendable {
-        private let queue = DispatchQueue(label: "com.cmux.socket-fast-path")
+        private let queue = DispatchQueue(label: "com.darkroom.programa.socket-fast-path")
         private var lastReportedDirectories: [SocketSurfaceKey: String] = [:]
         private var lastReportedShellStates: [SocketSurfaceKey: Workspace.PanelShellActivityState] = [:]
         private let maxTrackedDirectories = 4096
@@ -906,9 +906,9 @@ class TerminalController {
     /// can never reach `myPid` and `isDescendant` below would reject every
     /// command sent from inside that pane for the life of the session (#286).
     /// Treating the adopted child as an additional ancestry root keeps
-    /// `cmuxOnly` meaning "processes Programa owns" — it does not widen the
+    /// `programaOnly` meaning "processes Programa owns" — it does not widen the
     /// mode to every process running as this user, which is the boundary
-    /// `cmuxOnly` exists to be stricter than.
+    /// `programaOnly` exists to be stricter than.
     ///
     /// Entries are added when a surface is revived and removed when it is torn
     /// down, so a recycled pid cannot stay authorized past its session.
@@ -1791,10 +1791,10 @@ class TerminalController {
             return
         }
 
-        // In cmuxOnly mode, verify the connecting process is a descendant of cmux.
+        // In programaOnly mode, verify the connecting process is a descendant of Programa.
         // Password mode skips it on purpose: it exists so external clients (programa-mcp started
         // by another app, scripts) can connect by proving they know the password.
-        if unixPolicy != nil, requestPolicy.accessMode == .cmuxOnly {
+        if unixPolicy != nil, requestPolicy.accessMode == .programaOnly {
             // Use pre-captured peer PID if available (captured in accept loop before
             // the peer can disconnect), falling back to live lookup.
             guard let pid = peerPid ?? getPeerPid(socket) else {

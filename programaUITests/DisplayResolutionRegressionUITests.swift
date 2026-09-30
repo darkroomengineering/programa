@@ -20,11 +20,11 @@ final class DisplayResolutionRegressionUITests: XCTestCase {
 
         let token = UUID().uuidString
         let tempPrefix = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-display-\(token)")
+            .appendingPathComponent("programa-ui-test-display-\(token)")
             .path
         launchTag = "ui-tests-display-resolution-\(token.prefix(8))"
         diagnosticsPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-display-churn-\(token).json")
+            .appendingPathComponent("programa-ui-test-display-churn-\(token).json")
             .path
         displayReadyPath = "\(tempPrefix).ready"
         displayIDPath = "\(tempPrefix).id"
@@ -302,7 +302,7 @@ final class DisplayResolutionRegressionUITests: XCTestCase {
         proc.environment = env
 
         let logPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-app-\(launchTag).log").path
+            .appendingPathComponent("programa-ui-test-app-\(launchTag).log").path
         FileManager.default.createFile(atPath: logPath, contents: nil)
         let logHandle = FileHandle(forWritingAtPath: logPath)
         proc.standardOutput = logHandle
@@ -323,18 +323,18 @@ final class DisplayResolutionRegressionUITests: XCTestCase {
 
     private func resolveAppBinaryPath() throws -> String {
         // UI test bundle is at:
-        //   .../Build/Products/Debug/cmuxUITests-Runner.app/Contents/PlugIns/cmuxUITests.xctest
+        //   .../Build/Products/Debug/programaUITests-Runner.app/Contents/PlugIns/programaUITests.xctest
         // The app binary is at:
-        //   .../Build/Products/Debug/cmux DEV.app/Contents/MacOS/cmux DEV
+        //   .../Build/Products/Debug/programa DEV.app/Contents/MacOS/programa DEV
         let testBundle = Bundle(for: Self.self)
         let productsDir = testBundle.bundleURL
             .deletingLastPathComponent()  // -> .../Contents/PlugIns
             .deletingLastPathComponent()  // -> .../Contents
-            .deletingLastPathComponent()  // -> .../cmuxUITests-Runner.app
+            .deletingLastPathComponent()  // -> .../programaUITests-Runner.app
             .deletingLastPathComponent()  // -> .../Debug
         let binaryPath = productsDir
-            .appendingPathComponent("cmux DEV.app")
-            .appendingPathComponent("Contents/MacOS/cmux DEV")
+            .appendingPathComponent("programa DEV.app")
+            .appendingPathComponent("Contents/MacOS/programa DEV")
             .path
         if FileManager.default.fileExists(atPath: binaryPath) {
             return binaryPath
