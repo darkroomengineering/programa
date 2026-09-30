@@ -61,22 +61,23 @@ fileprivate struct ProgressRingView: View {
 fileprivate struct BrowserStyleLoadingSpinner: View {
     let size: CGFloat
     let color: Color
+    @State private var angle: Double = 0
 
     var body: some View {
-        TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let angle = (t.truncatingRemainder(dividingBy: 0.9) / 0.9) * 360.0
-
-            ZStack {
-                Circle()
-                    .stroke(color.opacity(0.20), lineWidth: ringWidth)
-                Circle()
-                    .trim(from: 0.0, to: 0.28)
-                    .stroke(color, style: StrokeStyle(lineWidth: ringWidth, lineCap: .round))
-                    .rotationEffect(.degrees(angle))
-            }
-            .frame(width: size, height: size)
+        ZStack {
+            Circle()
+                .stroke(color.opacity(0.20), lineWidth: ringWidth)
+            Circle()
+                .trim(from: 0.0, to: 0.28)
+                .stroke(color, style: StrokeStyle(lineWidth: ringWidth, lineCap: .round))
+                .rotationEffect(.degrees(angle))
         }
+        .frame(width: size, height: size)
+        .onAppear {
+            // 0.9s per revolution; one repeating animation instead of a per-frame body.
+            angle = 360
+        }
+        .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: angle)
     }
 
     private var ringWidth: CGFloat {

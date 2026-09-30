@@ -49,16 +49,7 @@ enum TabBarMetrics {
 
     // MARK: - Animations
 
-    static let selectionDuration: Double = 0.15
-    static let closeDuration: Double = 0.2
-    static let reorderDuration: Double = 0.3
-    static let reorderBounce: Double = 0.15
     static let hoverDuration: Double = 0.1
-
-    // MARK: - Split Animations (120fps via CADisplayLink)
-
-    /// Duration for split entry animation (fast and snappy like Hyprland)
-    static let splitAnimationDuration: Double = 0.15
 
     #if DEBUG
     private static func resolved(_ name: String, default defaultValue: CGFloat) -> CGFloat {
