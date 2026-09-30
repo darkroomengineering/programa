@@ -20,7 +20,7 @@ extension ProgramaCLI {
     ) -> [CommandDescriptor] {
         [
             CommandDescriptor(names: ["capture-pane"], helpLines: ["capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]"], execute: runTmuxCompatCommand),
-            CommandDescriptor(names: ["resize-pane"], helpLines: ["resize-pane --pane <id|ref> [--workspace <id|ref>] (-L|-R|-U|-D) [--amount <n>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["resize-pane"], helpLines: ["resize-pane --pane <id|ref> [--workspace <id|ref>] (-L|-R|-U|-D) [--amount <cells>]"], execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["pipe-pane"], helpLines: ["pipe-pane --command <shell-command> [--workspace <id|ref>] [--surface <id|ref>]"], execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["wait-for"], helpLines: ["wait-for [-S|--signal] <name> [--timeout <seconds>]"], execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["swap-pane"], helpLines: ["swap-pane --pane <id|ref> --target-pane <id|ref> [--workspace <id|ref>]"], grammar: CLIArgumentGrammar(valueOptions: ["pane", "target-pane", "workspace"], requiredOptions: ["pane", "target-pane"]), execute: runTmuxCompatCommand),
@@ -721,7 +721,11 @@ extension ProgramaCLI {
         let payload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": workspaceId])
         let panes = payload["panes"] as? [[String: Any]] ?? []
         if let paneId {
-            return panes.first { ($0["id"] as? String) == paneId }
+            let wanted = UUID(uuidString: paneId)
+            return panes.first {
+                guard let id = $0["id"] as? String else { return false }
+                return id == paneId || (wanted != nil && UUID(uuidString: id) == wanted)
+            }
         }
         return panes.first { ($0["focused"] as? Bool) == true } ?? panes.first
     }
@@ -737,9 +741,10 @@ extension ProgramaCLI {
         client: SocketClient
     ) throws {
         let horizontal = directions.contains { $0 == "left" || $0 == "right" }
-        guard let cellSize = (pane[horizontal ? "cell_width" : "cell_height"] as? NSNumber)?.doubleValue, cellSize > 0 else {
-            throw CLIError(message: "resize-pane: cell size unavailable for pane \(paneId)")
-        }
+        // Panes without a live terminal (a browser tab, a closed surface) report no cell size;
+        // use a typical terminal cell so a resize still moves the border.
+        let reported = (pane[horizontal ? "cell_width" : "cell_height"] as? NSNumber)?.doubleValue ?? 0
+        let cellSize = reported > 0 ? reported : (horizontal ? 8 : 16)
         let amount = max(1, Int((Double(cells) * cellSize).rounded()))
         // A pane grows or shrinks by moving whichever border it has; try each candidate direction.
         var lastError: Error?
@@ -757,6 +762,48 @@ extension ProgramaCLI {
             }
         }
         if let lastError { throw lastError }
+    }
+
+    /// Reads a surface's text. Without `scrollback` or `lines` only the visible screen is
+    /// returned; `lines` reads that many rows counting up from the bottom of the scrollback.
+    private func tmuxReadPaneText(
+        workspaceId: String?,
+        surfaceId: String?,
+        scrollback: Bool,
+        lines: Int?,
+        client: SocketClient
+    ) throws -> [String: Any] {
+        var params: [String: Any] = [:]
+        if let workspaceId { params["workspace_id"] = workspaceId }
+        if let surfaceId { params["surface_id"] = surfaceId }
+        if scrollback || lines != nil { params["scrollback"] = true }
+        if let lines { params["lines"] = lines }
+        return try client.sendV2(method: V2MethodNames.surfaceReadText, params: params)
+    }
+
+    /// Moves a pane border `cells` terminal cells for the native `resize-pane` command,
+    /// resolving optional workspace and pane handles the way the tmux `-t` target does.
+    private func tmuxResizePaneBorder(
+        workspaceHandle: String?,
+        paneHandle: String?,
+        direction: String,
+        cells: Int,
+        client: SocketClient
+    ) throws {
+        let paneHandle = normalizedTmuxTarget(paneHandle)
+        let workspaceId: String
+        if workspaceHandle == nil, let paneHandle,
+           let owner = try tmuxWorkspaceIdForPaneHandle(paneHandle, client: client) {
+            workspaceId = owner
+        } else {
+            workspaceId = try resolveWorkspaceId(workspaceHandle, client: client)
+        }
+        let paneId = try paneHandle.map { try tmuxCanonicalPaneId($0, workspaceId: workspaceId, client: client) }
+            ?? tmuxFocusedPaneId(workspaceId: workspaceId, client: client)
+        guard let pane = try tmuxPaneMetrics(workspaceId: workspaceId, paneId: paneId, client: client) else {
+            throw CLIError(message: "resize-pane: pane not found: \(paneId)")
+        }
+        try tmuxResizePane(workspaceId: workspaceId, paneId: paneId, directions: [direction], cells: cells, pane: pane, client: client)
     }
 
     private func tmuxShellQuote(_ value: String) -> String {
@@ -1264,23 +1311,27 @@ extension ProgramaCLI {
             let target = try tmuxResolveSurfaceTarget(parsed.value("-t"), client: client)
             // tmux captures only the visible pane unless -S reaches into history:
             // "-S -" starts at the top of the scrollback, "-S -N" starts N lines above the screen.
-            var params: [String: Any] = [
-                "workspace_id": target.workspaceId,
-                "surface_id": target.surfaceId
-            ]
+            var scrollback = false
+            var lines: Int?
             if let start = parsed.value("-S") {
                 if start == "-" {
-                    params["scrollback"] = true
+                    scrollback = true
                 } else if let historyLines = Int(start), historyLines < 0 {
                     let visibleRows = try tmuxPaneMetrics(
                         workspaceId: target.workspaceId,
                         paneId: target.paneId,
                         client: client
                     )?["rows"] as? Int ?? 0
-                    params["lines"] = abs(historyLines) + visibleRows
+                    lines = abs(historyLines) + visibleRows
                 }
             }
-            let payload = try client.sendV2(method: V2MethodNames.surfaceReadText, params: params)
+            let payload = try tmuxReadPaneText(
+                workspaceId: target.workspaceId,
+                surfaceId: target.surfaceId,
+                scrollback: scrollback,
+                lines: lines,
+                client: client
+            )
             let text = (payload["text"] as? String) ?? ""
             if parsed.hasFlag("-p") {
                 print(text)
@@ -1748,25 +1799,22 @@ extension ProgramaCLI {
             let workspaceArg = wsArg ?? (windowOverride == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
             let surfaceArg = sfArg ?? (wsArg == nil && windowOverride == nil ? ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] : nil)
 
-            var params: [String: Any] = [:]
             let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
             let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId)
-            if let sfId { params["surface_id"] = sfId }
-
-            let includeScrollback = rem2.contains("--scrollback")
-            if includeScrollback {
-                params["scrollback"] = true
-            }
+            var lineCount: Int?
             if let linesArg {
-                guard let lineCount = Int(linesArg), lineCount > 0 else {
+                guard let parsedLines = Int(linesArg), parsedLines > 0 else {
                     throw CLIError(message: "--lines must be greater than 0")
                 }
-                params["lines"] = lineCount
-                params["scrollback"] = true
+                lineCount = parsedLines
             }
-
-            let payload = try client.sendV2(method: V2MethodNames.surfaceReadText, params: params)
+            let payload = try tmuxReadPaneText(
+                workspaceId: wsId,
+                surfaceId: sfId,
+                scrollback: rem2.contains("--scrollback"),
+                lines: lineCount,
+                client: client
+            )
             if jsonOutput {
                 print(jsonString(payload))
             } else {
@@ -1790,13 +1838,9 @@ extension ProgramaCLI {
                 return "right"
             }()
 
-            var params: [String: Any] = ["direction": direction, "amount": amount]
             let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-            if let wsId { params["workspace_id"] = wsId }
-            let paneId = try normalizePaneHandle(paneArg, client: client, workspaceHandle: wsId, allowFocused: true)
-            if let paneId { params["pane_id"] = paneId }
-            let payload = try client.sendV2(method: V2MethodNames.paneResize, params: params)
-            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["pane"]))
+            try tmuxResizePaneBorder(workspaceHandle: wsId, paneHandle: paneArg, direction: direction, cells: amount, client: client)
+            print(jsonOutput ? jsonString(["ok": true]) : "OK")
 
         case "pipe-pane":
             let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowOverride)
@@ -2139,7 +2183,7 @@ extension ProgramaCLI {
             """
         case "resize-pane":
             return """
-            Usage: programa resize-pane [--pane <id|ref>] [--workspace <id|ref>] [-L|-R|-U|-D] [--amount <n>]
+            Usage: programa resize-pane [--pane <id|ref>] [--workspace <id|ref>] [-L|-R|-U|-D] [--amount <cells>]
 
             tmux-compatible pane resize command.
 
@@ -2147,7 +2191,7 @@ extension ProgramaCLI {
               --pane <id|ref>        Pane to resize (default: focused pane)
               --workspace <id|ref>   Workspace context (default: $PROGRAMA_WORKSPACE_ID)
               -L|-R|-U|-D            Direction (default: -R)
-              --amount <n>           Resize amount (default: 1)
+              --amount <cells>       Cells to move the border (default: 1)
             """
         case "pipe-pane":
             return """
