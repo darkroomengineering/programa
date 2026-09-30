@@ -1766,187 +1766,21 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         )
     }
 
-    func testCmdCtrlWHidesWindowAndPreservesItsSessions() {
-        guard let appDelegate = AppDelegate.shared else {
-            XCTFail("Expected AppDelegate.shared")
-            return
-        }
-
-        let windowId = appDelegate.createMainWindow()
-        defer { closeWindow(withId: windowId) }
-
-        guard let targetWindow = window(withId: windowId) else {
-            XCTFail("Expected test window")
-            return
-        }
-
-        let manager = appDelegate.tabManagerFor(windowId: windowId)
-        let workspace = manager?.selectedWorkspace
-        let panelIds = workspace.map { Set($0.panels.keys) }
-
-        guard let event = makeKeyDownEvent(
-            key: "w",
-            modifiers: [.command, .control],
-            keyCode: 13,
-            windowNumber: targetWindow.windowNumber
-        ) else {
-            XCTFail("Failed to construct Cmd+Ctrl+W event")
-            return
-        }
-
-#if DEBUG
-        XCTAssertTrue(appDelegate.debugHandleCustomShortcut(event: event))
-#else
-        XCTFail("debugHandleCustomShortcut is only available in DEBUG")
-#endif
-
-        XCTAssertFalse(targetWindow.isVisible)
-        XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
-        XCTAssertTrue(manager?.selectedWorkspace === workspace)
-        XCTAssertEqual(workspace.map { Set($0.panels.keys) }, panelIds)
-        XCTAssertTrue(appDelegate.reopenMostRecentlyHiddenMainWindow(onlyIfNoVisibleMainWindows: false))
-        XCTAssertTrue(targetWindow.isVisible)
-        XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
-    }
-
-    func testNativeCloseReopensMostRecentlyHiddenWindowWithoutAddingWorkspace() {
-        guard let appDelegate = AppDelegate.shared else {
-            XCTFail("Expected AppDelegate.shared")
-            return
-        }
-
-        let windowId = appDelegate.createMainWindow()
-        defer { closeWindow(withId: windowId) }
-        guard let targetWindow = window(withId: windowId) else {
-            XCTFail("Expected test window")
-            return
-        }
-
-        let olderWindowId = appDelegate.createMainWindow()
-        defer { closeWindow(withId: olderWindowId) }
-        guard let olderWindow = window(withId: olderWindowId) else {
-            XCTFail("Expected second test window")
-            return
-        }
-        olderWindow.close()
-        let manager = appDelegate.tabManagerFor(windowId: windowId)
-        let workspaceIds = manager?.tabs.map(\.id)
-        targetWindow.performClose(nil)
-        XCTAssertFalse(targetWindow.isVisible)
-        XCTAssertTrue(appDelegate.reopenMostRecentlyHiddenMainWindow(onlyIfNoVisibleMainWindows: false))
-        XCTAssertTrue(targetWindow.isVisible)
-        XCTAssertFalse(olderWindow.isVisible, "Reopen must choose the last hidden window")
-        XCTAssertEqual(manager?.tabs.map(\.id), workspaceIds)
-        XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
-    }
-
-    func testSessionSnapshotFlagsClosedWindowHiddenAndOrdersItLast() throws {
-        let appDelegate = try XCTUnwrap(AppDelegate.shared)
-        closeAllMainWindows()
-        let visibleWindowId = appDelegate.createMainWindow()
-        defer { closeWindow(withId: visibleWindowId) }
-        let closedWindowId = appDelegate.createMainWindow()
-        defer { closeWindow(withId: closedWindowId) }
-        let closedWindow = try XCTUnwrap(window(withId: closedWindowId))
-        let closedManager = try XCTUnwrap(appDelegate.tabManagerFor(windowId: closedWindowId))
-        _ = closedManager.addWorkspace()
-        let closedWorkspaceCount = closedManager.tabs.count
-
-        XCTAssertTrue(appDelegate.focusMainWindow(windowId: closedWindowId))
-        closedWindow.performClose(nil)
-        XCTAssertFalse(closedWindow.isVisible)
-        XCTAssertTrue(
-            appDelegate.tabManagerFor(windowId: closedWindowId) === closedManager,
-            "An ordinary close keeps the window registered for Dock reopen"
-        )
-
-        let snapshot = try XCTUnwrap(appDelegate.buildSessionSnapshot(includeScrollback: false))
-        XCTAssertEqual(snapshot.windows.count, 2)
-        let visible = try XCTUnwrap(snapshot.windows.first)
-        let hidden = try XCTUnwrap(snapshot.windows.last)
-        XCTAssertFalse(visible.isHiddenWindow, "The window the user can see must stay the primary restore entry")
-        XCTAssertTrue(hidden.isHiddenWindow, "A closed window is written flagged hidden, never as a visible one")
-        XCTAssertEqual(hidden.tabManager.workspaces.count, closedWorkspaceCount)
-        XCTAssertEqual(
-            SessionPersistenceStore.windowsToRestore(from: snapshot).count, 1,
-            "Restore must not bring a closed window back on the next launch"
-        )
-        XCTAssertEqual(SessionPersistenceStore.hiddenWindows(from: snapshot).count, 1)
-
-        XCTAssertTrue(appDelegate.reopenMostRecentlyHiddenMainWindow(onlyIfNoVisibleMainWindows: false))
-        XCTAssertTrue(closedWindow.isVisible)
-        let reopened = try XCTUnwrap(appDelegate.buildSessionSnapshot(includeScrollback: false))
-        XCTAssertTrue(
-            reopened.windows.allSatisfy { !$0.isHiddenWindow },
-            "Reopening from the Dock makes the window an ordinary restore entry again"
-        )
-    }
-
-    func testHiddenPrimaryWindowRetainsItsWindowAndWorkspaceUntilExplicitDisposal() throws {
-        let appDelegate = try XCTUnwrap(AppDelegate.shared)
-        AppDelegate.installWindowResponderSwizzlesForTesting()
-        let windowId = UUID()
-        defer { _ = appDelegate.closeMainWindow(windowId: windowId) }
-        let manager = TabManager()
-        let workspace = try XCTUnwrap(manager.selectedWorkspace)
-        weak var retainedWindow: NSWindow?
-        autoreleasepool {
-            let primaryWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
-                styleMask: [.titled, .closable], backing: .buffered, defer: false
-            )
-            primaryWindow.isReleasedWhenClosed = false
-            appDelegate.registerMainWindow(
-                primaryWindow, windowId: windowId, tabManager: manager,
-                sidebarState: SidebarState(), sidebarSelectionState: SidebarSelectionState()
-            )
-            retainedWindow = primaryWindow
-            primaryWindow.close()
-        }
-        let window = try XCTUnwrap(retainedWindow)
-        XCTAssertTrue(appDelegate.tabManagerFor(windowId: windowId) === manager)
-        XCTAssertFalse(workspace.panels.isEmpty)
-        XCTAssertTrue(appDelegate.closeMainWindow(windowId: windowId))
-        XCTAssertNil(appDelegate.tabManagerFor(windowId: windowId))
-        XCTAssertTrue(workspace.panels.isEmpty)
-        XCTAssertFalse(window.isVisible)
-    }
-
-    func testDockNewWindowAndNewWorkspaceReopenHiddenSession() throws {
+    func testOrdinaryCloseFreesWindowAndSessions() throws {
         let appDelegate = try XCTUnwrap(AppDelegate.shared)
         closeAllMainWindows()
         let windowId = appDelegate.createMainWindow()
         defer { closeWindow(withId: windowId) }
         let targetWindow = try XCTUnwrap(window(withId: windowId))
         let manager = try XCTUnwrap(appDelegate.tabManagerFor(windowId: windowId))
-        let workspaceIds = manager.tabs.map(\.id)
-        targetWindow.close()
-        XCTAssertFalse(appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false))
-        XCTAssertTrue(targetWindow.isVisible)
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
 
-        targetWindow.close()
-        XCTAssertFalse(appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: true),
-                       "Visible auxiliary windows must not prevent reopening the main session")
-        XCTAssertTrue(targetWindow.isVisible)
+        targetWindow.performClose(nil)
 
-        targetWindow.close()
-        appDelegate.openNewMainWindow(nil)
-        XCTAssertTrue(targetWindow.isVisible)
-        XCTAssertEqual(mainWindowIds(), Set([windowId]))
-
-        targetWindow.close()
-        let event = try XCTUnwrap(makeKeyDownEvent(
-            key: "n", modifiers: [.command], keyCode: 45,
-            windowNumber: targetWindow.windowNumber
-        ))
-        #if DEBUG
-        XCTAssertTrue(appDelegate.debugHandleCustomShortcut(event: event))
-        #else
-        XCTFail("debugHandleCustomShortcut is only available in DEBUG")
-        #endif
-        XCTAssertTrue(targetWindow.isVisible)
-        XCTAssertEqual(manager.tabs.map(\.id), workspaceIds)
-        XCTAssertEqual(mainWindowIds(), Set([windowId]))
+        XCTAssertNil(appDelegate.tabManagerFor(windowId: windowId), "A closed window is unregistered, not kept for reopen")
+        XCTAssertTrue(workspace.panels.isEmpty)
+        XCTAssertFalse(targetWindow.isVisible)
+        XCTAssertTrue(appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false))
     }
 
     func testClosingMainWindowTearsDownEveryOwnedWorkspaceAndBrowserElementRef() throws {

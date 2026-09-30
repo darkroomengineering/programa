@@ -516,7 +516,6 @@ struct programaApp: App {
 
                 splitCommandButton(title: String(localized: "menu.file.newWorkspace", defaultValue: "New Workspace"), shortcut: menuShortcut(for: .newTab)) {
                     if let appDelegate = AppDelegate.shared {
-                        if appDelegate.reopenMostRecentlyHiddenMainWindow() { return }
                         if appDelegate.addWorkspaceInPreferredMainWindow(debugSource: "menu.newWorkspace") == nil {
 #if DEBUG
                             FocusLogStore.shared.append(

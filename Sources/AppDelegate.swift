@@ -848,9 +848,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let sidebarState: SidebarState
         let sidebarSelectionState: SidebarSelectionState
         weak var window: NSWindow?
-        // SwiftUI owns the primary window; keep it alive while it is ordered out.
-        var hiddenWindow: NSWindow?
-        var hiddenAt: Date?
         weak var observedWindow: NSWindow?
         var willCloseObserver: NSObjectProtocol?
         var willCloseObserverGeneration: UUID?
@@ -971,11 +968,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         method_exchangeImplementations(originalMethod, swizzledMethod)
     }()
-    private static let didInstallWindowCloseSwizzle: Void = {
-        guard let original = class_getInstanceMethod(NSWindow.self, #selector(NSWindow.close)),
-              let replacement = class_getInstanceMethod(NSWindow.self, #selector(NSWindow.programa_close)) else { return }
-        method_exchangeImplementations(original, replacement)
-    }()
     private static let didInstallApplicationSendEventSwizzle: Void = {
         let targetClass: AnyClass = NSApplication.self
         let originalSelector = #selector(NSApplication.sendEvent(_:))
@@ -1054,7 +1046,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     var mainWindowContexts: [ObjectIdentifier: MainWindowContext] = [:]
-    private var disposingMainWindows: Set<ObjectIdentifier> = []
     private var mainWindowControllers: [MainWindowController] = []
 
     /// Tracks the cascade point for new windows, matching Ghostty's upstream algorithm.
@@ -1805,10 +1796,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // sessions silently. Say what happened.
             notifyUncleanShutdownRecovery()
         }
-        // Windows the user had closed before quitting are not shown again: their escrowed
-        // shells are ended here, before the orphan reconciler below could revive them into a
-        // recovery window. Until 2026-09-18 they were restored as ordinary visible windows,
-        // so every window ever closed with the red button came back on the next launch.
+        // Windows flagged closed in the snapshot are not shown again: their escrowed shells
+        // are ended here, before the orphan reconciler below could revive them into a
+        // recovery window.
         let windowsToRestore = startupSnapshot.map { SessionPersistenceStore.windowsToRestore(from: $0) } ?? []
         if let startupSnapshot {
             endShellsOfHiddenWindows(SessionPersistenceStore.hiddenWindows(from: startupSnapshot))
@@ -1896,10 +1886,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     /// Ends the shells of windows the user had closed before the previous run ended.
-    /// `preserveMainWindowOnClose` keeps a closed window's PTYs alive so the Dock can reopen
-    /// it in the same run, and quit escrows them like any other session -- but a closed
-    /// window must not come back on relaunch, and without this the orphan reconciler would
-    /// revive those shells into a recovery window instead. Each session is retrieved from the
+    /// Snapshots written by older builds flag closed windows `isHidden` and their PTYs were
+    /// escrowed at quit. A closed window must not come back on relaunch, and without this the
+    /// orphan reconciler would revive those shells into a recovery window instead. Each session is retrieved from the
     /// holder exactly like a reattach, then hung up (SIGHUP to the child, master fd closed)
     /// and its WAL directory removed. Runs synchronously on the main actor at launch, before
     /// any window restore, with the same per-session retrieve timeout a reattach pays.
@@ -2783,7 +2772,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     struct WindowMoveTarget: Identifiable {
         let windowId: UUID
         let label: String
-        let tabManager: TabManager
         let isCurrentWindow: Bool
 
         var id: UUID { windowId }
@@ -2821,12 +2809,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let orderedSummaries = orderedMainWindowSummaries(referenceWindowId: referenceWindowId)
         let labels = windowLabelsById(orderedSummaries: orderedSummaries, referenceWindowId: referenceWindowId)
         return orderedSummaries.compactMap { summary in
-            guard let manager = tabManagerFor(windowId: summary.windowId) else { return nil }
+            guard tabManagerFor(windowId: summary.windowId) != nil else { return nil }
             let label = labels[summary.windowId] ?? "Window"
             return WindowMoveTarget(
                 windowId: summary.windowId,
                 label: label,
-                tabManager: manager,
                 isCurrentWindow: summary.windowId == referenceWindowId
             )
         }
@@ -3801,54 +3788,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return true
     }
 
-    /// Explicit workspace/panel and socket disposal still ends the owned sessions.
+    /// Closing a main window frees it: its workspaces and sessions end with it.
     func disposeMainWindow(_ window: NSWindow) {
-        let key = ObjectIdentifier(window)
-        guard disposingMainWindows.insert(key).inserted else { return }
-        defer { disposingMainWindows.remove(key) }
-        contextForMainTerminalWindow(window)?.hiddenWindow = nil
         window.close()
-    }
-
-    /// Ordinary window close hides the UI without destroying its workspaces or PTYs.
-    func preserveMainWindowOnClose(_ window: NSWindow) -> Bool {
-        guard !isTerminatingApp,
-              !disposingMainWindows.contains(ObjectIdentifier(window)),
-              let context = contextForMainTerminalWindow(window) else { return false }
-        context.hiddenWindow = window
-        context.hiddenAt = Date()
-        NotificationCenter.default.post(
-            name: .commandPaletteDismissRequested,
-            object: window,
-            userInfo: ["restoreFocus": false]
-        )
-        teardownCommandPaletteState(for: context.windowId)
-        dismissNotificationsPopoverIfShown()
-        if let panelId = browserAddressBarFocusedPanelId,
-           context.tabManager.tabs.contains(where: { $0.panels[panelId] != nil }) {
-            browserAddressBarFocusedPanelId = nil
-            stopBrowserOmnibarSelectionRepeat()
-        }
-        persistWindowGeometry(from: window)
-        window.orderOut(nil)
-        _ = saveSessionSnapshot(includeScrollback: false)
-        return true
-    }
-
-    @discardableResult
-    func reopenMostRecentlyHiddenMainWindow(onlyIfNoVisibleMainWindows: Bool = true) -> Bool {
-        if onlyIfNoVisibleMainWindows,
-           mainWindowContexts.values.contains(where: {
-               guard let window = $0.window else { return false }
-               return window.isVisible || window.isMiniaturized
-           }) { return false }
-        guard let context = mainWindowContexts.values
-            .filter({ $0.hiddenWindow != nil })
-            .max(by: { ($0.hiddenAt ?? .distantPast) < ($1.hiddenAt ?? .distantPast) }),
-              let window = context.hiddenWindow else { return false }
-        CommandPaletteController.windowLifecycle.reset(windowId: context.windowId)
-        bringToFront(window)
-        return window.isVisible
     }
 
     private func orderedMainWindowSummaries(referenceWindowId: UUID?) -> [MainWindowSummary] {
@@ -4478,14 +4420,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     @objc func openNewMainWindow(_ sender: Any?) {
-        if reopenMostRecentlyHiddenMainWindow() { return }
         _ = createMainWindow()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        // AppKit's flag includes Settings and other auxiliary windows.
-        if reopenMostRecentlyHiddenMainWindow() { return false }
-        return true
+        true
     }
 
     /// Shows the "Open Folder" panel and creates a workspace for the selected directory.
@@ -5778,7 +5717,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     static func installWindowResponderSwizzlesForTesting() {
-        _ = didInstallWindowCloseSwizzle
         _ = didInstallWindowKeyEquivalentSwizzle
         _ = didInstallWindowFirstResponderSwizzle
         _ = didInstallWindowSendEventSwizzle
@@ -5797,7 +5735,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     private func installWindowResponderSwizzles() {
-        _ = Self.didInstallWindowCloseSwizzle
         _ = Self.didInstallApplicationSendEventSwizzle
         _ = Self.didInstallWindowKeyEquivalentSwizzle
         _ = Self.didInstallWindowFirstResponderSwizzle
@@ -6884,7 +6821,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func handleNewTabShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .newTab) else { return nil }
-        if reopenMostRecentlyHiddenMainWindow() { return true }
 #if DEBUG
         dlog("shortcut.action name=newWorkspace \(debugShortcutRouteSnapshot(event: event))")
 #endif
@@ -8858,10 +8794,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func setActiveMainWindow(_ window: NSWindow) {
         guard let context = contextForMainTerminalWindow(window) else { return }
-        if window.isVisible {
-            context.hiddenWindow = nil
-            context.hiddenAt = nil
-        }
 #if DEBUG
         let beforeManagerToken = debugManagerToken(tabManager)
 #endif
@@ -8938,6 +8870,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         teardownMainWindowContext(removed)
+        releaseClosedMainWindowContent(window)
 
         // During app termination we already persisted a full snapshot (with scrollback)
         // in applicationShouldTerminate/applicationWillTerminate. Saving again here would
@@ -8949,6 +8882,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                     isTerminatingApp: isTerminatingApp
                 )
             )
+        }
+    }
+
+    /// Drops the hosting view of a closed main window so its SwiftUI graph (and the
+    /// TabManager, workspaces and bonsplit controllers it observes) is freed even if
+    /// AppKit or SwiftUI keeps the NSWindow itself alive a little longer.
+    private func releaseClosedMainWindowContent(_ window: NSWindow) {
+        guard !isTerminatingApp else { return }
+        DispatchQueue.main.async { [weak window] in
+            window?.contentView = nil
         }
     }
 
@@ -9253,10 +9196,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             window.deminiaturize(nil)
         }
         window.makeKeyAndOrderFront(nil)
-        if let context = contextForMainTerminalWindow(window) {
-            context.hiddenWindow = nil
-            context.hiddenAt = nil
-        }
         // Improve reliability across Spaces / when other helper panels are key.
         NSRunningApplication.current.activate(options: [.activateAllWindows])
     }
