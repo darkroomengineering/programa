@@ -14,7 +14,7 @@ import Foundation
 // the one delivered -- no title is ever silently dropped.
 //
 // Only the coalescing machinery is ported here. Upstream's notification-hook /
-// desktop-notification ingress is programa agent-chat machinery programa doesn't have.
+// desktop-notification ingress is cmux agent-chat machinery programa doesn't have.
 final class GhosttyTitleUpdateDispatcher {
     /// Identifies the surface a title update belongs to. Coalescing is scoped per key
     /// so a burst of title churn on one surface never delays or drops updates for

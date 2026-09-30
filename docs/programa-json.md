@@ -1,9 +1,9 @@
 # `programa.json`
 
 Custom command-palette entries, shareable via git. Programa looks for `programa.json`
-(falling back to the legacy `programa.json`) by walking up from the focused workspace's current
+(falling back to the legacy `cmux.json`) by walking up from the focused workspace's current
 directory, and always loads `~/.config/programa/programa.json` (or the legacy
-`~/.config/programa/programa.json`) as a global fallback. Local entries take precedence over global ones
+`~/.config/cmux/cmux.json`) as a global fallback. Local entries take precedence over global ones
 with the same `name`.
 
 The Swift structs in `Sources/ProgramaConfig.swift` (`ProgramaConfigFile`,

@@ -11,8 +11,8 @@ _programa_relay_cli_path() {
         return 0
     fi
     # Rebranded CLI binary ships as "programa"; fall back to the pre-rebrand
-    # "programa" name for older installs that only symlinked that binary.
-    command -v programa 2>/dev/null || command -v programa 2>/dev/null
+    # "cmux" name for older installs that only symlinked that binary.
+    command -v programa 2>/dev/null || command -v cmux 2>/dev/null
 }
 
 _programa_socket_uses_remote_relay() {

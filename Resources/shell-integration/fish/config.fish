@@ -51,8 +51,8 @@ if test "$_programa_integration_enabled" != 0
             return 0
         end
         # Rebranded CLI binary ships as "programa"; fall back to the pre-rebrand
-        # "programa" name for older installs that only symlinked that binary.
-        command -v programa 2>/dev/null; or command -v programa 2>/dev/null
+        # "cmux" name for older installs that only symlinked that binary.
+        command -v programa 2>/dev/null; or command -v cmux 2>/dev/null
     end
 
     function _programa_socket_uses_remote_relay

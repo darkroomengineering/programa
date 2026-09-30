@@ -1070,7 +1070,7 @@ final class GhosttyTerminalStartupEnvironmentTests: XCTestCase {
         XCTAssertTrue(protectedKeys.contains("TERM_PROGRAM"))
     }
 
-    func testMergedStartupEnvironmentAllowsArbitraryAdditionalAndInitialEnvPROGRAMAKeys() {
+    func testMergedStartupEnvironmentAllowsArbitraryAdditionalAndInitialEnvProgramaKeys() {
         let arbitraryValue = "arbitrary-\(UUID().uuidString)"
         let merged = TerminalSurface.mergedStartupEnvironment(
             base: [

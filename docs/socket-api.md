@@ -57,7 +57,7 @@ Rules that follow from the diagram:
 ### Socket modes
 
 The mode is `automation.socketControlMode` in `settings.json` or **Settings > Automation**.
-The default is `programaOnly`.
+The default is `programaOnly`. The legacy name `cmuxOnly` is still accepted.
 
 | Mode | Shown in Settings as | Who can connect |
 |---|---|---|
