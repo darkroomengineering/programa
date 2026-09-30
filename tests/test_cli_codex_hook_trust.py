@@ -532,6 +532,203 @@ class CodexHookTrustTests(unittest.TestCase):
         )
         self.assertEqual(len(final_config["hooks"]["state"]), 1)
 
+    BEGIN_MARKER = "# BEGIN programa (managed by Programa, do not edit)"
+    END_MARKER = "# END programa"
+
+    def config_bytes(self) -> bytes:
+        return (self.codex_home / "config.toml").read_bytes()
+
+    def test_fresh_install_writes_one_marker_block_and_uninstall_removes_it(self) -> None:
+        """All Programa settings live in a single block that uninstall removes whole."""
+        user_config = b'model = "gpt-5.6"\n\n[history]\npersistence = "save-all"\n'
+        (self.codex_home / "config.toml").write_bytes(user_config)
+
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        installed = self.config_bytes()
+        text = installed.decode("utf-8")
+        self.assertEqual(text.count(self.BEGIN_MARKER), 1)
+        self.assertEqual(text.count(self.END_MARKER), 1)
+        self.assertTrue(installed.startswith(user_config + b"\n" + self.BEGIN_MARKER.encode()))
+        self.assertTrue(text.endswith(self.END_MARKER + "\n"))
+        state = tomllib.loads(text)["hooks"]["state"]
+        self.assertEqual(len(state), len(EVENT_LABELS))
+        self.assertEqual(tomllib.loads(text)["history"]["persistence"], "save-all")
+
+        self.assert_succeeded(self.run_cli("uninstall-hooks"))
+        self.assertEqual(self.config_bytes(), user_config)
+
+    def test_fresh_install_without_config_creates_only_the_block(self) -> None:
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        text = self.config_bytes().decode("utf-8")
+        self.assertTrue(text.startswith(self.BEGIN_MARKER + "\n"))
+        self.assertEqual(len(tomllib.loads(text)["hooks"]["state"]), len(EVENT_LABELS))
+
+    def test_reinstall_rewrites_the_block_whole_and_keeps_user_content(self) -> None:
+        """A stale or hand-edited block is replaced; everything outside it is byte-identical."""
+        before = b'# my notes\nmodel = "gpt-5.6"\n\n[tui]\nnotifications = true\n'
+        after = b"\n[other]\nkey = 1\n"
+        (self.codex_home / "config.toml").write_bytes(before)
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        installed = self.config_bytes()
+
+        stale = (
+            before
+            + b"\n" + self.BEGIN_MARKER.encode() + b"\n"
+            + b'[hooks.state."stale/hooks.json:stop:0:0"]\ntrusted_hash = "sha256:stale"\n'
+            + self.END_MARKER.encode() + b"\n"
+            + after
+        )
+        (self.codex_home / "config.toml").write_bytes(stale)
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        rewritten = self.config_bytes()
+        self.assertNotIn(b"stale/hooks.json", rewritten)
+        self.assertTrue(rewritten.startswith(before))
+        self.assertTrue(rewritten.endswith(after))
+        block_start = rewritten.index(self.BEGIN_MARKER.encode())
+        block_end = rewritten.index(self.END_MARKER.encode()) + len(self.END_MARKER) + 1
+        self.assertEqual(
+            rewritten[block_start:block_end],
+            installed[installed.index(self.BEGIN_MARKER.encode()):],
+        )
+
+        self.assert_succeeded(self.run_cli("uninstall-hooks"))
+        self.assertEqual(self.config_bytes(), before + after)
+
+    def test_reinstall_is_byte_identical(self) -> None:
+        (self.codex_home / "config.toml").write_bytes(b'model = "gpt-5.6"\n')
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        first = (self.config_bytes(), (self.codex_home / "hooks.json").read_bytes())
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assertEqual((self.config_bytes(), (self.codex_home / "hooks.json").read_bytes()), first)
+
+    def test_user_owned_trust_table_is_skipped_with_one_warning(self) -> None:
+        """A table the user defines is never edited; Programa skips that entry and says so."""
+        hooks_path = self.codex_home.resolve() / "hooks.json"
+        key = f"{hooks_path}:stop:0:0"
+        user_config = (
+            f"[hooks.state.{json.dumps(key)}]\n"
+            'trusted_hash = "sha256:mine"\n'
+            "enabled = false\n"
+        ).encode("utf-8")
+        (self.codex_home / "config.toml").write_bytes(user_config)
+
+        install = self.run_cli("install-hooks")
+
+        self.assert_succeeded(install)
+        warnings = [line for line in install.stderr.splitlines() if line.startswith("warning:")]
+        self.assertEqual(len(warnings), 1, install.stderr)
+        self.assertIn(key, warnings[0])
+        config = self.config_bytes()
+        self.assertTrue(config.startswith(user_config))
+        state = tomllib.loads(config.decode("utf-8"))["hooks"]["state"]
+        self.assertEqual(state[key], {"trusted_hash": "sha256:mine", "enabled": False})
+        self.assertEqual(len(state), len(EVENT_LABELS))
+
+        self.assert_succeeded(self.run_cli("uninstall-hooks"))
+        self.assertEqual(self.config_bytes(), user_config)
+
+    def test_migrates_the_older_spliced_format_into_the_block(self) -> None:
+        """Keys older installers wrote outside any block are removed once, then the block is written."""
+        self.write_hooks({"hooks": {"Stop": [{"hooks": [owned_handler("stop")]}]}})
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        hooks_path = self.codex_home.resolve() / "hooks.json"
+        stop_handler = self.read_hooks()["hooks"]["Stop"][0]["hooks"][0]
+        stop_key = f"{hooks_path}:stop:0:0"
+        stop_hash = expected_trust_hash("stop", stop_handler)
+        user_prefix = 'model = "gpt-5.6"\n\n[features]\ncodex_hooks = true\nforeign_feature = true\n\n'
+        user_suffix = "[history]\npersistence = \"save-all\"\n"
+        (self.codex_home / "config.toml").write_text(
+            user_prefix
+            + f"[hooks.state.{json.dumps(stop_key)}]\ntrusted_hash = \"{stop_hash}\"\n\n"
+            + user_suffix,
+            encoding="utf-8",
+        )
+
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        text = self.config_bytes().decode("utf-8")
+        self.assertNotIn("codex_hooks", text)
+        self.assertEqual(text.count(stop_key), 1)
+        self.assertIn(user_suffix, text)
+        config = tomllib.loads(text)
+        self.assertTrue(config["features"]["foreign_feature"])
+        self.assertEqual(config["history"]["persistence"], "save-all")
+        self.assertEqual(config["hooks"]["state"][stop_key]["trusted_hash"], stop_hash)
+        self.assertLess(text.index(self.BEGIN_MARKER), text.index(stop_key))
+        self.assertTrue(text.endswith(self.END_MARKER + "\n"))
+
+        migrated = self.config_bytes()
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assertEqual(self.config_bytes(), migrated)
+
+    def test_uninstall_migrates_the_older_spliced_format(self) -> None:
+        self.write_hooks({"hooks": {"Stop": [{"hooks": [owned_handler("stop")]}]}})
+        self.assert_succeeded(self.run_cli("install-hooks"))
+        hooks_path = self.codex_home.resolve() / "hooks.json"
+        stop_handler = self.read_hooks()["hooks"]["Stop"][0]["hooks"][0]
+        stop_key = f"{hooks_path}:stop:0:0"
+        stop_hash = expected_trust_hash("stop", stop_handler)
+        (self.codex_home / "config.toml").write_text(
+            'model = "gpt-5.6"\n\n'
+            "# >>> programa managed codex hook trust v1 >>>\n"
+            f"[hooks.state.{json.dumps(stop_key)}]\ntrusted_hash = \"{stop_hash}\"\n"
+            "# <<< programa managed codex hook trust v1 <<<\n",
+            encoding="utf-8",
+        )
+
+        self.assert_succeeded(self.run_cli("uninstall-hooks"))
+        self.assertEqual(self.config_bytes(), b'model = "gpt-5.6"\n')
+
+    def test_settings_right_after_the_block_are_refused(self) -> None:
+        """A bare assignment after the END marker would move into another table."""
+        for operation in ("install-hooks", "uninstall-hooks"):
+            with self.subTest(operation=operation):
+                original = (
+                    'model = "gpt-5.6"\n\n'
+                    + self.BEGIN_MARKER + "\n"
+                    + '[hooks.state."x/hooks.json:stop:0:0"]\ntrusted_hash = "sha256:x"\n'
+                    + self.END_MARKER + "\n"
+                    + "enabled = false\n"
+                ).encode("utf-8")
+                (self.codex_home / "config.toml").write_bytes(original)
+                process = self.run_cli(operation)
+                self.assertNotEqual(process.returncode, 0, process.stdout)
+                self.assertEqual(self.config_bytes(), original)
+                self.assertFalse((self.codex_home / "hooks.json").exists())
+
+    def test_foreign_entry_inside_old_markers_is_refused(self) -> None:
+        """Old markers only authorize removing entries Programa owns."""
+        hooks = {"hooks": {"SessionStart": [{"hooks": [owned_handler("session-start")]}]}}
+        hooks_path = self.codex_home.resolve() / "hooks.json"
+        owned_key = f"{hooks_path}:session_start:0:0"
+        owned_hash = expected_trust_hash("session_start", owned_handler("session-start"))
+        foreign_key = f"{hooks_path}:stop:5:0"
+        bodies = {
+            "foreign hash": (
+                f'[hooks.state.{json.dumps(owned_key)}]\ntrusted_hash = "sha256:foreign"\n'
+            ),
+            "foreign key": (
+                f'[hooks.state.{json.dumps(foreign_key)}]\ntrusted_hash = "sha256:foreign"\n'
+            ),
+            "extra field": (
+                f'[hooks.state.{json.dumps(owned_key)}]\ntrusted_hash = "{owned_hash}"\n'
+                "enabled = false\n"
+            ),
+        }
+        for name, body in bodies.items():
+            for operation in ("install-hooks", "uninstall-hooks"):
+                with self.subTest(case=name, operation=operation):
+                    original_hooks = self.write_hooks(hooks)
+                    original = (
+                        "# >>> programa managed codex hook trust v1 >>>\n"
+                        + body
+                        + "# <<< programa managed codex hook trust v1 <<<\n"
+                    ).encode("utf-8")
+                    (self.codex_home / "config.toml").write_bytes(original)
+                    process = self.run_cli(operation)
+                    self.assertNotEqual(process.returncode, 0, process.stdout)
+                    self.assertEqual(self.config_bytes(), original)
+                    self.assertEqual((self.codex_home / "hooks.json").read_bytes(), original_hooks)
+
 
 if __name__ == "__main__":
     if not CLI_PATH or not Path(CLI_PATH).is_file() or not os.access(CLI_PATH, os.X_OK):

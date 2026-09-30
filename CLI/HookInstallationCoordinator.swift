@@ -72,7 +72,7 @@ extension ProgramaCLI {
                 configLinkPath: paths.configLink,
                 hooksKeyPrefix: hooksKeyPath + ":",
                 desired: desired,
-                removalKeys: codexOwnedEntryKeys(hooksPath: hooksKeyPath, root: previousRoot),
+                previousOwned: codexOwnedTrustEntries(hooksPath: hooksKeyPath, root: previousRoot),
                 ownedHashes: try codexOwnedTrustHashes()
             )
             let preparedConfig = try codexPrepareConfig(edit)

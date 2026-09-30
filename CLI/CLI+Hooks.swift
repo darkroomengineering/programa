@@ -1712,6 +1712,10 @@ extension ProgramaCLI {
     // MARK: - Codex hooks
 
     static let codexMaximumFileBytes = 16 * 1024 * 1024
+    /// Everything Programa writes to config.toml lives between these two lines and is
+    /// rewritten whole. Its content is tables only, so it is valid wherever it lands.
+    private static let codexBlockBegin = "# BEGIN programa (managed by Programa, do not edit)"
+    private static let codexBlockEnd = "# END programa"
     private static let codexTrustBlockStart = "# >>> programa managed codex hook trust v1 >>>"
     private static let codexTrustBlockEnd = "# <<< programa managed codex hook trust v1 <<<"
     private static let codexLegacyTrustBlockStart = "# >>> programa codex hook trust >>>"
@@ -1755,7 +1759,8 @@ extension ProgramaCLI {
         let configLinkPath: String
         let hooksKeyPrefix: String
         let desired: [String: String]
-        let removalKeys: Set<String>
+        /// Trust hashes of the Programa handlers already in hooks.json, by trust key.
+        let previousOwned: [String: String]
         let ownedHashes: Set<String>
     }
 
@@ -1765,29 +1770,9 @@ extension ProgramaCLI {
         let rendered: Data
     }
 
-    private struct CodexTOMLAssignment {
-        let path: [String]
-        let lineRange: Range<String.Index>
-        let valueRange: Range<String.Index>?
-        let hasInlineComment: Bool
-    }
-
-    private struct CodexTOMLSection {
-        let path: [String]
-        let headerRange: Range<String.Index>
-        let bodyRange: Range<String.Index>
-        let fullRange: Range<String.Index>
-        let hasInlineComment: Bool
-    }
-
-    private struct CodexTOMLSourceMap {
-        let assignments: [CodexTOMLAssignment]
-        let sections: [CodexTOMLSection]
-    }
-
-    private struct CodexSourceSplice {
-        let range: Range<String.Index>
-        let replacement: String
+    private struct CodexRenderedConfig {
+        let text: String
+        let warnings: [String]
     }
 
     private enum CodexTOMLStringMode {
@@ -1800,7 +1785,6 @@ extension ProgramaCLI {
 
     private struct CodexTOMLLine {
         let range: Range<String.Index>
-        let contentRange: Range<String.Index>
         let text: String
         let startsInString: Bool
     }
@@ -2114,20 +2098,21 @@ extension ProgramaCLI {
         throw CodexHooksError(message: "installed Codex hook for \(spec.event) is missing")
     }
 
-    func codexOwnedEntryKeys(hooksPath: String, root: [String: Any]) -> Set<String> {
-        guard let hooks = root["hooks"] as? [String: Any] else { return [] }
+    func codexOwnedTrustEntries(hooksPath: String, root: [String: Any]) -> [String: String] {
+        guard let hooks = root["hooks"] as? [String: Any] else { return [:] }
         let labels = Dictionary(uniqueKeysWithValues: Self.codexHookSpecs.map { ($0.event, $0.label) })
-        var keys: Set<String> = []
+        var entries: [String: String] = [:]
         for (event, rawGroups) in hooks {
             guard let label = labels[event], let groups = rawGroups as? [[String: Any]] else { continue }
             for (groupIndex, group) in groups.enumerated() {
                 guard let handlers = group["hooks"] as? [[String: Any]] else { continue }
                 for (handlerIndex, handler) in handlers.enumerated() where codexIsOwnedHandler(handler, event: event) {
-                    keys.insert("\(hooksPath):\(label):\(groupIndex):\(handlerIndex)")
+                    entries["\(hooksPath):\(label):\(groupIndex):\(handlerIndex)"] =
+                        try? codexTrustHash(label: label, group: group, handler: handler)
                 }
             }
         }
-        return keys
+        return entries
     }
 
     func codexOwnedTrustHashes() throws -> Set<String> {
@@ -2204,7 +2189,8 @@ extension ProgramaCLI {
         let original = try codexUTF8(snapshot?.data ?? Data(), path: edit.configPath)
         let rendered = try codexRenderConfig(original, edit: edit)
         try codexProbeWritableDirectory((edit.configPath as NSString).deletingLastPathComponent)
-        return CodexPreparedConfig(edit: edit, snapshot: snapshot, rendered: Data(rendered.utf8))
+        for warning in rendered.warnings { FileHandle.standardError.write(Data((warning + "\n").utf8)) }
+        return CodexPreparedConfig(edit: edit, snapshot: snapshot, rendered: Data(rendered.text.utf8))
     }
 
     func codexCommitConfig(_ prepared: CodexPreparedConfig) throws {
@@ -2218,105 +2204,110 @@ extension ProgramaCLI {
             rendered = prepared.rendered
         } else {
             let fresh = try codexUTF8(current?.data ?? Data(), path: prepared.edit.configPath)
-            rendered = Data(try codexRenderConfig(fresh, edit: prepared.edit).utf8)
+            rendered = Data(try codexRenderConfig(fresh, edit: prepared.edit).text.utf8)
         }
         guard (current?.data ?? Data()) != rendered else { return }
         try codexAtomicWrite(rendered, to: prepared.edit.configPath, mode: current?.mode ?? 0o600)
     }
 
-    private func codexRenderConfig(_ source: String, edit: CodexTrustEdit) throws -> String {
+    private func codexRenderConfig(_ source: String, edit: CodexTrustEdit) throws -> CodexRenderedConfig {
         let originalTree = try codexParseTOML(source, path: edit.configPath)
+        try codexValidateTrustShape(originalTree, path: edit.configPath)
         let newline = codexNewline(in: source)
-        var working = try codexRemovingManagedBlocks(source, edit: edit)
+
+        var working = source
+        for (begin, end) in [
+            (Self.codexTrustBlockStart, Self.codexTrustBlockEnd),
+            (Self.codexLegacyTrustBlockStart, Self.codexLegacyTrustBlockEnd),
+        ] {
+            let removal = try codexRemovingBlock(working, begin: begin, end: end)
+            if let interior = removal.interior { try codexValidateLegacyBlock(interior, edit: edit) }
+            working = removal.text
+        }
+
+        // The current block is rewritten whole, in place, so its contents never need
+        // validating. `head` and `tail` are the text before and after it.
+        let lines = codexTOMLLines(working)
+        let block = try codexBlockRange(lines, begin: Self.codexBlockBegin, end: Self.codexBlockEnd)
+        let hadBlock = block != nil
+        var head = working
+        var tail = ""
+        var blockKeys = Set<String>()
+        if let block {
+            let interior = lines[(block.begin + 1)..<block.end].map { String(working.unicodeScalars[$0.range]) }.joined()
+            if let tree = try? codexParseTOML(interior, path: edit.configPath) {
+                blockKeys = Set(tree.tableValue?["hooks"]?.tableValue?["state"]?.tableValue?.keys.map { $0 } ?? [])
+            }
+            head = codexJoinLines(working, lines, removing: Set(block.first..<lines.count))
+            tail = codexJoinLines(working, lines, removing: Set(0...block.end))
+            working = head + tail
+        }
+
+        // Migration runs only until the first block exists, so a user's own
+        // `codex_hooks = true` written after that point is never touched.
+        var removedFeatureFlag = false
+        if !hadBlock {
+            let migration = try codexMigratingLegacyLines(working, edit: edit)
+            working = migration.text
+            removedFeatureFlag = migration.removedFeatureFlag
+        }
         let baseTree = try codexParseTOML(working, path: edit.configPath)
-        try codexValidateTrustShape(baseTree, path: edit.configPath)
-        let map = try codexTOMLSourceMap(working)
-        var splices: [CodexSourceSplice] = []
-
-        if baseTree.tableValue?["features"]?.tableValue?["codex_hooks"] != nil {
-            let matches = map.assignments.filter { $0.path == ["features", "codex_hooks"] }
-            guard matches.count == 1, matches[0].valueRange != nil, !matches[0].hasInlineComment else {
-                throw CodexHooksError(message: "codex_hooks in \(edit.configPath) uses an inline or multiline form that cannot be edited safely")
-            }
-            splices.append(.init(range: matches[0].lineRange, replacement: ""))
-        }
-
         let state = baseTree.tableValue?["hooks"]?.tableValue?["state"]?.tableValue ?? [:]
-        let ownedFromHashes = Set(state.compactMap { key, value -> String? in
-            guard key.hasPrefix(edit.hooksKeyPrefix),
-                  let hash = value.tableValue?["trusted_hash"]?.stringValue,
-                  edit.ownedHashes.contains(hash) else { return nil }
-            return key
-        })
-        let removable = edit.removalKeys.union(ownedFromHashes).subtracting(edit.desired.keys)
-        let statePrefix = ["hooks", "state"]
-        for key in removable {
-            guard state[key] != nil else { continue }
-            let path = statePrefix + [key]
-            let sections = map.sections.filter { $0.path == path }
-            if sections.count == 1 {
-                try codexValidateRemovableTrustSection(sections[0], key: key, map: map, source: working)
-                splices.append(.init(range: sections[0].fullRange, replacement: ""))
-                continue
+        let originalState = originalTree.tableValue?["hooks"]?.tableValue?["state"]?.tableValue ?? [:]
+        let removedKeys = Set(originalState.keys).subtracting(state.keys)
+        guard removedKeys.subtracting(blockKeys).allSatisfy({ $0.hasPrefix(edit.hooksKeyPrefix) }) else {
+            throw CodexHooksError(message: "Codex config verification failed: foreign trust state would be removed; refusing to write")
+        }
+        var entries: [(key: String, hash: String)] = []
+        var warnings: [String] = []
+        for (key, hash) in edit.desired.sorted(by: { $0.key < $1.key }) {
+            if state[key] != nil {
+                warnings.append("warning: \(edit.configLinkPath) already defines [hooks.state.\(try codexTOMLQuoted(key))] outside the Programa block; leaving it unchanged and not trusting that hook")
+            } else {
+                entries.append((key, hash))
             }
-            let assignments = map.assignments.filter { $0.path.starts(with: path) }
-            guard assignments.count == 1,
-                  assignments[0].path == path + ["trusted_hash"],
-                  assignments[0].valueRange != nil,
-                  !assignments[0].hasInlineComment else {
-                throw CodexHooksError(message: "trust entry \(key) in \(edit.configPath) is inline and cannot be removed safely")
-            }
-            splices.append(.init(range: assignments[0].lineRange, replacement: ""))
         }
 
-        var appendDesired = edit.desired
-        for (key, hash) in edit.desired where state[key] != nil {
-            let path = statePrefix + [key]
-            let sections = map.sections.filter { $0.path == path }
-            if sections.count == 1 {
-                let hashAssignments = map.assignments.filter { $0.path == path + ["trusted_hash"] }
-                if hashAssignments.count == 1, let valueRange = hashAssignments[0].valueRange {
-                    splices.append(.init(range: valueRange, replacement: try codexTOMLQuoted(hash)))
-                } else if hashAssignments.isEmpty {
-                    splices.append(.init(
-                        range: sections[0].bodyRange.lowerBound..<sections[0].bodyRange.lowerBound,
-                        replacement: "trusted_hash = \(try codexTOMLQuoted(hash))\(newline)"
-                    ))
-                } else {
-                    throw CodexHooksError(message: "trusted_hash for \(key) in \(edit.configPath) cannot be edited safely")
-                }
-                appendDesired.removeValue(forKey: key)
-                continue
+        var blockText = ""
+        if !entries.isEmpty {
+            blockText += Self.codexBlockBegin + newline
+            for (index, entry) in entries.enumerated() {
+                if index > 0 { blockText += newline }
+                blockText += "[hooks.state.\(try codexTOMLQuoted(entry.key))]\(newline)"
+                blockText += "trusted_hash = \(try codexTOMLQuoted(entry.hash))\(newline)"
             }
-            let dotted = map.assignments.filter { $0.path == path + ["trusted_hash"] }
-            guard dotted.count == 1, let valueRange = dotted[0].valueRange else {
-                throw CodexHooksError(message: "trust entry \(key) in \(edit.configPath) is inline and cannot be edited safely")
+            blockText += Self.codexBlockEnd + newline
+        }
+        // An existing block is replaced where it stands; a new one goes at the end
+        // after one blank line. The block holds full table headers only, so it does
+        // not matter which table the file ends in.
+        let separator = blockText.isEmpty ? "" : newline
+        if hadBlock {
+            working = head + (head.isEmpty ? "" : separator) + blockText + tail
+        } else if !blockText.isEmpty {
+            if !working.isEmpty {
+                if working.utf8.last != 0x0A { working += newline }
+                working += newline
             }
-            splices.append(.init(range: valueRange, replacement: try codexTOMLQuoted(hash)))
-            appendDesired.removeValue(forKey: key)
+            working += blockText
         }
 
-        working = try codexApplySplices(splices, to: working)
-        if !appendDesired.isEmpty {
-            if let hooks = baseTree.tableValue?["hooks"], hooks.tableValue == nil {
-                throw CodexHooksError(message: "hooks in \(edit.configPath) is not a table")
-            }
-            if map.assignments.contains(where: { $0.path == ["hooks"] || $0.path == ["hooks", "state"] }) {
-                throw CodexHooksError(message: "inline hooks/state in \(edit.configPath) cannot be extended safely")
-            }
-            if !working.isEmpty && !working.hasSuffix("\n") { working += newline }
-            if !working.isEmpty && !working.hasSuffix(newline + newline) { working += newline }
-            working += Self.codexTrustBlockStart + newline
-            for (key, hash) in appendDesired.sorted(by: { $0.key < $1.key }) {
-                working += "[hooks.state.\(try codexTOMLQuoted(key))]\(newline)"
-                working += "trusted_hash = \(try codexTOMLQuoted(hash))\(newline)\(newline)"
-            }
-            working += Self.codexTrustBlockEnd + newline
+        let renderedTree: CodexTOMLValue
+        do { renderedTree = try codexParseTOML(working, path: edit.configPath) }
+        catch {
+            throw CodexHooksError(message: "cannot add Programa trust entries to \(edit.configPath): hooks is defined in a form that cannot be extended (\(error.localizedDescription))")
         }
-
-        let renderedTree = try codexParseTOML(working, path: edit.configPath)
-        try codexVerifyRenderedConfig(original: originalTree, rendered: renderedTree, edit: edit)
-        return working
+        let renderedState = renderedTree.tableValue?["hooks"]?.tableValue?["state"]?.tableValue ?? [:]
+        for entry in entries {
+            guard renderedState[entry.key]?.tableValue?["trusted_hash"]?.stringValue == entry.hash else {
+                throw CodexHooksError(message: "Codex trust entry \(entry.key) did not render correctly")
+            }
+        }
+        guard Self.codexStripped(renderedTree, stateKeys: Set(entries.map(\.key)), featureFlag: false)
+                == Self.codexStripped(originalTree, stateKeys: removedKeys, featureFlag: removedFeatureFlag) else {
+            throw CodexHooksError(message: "Codex config changed outside the Programa block; refusing to write")
+        }
+        return CodexRenderedConfig(text: working, warnings: warnings)
     }
 
     private func codexValidateTrustShape(_ root: CodexTOMLValue, path: String) throws {
@@ -2331,59 +2322,28 @@ extension ProgramaCLI {
         }
     }
 
-    private func codexVerifyRenderedConfig(
-        original: CodexTOMLValue,
-        rendered: CodexTOMLValue,
-        edit: CodexTrustEdit
-    ) throws {
-        guard var originalRoot = original.tableValue, var renderedRoot = rendered.tableValue else {
-            throw CodexHooksError(message: "Codex config must be a TOML table")
+    /// Drops the named trust entries and feature flag, then every empty table, so two
+    /// trees compare equal when they differ only by Programa-owned or now-empty tables.
+    private static func codexStripped(_ tree: CodexTOMLValue, stateKeys: Set<String>, featureFlag: Bool) -> CodexTOMLValue? {
+        var root = tree.tableValue ?? [:]
+        if featureFlag, var features = root["features"]?.tableValue {
+            features.removeValue(forKey: "codex_hooks")
+            root["features"] = .table(features)
         }
-        var originalFeatures = originalRoot["features"]?.tableValue ?? [:]
-        var renderedFeatures = renderedRoot["features"]?.tableValue ?? [:]
-        originalFeatures.removeValue(forKey: "codex_hooks")
-        renderedFeatures.removeValue(forKey: "codex_hooks")
-        guard originalFeatures == renderedFeatures else {
-            throw CodexHooksError(message: "Codex config feature verification failed; refusing to write")
+        if var hooks = root["hooks"]?.tableValue, var state = hooks["state"]?.tableValue {
+            for key in stateKeys { state.removeValue(forKey: key) }
+            hooks["state"] = .table(state)
+            root["hooks"] = .table(hooks)
         }
-        originalRoot.removeValue(forKey: "features")
-        renderedRoot.removeValue(forKey: "features")
-
-        var originalHooks = originalRoot["hooks"]?.tableValue ?? [:]
-        var renderedHooks = renderedRoot["hooks"]?.tableValue ?? [:]
-        let originalState = originalHooks.removeValue(forKey: "state")?.tableValue ?? [:]
-        let renderedState = renderedHooks.removeValue(forKey: "state")?.tableValue ?? [:]
-        guard originalHooks == renderedHooks else {
-            throw CodexHooksError(message: "Codex config hooks verification failed; refusing to write")
+        func pruned(_ value: CodexTOMLValue) -> CodexTOMLValue? {
+            guard case .table(let table) = value else { return value }
+            let kept = table.compactMapValues(pruned)
+            return kept.isEmpty ? nil : .table(kept)
         }
-        originalRoot.removeValue(forKey: "hooks")
-        renderedRoot.removeValue(forKey: "hooks")
-        guard originalRoot == renderedRoot else {
-            throw CodexHooksError(message: "Codex config changed outside Programa-owned state; refusing to write")
-        }
-
-        let ignored = edit.removalKeys.union(edit.desired.keys)
-        let foreignOriginal = originalState.filter { key, value in
-            guard key.hasPrefix(edit.hooksKeyPrefix) else { return true }
-            if ignored.contains(key) { return false }
-            let hash = value.tableValue?["trusted_hash"]?.stringValue
-            return hash == nil || !edit.ownedHashes.contains(hash!)
-        }
-        let foreignRendered = renderedState.filter { key, _ in foreignOriginal[key] != nil }
-        guard foreignOriginal == foreignRendered else {
-            throw CodexHooksError(message: "foreign Codex trust state changed; refusing to write")
-        }
-        for (key, hash) in edit.desired {
-            guard renderedState[key]?.tableValue?["trusted_hash"]?.stringValue == hash else {
-                throw CodexHooksError(message: "Codex trust entry \(key) did not render correctly")
-            }
-        }
-        for key in edit.removalKeys where edit.desired[key] == nil {
-            guard renderedState[key] == nil else {
-                throw CodexHooksError(message: "stale Codex trust entry \(key) was not removed")
-            }
-        }
+        return pruned(.table(root))
     }
+
+
 
     private func codexParseTOML(_ source: String, path: String) throws -> CodexTOMLValue {
         let decoder = TOMLDecoder()
@@ -2398,119 +2358,149 @@ extension ProgramaCLI {
         catch { throw CodexHooksError(message: "\(path) is not valid TOML: \(error.localizedDescription)") }
     }
 
-    private func codexRemovingManagedBlocks(_ source: String, edit: CodexTrustEdit) throws -> String {
+    /// Locates a marker-delimited block. The range starts at the blank line the
+    /// installer put before the block, when there is one.
+    private func codexBlockRange(
+        _ lines: [CodexTOMLLine],
+        begin: String,
+        end: String
+    ) throws -> (first: Int, begin: Int, end: Int)? {
+        let starts = lines.indices.filter { !lines[$0].startsInString && lines[$0].text == begin }
+        let ends = lines.indices.filter { !lines[$0].startsInString && lines[$0].text == end }
+        guard starts.count <= 1, ends.count <= 1, starts.count == ends.count else {
+            throw CodexHooksError(message: "Codex config contains duplicate or unmatched Programa markers")
+        }
+        guard let start = starts.first, let finish = ends.first else { return nil }
+        guard start < finish else {
+            throw CodexHooksError(message: "Codex config contains mismatched Programa markers")
+        }
+        // An assignment after the end marker belongs to the block's last table; removing
+        // or rewriting the block would silently move it into another table.
+        for index in (finish + 1)..<lines.count where !lines[index].startsInString {
+            let text = lines[index].text.trimmingCharacters(in: .whitespaces)
+            if text.hasPrefix("[") { break }
+            guard text.isEmpty || text.hasPrefix("#") else {
+                throw CodexHooksError(message: "Codex config has settings right after the Programa block that would change meaning if the block moved; put them under their own [table] or above the block")
+            }
+        }
+        let blankBefore = start > 0 && !lines[start - 1].startsInString && lines[start - 1].text.isEmpty
+        return (blankBefore ? start - 1 : start, start, finish)
+    }
+
+    private func codexRemovingBlock(
+        _ source: String,
+        begin: String,
+        end: String
+    ) throws -> (text: String, interior: String?) {
         let lines = codexTOMLLines(source)
-        let starts = lines.filter { line in
-            !line.startsInString && [Self.codexTrustBlockStart, Self.codexLegacyTrustBlockStart].contains(line.text)
+        guard let block = try codexBlockRange(lines, begin: begin, end: end) else { return (source, nil) }
+        let interior = lines[(block.begin + 1)..<block.end].map { String(source.unicodeScalars[$0.range]) }.joined()
+        return (codexJoinLines(source, lines, removing: Set(block.first...block.end)), interior)
+    }
+
+    private func codexJoinLines(_ source: String, _ lines: [CodexTOMLLine], removing: Set<Int>) -> String {
+        var result = ""
+        for (index, line) in lines.enumerated() where !removing.contains(index) {
+            result += String(source.unicodeScalars[line.range])
         }
-        let ends = lines.filter { line in
-            !line.startsInString && [Self.codexTrustBlockEnd, Self.codexLegacyTrustBlockEnd].contains(line.text)
-        }
-        guard starts.count <= 1, ends.count <= 1 else {
-            throw CodexHooksError(message: "Codex config contains duplicate Programa trust blocks")
-        }
-        guard starts.count == ends.count else {
-            throw CodexHooksError(message: "Codex config contains an unmatched Programa trust marker")
-        }
-        guard let start = starts.first, let end = ends.first else { return source }
-        let expectedEnd = start.text == Self.codexTrustBlockStart
-            ? Self.codexTrustBlockEnd
-            : Self.codexLegacyTrustBlockEnd
-        guard end.text == expectedEnd, start.range.lowerBound < end.range.lowerBound else {
-            throw CodexHooksError(message: "Codex config contains mismatched Programa trust markers")
-        }
-        let interior = String(source[start.range.upperBound..<end.range.lowerBound])
-        try codexValidateManagedTrustBlock(interior, edit: edit)
-        var result = source
-        result.removeSubrange(start.range.lowerBound..<end.range.upperBound)
         return result
     }
 
-    private func codexValidateManagedTrustBlock(_ source: String, edit: CodexTrustEdit) throws {
-        let tree = try codexParseTOML(source, path: edit.configPath)
+    /// Older installers wrote trust tables between their own markers. The block must
+    /// hold only trust tables for this hooks file; anything else is the user's.
+    private func codexValidateLegacyBlock(_ interior: String, edit: CodexTrustEdit) throws {
+        let tree = try codexParseTOML(interior, path: edit.configPath)
         let state = tree.tableValue?["hooks"]?.tableValue?["state"]?.tableValue ?? [:]
-        let map = try codexTOMLSourceMap(source)
-        guard !state.isEmpty, map.sections.count == state.count else {
-            throw CodexHooksError(message: "Programa trust block contains unrecognized content")
+        let programaHashes = edit.ownedHashes.union(edit.desired.values)
+        var expectedLines = Set<String>()
+        for (key, value) in state {
+            guard key.hasPrefix(edit.hooksKeyPrefix),
+                  let hash = value.tableValue?["trusted_hash"]?.stringValue,
+                  programaHashes.contains(hash) || edit.previousOwned[key] == hash else {
+                throw CodexHooksError(message: "Programa trust block contains an entry Programa does not own: \(key)")
+            }
+            expectedLines.insert("[hooks.state.\(try codexTOMLQuoted(key))]")
+            expectedLines.insert("trusted_hash=\(try codexTOMLQuoted(hash))")
         }
-        for line in codexTOMLLines(source) {
-            let recognized = map.sections.contains { $0.headerRange == line.range }
-                || map.assignments.contains { $0.lineRange == line.range }
-            guard recognized || line.text.trimmingCharacters(in: .whitespaces).isEmpty else {
+        var contentLines = 0
+        for line in codexTOMLLines(interior) {
+            let text = line.text.trimmingCharacters(in: .whitespaces)
+            if text.isEmpty { continue }
+            contentLines += 1
+            guard expectedLines.contains(text.hasPrefix("[") ? text : text.filter({ !$0.isWhitespace })) else {
                 throw CodexHooksError(message: "Programa trust block contains comments or unrecognized content")
             }
         }
-        for section in map.sections {
-            guard section.path.count == 3,
-                  section.path[0] == "hooks",
-                  section.path[1] == "state" else {
-                throw CodexHooksError(message: "Programa trust block contains an unrecognized table")
-            }
-            let key = section.path[2]
-            try codexValidateRemovableTrustSection(section, key: key, map: map, source: source)
-            guard key.hasPrefix(edit.hooksKeyPrefix),
-                  let hash = state[key]?.tableValue?["trusted_hash"]?.stringValue,
-                  edit.removalKeys.contains(key)
-                    || edit.desired[key] == hash
-                    || edit.ownedHashes.contains(hash) else {
-                throw CodexHooksError(message: "Programa trust block contains an unrecognized trust entry")
-            }
+        guard !state.isEmpty, contentLines == state.count * 2 else {
+            throw CodexHooksError(message: "Programa trust block contains comments or unrecognized content")
         }
     }
 
-    private func codexValidateRemovableTrustSection(
-        _ section: CodexTOMLSection,
-        key: String,
-        map: CodexTOMLSourceMap,
-        source: String
-    ) throws {
-        guard !section.hasInlineComment else {
-            throw CodexHooksError(message: "trust entry \(key) has a comment that Programa cannot remove safely")
+    /// Removes exactly what the older installers wrote outside any block: a
+    /// `codex_hooks = true` line under `[features]`, and `[hooks.state."<key>"]` tables
+    /// that hold a single `trusted_hash` equal to a hash Programa produces.
+    private func codexMigratingLegacyLines(
+        _ source: String,
+        edit: CodexTrustEdit
+    ) throws -> (text: String, removedKeys: Set<String>, removedFeatureFlag: Bool) {
+        let lines = codexTOMLLines(source)
+        let tree = try codexParseTOML(source, path: edit.configPath)
+        let state = tree.tableValue?["hooks"]?.tableValue?["state"]?.tableValue ?? [:]
+        let programaHashes = edit.ownedHashes.union(edit.desired.values)
+        let headers = lines.indices.compactMap { index -> (index: Int, text: String)? in
+            let text = lines[index].text.trimmingCharacters(in: .whitespaces)
+            return !lines[index].startsInString && text.hasPrefix("[") ? (index, text) : nil
         }
-        let expectedPath = section.path + ["trusted_hash"]
-        let assignments = map.assignments.filter {
-            $0.lineRange.lowerBound >= section.bodyRange.lowerBound
-                && $0.lineRange.upperBound <= section.bodyRange.upperBound
-        }
-        guard assignments.count == 1,
-              assignments[0].path == expectedPath,
-              assignments[0].valueRange != nil,
-              !assignments[0].hasInlineComment else {
-            throw CodexHooksError(message: "trust entry \(key) contains fields or comments that Programa cannot remove safely")
-        }
-        for line in codexTOMLLines(source) {
-            guard line.range.lowerBound >= section.bodyRange.lowerBound,
-                  line.range.upperBound <= section.bodyRange.upperBound else { continue }
-            if line.range == assignments[0].lineRange { continue }
-            guard line.text.trimmingCharacters(in: .whitespaces).isEmpty else {
-                throw CodexHooksError(message: "trust entry \(key) contains unrecognized content that Programa cannot remove safely")
+        func sectionEnd(_ position: Int) -> Int { position + 1 < headers.count ? headers[position + 1].index : lines.count }
+
+        var removal = Set<Int>()
+        var removedFeatureFlag = false
+        for (position, header) in headers.enumerated() where header.text == "[features]" {
+            for index in (header.index + 1)..<sectionEnd(position)
+            where !lines[index].startsInString && lines[index].text.filter({ !$0.isWhitespace }) == "codex_hooks=true" {
+                removal.insert(index)
+                removedFeatureFlag = true
             }
         }
+
+        var removedKeys = Set<String>()
+        for (key, value) in state where key.hasPrefix(edit.hooksKeyPrefix) {
+            guard let hash = value.tableValue?["trusted_hash"]?.stringValue,
+                  programaHashes.contains(hash) || edit.previousOwned[key] == hash else { continue }
+            let header = "[hooks.state.\(try codexTOMLQuoted(key))]"
+            let matches = headers.indices.filter { headers[$0].text == header }
+            guard matches.count == 1 else {
+                throw CodexHooksError(message: "Programa trust entry \(key) in \(edit.configPath) is not a plain table and cannot be removed safely")
+            }
+            let position = matches[0]
+            let content = ((headers[position].index + 1)..<sectionEnd(position)).filter {
+                !lines[$0].text.trimmingCharacters(in: .whitespaces).isEmpty
+            }
+            guard content.count == 1,
+                  lines[content[0]].text.filter({ !$0.isWhitespace }) == "trusted_hash=\(try codexTOMLQuoted(hash))" else {
+                throw CodexHooksError(message: "trust entry \(key) contains fields or comments that Programa cannot remove safely")
+            }
+            removal.formUnion(headers[position].index..<sectionEnd(position))
+            removedKeys.insert(key)
+        }
+        return (codexJoinLines(source, lines, removing: removal), removedKeys, removedFeatureFlag)
     }
 
     private func codexTOMLLines(_ source: String) -> [CodexTOMLLine] {
         var result: [CodexTOMLLine] = []
         var mode = CodexTOMLStringMode.none
-        var cursor = source.startIndex
-        while cursor < source.endIndex {
-            let newline = source[cursor...].firstIndex(of: "\n")
-            let contentEndWithCR = newline ?? source.endIndex
-            let lineEnd = newline.map { source.index(after: $0) } ?? source.endIndex
-            let contentEnd: String.Index
-            if contentEndWithCR > cursor,
-               source[source.index(before: contentEndWithCR)] == "\r" {
-                contentEnd = source.index(before: contentEndWithCR)
-            } else {
-                contentEnd = contentEndWithCR
+        let scalars = source.unicodeScalars
+        var cursor = scalars.startIndex
+        while cursor < scalars.endIndex {
+            let newline = scalars[cursor...].firstIndex(of: "\n")
+            let lineEnd = newline.map { scalars.index(after: $0) } ?? scalars.endIndex
+            var contentEnd = newline ?? scalars.endIndex
+            if contentEnd > cursor, scalars[scalars.index(before: contentEnd)] == "\r" {
+                contentEnd = scalars.index(before: contentEnd)
             }
             let startsInString = mode != .none
-            let text = String(source[cursor..<contentEnd])
-            result.append(.init(
-                range: cursor..<lineEnd,
-                contentRange: cursor..<contentEnd,
-                text: text,
-                startsInString: startsInString
-            ))
+            let text = String(scalars[cursor..<contentEnd])
+            result.append(.init(range: cursor..<lineEnd, text: text, startsInString: startsInString))
             mode = codexAdvanceStringMode(in: text, from: mode)
             cursor = lineEnd
         }
@@ -2577,195 +2567,9 @@ extension ProgramaCLI {
     }
 
     private func codexNewline(in source: String) -> String {
-        guard let newline = source.firstIndex(of: "\n") else { return "\n" }
-        return newline > source.startIndex && source[source.index(before: newline)] == "\r" ? "\r\n" : "\n"
-    }
-
-    private func codexTOMLSourceMap(_ source: String) throws -> CodexTOMLSourceMap {
-        struct Header {
-            let path: [String]
-            let range: Range<String.Index>
-            let bodyStart: String.Index
-            let hasInlineComment: Bool
-        }
-        var headers: [Header] = []
-        var assignments: [CodexTOMLAssignment] = []
-        var currentTable: [String] = []
-        for line in codexTOMLLines(source) where !line.startsInString {
-            let trimmed = line.text.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("[") {
-                if let header = try codexParseTableHeader(trimmed) {
-                    currentTable = header.path
-                    headers.append(.init(
-                        path: header.path,
-                        range: line.range,
-                        bodyStart: line.range.upperBound,
-                        hasInlineComment: header.hasInlineComment
-                    ))
-                }
-            } else if !trimmed.isEmpty, !trimmed.hasPrefix("#"),
-                      let assignment = try codexParseAssignment(source, line: line) {
-                assignments.append(.init(
-                    path: currentTable + assignment.path,
-                    lineRange: line.range,
-                    valueRange: assignment.valueRange,
-                    hasInlineComment: assignment.hasInlineComment
-                ))
-            }
-        }
-        let sections = headers.enumerated().map { index, header in
-            let end = index + 1 < headers.count ? headers[index + 1].range.lowerBound : source.endIndex
-            return CodexTOMLSection(
-                path: header.path,
-                headerRange: header.range,
-                bodyRange: header.bodyStart..<end,
-                fullRange: header.range.lowerBound..<end,
-                hasInlineComment: header.hasInlineComment
-            )
-        }
-        return CodexTOMLSourceMap(assignments: assignments, sections: sections)
-    }
-
-    private func codexParseTableHeader(_ line: String) throws -> (path: [String], hasInlineComment: Bool)? {
-        let arrayTable = line.hasPrefix("[[")
-        let opening = arrayTable ? 2 : 1
-        let start = line.index(line.startIndex, offsetBy: opening)
-        var quote: Character?
-        var escaped = false
-        var cursor = start
-        while cursor < line.endIndex {
-            let character = line[cursor]
-            if escaped { escaped = false; cursor = line.index(after: cursor); continue }
-            if quote == "\"", character == "\\" { escaped = true; cursor = line.index(after: cursor); continue }
-            if character == "\"" || character == "'" {
-                if quote == character { quote = nil } else if quote == nil { quote = character }
-                cursor = line.index(after: cursor)
-                continue
-            }
-            if character == "]", quote == nil {
-                let closeEnd = line.index(after: cursor)
-                if arrayTable {
-                    guard closeEnd < line.endIndex, line[closeEnd] == "]" else { return nil }
-                }
-                let suffixStart = arrayTable ? line.index(after: closeEnd) : closeEnd
-                let suffix = line[suffixStart...].trimmingCharacters(in: .whitespaces)
-                guard suffix.isEmpty || suffix.hasPrefix("#") else { return nil }
-                return (try codexParseKeyPath(String(line[start..<cursor])), suffix.hasPrefix("#"))
-            }
-            cursor = line.index(after: cursor)
-        }
-        return nil
-    }
-
-    private func codexParseAssignment(
-        _ source: String,
-        line: CodexTOMLLine
-    ) throws -> (path: [String], valueRange: Range<String.Index>?, hasInlineComment: Bool)? {
-        let content = source[line.contentRange]
-        var quote: Character?
-        var escaped = false
-        for index in content.indices {
-            let character = source[index]
-            if escaped { escaped = false; continue }
-            if quote == "\"", character == "\\" { escaped = true; continue }
-            if character == "\"" || character == "'" {
-                if quote == character { quote = nil } else if quote == nil { quote = character }
-                continue
-            }
-            if character == "=", quote == nil {
-                let path = try codexParseKeyPath(String(source[line.contentRange.lowerBound..<index]))
-                var valueStart = source.index(after: index)
-                while valueStart < line.contentRange.upperBound, source[valueStart].isWhitespace {
-                    valueStart = source.index(after: valueStart)
-                }
-                let scalar = codexScalarRange(in: source, from: valueStart, to: line.contentRange.upperBound)
-                guard let scalar else { return (path, nil, false) }
-                var suffix = scalar.upperBound
-                while suffix < line.contentRange.upperBound, source[suffix].isWhitespace {
-                    suffix = source.index(after: suffix)
-                }
-                let hasComment = suffix < line.contentRange.upperBound && source[suffix] == "#"
-                guard suffix == line.contentRange.upperBound || hasComment else { return (path, nil, false) }
-                return (path, scalar, hasComment)
-            }
-        }
-        return nil
-    }
-
-    private func codexScalarRange(
-        in source: String,
-        from start: String.Index,
-        to end: String.Index
-    ) -> Range<String.Index>? {
-        guard start < end else { return nil }
-        if source[start...].hasPrefix("\"\"\"") || source[start...].hasPrefix("'''")
-            || source[start] == "[" || source[start] == "{" {
-            return nil
-        }
-        if source[start] == "\"" || source[start] == "'" {
-            let quote = source[start]
-            var escaped = false
-            var cursor = source.index(after: start)
-            while cursor < end {
-                let character = source[cursor]
-                if escaped { escaped = false; cursor = source.index(after: cursor); continue }
-                if quote == "\"", character == "\\" { escaped = true; cursor = source.index(after: cursor); continue }
-                cursor = source.index(after: cursor)
-                if character == quote { return start..<cursor }
-            }
-            return nil
-        }
-        var cursor = start
-        while cursor < end, !source[cursor].isWhitespace, source[cursor] != "#" {
-            cursor = source.index(after: cursor)
-        }
-        return cursor > start ? start..<cursor : nil
-    }
-
-    private func codexParseKeyPath(_ source: String) throws -> [String] {
-        var tokens: [String] = []
-        var current = ""
-        var quote: Character?
-        var escaped = false
-        func finish() throws {
-            let token = current.trimmingCharacters(in: .whitespaces)
-            guard !token.isEmpty else { throw CodexHooksError(message: "invalid empty TOML key") }
-            let decoder = TOMLDecoder()
-            let decoded = try decoder.decode([String: Int].self, from: "\(token) = 1")
-            guard let key = decoded.keys.first else { throw CodexHooksError(message: "invalid TOML key \(token)") }
-            tokens.append(key)
-            current = ""
-        }
-        for character in source {
-            if escaped { current.append(character); escaped = false; continue }
-            if quote == "\"", character == "\\" { current.append(character); escaped = true; continue }
-            if character == "\"" || character == "'" {
-                current.append(character)
-                if quote == character { quote = nil } else if quote == nil { quote = character }
-                continue
-            }
-            if character == ".", quote == nil { try finish() }
-            else { current.append(character) }
-        }
-        try finish()
-        return tokens
-    }
-
-    private func codexApplySplices(_ splices: [CodexSourceSplice], to source: String) throws -> String {
-        let sorted = splices.sorted {
-            source.distance(from: source.startIndex, to: $0.range.lowerBound)
-                > source.distance(from: source.startIndex, to: $1.range.lowerBound)
-        }
-        var result = source
-        var previousLower = source.endIndex
-        for splice in sorted {
-            guard splice.range.upperBound <= previousLower else {
-                throw CodexHooksError(message: "overlapping Codex config edits; refusing to write")
-            }
-            result.replaceSubrange(splice.range, with: splice.replacement)
-            previousLower = splice.range.lowerBound
-        }
-        return result
+        let scalars = source.unicodeScalars
+        guard let newline = scalars.firstIndex(of: "\n") else { return "\n" }
+        return newline > scalars.startIndex && scalars[scalars.index(before: newline)] == "\r" ? "\r\n" : "\n"
     }
 
     private func codexTOMLQuoted(_ value: String) throws -> String {
