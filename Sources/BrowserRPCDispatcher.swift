@@ -80,19 +80,6 @@ final class BrowserRPCDispatcher {
         "browser.addinitscript": { $0.v2BrowserAddInitScript(params: $1) },
         "browser.addscript": { $0.v2BrowserAddScript(params: $1) },
         "browser.addstyle": { $0.v2BrowserAddStyle(params: $1) },
-        "browser.viewport.set": { $0.v2BrowserViewportSet(params: $1) },
-        "browser.geolocation.set": { $0.v2BrowserGeolocationSet(params: $1) },
-        "browser.offline.set": { $0.v2BrowserOfflineSet(params: $1) },
-        "browser.trace.start": { $0.v2BrowserTraceStart(params: $1) },
-        "browser.trace.stop": { $0.v2BrowserTraceStop(params: $1) },
-        "browser.network.route": { $0.v2BrowserNetworkRoute(params: $1) },
-        "browser.network.unroute": { $0.v2BrowserNetworkUnroute(params: $1) },
-        "browser.network.requests": { $0.v2BrowserNetworkRequests(params: $1) },
-        "browser.screencast.start": { $0.v2BrowserScreencastStart(params: $1) },
-        "browser.screencast.stop": { $0.v2BrowserScreencastStop(params: $1) },
-        "browser.input_mouse": { $0.v2BrowserInputMouse(params: $1) },
-        "browser.input_keyboard": { $0.v2BrowserInputKeyboard(params: $1) },
-        "browser.input_touch": { $0.v2BrowserInputTouch(params: $1) },
         "browser.design_mode.toggle": { $0.v2BrowserDesignModeToggle(params: $1) },
     ]
 
@@ -121,7 +108,6 @@ final class BrowserRPCState {
     var downloadEventsBySurface: [UUID: [[String: Any]]] = [:]
     var downloadDroppedEventCountBySurface: [UUID: Int] = [:]
     var pendingDownloadEventWaiter: TerminalController.V2BrowserDownloadEventWaiter?
-    var unsupportedNetworkRequestsBySurface: [UUID: [[String: Any]]] = [:]
     let undefinedSentinel = TerminalController.V2BrowserUndefinedSentinel()
 
     func navigationGeneration(for surfaceId: UUID) -> UInt64 {
@@ -240,7 +226,6 @@ final class BrowserRPCState {
         initStylesBySurface.removeValue(forKey: surfaceId)
         downloadEventsBySurface.removeValue(forKey: surfaceId)
         downloadDroppedEventCountBySurface.removeValue(forKey: surfaceId)
-        unsupportedNetworkRequestsBySurface.removeValue(forKey: surfaceId)
         frameSelectorBySurface.removeValue(forKey: surfaceId)
         waiter?.finish(.cancelled)
     }

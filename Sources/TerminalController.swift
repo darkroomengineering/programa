@@ -389,10 +389,6 @@ class TerminalController {
         get { browserRPCState.pendingDownloadEventWaiter }
         set { browserRPCState.pendingDownloadEventWaiter = newValue }
     }
-    var v2BrowserUnsupportedNetworkRequestsBySurface: [UUID: [[String: Any]]] {
-        get { browserRPCState.unsupportedNetworkRequestsBySurface }
-        set { browserRPCState.unsupportedNetworkRequestsBySurface = newValue }
-    }
     var v2BrowserUndefinedSentinel: V2BrowserUndefinedSentinel { browserRPCState.undefinedSentinel }
     private var browserDownloadObserver: NSObjectProtocol?
     private var socketControlPasswordObserver: NSObjectProtocol?

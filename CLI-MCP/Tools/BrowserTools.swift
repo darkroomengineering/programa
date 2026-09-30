@@ -5,13 +5,6 @@ import MCP
 /// `Sources/TerminalController+BrowserAutomation.swift`; the socket dispatch table is
 /// `Sources/BrowserRPCDispatcher.swift`.
 ///
-/// The embedded browser is a per-workspace WKWebView, not a Chromium/CDP surface, so several
-/// Playwright-shaped methods here (`viewport.set`, `geolocation.set`, `offline.set`,
-/// `trace.start`/`stop`, `network.route`/`unroute`/`requests`, `screencast.start`/`stop`,
-/// `input_mouse`/`input_keyboard`/`input_touch`) are always-`not_supported` stubs on this
-/// platform; they are still exposed so a caller gets a clear "not supported on WKWebView" error
-/// instead of an unknown-tool error, and so the tool list matches the full socket method surface.
-///
 /// Almost every tool here resolves its target with `surface_id` (falling back to the workspace's
 /// focused browser surface when omitted) via `v2BrowserWithPanel`/`v2ResolveWorkspace`, the same
 /// fallback chain documented on `ProgramaToolSchema.surfaceRoutingIdProperty` -- these tools use a
@@ -1011,100 +1004,6 @@ enum BrowserTools {
                 ],
                 required: ["css"]
             )
-        ),
-        ProgramaTool(
-            name: "browser_viewport_set",
-            socketMethod: V2MethodNames.browserViewportSet,
-            description: "Always returns a not_supported error: WKWebView does not provide a per-tab programmable viewport emulation API equivalent to CDP.",
-            inputSchema: ProgramaToolSchema.empty
-        ),
-        ProgramaTool(
-            name: "browser_geolocation_set",
-            socketMethod: V2MethodNames.browserGeolocationSet,
-            description: "Always returns a not_supported error: WKWebView does not expose per-tab geolocation spoofing hooks equivalent to Playwright/CDP.",
-            inputSchema: ProgramaToolSchema.empty
-        ),
-        ProgramaTool(
-            name: "browser_offline_set",
-            socketMethod: V2MethodNames.browserOfflineSet,
-            description: "Always returns a not_supported error: WKWebView does not expose reliable per-tab offline emulation.",
-            inputSchema: ProgramaToolSchema.empty
-        ),
-        ProgramaTool(
-            name: "browser_trace_start",
-            socketMethod: V2MethodNames.browserTraceStart,
-            description: "Always returns a not_supported error: Playwright trace artifacts are not available on WKWebView.",
-            inputSchema: ProgramaToolSchema.empty
-        ),
-        ProgramaTool(
-            name: "browser_trace_stop",
-            socketMethod: V2MethodNames.browserTraceStop,
-            description: "Always returns a not_supported error: Playwright trace artifacts are not available on WKWebView.",
-            inputSchema: ProgramaToolSchema.empty
-        ),
-        ProgramaTool(
-            name: "browser_network_route",
-            socketMethod: V2MethodNames.browserNetworkRoute,
-            description: "Always returns a not_supported error: WKWebView does not provide CDP-style request interception/mocking. The attempted route is still recorded and shows up in browser_network_requests.",
-            inputSchema: ProgramaToolSchema.object(properties: [
-                "url": ProgramaToolSchema.string("URL or pattern the route would have matched."),
-                "abort": ProgramaToolSchema.boolean("Whether the route would have aborted matching requests."),
-                "body": ProgramaToolSchema.string("Response body the route would have returned."),
-                "surface_id": surfaceIdProperty(),
-                "window_id": ProgramaToolSchema.windowIdProperty,
-                "workspace_id": ProgramaToolSchema.workspaceIdProperty,
-            ])
-        ),
-        ProgramaTool(
-            name: "browser_network_unroute",
-            socketMethod: V2MethodNames.browserNetworkUnroute,
-            description: "Always returns a not_supported error: WKWebView does not provide CDP-style request interception/mocking. The attempted unroute is still recorded and shows up in browser_network_requests.",
-            inputSchema: ProgramaToolSchema.object(properties: [
-                "url": ProgramaToolSchema.string("URL or pattern the unroute would have matched."),
-                "surface_id": surfaceIdProperty(),
-                "window_id": ProgramaToolSchema.windowIdProperty,
-                "workspace_id": ProgramaToolSchema.workspaceIdProperty,
-            ])
-        ),
-        ProgramaTool(
-            name: "browser_network_requests",
-            socketMethod: V2MethodNames.browserNetworkRequests,
-            description: "Always returns a not_supported error, along with recorded_requests: the browser_network_route/browser_network_unroute attempts recorded for this surface (WKWebView cannot supply real request logs).",
-            inputSchema: ProgramaToolSchema.object(properties: [
-                "surface_id": surfaceIdProperty(),
-                "window_id": ProgramaToolSchema.windowIdProperty,
-                "workspace_id": ProgramaToolSchema.workspaceIdProperty,
-            ])
-        ),
-        ProgramaTool(
-            name: "browser_screencast_start",
-            socketMethod: V2MethodNames.browserScreencastStart,
-            description: "Always returns a not_supported error: WKWebView does not expose CDP screencast streaming. Use browser_screenshot for point-in-time captures.",
-            inputSchema: ProgramaToolSchema.empty
-        ),
-        ProgramaTool(
-            name: "browser_screencast_stop",
-            socketMethod: V2MethodNames.browserScreencastStop,
-            description: "Always returns a not_supported error: WKWebView does not expose CDP screencast streaming.",
-            inputSchema: ProgramaToolSchema.empty
-        ),
-        ProgramaTool(
-            name: "browser_input_mouse",
-            socketMethod: V2MethodNames.browserInputMouse,
-            description: "Always returns a not_supported error: raw CDP mouse injection is unavailable. Use browser_click/browser_hover/browser_scroll instead.",
-            inputSchema: ProgramaToolSchema.empty
-        ),
-        ProgramaTool(
-            name: "browser_input_keyboard",
-            socketMethod: V2MethodNames.browserInputKeyboard,
-            description: "Always returns a not_supported error: raw CDP keyboard injection is unavailable. Use browser_press/browser_keydown/browser_keyup instead.",
-            inputSchema: ProgramaToolSchema.empty
-        ),
-        ProgramaTool(
-            name: "browser_input_touch",
-            socketMethod: V2MethodNames.browserInputTouch,
-            description: "Always returns a not_supported error: raw CDP touch injection is unavailable on WKWebView.",
-            inputSchema: ProgramaToolSchema.empty
         ),
         ProgramaTool(
             name: "browser_design_mode_toggle",
