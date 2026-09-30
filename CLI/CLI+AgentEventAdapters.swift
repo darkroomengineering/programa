@@ -33,7 +33,7 @@ extension ProgramaCLI {
         if let pid {
             params["pid"] = pid
         }
-        _ = try? client.sendV2(method: "agent.event", params: params)
+        _ = try? client.sendV2(method: V2MethodNames.agentEvent, params: params)
     }
 
     /// Reports a surface's agent activity state, then a matching `agent.event`, in that
@@ -81,7 +81,7 @@ extension ProgramaCLI {
         ]
         if let sessionId, !sessionId.isEmpty { params["session_id"] = sessionId }
         if let pid { params["pid"] = pid }
-        _ = try? client.sendV2(method: "agent.needs_input", params: params)
+        _ = try? client.sendV2(method: V2MethodNames.agentNeedsInput, params: params)
     }
 
     /// Reports the matching `agent.event`, then clears the surface's reported agent
