@@ -195,7 +195,7 @@ struct TabItemView: View {
         )
         .padding(.bottom, isSelected ? 1 : 0)
         .background(tabBackground.saturation(saturation))
-        .animation(.easeInOut(duration: 0.14), value: showsShortcutHint)
+        .animation(.easeOut(duration: 0.14), value: showsShortcutHint)
         .contentShape(Rectangle())
         // Middle click to close (macOS convention).
         // Uses an AppKit event monitor so it doesn't interfere with left click selection or drag/reorder.
@@ -317,7 +317,7 @@ struct TabItemView: View {
             minHeight: TabBarMetrics.closeButtonSize,
             alignment: .center
         )
-        .animation(.easeInOut(duration: 0.14), value: showsShortcutHint)
+        .animation(.easeOut(duration: 0.14), value: showsShortcutHint)
     }
 
     private func updateGlobeFallback() {

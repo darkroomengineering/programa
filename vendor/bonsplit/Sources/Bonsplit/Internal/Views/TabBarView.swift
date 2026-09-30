@@ -226,7 +226,7 @@ struct TabBarView: View {
                                 .padding(.bottom, 1)
                                 .opacity(shouldShow ? 1 : 0)
                                 .allowsHitTesting(shouldShow)
-                                .animation(.easeInOut(duration: 0.14), value: shouldShow)
+                                .animation(.easeOut(duration: 0.14), value: shouldShow)
                         }
                     }
                 }
@@ -639,7 +639,7 @@ struct TabBarView: View {
                 Color.clear.frame(width: buttonClearWidth)
             }
         }
-        .animation(.easeInOut(duration: 0.14), value: shouldShowButtons)
+        .animation(.easeOut(duration: 0.14), value: shouldShowButtons)
     }
 
     // MARK: - Fade Overlays
@@ -1106,7 +1106,7 @@ private final class TabControlShortcutKeyMonitor: ObservableObject {
             ) else { return }
             guard let currentModifier = TabControlShortcutHintPolicy.hintModifier(for: NSEvent.modifierFlags) else { return }
             self.shortcutModifierSymbol = currentModifier.symbol
-            withAnimation(.easeInOut(duration: 0.14)) {
+            withAnimation(.easeOut(duration: 0.14)) {
                 self.isShortcutHintVisible = true
             }
         }
@@ -1121,7 +1121,7 @@ private final class TabControlShortcutKeyMonitor: ObservableObject {
         pendingShowWorkItem = nil
         pendingModifier = nil
         if resetVisible {
-            withAnimation(.easeInOut(duration: 0.14)) {
+            withAnimation(.easeOut(duration: 0.14)) {
                 isShortcutHintVisible = false
             }
         }

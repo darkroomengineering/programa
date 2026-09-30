@@ -524,7 +524,7 @@ struct TabItemView: View, Equatable {
                                 .transition(.opacity)
                         }
                     }
-                    .animation(.easeInOut(duration: 0.14), value: showsModifierShortcutHints || alwaysShowShortcutHints)
+                    .animation(.easeOut(duration: 0.14), value: showsModifierShortcutHints || alwaysShowShortcutHints)
                 }
             }
 
