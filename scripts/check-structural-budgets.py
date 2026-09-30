@@ -35,7 +35,7 @@ FILES = (
     FileBudget("Sources/CommandPaletteController.swift", 71, 283, "CommandPaletteController"),
     FileBudget("CLI/programa.swift", 7_886, 6_864, "ProgramaCLI entrypoint"),
     FileBudget("CLI/CLICommandDispatcher.swift", 0, 255, "CLICommandDispatcher"),
-    FileBudget("CLI/CLI+Hooks.swift", 4_381, 3_806, "hook provider primitives"),
+    FileBudget("CLI/CLI+Hooks.swift", 4_381,     3610, "hook provider primitives"),
     FileBudget("CLI/HookInstallationCoordinator.swift", 0, 168, "HookInstallationCoordinator"),
     FileBudget("Sources/TerminalController.swift", 3_149, 3_021, "terminal RPC adapter"),
     FileBudget(

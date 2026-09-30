@@ -4,13 +4,13 @@
 Runs entirely against the CLI binary with no app/socket involved — the `codex`
 command branch is dispatched before any socket connection is opened. Exercises:
 - Fresh install: writes all five lifecycle hook events into hooks.json, and
-  config.toml gains `codex_hooks = true` under `[features]`.
+  config.toml gains one marker-delimited block holding the hook trust tables.
 - Idempotency: a second install run makes no further changes.
 - Preservation: unrelated user hooks and other event keys are left alone; a
   stale programa entry is replaced (not duplicated) on reinstall.
 - Uninstall: programa entries are removed, user hooks and unrelated event
   keys survive, emptied event keys are dropped, and config.toml's
-  `codex_hooks` key is removed.
+  Programa block is removed.
 - Declining the confirmation prompt leaves the files untouched.
 - Legacy alias: `programa codex install-hooks` / `uninstall-hooks` behave
   identically to `install-integration` / `uninstall-integration`.
@@ -91,16 +91,6 @@ def _hooks_commands(hooks: Dict[str, Any], event: str) -> List[str]:
     return commands
 
 
-def _has_codex_hooks_feature(config_toml: str) -> bool:
-    for line in config_toml.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            continue
-        if stripped.replace(" ", "") == "codex_hooks=true":
-            return True
-    return False
-
-
 def test_fresh_install(cli: str) -> None:
     with tempfile.TemporaryDirectory() as codex_home:
         proc = _run(cli, ["codex", "install-integration", "--yes"], codex_home)
@@ -121,12 +111,14 @@ def test_fresh_install(cli: str) -> None:
 
         config_path = Path(codex_home) / "config.toml"
         _must(config_path.exists(), f"config.toml should be created at {config_path}")
+        config_text = config_path.read_text(encoding="utf-8")
         _must(
-            _has_codex_hooks_feature(config_path.read_text(encoding="utf-8")),
-            "config.toml should gain codex_hooks = true under [features]",
+            "# BEGIN programa (managed by Programa, do not edit)" in config_text
+            and "# END programa" in config_text,
+            f"config.toml should gain the Programa block, got: {config_text!r}",
         )
 
-        print("  PASS: fresh install writes all five lifecycle hook events and config.toml feature flag")
+        print("  PASS: fresh install writes all five lifecycle hook events and the config.toml block")
 
 
 def test_idempotent_reinstall(cli: str) -> None:
@@ -257,11 +249,11 @@ def test_preserves_user_hooks_and_replaces_stale_entry(cli: str) -> None:
         config_path = Path(codex_home) / "config.toml"
         config_after = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
         _must(
-            not _has_codex_hooks_feature(config_after),
-            f"config.toml codex_hooks key should be removed after uninstall, got: {config_after!r}",
+            "programa" not in config_after,
+            f"config.toml Programa block should be removed after uninstall, got: {config_after!r}",
         )
 
-        print("  PASS: uninstall removes programa entries, preserves user hooks, drops empty keys, and config.toml key")
+        print("  PASS: uninstall removes programa entries, preserves user hooks, drops empty keys, and config.toml block")
 
 
 def test_decline_confirmation_leaves_file_untouched(cli: str) -> None:
