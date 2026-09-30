@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import wait_for as _wait_for
 
 
@@ -23,7 +23,7 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         c.activate_app()
         time.sleep(0.25)
 
@@ -33,13 +33,13 @@ def main() -> int:
 
         surfaces = c.list_surfaces()
         if not surfaces:
-            raise cmuxError("Expected at least 1 surface after new_workspace")
+            raise ProgramaClientError("Expected at least 1 surface after new_workspace")
         panel_id = next((sid for _i, sid, focused in surfaces if focused), surfaces[0][1])
 
         _wait_for(lambda: c.is_terminal_focused(panel_id), timeout_s=3.0)
 
         # Type into the shell prompt without pressing Enter.
-        text = "cmux"
+        text = "programa"
 
         # A single glyph can be surprisingly small at some font sizes; keep this low but
         # non-zero to still catch the "no visual updates until Enter/unfocus" regression.
@@ -57,7 +57,7 @@ def main() -> int:
             snap = c.panel_snapshot(panel_id, f"typing_{i}_after_{ord(ch)}")
             changed = int(snap.get("changed_pixels", -1))
             if changed < min_pixels:
-                raise cmuxError(
+                raise ProgramaClientError(
                     "Expected visible pixel changes after typing a character.\n"
                     f"char={ch!r} index={i} changed_pixels={changed} min_pixels={min_pixels}\n"
                     f"snapshot_path={snap.get('path')}"
@@ -68,7 +68,7 @@ def main() -> int:
             buf = c.read_terminal_text(panel_id)
             if text[: i + 1] not in buf:
                 tail = buf[-600:].replace("\r", "\\r")
-                raise cmuxError(
+                raise ProgramaClientError(
                     "Terminal text did not update after typing.\n"
                     f"expected_prefix={text[:i+1]!r}\n"
                     f"last_tail:\n{tail}"

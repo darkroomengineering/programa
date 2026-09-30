@@ -111,7 +111,7 @@ enum SocketPasswordResolver {
         }
 
         let candidate = URL(fileURLWithPath: socketPath).lastPathComponent
-        let prefixes = ["cmux-debug-", "cmux-"]
+        let prefixes = ["programa-debug-", "programa-", "cmux-debug-", "cmux-"] // Legacy cmux socket names, still read so older sockets keep resolving a scope.
         for prefix in prefixes {
             guard candidate.hasPrefix(prefix), candidate.hasSuffix(".sock") else { continue }
             let start = candidate.index(candidate.startIndex, offsetBy: prefix.count)
@@ -2436,7 +2436,7 @@ struct ProgramaCLI {
 
                     // Reconnect failures that won't resolve themselves on retry: wrong
                     // password / unconfigured password (auth.login's auth_failed/
-                    // auth_required/auth_unconfigured), the cmux-ancestry "unsafe socket"
+                    // auth_required/auth_unconfigured), the programa-ancestry "unsafe socket"
                     // rejection (raw "ERROR: Access denied ..." preamble), and an explicit
                     // subscribe-ack rejection (invalid_params -- retrying with the same
                     // params will never succeed). Everything else (ECONNREFUSED/ENOENT while
@@ -6849,7 +6849,7 @@ struct ProgramaCLI {
 }
 
 @main
-struct CMUXTermMain {
+struct ProgramaMain {
     static func main() {
         // CLI tools should ignore SIGPIPE so closed stdout pipes do not terminate the process.
         _ = signal(SIGPIPE, SIG_IGN)

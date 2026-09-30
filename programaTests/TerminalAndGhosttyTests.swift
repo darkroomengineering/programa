@@ -115,16 +115,16 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 
     func testHTMLOnlyPasteboardExtractsPlainText() {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-html-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-html-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString("<p>Hello <strong>world</strong></p>", forType: .html)
 
-        XCTAssertEqual(cmuxPasteboardStringContentsForTesting(pasteboard), "Hello world")
-        XCTAssertNil(cmuxPasteboardImagePathForTesting(pasteboard))
+        XCTAssertEqual(programaPasteboardStringContentsForTesting(pasteboard), "Hello world")
+        XCTAssertNil(programaPasteboardImagePathForTesting(pasteboard))
     }
 
     func testAlternatePlainTextUTIExtractsPlainText() {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-plain-text-uti-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-plain-text-uti-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString(
             "hello from public.plain-text",
@@ -132,13 +132,13 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            cmuxPasteboardStringContentsForTesting(pasteboard),
+            programaPasteboardStringContentsForTesting(pasteboard),
             "hello from public.plain-text"
         )
     }
 
     func testEmptyPlainTextFallsBackToRichTextPayload() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-empty-plain-rich-fallback-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-empty-plain-rich-fallback-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString("", forType: .string)
 
@@ -150,13 +150,13 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         pasteboard.setData(rtfData, forType: .rtf)
 
         XCTAssertEqual(
-            cmuxPasteboardStringContentsForTesting(pasteboard),
+            programaPasteboardStringContentsForTesting(pasteboard),
             "hello from rtf fallback"
         )
     }
 
     func testXHTMLTypeFallsBackToRenderedHTMLText() {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-xhtml-html-fallback-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-xhtml-html-fallback-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString(
             "<div>Hello <strong>world</strong></div>",
@@ -164,11 +164,11 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         )
         pasteboard.setString("<p>Hello <strong>world</strong></p>", forType: .html)
 
-        XCTAssertEqual(cmuxPasteboardStringContentsForTesting(pasteboard), "Hello world")
+        XCTAssertEqual(programaPasteboardStringContentsForTesting(pasteboard), "Hello world")
     }
 
     func testImageClipboardWithPlainTextFallbackStillFallsBackToImagePath() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-image-plain-text-fallback-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-image-plain-text-fallback-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString(
             "https://example.com/keyboard.png",
@@ -185,9 +185,9 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         let pngData = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         pasteboard.setData(pngData, forType: .png)
 
-        XCTAssertNil(cmuxPasteboardStringContentsForTesting(pasteboard))
+        XCTAssertNil(programaPasteboardStringContentsForTesting(pasteboard))
 
-        let imagePath = try XCTUnwrap(cmuxPasteboardImagePathForTesting(pasteboard))
+        let imagePath = try XCTUnwrap(programaPasteboardImagePathForTesting(pasteboard))
         defer { try? FileManager.default.removeItem(atPath: imagePath) }
 
         XCTAssertTrue(imagePath.hasSuffix(".png"))
@@ -195,7 +195,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 
     func testImageHTMLClipboardFallsBackToImagePath() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-image-html-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-image-html-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString("<meta charset='utf-8'><img src=\"https://example.com/keyboard.png\">", forType: .html)
 
@@ -209,9 +209,9 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         let pngData = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         pasteboard.setData(pngData, forType: .png)
 
-        XCTAssertNil(cmuxPasteboardStringContentsForTesting(pasteboard))
+        XCTAssertNil(programaPasteboardStringContentsForTesting(pasteboard))
 
-        let imagePath = try XCTUnwrap(cmuxPasteboardImagePathForTesting(pasteboard))
+        let imagePath = try XCTUnwrap(programaPasteboardImagePathForTesting(pasteboard))
         defer { try? FileManager.default.removeItem(atPath: imagePath) }
 
         XCTAssertTrue(imagePath.hasSuffix(".png"))
@@ -219,7 +219,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 
     func testImageHTMLClipboardWithGenericPlainTextStillFallsBackToImagePath() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-image-html-generic-text-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-image-html-generic-text-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString("<meta charset='utf-8'><img src=\"https://example.com/keyboard.png\">", forType: .html)
         pasteboard.setString(
@@ -237,9 +237,9 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         let pngData = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         pasteboard.setData(pngData, forType: .png)
 
-        XCTAssertNil(cmuxPasteboardStringContentsForTesting(pasteboard))
+        XCTAssertNil(programaPasteboardStringContentsForTesting(pasteboard))
 
-        let imagePath = try XCTUnwrap(cmuxPasteboardImagePathForTesting(pasteboard))
+        let imagePath = try XCTUnwrap(programaPasteboardImagePathForTesting(pasteboard))
         defer { try? FileManager.default.removeItem(atPath: imagePath) }
 
         XCTAssertTrue(imagePath.hasSuffix(".png"))
@@ -247,7 +247,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 
     func testImageHTMLClipboardWithVisibleTextPrefersText() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-image-html-text-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-image-html-text-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString("<p>Hello <img src=\"https://example.com/keyboard.png\"></p>", forType: .html)
 
@@ -261,12 +261,12 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         let pngData = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         pasteboard.setData(pngData, forType: .png)
 
-        XCTAssertEqual(cmuxPasteboardStringContentsForTesting(pasteboard), "Hello")
-        XCTAssertNil(cmuxPasteboardImagePathForTesting(pasteboard))
+        XCTAssertEqual(programaPasteboardStringContentsForTesting(pasteboard), "Hello")
+        XCTAssertNil(programaPasteboardImagePathForTesting(pasteboard))
     }
 
     func testJPEGClipboardFallsBackToImagePath() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-jpeg-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-jpeg-\(UUID().uuidString)"))
         pasteboard.clearContents()
 
         let image = NSImage(size: NSSize(width: 1, height: 1))
@@ -288,7 +288,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
             forType: NSPasteboard.PasteboardType(UTType.jpeg.identifier)
         )
 
-        let imagePath = try XCTUnwrap(cmuxPasteboardImagePathForTesting(pasteboard))
+        let imagePath = try XCTUnwrap(programaPasteboardImagePathForTesting(pasteboard))
         defer { try? FileManager.default.removeItem(atPath: imagePath) }
 
         XCTAssertTrue(imagePath.hasSuffix(".jpeg"))
@@ -296,7 +296,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 
     func testAttachmentOnlyRTFDClipboardFallsBackToImagePath() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-rtfd-attachment-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-rtfd-attachment-\(UUID().uuidString)"))
         pasteboard.clearContents()
 
         let image = NSImage(size: NSSize(width: 1, height: 1))
@@ -314,9 +314,9 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         )
         pasteboard.setData(data, forType: .rtfd)
 
-        XCTAssertNil(cmuxPasteboardStringContentsForTesting(pasteboard))
+        XCTAssertNil(programaPasteboardStringContentsForTesting(pasteboard))
 
-        let imagePath = try XCTUnwrap(cmuxPasteboardImagePathForTesting(pasteboard))
+        let imagePath = try XCTUnwrap(programaPasteboardImagePathForTesting(pasteboard))
         defer { try? FileManager.default.removeItem(atPath: imagePath) }
 
         XCTAssertTrue(imagePath.hasSuffix(".tiff"))
@@ -324,7 +324,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 
     func testAttachmentOnlyRTFDNonImageClipboardDoesNotFallBackToImagePath() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-rtfd-non-image-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-rtfd-non-image-\(UUID().uuidString)"))
         pasteboard.clearContents()
 
         let wrapper = FileWrapper(regularFileWithContents: Data("hello".utf8))
@@ -338,12 +338,12 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         )
         pasteboard.setData(data, forType: .rtfd)
 
-        XCTAssertNil(cmuxPasteboardStringContentsForTesting(pasteboard))
-        XCTAssertNil(cmuxPasteboardImagePathForTesting(pasteboard))
+        XCTAssertNil(programaPasteboardStringContentsForTesting(pasteboard))
+        XCTAssertNil(programaPasteboardImagePathForTesting(pasteboard))
     }
 
     func testRTFDClipboardWithVisibleTextPrefersText() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-rtfd-text-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-rtfd-text-\(UUID().uuidString)"))
         pasteboard.clearContents()
 
         let image = NSImage(size: NSSize(width: 1, height: 1))
@@ -363,16 +363,16 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         )
         pasteboard.setData(data, forType: .rtfd)
 
-        XCTAssertEqual(cmuxPasteboardStringContentsForTesting(pasteboard), "Hello")
-        XCTAssertNil(cmuxPasteboardImagePathForTesting(pasteboard))
+        XCTAssertEqual(programaPasteboardStringContentsForTesting(pasteboard), "Hello")
+        XCTAssertNil(programaPasteboardImagePathForTesting(pasteboard))
     }
 
     func testImageOnlyPasteboardProducesTempFileURL() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-drop-image-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-drop-image-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setData(try make1x1PNG(color: .red), forType: .png)
 
-        let fileURL = try XCTUnwrap(cmuxPasteboardImageFileURLForTesting(pasteboard))
+        let fileURL = try XCTUnwrap(programaPasteboardImageFileURLForTesting(pasteboard))
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
         XCTAssertEqual(fileURL.pathExtension, "png")
@@ -392,7 +392,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 
     func testLocalImageDropPlanInsertsEscapedLocalPath() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-local-drop-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-local-drop-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setData(try make1x1PNG(color: .orange), forType: .png)
 
@@ -411,7 +411,7 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 
     func testLocalImagePastePlanInsertsEscapedLocalPath() throws {
-        let pasteboard = NSPasteboard(name: .init("cmux-test-local-paste-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: .init("programa-test-local-paste-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setData(try make1x1PNG(color: .magenta), forType: .png)
 
@@ -1050,17 +1050,17 @@ final class GhosttyResponderResolutionTests: XCTestCase {
         let descendant = FocusProbeView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
         ghosttyView.addSubview(descendant)
 
-        XCTAssertTrue(cmuxOwningGhosttyView(for: descendant) === ghosttyView)
+        XCTAssertTrue(programaOwningGhosttyView(for: descendant) === ghosttyView)
     }
 
     func testResolvesGhosttyViewFromGhosttyResponder() {
         let ghosttyView = GhosttyNSView(frame: NSRect(x: 0, y: 0, width: 200, height: 120))
-        XCTAssertTrue(cmuxOwningGhosttyView(for: ghosttyView) === ghosttyView)
+        XCTAssertTrue(programaOwningGhosttyView(for: ghosttyView) === ghosttyView)
     }
 
     func testReturnsNilForUnrelatedResponder() {
         let view = FocusProbeView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
-        XCTAssertNil(cmuxOwningGhosttyView(for: view))
+        XCTAssertNil(programaOwningGhosttyView(for: view))
     }
 }
 

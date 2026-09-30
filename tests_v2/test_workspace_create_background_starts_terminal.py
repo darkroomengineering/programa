@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -27,14 +27,14 @@ def _wait_for_file_text(path: Path, needle: str, timeout_s: float = 8.0) -> str:
         if needle in last_text:
             return last_text
         time.sleep(0.1)
-    raise cmuxError(f"Timed out waiting for {needle!r} in background workspace file: {last_text!r}")
+    raise ProgramaClientError(f"Timed out waiting for {needle!r} in background workspace file: {last_text!r}")
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         baseline_workspace = c.current_workspace()
         created_workspace = ""
-        marker_path = Path(tempfile.gettempdir()) / f"cmux-bg-start-{int(time.time() * 1000)}.txt"
+        marker_path = Path(tempfile.gettempdir()) / f"programa-bg-start-{int(time.time() * 1000)}.txt"
         try:
             token = f"PROGRAMA_BG_START_{int(time.time() * 1000)}"
             initial_command = (

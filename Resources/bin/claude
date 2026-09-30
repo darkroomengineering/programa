@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# cmux claude wrapper - injects hooks and session tracking
+# programa claude wrapper - injects hooks and session tracking
 #
-# When running inside a cmux terminal (PROGRAMA_SURFACE_ID is set), this wrapper
+# When running inside a programa terminal (PROGRAMA_SURFACE_ID is set), this wrapper
 # intercepts `claude` invocations to inject --session-id and --settings flags
-# so that Claude Code hooks fire back into cmux for notifications/status.
-# Outside cmux, it passes through to the real claude binary unchanged.
+# so that Claude Code hooks fire back into programa for notifications/status.
+# Outside programa, it passes through to the real claude binary unchanged.
 
 # Find the real claude binary, skipping our own directory.
 find_real_claude() {
@@ -30,24 +30,24 @@ find_real_claude() {
     return 1
 }
 
-# Return 0 only when PROGRAMA_SOCKET_PATH points to a live cmux socket.
-cmux_socket_available() {
+# Return 0 only when PROGRAMA_SOCKET_PATH points to a live programa socket.
+programa_socket_available() {
     local socket="${PROGRAMA_SOCKET_PATH:-}"
     [[ -n "$socket" && -S "$socket" ]] || return 1
 
-    local self_dir cmux_bin
+    local self_dir programa_bin
     self_dir="$(cd "$(dirname "$0")" && pwd)"
-    cmux_bin="$self_dir/programa"
-    [[ -x "$cmux_bin" ]] || cmux_bin="$(command -v cmux || true)"
-    [[ -n "$cmux_bin" ]] || return 1
+    programa_bin="$self_dir/programa"
+    [[ -x "$programa_bin" ]] || programa_bin="$(command -v programa || true)"
+    [[ -n "$programa_bin" ]] || return 1
 
     # Keep stale/hung socket checks bounded so claude startup does not block
     # behind the CLI default timeout (15s).
-    CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC=0.75 \
-        "$cmux_bin" --socket "$socket" ping >/dev/null 2>&1
+    PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=0.75 \
+        "$programa_bin" --socket "$socket" ping >/dev/null 2>&1
 }
 
-resolve_hook_cmux_bin() {
+resolve_hook_programa_bin() {
     local self_dir bundled_cli
     bundled_cli="${PROGRAMA_BUNDLED_CLI_PATH:-}"
     if [[ -n "$bundled_cli" && -x "$bundled_cli" ]]; then
@@ -62,26 +62,26 @@ resolve_hook_cmux_bin() {
         return 0
     fi
 
-    bundled_cli="$(command -v cmux || true)"
+    bundled_cli="$(command -v programa || true)"
     if [[ -n "$bundled_cli" ]]; then
         printf '%s' "$bundled_cli"
         return 0
     fi
 
-    printf '%s' "cmux"
+    printf '%s' "programa"
 }
 
-# Pass through if not in a cmux terminal, hooks are disabled, or the cmux
+# Pass through if not in a programa terminal, hooks are disabled, or the programa
 # socket is unavailable (stale env / app not running).
-IN_CMUX=0
+IN_PROGRAMA=0
 if [[ -n "$PROGRAMA_SURFACE_ID" ]]; then
-    IN_CMUX=1
+    IN_PROGRAMA=1
 fi
 
-if [[ "$IN_CMUX" == "0" || "$PROGRAMA_CLAUDE_HOOKS_DISABLED" == "1" ]] || ! cmux_socket_available; then
-    # In cmux-launched shells, preserve old behavior and always clear nested
+if [[ "$IN_PROGRAMA" == "0" || "$PROGRAMA_CLAUDE_HOOKS_DISABLED" == "1" ]] || ! programa_socket_available; then
+    # In programa-launched shells, preserve old behavior and always clear nested
     # Claude session markers, even when we must pass through due to stale socket.
-    if [[ "$IN_CMUX" == "1" ]]; then
+    if [[ "$IN_PROGRAMA" == "1" ]]; then
         unset CLAUDECODE
     fi
     REAL_CLAUDE="$(find_real_claude)" || { echo "Error: claude not found in PATH" >&2; exit 127; }
@@ -93,7 +93,7 @@ REAL_CLAUDE="$(find_real_claude)" || { echo "Error: claude not found in PATH" >&
 
 ensure_node_options_restore_module() {
     local guard_dir="${TMPDIR:-/tmp}"
-    guard_dir="${guard_dir%/}/cmux-claude-node-options"
+    guard_dir="${guard_dir%/}/programa-claude-node-options"
     local guard_path="$guard_dir/restore-node-options.cjs"
     mkdir -p "$guard_dir" || return 1
     local temp_path
@@ -167,7 +167,7 @@ case "${1:-}" in
     mcp|config|api-key|rc|remote-control) exec "$REAL_CLAUDE" "$@" ;;
 esac
 
-# Unset CLAUDECODE to avoid "nested session" detection — cmux terminals are
+# Unset CLAUDECODE to avoid "nested session" detection — programa terminals are
 # independent sessions even when the parent shell was launched from Claude Code.
 unset CLAUDECODE
 
@@ -186,7 +186,7 @@ done
 # Export the wrapper's PID. Because we exec claude below, this PID becomes
 # the actual claude process PID, which hooks use for stale-session detection.
 export PROGRAMA_CLAUDE_PID=$$
-export PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN="$(resolve_hook_cmux_bin)"
+export PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN="$(resolve_hook_programa_bin)"
 if GUARD_PATH="$(ensure_node_options_restore_module)"; then
     if [[ ${NODE_OPTIONS+x} ]]; then
         export PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT=1

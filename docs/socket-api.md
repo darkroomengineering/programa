@@ -22,7 +22,7 @@ sequenceDiagram
     participant M as Main actor
 
     C->>L: connect to the socket
-    Note over L: cmuxOnly mode checks that the peer process<br/>descends from Programa
+    Note over L: programaOnly mode checks that the peer process<br/>descends from Programa
     opt password mode
         C->>L: auth.login {password}
         L-->>C: authenticated, or auth_failed
@@ -57,12 +57,12 @@ Rules that follow from the diagram:
 ### Socket modes
 
 The mode is `automation.socketControlMode` in `settings.json` or **Settings > Automation**.
-The default is `cmuxOnly`.
+The default is `programaOnly`. The legacy name `cmuxOnly` is still accepted.
 
 | Mode | Shown in Settings as | Who can connect |
 |---|---|---|
 | `off` | Off | Nobody. The socket is not created. |
-| `cmuxOnly` | Programa processes only | Processes started inside Programa terminals. The server checks that the peer process descends from Programa. |
+| `programaOnly` | Programa processes only | Processes started inside Programa terminals. The server checks that the peer process descends from Programa. |
 | `automation` | Automation mode | Any process of the same macOS user. No ancestry check. |
 | `password` | Password mode | Any process of the same macOS user that authenticates with the socket password. |
 | `allowAll` | Full open access | Any local process and user, with no auth. The socket file is world-writable (`0666`); every other mode uses `0600`. Unsafe. |
@@ -74,7 +74,7 @@ Two environment variables override the setting for one launch. `PROGRAMA_SOCKET_
 (`1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`) turns the socket on or off, and
 `PROGRAMA_SOCKET_MODE` sets the mode. Disabling wins over a mode.
 
-A client denied by `cmuxOnly` receives a plain-text line, `ERROR: Access denied — only
+A client denied by `programaOnly` receives a plain-text line, `ERROR: Access denied — only
 processes started inside Programa can connect`, and the connection closes. It is not a JSON
 error envelope.
 
@@ -84,7 +84,7 @@ The app listens on:
 
 | Build | Path |
 |---|---|
-| Release | `~/Library/Application Support/programa/programa.sock` (the per-user file `cmux-<uid>.sock` in the same folder is used when `programa.sock` exists but belongs to another user or is not a socket) |
+| Release | `~/Library/Application Support/programa/programa.sock` (the per-user file `programa-<uid>.sock` in the same folder is used when `programa.sock` exists but belongs to another user or is not a socket) |
 | Debug | `/tmp/programa-debug.sock` |
 | Tagged Debug (`reload.sh --tag <tag>`) | `/tmp/programa-debug-<tag>.sock` |
 | Staging | `/tmp/programa-staging.sock` |
@@ -821,7 +821,7 @@ Services call. Both are omitted if resolution fails.
 
 ## Tests
 
-`tests_v2/` contains socket integration tests, using `tests_v2/cmux.py` where a client
+`tests_v2/` contains socket integration tests, using `tests_v2/programa_client.py` where a client
 helper is needed. `tests/` contains script and CLI tests; `programaTests/` contains
 unit tests; `programaUITests/` contains UI tests. See [the testing layout](testing-layout.md)
 for the harnesses and CI jobs that run them.

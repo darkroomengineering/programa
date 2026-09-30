@@ -423,7 +423,7 @@ final class NativeTrafficLightLifecycleTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.settings")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.settings")
         defer { window.orderOut(nil) }
 
         window.contentView?.superview?.layoutSubtreeIfNeeded()
@@ -520,7 +520,7 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.main.\(id.uuidString)")
+        window.identifier = NSUserInterfaceItemIdentifier("programa.main.\(id.uuidString)")
         return window
     }
 
@@ -750,7 +750,7 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
 
         let existingWorkspaceIds = Set(manager.tabs.map(\.id))
         let embeddedExecutableURL = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/MacOS/cmux", isDirectory: false)
+            .appendingPathComponent("Contents/MacOS/programa", isDirectory: false)
 
         app.application(
             NSApplication.shared,
@@ -1728,7 +1728,7 @@ final class FileDropOverlayViewTests: XCTestCase {
         overlay.autoresizingMask = [.width, .height]
         container.addSubview(overlay, positioned: .above, relativeTo: nil)
 
-        let pasteboard = NSPasteboard(name: NSPasteboard.Name("cmux.test.drag.\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("programa.test.drag.\(UUID().uuidString)"))
         pasteboard.clearContents()
         XCTAssertTrue(
             pasteboard.writeObjects([URL(fileURLWithPath: "/tmp/upload.mov") as NSURL]),

@@ -211,7 +211,7 @@ final class NotificationDockBadgeTests: XCTestCase {
         let store = TerminalNotificationStore.shared
         let defaults = UserDefaults.standard
         let commandOutputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-notification-command-\(UUID().uuidString).txt", isDirectory: false)
+            .appendingPathComponent("programa-notification-command-\(UUID().uuidString).txt", isDirectory: false)
 
         let originalTabManager = appDelegate.tabManager
         let originalNotificationStore = appDelegate.notificationStore
@@ -284,7 +284,7 @@ final class NotificationDockBadgeTests: XCTestCase {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let expectedTitle = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? "cmux"
+            ?? "programa"
         XCTAssertEqual(output.components(separatedBy: "\n"), [expectedTitle, "Focused subtitle", "Focused body"])
     }
 
@@ -776,19 +776,19 @@ final class NotificationMenuSnapshotBuilderTests: XCTestCase {
 
 final class MenuBarBuildHintFormatterTests: XCTestCase {
     func testReleaseBuildShowsNoHint() {
-        XCTAssertNil(MenuBarBuildHintFormatter.menuTitle(appName: "cmux DEV menubar-extra", isDebugBuild: false))
+        XCTAssertNil(MenuBarBuildHintFormatter.menuTitle(appName: "programa DEV menubar-extra", isDebugBuild: false))
     }
 
     func testDebugBuildWithTagShowsTag() {
         XCTAssertEqual(
-            MenuBarBuildHintFormatter.menuTitle(appName: "cmux DEV menubar-extra", isDebugBuild: true),
+            MenuBarBuildHintFormatter.menuTitle(appName: "programa DEV menubar-extra", isDebugBuild: true),
             "Build Tag: menubar-extra"
         )
     }
 
     func testDebugBuildWithoutTagShowsUntagged() {
         XCTAssertEqual(
-            MenuBarBuildHintFormatter.menuTitle(appName: "cmux DEV", isDebugBuild: true),
+            MenuBarBuildHintFormatter.menuTitle(appName: "programa DEV", isDebugBuild: true),
             "Build: DEV (untagged)"
         )
     }

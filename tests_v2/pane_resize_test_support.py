@@ -4,7 +4,7 @@ import re
 import secrets
 import time
 
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must, wait_for  # noqa: F401  (re-exported to the pane-resize tests)
 
 
@@ -19,13 +19,13 @@ def clean_line(raw: str) -> str:
     return line.strip()
 
 
-def layout_panes(client: cmux) -> list[dict]:
+def layout_panes(client: ProgramaClient) -> list[dict]:
     layout_payload = client.layout_debug() or {}
     layout = layout_payload.get("layout") or {}
     return list(layout.get("panes") or [])
 
 
-def pane_extent(client: cmux, pane_id: str, axis: str) -> float:
+def pane_extent(client: ProgramaClient, pane_id: str, axis: str) -> float:
     panes = layout_panes(client)
     for pane in panes:
         pid = str(pane.get("paneId") or pane.get("pane_id") or "")
@@ -33,10 +33,10 @@ def pane_extent(client: cmux, pane_id: str, axis: str) -> float:
             continue
         frame = pane.get("frame") or {}
         return float(frame.get(axis) or 0.0)
-    raise cmuxError(f"Pane {pane_id} missing from debug layout panes: {panes}")
+    raise ProgramaClientError(f"Pane {pane_id} missing from debug layout panes: {panes}")
 
 
-def workspace_panes(client: cmux, workspace_id: str) -> list[tuple[str, bool, int]]:
+def workspace_panes(client: ProgramaClient, workspace_id: str) -> list[tuple[str, bool, int]]:
     payload = client._call("pane.list", {"workspace_id": workspace_id}) or {}
     out: list[tuple[str, bool, int]] = []
     for row in payload.get("panes") or []:
@@ -48,14 +48,14 @@ def workspace_panes(client: cmux, workspace_id: str) -> list[tuple[str, bool, in
     return out
 
 
-def focused_pane_id(client: cmux, workspace_id: str) -> str:
+def focused_pane_id(client: ProgramaClient, workspace_id: str) -> str:
     for pane_id, focused, _surface_count in workspace_panes(client, workspace_id):
         if focused:
             return pane_id
-    raise cmuxError("No focused pane found")
+    raise ProgramaClientError("No focused pane found")
 
 
-def surface_scrollback_text(client: cmux, workspace_id: str, surface_id: str) -> str:
+def surface_scrollback_text(client: ProgramaClient, workspace_id: str, surface_id: str) -> str:
     payload = client._call(
         "surface.read_text",
         {"workspace_id": workspace_id, "surface_id": surface_id, "scrollback": True},
@@ -63,16 +63,16 @@ def surface_scrollback_text(client: cmux, workspace_id: str, surface_id: str) ->
     return str(payload.get("text") or "")
 
 
-def surface_scrollback_lines(client: cmux, workspace_id: str, surface_id: str) -> list[str]:
+def surface_scrollback_lines(client: ProgramaClient, workspace_id: str, surface_id: str) -> list[str]:
     text = surface_scrollback_text(client, workspace_id, surface_id)
     return [clean_line(raw) for raw in text.splitlines()]
 
 
-def scrollback_has_exact_line(client: cmux, workspace_id: str, surface_id: str, token: str) -> bool:
+def scrollback_has_exact_line(client: ProgramaClient, workspace_id: str, surface_id: str, token: str) -> bool:
     return token in surface_scrollback_lines(client, workspace_id, surface_id)
 
 
-def wait_for_surface_command_roundtrip(client: cmux, workspace_id: str, surface_id: str) -> None:
+def wait_for_surface_command_roundtrip(client: ProgramaClient, workspace_id: str, surface_id: str) -> None:
     for _attempt in range(1, 5):
         token = f"PROGRAMA_READY_{secrets.token_hex(4)}"
         client.send_surface(surface_id, f"echo {token}\n")
@@ -82,15 +82,15 @@ def wait_for_surface_command_roundtrip(client: cmux, workspace_id: str, surface_
                 timeout_s=2.5,
             )
             return
-        except cmuxError:
+        except ProgramaClientError:
             time.sleep(0.1)
-    raise cmuxError("Timed out waiting for surface command roundtrip")
+    raise ProgramaClientError("Timed out waiting for surface command roundtrip")
 
 
-def pick_resize_direction_for_pane(client: cmux, pane_ids: list[str], target_pane: str) -> tuple[str, str]:
+def pick_resize_direction_for_pane(client: ProgramaClient, pane_ids: list[str], target_pane: str) -> tuple[str, str]:
     panes = [p for p in layout_panes(client) if str(p.get("paneId") or p.get("pane_id") or "") in pane_ids]
     if len(panes) < 2:
-        raise cmuxError(f"Need >=2 panes for resize test, got {panes}")
+        raise ProgramaClientError(f"Need >=2 panes for resize test, got {panes}")
 
     def x_of(p: dict) -> float:
         return float((p.get("frame") or {}).get("x") or 0.0)

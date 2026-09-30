@@ -123,7 +123,7 @@ final class SessionPersistenceTests: XCTestCase {
     @MainActor
     func testWorkspaceSessionSnapshotRestoresMarkdownPanel() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-markdown-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-markdown-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -170,7 +170,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testSaveAndLoadRoundTripWithCustomSnapshotPath() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -196,7 +196,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testSaveAndLoadRoundTripPreservesWorkspaceCustomColor() {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -215,7 +215,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testSaveSkipsRewritingIdenticalSnapshotData() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -237,7 +237,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testRotateIntoHistoryCopiesLiveSnapshotIntoHistoryDirectory() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-history-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-history-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -257,7 +257,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testRotateIntoHistorySkipsWhenNewestEntryIsIdentical() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-history-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-history-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -280,7 +280,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testRotateIntoHistoryPrunesToTenNewestEntries() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-history-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-history-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -402,7 +402,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testRotateIntoHistoryReplacesAnArchiveThatLandsOnTheSameFilename() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-history-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-history-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -685,7 +685,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testLoadRejectsSchemaVersionMismatch() {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -697,7 +697,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testLoadWithHistoryFallbackReturnsHistoryCopyWhenPrimaryIsCorrupt() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -730,7 +730,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testLoadWithHistoryFallbackReturnsHistoryCopyWhenPrimaryVersionMismatches() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -787,7 +787,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testLoadWithHistoryFallbackReturnsNilWhenHistoryIsAlsoUnusable() throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -800,7 +800,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testDefaultSnapshotPathSanitizesBundleIdentifier() {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-session-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -815,7 +815,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testRestorePolicySkipsWhenLaunchHasExplicitArguments() {
         let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
-            arguments: ["/Applications/cmux.app/Contents/MacOS/cmux", "--window", "window:1"],
+            arguments: ["/Applications/programa.app/Contents/MacOS/programa", "--window", "window:1"],
             environment: [:]
         )
 
@@ -824,7 +824,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testRestorePolicyAllowsFinderStyleLaunchArgumentsOnly() {
         let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
-            arguments: ["/Applications/cmux.app/Contents/MacOS/cmux", "-psn_0_12345"],
+            arguments: ["/Applications/programa.app/Contents/MacOS/programa", "-psn_0_12345"],
             environment: [:]
         )
 
@@ -833,7 +833,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testRestorePolicyAllowsUserDefaultsArgumentDomainPairs() {
         let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
-            arguments: ["/Applications/cmux.app/Contents/MacOS/cmux",
+            arguments: ["/Applications/programa.app/Contents/MacOS/programa",
                         "-socketControlMode", "full", "-sessionPersistScrollback", "NO"],
             environment: [:]
         )
@@ -843,7 +843,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testRestorePolicySkipsWhenArgumentDomainPairsPrecedeAnOpenTarget() {
         let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
-            arguments: ["/Applications/cmux.app/Contents/MacOS/cmux",
+            arguments: ["/Applications/programa.app/Contents/MacOS/programa",
                         "-socketControlMode", "full", "/tmp/project"],
             environment: [:]
         )
@@ -853,7 +853,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testRestorePolicySkipsWhenRunningUnderXCTest() {
         let shouldRestore = SessionRestorePolicy.shouldAttemptRestore(
-            arguments: ["/Applications/cmux.app/Contents/MacOS/cmux"],
+            arguments: ["/Applications/programa.app/Contents/MacOS/programa"],
             environment: ["XCTestConfigurationFilePath": "/tmp/xctest.xctestconfiguration"]
         )
 
@@ -1356,7 +1356,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testShouldRemoveExportedScreenDirectoryOnlyWithinTemporaryRoot() {
         let tempRoot = URL(fileURLWithPath: "/tmp")
-            .appendingPathComponent("cmux-export-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-export-tests-\(UUID().uuidString)", isDirectory: true)
         let tempFile = tempRoot
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
             .appendingPathComponent("screen.txt", isDirectory: false)
@@ -1378,7 +1378,7 @@ final class SessionPersistenceTests: XCTestCase {
 
     func testShouldRemoveExportedScreenFileOnlyWithinTemporaryRoot() {
         let tempRoot = URL(fileURLWithPath: "/tmp")
-            .appendingPathComponent("cmux-export-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-export-tests-\(UUID().uuidString)", isDirectory: true)
         let tempFile = tempRoot
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
             .appendingPathComponent("screen.txt", isDirectory: false)

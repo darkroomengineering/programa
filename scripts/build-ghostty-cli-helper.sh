@@ -123,7 +123,7 @@ build_helper() {
   )
 }
 
-TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cmux-ghostty-helper.XXXXXX")"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/programa-ghostty-helper.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"

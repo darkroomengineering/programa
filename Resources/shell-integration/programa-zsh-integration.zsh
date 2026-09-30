@@ -1,11 +1,11 @@
-# cmux shell integration for zsh
+# programa shell integration for zsh
 # Injected automatically — do not source manually
 
-_cmux_socket_is_unix() {
+_programa_socket_is_unix() {
     [[ -n "$PROGRAMA_SOCKET_PATH" && -S "$PROGRAMA_SOCKET_PATH" ]]
 }
 
-_cmux_relay_cli_path() {
+_programa_relay_cli_path() {
     if [[ -n "${PROGRAMA_BUNDLED_CLI_PATH:-}" && -x "${PROGRAMA_BUNDLED_CLI_PATH}" ]]; then
         print -r -- "${PROGRAMA_BUNDLED_CLI_PATH}"
         return 0
@@ -15,19 +15,19 @@ _cmux_relay_cli_path() {
     command -v programa 2>/dev/null || command -v cmux 2>/dev/null
 }
 
-_cmux_socket_uses_remote_relay() {
+_programa_socket_uses_remote_relay() {
     [[ -n "$PROGRAMA_SOCKET_PATH" ]] || return 1
     [[ "$PROGRAMA_SOCKET_PATH" == /* ]] && return 1
     [[ "$PROGRAMA_SOCKET_PATH" == *:* ]] || return 1
-    [[ -n "$(_cmux_relay_cli_path)" ]]
+    [[ -n "$(_programa_relay_cli_path)" ]]
 }
 
-_cmux_has_port_scan_transport() {
-    _cmux_socket_is_unix && return 0
-    _cmux_socket_uses_remote_relay
+_programa_has_port_scan_transport() {
+    _programa_socket_is_unix && return 0
+    _programa_socket_uses_remote_relay
 }
 
-_cmux_json_escape() {
+_programa_json_escape() {
     local value="$1"
     value="${value//\\/\\\\}"
     value="${value//\"/\\\"}"
@@ -38,35 +38,35 @@ _cmux_json_escape() {
 }
 
 # Format a TTY report frame for callers that need the serialized request.
-_cmux_json_rpc_frame() {
+_programa_json_rpc_frame() {
     local method="$1"
     local params_json="$2"
     print -r -- "{\"id\":1,\"method\":\"$method\",\"params\":$params_json}"
 }
 
-_cmux_relay_rpc_bg() {
+_programa_relay_rpc_bg() {
     local method="$1"
     local params="$2"
     local relay_cli=""
-    _cmux_has_port_scan_transport || return 1
-    relay_cli="$(_cmux_relay_cli_path)" || return 1
+    _programa_has_port_scan_transport || return 1
+    relay_cli="$(_programa_relay_cli_path)" || return 1
     local -a child_env=()
-    _cmux_socket_is_unix && child_env=(CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC=1)
+    _programa_socket_is_unix && child_env=(PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1)
     { env "${child_env[@]}" "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 || true } >/dev/null 2>&1 &!
 }
 
-_cmux_relay_rpc() {
+_programa_relay_rpc() {
     local method="$1"
     local params="$2"
     local relay_cli=""
     local response=""
-    _cmux_has_port_scan_transport || return 1
-    # Relay `cmux rpc` exits nonzero on server error. The real remote CLI prints
+    _programa_has_port_scan_transport || return 1
+    # Relay `programa rpc` exits nonzero on server error. The real remote CLI prints
     # only the JSON result payload on success, while some test stubs return the
     # full `{"ok":...}` envelope. Retry only on explicit `ok:false`.
-    relay_cli="$(_cmux_relay_cli_path)" || return 1
+    relay_cli="$(_programa_relay_cli_path)" || return 1
     local -a child_env=()
-    _cmux_socket_is_unix && child_env=(CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC=1)
+    _programa_socket_is_unix && child_env=(PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1)
     response="$(env "${child_env[@]}" "$relay_cli" rpc "$method" "$params" 2>/dev/null)" || return 1
     response="${response//$'\n'/}"
     response="${response//$'\r'/}"
@@ -74,7 +74,7 @@ _cmux_relay_rpc() {
     return 0
 }
 
-_cmux_relay_workspace_id() {
+_programa_relay_workspace_id() {
     if [[ -n "$PROGRAMA_WORKSPACE_ID" ]]; then
         print -r -- "$PROGRAMA_WORKSPACE_ID"
         return 0
@@ -83,41 +83,41 @@ _cmux_relay_workspace_id() {
     print -r -- "$PROGRAMA_TAB_ID"
 }
 
-_cmux_report_tty_via_relay() {
-    _cmux_socket_uses_remote_relay || return 1
+_programa_report_tty_via_relay() {
+    _programa_socket_uses_remote_relay || return 1
     local workspace_id=""
-    workspace_id="$(_cmux_relay_workspace_id)" || return 1
+    workspace_id="$(_programa_relay_workspace_id)" || return 1
     [[ -n "$_PROGRAMA_TTY_NAME" ]] || return 1
 
     local tty_name_json params
-    tty_name_json="$(_cmux_json_escape "$_PROGRAMA_TTY_NAME")"
+    tty_name_json="$(_programa_json_escape "$_PROGRAMA_TTY_NAME")"
     params="{\"workspace_id\":\"$workspace_id\",\"tty_name\":\"$tty_name_json\""
     if [[ -n "$PROGRAMA_PANEL_ID" ]]; then
         params+=",\"surface_id\":\"$PROGRAMA_PANEL_ID\""
     fi
     params+="}"
-    _cmux_relay_rpc "surface.report_tty" "$params"
+    _programa_relay_rpc "surface.report_tty" "$params"
 }
 
-_cmux_ports_kick_via_relay() {
+_programa_ports_kick_via_relay() {
     local reason="${1:-command}"
-    _cmux_socket_uses_remote_relay || return 1
+    _programa_socket_uses_remote_relay || return 1
     local workspace_id=""
-    workspace_id="$(_cmux_relay_workspace_id)" || return 1
+    workspace_id="$(_programa_relay_workspace_id)" || return 1
     local params="{\"workspace_id\":\"$workspace_id\",\"reason\":\"$reason\""
     if [[ -n "$PROGRAMA_PANEL_ID" ]]; then
         params+=",\"surface_id\":\"$PROGRAMA_PANEL_ID\""
     fi
     params+="}"
-    _cmux_relay_rpc_bg "surface.ports_kick" "$params"
+    _programa_relay_rpc_bg "surface.ports_kick" "$params"
 }
 
-_cmux_now() {
+_programa_now() {
     print -r -- "${EPOCHSECONDS:-$SECONDS}"
 }
 
 typeset -g _PROGRAMA_CLAUDE_WRAPPER=""
-_cmux_install_claude_wrapper() {
+_programa_install_claude_wrapper() {
     local integration_dir="${PROGRAMA_SHELL_INTEGRATION_DIR:-}"
     [[ -n "$integration_dir" ]] || return 0
 
@@ -132,7 +132,7 @@ _cmux_install_claude_wrapper() {
     builtin unalias claude >/dev/null 2>&1 || true
     eval 'claude() { "$_PROGRAMA_CLAUDE_WRAPPER" "$@"; }'
 }
-_cmux_install_claude_wrapper
+_programa_install_claude_wrapper
 
 # Throttle heavy work to avoid prompt latency.
 typeset -g _PROGRAMA_PWD_LAST_PWD=""
@@ -166,8 +166,8 @@ typeset -g _PROGRAMA_TMUX_PULL_SIGNATURE=""
 typeset -ga _PROGRAMA_TMUX_SYNC_KEYS=(
     PROGRAMA_BUNDLED_CLI_PATH
     PROGRAMA_BUNDLE_ID
-    CMUXD_UNIX_PATH
-    CMUXTERM_REPO_ROOT
+    PROGRAMAD_UNIX_PATH
+    PROGRAMA_REPO_ROOT
     PROGRAMA_DEBUG_LOG
     PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION
     PROGRAMA_PORT
@@ -188,7 +188,7 @@ typeset -ga _PROGRAMA_TMUX_SURFACE_SCOPED_KEYS=(
     PROGRAMA_SURFACE_ID
 )
 
-_cmux_tmux_sync_key_is_managed() {
+_programa_tmux_sync_key_is_managed() {
     local candidate="$1"
     local key
     for key in "${_PROGRAMA_TMUX_SYNC_KEYS[@]}"; do
@@ -197,7 +197,7 @@ _cmux_tmux_sync_key_is_managed() {
     return 1
 }
 
-_cmux_tmux_shell_env_signature() {
+_programa_tmux_shell_env_signature() {
     local key value
     local -a parts
     for key in "${_PROGRAMA_TMUX_SYNC_KEYS[@]}"; do
@@ -208,12 +208,12 @@ _cmux_tmux_shell_env_signature() {
     print -r -- "${(j:\x1f:)parts}"
 }
 
-_cmux_tmux_publish_cmux_environment() {
+_programa_tmux_publish_programa_environment() {
     [[ -z "$TMUX" ]] || return 0
     command -v tmux >/dev/null 2>&1 || return 0
 
     local signature
-    signature="$(_cmux_tmux_shell_env_signature)"
+    signature="$(_programa_tmux_shell_env_signature)"
     [[ -n "$signature" ]] || return 0
     [[ "$signature" == "$_PROGRAMA_TMUX_PUSH_SIGNATURE" ]] && return 0
 
@@ -231,7 +231,7 @@ _cmux_tmux_publish_cmux_environment() {
     _PROGRAMA_TMUX_PUSH_SIGNATURE="$signature"
 }
 
-_cmux_tmux_refresh_cmux_environment() {
+_programa_tmux_refresh_programa_environment() {
     [[ -n "$TMUX" ]] || return 0
     command -v tmux >/dev/null 2>&1 || return 0
 
@@ -242,7 +242,7 @@ _cmux_tmux_refresh_cmux_environment() {
     while IFS= read -r line; do
         [[ "$line" == PROGRAMA_* ]] || continue
         key="${line%%=*}"
-        _cmux_tmux_sync_key_is_managed "$key" || continue
+        _programa_tmux_sync_key_is_managed "$key" || continue
         filtered+="${line}"$'\n'
     done <<< "$output"
 
@@ -253,7 +253,7 @@ _cmux_tmux_refresh_cmux_environment() {
     while IFS= read -r line; do
         [[ "$line" == PROGRAMA_* ]] || continue
         key="${line%%=*}"
-        _cmux_tmux_sync_key_is_managed "$key" || continue
+        _programa_tmux_sync_key_is_managed "$key" || continue
         value="${line#*=}"
         if [[ "${(P)key}" != "$value" ]]; then
             export "$key=$value"
@@ -272,20 +272,20 @@ _cmux_tmux_refresh_cmux_environment() {
         _PROGRAMA_GIT_HEAD_SIGNATURE=""
         _PROGRAMA_GIT_FORCE=1
         _PROGRAMA_PR_FORCE=1
-        _cmux_stop_pr_poll_loop
-        _cmux_stop_git_head_watch
+        _programa_stop_pr_poll_loop
+        _programa_stop_git_head_watch
     fi
 }
 
-_cmux_tmux_sync_cmux_environment() {
+_programa_tmux_sync_programa_environment() {
     if [[ -n "$TMUX" ]]; then
-        _cmux_tmux_refresh_cmux_environment
+        _programa_tmux_refresh_programa_environment
     else
-        _cmux_tmux_publish_cmux_environment
+        _programa_tmux_publish_programa_environment
     fi
 }
 
-_cmux_ensure_ghostty_preexec_strips_both_marks() {
+_programa_ensure_ghostty_preexec_strips_both_marks() {
     local fn_name="$1"
     (( $+functions[$fn_name] )) || return 0
 
@@ -309,7 +309,7 @@ _cmux_ensure_ghostty_preexec_strips_both_marks() {
     fi
 }
 
-_cmux_patch_ghostty_semantic_redraw() {
+_programa_patch_ghostty_semantic_redraw() {
     local old_frag new_frag
     old_frag='133;A;cl=line'
     new_frag='133;A;redraw=last;cl=line'
@@ -330,12 +330,12 @@ _cmux_patch_ghostty_semantic_redraw() {
 
     # Keep legacy + redraw-aware strip lines so prompts created before patching
     # are still cleared by preexec.
-    _cmux_ensure_ghostty_preexec_strips_both_marks _ghostty_deferred_init
-    _cmux_ensure_ghostty_preexec_strips_both_marks _ghostty_preexec
+    _programa_ensure_ghostty_preexec_strips_both_marks _ghostty_deferred_init
+    _programa_ensure_ghostty_preexec_strips_both_marks _ghostty_preexec
 }
-_cmux_patch_ghostty_semantic_redraw
+_programa_patch_ghostty_semantic_redraw
 
-_cmux_prompt_wrap_guard() {
+_programa_prompt_wrap_guard() {
     local cmd_start="$1"
     local pwd="$2"
     [[ -n "$cmd_start" && "$cmd_start" != 0 ]] || return 0
@@ -352,7 +352,7 @@ _cmux_prompt_wrap_guard() {
     builtin print -r -- ""
 }
 
-_cmux_install_winch_guard() {
+_programa_install_winch_guard() {
     (( _PROGRAMA_WINCH_GUARD_INSTALLED )) && return 0
 
     # Respect user-defined WINCH handlers (function-based or trap-based).
@@ -374,9 +374,9 @@ _cmux_install_winch_guard() {
 
     _PROGRAMA_WINCH_GUARD_INSTALLED=1
 }
-_cmux_install_winch_guard
+_programa_install_winch_guard
 
-_cmux_git_resolve_head_path() {
+_programa_git_resolve_head_path() {
     # Resolve the HEAD file path without invoking git (fast; works for worktrees).
     local dir="$PWD"
     while true; do
@@ -403,7 +403,7 @@ _cmux_git_resolve_head_path() {
     return 1
 }
 
-_cmux_git_head_signature() {
+_programa_git_head_signature() {
     local head_path="$1"
     [[ -n "$head_path" && -r "$head_path" ]] || return 1
     local line=""
@@ -414,13 +414,13 @@ _cmux_git_head_signature() {
     return 1
 }
 
-_cmux_report_tty_params() {
+_programa_report_tty_params() {
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     [[ -n "$_PROGRAMA_TTY_NAME" ]] || return 0
 
     local workspace_id="" tty_name_json params
-    workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
-    tty_name_json="$(_cmux_json_escape "$_PROGRAMA_TTY_NAME")"
+    workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+    tty_name_json="$(_programa_json_escape "$_PROGRAMA_TTY_NAME")"
     params="{\"workspace_id\":\"$workspace_id\",\"tty_name\":\"$tty_name_json\""
     if [[ -z "$TMUX" ]]; then
         [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
@@ -431,35 +431,35 @@ _cmux_report_tty_params() {
     printf '%s\n' "$params"
 }
 
-_cmux_report_tty_payload() {
+_programa_report_tty_payload() {
     local params=""
-    params="$(_cmux_report_tty_params)"
+    params="$(_programa_report_tty_params)"
     [[ -n "$params" ]] || return 0
-    _cmux_json_rpc_frame "surface.report_tty" "$params"
+    _programa_json_rpc_frame "surface.report_tty" "$params"
 }
 
-_cmux_report_tty_once() {
+_programa_report_tty_once() {
     # Send the TTY name to the app once per session so the batched port scanner
     # knows which TTY belongs to this panel.
     (( _PROGRAMA_TTY_REPORTED )) && return 0
-    _cmux_has_port_scan_transport || return 0
+    _programa_has_port_scan_transport || return 0
 
-    if _cmux_socket_is_unix; then
+    if _programa_socket_is_unix; then
         local params=""
-        params="$(_cmux_report_tty_params)"
+        params="$(_programa_report_tty_params)"
         [[ -n "$params" ]] || return 0
-        _cmux_relay_rpc "surface.report_tty" "$params" || return 0
+        _programa_relay_rpc "surface.report_tty" "$params" || return 0
         _PROGRAMA_TTY_REPORTED=1
     else
         [[ -n "$_PROGRAMA_TTY_NAME" ]] || return 0
         # Keep the first relay TTY report synchronous so the server can resolve
         # the target surface before command-start kicks begin their scan burst.
-        _cmux_report_tty_via_relay || return 0
+        _programa_report_tty_via_relay || return 0
         _PROGRAMA_TTY_REPORTED=1
     fi
 }
 
-_cmux_report_shell_activity_state() {
+_programa_report_shell_activity_state() {
     local state="$1"
     [[ -n "$state" ]] || return 0
     [[ -S "$PROGRAMA_SOCKET_PATH" ]] || return 0
@@ -467,35 +467,35 @@ _cmux_report_shell_activity_state() {
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
     [[ "$_PROGRAMA_SHELL_ACTIVITY_LAST" == "$state" ]] && return 0
     local workspace_id="" state_json params
-    workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
-    state_json="$(_cmux_json_escape "$state")"
+    workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+    state_json="$(_programa_json_escape "$state")"
     params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"state\":\"$state_json\"}"
-    _cmux_relay_rpc "surface.report_shell_state" "$params" || return 0
+    _programa_relay_rpc "surface.report_shell_state" "$params" || return 0
     _PROGRAMA_SHELL_ACTIVITY_LAST="$state"
 }
 
-_cmux_ports_kick() {
+_programa_ports_kick() {
     local reason="${1:-command}"
     # Lightweight: just tell the app to run a batched scan for this panel.
     # The app coalesces kicks across all panels and runs a single ps+lsof.
-    _cmux_has_port_scan_transport || return 0
+    _programa_has_port_scan_transport || return 0
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
-    if _cmux_socket_is_unix; then
+    if _programa_socket_is_unix; then
         [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
     fi
-    _PROGRAMA_PORTS_LAST_RUN="$(_cmux_now)"
-    if _cmux_socket_is_unix; then
+    _PROGRAMA_PORTS_LAST_RUN="$(_programa_now)"
+    if _programa_socket_is_unix; then
         local workspace_id="" reason_json params
-        workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
-        reason_json="$(_cmux_json_escape "$reason")"
+        workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+        reason_json="$(_programa_json_escape "$reason")"
         params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"reason\":\"$reason_json\"}"
-        _cmux_relay_rpc_bg "surface.ports_kick" "$params"
+        _programa_relay_rpc_bg "surface.ports_kick" "$params"
     else
-        _cmux_ports_kick_via_relay "$reason"
+        _programa_ports_kick_via_relay "$reason"
     fi
 }
 
-_cmux_report_git_branch_for_path() {
+_programa_report_git_branch_for_path() {
     local repo_path="$1"
     [[ -n "$repo_path" ]] || return 0
     [[ -S "$PROGRAMA_SOCKET_PATH" ]] || return 0
@@ -507,31 +507,31 @@ _cmux_report_git_branch_for_path() {
 
     local branch dirty=false first workspace_id="" params
     branch="$(git -C "$repo_path" branch --show-current 2>/dev/null)"
-    workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+    workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
     if [[ -n "$branch" ]]; then
         first="$(git -C "$repo_path" status --porcelain -uno 2>/dev/null | head -1)"
         [[ -n "$first" ]] && dirty=true
         local branch_json
-        branch_json="$(_cmux_json_escape "$branch")"
+        branch_json="$(_programa_json_escape "$branch")"
         params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"branch\":\"$branch_json\",\"dirty\":$dirty}"
-        _cmux_relay_rpc "surface.report_git_branch" "$params"
+        _programa_relay_rpc "surface.report_git_branch" "$params"
     else
         params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\"}"
-        _cmux_relay_rpc "surface.clear_git_branch" "$params"
+        _programa_relay_rpc "surface.clear_git_branch" "$params"
     fi
 }
 
-_cmux_clear_pr_for_panel() {
+_programa_clear_pr_for_panel() {
     [[ -S "$PROGRAMA_SOCKET_PATH" ]] || return 0
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
     local workspace_id="" params
-    workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+    workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
     params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\"}"
-    _cmux_relay_rpc_bg "surface.clear_pr" "$params"
+    _programa_relay_rpc_bg "surface.clear_pr" "$params"
 }
 
-_cmux_pr_output_indicates_no_pull_request() {
+_programa_pr_output_indicates_no_pull_request() {
     local output="${1:l}"
     [[ "$output" == *"no pull requests found"* \
         || "$output" == *"no pull request found"* \
@@ -539,7 +539,7 @@ _cmux_pr_output_indicates_no_pull_request() {
         || "$output" == *"no pull request associated"* ]]
 }
 
-_cmux_github_repo_slug_for_path() {
+_programa_github_repo_slug_for_path() {
     local repo_path="$1"
     local remote_url="" path_part=""
     [[ -n "$repo_path" ]] || return 0
@@ -573,28 +573,28 @@ _cmux_github_repo_slug_for_path() {
     print -r -- "$path_part"
 }
 
-_cmux_pr_cache_prefix() {
+_programa_pr_cache_prefix() {
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 1
-    print -r -- "/tmp/cmux-pr-cache-${PROGRAMA_PANEL_ID}"
+    print -r -- "/tmp/programa-pr-cache-${PROGRAMA_PANEL_ID}"
 }
 
-_cmux_pr_force_signal_path() {
+_programa_pr_force_signal_path() {
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 1
-    print -r -- "/tmp/cmux-pr-force-${PROGRAMA_PANEL_ID}"
+    print -r -- "/tmp/programa-pr-force-${PROGRAMA_PANEL_ID}"
 }
 
-_cmux_pr_debug_log() {
+_programa_pr_debug_log() {
     (( _PROGRAMA_PR_DEBUG )) || return 0
 
     local branch="$1"
     local event="$2"
     local now="${EPOCHSECONDS:-$SECONDS}"
-    printf '%s\tbranch=%s\tevent=%s\n' "$now" "$branch" "$event" >> /tmp/cmux-pr-debug.log
+    printf '%s\tbranch=%s\tevent=%s\n' "$now" "$branch" "$event" >> /tmp/programa-pr-debug.log
 }
 
-_cmux_pr_cache_clear() {
+_programa_pr_cache_clear() {
     local prefix=""
-    prefix="$(_cmux_pr_cache_prefix 2>/dev/null || true)"
+    prefix="$(_programa_pr_cache_prefix 2>/dev/null || true)"
     if [[ -n "$prefix" ]]; then
         /bin/rm -f -- \
             "${prefix}.branch" \
@@ -609,24 +609,24 @@ _cmux_pr_cache_clear() {
     _PROGRAMA_PR_NO_PR_BRANCH=""
 }
 
-_cmux_pr_request_probe() {
+_programa_pr_request_probe() {
     local signal_path=""
-    signal_path="$(_cmux_pr_force_signal_path 2>/dev/null || true)"
+    signal_path="$(_programa_pr_force_signal_path 2>/dev/null || true)"
     [[ -n "$signal_path" ]] || return 0
     : >| "$signal_path"
 }
 
-_cmux_report_pr_for_path() {
+_programa_report_pr_for_path() {
     local repo_path="$1"
     local force_probe="${2:-0}"
     [[ -n "$repo_path" ]] || {
-        _cmux_pr_cache_clear
-        _cmux_clear_pr_for_panel
+        _programa_pr_cache_clear
+        _programa_clear_pr_for_panel
         return 0
     }
     [[ -d "$repo_path" ]] || {
-        _cmux_pr_cache_clear
-        _cmux_clear_pr_for_panel
+        _programa_pr_cache_clear
+        _programa_clear_pr_for_panel
         return 0
     }
     [[ -S "$PROGRAMA_SOCKET_PATH" ]] || return 0
@@ -641,13 +641,13 @@ _cmux_report_pr_for_path() {
     gh_repo_args=()
     branch="$(git -C "$repo_path" branch --show-current 2>/dev/null)"
     if [[ -z "$branch" ]] || ! command -v gh >/dev/null 2>&1; then
-        _cmux_pr_debug_log "$branch" "cache-miss:clear"
-        _cmux_pr_cache_clear
-        _cmux_clear_pr_for_panel
+        _programa_pr_debug_log "$branch" "cache-miss:clear"
+        _programa_pr_cache_clear
+        _programa_clear_pr_for_panel
         return 0
     fi
 
-    prefix="$(_cmux_pr_cache_prefix 2>/dev/null || true)"
+    prefix="$(_programa_pr_cache_prefix 2>/dev/null || true)"
     if [[ -n "$prefix" ]]; then
         branch_file="${prefix}.branch"
         repo_file="${prefix}.repo"
@@ -662,17 +662,17 @@ _cmux_report_pr_for_path() {
     _PROGRAMA_PR_LAST_BRANCH="$cache_branch"
     _PROGRAMA_PR_NO_PR_BRANCH="$cache_no_pr_branch"
     if [[ "$cache_branch" == "$branch" && -n "$cache_result" ]]; then
-        _cmux_pr_debug_log "$branch" "cache-refresh"
+        _programa_pr_debug_log "$branch" "cache-refresh"
     else
-        _cmux_pr_debug_log "$branch" "cache-miss"
+        _programa_pr_debug_log "$branch" "cache-miss"
     fi
 
-    repo_slug="$(_cmux_github_repo_slug_for_path "$repo_path")"
+    repo_slug="$(_programa_github_repo_slug_for_path "$repo_path")"
     if [[ -n "$repo_slug" ]]; then
         gh_repo_args=(--repo "$repo_slug")
     fi
 
-    err_file="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/cmux-gh-pr-view.XXXXXX" 2>/dev/null || true)"
+    err_file="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/programa-gh-pr-view.XXXXXX" 2>/dev/null || true)"
     [[ -n "$err_file" ]] || return 1
     gh_output="$(
         builtin cd "$repo_path" 2>/dev/null \
@@ -699,10 +699,10 @@ _cmux_report_pr_for_path() {
             fi
             _PROGRAMA_PR_LAST_BRANCH="$branch"
             _PROGRAMA_PR_NO_PR_BRANCH="$branch"
-            _cmux_clear_pr_for_panel
+            _programa_clear_pr_for_panel
             return 0
         fi
-        if _cmux_pr_output_indicates_no_pull_request "$gh_error"; then
+        if _programa_pr_output_indicates_no_pull_request "$gh_error"; then
             if [[ -n "$prefix" ]]; then
                 print -r -- "$branch" >| "$branch_file"
                 print -r -- "$repo_path" >| "$repo_file"
@@ -712,7 +712,7 @@ _cmux_report_pr_for_path() {
             fi
             _PROGRAMA_PR_LAST_BRANCH="$branch"
             _PROGRAMA_PR_NO_PR_BRANCH="$branch"
-            _cmux_clear_pr_for_panel
+            _programa_clear_pr_for_panel
             return 0
         fi
 
@@ -746,20 +746,20 @@ _cmux_report_pr_for_path() {
     _PROGRAMA_PR_NO_PR_BRANCH=""
 
     local workspace_id="" branch_json url_json params
-    workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
-    branch_json="$(_cmux_json_escape "$branch")"
-    url_json="$(_cmux_json_escape "$url")"
+    workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+    branch_json="$(_programa_json_escape "$branch")"
+    url_json="$(_programa_json_escape "$url")"
     params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"number\":$number,\"url\":\"$url_json\",\"state\":\"$status_opt\",\"branch\":\"$branch_json\"}"
-    _cmux_relay_rpc "surface.report_pr" "$params"
+    _programa_relay_rpc "surface.report_pr" "$params"
 }
 
-_cmux_child_pids() {
+_programa_child_pids() {
     local parent_pid="$1"
     [[ -n "$parent_pid" ]] || return 0
     /bin/ps -ax -o pid= -o ppid= 2>/dev/null | /usr/bin/awk -v parent="$parent_pid" '$2 == parent { print $1 }'
 }
 
-_cmux_kill_process_tree() {
+_programa_kill_process_tree() {
     local pid="$1"
     local signal="${2:-TERM}"
     local child_pid=""
@@ -768,13 +768,13 @@ _cmux_kill_process_tree() {
     while IFS= read -r child_pid; do
         [[ -n "$child_pid" ]] || continue
         [[ "$child_pid" == "$pid" ]] && continue
-        _cmux_kill_process_tree "$child_pid" "$signal"
-    done < <(_cmux_child_pids "$pid")
+        _programa_kill_process_tree "$child_pid" "$signal"
+    done < <(_programa_child_pids "$pid")
 
     kill "-$signal" "$pid" >/dev/null 2>&1 || true
 }
 
-_cmux_run_pr_probe_with_timeout() {
+_programa_run_pr_probe_with_timeout() {
     local repo_path="$1"
     local force_probe="${2:-0}"
     local probe_pid=""
@@ -782,7 +782,7 @@ _cmux_run_pr_probe_with_timeout() {
     local now=$started_at
 
     (
-        _cmux_report_pr_for_path "$repo_path" "$force_probe"
+        _programa_report_pr_for_path "$repo_path" "$force_probe"
     ) &
     probe_pid=$!
 
@@ -790,10 +790,10 @@ _cmux_run_pr_probe_with_timeout() {
         sleep 1
         now="${EPOCHSECONDS:-$SECONDS}"
         if (( _PROGRAMA_ASYNC_JOB_TIMEOUT > 0 )) && (( now - started_at >= _PROGRAMA_ASYNC_JOB_TIMEOUT )); then
-            _cmux_kill_process_tree "$probe_pid" TERM
+            _programa_kill_process_tree "$probe_pid" TERM
             sleep 0.2
             if kill -0 "$probe_pid" >/dev/null 2>&1; then
-                _cmux_kill_process_tree "$probe_pid" KILL
+                _programa_kill_process_tree "$probe_pid" KILL
                 sleep 0.2
             fi
             if ! kill -0 "$probe_pid" >/dev/null 2>&1; then
@@ -806,7 +806,7 @@ _cmux_run_pr_probe_with_timeout() {
     wait "$probe_pid"
 }
 
-_cmux_halt_pr_poll_loop() {
+_programa_halt_pr_poll_loop() {
     if [[ -n "$_PROGRAMA_PR_POLL_PID" ]]; then
         # Process-group kill: background jobs are process-group leaders, so
         # negative PID kills the loop + all descendants (gh, sleep) without
@@ -814,18 +814,18 @@ _cmux_halt_pr_poll_loop() {
         kill -KILL -- -"$_PROGRAMA_PR_POLL_PID" 2>/dev/null || true
     fi
     local signal_path=""
-    signal_path="$(_cmux_pr_force_signal_path 2>/dev/null || true)"
+    signal_path="$(_programa_pr_force_signal_path 2>/dev/null || true)"
     [[ -n "$signal_path" ]] && /bin/rm -f -- "$signal_path" >/dev/null 2>&1 || true
     _PROGRAMA_PR_POLL_PID=""
     _PROGRAMA_PR_POLL_PWD=""
 }
 
-_cmux_stop_pr_poll_loop() {
-    _cmux_halt_pr_poll_loop
-    _cmux_pr_cache_clear
+_programa_stop_pr_poll_loop() {
+    _programa_halt_pr_poll_loop
+    _programa_pr_cache_clear
 }
 
-_cmux_start_pr_poll_loop() {
+_programa_start_pr_poll_loop() {
     [[ -S "$PROGRAMA_SOCKET_PATH" ]] || return 0
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
@@ -841,7 +841,7 @@ _cmux_start_pr_poll_loop() {
     fi
 
     if [[ -n "$_PROGRAMA_PR_POLL_PID" ]] && kill -0 "$_PROGRAMA_PR_POLL_PID" 2>/dev/null; then
-        _cmux_halt_pr_poll_loop
+        _programa_halt_pr_poll_loop
     else
         _PROGRAMA_PR_POLL_PID=""
     fi
@@ -849,7 +849,7 @@ _cmux_start_pr_poll_loop() {
 
     {
         local signal_path=""
-        signal_path="$(_cmux_pr_force_signal_path 2>/dev/null || true)"
+        signal_path="$(_programa_pr_force_signal_path 2>/dev/null || true)"
         while true; do
             kill -0 "$watch_shell_pid" >/dev/null 2>&1 || break
             local force_probe=0
@@ -857,7 +857,7 @@ _cmux_start_pr_poll_loop() {
                 force_probe=1
                 /bin/rm -f -- "$signal_path" >/dev/null 2>&1 || true
             fi
-            _cmux_run_pr_probe_with_timeout "$watch_pwd" "$force_probe" || true
+            _programa_run_pr_probe_with_timeout "$watch_pwd" "$force_probe" || true
 
             local slept=0
             while (( slept < interval )); do
@@ -873,47 +873,47 @@ _cmux_start_pr_poll_loop() {
     _PROGRAMA_PR_POLL_PID=$!
 }
 
-_cmux_stop_git_head_watch() {
+_programa_stop_git_head_watch() {
     if [[ -n "$_PROGRAMA_GIT_HEAD_WATCH_PID" ]]; then
         kill "$_PROGRAMA_GIT_HEAD_WATCH_PID" >/dev/null 2>&1 || true
         _PROGRAMA_GIT_HEAD_WATCH_PID=""
     fi
 }
 
-_cmux_start_git_head_watch() {
+_programa_start_git_head_watch() {
     [[ -S "$PROGRAMA_SOCKET_PATH" ]] || return 0
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
 
     local watch_pwd="$PWD"
     local watch_head_path
-    watch_head_path="$(_cmux_git_resolve_head_path 2>/dev/null || true)"
+    watch_head_path="$(_programa_git_resolve_head_path 2>/dev/null || true)"
     [[ -n "$watch_head_path" ]] || return 0
 
     local watch_head_signature
-    watch_head_signature="$(_cmux_git_head_signature "$watch_head_path" 2>/dev/null || true)"
+    watch_head_signature="$(_programa_git_head_signature "$watch_head_path" 2>/dev/null || true)"
 
     _PROGRAMA_GIT_HEAD_LAST_PWD="$watch_pwd"
     _PROGRAMA_GIT_HEAD_PATH="$watch_head_path"
     _PROGRAMA_GIT_HEAD_SIGNATURE="$watch_head_signature"
 
-    _cmux_stop_git_head_watch
+    _programa_stop_git_head_watch
     {
         local last_signature="$watch_head_signature"
         while true; do
             sleep 1
 
             local signature
-            signature="$(_cmux_git_head_signature "$watch_head_path" 2>/dev/null || true)"
+            signature="$(_programa_git_head_signature "$watch_head_path" 2>/dev/null || true)"
             if [[ -n "$signature" && "$signature" != "$last_signature" ]]; then
                 last_signature="$signature"
-                _cmux_pr_cache_clear
-                _cmux_report_git_branch_for_path "$watch_pwd"
-                _cmux_clear_pr_for_panel
+                _programa_pr_cache_clear
+                _programa_report_git_branch_for_path "$watch_pwd"
+                _programa_clear_pr_for_panel
                 if [[ -n "$_PROGRAMA_PR_POLL_PID" ]] && kill -0 "$_PROGRAMA_PR_POLL_PID" 2>/dev/null; then
-                    _cmux_pr_request_probe
+                    _programa_pr_request_probe
                 else
-                    _cmux_run_pr_probe_with_timeout "$watch_pwd" 1 || true
+                    _programa_run_pr_probe_with_timeout "$watch_pwd" 1 || true
                 fi
             fi
         done
@@ -921,7 +921,7 @@ _cmux_start_git_head_watch() {
     _PROGRAMA_GIT_HEAD_WATCH_PID=$!
 }
 
-_cmux_command_starts_nested_shell() {
+_programa_command_starts_nested_shell() {
     local cmd="$1"
     local -a words
     words=("${(z)cmd}")
@@ -971,9 +971,9 @@ _cmux_command_starts_nested_shell() {
     return 1
 }
 
-_cmux_preexec() {
-    _cmux_restore_terminal_identity_after_startup
-    _cmux_tmux_sync_cmux_environment
+_programa_preexec() {
+    _programa_restore_terminal_identity_after_startup
+    _programa_tmux_sync_programa_environment
 
     if [[ -z "$_PROGRAMA_TTY_NAME" ]]; then
         local t
@@ -982,8 +982,8 @@ _cmux_preexec() {
         [[ -n "$t" && "$t" != "not a tty" ]] && _PROGRAMA_TTY_NAME="$t"
     fi
 
-    _PROGRAMA_CMD_START="$(_cmux_now)"
-    _cmux_report_shell_activity_state running
+    _PROGRAMA_CMD_START="$(_programa_now)"
+    _programa_report_shell_activity_state running
 
     # Heuristic: commands that may change git branch/dirty state without changing $PWD.
     local cmd="${1## }"
@@ -994,30 +994,30 @@ _cmux_preexec() {
     esac
 
     # Register TTY + kick batched port scan for foreground commands (servers).
-    _cmux_report_tty_once
-    _cmux_ports_kick command
-    _cmux_halt_pr_poll_loop
-    _cmux_stop_git_head_watch
-    if _cmux_command_starts_nested_shell "$cmd"; then
+    _programa_report_tty_once
+    _programa_ports_kick command
+    _programa_halt_pr_poll_loop
+    _programa_stop_git_head_watch
+    if _programa_command_starts_nested_shell "$cmd"; then
         return 0
     fi
-    _cmux_start_git_head_watch
+    _programa_start_git_head_watch
 }
 
-_cmux_precmd() {
-    _cmux_stop_git_head_watch
-    _cmux_tmux_sync_cmux_environment
+_programa_precmd() {
+    _programa_stop_git_head_watch
+    _programa_tmux_sync_programa_environment
 
     local programa_has_unix_socket=0
-    _cmux_socket_is_unix && programa_has_unix_socket=1
-    (( programa_has_unix_socket )) || _cmux_has_port_scan_transport || return 0
+    _programa_socket_is_unix && programa_has_unix_socket=1
+    (( programa_has_unix_socket )) || _programa_has_port_scan_transport || return 0
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     if [[ -n "$PROGRAMA_PANEL_ID" ]]; then
-        _cmux_report_shell_activity_state prompt
+        _programa_report_shell_activity_state prompt
     fi
 
     # Handle cases where Ghostty integration initializes after this file.
-    (( _PROGRAMA_GHOSTTY_SEMANTIC_PATCHED )) || _cmux_patch_ghostty_semantic_redraw
+    (( _PROGRAMA_GHOSTTY_SEMANTIC_PATCHED )) || _programa_patch_ghostty_semantic_redraw
 
     if [[ -z "$_PROGRAMA_TTY_NAME" ]]; then
         local t
@@ -1026,9 +1026,9 @@ _cmux_precmd() {
         [[ -n "$t" && "$t" != "not a tty" ]] && _PROGRAMA_TTY_NAME="$t"
     fi
 
-    _cmux_report_tty_once
+    _programa_report_tty_once
 
-    local now="$(_cmux_now)"
+    local now="$(_programa_now)"
     local cmd_start="$_PROGRAMA_CMD_START"
     _PROGRAMA_CMD_START=0
     local cmd_dur=0
@@ -1038,7 +1038,7 @@ _cmux_precmd() {
 
     if (( ! programa_has_unix_socket )); then
         if (( cmd_dur >= 2 || now - _PROGRAMA_PORTS_LAST_RUN >= 10 )); then
-            _cmux_ports_kick refresh
+            _programa_ports_kick refresh
         fi
         return 0
     fi
@@ -1046,7 +1046,7 @@ _cmux_precmd() {
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
     local pwd="$PWD"
 
-    _cmux_prompt_wrap_guard "$cmd_start" "$pwd"
+    _programa_prompt_wrap_guard "$cmd_start" "$pwd"
 
     # Post-wake socket writes can occasionally leave a probe process wedged.
     # If one probe is stale, clear the guard so fresh async probes can resume.
@@ -1065,16 +1065,16 @@ _cmux_precmd() {
     # This is also the simplest way to test sidebar directory behavior end-to-end.
     if [[ "$pwd" != "$_PROGRAMA_PWD_LAST_PWD" ]]; then
         local workspace_id="" pwd_json params
-        workspace_id="$(_cmux_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
-        pwd_json="$(_cmux_json_escape "$pwd")"
+        workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
+        pwd_json="$(_programa_json_escape "$pwd")"
         params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"path\":\"$pwd_json\"}"
-        if _cmux_relay_rpc "surface.report_pwd" "$params"; then
+        if _programa_relay_rpc "surface.report_pwd" "$params"; then
             _PROGRAMA_PWD_LAST_PWD="$pwd"
         fi
     fi
 
     # Git branch/dirty: update immediately on directory change, otherwise every ~3s.
-    # While a foreground command is running, _cmux_start_git_head_watch probes HEAD
+    # While a foreground command is running, _programa_start_git_head_watch probes HEAD
     # once per second so agent-initiated git checkouts still surface quickly.
     local should_git=0
     local git_head_changed=0
@@ -1083,12 +1083,12 @@ _cmux_precmd() {
     # tools like `gh pr checkout`, etc.). Detect HEAD changes and force a refresh.
     if [[ "$pwd" != "$_PROGRAMA_GIT_HEAD_LAST_PWD" ]]; then
         _PROGRAMA_GIT_HEAD_LAST_PWD="$pwd"
-        _PROGRAMA_GIT_HEAD_PATH="$(_cmux_git_resolve_head_path 2>/dev/null || true)"
+        _PROGRAMA_GIT_HEAD_PATH="$(_programa_git_resolve_head_path 2>/dev/null || true)"
         _PROGRAMA_GIT_HEAD_SIGNATURE=""
     fi
     if [[ -n "$_PROGRAMA_GIT_HEAD_PATH" ]]; then
         local head_signature
-        head_signature="$(_cmux_git_head_signature "$_PROGRAMA_GIT_HEAD_PATH" 2>/dev/null || true)"
+        head_signature="$(_programa_git_head_signature "$_PROGRAMA_GIT_HEAD_PATH" 2>/dev/null || true)"
         if [[ -n "$head_signature" ]]; then
             if [[ -z "$_PROGRAMA_GIT_HEAD_SIGNATURE" ]]; then
                 # The first observed HEAD value establishes the baseline for this
@@ -1138,7 +1138,7 @@ _cmux_precmd() {
             _PROGRAMA_GIT_LAST_PWD="$pwd"
             _PROGRAMA_GIT_LAST_RUN=$now
             {
-                _cmux_report_git_branch_for_path "$pwd"
+                _programa_report_git_branch_for_path "$pwd"
             } >/dev/null 2>&1 &!
             _PROGRAMA_GIT_JOB_PID=$!
             _PROGRAMA_GIT_JOB_STARTED_AT=$now
@@ -1169,33 +1169,33 @@ _cmux_precmd() {
     fi
 
     if (( pr_context_changed )); then
-        _cmux_pr_cache_clear
-        _cmux_clear_pr_for_panel
+        _programa_pr_cache_clear
+        _programa_clear_pr_for_panel
     fi
 
     if (( should_signal_pr_probe )); then
         _PROGRAMA_PR_FORCE=0
-        _cmux_pr_request_probe
+        _programa_pr_request_probe
     fi
 
     if (( should_restart_pr_poll )); then
         _PROGRAMA_PR_FORCE=0
-        _cmux_start_pr_poll_loop "$pwd" 1
+        _programa_start_pr_poll_loop "$pwd" 1
     fi
 
     # Ports: lightweight kick to the app's batched scanner.
     # - Periodic scan to avoid stale values.
     # - Forced scan when a long-running command returns to the prompt (common when stopping a server).
     if (( cmd_dur >= 2 || now - _PROGRAMA_PORTS_LAST_RUN >= 10 )); then
-        _cmux_ports_kick refresh
+        _programa_ports_kick refresh
     fi
 }
 
 # Ensure Resources/bin is at the front of PATH, and remove the app's
-# Contents/MacOS entry so the GUI cmux binary cannot shadow the CLI cmux.
+# Contents/MacOS entry so the GUI programa binary cannot shadow the CLI programa.
 # Shell init (.zprofile/.zshrc) may prepend other dirs after launch.
 # We fix this once on first prompt (after all init files have run).
-_cmux_fix_path() {
+_programa_fix_path() {
     if [[ -n "${GHOSTTY_BIN_DIR:-}" ]]; then
         local gui_dir="${GHOSTTY_BIN_DIR%/}"
         local bin_dir="${gui_dir%/MacOS}/Resources/bin"
@@ -1207,23 +1207,23 @@ _cmux_fix_path() {
             PATH="${bin_dir}:${(j/:/)parts}"
         fi
     fi
-    add-zsh-hook -d precmd _cmux_fix_path
+    add-zsh-hook -d precmd _programa_fix_path
 }
 
-_cmux_restore_terminal_identity_after_startup() {
+_programa_restore_terminal_identity_after_startup() {
     if [[ -n "${PROGRAMA_ZSH_RESTORE_TERM:-}" ]]; then
         builtin export TERM="$PROGRAMA_ZSH_RESTORE_TERM"
         builtin unset PROGRAMA_ZSH_RESTORE_TERM
     fi
 }
 
-_cmux_zshexit() {
-    _cmux_stop_git_head_watch
-    _cmux_stop_pr_poll_loop
+_programa_zshexit() {
+    _programa_stop_git_head_watch
+    _programa_stop_pr_poll_loop
 }
 
 autoload -Uz add-zsh-hook
-add-zsh-hook preexec _cmux_preexec
-add-zsh-hook precmd _cmux_precmd
-add-zsh-hook precmd _cmux_fix_path
-add-zsh-hook zshexit _cmux_zshexit
+add-zsh-hook preexec _programa_preexec
+add-zsh-hook precmd _programa_precmd
+add-zsh-hook precmd _programa_fix_path
+add-zsh-hook zshexit _programa_zshexit

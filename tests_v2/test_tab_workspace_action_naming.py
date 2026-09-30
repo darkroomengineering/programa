@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, List
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -18,19 +18,19 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def _find_cli_binary() -> str:
-    env_cli = os.environ.get("CMUXTERM_CLI")
+    env_cli = os.environ.get("PROGRAMA_CLI")
     if env_cli and os.path.isfile(env_cli) and os.access(env_cli, os.X_OK):
         return env_cli
 
-    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/cmux-tests-v2/Build/Products/Debug/cmux")
+    fixed = os.path.expanduser("~/Library/Developer/Xcode/DerivedData/programa-tests-v2/Build/Products/Debug/programa")
     if os.path.isfile(fixed) and os.access(fixed, os.X_OK):
         return fixed
 
-    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/cmux"), recursive=True)
+    candidates = glob.glob(os.path.expanduser("~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug/programa"), recursive=True)
     candidates += glob.glob("/tmp/programa-*/Build/Products/Debug/programa")
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
-        raise cmuxError("Could not locate cmux CLI binary; set CMUXTERM_CLI")
+        raise ProgramaClientError("Could not locate programa CLI binary; set PROGRAMA_CLI")
     candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return candidates[0]
 
@@ -49,7 +49,7 @@ def _run_cli(cli: str, args: List[str], json_output: bool) -> str:
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
     if proc.returncode != 0:
         merged = f"{proc.stdout}\n{proc.stderr}".strip()
-        raise cmuxError(f"CLI failed ({' '.join(cmd)}): {merged}")
+        raise ProgramaClientError(f"CLI failed ({' '.join(cmd)}): {merged}")
     return proc.stdout
 
 
@@ -58,10 +58,10 @@ def _run_cli_json(cli: str, args: List[str]) -> Dict:
     try:
         return json.loads(output or "{}")
     except Exception as exc:  # noqa: BLE001
-        raise cmuxError(f"Invalid JSON output for {' '.join(args)}: {output!r} ({exc})")
+        raise ProgramaClientError(f"Invalid JSON output for {' '.join(args)}: {output!r} ({exc})")
 
 
-def _focused_surface_ref(c: cmux, workspace_id: str) -> str:
+def _focused_surface_ref(c: ProgramaClient, workspace_id: str) -> str:
     current = c._call("surface.current", {"workspace_id": workspace_id}) or {}
     surface_ref = str(current.get("surface_ref") or "")
     if surface_ref.startswith("surface:"):
@@ -79,7 +79,7 @@ def _focused_surface_ref(c: cmux, workspace_id: str) -> str:
         if ref.startswith("surface:"):
             return ref
 
-    raise cmuxError(f"Unable to resolve focused surface ref in workspace {workspace_id}: {listed}")
+    raise ProgramaClientError(f"Unable to resolve focused surface ref in workspace {workspace_id}: {listed}")
 
 
 def main() -> int:
@@ -90,7 +90,7 @@ def main() -> int:
     _must("tab:<n>" in help_text, "tab-action --help should mention tab:<n> refs")
     _must("--tab tab:" in help_text, "tab-action examples should use tab: refs")
 
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         caps = c.capabilities() or {}
         methods = set(caps.get("methods") or [])
         for method in ["workspace.action", "tab.action", "surface.action"]:

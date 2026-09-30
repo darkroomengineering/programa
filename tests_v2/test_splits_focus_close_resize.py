@@ -9,7 +9,7 @@ Tests that terminal content remains visible and functional after:
 4. Resizing splits (50/50 ratio)
 
 These tests do not drag tabs; they cover the split-layout operations where
-terminal-visibility bugs show up. They use the cmux socket interface to:
+terminal-visibility bugs show up. They use the programa socket interface to:
 - Create splits and surfaces
 - Send commands to terminals
 - Verify terminal responsiveness by checking for marker files
@@ -18,7 +18,7 @@ Usage:
     python3 test_splits_focus_close_resize.py
 
 Requirements:
-    - cmux must be running with the socket controller enabled
+    - programa must be running with the socket controller enabled
 """
 
 import os
@@ -27,10 +27,10 @@ import time
 import tempfile
 from pathlib import Path
 
-# Add the directory containing cmux.py to the path
+# Add the directory containing programa.py to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 class TestResult:
@@ -48,7 +48,7 @@ class TestResult:
         self.message = msg
 
 
-def ensure_focused_terminal(client: cmux) -> None:
+def ensure_focused_terminal(client: ProgramaClient) -> None:
     """
     Make sure the currently selected workspace has a focused terminal surface.
 
@@ -80,7 +80,7 @@ def ensure_focused_terminal(client: cmux) -> None:
         pass
 
 
-def wait_for_terminal_in_window(client: cmux, surface_idx: int, timeout: float = 5.0) -> bool:
+def wait_for_terminal_in_window(client: ProgramaClient, surface_idx: int, timeout: float = 5.0) -> bool:
     """Wait until a terminal surface index reports in_window=true via surface_health()."""
     start = time.time()
     while time.time() - start < timeout:
@@ -110,7 +110,7 @@ def clear_marker(marker: Path):
     marker.unlink(missing_ok=True)
 
 
-def verify_terminal_responsive(client: cmux, marker: Path, surface_idx: int = None, retries: int = 3) -> bool:
+def verify_terminal_responsive(client: ProgramaClient, marker: Path, surface_idx: int = None, retries: int = 3) -> bool:
     """
     Verify a terminal is responsive by running a command.
     Returns True if the terminal executed the command successfully.
@@ -150,7 +150,7 @@ def verify_terminal_responsive(client: cmux, marker: Path, surface_idx: int = No
     return False
 
 
-def test_connection(client: cmux) -> TestResult:
+def test_connection(client: ProgramaClient) -> TestResult:
     """Test that we can connect and ping the server."""
     result = TestResult("Connection")
     try:
@@ -163,10 +163,10 @@ def test_connection(client: cmux) -> TestResult:
     return result
 
 
-def test_initial_terminal_responsive(client: cmux) -> TestResult:
+def test_initial_terminal_responsive(client: ProgramaClient) -> TestResult:
     """Test that the initial terminal is responsive."""
     result = TestResult("Initial Terminal Responsive")
-    marker = Path(tempfile.gettempdir()) / f"cmux_init_{os.getpid()}"
+    marker = Path(tempfile.gettempdir()) / f"programa_init_{os.getpid()}"
 
     try:
         # Prefer targeting a specific terminal surface by index so this test
@@ -197,11 +197,11 @@ def test_initial_terminal_responsive(client: cmux) -> TestResult:
     return result
 
 
-def test_split_right_responsive(client: cmux) -> TestResult:
+def test_split_right_responsive(client: ProgramaClient) -> TestResult:
     """Test that both terminals remain responsive after horizontal split."""
     result = TestResult("Split Right - Both Responsive")
-    marker0 = Path(tempfile.gettempdir()) / f"cmux_split0_{os.getpid()}"
-    marker1 = Path(tempfile.gettempdir()) / f"cmux_split1_{os.getpid()}"
+    marker0 = Path(tempfile.gettempdir()) / f"programa_split0_{os.getpid()}"
+    marker1 = Path(tempfile.gettempdir()) / f"programa_split1_{os.getpid()}"
 
     try:
         # Create split
@@ -247,11 +247,11 @@ def test_split_right_responsive(client: cmux) -> TestResult:
     return result
 
 
-def test_split_down_responsive(client: cmux) -> TestResult:
+def test_split_down_responsive(client: ProgramaClient) -> TestResult:
     """Test that both terminals remain responsive after vertical split."""
     result = TestResult("Split Down - Both Responsive")
-    marker0 = Path(tempfile.gettempdir()) / f"cmux_splitv0_{os.getpid()}"
-    marker1 = Path(tempfile.gettempdir()) / f"cmux_splitv1_{os.getpid()}"
+    marker0 = Path(tempfile.gettempdir()) / f"programa_splitv0_{os.getpid()}"
+    marker1 = Path(tempfile.gettempdir()) / f"programa_splitv1_{os.getpid()}"
 
     try:
         # First create a new tab to have a clean state
@@ -300,11 +300,11 @@ def test_split_down_responsive(client: cmux) -> TestResult:
     return result
 
 
-def test_multiple_splits_responsive(client: cmux) -> TestResult:
+def test_multiple_splits_responsive(client: ProgramaClient) -> TestResult:
     """Test that all terminals remain responsive after multiple splits."""
     result = TestResult("Multiple Splits - All Responsive")
     markers = [
-        Path(tempfile.gettempdir()) / f"cmux_multi{i}_{os.getpid()}"
+        Path(tempfile.gettempdir()) / f"programa_multi{i}_{os.getpid()}"
         for i in range(4)
     ]
 
@@ -365,11 +365,11 @@ def test_multiple_splits_responsive(client: cmux) -> TestResult:
     return result
 
 
-def test_focus_switching(client: cmux) -> TestResult:
+def test_focus_switching(client: ProgramaClient) -> TestResult:
     """Test that focus switching between panes works correctly."""
     result = TestResult("Focus Switching")
     markers = [
-        Path(tempfile.gettempdir()) / f"cmux_focus{i}_{os.getpid()}"
+        Path(tempfile.gettempdir()) / f"programa_focus{i}_{os.getpid()}"
         for i in range(3)
     ]
 
@@ -422,11 +422,11 @@ def test_focus_switching(client: cmux) -> TestResult:
     return result
 
 
-def test_split_ratio_50_50(client: cmux) -> TestResult:
+def test_split_ratio_50_50(client: ProgramaClient) -> TestResult:
     """Test that splits create 50/50 pane ratios."""
     result = TestResult("Split Ratio 50/50")
-    cols_file_0 = Path(tempfile.gettempdir()) / f"cmux_cols0_{os.getpid()}"
-    cols_file_1 = Path(tempfile.gettempdir()) / f"cmux_cols1_{os.getpid()}"
+    cols_file_0 = Path(tempfile.gettempdir()) / f"programa_cols0_{os.getpid()}"
+    cols_file_1 = Path(tempfile.gettempdir()) / f"programa_cols1_{os.getpid()}"
 
     try:
         # Create a new tab for clean state
@@ -514,11 +514,11 @@ def test_split_ratio_50_50(client: cmux) -> TestResult:
     return result
 
 
-def test_new_surfaces(client: cmux) -> TestResult:
+def test_new_surfaces(client: ProgramaClient) -> TestResult:
     """Test creating new surfaces in a pane."""
     result = TestResult("New Surfaces")
     markers = [
-        Path(tempfile.gettempdir()) / f"cmux_bonsplit{i}_{os.getpid()}"
+        Path(tempfile.gettempdir()) / f"programa_bonsplit{i}_{os.getpid()}"
         for i in range(3)
     ]
 
@@ -565,10 +565,10 @@ def test_new_surfaces(client: cmux) -> TestResult:
     return result
 
 
-def test_pane_commands(client: cmux) -> TestResult:
+def test_pane_commands(client: ProgramaClient) -> TestResult:
     """Test the new pane commands (list_panes, focus_pane)."""
     result = TestResult("Pane Commands")
-    marker = Path(tempfile.gettempdir()) / f"cmux_pane_{os.getpid()}"
+    marker = Path(tempfile.gettempdir()) / f"programa_pane_{os.getpid()}"
 
     try:
         # Create a new tab
@@ -611,11 +611,11 @@ def test_pane_commands(client: cmux) -> TestResult:
     return result
 
 
-def test_close_horizontal_split(client: cmux) -> TestResult:
+def test_close_horizontal_split(client: ProgramaClient) -> TestResult:
     """Test that closing one side of a horizontal split preserves the other terminal."""
     result = TestResult("Close Horizontal Split")
-    marker0 = Path(tempfile.gettempdir()) / f"cmux_close_h0_{os.getpid()}"
-    marker1 = Path(tempfile.gettempdir()) / f"cmux_close_h1_{os.getpid()}"
+    marker0 = Path(tempfile.gettempdir()) / f"programa_close_h0_{os.getpid()}"
+    marker1 = Path(tempfile.gettempdir()) / f"programa_close_h1_{os.getpid()}"
 
     try:
         # Create a new tab for clean state
@@ -702,11 +702,11 @@ def test_close_horizontal_split(client: cmux) -> TestResult:
     return result
 
 
-def test_close_vertical_split(client: cmux) -> TestResult:
+def test_close_vertical_split(client: ProgramaClient) -> TestResult:
     """Test that closing one side of a vertical split preserves the other terminal."""
     result = TestResult("Close Vertical Split")
-    marker0 = Path(tempfile.gettempdir()) / f"cmux_close_v0_{os.getpid()}"
-    marker1 = Path(tempfile.gettempdir()) / f"cmux_close_v1_{os.getpid()}"
+    marker0 = Path(tempfile.gettempdir()) / f"programa_close_v0_{os.getpid()}"
+    marker1 = Path(tempfile.gettempdir()) / f"programa_close_v1_{os.getpid()}"
 
     try:
         # Create a new tab for clean state
@@ -792,15 +792,15 @@ def test_close_vertical_split(client: cmux) -> TestResult:
     return result
 
 
-def test_close_first_pane_vertical_split(client: cmux) -> TestResult:
+def test_close_first_pane_vertical_split(client: ProgramaClient) -> TestResult:
     """Test that closing the FIRST (upper) pane of a vertical split preserves the second terminal.
 
     This is the specific bug the user reported: closing the first vertical split
     causes the terminal to disappear in the remaining pane.
     """
     result = TestResult("Close First Pane Vertical Split")
-    marker0 = Path(tempfile.gettempdir()) / f"cmux_close_fv0_{os.getpid()}"
-    marker1 = Path(tempfile.gettempdir()) / f"cmux_close_fv1_{os.getpid()}"
+    marker0 = Path(tempfile.gettempdir()) / f"programa_close_fv0_{os.getpid()}"
+    marker1 = Path(tempfile.gettempdir()) / f"programa_close_fv1_{os.getpid()}"
 
     try:
         # Create a new tab for clean state
@@ -886,11 +886,11 @@ def test_close_first_pane_vertical_split(client: cmux) -> TestResult:
     return result
 
 
-def test_close_nested_splits(client: cmux) -> TestResult:
+def test_close_nested_splits(client: ProgramaClient) -> TestResult:
     """Test closing splits in a nested configuration."""
     result = TestResult("Close Nested Splits")
     markers = [
-        Path(tempfile.gettempdir()) / f"cmux_nested_{i}_{os.getpid()}"
+        Path(tempfile.gettempdir()) / f"programa_nested_{i}_{os.getpid()}"
         for i in range(4)
     ]
 
@@ -978,14 +978,14 @@ def test_close_nested_splits(client: cmux) -> TestResult:
     return result
 
 
-def test_rapid_split_close_vertical(client: cmux) -> TestResult:
+def test_rapid_split_close_vertical(client: ProgramaClient) -> TestResult:
     """Test rapid vertical split and close to reproduce blank terminal bug.
 
     This test creates and closes vertical splits rapidly with minimal delays
     to try to trigger race conditions that cause blank terminals.
     """
     result = TestResult("Rapid Split/Close Vertical")
-    marker = Path(tempfile.gettempdir()) / f"cmux_rapid_{os.getpid()}"
+    marker = Path(tempfile.gettempdir()) / f"programa_rapid_{os.getpid()}"
 
     try:
         # Create a new tab for clean state
@@ -1034,14 +1034,14 @@ def test_rapid_split_close_vertical(client: cmux) -> TestResult:
     return result
 
 
-def test_rapid_split_close_first_pane(client: cmux) -> TestResult:
+def test_rapid_split_close_first_pane(client: ProgramaClient) -> TestResult:
     """Test rapid vertical split then close FIRST (top) pane.
 
     This specifically tests the user's reported issue: create vertical split,
     delete the bottom one, remaining top pane goes blank.
     """
     result = TestResult("Rapid Split/Close First Pane")
-    marker = Path(tempfile.gettempdir()) / f"cmux_rapid_first_{os.getpid()}"
+    marker = Path(tempfile.gettempdir()) / f"programa_rapid_first_{os.getpid()}"
 
     try:
         # Create a new tab for clean state
@@ -1093,23 +1093,23 @@ def test_rapid_split_close_first_pane(client: cmux) -> TestResult:
 def run_tests():
     """Run all tests."""
     print("=" * 60)
-    print("cmux Splits, Focus, Close, and Resize E2E Tests")
+    print("programa Splits, Focus, Close, and Resize E2E Tests")
     print("=" * 60)
     print()
     print("These tests verify that terminals remain responsive after")
     print("split, focus, close, and resize operations.")
     print()
 
-    socket_path = cmux.DEFAULT_SOCKET_PATH
+    socket_path = ProgramaClient.DEFAULT_SOCKET_PATH
     if not os.path.exists(socket_path):
         print(f"Error: Socket not found at {socket_path}")
-        print("Please make sure cmux is running.")
+        print("Please make sure programa is running.")
         return 1
 
     results = []
 
     try:
-        with cmux() as client:
+        with ProgramaClient() as client:
             # Test connection
             print("Testing connection...")
             results.append(test_connection(client))
@@ -1246,7 +1246,7 @@ def run_tests():
             print(f"  {status} {results[-1].message}")
             print()
 
-    except cmuxError as e:
+    except ProgramaClientError as e:
         print(f"Error: {e}")
         return 1
 

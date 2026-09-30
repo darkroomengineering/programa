@@ -1,6 +1,6 @@
 # vim:ft=zsh
 #
-# Compatibility shim: with the current integration model, cmux restores
+# Compatibility shim: with the current integration model, programa restores
 # ZDOTDIR in .zshenv so this file should never be reached. If it is, restore
 # ZDOTDIR and behave like vanilla zsh by sourcing the user's .zshrc.
 
@@ -14,6 +14,6 @@ else
     builtin unset ZDOTDIR
 fi
 
-builtin typeset _cmux_file="${ZDOTDIR-$HOME}/.zshrc"
-[[ ! -r "$_cmux_file" ]] || builtin source -- "$_cmux_file"
-builtin unset _cmux_file
+builtin typeset _programa_file="${ZDOTDIR-$HOME}/.zshrc"
+[[ ! -r "$_programa_file" ]] || builtin source -- "$_programa_file"
+builtin unset _programa_file

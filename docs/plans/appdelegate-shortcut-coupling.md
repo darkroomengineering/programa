@@ -76,7 +76,7 @@ Spanning essentially every subsystem AppDelegate owns, not just shortcut-adjacen
   `recentCommandPaletteRequestAge`, `shouldConsumeShortcutWhileCommandPaletteVisible`,
   `shouldHandleCommandPaletteShortcutEvent`, `shouldRouteCommandPaletteSelectionNavigation`,
   `shouldSubmitCommandPaletteWithReturn`, `mainWindowId`
-- **Browser/omnibar**: `browserPanel`, `cmuxOwningGhosttyView`, `shouldLetFocusedBrowserOwnFindShortcut`,
+- **Browser/omnibar**: `browserPanel`, `programaOwningGhosttyView`, `shouldLetFocusedBrowserOwnFindShortcut`,
   `browserOmnibarSelectionDeltaForArrowNavigation`, `browserOmnibarSelectionDeltaForCommandNavigation`,
   `browserOmnibarNormalizedModifierFlags`, `browserZoomShortcutTraceActionString`,
   `browserZoomShortcutTraceCandidate`, `browserZoomShortcutTraceFlagsString`,

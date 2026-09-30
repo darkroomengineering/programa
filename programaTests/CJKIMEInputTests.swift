@@ -12,11 +12,11 @@ private var cjkIMEInterpretKeyEventsSwizzled = false
 private var cjkIMEInterpretKeyEventsHook: ((GhosttyNSView, [NSEvent]) -> Bool)?
 
 private extension GhosttyNSView {
-    @objc func cmuxUnitTest_interpretKeyEvents(_ eventArray: [NSEvent]) {
+    @objc func programaUnitTest_interpretKeyEvents(_ eventArray: [NSEvent]) {
         if let hook = cjkIMEInterpretKeyEventsHook, hook(self, eventArray) {
             return
         }
-        cmuxUnitTest_interpretKeyEvents(eventArray)
+        programaUnitTest_interpretKeyEvents(eventArray)
     }
 }
 
@@ -24,7 +24,7 @@ private func installCJKIMEInterpretKeyEventsSwizzle() {
     guard !cjkIMEInterpretKeyEventsSwizzled else { return }
 
     let originalSelector = #selector(GhosttyNSView.interpretKeyEvents(_:))
-    let swizzledSelector = #selector(GhosttyNSView.cmuxUnitTest_interpretKeyEvents(_:))
+    let swizzledSelector = #selector(GhosttyNSView.programaUnitTest_interpretKeyEvents(_:))
 
     guard let originalMethod = class_getInstanceMethod(GhosttyNSView.self, originalSelector),
           let swizzledMethod = class_getInstanceMethod(GhosttyNSView.self, swizzledSelector) else {
@@ -964,7 +964,7 @@ final class CJKIMEShiftSpaceFallbackTests: XCTestCase {
     }
 }
 
-// MARK: - Space release regression (Codex hold-to-talk in cmux)
+// MARK: - Space release regression (Codex hold-to-talk in programa)
 
 @MainActor
 final class GhosttySpaceReleaseRegressionTests: XCTestCase {

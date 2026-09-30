@@ -2,7 +2,7 @@
 //!
 //! This mirrors the JSON-lines protocol implemented by the macOS app's
 //! `TerminalController` (see `docs/socket-api.md` and
-//! `tests_v2/cmux.py` in the `programa` repo, which this crate does not
+//! `tests_v2/programa_client.py` in the `programa` repo, which this crate does not
 //! depend on or import from at runtime). One JSON object per line, in both
 //! directions, over a Unix domain socket:
 //!
@@ -141,7 +141,7 @@ impl ErrorBody {
 /// Stable error codes. Matches the existing macOS app's `TerminalController`
 /// codes (`docs/socket-api.md`, `Sources/TerminalController.swift`)
 /// wherever an equivalent situation exists, so an existing v2 client (the
-/// CLI, `tests_v2/cmux.py`, the MCP bridge) needs no code changes to talk to
+/// CLI, `tests_v2/programa_client.py`, the MCP bridge) needs no code changes to talk to
 /// `programad` instead of the app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

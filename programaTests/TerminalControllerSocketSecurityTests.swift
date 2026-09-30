@@ -353,7 +353,7 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
 #if DEBUG
     func testDebugCaptureLabelsCannotEscapeTheScreenshotDirectory() {
         let expectedDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-screenshots", isDirectory: true)
+            .appendingPathComponent("programa-screenshots", isDirectory: true)
             .standardizedFileURL
         let captureID = "capture-id"
         let untrustedLabels = [
@@ -1031,21 +1031,21 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
 
         TerminalController.shared.stop()
 
-        let restrictedPath = makeSocketPath("cmux-only")
+        let restrictedPath = makeSocketPath("programa-only")
         TerminalController.shared.start(
             tabManager: tabManager,
             socketPath: restrictedPath,
-            accessMode: .cmuxOnly
+            accessMode: .programaOnly
         )
         try waitForSocket(at: restrictedPath)
         XCTAssertEqual(try socketMode(at: restrictedPath), 0o600)
     }
 
     #if DEBUG
-    func testCmuxOnlyRejectsSameUserWhenPeerProcessCannotBeVerified() throws {
+    func testProgramaOnlyRejectsSameUserWhenPeerProcessCannotBeVerified() throws {
         TerminalController.shared.setSocketPeerPIDProviderForTesting { _ in nil }
         let path = makeSocketPath("unverified-peer")
-        TerminalController.shared.start(tabManager: TabManager(), socketPath: path, accessMode: .cmuxOnly)
+        TerminalController.shared.start(tabManager: TabManager(), socketPath: path, accessMode: .programaOnly)
         try waitForSocket(at: path)
         let client = try connectPersistentClient(to: path)
         defer { Darwin.close(client) }
@@ -1055,7 +1055,7 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
 
     func testVerifiedOwnedProcessAndAutomationClientsCanStillPing() throws {
         let path = makeSocketPath("verified-peer")
-        TerminalController.shared.start(tabManager: TabManager(), socketPath: path, accessMode: .cmuxOnly)
+        TerminalController.shared.start(tabManager: TabManager(), socketPath: path, accessMode: .programaOnly)
         try waitForSocket(at: path)
         XCTAssertTrue(isSuccessfulV2Ping(try sendV2Request(method: "system.ping", params: [:], to: path)))
         TerminalController.shared.stop()
@@ -3657,7 +3657,7 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
 
     func testRevivedRootRegistrationRejectsLaunchdAndInvalidPids() {
         // Registering pid 1 would authorize the ancestry root of every process
-        // on the machine, which is the whole boundary `cmuxOnly` protects.
+        // on the machine, which is the whole boundary `programaOnly` protects.
         TerminalController.registerRevivedRoot(1)
         TerminalController.registerRevivedRoot(0)
         TerminalController.registerRevivedRoot(-1)

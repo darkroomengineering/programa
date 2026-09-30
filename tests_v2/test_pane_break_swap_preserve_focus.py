@@ -9,14 +9,14 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
-def _focused_pane_id(client: cmux, workspace_id: str) -> str:
+def _focused_pane_id(client: ProgramaClient, workspace_id: str) -> str:
     payload = client._call("pane.list", {"workspace_id": workspace_id}) or {}
     for row in payload.get("panes") or []:
         if bool(row.get("focused")):
@@ -28,7 +28,7 @@ def main() -> int:
     created_workspaces: list[str] = []
 
     try:
-        with cmux(SOCKET_PATH) as client:
+        with ProgramaClient(SOCKET_PATH) as client:
             workspace_id = client.new_workspace()
             created_workspaces.append(workspace_id)
             client.select_workspace(workspace_id)
@@ -77,7 +77,7 @@ def main() -> int:
                 "pane.break should preserve the selected workspace when invoked over the socket",
             )
     finally:
-        with cmux(SOCKET_PATH) as cleanup_client:
+        with ProgramaClient(SOCKET_PATH) as cleanup_client:
             for workspace_id in reversed(created_workspaces):
                 try:
                     cleanup_client.close_workspace(workspace_id)

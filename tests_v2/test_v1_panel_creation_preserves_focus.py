@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -34,19 +34,19 @@ def _send_v1(command: str, *, expect_ok: bool = True) -> str:
             sock.settimeout(0.1)
     payload = b"".join(chunks).decode("utf-8", errors="replace").strip()
     if expect_ok and not payload.startswith("OK"):
-        raise cmuxError(f"{command!r} failed: {payload!r}")
+        raise ProgramaClientError(f"{command!r} failed: {payload!r}")
     return payload
 
 
-def _focused_surface_id(client: cmux, workspace_id: str) -> str:
+def _focused_surface_id(client: ProgramaClient, workspace_id: str) -> str:
     surfaces = client.list_surfaces(workspace=workspace_id)
     for _, surface_id, focused in surfaces:
         if focused:
             return surface_id
-    raise cmuxError(f"no focused surface in workspace {workspace_id}: {surfaces}")
+    raise ProgramaClientError(f"no focused surface in workspace {workspace_id}: {surfaces}")
 
 
-def _surface_ids(client: cmux, workspace_id: str) -> set[str]:
+def _surface_ids(client: ProgramaClient, workspace_id: str) -> set[str]:
     return {surface_id for _, surface_id, _ in client.list_surfaces(workspace=workspace_id)}
 
 
@@ -59,13 +59,13 @@ def _created_surface_id(response: str) -> str:
 def _sidebar_state(workspace_id: str) -> str:
     payload = _send_v1(f"sidebar_state --tab={workspace_id}", expect_ok=False)
     if payload.startswith("ERROR"):
-        raise cmuxError(f"sidebar_state failed: {payload!r}")
+        raise ProgramaClientError(f"sidebar_state failed: {payload!r}")
     return payload
 
 
 def main() -> int:
     created_workspaces: list[str] = []
-    with cmux(SOCKET_PATH) as client:
+    with ProgramaClient(SOCKET_PATH) as client:
         try:
             created_workspace = client.new_workspace()
             created_workspaces.append(created_workspace)

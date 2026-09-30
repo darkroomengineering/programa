@@ -35,7 +35,7 @@ class UpdateDriver: NSObject, SPUUserDriver {
             return
         }
 #endif
-        // Never show Sparkle's permission UI. cmux always enables scheduled checks and keeps
+        // Never show Sparkle's permission UI. programa always enables scheduled checks and keeps
         // automatic downloads disabled so installs remain user-driven.
         UpdateLogStore.shared.append("auto-allow update permission (no UI)")
         DispatchQueue.main.async {
@@ -61,7 +61,7 @@ class UpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {
-        // cmux uses Sparkle's UI for release notes links instead.
+        // programa uses Sparkle's UI for release notes links instead.
     }
 
     func showUpdateReleaseNotesFailedToDownloadWithError(_ error: any Error) {
@@ -168,7 +168,7 @@ class UpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showUpdateInFocus() {
-        // No-op; cmux never shows Sparkle dialogs.
+        // No-op; programa never shows Sparkle dialogs.
     }
 
     func dismissUpdateInstallation() {

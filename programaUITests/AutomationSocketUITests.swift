@@ -25,7 +25,7 @@ final class AutomationSocketUITests: XCTestCase {
     }
 
     func testSocketToggleDisablesAndEnables() {
-        let app = configuredApp(mode: "cmuxOnly")
+        let app = configuredApp(mode: "programaOnly")
         app.launch()
         XCTAssertTrue(
             ensureForegroundAfterLaunch(app, timeout: 12.0),
@@ -113,7 +113,7 @@ final class AutomationSocketUITests: XCTestCase {
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: tmpPath) else {
             return nil
         }
-        let matches = entries.filter { $0.hasPrefix("cmux") && $0.hasSuffix(".sock") }
+        let matches = entries.filter { $0.hasPrefix("programa") && $0.hasSuffix(".sock") }
         if let debug = matches.first(where: { $0.contains("debug") }) {
             return (tmpPath as NSString).appendingPathComponent(debug)
         }

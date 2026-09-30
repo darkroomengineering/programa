@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import palette_visible as _palette_visible
 
 
@@ -28,18 +28,18 @@ def _wait_until(predicate, timeout_s=5.0, interval_s=0.05, message="timeout"):
         if predicate():
             return
         time.sleep(interval_s)
-    raise cmuxError(message)
+    raise ProgramaClientError(message)
 
 
-def _rename_input_selection(client: cmux, window_id: str) -> dict:
+def _rename_input_selection(client: ProgramaClient, window_id: str) -> dict:
     return client._call("debug.command_palette.rename_input.selection", {"window_id": window_id}) or {}
 
 
-def _palette_results(client: cmux, window_id: str, limit: int = 10) -> dict:
+def _palette_results(client: ProgramaClient, window_id: str, limit: int = 10) -> dict:
     return client.command_palette_results(window_id=window_id, limit=limit)
 
 
-def _set_palette_visible(client: cmux, window_id: str, visible: bool) -> None:
+def _set_palette_visible(client: ProgramaClient, window_id: str, visible: bool) -> None:
     if _palette_visible(client, window_id) == visible:
         return
     client._call("debug.command_palette.toggle", {"window_id": window_id})
@@ -50,7 +50,7 @@ def _set_palette_visible(client: cmux, window_id: str, visible: bool) -> None:
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as client:
+    with ProgramaClient(SOCKET_PATH) as client:
         client.activate_app()
         time.sleep(0.2)
 
@@ -84,14 +84,14 @@ def main() -> int:
         payload = _palette_results(client, window_id, limit=12)
         rows = payload.get("results") or []
         if not rows:
-            raise cmuxError(f"palette returned no results for rename query: {payload}")
+            raise ProgramaClientError(f"palette returned no results for rename query: {payload}")
 
         top = rows[0] or {}
         top_id = str(top.get("command_id") or "")
         top_title = str(top.get("title") or "")
         if top_id not in RENAME_COMMAND_IDS:
             titles = [str(row.get("title") or "") for row in rows]
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"unexpected top result for 'rename': id={top_id!r} title={top_title!r} results={titles}"
             )
 
@@ -105,10 +105,10 @@ def main() -> int:
         retab_payload = _palette_results(client, window_id, limit=12)
         retab_rows = retab_payload.get("results") or []
         if not retab_rows:
-            raise cmuxError(f"palette returned no results for retab query: {retab_payload}")
+            raise ProgramaClientError(f"palette returned no results for retab query: {retab_payload}")
         top_retabs = [str(row.get("command_id") or "") for row in retab_rows[:3]]
         if "palette.renameTab" not in top_retabs:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"'retab' did not rank Rename Tab near top: top3={top_retabs} rows={retab_rows}"
             )
 

@@ -35,7 +35,8 @@ final class SocketClient {
     private static let maxSocketTimeoutSeconds: TimeInterval = 9_007_199_254_740_991
     private static let responseTimeoutSeconds: TimeInterval = {
         let env = ProcessInfo.processInfo.environment
-        if let raw = env["CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC"],
+        // Legacy cmux name (CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC), still read so existing scripts keep working.
+        if let raw = env["PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC"] ?? env["CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC"],
            let seconds = Double(raw),
            seconds.isFinite,
            seconds > 0 {
@@ -103,7 +104,7 @@ final class SocketClient {
 
     /// - Parameter minimumReceiveTimeout: overrides the default response-wait timeout when
     ///   larger than it, for commands that legitimately hold the connection open longer than
-    ///   `CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC`'s default (e.g. `surface.wait` with a caller-chosen
+    ///   `PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC`'s default (e.g. `surface.wait` with a caller-chosen
     ///   `--timeout`). Ignored (falls back to the default) when `nil` or smaller.
     func send(
         command: String,

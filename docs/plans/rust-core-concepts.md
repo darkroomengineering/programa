@@ -251,7 +251,7 @@ file-set key wins over the Settings UI until removed). Top-level sections and ev
 - `workspaceColors`: `indicatorStyle`, `selectionColor`, `notificationBadgeColor`, `colors`.
 - `sidebarAppearance`: `matchTerminalBackground`, `tintColor`, `lightModeTintColor`,
   `darkModeTintColor`, `tintOpacity`, `showClaudeQuota`.
-- `automation`: `socketControlMode` (`off|cmuxOnly|automation|password|allowAll|openAccess|
+- `automation`: `socketControlMode` (`off|programaOnly|automation|password|allowAll|openAccess|
   fullOpenAccess|notifications|full`), `socketPassword`, `claudeCodeIntegration`,
   `openBrowserWithAgentSplits`, `claudeBinaryPath`, `portBase`, `portRange`.
 - `customCommands`: `trustedDirectories`.

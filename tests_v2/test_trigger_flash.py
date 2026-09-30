@@ -12,14 +12,14 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         sid = c.new_surface(panel_type="terminal")
         c.focus_surface(sid)
 
@@ -31,7 +31,7 @@ def main() -> int:
 
         after = c.flash_count(sid)
         if after <= base:
-            raise cmuxError(f"Expected flash count to increase (base={base}, after={after})")
+            raise ProgramaClientError(f"Expected flash count to increase (base={base}, after={after})")
 
     print("PASS: surface.trigger_flash increments flash counter")
     return 0

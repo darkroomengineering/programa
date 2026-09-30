@@ -4,7 +4,7 @@ Regression test: Cmd+Option+Arrow (goto_split) must work when a browser panel
 is focused and actively displaying a web page.
 
 Requires:
-  - cmux running
+  - programa running
   - Debug socket commands enabled (`simulate_shortcut`)
 """
 
@@ -15,10 +15,10 @@ from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 
 
-def focused_pane_id(client: cmux) -> Optional[str]:
+def focused_pane_id(client: ProgramaClient) -> Optional[str]:
     """Return the pane_id of the currently focused pane, or None."""
     for _idx, pane_id, _count, is_focused in client.list_panes():
         if is_focused:
@@ -26,7 +26,7 @@ def focused_pane_id(client: cmux) -> Optional[str]:
     return None
 
 
-def test_goto_split_from_loaded_browser(client: cmux) -> tuple[bool, str]:
+def test_goto_split_from_loaded_browser(client: ProgramaClient) -> tuple[bool, str]:
     """
     1. Create workspace with horizontal split: terminal (left) | browser with URL (right)
     2. Focus the browser pane and ensure WKWebView has first responder
@@ -101,7 +101,7 @@ def test_goto_split_from_loaded_browser(client: cmux) -> tuple[bool, str]:
         )
 
 
-def test_goto_split_roundtrip_loaded_browser(client: cmux) -> tuple[bool, str]:
+def test_goto_split_roundtrip_loaded_browser(client: ProgramaClient) -> tuple[bool, str]:
     """
     Round-trip: terminal → browser (Cmd+Opt+Right) → terminal (Cmd+Opt+Left)
     with a loaded page and webview focused.
@@ -176,15 +176,15 @@ def test_goto_split_roundtrip_loaded_browser(client: cmux) -> tuple[bool, str]:
 
 def run_tests() -> int:
     print("=" * 60)
-    print("cmux Browser goto_split Regression Test")
+    print("programa Browser goto_split Regression Test")
     print("=" * 60)
     print()
 
-    probe = cmux()
+    probe = ProgramaClient()
     socket_path = probe.socket_path
     if not os.path.exists(socket_path):
         print(f"Error: Socket not found at {socket_path}")
-        print("Please make sure cmux is running.")
+        print("Please make sure programa is running.")
         return 1
 
     tests = [
@@ -196,7 +196,7 @@ def run_tests() -> int:
     failed = 0
 
     try:
-        with cmux(socket_path=socket_path) as client:
+        with ProgramaClient(socket_path=socket_path) as client:
             for name, fn in tests:
                 print(f"  Running: {name} ... ", end="", flush=True)
                 try:
@@ -209,7 +209,7 @@ def run_tests() -> int:
                     passed += 1
                 else:
                     failed += 1
-    except cmuxError as e:
+    except ProgramaClientError as e:
         print(f"Error: {e}")
         return 1
 

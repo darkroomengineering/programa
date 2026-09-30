@@ -5424,7 +5424,7 @@
         }
       }
     },
-    "command.cmuxConfig.customTitle": {
+    "command.programaConfig.customTitle": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -5441,7 +5441,7 @@
         }
       }
     },
-    "command.cmuxConfig.recipeTitle": {
+    "command.programaConfig.recipeTitle": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -5458,7 +5458,7 @@
         }
       }
     },
-    "command.cmuxConfig.subtitle": {
+    "command.programaConfig.subtitle": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9130,7 +9130,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmCommand.cancel": {
+    "dialog.programaConfig.confirmCommand.cancel": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9147,7 +9147,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmCommand.configChanged": {
+    "dialog.programaConfig.confirmCommand.configChanged": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9164,7 +9164,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmCommand.messageWithCommand": {
+    "dialog.programaConfig.confirmCommand.messageWithCommand": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9181,7 +9181,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmCommand.run": {
+    "dialog.programaConfig.confirmCommand.run": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9198,7 +9198,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmCommand.title": {
+    "dialog.programaConfig.confirmCommand.title": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9215,7 +9215,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmCommand.truncated": {
+    "dialog.programaConfig.confirmCommand.truncated": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9232,7 +9232,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmCommand.trustDirectory": {
+    "dialog.programaConfig.confirmCommand.trustDirectory": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9249,7 +9249,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmCommand.workspaceSummary": {
+    "dialog.programaConfig.confirmCommand.workspaceSummary": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9266,7 +9266,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmRecipe.insert": {
+    "dialog.programaConfig.confirmRecipe.insert": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9283,7 +9283,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmRecipe.messageWithPrompt": {
+    "dialog.programaConfig.confirmRecipe.messageWithPrompt": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9300,7 +9300,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmRecipe.title": {
+    "dialog.programaConfig.confirmRecipe.title": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9317,7 +9317,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmRestart.cancel": {
+    "dialog.programaConfig.confirmRestart.cancel": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9334,7 +9334,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmRestart.message": {
+    "dialog.programaConfig.confirmRestart.message": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9351,7 +9351,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmRestart.recreate": {
+    "dialog.programaConfig.confirmRestart.recreate": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9368,7 +9368,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.confirmRestart.title": {
+    "dialog.programaConfig.confirmRestart.title": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9385,7 +9385,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.invalidRecipe.message": {
+    "dialog.programaConfig.invalidRecipe.message": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9402,7 +9402,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.invalidRecipe.title": {
+    "dialog.programaConfig.invalidRecipe.title": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9419,7 +9419,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.parameter.continue": {
+    "dialog.programaConfig.parameter.continue": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -9436,7 +9436,7 @@
         }
       }
     },
-    "dialog.cmuxConfig.parameter.message": {
+    "dialog.programaConfig.parameter.message": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -16015,7 +16015,7 @@
         }
       }
     },
-    "socketControl.cmuxOnly.description": {
+    "socketControl.programaOnly.description": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -16032,7 +16032,7 @@
         }
       }
     },
-    "socketControl.cmuxOnly.name": {
+    "socketControl.programaOnly.name": {
       "extractionState": "manual",
       "localizations": {
         "en": {

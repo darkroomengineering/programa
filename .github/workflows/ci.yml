@@ -682,7 +682,7 @@ jobs:
           test -x "$CLI_BIN"
           result=0
           for provider in codex claude opencode; do
-            CMUXTERM_CLI="$CLI_BIN" python3 "tests_v2/test_${provider}_install_integration.py" --eof-only || result=1
+            PROGRAMA_CLI="$CLI_BIN" python3 "tests_v2/test_${provider}_install_integration.py" --eof-only || result=1
           done
           exit "$result"
 

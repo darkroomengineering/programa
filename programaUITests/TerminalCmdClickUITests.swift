@@ -29,7 +29,7 @@ final class TerminalCmdClickUITests: XCTestCase {
         continueAfterFailure = false
 
         fixtureDirectoryURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-ui-test-terminal-cmd-click-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("programa-ui-test-terminal-cmd-click-\(UUID().uuidString)", isDirectory: true)
         hoverDiagnosticsPath = fixtureDirectoryURL.appendingPathComponent("hover.json").path
         openCapturePath = fixtureDirectoryURL.appendingPathComponent("open.log").path
         setupDataPath = fixtureDirectoryURL.appendingPathComponent("setup.json").path

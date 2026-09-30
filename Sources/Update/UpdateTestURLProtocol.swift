@@ -2,7 +2,7 @@
 import Foundation
 
 final class UpdateTestURLProtocol: URLProtocol {
-    static let host = "cmux.test"
+    static let host = "programa.test"
     static let appcastPath = "/appcast.xml"
     static let updatePath = "/programa-test.zip"
 
@@ -84,7 +84,7 @@ final class UpdateTestURLProtocol: URLProtocol {
         } else {
             item = """
             <item>
-              <title>cmux \(version)</title>
+              <title>programa \(version)</title>
               <sparkle:version>\(version)</sparkle:version>
               <sparkle:shortVersionString>\(version)</sparkle:shortVersionString>
               <enclosure url="\(updateURL)" length="\(updateLength)" type="application/octet-stream" />
@@ -98,7 +98,7 @@ final class UpdateTestURLProtocol: URLProtocol {
           xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
           xmlns:dc="http://purl.org/dc/elements/1.1/">
           <channel>
-            <title>cmux Test Updates</title>
+            <title>programa Test Updates</title>
             <link>https://\(host)</link>
             <description>Test updates feed</description>
             <language>en</language>
@@ -111,7 +111,7 @@ final class UpdateTestURLProtocol: URLProtocol {
     }
 
     private static func updateArchiveData() -> Data {
-        Data("cmux test update".utf8)
+        Data("programa test update".utf8)
     }
 }
 #endif

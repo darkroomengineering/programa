@@ -190,7 +190,7 @@ extension AppDelegate {
         func hasMainTerminalWindow() -> Bool {
             NSApp.windows.contains { window in
                 guard let raw = window.identifier?.rawValue else { return false }
-                return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+                return raw == "programa.main" || raw.hasPrefix("programa.main.")
             }
         }
 
@@ -254,7 +254,7 @@ extension AppDelegate {
         func hasMainTerminalWindow() -> Bool {
             NSApp.windows.contains { window in
                 guard let raw = window.identifier?.rawValue else { return false }
-                return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+                return raw == "programa.main" || raw.hasPrefix("programa.main.")
             }
         }
 
@@ -271,7 +271,7 @@ extension AppDelegate {
             }
             if let mainWindow = NSApp.windows.first(where: { window in
                 guard let raw = window.identifier?.rawValue else { return false }
-                return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+                return raw == "programa.main" || raw.hasPrefix("programa.main.")
             }) {
                 let screenFrame = mainWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
                 if let screenFrame {
@@ -798,10 +798,10 @@ extension AppDelegate {
               return input;
             };
 
-            let container = document.getElementById("cmux-ui-test-focus-container");
+            let container = document.getElementById("programa-ui-test-focus-container");
             if (!container || !container.tagName || container.tagName.toLowerCase() !== "div") {
               container = document.createElement("div");
-              container.id = "cmux-ui-test-focus-container";
+              container.id = "programa-ui-test-focus-container";
               document.body.appendChild(container);
             }
             container.style.position = "fixed";
@@ -817,8 +817,8 @@ extension AppDelegate {
             container.style.boxShadow = "0 2px 10px rgba(0,0,0,0.2)";
             container.style.zIndex = "2147483647";
 
-            const input = ensureInput("cmux-ui-test-focus-input", "cmux-ui-focus-primary");
-            const secondaryInput = ensureInput("cmux-ui-test-focus-input-secondary", "cmux-ui-focus-secondary");
+            const input = ensureInput("programa-ui-test-focus-input", "programa-ui-focus-primary");
+            const secondaryInput = ensureInput("programa-ui-test-focus-input-secondary", "programa-ui-focus-secondary");
             if (input.parentElement !== container) {
               container.appendChild(input);
             }
@@ -832,10 +832,10 @@ extension AppDelegate {
               input.setSelectionRange(end, end);
             }
 
-            let trackedFocusId = input.getAttribute("data-cmux-addressbar-focus-id");
+            let trackedFocusId = input.getAttribute("data-programa-addressbar-focus-id");
             if (!trackedFocusId) {
-              trackedFocusId = "cmux-ui-test-focus-input-tracked";
-              input.setAttribute("data-cmux-addressbar-focus-id", trackedFocusId);
+              trackedFocusId = "programa-ui-test-focus-input-tracked";
+              input.setAttribute("data-programa-addressbar-focus-id", trackedFocusId);
             }
             const selectionStart = typeof input.selectionStart === "number" ? input.selectionStart : null;
             const selectionEnd = typeof input.selectionEnd === "number" ? input.selectionEnd : null;

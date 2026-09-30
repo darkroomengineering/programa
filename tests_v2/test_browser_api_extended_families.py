@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -24,18 +24,18 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 def _expect_error_contains(label: str, fn, needle: str) -> None:
     try:
         fn()
-    except cmuxError as exc:
+    except ProgramaClientError as exc:
         text = str(exc)
         if needle in text:
             return
-        raise cmuxError(f"{label}: expected error containing {needle!r}, got: {text}")
-    raise cmuxError(f"{label}: expected error containing {needle!r}, but call succeeded")
+        raise ProgramaClientError(f"{label}: expected error containing {needle!r}, got: {text}")
+    raise ProgramaClientError(f"{label}: expected error containing {needle!r}, but call succeeded")
 
 
 def _expect_error_data(label: str, fn, code: str) -> dict:
     try:
         fn()
-    except cmuxError as exc:
+    except ProgramaClientError as exc:
         text = str(exc)
         _must(text.startswith(f"{code}:"), f"{label}: expected {code}, got: {text}")
         _, separator, serialized = text.partition(" (")
@@ -43,18 +43,18 @@ def _expect_error_data(label: str, fn, code: str) -> dict:
         try:
             data = ast.literal_eval(serialized[:-1])
         except (SyntaxError, ValueError) as parse_error:
-            raise cmuxError(f"{label}: expected parseable error data, got: {text}") from parse_error
+            raise ProgramaClientError(f"{label}: expected parseable error data, got: {text}") from parse_error
         _must(isinstance(data, dict), f"{label}: expected dictionary error data, got: {data}")
         return data
-    raise cmuxError(f"{label}: expected {code}, but call succeeded")
+    raise ProgramaClientError(f"{label}: expected {code}, but call succeeded")
 
 
-def _wait_selector(c: cmux, surface_id: str, selector: str, timeout_s: float = 6.0) -> None:
+def _wait_selector(c: ProgramaClient, surface_id: str, selector: str, timeout_s: float = 6.0) -> None:
     timeout_ms = max(1, int(timeout_s * 1000.0))
     try:
         c._call("browser.wait", {"surface_id": surface_id, "selector": selector, "timeout_ms": timeout_ms})
         return
-    except cmuxError as exc:
+    except ProgramaClientError as exc:
         if "timeout" not in str(exc):
             raise
 
@@ -65,15 +65,15 @@ def _wait_selector(c: cmux, surface_id: str, selector: str, timeout_s: float = 6
         if bool(probe.get("value")):
             return
         time.sleep(0.05)
-    raise cmuxError(f"Timed out waiting for selector {selector}")
+    raise ProgramaClientError(f"Timed out waiting for selector {selector}")
 
 
-def _wait_function(c: cmux, surface_id: str, expression: str, timeout_s: float = 6.0) -> None:
+def _wait_function(c: ProgramaClient, surface_id: str, expression: str, timeout_s: float = 6.0) -> None:
     timeout_ms = max(1, int(timeout_s * 1000.0))
     c._call("browser.wait", {"surface_id": surface_id, "function": expression, "timeout_ms": timeout_ms})
 
 
-def _test_browser_wait_allows_concurrent_exact_query(c: cmux, surface_id: str) -> None:
+def _test_browser_wait_allows_concurrent_exact_query(c: ProgramaClient, surface_id: str) -> None:
     """A pending browser.wait must not monopolize command dispatch or the main actor."""
     entered_attribute = "data-programa-concurrent-wait-entered"
     release_attribute = "data-programa-concurrent-wait-release"
@@ -95,7 +95,7 @@ def _test_browser_wait_allows_concurrent_exact_query(c: cmux, surface_id: str) -
 
     def _wait_on_client_a() -> None:
         try:
-            with cmux(SOCKET_PATH) as wait_client:
+            with ProgramaClient(SOCKET_PATH) as wait_client:
                 payload = wait_client._call(
                     "browser.wait",
                     {
@@ -175,7 +175,7 @@ def _test_browser_wait_allows_concurrent_exact_query(c: cmux, surface_id: str) -
                 timeout_s=3.0,
             ) or {}
             if not bool(released.get("value")):
-                cleanup_errors.append(cmuxError(f"Failed to release browser.wait: {released}"))
+                cleanup_errors.append(ProgramaClientError(f"Failed to release browser.wait: {released}"))
         except Exception as exc:  # pragma: no cover - reported below
             cleanup_errors.append(exc)
 
@@ -197,7 +197,7 @@ def _test_browser_wait_allows_concurrent_exact_query(c: cmux, surface_id: str) -
             cleanup_errors.append(exc)
 
     if primary_error is not None:
-        raise cmuxError(
+        raise ProgramaClientError(
             f"{primary_error}; wait_errors={wait_errors}; wait_result={wait_result}; "
             f"cleanup_errors={cleanup_errors}; wait_thread_alive={wait_thread.is_alive()}"
         ) from primary_error
@@ -208,14 +208,14 @@ def _test_browser_wait_allows_concurrent_exact_query(c: cmux, surface_id: str) -
     _must(wait_result.get("waited") is True, f"Expected browser.wait waited=true: {wait_result}")
 
 
-def _test_browser_eval_concurrent_clients(c: cmux, surface_id: str) -> None:
+def _test_browser_eval_concurrent_clients(c: ProgramaClient, surface_id: str) -> None:
     """Simultaneous browser.eval calls from separate connections must each get their own result."""
     rounds = 10
     errors: list[str] = []
 
     def _eval_on_own_client(tag: str) -> None:
         try:
-            with cmux(SOCKET_PATH) as client:
+            with ProgramaClient(SOCKET_PATH) as client:
                 for round_index in range(rounds):
                     expected = f"{tag}-{round_index}"
                     payload = client._call(
@@ -240,24 +240,24 @@ def _test_browser_eval_concurrent_clients(c: cmux, surface_id: str) -> None:
     _must(not errors, f"Concurrent browser.eval failures: {errors}")
 
 
-def _test_browser_wait_function_sees_page_globals(c: cmux, surface_id: str) -> None:
+def _test_browser_wait_function_sees_page_globals(c: ProgramaClient, surface_id: str) -> None:
     c._call("browser.eval", {"surface_id": surface_id, "script": "window.__programaPageFlag = true"})
     _wait_function(c, surface_id, "window.__programaPageFlag === true", timeout_s=3.0)
 
 
-def _test_download_path_wait_allows_concurrent_exact_query(c: cmux, surface_id: str) -> None:
+def _test_download_path_wait_allows_concurrent_exact_query(c: ProgramaClient, surface_id: str) -> None:
     """A pending path wait must not block exact queries or poison later requests."""
     wait_finished = threading.Event()
     wait_result: dict = {}
     wait_errors: list[Exception] = []
 
-    with tempfile.TemporaryDirectory(prefix="cmux-download-wait-") as root:
+    with tempfile.TemporaryDirectory(prefix="programa-download-wait-") as root:
         download_path = str(Path(root) / "pending.txt")
         pending_marker_path = str(Path(root) / "watcher-ready.txt")
 
         def _wait_on_client_a() -> None:
             try:
-                with cmux(SOCKET_PATH) as wait_client:
+                with ProgramaClient(SOCKET_PATH) as wait_client:
                     payload = wait_client._call(
                         "browser.download.wait",
                         {
@@ -323,7 +323,7 @@ def _test_download_path_wait_allows_concurrent_exact_query(c: cmux, surface_id: 
             wait_thread.join(timeout=10.0)
 
         if primary_error is not None:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"{primary_error}; wait_errors={wait_errors}; wait_result={wait_result}; "
                 f"cleanup_errors={cleanup_errors}; wait_thread_alive={wait_thread.is_alive()}"
             ) from primary_error
@@ -353,7 +353,7 @@ def _test_download_path_wait_allows_concurrent_exact_query(c: cmux, surface_id: 
         )
 
 
-def _test_browser_screenshot_allows_concurrent_exact_query(c: cmux, surface_id: str) -> None:
+def _test_browser_screenshot_allows_concurrent_exact_query(c: ProgramaClient, surface_id: str) -> None:
     """Completed screenshot work must not hold the main actor while routing its response."""
 
     def _wait_for_pending_marker(
@@ -379,7 +379,7 @@ def _test_browser_screenshot_allows_concurrent_exact_query(c: cmux, surface_id: 
             finished.wait(timeout=0.02)
         _must(marker_observed, f"Timed out waiting for {label} pending marker")
 
-    with tempfile.TemporaryDirectory(prefix="cmux-screenshot-wait-") as root:
+    with tempfile.TemporaryDirectory(prefix="programa-screenshot-wait-") as root:
         success_pending_path = str(Path(root) / "success-pending.txt")
         success_release_path = str(Path(root) / "success-release.txt")
         success_result: dict = {}
@@ -388,7 +388,7 @@ def _test_browser_screenshot_allows_concurrent_exact_query(c: cmux, surface_id: 
 
         def _take_released_screenshot() -> None:
             try:
-                with cmux(SOCKET_PATH) as screenshot_client:
+                with ProgramaClient(SOCKET_PATH) as screenshot_client:
                     payload = screenshot_client._call(
                         "browser.screenshot",
                         {
@@ -465,7 +465,7 @@ def _test_browser_screenshot_allows_concurrent_exact_query(c: cmux, surface_id: 
                 except Exception as exc:  # pragma: no cover - reported below
                     success_cleanup_errors.append(exc)
         if success_post_join_error is not None:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"{success_post_join_error}; screenshot_errors={success_errors}; screenshot_result={success_result}; "
                 f"cleanup_errors={success_cleanup_errors}; screenshot_thread_alive={success_thread.is_alive()}"
             ) from success_post_join_error
@@ -479,7 +479,7 @@ def _test_browser_screenshot_allows_concurrent_exact_query(c: cmux, surface_id: 
 
         def _take_timed_out_screenshot() -> None:
             try:
-                with cmux(SOCKET_PATH) as screenshot_client:
+                with ProgramaClient(SOCKET_PATH) as screenshot_client:
                     payload = screenshot_client._call(
                         "browser.screenshot",
                         {
@@ -515,7 +515,7 @@ def _test_browser_screenshot_allows_concurrent_exact_query(c: cmux, surface_id: 
             _must(not timeout_result, f"Timed browser.screenshot unexpectedly succeeded: {timeout_result}")
             _must(len(timeout_errors) == 1, f"Expected one browser.screenshot timeout error: {timeout_errors}")
             _must(
-                isinstance(timeout_errors[0], cmuxError)
+                isinstance(timeout_errors[0], ProgramaClientError)
                 and str(timeout_errors[0]) == "timeout: Timed out waiting for snapshot",
                 f"Expected exact browser.screenshot timeout error: {timeout_errors}",
             )
@@ -530,7 +530,7 @@ def _test_browser_screenshot_allows_concurrent_exact_query(c: cmux, surface_id: 
             threading.Event().wait(timeout=0.5)
 
         if timeout_primary_error is not None:
-            raise cmuxError(
+            raise ProgramaClientError(
                 f"{timeout_primary_error}; screenshot_errors={timeout_errors}; screenshot_result={timeout_result}; "
                 f"cleanup_errors={timeout_cleanup_errors}; screenshot_thread_alive={timeout_thread.is_alive()}"
             ) from timeout_primary_error
@@ -562,7 +562,7 @@ def _test_browser_screenshot_allows_concurrent_exact_query(c: cmux, surface_id: 
 
 @contextmanager
 def _local_test_server() -> str:
-    with tempfile.TemporaryDirectory(prefix="cmux-browser-ext-") as root:
+    with tempfile.TemporaryDirectory(prefix="programa-browser-ext-") as root:
         root_path = Path(root)
 
         pixel = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==")
@@ -584,7 +584,7 @@ def _local_test_server() -> str:
             """<!doctype html>
 <html>
   <head>
-    <title>cmux-browser-extended-second</title>
+    <title>programa-browser-extended-second</title>
   </head>
   <body>
     <div id="second">second-page</div>
@@ -599,7 +599,7 @@ def _local_test_server() -> str:
             """<!doctype html>
 <html>
   <head>
-    <title>cmux-browser-extended</title>
+    <title>programa-browser-extended</title>
     <style>
       #style-target { color: rgb(255, 0, 0); }
     </style>
@@ -646,9 +646,9 @@ def _local_test_server() -> str:
         return true;
       };
       window.emitConsoleAndError = function () {
-        console.log('cmux-console-entry');
+        console.log('programa-console-entry');
         setTimeout(function () {
-          throw new Error('cmux-boom');
+          throw new Error('programa-boom');
         }, 0);
         return true;
       };
@@ -681,20 +681,20 @@ def _local_test_server() -> str:
             thread.join(timeout=1.0)
 
 
-def _respond_to_pending_dialog(c: cmux, sid: str, accept: bool, **extra) -> dict:
+def _respond_to_pending_dialog(c: ProgramaClient, sid: str, accept: bool, **extra) -> dict:
     deadline = time.monotonic() + 8.0
     method = "browser.dialog.accept" if accept else "browser.dialog.dismiss"
     while True:
         try:
             return c._call(method, {"surface_id": sid, **extra}) or {}
-        except cmuxError as exc:
+        except ProgramaClientError as exc:
             # Never probe JavaScript while the native dialog blocks the page.
             if not str(exc).startswith("not_found:") or time.monotonic() >= deadline:
                 raise
             time.sleep(0.05)
 
 
-def _test_find_reference_targets(c: cmux, sid: str) -> None:
+def _test_find_reference_targets(c: ProgramaClient, sid: str) -> None:
     # Same fixture works in the main document and the selected same-origin frame.
     c._call("browser.eval", {"surface_id": sid, "script": """
       (() => {
@@ -741,7 +741,7 @@ def main() -> int:
         index_url = f"{base_url}/index.html"
         second_url = f"{base_url}/second.html"
 
-        with cmux(SOCKET_PATH) as c:
+        with ProgramaClient(SOCKET_PATH) as c:
             opened = c._call("browser.open_split", {"url": "about:blank"}) or {}
             sid = str(opened.get("surface_id") or "")
             _must(bool(sid), f"browser.open_split returned no surface_id: {opened}")
@@ -847,16 +847,16 @@ def main() -> int:
                 "browser.cookies.set",
                 {
                     "surface_id": sid,
-                    "name": "cmux_cookie",
+                    "name": "programa_cookie",
                     "value": "cookie_value",
                     "url": index_url,
                 },
             )
-            got_cookie = c._call("browser.cookies.get", {"surface_id": sid, "name": "cmux_cookie"}) or {}
+            got_cookie = c._call("browser.cookies.get", {"surface_id": sid, "name": "programa_cookie"}) or {}
             cookies = got_cookie.get("cookies") or []
-            _must(any(str(row.get("name")) == "cmux_cookie" for row in cookies), f"Expected cmux_cookie in cookies.get: {got_cookie}")
-            c._call("browser.cookies.clear", {"surface_id": sid, "name": "cmux_cookie"})
-            got_after_clear = c._call("browser.cookies.get", {"surface_id": sid, "name": "cmux_cookie"}) or {}
+            _must(any(str(row.get("name")) == "programa_cookie" for row in cookies), f"Expected programa_cookie in cookies.get: {got_cookie}")
+            c._call("browser.cookies.clear", {"surface_id": sid, "name": "programa_cookie"})
+            got_after_clear = c._call("browser.cookies.get", {"surface_id": sid, "name": "programa_cookie"}) or {}
             _must(len(got_after_clear.get("cookies") or []) == 0, f"Expected cookie cleared: {got_after_clear}")
 
             _expect_error_contains(
@@ -899,10 +899,10 @@ def main() -> int:
             style_color = c._call("browser.get.styles", {"surface_id": sid, "selector": "#style-target", "property": "color"}) or {}
             _must("0, 128, 0" in str(style_color.get("value") or ""), f"Expected updated style color: {style_color}")
 
-            c._call("browser.addinitscript", {"surface_id": sid, "script": "window.__cmuxInitMarker = 'init-ok';"})
+            c._call("browser.addinitscript", {"surface_id": sid, "script": "window.__programaInitMarker = 'init-ok';"})
             c._call("browser.navigate", {"surface_id": sid, "url": second_url})
             _wait_selector(c, sid, "#second", timeout_s=7.0)
-            init_value = c._call("browser.eval", {"surface_id": sid, "script": "window.__cmuxInitMarker || ''"}) or {}
+            init_value = c._call("browser.eval", {"surface_id": sid, "script": "window.__programaInitMarker || ''"}) or {}
             _must(str(init_value.get("value") or "") == "init-ok", f"Expected init script marker after navigation: {init_value}")
             persisted_style = c._call(
                 "browser.get.styles",
@@ -940,7 +940,7 @@ def main() -> int:
             ) or {}
             _must(bool(highlight_observed.get("value")), f"Expected highlighted outline mutation: {highlight_observed}")
 
-            state_path = tempfile.NamedTemporaryFile(delete=False, prefix="cmux-state-", suffix=".json").name
+            state_path = tempfile.NamedTemporaryFile(delete=False, prefix="programa-state-", suffix=".json").name
             c._call("browser.storage.set", {"surface_id": sid, "type": "local", "key": "persist", "value": "yes"})
             c._call("browser.state.save", {"surface_id": sid, "path": state_path})
             c._call("browser.storage.set", {"surface_id": sid, "type": "local", "key": "persist", "value": "no"})

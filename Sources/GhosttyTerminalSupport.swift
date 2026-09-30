@@ -20,7 +20,7 @@ func ghostty_surface_clear_selection_compat(_ surface: ghostty_surface_t) -> Boo
 func ghostty_surface_select_cursor_cell_compat(_ surface: ghostty_surface_t) -> Bool
 
 #if os(macOS)
-func cmuxShouldApplyWindowGlass(
+func programaShouldApplyWindowGlass(
     bgGlassEnabled: Bool,
     glassEffectAvailable: Bool,
     performanceOverride: Bool? = nil
@@ -33,21 +33,21 @@ func cmuxShouldApplyWindowGlass(
     return glassEffectAvailable || bgGlassEnabled
 }
 
-func cmuxShouldUseTransparentBackgroundWindow() -> Bool {
+func programaShouldUseTransparentBackgroundWindow() -> Bool {
     let defaults = UserDefaults.standard
     let bgGlassEnabled = defaults.object(forKey: "bgGlassEnabled") as? Bool ?? false
-    return cmuxShouldApplyWindowGlass(
+    return programaShouldApplyWindowGlass(
         bgGlassEnabled: bgGlassEnabled,
         glassEffectAvailable: WindowGlassEffect.isAvailable,
         performanceOverride: ProgramaGlassSettings.startupOverride(for: .window)
     )
 }
 
-func cmuxShouldUseClearWindowBackground(for opacity: Double) -> Bool {
+func programaShouldUseClearWindowBackground(for opacity: Double) -> Bool {
     // The glass backdrop samples BEHIND the window, which requires a
     // non-opaque window — same compositing the translucent-terminal mode has
     // always used (standard frame, no custom masks, so no corner artifacts).
-    cmuxShouldUseTransparentBackgroundWindow() || opacity < 0.999
+    programaShouldUseTransparentBackgroundWindow() || opacity < 0.999
 }
 
 // Widened from private to internal: used by both GhosttyApp.swift and
@@ -458,15 +458,15 @@ enum GhosttyPasteboardHelper {
 }
 
 #if DEBUG
-func cmuxPasteboardStringContentsForTesting(_ pasteboard: NSPasteboard) -> String? {
+func programaPasteboardStringContentsForTesting(_ pasteboard: NSPasteboard) -> String? {
     GhosttyPasteboardHelper.stringContents(from: pasteboard)
 }
 
-func cmuxPasteboardImageFileURLForTesting(_ pasteboard: NSPasteboard) -> URL? {
+func programaPasteboardImageFileURLForTesting(_ pasteboard: NSPasteboard) -> URL? {
     GhosttyPasteboardHelper.saveImageFileURLIfNeeded(from: pasteboard)
 }
 
-func cmuxPasteboardImagePathForTesting(_ pasteboard: NSPasteboard) -> String? {
+func programaPasteboardImagePathForTesting(_ pasteboard: NSPasteboard) -> String? {
     GhosttyPasteboardHelper.saveClipboardImageIfNeeded(from: pasteboard)
 }
 

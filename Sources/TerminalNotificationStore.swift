@@ -10,7 +10,7 @@ import Bonsplit
 // freeze the UI.
 extension UNUserNotificationCenter {
     private static let removalQueue = DispatchQueue(
-        label: "com.cmuxterm.notification-removal",
+        label: "com.darkroom.programa.notification-removal",
         qos: .utility
     )
 
@@ -67,7 +67,7 @@ enum AppFocusState {
         // Only treat the app as "focused" for notification suppression when a main terminal window
         // is key. If Settings/About/debug panels are key, we still want notifications to show.
         if let raw = keyWindow.identifier?.rawValue {
-            return raw == "cmux.main" || raw.hasPrefix("cmux.main.")
+            return raw == "programa.main" || raw.hasPrefix("programa.main.")
         }
         return false
     }

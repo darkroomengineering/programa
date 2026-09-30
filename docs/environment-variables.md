@@ -44,7 +44,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_SOCKET_PATH` | CLI, MCP, app | Socket path to use. The app honors it for Debug and Staging builds, or when `PROGRAMA_ALLOW_SOCKET_OVERRIDE` is truthy. |
 | `PROGRAMA_SOCKET` | CLI, MCP | Second choice for the socket path. `PROGRAMA_SOCKET_PATH` wins when both are set. The app never reads it. |
 | `PROGRAMA_SOCKET_PASSWORD` | CLI, MCP, app | Socket password for `password` mode. The CLI checks `--password` first. The app checks it before the saved password file. |
-| `PROGRAMA_SOCKET_MODE` | app | Socket mode for this launch: `off`, `cmuxOnly`, `automation`, `password` or `allowAll`. Overrides the setting. |
+| `PROGRAMA_SOCKET_MODE` | app | Socket mode for this launch: `off`, `programaOnly` (legacy alias `cmuxOnly`), `automation`, `password` or `allowAll`. Overrides the setting. |
 | `PROGRAMA_SOCKET_ENABLE` | app | `1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`. `0` turns the socket off regardless of the mode. |
 | `PROGRAMA_ALLOW_SOCKET_OVERRIDE` | app | Truthy value lets `PROGRAMA_SOCKET_PATH` move the socket in a Release build or a tagged Debug build. |
 | `PROGRAMA_TAG` | app, CLI | Name of a tagged build. The app uses it for the tag badge (at most 10 characters), for the tagged socket path, and to allow a Debug launch. The CLI adds `/tmp/programa-debug-<tag>.sock` to its socket search. An untagged Debug build refuses to launch. |
@@ -57,6 +57,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_COMMIT` | Commit hash the CLI and the About box show when the build has no embedded value. |
 | `PROGRAMA_RESPECT_EXTERNAL_OPEN_RULES` | Truthy value makes `programa browser open` apply the `browser.urlsToAlwaysOpenExternally` rules. The `open` wrapper sets it. |
 | `PROGRAMA_CLI_TTY_NAME`, `PROGRAMA_TTY_NAME` | Terminal device name that the agent hooks report for the surface. They fall back to `TTY` and `SSH_TTY`. |
+| `PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC` | CLI | Seconds the CLI waits for a socket response (default 15). The legacy name `CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC` is still read. |
 | `PROGRAMA_CLAUDE_HOOK_STATE_PATH` | Overrides where the Claude, Codex and OpenCode hooks keep their session state file. |
 | `PROGRAMA_CLAUDE_PID` | Process id of the Claude Code instance a hook belongs to. Set by the `claude` wrapper. |
 | `PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN` | `programa` binary the `claude` wrapper's hooks call. |
@@ -126,6 +127,7 @@ integration, but no app, CLI or daemon code reads them.
 | `PROGRAMA_WINDOWS_SIGN_SCRIPT` | `build-windows.ps1` | Script that signs the Windows executable. The build ships unsigned when it is unset. |
 | `PROGRAMA_CI_BUILD`, `PROGRAMA_CI_COMMIT` | `ci.yml` | Build number and commit passed to `build-windows.ps1`. |
 | `PROGRAMA_CLI_BIN` | `tests/test_cli_*.py` | Path of the `programa` CLI binary under test. |
+| `PROGRAMA_CLI` | `tests_v2/` | Path of the `programa` CLI binary under test. |
 | `PROGRAMA_MCP_BIN`, `PROGRAMA_MCP_E2E` | `tests_v2/test_mcp_server_e2e.py` | Path of `programa-mcp` under test, and the switch for the end-to-end run. |
 
 ## Test harness tuning

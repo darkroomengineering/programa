@@ -404,7 +404,7 @@ reduced scope.
 
 - `tests_v2/` python suite is the CI gate (per `docs/socket-api.md`'s closing note); add
   `tests_v2/test_detached_session_attach_reattach.py` following the existing structure/harness in
-  `tests_v2/cmux.py`. Cover:
+  `tests_v2/programa_client.py`. Cover:
   - create keep-alive surface, close workspace, `session.list` shows it detached/alive.
   - relaunch (simulated via killing + relaunching the tagged debug app in the test harness, same
     pattern already used for reconnect tests like `test_ssh_remote_docker_reconnect.py`),
@@ -496,7 +496,7 @@ reattach" scope.
 - `daemon/remote/README.md`, `docs/remote-daemon-spec.md` (prior-art spec and naming to align
   with)
 - `docs/socket-api.md` (v2 socket method conventions, threading policy references)
-- `tests_v2/cmux.py` and sibling `test_ssh_remote_*` files (test harness patterns to extend)
+- `tests_v2/programa_client.py` and sibling `test_ssh_remote_*` files (test harness patterns to extend)
 - `CLAUDE.md` (root) — typing-latency pitfalls, submodule workflow, socket threading/focus
   policy — all binding constraints on this feature's implementation
 

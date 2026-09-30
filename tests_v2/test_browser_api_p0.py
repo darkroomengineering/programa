@@ -8,7 +8,7 @@ import urllib.parse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError
+from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 
 
@@ -16,7 +16,7 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 
 def main() -> int:
-    with cmux(SOCKET_PATH) as c:
+    with ProgramaClient(SOCKET_PATH) as c:
         ident = c.identify()
         focused = ident.get("focused") or {}
         _must(isinstance(focused, dict), f"identify.focused should be dict: {focused}")
@@ -35,7 +35,7 @@ def main() -> int:
         html = """
 <!doctype html>
 <html>
-  <head><title>cmux-browser-p0</title></head>
+  <head><title>programa-browser-p0</title></head>
   <body>
     <input id='name' value=''>
     <button id='btn' onclick="document.querySelector('#out').textContent = document.querySelector('#name').value || 'empty';">Go</button>
@@ -50,7 +50,7 @@ def main() -> int:
         c._call("browser.navigate", {"surface_id": target, "url": data_url})
         try:
             c._call("browser.wait", {"surface_id": target, "selector": "#btn", "timeout_ms": 5000})
-        except cmuxError as exc:
+        except ProgramaClientError as exc:
             if "timeout" not in str(exc):
                 raise
             deadline = time.time() + 5.0
@@ -65,11 +65,11 @@ def main() -> int:
             else:
                 raise
 
-        c._call("browser.fill", {"surface_id": target, "selector": "#name", "text": "cmux"})
+        c._call("browser.fill", {"surface_id": target, "selector": "#name", "text": "programa"})
         c._call("browser.click", {"surface_id": target, "selector": "#btn"})
 
         out = c._call("browser.get.text", {"surface_id": target, "selector": "#out"}) or {}
-        _must("cmux" in str(out.get("value", "")), f"Expected #out text to include 'cmux': {out}")
+        _must("programa" in str(out.get("value", "")), f"Expected #out text to include 'programa': {out}")
 
         c._call("browser.check", {"surface_id": target, "selector": "#chk"})
         checked = c._call("browser.is.checked", {"surface_id": target, "selector": "#chk"}) or {}
@@ -80,11 +80,11 @@ def main() -> int:
         _must(str(val.get("value", "")) == "b", f"Expected select value 'b': {val}")
 
         eval_res = c._call("browser.eval", {"surface_id": target, "script": "document.querySelector('#name').value"}) or {}
-        _must(str(eval_res.get("value", "")) == "cmux", f"Expected eval value 'cmux': {eval_res}")
+        _must(str(eval_res.get("value", "")) == "programa", f"Expected eval value 'programa': {eval_res}")
 
         snap = c._call("browser.snapshot", {"surface_id": target}) or {}
         snapshot_text = str(snap.get("snapshot") or "")
-        _must("cmux-browser-p0" in snapshot_text, f"Expected snapshot text to include page title: {snap}")
+        _must("programa-browser-p0" in snapshot_text, f"Expected snapshot text to include page title: {snap}")
         refs = snap.get("refs") or {}
         _must(isinstance(refs, dict), f"Expected snapshot refs dict: {snap}")
         _must(any(str(key).startswith("e") for key in refs.keys()), f"Expected eN refs in snapshot: {snap}")
@@ -105,7 +105,7 @@ def main() -> int:
         b64 = str(shot.get("png_base64") or "")
         _must(len(b64) > 100, f"Expected non-trivial screenshot payload: len={len(b64)}")
 
-    print("PASS: browser.* P0 methods work on cmux webview with ref handles")
+    print("PASS: browser.* P0 methods work on programa webview with ref handles")
     return 0
 
 

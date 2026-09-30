@@ -3,7 +3,7 @@
 
 Spawns the real `programa-mcp` binary as a subprocess, speaks MCP over stdio against a
 *live, running* tagged Programa build's control socket, and exercises the sidecar the way an
-actual MCP client would -- not a mock. A separate, direct `cmux` socket connection (the same
+actual MCP client would -- not a mock. A separate, direct `programa` socket connection (the same
 client every other tests_v2 file uses) drives setup/verification independently of the layer
 under test.
 
@@ -33,13 +33,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cmux import cmux, cmuxError  # noqa: E402
+from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
 from v2_support import must as _must
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET_PATH") or os.environ.get("PROGRAMA_SOCKET") or "/tmp/programa-debug.sock"
 
-# Set BOTH -- programa-mcp resolves its socket the same way the CLI/cmux.py do
+# Set BOTH -- programa-mcp resolves its socket the same way the CLI/programa.py do
 # (PROGRAMA_SOCKET_PATH takes priority over PROGRAMA_SOCKET). Per project memory
 # "tests-v2-socket-hijack": inside a Programa terminal, PROGRAMA_SOCKET_PATH already points at
 # the user's PRODUCTION app, so both must be explicitly overridden to the tagged build's
@@ -127,7 +127,7 @@ def _find_mcp_binary() -> str:
         candidates.extend(glob.glob(pattern, recursive=True))
     candidates = [p for p in candidates if os.path.isfile(p) and os.access(p, os.X_OK)]
     if not candidates:
-        raise cmuxError("Could not locate programa-mcp binary; set PROGRAMA_MCP_BIN")
+        raise ProgramaClientError("Could not locate programa-mcp binary; set PROGRAMA_MCP_BIN")
     candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return candidates[0]
 
@@ -447,7 +447,7 @@ def _assert_resource_read_exposes_sibling_pane_text(mcp: ProgramaMcpClient, surf
         time.sleep(0.3)
 
     text = "".join(str(item.get("text") or "") for item in contents)
-    raise cmuxError(f"resources/read on {uri} never surfaced marker {marker!r}; last text tail: {text[-500:]!r}")
+    raise ProgramaClientError(f"resources/read on {uri} never surfaced marker {marker!r}; last text tail: {text[-500:]!r}")
 
 
 # ---------------------------------------------------------------------------------------
@@ -460,7 +460,7 @@ def main() -> int:
 
     created_workspace_ids: List[str] = []
     try:
-        with cmux(SOCKET_PATH) as setup_client:
+        with ProgramaClient(SOCKET_PATH) as setup_client:
             baseline_workspaces = setup_client.list_workspaces()
             baseline_count = len(baseline_workspaces)
 
@@ -515,7 +515,7 @@ def main() -> int:
     finally:
         if created_workspace_ids:
             try:
-                with cmux(SOCKET_PATH) as cleanup_client:
+                with ProgramaClient(SOCKET_PATH) as cleanup_client:
                     for workspace_id in created_workspace_ids:
                         try:
                             cleanup_client.close_workspace(workspace_id)
