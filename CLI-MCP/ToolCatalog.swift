@@ -140,8 +140,10 @@ enum ToolCatalog {
             return doubleValue
         case .string(let stringValue):
             return stringValue
-        case .data(_, let data):
-            return data.base64EncodedString()
+        case .data(let mimeType, let data):
+            // The SDK decodes any `data:` URL string argument (e.g. a browser URL) as `.data`,
+            // so re-encode it as a data URL; bare base64 would drop the scheme and MIME type.
+            return data.dataURLEncoded(mimeType: mimeType)
         case .array(let array):
             return array.map { valueToAny($0) }
         case .object(let object):

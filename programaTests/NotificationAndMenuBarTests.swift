@@ -776,19 +776,19 @@ final class NotificationMenuSnapshotBuilderTests: XCTestCase {
 
 final class MenuBarBuildHintFormatterTests: XCTestCase {
     func testReleaseBuildShowsNoHint() {
-        XCTAssertNil(MenuBarBuildHintFormatter.menuTitle(appName: "programa DEV menubar-extra", isDebugBuild: false))
+        XCTAssertNil(MenuBarBuildHintFormatter.menuTitle(appName: "Programa DEV menubar-extra", isDebugBuild: false))
     }
 
     func testDebugBuildWithTagShowsTag() {
         XCTAssertEqual(
-            MenuBarBuildHintFormatter.menuTitle(appName: "programa DEV menubar-extra", isDebugBuild: true),
+            MenuBarBuildHintFormatter.menuTitle(appName: "Programa DEV menubar-extra", isDebugBuild: true),
             "Build Tag: menubar-extra"
         )
     }
 
     func testDebugBuildWithoutTagShowsUntagged() {
         XCTAssertEqual(
-            MenuBarBuildHintFormatter.menuTitle(appName: "programa DEV", isDebugBuild: true),
+            MenuBarBuildHintFormatter.menuTitle(appName: "Programa DEV", isDebugBuild: true),
             "Build: DEV (untagged)"
         )
     }
