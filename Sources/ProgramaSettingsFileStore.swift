@@ -781,6 +781,16 @@ final class ProgramaSettingsFileStore {
         } else if section.keys.contains("urlsToAlwaysOpenExternally") {
             logInvalid("browser.urlsToAlwaysOpenExternally", sourcePath: sourcePath)
         }
+        if let values = jsonStringArray(section["externalAppOpenAllowlist"]) {
+            let normalized = values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            snapshot.managedUserDefaults[ExternalOpenPolicy.allowlistKey] = .string(
+                normalized.joined(separator: "\n")
+            )
+        } else if section.keys.contains("externalAppOpenAllowlist") {
+            logInvalid("browser.externalAppOpenAllowlist", sourcePath: sourcePath)
+        }
         if let raw = section["externalBrowser"] {
             if let value = jsonString(raw) {
                 let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1627,6 +1637,7 @@ final class ProgramaSettingsFileStore {
                     "hostsToOpenInEmbeddedBrowser": [String](),
                     "urlsToAlwaysOpenExternally": [String](),
                     "externalBrowser": BrowserLinkOpenSettings.defaultExternalBrowserBundleIdentifier,
+                    "externalAppOpenAllowlist": [String](),
                     "insecureHttpHostsAllowedInEmbeddedBrowser": BrowserInsecureHTTPSettings.defaultAllowlistPatterns,
                 ],
             ],

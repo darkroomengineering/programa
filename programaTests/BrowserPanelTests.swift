@@ -79,76 +79,43 @@ private func makeTemporaryBrowserPanelProfile(named prefix: String) throws -> Br
     )
 }
 
-final class BrowserPanelChromeBackgroundColorTests: XCTestCase {
-    func testLightModeUsesThemeBackgroundColor() {
-        assertResolvedColorMatchesTheme(for: .light)
-    }
-
-    func testDarkModeUsesThemeBackgroundColor() {
-        assertResolvedColorMatchesTheme(for: .dark)
-    }
-
-    private func assertResolvedColorMatchesTheme(
-        for colorScheme: ColorScheme,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        let themeBackground = NSColor(srgbRed: 0.13, green: 0.29, blue: 0.47, alpha: 1.0)
-
-        guard
-            let actual = resolvedBrowserChromeBackgroundColor(
-                for: colorScheme,
-                themeBackgroundColor: themeBackground
-            ).usingColorSpace(.sRGB),
-            let expected = themeBackground.usingColorSpace(.sRGB)
-        else {
-            XCTFail("Expected sRGB-convertible colors", file: file, line: line)
-            return
-        }
-
-        XCTAssertEqual(actual.redComponent, expected.redComponent, accuracy: 0.001, file: file, line: line)
-        XCTAssertEqual(actual.greenComponent, expected.greenComponent, accuracy: 0.001, file: file, line: line)
-        XCTAssertEqual(actual.blueComponent, expected.blueComponent, accuracy: 0.001, file: file, line: line)
-        XCTAssertEqual(actual.alphaComponent, expected.alphaComponent, accuracy: 0.001, file: file, line: line)
-    }
-}
-
-
 final class BrowserPanelOmnibarPillBackgroundColorTests: XCTestCase {
+    // Theme background (0.94, 0.93, 0.91) darkened toward black by the per-scheme mix
+    // (light 0.04, dark 0.05). NSColor.blended(withFraction:of:) does not interpolate the
+    // sRGB components linearly, so these are the literal values it produces, not
+    // theme * (1 - mix).
     func testLightModeSlightlyDarkensThemeBackground() {
-        assertResolvedColorMatchesExpectedBlend(for: .light, darkenMix: 0.04)
+        assertResolvedColor(for: .light, red: 0.9100, green: 0.9003, blue: 0.8809)
     }
 
     func testDarkModeSlightlyDarkensThemeBackground() {
-        assertResolvedColorMatchesExpectedBlend(for: .dark, darkenMix: 0.05)
+        assertResolvedColor(for: .dark, red: 0.9024, green: 0.8928, blue: 0.8736)
     }
 
-    private func assertResolvedColorMatchesExpectedBlend(
+    private func assertResolvedColor(
         for colorScheme: ColorScheme,
-        darkenMix: CGFloat,
+        red: CGFloat,
+        green: CGFloat,
+        blue: CGFloat,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         let themeBackground = NSColor(srgbRed: 0.94, green: 0.93, blue: 0.91, alpha: 1.0)
-        let expected = themeBackground.blended(withFraction: darkenMix, of: .black) ?? themeBackground
 
         guard
             let actual = resolvedBrowserOmnibarPillBackgroundColor(
                 for: colorScheme,
                 themeBackgroundColor: themeBackground
-            ).usingColorSpace(.sRGB),
-            let expectedSRGB = expected.usingColorSpace(.sRGB),
-            let themeSRGB = themeBackground.usingColorSpace(.sRGB)
+            ).usingColorSpace(.sRGB)
         else {
-            XCTFail("Expected sRGB-convertible colors", file: file, line: line)
+            XCTFail("Expected an sRGB-convertible color", file: file, line: line)
             return
         }
 
-        XCTAssertEqual(actual.redComponent, expectedSRGB.redComponent, accuracy: 0.001, file: file, line: line)
-        XCTAssertEqual(actual.greenComponent, expectedSRGB.greenComponent, accuracy: 0.001, file: file, line: line)
-        XCTAssertEqual(actual.blueComponent, expectedSRGB.blueComponent, accuracy: 0.001, file: file, line: line)
-        XCTAssertEqual(actual.alphaComponent, expectedSRGB.alphaComponent, accuracy: 0.001, file: file, line: line)
-        XCTAssertNotEqual(actual.redComponent, themeSRGB.redComponent, file: file, line: line)
+        XCTAssertEqual(actual.redComponent, red, accuracy: 0.001, file: file, line: line)
+        XCTAssertEqual(actual.greenComponent, green, accuracy: 0.001, file: file, line: line)
+        XCTAssertEqual(actual.blueComponent, blue, accuracy: 0.001, file: file, line: line)
+        XCTAssertEqual(actual.alphaComponent, 1.0, accuracy: 0.001, file: file, line: line)
     }
 }
 

@@ -8,6 +8,8 @@ Rust daemon + GPUI client ── finish bounded foundation work ─────�
 
 # Core foundations recovery
 
+Status: complete. The contract, the Swift core seam and the `core/` Rust crates are in the tree. The GPUI client this log mentions was superseded by the WinUI 3 Windows app (see `native-frontends-shared-core-2026-09-16.md`).
+
 Base: `01cd644e275e87ddaa0804664f88604c3311a704`.
 User resumed the last task on September 16. The actual unfinished request was
 “do them all lfg work autonomously” in the September 15 session, after discussion

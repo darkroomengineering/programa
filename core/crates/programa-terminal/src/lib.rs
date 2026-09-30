@@ -480,16 +480,31 @@ fn cursor_is_visible(display_offset: usize, mode: &TermMode) -> bool {
     display_offset == 0 && mode.contains(TermMode::SHOW_CURSOR)
 }
 
+/// Returns the view to the live screen; true when it had been scrolled back.
+fn scroll_to_bottom<T: EventListener>(term: &mut Term<T>) -> bool {
+    if term.grid().display_offset() == 0 {
+        return false;
+    }
+    term.scroll_display(Scroll::Bottom);
+    true
+}
+
 fn paste_bytes(data: &[u8], requested: bool, mode: &TermMode) -> Vec<u8> {
     let enabled = requested && mode.contains(TermMode::BRACKETED_PASTE);
-    let mut output = Vec::with_capacity(data.len() + if enabled { 12 } else { 0 });
-    if enabled {
-        output.extend_from_slice(b"\x1b[200~");
+    if !enabled {
+        return data.to_vec();
     }
-    output.extend_from_slice(data);
-    if enabled {
-        output.extend_from_slice(b"\x1b[201~");
-    }
+    // Inside a bracket the payload must not be able to end it early: drop every
+    // C0 control byte except tab, CR and LF. That removes ESC, so an embedded
+    // `ESC[201~` cannot close the bracket and inject terminal input.
+    let mut output = Vec::with_capacity(data.len() + 12);
+    output.extend_from_slice(b"\x1b[200~");
+    output.extend(
+        data.iter()
+            .copied()
+            .filter(|byte| !matches!(byte, 0x00..=0x08 | 0x0b | 0x0c | 0x0e..=0x1f)),
+    );
+    output.extend_from_slice(b"\x1b[201~");
     output
 }
 
@@ -678,7 +693,11 @@ pub unsafe extern "C" fn programa_terminal_write(
     ffi_status(|| {
         let value = session(value)?;
         let data = bytes(data, len)?;
+        let scrolled = scroll_to_bottom(&mut value.term.lock());
         value.notifier.notify(Cow::Owned(data.to_vec()));
+        if scrolled {
+            value.state.changed();
+        }
         Ok(())
     })
 }
@@ -888,8 +907,14 @@ pub unsafe extern "C" fn programa_terminal_paste(
     ffi_status(|| {
         let value = session(value)?;
         let data = bytes(data, len)?;
-        let output = paste_bytes(data, bracketed, value.term.lock().mode());
+        let mut term = value.term.lock();
+        let output = paste_bytes(data, bracketed, term.mode());
+        let scrolled = scroll_to_bottom(&mut term);
+        drop(term);
         value.notifier.notify(Cow::Owned(output));
+        if scrolled {
+            value.state.changed();
+        }
         Ok(())
     })
 }
@@ -1000,6 +1025,17 @@ mod tests {
             paste_bytes(b"hello", true, &TermMode::BRACKETED_PASTE),
             b"\x1b[200~hello\x1b[201~"
         );
+    }
+
+    #[test]
+    fn bracketed_paste_cannot_end_the_bracket_early() {
+        let out = paste_bytes(
+            b"a\x1b[201~rm -rf /\nb\tc\x03",
+            true,
+            &TermMode::BRACKETED_PASTE,
+        );
+        assert_eq!(out, b"\x1b[200~a[201~rm -rf /\nb\tc\x1b[201~");
+        assert_eq!(out.windows(6).filter(|w| *w == b"\x1b[201~").count(), 1);
     }
 
     #[test]

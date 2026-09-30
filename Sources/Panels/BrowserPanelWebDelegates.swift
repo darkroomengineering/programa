@@ -368,13 +368,18 @@ class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {
         if let url = navigationAction.request.url,
            navigationAction.targetFrame?.isMainFrame != false,
            browserShouldOpenURLExternally(url) {
-            let opened = NSWorkspace.shared.open(url)
-            if !opened {
-                NSLog("BrowserPanel external navigation failed to open URL: %@", url.absoluteString)
+            // Only a real link click or form submit may reach the confirmation prompt;
+            // script-driven navigations to another app are dropped.
+            if ExternalOpenPolicy.navigationTypeHasUserGesture(navigationAction.navigationType) {
+                let opened = BrowserLinkOpenSettings.openExternally(url)
+                #if DEBUG
+                dlog("browser.navigation.external source=navDelegate dispatched=\(opened ? 1 : 0) url=\(url.absoluteString)")
+                #endif
+            } else {
+                #if DEBUG
+                dlog("browser.navigation.external source=navDelegate blocked=noUserGesture url=\(url.absoluteString)")
+                #endif
             }
-            #if DEBUG
-            dlog("browser.navigation.external source=navDelegate opened=\(opened ? 1 : 0) url=\(url.absoluteString)")
-            #endif
             decisionHandler(.cancel)
             return
         }
@@ -523,13 +528,16 @@ class BrowserUIDelegate: NSObject, WKUIDelegate {
         // External URL schemes → hand off to macOS, don't create a popup
         if let url = navigationAction.request.url,
            browserShouldOpenURLExternally(url) {
-            let opened = NSWorkspace.shared.open(url)
-            if !opened {
-                NSLog("BrowserPanel external navigation failed to open URL: %@", url.absoluteString)
+            if ExternalOpenPolicy.navigationTypeHasUserGesture(navigationAction.navigationType) {
+                let opened = BrowserLinkOpenSettings.openExternally(url)
+                #if DEBUG
+                dlog("browser.navigation.external source=uiDelegate dispatched=\(opened ? 1 : 0) url=\(url.absoluteString)")
+                #endif
+            } else {
+                #if DEBUG
+                dlog("browser.navigation.external source=uiDelegate blocked=noUserGesture url=\(url.absoluteString)")
+                #endif
             }
-            #if DEBUG
-            dlog("browser.navigation.external source=uiDelegate opened=\(opened ? 1 : 0) url=\(url.absoluteString)")
-            #endif
             return nil
         }
 

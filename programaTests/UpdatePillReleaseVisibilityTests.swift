@@ -223,24 +223,6 @@ final class TitlebarControlsSizingPolicyTests: XCTestCase {
     }
 }
 
-final class TitlebarControlsHoverPolicyTests: XCTestCase {
-    /// Every titlebar control style now tracks hover.
-    ///
-    /// This previously asserted that only `pillGroup` did, which meant the
-    /// default (`classic`) titlebar buttons gave no feedback at all — they did
-    /// not respond to the cursor, unlike every other piece of macOS window
-    /// chrome. Hover and press feedback are now part of the shared control
-    /// style, so the presets differ only in size and spacing, never in whether
-    /// they react to input.
-    func testHoverTrackingEnabledForEveryStyle() {
-        XCTAssertTrue(titlebarControlsShouldTrackButtonHover(config: TitlebarControlsStyle.classic.config))
-        XCTAssertTrue(titlebarControlsShouldTrackButtonHover(config: TitlebarControlsStyle.compact.config))
-        XCTAssertTrue(titlebarControlsShouldTrackButtonHover(config: TitlebarControlsStyle.roomy.config))
-        XCTAssertTrue(titlebarControlsShouldTrackButtonHover(config: TitlebarControlsStyle.pillGroup.config))
-        XCTAssertTrue(titlebarControlsShouldTrackButtonHover(config: TitlebarControlsStyle.softButtons.config))
-    }
-}
-
 /// Tests for the predicate that suppresses the Sparkle updater in non-release builds.
 ///
 /// Tagged DEV builds and staging builds must never start the public update feed

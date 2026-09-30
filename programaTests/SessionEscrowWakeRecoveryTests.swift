@@ -59,16 +59,4 @@ final class SessionEscrowWakeRecoveryTests: XCTestCase {
             SessionEscrowPolicy.isConnectionStale(lastActivitySystemUptime: lastActivity, nowSystemUptime: now)
         )
     }
-
-    /// `SessionEscrowClient.notifySystemDidWake()` -- the app-side half of
-    /// wake recovery, invoked from `AppDelegate`'s `didWakeNotification`
-    /// handler -- must be safe to call with no active connection (the
-    /// common case: most launches never escrow anything) and must not
-    /// block or crash under `SessionMachineryGate.isUnitTesting`.
-    func testNotifySystemDidWakeIsSafeWithNoConnection() {
-        SessionEscrowClient.shared.notifySystemDidWake()
-        // No assertion beyond "did not crash / did not hang" -- this is the
-        // executable seam the wake handler drives; the method is a no-op
-        // under the unit-test gate by design (see SessionMachineryGate).
-    }
 }

@@ -5649,9 +5649,14 @@ extension TerminalController {
     }
 
     func v2BrowserStateSave(params: [String: Any]) -> V2CallResult {
-        guard let path = v2String(params, "path") else {
+        guard let rawPath = v2String(params, "path") else {
             return .err(code: "invalid_params", message: "Missing path", data: nil)
         }
+        let path = NSString(string: rawPath).expandingTildeInPath
+        guard path.hasPrefix("/") else {
+            return .err(code: "invalid_params", message: "Path must be absolute: \(path)", data: ["path": path])
+        }
+        let allDomains = v2Bool(params, "all_domains") ?? false
 
         return v2BrowserWithPanel(params: params) { _, ws, surfaceId, browserPanel in
             let storageScript = """
@@ -5681,7 +5686,10 @@ extension TerminalController {
             }
 
             let store = browserPanel.webView.configuration.websiteDataStore.httpCookieStore
-            let cookies = (v2BrowserCookieStoreAll(store) ?? []).map(v2BrowserCookieDict)
+            let pageHost = browserPanel.currentURL?.host ?? ""
+            let cookies = (v2BrowserCookieStoreAll(store) ?? [])
+                .filter { allDomains || BrowserStateExport.cookieMatchesSite($0.domain, pageHost) }
+                .map(v2BrowserCookieDict)
 
             let data: Data
             switch V2BrowserStateRestorer.encodeDocument(
@@ -5697,7 +5705,7 @@ extension TerminalController {
             }
 
             do {
-                try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+                try BrowserStateExport.writePrivateFile(data, to: path)
             } catch {
                 return .err(code: "internal_error", message: "Failed to write state file", data: ["path": path, "error": error.localizedDescription])
             }
@@ -5708,7 +5716,9 @@ extension TerminalController {
                 "surface_id": surfaceId.uuidString,
                 "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
                 "path": path,
-                "cookies": cookies.count
+                "cookies": cookies.count,
+                "all_domains": allDomains,
+                "note": "The state file contains session cookies and storage that grant access to signed-in accounts. It is readable only by you (0600); keep it private and delete it when done."
             ])
         }
     }

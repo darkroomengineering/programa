@@ -3,10 +3,9 @@
 
 Outputs (all overwritten in place, each carrying a "GENERATED, do not edit" header):
   - Sources/V2CommandCatalog.swift   (base/debug method-name arrays)
-  - tests_v2/programa_v2.py          (typed Python client, built on tests_v2/cmux.py)
   - CLI/V2MethodNames.swift          (one named constant per v2 method)
 
-Handlers change only after the contract does (see docs/v2-api-migration.md "Contract").
+Handlers change only after the contract does (see docs/socket-api.md "Contract").
 Run scripts/check-v2-contract.sh to verify the checked-in files match this contract.
 """
 from __future__ import annotations
@@ -26,16 +25,6 @@ GENERATED_HEADER_SWIFT = """\
 // Verify with:      scripts/check-v2-contract.sh
 """
 
-GENERATED_HEADER_PY = '''\
-"""GENERATED FILE — do not edit by hand.
-
-Source of truth: contracts/v2/methods.json
-Regenerate with: python3 scripts/gen-v2-contract.py
-Verify with:      scripts/check-v2-contract.sh
-"""
-'''
-
-
 def load_contract():
     with open(CONTRACT_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -53,11 +42,6 @@ def camel_case(method: str) -> str:
 def pascal_case(method: str) -> str:
     c = camel_case(method)
     return c[:1].upper() + c[1:]
-
-
-def snake_case_method(method: str) -> str:
-    """"browser.tab.list" -> "browser_tab_list" (Python method name)."""
-    return re.sub(r"[.]", "_", method)
 
 
 # ---------------------------------------------------------------------------
@@ -112,121 +96,7 @@ def gen_v2_command_catalog(contract) -> str:
 
 
 # ---------------------------------------------------------------------------
-# (b) tests_v2/programa_v2.py
-# ---------------------------------------------------------------------------
-
-PY_TYPE_CHECK = {
-    "string": "str",
-    "integer": "int",
-    "number": "(int, float)",
-    "boolean": "bool",
-    "array": "list",
-    "object": "dict",
-}
-
-
-def py_param_doc(name, schema):
-    t = schema.get("type", "any")
-    fmt = schema.get("format")
-    if fmt:
-        return f"{name} ({t}, {fmt})"
-    return f"{name} ({t})"
-
-
-def gen_programa_v2_py(contract) -> str:
-    methods = contract["methods"]
-    lines = []
-    lines.append(GENERATED_HEADER_PY)
-    lines.append("from typing import Any, Dict, Optional")
-    lines.append("")
-    lines.append("from cmux import cmux, cmuxError")
-    lines.append("")
-    lines.append("")
-    lines.append("class ProgramaV2Error(cmuxError):")
-    lines.append('    """Raised by ProgramaV2Client for client-side param validation failures."""')
-    lines.append("")
-    lines.append("")
-    lines.append("class ProgramaV2Client:")
-    lines.append('    """Generated typed v2 client: one method per contract entry.')
-    lines.append("")
-    lines.append("    Thin wrapper over tests_v2.cmux.cmux — it owns (or is given) the transport")
-    lines.append("    connection and framing, this class only adds per-method required-param")
-    lines.append('    validation and a method name per contract entry."""')
-    lines.append("")
-    lines.append("    def __init__(self, socket_path: Optional[str] = None, client: Optional[cmux] = None):")
-    lines.append("        self._client = client if client is not None else cmux(socket_path)")
-    lines.append("        self._owns_client = client is None")
-    lines.append("")
-    lines.append("    def connect(self) -> None:")
-    lines.append("        self._client.connect()")
-    lines.append("")
-    lines.append("    def close(self) -> None:")
-    lines.append("        if self._owns_client:")
-    lines.append("            self._client.close()")
-    lines.append("")
-    lines.append("    def __enter__(self):")
-    lines.append("        self.connect()")
-    lines.append("        return self")
-    lines.append("")
-    lines.append("    def __exit__(self, exc_type, exc_val, exc_tb):")
-    lines.append("        self.close()")
-    lines.append("        return False")
-    lines.append("")
-    lines.append("    def call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Any:")
-    lines.append('        """Escape hatch for a method not (yet) in the generated set below."""')
-    lines.append("        return self._client._call(method, params)")
-    lines.append("")
-
-    seen_names = set()
-    for method in sorted(methods.keys()):
-        entry = methods[method]
-        pyname = snake_case_method(method)
-        if pyname in seen_names:
-            continue
-        seen_names.add(pyname)
-        params_schema = entry.get("params", {})
-        props = params_schema.get("properties", {})
-        required = params_schema.get("required", [])
-        any_of = params_schema.get("anyOf", [])
-
-        arg_names = sorted(props.keys())
-        sig_parts = ["self"]
-        for name in arg_names:
-            sig_parts.append(f"{name}: Optional[Any] = None")
-        sig_parts.append("**extra_params: Any")
-        sig = ", ".join(sig_parts)
-
-        doc = entry.get("description", "").replace('"""', "'")
-        debug_note = " (DEBUG builds only)" if entry.get("debug_only") else ""
-
-        lines.append(f"    def {pyname}({sig}) -> Any:")
-        lines.append(f'        """{doc}{debug_note}"""')
-        lines.append("        params: Dict[str, Any] = {}")
-        for name in arg_names:
-            lines.append(f"        if {name} is not None:")
-            lines.append(f'            params["{name}"] = {name}')
-        lines.append("        params.update(extra_params)")
-        for req in required:
-            lines.append(f'        if params.get("{req}") is None:')
-            lines.append(
-                f'            raise ProgramaV2Error("{method} requires \'{req}\'")'
-            )
-        if any_of:
-            any_of_keys = sorted({k for grp in any_of for k in grp.get("required", [])})
-            if any_of_keys:
-                keys_repr = ", ".join(f'"{k}"' for k in any_of_keys)
-                lines.append(f"        if not any(params.get(k) is not None for k in ({keys_repr},)):")
-                lines.append(
-                    f'            raise ProgramaV2Error("{method} requires one of: {", ".join(any_of_keys)}")'
-                )
-        lines.append(f'        return self._client._call("{method}", params)')
-        lines.append("")
-
-    return "\n".join(lines) + "\n"
-
-
-# ---------------------------------------------------------------------------
-# (d) CLI/V2MethodNames.swift
+# (b) CLI/V2MethodNames.swift
 # ---------------------------------------------------------------------------
 
 def gen_v2_method_names(contract) -> str:
@@ -265,7 +135,6 @@ def main():
     contract = load_contract()
     outputs = {
         os.path.join(ROOT, "Sources", "V2CommandCatalog.swift"): gen_v2_command_catalog(contract),
-        os.path.join(ROOT, "tests_v2", "programa_v2.py"): gen_programa_v2_py(contract),
         os.path.join(ROOT, "CLI", "V2MethodNames.swift"): gen_v2_method_names(contract),
     }
     out_dir = None

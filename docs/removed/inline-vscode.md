@@ -69,12 +69,12 @@ CHANGELOG.md (0.2.x "Fixed" section) records two shipped bugs this subsystem car
 serve-web port and sign-in token did not originally persist across restarts (fixed — port
 persisted via `ServeWebPortStore`, connection token persisted to Application Support, both
 tagged `#21` in code comments), and the sign-in popup briefly showed `about:blank` before
-loading. `docs/audits/codebase-audit-2026-08-31.md` finding M4 ("Bounded-input policy is
-repeatedly applied after allocation") flagged `VSCodeIntegration.swift:289-307` as one of four
-call sites that buffer input before enforcing a size limit — the code as removed did already
+loading. A review finding ("bounded-input policy is repeatedly applied after allocation") flagged
+`VSCodeIntegration.swift:289-307` as one of four call sites that buffer input before enforcing a
+size limit — the code as removed did already
 carry a `maximumBytes` cap on `ServeWebOutputCollector` (default 1 MiB) with overflow handling,
-so this looks like a finding that was addressed after the audit ran; verify against the audit
-diff if this is ever rebuilt rather than assuming the cap was always there. The controller used
+so this looks like a finding that was addressed after the review; verify the cap in the history
+if this is ever rebuilt rather than assuming the cap was always there. The controller used
 a generation-counter pattern (`lifecycleGeneration`/`activeLaunchGeneration`) to make
 stop-during-launch races safe — worth keeping if this is rebuilt, since serve-web startup was a
 multi-second subprocess launch racing against user-triggered stop/restart.

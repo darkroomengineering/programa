@@ -10,12 +10,16 @@ app_path="$1"
 shift
 
 sensitive_keys=(
-  com.apple.security.cs.disable-library-validation
-  com.apple.security.cs.allow-unsigned-executable-memory
   com.apple.security.cs.allow-jit
   com.apple.security.device.camera
   com.apple.security.device.audio-input
   com.apple.security.automation.apple-events
+)
+
+# The app must not regain these: they let unsigned or foreign-team code load into the process.
+forbidden_keys=(
+  com.apple.security.cs.disable-library-validation
+  com.apple.security.cs.allow-unsigned-executable-memory
 )
 
 app_entitlements="$(/usr/bin/codesign -d --entitlements :- "$app_path" 2>/dev/null)"
@@ -26,9 +30,16 @@ for key in "${sensitive_keys[@]}"; do
   fi
 done
 
+for key in "${forbidden_keys[@]}"; do
+  if [[ "$app_entitlements" == *"<key>$key</key>"* ]]; then
+    echo "app must not carry entitlement: $key" >&2
+    exit 1
+  fi
+done
+
 for tool in "$@"; do
   tool_entitlements="$(/usr/bin/codesign -d --entitlements :- "$tool" 2>/dev/null)"
-  for key in "${sensitive_keys[@]}"; do
+  for key in "${sensitive_keys[@]}" "${forbidden_keys[@]}"; do
     if [[ "$tool_entitlements" == *"<key>$key</key>"* ]]; then
       echo "embedded tool has app-only entitlement $key: $tool" >&2
       exit 1

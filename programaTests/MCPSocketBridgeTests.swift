@@ -498,3 +498,56 @@ private final class ReceivedRequestSequenceBox: @unchecked Sendable {
         lock.unlock()
     }
 }
+
+final class CLISocketSafetyTests: XCTestCase {
+    private func bindSocket(at path: String) throws -> Int32 {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let maxLength = MemoryLayout.size(ofValue: addr.sun_path)
+        path.withCString { ptr in
+            withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
+                let buf = UnsafeMutableRawPointer(pathPtr).assumingMemoryBound(to: CChar.self)
+                strncpy(buf, ptr, maxLength - 1)
+            }
+        }
+        let result = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        XCTAssertEqual(result, 0)
+        return fd
+    }
+
+    func testPathCheckAcceptsOwnedSocketAndRejectsSymlinksAndOtherFiles() throws {
+        let shortID = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("sfy-\(shortID)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let socketPath = dir.appendingPathComponent("s.sock").path
+        let fd = try bindSocket(at: socketPath)
+        defer { Darwin.close(fd) }
+        XCTAssertEqual(CLISocketSafety.checkPath(socketPath), .ok)
+
+        let linkPath = dir.appendingPathComponent("link.sock").path
+        try FileManager.default.createSymbolicLink(atPath: linkPath, withDestinationPath: socketPath)
+        XCTAssertEqual(CLISocketSafety.checkPath(linkPath), .symlink)
+
+        let filePath = dir.appendingPathComponent("plain").path
+        FileManager.default.createFile(atPath: filePath, contents: Data())
+        XCTAssertEqual(CLISocketSafety.checkPath(filePath), .notSocket)
+
+        guard case .missing = CLISocketSafety.checkPath(dir.appendingPathComponent("nope.sock").path) else {
+            return XCTFail("a missing path must report .missing")
+        }
+    }
+
+    func testPeerUIDMatchesForSameUserConnections() {
+        var fds: [Int32] = [0, 0]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+        defer { fds.forEach { Darwin.close($0) } }
+        XCTAssertTrue(CLISocketSafety.peerUIDMatchesCurrentUser(fd: fds[0]))
+        XCTAssertFalse(CLISocketSafety.peerUIDMatchesCurrentUser(fd: -1))
+    }
+}

@@ -5,24 +5,11 @@ import secrets
 import time
 
 from cmux import cmux, cmuxError
+from v2_support import must, wait_for  # noqa: F401  (re-exported to the pane-resize tests)
 
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 OSC_ESCAPE_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
-
-
-def must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
-
-
-def wait_for(pred, timeout_s: float = 5.0, step_s: float = 0.05) -> None:
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        if pred():
-            return
-        time.sleep(step_s)
-    raise cmuxError("Timed out waiting for condition")
 
 
 def clean_line(raw: str) -> str:

@@ -96,6 +96,7 @@ impl Session {
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
+                let _ = crate::paths::remove_session_dir(&id);
                 return Err(error);
             }
         };
@@ -121,7 +122,8 @@ impl Session {
                 let mut child = inner.child.lock().unwrap();
                 let _ = child.child.kill();
                 let _ = child.child.wait();
-                return Err(io::Error::from(error));
+                let _ = crate::paths::remove_session_dir(&id);
+                return Err(error);
             }
         };
         *inner.reader_handle.lock().unwrap() = Some(handle);
@@ -171,8 +173,7 @@ impl Session {
         let inner = self.inner.clone();
         let input_handle = std::thread::Builder::new()
             .name(format!("programad-input-{}-{attach_id}", self.id))
-            .spawn(move || attachment_input_loop(inner, input_r, stop_r))
-            .map_err(io::Error::from)?;
+            .spawn(move || attachment_input_loop(inner, input_r, stop_r))?;
 
         self.inner.attachments.lock().unwrap().insert(
             attach_id,
@@ -706,6 +707,9 @@ impl SessionManager {
             Some(session) => {
                 session.close(kill)?;
                 self.sessions.lock().unwrap().remove(id);
+                if let Err(error) = crate::paths::remove_session_dir(id) {
+                    tracing::warn!(session = id, %error, "failed to remove closed session directory");
+                }
                 Ok(true)
             }
             None => Ok(false),

@@ -14,18 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
+from v2_support import wait_until as _wait_until
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
-
-
-def _wait_until(predicate, timeout_s: float = 4.0, interval_s: float = 0.05, message: str = "timeout") -> None:
-    start = time.time()
-    while time.time() - start < timeout_s:
-        if predicate():
-            return
-        time.sleep(interval_s)
-    raise cmuxError(message)
 
 
 def _sidebar_visible(client: cmux, window_id: str) -> bool:

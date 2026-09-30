@@ -22,7 +22,7 @@ pub struct AppState {
     /// `None` means no password is configured: every method is allowed
     /// without `auth.login`, matching the local-only "off" access mode.
     /// `Some(password)` requires a successful `auth.login` first, matching
-    /// the app's password mode (`docs/v2-api-migration.md`, `auth_required`
+    /// the app's password mode (`docs/socket-api.md`, `auth_required`
     /// / `auth_unconfigured` codes).
     pub password: Option<String>,
     /// The shared state model from `programa-domain`, the same crate the
@@ -33,7 +33,7 @@ pub struct AppState {
     /// two are otherwise independent: closing this lock never blocks on
     /// session I/O and vice versa. See `workspace_dispatch` below and
     /// `core/docs/programad.md` "Process layer" for the reconciliation rule
-    /// applied on `session.close`.
+    /// applied on `session.close` and when a session's child exits.
     pub domain: Mutex<DomainCore>,
 }
 
@@ -241,10 +241,7 @@ fn require_str<'a>(params: &'a Value, key: &str) -> Result<&'a str, ErrorBody> {
     })
 }
 
-fn get_session<'a>(
-    state: &'a AppState,
-    id: &str,
-) -> Result<Arc<crate::session::Session>, ErrorBody> {
+fn get_session(state: &AppState, id: &str) -> Result<Arc<crate::session::Session>, ErrorBody> {
     state
         .sessions
         .get(id)
@@ -502,6 +499,22 @@ fn reconcile_closed_session(state: &Arc<AppState>, session_id: &str) {
     let Ok(mut domain) = state.domain.lock() else {
         return;
     };
+    reconcile_session_locked(&mut domain, session_id);
+}
+
+/// Same rule for sessions whose child exited (or failed) on its own: the
+/// session stays listed until `session.close`, but its domain surface is
+/// closed. Run whenever the domain is observed or mutated, so a client never
+/// sees a surface bound to a dead PTY.
+fn reconcile_dead_sessions(state: &AppState, domain: &mut DomainCore) {
+    for session in state.sessions.list() {
+        if !matches!(session.status(), SessionStatus::Running) {
+            reconcile_session_locked(domain, &session.id);
+        }
+    }
+}
+
+fn reconcile_session_locked(domain: &mut DomainCore, session_id: &str) {
     loop {
         let Some((workspace_id, pane_id, surface_id)) =
             find_surface_by_session(domain.snapshot(), session_id)
@@ -645,10 +658,11 @@ fn attach(req: &Request, state: &Arc<AppState>) -> Result<Dispatched, ErrorBody>
 /// matching `programa_core_snapshot` over the C ABI (`core/ABI.md`
 /// "Snapshot").
 fn workspace_snapshot(state: &Arc<AppState>) -> Result<Value, ErrorBody> {
-    let domain = state
+    let mut domain = state
         .domain
         .lock()
         .map_err(|_| ErrorBody::new(ErrorCode::InternalError, "domain lock is poisoned"))?;
+    reconcile_dead_sessions(state, &mut domain);
     serde_json::to_value(domain.snapshot())
         .map_err(|e| ErrorBody::new(ErrorCode::InternalError, format!("serialize failed: {e}")))
 }
@@ -667,12 +681,15 @@ fn workspace_snapshot(state: &Arc<AppState>) -> Result<Value, ErrorBody> {
 fn workspace_dispatch(req: &Request, state: &Arc<AppState>) -> Result<Value, ErrorBody> {
     let command: DomainCommand = serde_json::from_value(req.params.clone())
         .map_err(|e| ErrorBody::new(ErrorCode::InvalidParams, format!("invalid command: {e}")))?;
-    validate_command_sessions(&command, state)?;
-
+    // Validate while holding the domain lock: `session.close` reconciles under
+    // the same lock after removing the session, so a surface can never be
+    // attached to a session that closes between the check and the dispatch.
     let mut domain = state
         .domain
         .lock()
         .map_err(|_| ErrorBody::new(ErrorCode::InternalError, "domain lock is poisoned"))?;
+    validate_command_sessions(&command, state)?;
+    reconcile_dead_sessions(state, &mut domain);
     match domain.dispatch(command) {
         Ok(snapshot) => serde_json::to_value(json!({ "snapshot": snapshot })).map_err(|e| {
             ErrorBody::new(ErrorCode::InternalError, format!("serialize failed: {e}"))
@@ -708,12 +725,66 @@ fn validate_command_sessions(
         | DomainCommand::ResizeSplit { .. } => Vec::new(),
     };
     for session_id in session_ids {
-        if state.sessions.get(session_id).is_none() {
-            return Err(ErrorBody::new(
-                ErrorCode::NotFound,
-                format!("session '{session_id}' was not found"),
-            ));
+        match state
+            .sessions
+            .get(session_id)
+            .map(|session| session.status())
+        {
+            None => {
+                return Err(ErrorBody::new(
+                    ErrorCode::NotFound,
+                    format!("session '{session_id}' was not found"),
+                ))
+            }
+            Some(SessionStatus::Running) => {}
+            Some(_) => {
+                return Err(ErrorBody::new(
+                    ErrorCode::InvalidParams,
+                    format!("session '{session_id}' has already exited"),
+                ))
+            }
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `system.capabilities` advertises `IMPLEMENTED_METHODS`; every advertised
+    /// method must have a `dispatch` arm, and an unlisted one must not.
+    #[tokio::test]
+    async fn every_advertised_method_is_dispatched() {
+        let state = Arc::new(AppState::new(None));
+        let call = |method: &'static str| {
+            let state = Arc::clone(&state);
+            async move {
+                let req = Request {
+                    id: None,
+                    method: method.to_string(),
+                    // An empty argv makes session.open fail validation instead of
+                    // spawning a shell; other methods reject empty params.
+                    params: json!({"argv": []}),
+                };
+                let mut authenticated = true;
+                let mut attachments = HashSet::new();
+                dispatch(&req, &state, &mut authenticated, &mut attachments).await
+            }
+        };
+        for method in IMPLEMENTED_METHODS {
+            if let Err(error) = call(method).await {
+                assert_ne!(
+                    error.code.as_str(),
+                    ErrorCode::MethodNotFound.as_str(),
+                    "{method} is advertised but not dispatched"
+                );
+            }
+        }
+        let unknown = call("system.not_a_method")
+            .await
+            .err()
+            .map(|e| e.code.as_str());
+        assert_eq!(unknown, Some(ErrorCode::MethodNotFound.as_str()));
+    }
 }

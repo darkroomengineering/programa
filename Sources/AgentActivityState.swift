@@ -40,7 +40,7 @@ enum AgentActivityState: String, Codable, CaseIterable, Sendable {
 /// Which tier reported a surface's current `AgentActivityState` (screen-manifest detection,
 /// v2 — see docs/plans/screen-manifest-detection.md). Additive sibling to `agent_state`
 /// wherever it appears on the wire (`surface.list`/`surface.wait`/`subscribe`) — `agent_state`
-/// itself never changes shape, per docs/v2-api-migration.md's "never repurpose an existing
+/// itself never changes shape, per docs/socket-api.md's "never repurpose an existing
 /// field" discipline and the exact-string-equality tests that already assert on it.
 ///
 /// Hooks always win: `Workspace.updatePanelAgentState` (Workspace+SidebarTelemetry.swift)

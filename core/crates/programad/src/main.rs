@@ -31,14 +31,12 @@ mod unix {
     struct Args {
         socket_path: Option<PathBuf>,
         password: Option<String>,
-        keep_sessions: bool,
     }
 
     fn parse_args() -> Result<Args, String> {
         let mut args = Args {
             socket_path: None,
             password: std::env::var("PROGRAMAD_PASSWORD").ok(),
-            keep_sessions: false,
         };
         let mut it = std::env::args().skip(1);
         while let Some(arg) = it.next() {
@@ -142,8 +140,7 @@ mod unix {
             }
         };
 
-        let keep_sessions = args.keep_sessions;
-        let result = runtime.block_on(run(socket_path, args.password, keep_sessions));
+        let result = runtime.block_on(run(socket_path, args.password));
 
         match result {
             Ok(()) => ExitCode::SUCCESS,
@@ -154,11 +151,7 @@ mod unix {
         }
     }
 
-    async fn run(
-        socket_path: PathBuf,
-        password: Option<String>,
-        keep_sessions: bool,
-    ) -> std::io::Result<()> {
+    async fn run(socket_path: PathBuf, password: Option<String>) -> std::io::Result<()> {
         let config = programad::DaemonConfig {
             socket_path,
             password,
@@ -180,19 +173,9 @@ mod unix {
         let state = programad::serve(config, shutdown).await?;
 
         let ids = state.sessions.ids();
-        if !keep_sessions {
-            tracing::info!(
-                count = ids.len(),
-                "terminating sessions (pass --keep-sessions to skip this)"
-            );
-            for id in ids {
-                let _ = state.sessions.close(&id, true);
-            }
-        } else if !ids.is_empty() {
-            tracing::warn!(
-                count = ids.len(),
-                "exiting with sessions left running; see --help for the fd-escrow caveat"
-            );
+        tracing::info!(count = ids.len(), "terminating sessions");
+        for id in ids {
+            let _ = state.sessions.close(&id, true);
         }
         Ok(())
     }

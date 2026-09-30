@@ -3675,3 +3675,34 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         )
     }
 }
+
+final class SocketConnectProbeTests: XCTestCase {
+    func testProbeSucceedsAgainstALiveListenerAndFailsWhenItIsGone() throws {
+        let shortID = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)
+        let path = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("probe-\(shortID).sock").path
+        defer { unlink(path) }
+
+        XCTAssertFalse(SocketConnectProbe.canConnect(at: path, timeout: 0.5), "missing socket must fail")
+
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let maxLength = MemoryLayout.size(ofValue: addr.sun_path)
+        path.withCString { ptr in
+            withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
+                let buf = UnsafeMutableRawPointer(pathPtr).assumingMemoryBound(to: CChar.self)
+                strncpy(buf, ptr, maxLength - 1)
+            }
+        }
+        let bound = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        XCTAssertEqual(bound, 0)
+        XCTAssertEqual(listen(fd, 4), 0)
+        XCTAssertTrue(SocketConnectProbe.canConnect(at: path, timeout: 0.5))
+
+        Darwin.close(fd)
+        XCTAssertFalse(SocketConnectProbe.canConnect(at: path, timeout: 0.5), "a socket file with no listener must fail")
+    }
+}

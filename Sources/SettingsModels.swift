@@ -236,12 +236,14 @@ enum PreferredEditorSettings {
 
     /// Open a file path with the user's preferred editor, falling back to system default.
     static func open(_ url: URL) {
+#if DEBUG
         if ProgramaUITestCapture.appendLineIfConfigured(
             envKey: "PROGRAMA_UI_TEST_CAPTURE_OPEN_PATH",
             line: url.path
         ) {
             return
         }
+#endif
 
         guard let command = resolvedCommand() else {
             NSWorkspace.shared.open(url)

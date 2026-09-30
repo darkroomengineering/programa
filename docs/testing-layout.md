@@ -22,8 +22,8 @@ generation of tests. There is no `tests_v1`.
 
 **`tests/`** — the thing under test is a script or a build artifact, and no app
 is involved. Shell scripts here guard `scripts/*.sh`, the CI workflows, DMG
-creation, and release assets. The three python files here drive the `programa`
-CLI binary as a subprocess via `PROGRAMA_CLI_BIN`.
+creation, and release assets. The four python files here (`test_cli_*.py`) drive the `programa` CLI binary
+as a subprocess through `PROGRAMA_CLI_BIN`.
 
 **`tests_v2/`** — the thing under test is app behaviour you can observe over the
 socket. Everything here talks to a live instance, whether through `cmux.py` or
@@ -59,41 +59,10 @@ instance rather than a build under test.
 ## Display resolution churn regression (`programaUITests`)
 
 `DisplayResolutionRegressionUITests.testRapidDisplayResolutionChangesKeepTerminalResponsive`
-churns a virtual display through four resolutions while the app's window sits
-on it, and asserts the terminal keeps presenting frames. It never passed on
-any green `main` run before 2026-09-17: `ui-regressions` masked its own exit
-code until PR #334 (2026-09-16) unmasked it, and every run since then failed
-with "Failed to create CGVirtualDisplay" — the step created a second
-`CGVirtualDisplay` while the job's own persistent one was still alive, and a
-headless CI session only reliably holds one at a time.
-
-Fixed on `macos-26` runners, in order:
-- The churn step now attaches to the job's persistent virtual display
-  (`--attach-id`) instead of creating a second one.
-- The app is externally activated via System Events after launch, since the
-  in-process `NSRunningApplication.activate()` call silently fails without a
-  real WindowServer frontmost app on headless CI.
-- The UI test's own diagnostics file — which the churn step polls for render
-  present counts — is refreshed on every
-  `NSApplication.didChangeScreenParametersNotification`, the notification
-  that fires when a stationary window's screen changes mode underneath it
-  (the render path itself already relies on this same notification; the
-  diagnostics observer set didn't).
-
-What is still broken, and not fixed here: on `macos-26` runners the app's
-window cannot reliably be kept on the virtual display once its mode starts
-churning. It lands there once at launch (`targetDisplayMoveSucceeded` in the
-launch diagnostics briefly reads `"1"`), but AppKit reassigns the window to
-another screen — observed landing back on the real primary display, and once
-on no screen at all — as soon as `CGDisplaySetDisplayMode` recalculates the
-virtual display's global bounds. A window re-homing pass tied to the same
-notification made this worse (moved the window off every screen), not
-better, and was reverted.
-
-Because of that, the churn step reads the app's launch diagnostics after
-launch and self-skips with `SKIPPED: the runner could not place the app
-window on the virtual display; the display churn regression cannot be
-exercised here` (exit 0) when `targetDisplayMoveSucceeded` never reaches
-`"1"`. When it does reach `"1"` — a runner where placement genuinely works —
-the step runs the regression exactly as before, so a real rendering
-regression on a working harness still fails the job.
+churns a virtual display through four resolutions while the app's window sits on it, and asserts
+the terminal keeps presenting frames. The churn step attaches to the job's persistent virtual
+display (`--attach-id`) rather than creating a second `CGVirtualDisplay`, because a headless CI
+session reliably holds only one. On `macos-26` runners AppKit can move the window off the virtual
+display once its mode starts changing, so the step reads the launch diagnostics and self-skips
+(exit 0) when `targetDisplayMoveSucceeded` never reaches `"1"`. When placement works, the step
+runs the regression and a real rendering failure still fails the job.

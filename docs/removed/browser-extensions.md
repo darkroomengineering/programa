@@ -35,29 +35,28 @@ manage.message/manage.title/none.message/none.title/noneRequested).
 
 ## What we learned
 
-`docs/audits/codebase-audit-2026-08-31.md` finding M3 (medium severity, confirmed, status
-RESOLVED at audit time) found that installed extensions received every requested permission and
+A medium-severity review finding showed that installed extensions received every requested permission and
 host match pattern permanently, with no consent step: "Opening the first browser loads every
 unpacked directory/zip from `~/.config/programa/extensions` and grants every permission/match
 pattern until `distantFuture`. A copied extension with `<all_urls>` silently reads every Programa
-browser page." The audit's fix required an enable/consent UI, visible requested-hosts display,
+browser page." The fix required an enable/consent UI, visible requested-hosts display,
 revocation support, and default-deny for new/changed permissions — CHANGELOG.md confirms this
 shipped: "Browser extensions now require explicit permission consent and support revocation."
 
-The same audit's open questions section asked directly: "Are browser extensions a user-facing
-feature or developer-only experiment? Current code loads them in production without an enable
-switch." That question was never answered before this removal — the feature stayed a proof of
+The review also asked whether browser extensions were a user-facing feature or a developer-only
+experiment, since the code loaded them in production without an enable switch. That question was
+never answered before this removal — the feature stayed a proof of
 concept from introduction to removal, with no settings-visible on/off switch of its own beyond the
-per-extension consent added for M3.
+per-extension consent added afterward.
 
 ## Why removed and what a future version should do differently
 
 The feature never left proof-of-concept status: no discovery UI beyond a filesystem convention, no
-extension store or install flow, and a real security finding (M3) that had to be patched onto it
+extension store or install flow, and a real security finding that had to be patched onto it
 after the fact rather than designed in. It also only worked on macOS 15.4+, splitting the toolbar
 UI with an availability check for a feature most users never used.
 
 A future version should treat extension support as security-sensitive from the start — permission
-consent, host-access visibility, and revocation designed in before shipping, not added after an
-audit — and should decide up front whether this is a user-facing feature (with a discovery/install
+consent, host-access visibility, and revocation designed in before shipping, not added after a
+review — and should decide up front whether this is a user-facing feature (with a discovery/install
 UI) or stays out of the product entirely.

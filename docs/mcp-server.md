@@ -6,7 +6,7 @@ app directly: list and switch workspaces, split panes, send text to a terminal, 
 
 It is a separate binary, `programa-mcp`, embedded in the app bundle. It talks to the
 running app over the same v2 JSON control socket the `programa` CLI uses
-(see [v2-api-migration.md](v2-api-migration.md)). It is not part of the app process,
+(see [socket-api.md](socket-api.md)). It is not part of the app process,
 so it cannot affect terminal rendering or typing latency.
 
 ## Setup

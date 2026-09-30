@@ -1,5 +1,7 @@
 # Agent events: normalized lifecycle schema
 
+Status: shipped. The `agent.event` socket method, the hook adapters in `CLI/CLI+AgentEventAdapters.swift` and the screen-manifest tier all feed one agent-state path.
+
 ## Where we actually are (read this before assuming greenfield)
 
 Programa already ships a two-tier agent-state system (issue #164,

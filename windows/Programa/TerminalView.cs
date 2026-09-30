@@ -52,15 +52,15 @@ public sealed class TerminalView : UserControl, IDisposable
     private bool _composing;
     private bool _disposed;
     private bool _selecting;
+    private bool _exitRaised;
     private ulong _paintedGeneration;
     private DateTimeOffset _lastClick;
     private Point _lastClickPoint;
     private uint _clickCount;
 
-    public TerminalView(string surfaceId, string sessionId)
+    public TerminalView(string surfaceId)
     {
         SurfaceId = surfaceId;
-        SessionId = sessionId;
         IsTabStop = true;
         AutomationProperties.SetName(this, Localizer.Get("TerminalAccessibilityName"));
 
@@ -123,7 +123,9 @@ public sealed class TerminalView : UserControl, IDisposable
     }
 
     public string SurfaceId { get; }
-    public string SessionId { get; }
+
+    /// <summary>Raised once, on the UI thread, when the shell has exited. The owner closes the surface.</summary>
+    internal event Action<string>? Exited;
 
     /// <summary>True once at least one terminal snapshot has been painted. Used by the
     /// `--smoke` CI launch check to confirm the native terminal session actually produced
@@ -146,13 +148,14 @@ public sealed class TerminalView : UserControl, IDisposable
 
     public async void Paste()
     {
-        if (_session is null) return;
-        var content = Clipboard.GetContent();
-        if (!content.Contains(StandardDataFormats.Text)) return;
+        var session = _session;
+        if (session is null) return;
         try
         {
+            var content = Clipboard.GetContent();
+            if (!content.Contains(StandardDataFormats.Text)) return;
             var text = await content.GetTextAsync();
-            NativeTerminal.Paste(_session, Encoding.UTF8.GetBytes(text), true);
+            if (ReferenceEquals(_session, session)) NativeTerminal.Paste(session, Encoding.UTF8.GetBytes(text), true);
         }
         catch (Exception error)
         {
@@ -183,6 +186,7 @@ public sealed class TerminalView : UserControl, IDisposable
         if (_disposed) return;
         RetireCurrentSession();
         _paintedGeneration = 0;
+        _exitRaised = false;
         lock (_snapshotGate) _snapshot = null;
         _automationValue = string.Empty;
         _spawnFailure.Visibility = Visibility.Collapsed;
@@ -208,6 +212,12 @@ public sealed class TerminalView : UserControl, IDisposable
     {
         if (_disposed || !ReferenceEquals(_session, session)) return;
         var generation = NativeTerminal.Generation(session);
+        // Checked before the visibility early-outs so a shell that exits in a background tab still closes it.
+        if (!_exitRaised && NativeTerminal.IsTerminated(session))
+        {
+            _exitRaised = true;
+            Exited?.Invoke(SurfaceId);
+        }
         if (!IsLoaded || Visibility != Visibility.Visible)
         {
             AcknowledgeAndArm(session, generation);
@@ -453,23 +463,61 @@ public sealed class TerminalView : UserControl, IDisposable
         var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
         var alt = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu).HasFlag(CoreVirtualKeyStates.Down);
         var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(CoreVirtualKeyStates.Down);
-        var appCursor = NativeTerminal.ApplicationCursor(_session);
-        byte[]? bytes = args.Key switch
-        {
-            VirtualKey.Enter => [13], VirtualKey.Back => [127],
-            VirtualKey.Tab when !ctrl && !alt => shift ? [27, 91, 90] : [9],
-            VirtualKey.Escape => [27],
-            VirtualKey.Up => Encoding.ASCII.GetBytes(appCursor ? "\x1bOA" : "\x1b[A"), VirtualKey.Down => Encoding.ASCII.GetBytes(appCursor ? "\x1bOB" : "\x1b[B"),
-            VirtualKey.Right => Encoding.ASCII.GetBytes(appCursor ? "\x1bOC" : "\x1b[C"), VirtualKey.Left => Encoding.ASCII.GetBytes(appCursor ? "\x1bOD" : "\x1b[D"),
-            VirtualKey.Home => Encoding.ASCII.GetBytes("\x1b[H"), VirtualKey.End => Encoding.ASCII.GetBytes("\x1b[F"),
-            VirtualKey.PageUp => Encoding.ASCII.GetBytes("\x1b[5~"), VirtualKey.PageDown => Encoding.ASCII.GetBytes("\x1b[6~"),
-            VirtualKey.Delete => Encoding.ASCII.GetBytes("\x1b[3~"),
-            >= VirtualKey.A and <= VirtualKey.Z when ctrl && !alt => [(byte)((int)args.Key - (int)VirtualKey.A + 1)],
-            _ => null,
-        };
+        var bytes = EncodeKey(args.Key, ctrl, alt, shift, NativeTerminal.ApplicationCursor(_session));
         if (bytes is null) return;
         NativeTerminal.Write(_session, bytes);
         args.Handled = true;
+    }
+
+    /// <summary>
+    /// Maps a non-text key to xterm bytes. Printable characters without Ctrl or Alt arrive through the
+    /// text box instead. Ctrl+Alt is AltGr on many layouts and is left to the text box as well.
+    /// </summary>
+    internal static byte[]? EncodeKey(VirtualKey key, bool ctrl, bool alt, bool shift, bool appCursor)
+    {
+        var modifier = 1 + (shift ? 1 : 0) + (alt ? 2 : 0) + (ctrl ? 4 : 0);
+        var modified = modifier > 1;
+        static byte[] Ascii(string text) => Encoding.ASCII.GetBytes(text);
+
+        switch (key)
+        {
+            case VirtualKey.Enter: return [13];
+            case VirtualKey.Back: return alt ? [27, 127] : [127];
+            case VirtualKey.Tab when !ctrl && !alt: return shift ? [27, 91, 90] : [9];
+            case VirtualKey.Escape: return [27];
+        }
+
+        var cursor = key switch { VirtualKey.Up => 'A', VirtualKey.Down => 'B', VirtualKey.Right => 'C', VirtualKey.Left => 'D', VirtualKey.Home => 'H', VirtualKey.End => 'F', _ => '\0' };
+        if (cursor != '\0')
+        {
+            var arrow = key is VirtualKey.Up or VirtualKey.Down or VirtualKey.Right or VirtualKey.Left;
+            return Ascii(modified ? $"\x1b[1;{modifier}{cursor}" : appCursor && arrow ? $"\x1bO{cursor}" : $"\x1b[{cursor}");
+        }
+
+        var function = key switch { VirtualKey.F1 => 'P', VirtualKey.F2 => 'Q', VirtualKey.F3 => 'R', VirtualKey.F4 => 'S', _ => '\0' };
+        if (function != '\0') return Ascii(modified ? $"\x1b[1;{modifier}{function}" : $"\x1bO{function}");
+
+        var tilde = key switch
+        {
+            VirtualKey.Insert => 2, VirtualKey.Delete => 3, VirtualKey.PageUp => 5, VirtualKey.PageDown => 6,
+            VirtualKey.F5 => 15, VirtualKey.F6 => 17, VirtualKey.F7 => 18, VirtualKey.F8 => 19,
+            VirtualKey.F9 => 20, VirtualKey.F10 => 21, VirtualKey.F11 => 23, VirtualKey.F12 => 24,
+            _ => 0,
+        };
+        if (tilde != 0) return Ascii(modified ? $"\x1b[{tilde};{modifier}~" : $"\x1b[{tilde}~");
+
+        if (!ctrl && !alt || ctrl && alt) return null;
+        int character;
+        if (key is >= VirtualKey.A and <= VirtualKey.Z)
+            character = ctrl ? (int)key - (int)VirtualKey.A + 1 : (shift ? 'A' : 'a') + (int)key - (int)VirtualKey.A;
+        else if (key is >= VirtualKey.Number0 and <= VirtualKey.Number9 && !ctrl && !shift)
+            character = '0' + (int)key - (int)VirtualKey.Number0;
+        else if (ctrl && key == VirtualKey.Space) character = 0;
+        else if (ctrl && (int)key == 219) character = 27; // Ctrl+[
+        else if (ctrl && (int)key == 220) character = 28; // Ctrl+\
+        else if (ctrl && (int)key == 221) character = 29; // Ctrl+]
+        else return null;
+        return alt ? [27, (byte)character] : [(byte)character];
     }
 
     private void PointerPressed(object sender, PointerRoutedEventArgs args)
@@ -576,6 +624,8 @@ internal static class NativeTerminal
     [DllImport(Dll, EntryPoint = "programa_terminal_selection_update")] internal static extern int SelectionUpdate(SafeSessionHandle session, nuint col, nuint row);
     [DllImport(Dll, EntryPoint = "programa_terminal_selection_end")] internal static extern int SelectionEnd(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_copy_selection")] internal static extern int CopySelection(SafeSessionHandle session, out Buffer buffer);
+    [DllImport(Dll, EntryPoint = "programa_terminal_is_terminated")]
+    [return: MarshalAs(UnmanagedType.I1)] internal static extern bool IsTerminated(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_paste")] private static extern int PasteNative(SafeSessionHandle session, byte[] data, nuint length, [MarshalAs(UnmanagedType.I1)] bool bracketed);
 
     internal static SafeSessionHandle? Create(byte[] config, out string error)

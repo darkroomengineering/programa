@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmuxError
+from v2_support import must as _must
 
 
 CODEX_HOOK_MARKER = "programa codex-hook"
@@ -37,11 +38,6 @@ EXPECTED_EVENTS = [
     "Notification",
     "SessionEnd",
 ]
-
-
-def _must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
 
 
 def _find_cli_binary() -> str:

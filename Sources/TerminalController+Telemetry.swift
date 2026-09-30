@@ -136,7 +136,7 @@ extension TerminalController {
     // These adapt what were v1's explicit-scope ("shell integration always includes explicit
     // workspace/panel IDs") fast paths (report_pwd/report_shell_state/report_git_branch/
     // clear_git_branch/report_pr/clear_pr/report_ports/clear_ports — removed along with the
-    // rest of the v1 protocol; see docs/v2-api-migration.md) to the v2 handle-based protocol.
+    // rest of the v1 protocol; see docs/socket-api.md) to the v2 handle-based protocol.
     // v2 always requires explicit workspace_id + surface_id (no implicit "selected tab"
     // fallback), so they always take the async fast path v1 took when both --tab and --panel
     // were supplied explicitly.
@@ -766,7 +766,7 @@ extension TerminalController {
     // What were v1's set_status/clear_status/list_status/log/clear_log/list_log/set_progress/
     // clear_progress/sidebar_state verbs were workspace(tab)-scoped, not surface-scoped (their
     // v1 handlers resolved a `Tab` via a helper rather than a specific panel — removed along
-    // with the rest of the v1 protocol; see docs/v2-api-migration.md). Mutations follow the same
+    // with the rest of the v1 protocol; see docs/socket-api.md). Mutations follow the same
     // off-main-parse + main.async-mutate telemetry policy as the surface.report_* family;
     // reads (list_status/list_log/sidebar_state) are exact-snapshot queries and use the
     // v2MainSync pattern shared by sibling v2 read methods.

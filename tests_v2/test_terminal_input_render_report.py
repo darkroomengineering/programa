@@ -27,6 +27,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError
+from v2_support import wait_for as _wait_for
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET") or os.environ.get("PROGRAMA_SOCKET_PATH") or "/tmp/programa-debug.sock"
@@ -41,15 +42,6 @@ class Shot:
 
     def to_base64(self) -> str:
         return base64.b64encode(self.path.read_bytes()).decode("utf-8")
-
-
-def _wait_for(pred, timeout_s: float, step_s: float = 0.05) -> None:
-    start = time.time()
-    while time.time() - start < timeout_s:
-        if pred():
-            return
-        time.sleep(step_s)
-    raise cmuxError("Timed out waiting for condition")
 
 
 def _focused_panel_id(c: cmux) -> str:

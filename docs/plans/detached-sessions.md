@@ -83,7 +83,7 @@ processes (yet)" (`README.md:51`). Session persistence
 one-shot env-var replay file, not a live reconnect).
 
 With agent features (`surface.wait`, `agent.prompt`, `agent_state` subscriptions —
-`docs/v2-api-migration.md:161-446`) making long-running unattended agent processes the primary
+`docs/socket-api.md:161-446`) making long-running unattended agent processes the primary
 use case, losing the process on every restart/crash is the single biggest gap between Programa
 and its target workflow.
 
@@ -145,14 +145,14 @@ and its target workflow.
 
 ### 2.3 v2 socket API: additive, no existing local session verbs
 
-`docs/v2-api-migration.md` has zero `session.*` methods scoped to the **local** socket today —
+`docs/socket-api.md` has zero `session.*` methods scoped to the **local** socket today —
 the existing `session.*` family lives entirely inside `programad-remote`'s stdio RPC, reachable
 only via the SSH bootstrap path, not the local Unix socket that `TerminalController` serves
-(`docs/v2-api-migration.md` method table, §"Surfaces / Splits" etc. — no `session.list/attach/
+(`docs/socket-api.md` method table, §"Surfaces / Splits" etc. — no `session.list/attach/
 detach/kill`). Any new local `session.*` verbs are net-new surface area on
 `TerminalController`, following the same envelope/threading conventions already documented:
 off-main parse/validate, `v2MainSync` only around the final state mutation (per `docs/
-v2-api-migration.md`'s worktree/layout section, and per root `CLAUDE.md`'s "Socket command
+socket-api.md`'s worktree/layout section, and per root `CLAUDE.md`'s "Socket command
 threading policy").
 
 ### 2.4 Typing-latency constraint (hard requirement, not a suggestion)
@@ -376,7 +376,7 @@ reduced scope.
      `Sources/SessionPersistence.swift:226-229`: `detachedSessionId: String?`).
 4. **New local v2 socket methods** (`TerminalController+Surface.swift` or a new
    `TerminalController+Sessions.swift`, following the off-main-parse / `v2MainSync`-mutate
-   convention documented in `docs/v2-api-migration.md`'s worktree section):
+   convention documented in `docs/socket-api.md`'s worktree section):
    - `session.list` -> `{"sessions": [{"session_id", "surface_id"?, "workspace_id"?, "pid",
      "created_at", "last_attached_at", "attached": bool, "command", "cwd"}]}`.
    - `session.detach` (`surface_id` -> detach without kill; distinct from the daemon-internal
@@ -402,7 +402,7 @@ reduced scope.
 
 ### Phase 1 test strategy
 
-- `tests_v2/` python suite is the CI gate (per `docs/v2-api-migration.md`'s closing note); add
+- `tests_v2/` python suite is the CI gate (per `docs/socket-api.md`'s closing note); add
   `tests_v2/test_detached_session_attach_reattach.py` following the existing structure/harness in
   `tests_v2/cmux.py`. Cover:
   - create keep-alive surface, close workspace, `session.list` shows it detached/alive.
@@ -495,7 +495,7 @@ reattach" scope.
   `main_proxy.go` (existing Go daemon patterns to mirror for `daemon/local`)
 - `daemon/remote/README.md`, `docs/remote-daemon-spec.md` (prior-art spec and naming to align
   with)
-- `docs/v2-api-migration.md` (v2 socket method conventions, threading policy references)
+- `docs/socket-api.md` (v2 socket method conventions, threading policy references)
 - `tests_v2/cmux.py` and sibling `test_ssh_remote_*` files (test harness patterns to extend)
 - `CLAUDE.md` (root) — typing-latency pitfalls, submodule workflow, socket threading/focus
   policy — all binding constraints on this feature's implementation

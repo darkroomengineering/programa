@@ -1191,20 +1191,25 @@ extension ProgramaCLI {
             guard let stateVerb = subArgs.first?.lowercased() else {
                 throw CLIError(message: "browser state requires save|load <path>")
             }
-            guard subArgs.count >= 2 else {
+            let stateArgs = Array(subArgs.dropFirst())
+            let allDomains = stateArgs.contains("--all-domains")
+            guard let rawPath = stateArgs.first(where: { $0 != "--all-domains" }) else {
                 throw CLIError(message: "browser state \(stateVerb) requires a file path")
             }
-            let path = subArgs[1]
+            // The app requires an absolute path; resolve against this shell's cwd.
+            let path = URL(fileURLWithPath: NSString(string: rawPath).expandingTildeInPath).standardizedFileURL.path
             let method: String
+            var stateParams: [String: Any] = ["surface_id": sid, "path": path]
             switch stateVerb {
             case "save":
                 method = V2MethodNames.browserStateSave
+                if allDomains { stateParams["all_domains"] = true }
             case "load":
                 method = V2MethodNames.browserStateLoad
             default:
                 throw CLIError(message: "Unsupported browser state subcommand: \(stateVerb)")
             }
-            let payload = try client.sendV2(method: method, params: ["surface_id": sid, "path": path])
+            let payload = try client.sendV2(method: method, params: stateParams)
             output(payload, fallback: "OK")
             return
         }

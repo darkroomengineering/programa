@@ -1,6 +1,6 @@
 // agent.prompt (#166 task 3): submit a prompt to an agent surface and wait for it to finish, in
 // one request. Built directly on top of surface.wait's agent_state condition (task 2) and
-// surface.send_text's injection path -- see docs/v2-api-migration.md "agent.prompt (#166)" for
+// surface.send_text's injection path -- see docs/socket-api.md "agent.prompt (#166)" for
 // the full semantics this implements.
 //
 // Semantics (documented, not just implied by the code -- keep the doc in sync with this file):
@@ -30,7 +30,7 @@ import Foundation
 extension TerminalController {
     /// `agent.prompt`: send `text` to an agent surface and block (single request/response) until
     /// the agent finishes, per the phased semantics documented on this file and in
-    /// docs/v2-api-migration.md.
+    /// docs/socket-api.md.
     nonisolated func v2AgentPrompt(params: [String: Any]) -> V2CallResult {
         let tabManagerAvailable = v2MainSync { self.v2ResolveTabManager(params: params) != nil }
         guard tabManagerAvailable else {

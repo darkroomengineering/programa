@@ -15,6 +15,9 @@ internal static partial class LaunchLog
         "Programa",
         "launch.log");
 
+    /// <summary>Set once the main window has been shown. Before that an unhandled exception means launch failed.</summary>
+    internal static volatile bool LaunchCompleted;
+
     /// <summary>Appends a single line with a timestamp. Never throws.</summary>
     internal static void Write(string message)
     {

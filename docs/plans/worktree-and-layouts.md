@@ -83,7 +83,7 @@ UI-mutation path).
 | `Resources/settings.schema.json` | New top-level `"worktrees": { "directory": {...} }` section, `additionalProperties: false`, matching existing section style (`"app"`, `"browser"`) |
 | Settings parser (confirm exact file — `Sources/ProgramaSettingsFileStore.swift` or `Sources/KeyboardShortcutSettings.swift`, whichever owns `settings.schema.json` section parsing today) | Parse `worktrees.directory` into a small `WorktreeSettings` struct with a static accessor, default `~/.programa-worktrees` |
 | `Resources/Localizable.xcstrings` | New EN+JA keys for command-palette layout entries (`"Apply layout: %@"` / subtitle `"Layout"`) and the sidebar worktree badge tooltip. No new dialog strings — v1 has no confirmation UI for worktree mutation (CLI/socket only) |
-| `docs/v2-api-migration.md` | Add `worktree.*` / `layout.*` rows to "Method Parity Reference" (marked "new in v2, no v1 predecessor") |
+| `docs/socket-api.md` | Add `worktree.*` / `layout.*` rows to "Method Parity Reference" (marked "new in v2, no v1 predecessor") |
 | `docs/keyboard-shortcuts.md` | Explicit note: no new shortcuts in this feature (CLI + command palette only) — not an oversight |
 | `GhosttyTabs.xcodeproj/project.pbxproj` | Manual registration (`PBXBuildFile` + `PBXFileReference` + group + Sources phase) for the 4 new Swift files |
 | `CHANGELOG.md` | Entry under the next unreleased version |
@@ -296,7 +296,7 @@ Two independent tracks (A, B) can run in parallel worktrees; C and D depend on b
 
 ### Track D — docs, tests, release hygiene (depends on A+B+C, ~half day)
 
-1. **D1** `docs/v2-api-migration.md` — add the 7 new methods to the parity table.
+1. **D1** `docs/socket-api.md` — add the 7 new methods to the parity table.
    *(~30m)*
 2. **D2** `docs/keyboard-shortcuts.md` — explicit "no new shortcuts" note. *(~10m)*
 3. **D3** 5 new `tests_v2/` files (see table above). *(~3–4h — the layout-relative-cwd

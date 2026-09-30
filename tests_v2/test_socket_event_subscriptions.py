@@ -9,7 +9,7 @@ scripted agent without polling" -- no real agent is involved, state is driven di
 reads pushed frames (see the HARD-WON LESSONS note below).
 
 Pushed event frames are NOT wrapped in the usual {"id","ok","result"} v2 envelope (see
-docs/v2-api-migration.md "Socket Event Subscriptions (#167)") -- each is its own single-line
+docs/socket-api.md "Socket Event Subscriptions (#167)") -- each is its own single-line
 JSON object with an "event" key, so this test reads raw lines via `client._recv_line` (bypassing
 `cmux._call`'s request/response id matching, which doesn't apply to pushed frames) rather than
 `_call`.
@@ -31,17 +31,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cmux import cmux, cmuxError  # noqa: E402
+from v2_support import must as _must
 from pane_resize_test_support import (  # noqa: E402
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
 )
 
 
 DEFAULT_SOCKET_PATHS = ["/tmp/programa-debug.sock", "/tmp/programa.sock"]
-
-
-def _must(cond: bool, msg: str) -> None:
-    if not cond:
-        raise cmuxError(msg)
 
 
 def _wait_for(pred, timeout_s: float = 10.0, step_s: float = 0.05) -> None:

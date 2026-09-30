@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -44,6 +45,7 @@ public sealed partial class MainWindow : Window
         if (_activationLogged) return;
         _activationLogged = true;
         LaunchLog.Write("launch ok: window shown");
+        LaunchLog.LaunchCompleted = true;
         if (_smoke) _ = RunSmokeTestAsync();
     }
 
@@ -115,8 +117,7 @@ public sealed partial class MainWindow : Window
             Root.Children.Add(toolbar);
             Grid.SetRow(toolbar, 0);
 
-            var workspace = _snapshot.Workspaces.FirstOrDefault(item => item.Id == _snapshot.SelectedWorkspaceId)
-                ?? _snapshot.Workspaces.FirstOrDefault();
+            var workspace = SelectedWorkspace();
             if (workspace is not null)
             {
                 var layout = BuildLayout(workspace, workspace.Layout);
@@ -126,6 +127,12 @@ public sealed partial class MainWindow : Window
             RemoveClosedTerminals();
         }
         finally { _projecting = false; }
+        // Rebuilding the tree drops keyboard focus. Refocus once the new tree has been laid out,
+        // unless a dialog is open and should keep it.
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (!_dialogOpen) ActiveTerminal()?.FocusTerminal();
+        });
     }
 
     private static void DetachTerminals(DependencyObject node)
@@ -224,7 +231,8 @@ public sealed partial class MainWindow : Window
             var surface = pane.Surfaces[surfaceIndex];
             if (!_terminals.TryGetValue(surface.Id, out var terminal))
             {
-                terminal = new TerminalView(surface.Id, surface.SessionId);
+                terminal = new TerminalView(surface.Id);
+                terminal.Exited += OnTerminalExited;
                 _terminals.Add(surface.Id, terminal);
             }
             var item = new TabViewItem
@@ -270,9 +278,25 @@ public sealed partial class MainWindow : Window
         Apply(new { command = "resize_split", workspace_id = workspaceId, split_id = splitId, ratio });
     }
 
+    /// <summary>The shell in a tab exited: close that tab, as the macOS app does.</summary>
+    private void OnTerminalExited(string surfaceId)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            foreach (var workspace in _snapshot.Workspaces)
+            {
+                var pane = workspace.Panes.FirstOrDefault(item => item.Surfaces.Any(surface => surface.Id == surfaceId));
+                if (pane is null) continue;
+                // Same command and last-surface handling as closing the tab by hand.
+                Apply(new { command = "close_surface", workspace_id = workspace.Id, pane_id = pane.Id, surface_id = surfaceId });
+                return;
+            }
+        });
+    }
+
     private void NewTab(string? paneId = null)
     {
-        var workspace = SelectedWorkspace();
+        if (SelectedWorkspace() is not { } workspace) return;
         var pane = paneId is null ? workspace.SelectedPane : workspace.Panes.FirstOrDefault(item => item.Id == paneId);
         if (pane is null) return;
         Apply(new { command = "create_surface", workspace_id = workspace.Id, pane_id = pane.Id, surface_id = Id("surface"), session_id = Id("session") });
@@ -280,7 +304,7 @@ public sealed partial class MainWindow : Window
 
     private void Split(string direction)
     {
-        var workspace = SelectedWorkspace();
+        if (SelectedWorkspace() is not { } workspace) return;
         var pane = workspace.SelectedPane;
         if (pane is null) return;
         Apply(new { command = "split_pane", workspace_id = workspace.Id, pane_id = pane.Id, split_id = Id("split"), new_pane_id = Id("pane"), new_surface_id = Id("surface"), session_id = Id("session"), direction, ratio = 0.5 });
@@ -360,7 +384,7 @@ public sealed partial class MainWindow : Window
     private void OnPaneGotFocus(object sender, RoutedEventArgs args)
     {
         if (_projecting || sender is not TabView tabs || tabs.SelectedItem is not TabViewItem { Tag: SurfaceTag tag }) return;
-        var workspace = SelectedWorkspace();
+        if (SelectedWorkspace() is not { } workspace) return;
         if (workspace.SelectedPaneId != tag.PaneId || workspace.SelectedPane?.SelectedSurfaceId != tag.SurfaceId)
             SelectSurfaceWithoutProjection(tag, focusTerminal: false);
     }
@@ -420,7 +444,7 @@ public sealed partial class MainWindow : Window
 
     private void CloseSelectedTab()
     {
-        var workspace = SelectedWorkspace();
+        if (SelectedWorkspace() is not { } workspace) return;
         var pane = workspace.SelectedPane;
         if (pane?.SelectedSurface is not null)
             Apply(new { command = "close_surface", workspace_id = workspace.Id, pane_id = pane.Id, surface_id = pane.SelectedSurface.Id });
@@ -428,7 +452,7 @@ public sealed partial class MainWindow : Window
 
     private void SelectTab(int index)
     {
-        var workspace = SelectedWorkspace();
+        if (SelectedWorkspace() is not { } workspace) return;
         var pane = workspace.SelectedPane;
         if (pane is not null && index < pane.Surfaces.Count)
             Apply(new { command = "select_surface", workspace_id = workspace.Id, pane_id = pane.Id, surface_id = pane.Surfaces[index].Id });
@@ -436,12 +460,13 @@ public sealed partial class MainWindow : Window
 
     private TerminalView? ActiveTerminal()
     {
-        var id = SelectedWorkspace().SelectedPane?.SelectedSurfaceId;
+        var id = SelectedWorkspace()?.SelectedPane?.SelectedSurfaceId;
         return id is not null && _terminals.TryGetValue(id, out var terminal) ? terminal : null;
     }
 
-    private WorkspaceSnapshot SelectedWorkspace() =>
-        _snapshot.Workspaces.First(item => item.Id == _snapshot.SelectedWorkspaceId);
+    private WorkspaceSnapshot? SelectedWorkspace() =>
+        _snapshot.Workspaces.FirstOrDefault(item => item.Id == _snapshot.SelectedWorkspaceId)
+            ?? _snapshot.Workspaces.FirstOrDefault();
 
     private CoreSnapshot Dispatch(object command) => _core.Dispatch(command);
 

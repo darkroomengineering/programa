@@ -90,7 +90,7 @@ enum AgentStateWaitCondition: String {
     /// has ever reported one") already satisfies this condition -- used both for the
     /// already-satisfied check at registration time and for filtering registry notifications.
     ///
-    /// No-state rule (documented in docs/v2-api-migration.md): a surface with no agent state
+    /// No-state rule (documented in docs/socket-api.md): a surface with no agent state
     /// at all is treated as idle-equivalent for an `idle` wait -- most bare terminals never
     /// report anything, and a caller waiting for "idle" almost always means "not currently
     /// busy", which is true of a surface with no agent hook installed. `working`/`blocked`

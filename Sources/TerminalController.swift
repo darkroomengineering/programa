@@ -1499,51 +1499,47 @@ class TerminalController {
         return v2Error(id: id, code: "auth_required", message: message)
     }
 
-    private func passwordLoginV2ResponseIfNeeded(for command: String, authenticated: inout Bool) -> String? {
-        guard command.hasPrefix("{"),
-              let data = command.data(using: .utf8),
-              let dict = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] else {
-            return nil
-        }
-        let id = dict["id"]
-        let method = (dict["method"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard method == "auth.login" else {
-            return nil
-        }
-
-        guard let params = dict["params"] as? [String: Any],
-              let provided = params["password"] as? String else {
+    private func passwordLoginV2ResponseIfNeeded(
+        for command: String,
+        authenticated: inout Bool,
+        failureLimiter: inout SocketAuthFailureLimiter
+    ) -> String? {
+        guard let (id, outcome) = SocketPasswordLogin.evaluate(
+            command,
+            credentials: { withListenerState { socketPasswordCredentialSource } },
+            limiter: &failureLimiter
+        ) else { return nil }
+        switch outcome {
+        case .invalidParams:
             return v2Error(id: id, code: "invalid_params", message: "auth.login requires params.password")
-        }
-
-        let credentialSource = withListenerState {
-            socketPasswordCredentialSource
-        }
-
-        guard credentialSource.hasConfiguredPassword() else {
+        case .unconfigured:
             return v2Error(
                 id: id,
                 code: "auth_unconfigured",
                 message: "Password mode is enabled but no socket password is configured in Settings."
             )
-        }
-
-        guard credentialSource.verify(provided) else {
+        case .failed:
             return v2Error(id: id, code: "auth_failed", message: "Invalid password")
+        case .succeeded:
+            authenticated = true
+            return v2Ok(id: id, result: ["authenticated": true])
         }
-        authenticated = true
-        return v2Ok(id: id, result: ["authenticated": true])
     }
 
     private func authResponseIfNeeded(
         for command: String,
         authenticated: inout Bool,
+        failureLimiter: inout SocketAuthFailureLimiter,
         requestPolicy: SocketRequestPolicy
     ) -> String? {
         guard requestPolicy.requiresPasswordAuthentication else {
             return nil
         }
-        if let v2Response = passwordLoginV2ResponseIfNeeded(for: command, authenticated: &authenticated) {
+        if let v2Response = passwordLoginV2ResponseIfNeeded(
+            for: command,
+            authenticated: &authenticated,
+            failureLimiter: &failureLimiter
+        ) {
             return v2Response
         }
         if !authenticated {
@@ -1800,7 +1796,8 @@ class TerminalController {
         }
 
         // In cmuxOnly mode, verify the connecting process is a descendant of cmux.
-        // In allowAll mode (env-var only), skip the ancestry check.
+        // Password mode skips it on purpose: it exists so external clients (programa-mcp started
+        // by another app, scripts) can connect by proving they know the password.
         if unixPolicy != nil, requestPolicy.accessMode == .cmuxOnly {
             // Use pre-captured peer PID if available (captured in accept loop before
             // the peer can disconnect), falling back to live lookup.
@@ -1825,6 +1822,7 @@ class TerminalController {
         var buffer = [UInt8](repeating: 0, count: 4096)
         var pending = Data()
         var authenticated = false
+        var failureLimiter = SocketAuthFailureLimiter()
 
         connectionLoop: while true {
             let bytesRead = read(socket, &buffer, buffer.count - 1)
@@ -1866,9 +1864,14 @@ class TerminalController {
                 if let authResponse = authResponseIfNeeded(
                     for: trimmed,
                     authenticated: &authenticated,
+                    failureLimiter: &failureLimiter,
                     requestPolicy: requestPolicy
                 ) {
                     connection.writeLine(authResponse)
+                    if failureLimiter.isExhausted {
+                        closeReason = "auth_failed_limit"
+                        break connectionLoop
+                    }
                     continue
                 }
 
@@ -1903,7 +1906,7 @@ class TerminalController {
             return v2Error(
                 id: nil,
                 code: "v1_removed",
-                message: "The v1 line-based socket protocol has been removed. Use the v2 JSON-RPC protocol (see docs/v2-api-migration.md)."
+                message: "The v1 line-based socket protocol has been removed. Use the v2 JSON-RPC protocol (see docs/socket-api.md)."
             )
         }
 
