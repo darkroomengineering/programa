@@ -55,10 +55,6 @@ public final class BonsplitController {
     /// Internal host-driven closes should not use this hook.
     @ObservationIgnored public var onTabCloseRequest: ((_ tabId: TabID, _ paneId: PaneID) -> Void)?
 
-    /// Lets the host's shared model resolve ordering without replacing native tab objects.
-    /// A nil result rejects the move; the returned IDs must be a permutation of the pane.
-    @ObservationIgnored public var onResolveTabOrder: ((PaneID, [TabID], TabID, Int) -> [TabID]?)?
-
     /// Window-owned renderer for native pane chrome. Weak to avoid retaining an NSWindow
     /// through a controller that can outlive its current view hierarchy.
     @ObservationIgnored public private(set) weak var paneChromePortalBridge: (any BonsplitPaneChromePortalBridge)?
@@ -334,7 +330,7 @@ public final class BonsplitController {
                 if let index { return max(0, min(index, sourcePane.tabs.count)) }
                 return sourcePane.tabs.count
             }()
-            guard applyTabOrder(in: sourcePane, from: sourceIndex, to: destinationIndex) else { return false }
+            sourcePane.moveTab(from: sourceIndex, to: destinationIndex)
             sourcePane.selectTab(tabItem.id)
             internalController.focusPane(sourcePane.id)
             delegate?.splitTabBar(self, didSelectTab: movedTab, inPane: sourcePane.id)
@@ -357,7 +353,7 @@ public final class BonsplitController {
     public func reorderTab(_ tabId: TabID, toIndex: Int, selectMovedTab: Bool = true) -> Bool {
         guard let (pane, sourceIndex) = findTabInternal(tabId) else { return false }
         let destinationIndex = max(0, min(toIndex, pane.tabs.count))
-        guard applyTabOrder(in: pane, from: sourceIndex, to: destinationIndex) else { return false }
+        pane.moveTab(from: sourceIndex, to: destinationIndex)
         guard selectMovedTab else {
             notifyGeometryChange()
             return true
@@ -369,19 +365,6 @@ public final class BonsplitController {
             delegate?.splitTabBar(self, didSelectTab: tab, inPane: pane.id)
         }
         notifyGeometryChange()
-        return true
-    }
-
-    private func applyTabOrder(in pane: PaneState, from sourceIndex: Int, to destinationIndex: Int) -> Bool {
-        guard let resolve = onResolveTabOrder else {
-            pane.moveTab(from: sourceIndex, to: destinationIndex)
-            return true
-        }
-        let ids = pane.tabs.map { TabID(id: $0.id) }
-        guard let order = resolve(pane.id, ids, ids[sourceIndex], destinationIndex),
-              order.count == ids.count, Set(order) == Set(ids) else { return false }
-        let tabs = Dictionary(uniqueKeysWithValues: pane.tabs.map { ($0.id, $0) })
-        pane.tabs = order.compactMap { tabs[$0.uuid] }
         return true
     }
 
