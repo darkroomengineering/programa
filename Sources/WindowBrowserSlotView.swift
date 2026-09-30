@@ -408,7 +408,7 @@ final class WindowBrowserSlotView: NSView {
 
             dropZoneOverlayAnimationGeneration &+= 1
             let animationGeneration = dropZoneOverlayAnimationGeneration
-            dropZoneOverlayView.layer?.removeAllAnimations()
+            settleDropZoneOverlayAtPresentation()
             bringInteractionLayersToFrontIfNeeded()
 
             NSAnimationContext.runAnimationGroup { context in
@@ -436,7 +436,7 @@ final class WindowBrowserSlotView: NSView {
         }
 
         dropZoneOverlayAnimationGeneration &+= 1
-        dropZoneOverlayView.layer?.removeAllAnimations()
+        settleDropZoneOverlayAtPresentation()
 
         if dropZoneOverlayView.isHidden {
             applyDropZoneOverlayFrame(targetFrame)
@@ -445,7 +445,7 @@ final class WindowBrowserSlotView: NSView {
             bringInteractionLayersToFrontIfNeeded()
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.18
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 dropZoneOverlayView.animator().alphaValue = 1
             }
             return
@@ -498,6 +498,21 @@ final class WindowBrowserSlotView: NSView {
             if lhsPriority == rhsPriority { return .orderedSame }
             return lhsPriority < rhsPriority ? .orderedAscending : .orderedDescending
         }, context: context)
+    }
+
+    /// Cancels in-flight overlay animations but first bakes the presentation layer's
+    /// current frame/opacity into the model, so the next animation starts from where
+    /// the overlay visibly is instead of snapping to the previous target.
+    private func settleDropZoneOverlayAtPresentation() {
+        guard let layer = dropZoneOverlayView.layer else { return }
+        if let presentation = layer.presentation(), layer.animationKeys()?.isEmpty == false {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            dropZoneOverlayView.frame = presentation.frame
+            dropZoneOverlayView.alphaValue = CGFloat(presentation.opacity)
+            CATransaction.commit()
+        }
+        layer.removeAllAnimations()
     }
 
     private func applyDropZoneOverlayFrame(_ frame: CGRect) {

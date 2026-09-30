@@ -501,6 +501,8 @@ final class GhosttySurfaceScrollView: NSView {
         flashLayer.shadowOffset = .zero
         flashLayer.opacity = 0
         flashOverlayView.layer?.addSublayer(flashLayer)
+        // Hidden while idle so the shadowed layer is not composited at opacity 0.
+        flashOverlayView.isHidden = true
         addSubview(flashOverlayView)
         keyboardCopyModeBadgeContainerView.translatesAutoresizingMaskIntoConstraints = false
         keyboardCopyModeBadgeContainerView.wantsLayer = true
@@ -826,6 +828,21 @@ final class GhosttySurfaceScrollView: NSView {
               let overlayIndex = container.subviews.firstIndex(of: dropZoneOverlayView),
               overlayIndex <= hostedIndex else { return }
         container.addSubview(dropZoneOverlayView, positioned: .above, relativeTo: self)
+    }
+
+    /// Cancels in-flight overlay animations but first bakes the presentation layer's
+    /// current frame/opacity into the model, so the next animation starts from where
+    /// the overlay visibly is instead of snapping to the previous target.
+    private func settleDropZoneOverlayAtPresentation() {
+        guard let layer = dropZoneOverlayView.layer else { return }
+        if let presentation = layer.presentation(), layer.animationKeys()?.isEmpty == false {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            dropZoneOverlayView.frame = presentation.frame
+            dropZoneOverlayView.alphaValue = CGFloat(presentation.opacity)
+            CATransaction.commit()
+        }
+        layer.removeAllAnimations()
     }
 
     private func applyDropZoneOverlayFrame(_ frame: CGRect) {
@@ -1467,7 +1484,7 @@ final class GhosttySurfaceScrollView: NSView {
             }
 
             dropZoneOverlayAnimationGeneration &+= 1
-            dropZoneOverlayView.layer?.removeAllAnimations()
+            settleDropZoneOverlayAtPresentation()
 
             if dropZoneOverlayView.isHidden {
                 applyDropZoneOverlayFrame(targetFrame)
@@ -1482,7 +1499,7 @@ final class GhosttySurfaceScrollView: NSView {
 
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = 0.18
-                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                     dropZoneOverlayView.animator().alphaValue = 1
                 } completionHandler: { [weak self] in
 #if DEBUG
@@ -1518,7 +1535,7 @@ final class GhosttySurfaceScrollView: NSView {
             guard !dropZoneOverlayView.isHidden else { return }
             dropZoneOverlayAnimationGeneration &+= 1
             let animationGeneration = dropZoneOverlayAnimationGeneration
-            dropZoneOverlayView.layer?.removeAllAnimations()
+            settleDropZoneOverlayAtPresentation()
 #if DEBUG
             logDropZoneOverlay(event: "hide", zone: nil, frame: nil)
 #endif
@@ -1604,7 +1621,15 @@ final class GhosttySurfaceScrollView: NSView {
                     return CAMediaTimingFunction(name: .easeOut)
                 }
             }
+            self.flashOverlayView.isHidden = false
+            CATransaction.begin()
+            CATransaction.setCompletionBlock { [weak self] in
+                // A newer flash re-adds the same key, so only hide once none is pending.
+                guard let self, self.flashLayer.animation(forKey: "programa.flash") == nil else { return }
+                self.flashOverlayView.isHidden = true
+            }
             self.flashLayer.add(animation, forKey: "programa.flash")
+            CATransaction.commit()
         }
     }
 

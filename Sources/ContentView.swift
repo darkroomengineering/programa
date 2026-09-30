@@ -10,7 +10,6 @@ import WebKit
 struct ContentView: View {
     @ObservedObject var updateViewModel: UpdateViewModel
     let windowId: UUID
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var tabManager: TabManager
     @EnvironmentObject var notificationStore: TerminalNotificationStore
     @EnvironmentObject var sidebarState: SidebarState
@@ -1901,7 +1900,7 @@ struct ContentView: View {
                 anchor: commandPaletteController.commandPaletteScrollTargetAnchor
             )
             .onChange(of: commandPaletteController.commandPaletteSelectedResultIndex) {
-                updateCommandPaletteScrollTarget(resultCount: visibleResults.count, animated: true)
+                updateCommandPaletteScrollTarget(resultCount: visibleResults.count)
             }
 
             // Keep Esc-to-close behavior without showing footer controls.
@@ -1916,7 +1915,7 @@ struct ContentView: View {
         }
         .onAppear {
             commandPaletteController.commandPaletteHoveredResultIndex = nil
-            updateCommandPaletteScrollTarget(resultCount: commandPaletteController.commandPaletteVisibleResults.count, animated: false)
+            updateCommandPaletteScrollTarget(resultCount: commandPaletteController.commandPaletteVisibleResults.count)
             resetCommandPaletteSearchFocus()
         }
         .onChange(of: commandPaletteController.commandPaletteQuery) { oldValue, newValue in
@@ -1936,7 +1935,7 @@ struct ContentView: View {
                 commandPaletteController.commandPaletteVisibleResultsFingerprint = nil
             }
             scheduleCommandPaletteResultsRefresh(query: newValue)
-            updateCommandPaletteScrollTarget(resultCount: commandPaletteController.commandPaletteVisibleResults.count, animated: false)
+            updateCommandPaletteScrollTarget(resultCount: commandPaletteController.commandPaletteVisibleResults.count)
             syncCommandPaletteDebugStateForObservedWindow()
         }
         .onChange(of: commandPaletteCurrentSearchFingerprint) {
@@ -1948,7 +1947,7 @@ struct ContentView: View {
                     query: commandPaletteController.commandPaletteQuery,
                     forceSearchCorpusRefresh: true
                 )
-                updateCommandPaletteScrollTarget(resultCount: commandPaletteController.commandPaletteVisibleResults.count, animated: false)
+                updateCommandPaletteScrollTarget(resultCount: commandPaletteController.commandPaletteVisibleResults.count)
                 syncCommandPaletteDebugStateForObservedWindow()
             }
         }
@@ -1961,7 +1960,7 @@ struct ContentView: View {
             )
             syncCommandPaletteSelectionAnchorFromCurrentResults()
             let visibleResultCount = commandPaletteController.commandPaletteVisibleResults.count
-            updateCommandPaletteScrollTarget(resultCount: visibleResultCount, animated: false)
+            updateCommandPaletteScrollTarget(resultCount: visibleResultCount)
             if let hoveredIndex = commandPaletteController.commandPaletteHoveredResultIndex, hoveredIndex >= visibleResultCount {
                 commandPaletteController.commandPaletteHoveredResultIndex = nil
             }
@@ -4639,7 +4638,7 @@ struct ContentView: View {
         commandPaletteController.selectedIndex(resultCount: resultCount)
     }
 
-    private func updateCommandPaletteScrollTarget(resultCount: Int, animated: Bool) {
+    private func updateCommandPaletteScrollTarget(resultCount: Int) {
         guard resultCount > 0 else {
             commandPaletteController.commandPaletteScrollTargetIndex = nil
             commandPaletteController.commandPaletteScrollTargetAnchor = nil
@@ -4652,16 +4651,7 @@ struct ContentView: View {
             resultCount: resultCount
         )
 
-        let assignTarget = {
-            commandPaletteController.commandPaletteScrollTargetIndex = selectedIndex
-        }
-        if animated {
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.1)) {
-                assignTarget()
-            }
-        } else {
-            assignTarget()
-        }
+        commandPaletteController.commandPaletteScrollTargetIndex = selectedIndex
     }
 
     private func syncCommandPaletteSelectionAnchor(resultIDs: [String]) {
