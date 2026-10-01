@@ -43,3 +43,4 @@ test_terminal_close_undo.py
 test_mcp_server_e2e.py
 test_opencode_install_integration.py
 test_tmux_compat_matrix.py
+test_socket_error_contract_sweep.py
