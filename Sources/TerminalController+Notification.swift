@@ -22,7 +22,8 @@ extension TerminalController {
 
     nonisolated func v2NotificationCreate(params: [String: Any]) -> V2CallResult {
         let explicitSurfaceId = v2UUID(params, "surface_id")
-        let title = (params["title"] as? String) ?? "Notification"
+        if let limitError = v2TextLimitError(params, Self.v2NotificationTextLimits) { return limitError }
+        let title = (params["title"] as? String) ?? Self.v2DefaultNotificationTitle
         let subtitle = (params["subtitle"] as? String) ?? ""
         let body = (params["body"] as? String) ?? ""
 
@@ -33,11 +34,12 @@ extension TerminalController {
             guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
                 return .err(code: "not_found", message: "Workspace not found", data: nil)
             }
-            if let explicitSurfaceId, ws.panels[explicitSurfaceId] == nil {
+            // A surface_id that was passed but does not resolve must not retarget the focused surface.
+            if v2HasNonNullParam(params, "surface_id"), explicitSurfaceId.map({ ws.panels[$0] == nil }) ?? true {
                 return .err(
                     code: "not_found",
                     message: "Surface not found",
-                    data: ["surface_id": explicitSurfaceId.uuidString]
+                    data: ["surface_id": v2OrNull(v2String(params, "surface_id"))]
                 )
             }
             let surfaceId = explicitSurfaceId ?? ws.focusedPanelId
@@ -55,7 +57,8 @@ extension TerminalController {
 
     nonisolated func v2NotificationCreateForSurface(params: [String: Any]) -> V2CallResult {
         let surfaceId = v2UUID(params, "surface_id")
-        let title = (params["title"] as? String) ?? "Notification"
+        if let limitError = v2TextLimitError(params, Self.v2NotificationTextLimits) { return limitError }
+        let title = (params["title"] as? String) ?? Self.v2DefaultNotificationTitle
         let subtitle = (params["subtitle"] as? String) ?? ""
         let body = (params["body"] as? String) ?? ""
 
@@ -87,7 +90,8 @@ extension TerminalController {
     nonisolated func v2NotificationCreateForTarget(params: [String: Any]) -> V2CallResult {
         let wsId = v2UUID(params, "workspace_id")
         let surfaceId = v2UUID(params, "surface_id")
-        let title = (params["title"] as? String) ?? "Notification"
+        if let limitError = v2TextLimitError(params, Self.v2NotificationTextLimits) { return limitError }
+        let title = (params["title"] as? String) ?? Self.v2DefaultNotificationTitle
         let subtitle = (params["subtitle"] as? String) ?? ""
         let body = (params["body"] as? String) ?? ""
 

@@ -1009,7 +1009,8 @@ extension ProgramaCLI {
             let (urlOpt, rem3) = parseOption(rem2, name: "--url")
             let (domainOpt, rem4) = parseOption(rem3, name: "--domain")
             let (pathOpt, rem5) = parseOption(rem4, name: "--path")
-            let (expiresOpt, _) = parseOption(rem5, name: "--expires")
+            let (expiresOpt, rem6) = parseOption(rem5, name: "--expires")
+            let (sameSiteOpt, rem7) = parseOption(rem6, name: "--same-site")
 
             var params: [String: Any] = ["surface_id": sid]
             if let nameOpt { params["name"] = nameOpt }
@@ -1020,8 +1021,13 @@ extension ProgramaCLI {
             if hasFlag(cookieArgs, name: "--secure") {
                 params["secure"] = true
             }
-            if hasFlag(cookieArgs, name: "--all") {
-                params["all"] = true
+            if hasFlag(cookieArgs, name: "--http-only") {
+                params["http_only"] = true
+            }
+            if let sameSiteOpt { params["same_site"] = sameSiteOpt.lowercased() }
+            // get/clear default to the current page's site; --all-domains (alias --all) widens.
+            if hasFlag(cookieArgs, name: "--all-domains") || hasFlag(cookieArgs, name: "--all") {
+                params["all_domains"] = true
             }
             if let expiresOpt {
                 guard let expires = Int(expiresOpt) else {
@@ -1036,7 +1042,7 @@ extension ProgramaCLI {
                 output(payload, fallback: "OK")
             case "set":
                 var setParams = params
-                let positional = nonFlagArgs(cookieArgs)
+                let positional = nonFlagArgs(rem7)
                 if setParams["name"] == nil, positional.count >= 1 {
                     setParams["name"] = positional[0]
                 }
@@ -1278,7 +1284,7 @@ extension ProgramaCLI {
               frame <main|selector> [--selector <css>]
               dialog <accept|dismiss> [text]
               download [wait] [--path <path>] [--timeout-ms <ms>|--timeout <seconds>]
-              cookies <get|set|clear> [--name <name>] [--value <value>] [--url <url>] [--domain <domain>] [--path <path>] [--expires <unix>] [--secure] [--all]
+              cookies <get|set|clear> [--name <name>] [--value <value>] [--url <url>] [--domain <domain>] [--path <path>] [--expires <unix>] [--secure] [--http-only] [--same-site <lax|strict>] [--all-domains]
               storage <local|session> <get|set|clear> [...]
               tab <new|list|switch|close|<index>> [...]
               console <list|clear>

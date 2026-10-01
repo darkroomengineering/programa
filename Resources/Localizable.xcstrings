@@ -15930,6 +15930,23 @@
         }
       }
     },
+    "sock.notification.defaultTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notification"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通知"
+          }
+        }
+      }
+    },
     "socketControl.allowAll.description": {
       "extractionState": "manual",
       "localizations": {

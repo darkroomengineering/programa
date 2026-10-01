@@ -478,10 +478,14 @@ extension TerminalController {
                         workspaceId: workspace.id,
                         surfaceId: surfaceId
                     )
+                    // Pane hosting the spawned terminal, so callers can target it without a lookup.
+                    let paneUUID = surfaceId.flatMap { workspace.paneId(forPanelId: $0)?.id }
                     return .ok([
                         "agent_id": agentId.uuidString,
                         "workspace_id": workspace.id.uuidString,
                         "workspace_ref": v2Ref(kind: .workspace, uuid: workspace.id),
+                        "pane_id": v2OrNull(paneUUID?.uuidString),
+                        "pane_ref": v2Ref(kind: .pane, uuid: paneUUID),
                         "surface_id": v2OrNull(surfaceId?.uuidString),
                         "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
                         "focused": false,

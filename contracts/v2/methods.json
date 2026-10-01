@@ -206,6 +206,7 @@
       "debug_only": false,
       "description": "Agent task lifecycle, spawning, and prompt delivery. (prompt).",
       "errors": [
+        "client_disconnected",
         "internal_error",
         "invalid_params",
         "not_found",
@@ -418,7 +419,7 @@
     },
     "app.focus_override.set": {
       "auth_required": true,
-      "debug_only": false,
+      "debug_only": true,
       "description": "App-level focus/activation and browser discovery. (set).",
       "errors": [
         "invalid_params"
@@ -467,7 +468,7 @@
     },
     "app.simulate_active": {
       "auth_required": true,
-      "debug_only": false,
+      "debug_only": true,
       "description": "App-level focus/activation and browser discovery. (simulate active).",
       "errors": [
         "invalid_params",
@@ -841,10 +842,16 @@
         "additionalProperties": false,
         "properties": {
           "all": {},
+          "all_domains": {
+            "type": "boolean"
+          },
           "domain": {
             "type": "string"
           },
           "name": {
+            "type": "string"
+          },
+          "path": {
             "type": "string"
           },
           "surface_id": {
@@ -888,6 +895,9 @@
       "params": {
         "additionalProperties": false,
         "properties": {
+          "all_domains": {
+            "type": "boolean"
+          },
           "domain": {
             "type": "string"
           },
@@ -945,11 +955,21 @@
           "expires": {
             "type": "integer"
           },
+          "http_only": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
           "path": {
             "type": "string"
+          },
+          "same_site": {
+            "type": "string",
+            "enum": [
+              "lax",
+              "strict"
+            ]
           },
           "secure": {
             "type": "boolean"
@@ -1012,6 +1032,7 @@
       "debug_only": false,
       "description": "Embedded browser automation (Playwright-like RPC surface). (toggle).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -1827,6 +1848,7 @@
       "description": "Embedded browser automation (Playwright-like RPC surface). (focus webview).",
       "errors": [
         "internal_error",
+        "invalid_params",
         "invalid_state",
         "not_found",
         "unavailable"
@@ -2316,6 +2338,8 @@
       "debug_only": false,
       "description": "Embedded browser automation (Playwright-like RPC surface). (is webview focused).",
       "errors": [
+        "invalid_params",
+        "not_found",
         "unavailable"
       ],
       "focus_intent": false,
@@ -2494,6 +2518,8 @@
       "errors": [
         "external_open_failed",
         "internal_error",
+        "invalid_params",
+        "limit_reached",
         "not_found",
         "unavailable"
       ],
@@ -3039,6 +3065,7 @@
       "description": "Embedded browser automation (Playwright-like RPC surface). (close).",
       "errors": [
         "internal_error",
+        "invalid_params",
         "invalid_state",
         "not_found",
         "unavailable"
@@ -3085,6 +3112,7 @@
       "debug_only": false,
       "description": "Embedded browser automation (Playwright-like RPC surface). (list).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -3124,6 +3152,7 @@
       "description": "Embedded browser automation (Playwright-like RPC surface). (new).",
       "errors": [
         "internal_error",
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -3173,6 +3202,7 @@
       "debug_only": false,
       "description": "Embedded browser automation (Playwright-like RPC surface). (switch).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -3266,6 +3296,7 @@
       "debug_only": false,
       "description": "Embedded browser automation (Playwright-like RPC surface). (get).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -4165,9 +4196,11 @@
     },
     "debug.terminals": {
       "auth_required": true,
-      "debug_only": false,
+      "debug_only": true,
       "description": "DEBUG-build-only introspection and simulation. (terminals).",
       "errors": [
+        "invalid_params",
+        "not_found",
         "unavailable"
       ],
       "focus_intent": false,
@@ -4315,6 +4348,7 @@
       "debug_only": false,
       "description": "Saved workspace layouts. (apply).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -4384,7 +4418,9 @@
         "already_exists",
         "internal_error",
         "invalid_name",
+        "invalid_params",
         "no_active_workspace",
+        "not_found",
         "unavailable"
       ],
       "focus_intent": false,
@@ -4504,6 +4540,7 @@
       "debug_only": false,
       "description": "In-app notification center. (create).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -4551,6 +4588,7 @@
       "debug_only": false,
       "description": "In-app notification center. (create for surface).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -4598,6 +4636,7 @@
       "debug_only": false,
       "description": "In-app notification center. (create for target).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -4668,6 +4707,7 @@
       "description": "Split-pane layout management. (break).",
       "errors": [
         "internal_error",
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -4714,6 +4754,8 @@
       "description": "Split-pane layout management. (create).",
       "errors": [
         "internal_error",
+        "invalid_params",
+        "limit_reached",
         "not_found",
         "unavailable"
       ],
@@ -4732,6 +4774,13 @@
           "tab_id": {
             "format": "tab:N",
             "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "terminal",
+              "browser"
+            ]
           },
           "url": {
             "type": "string"
@@ -4760,6 +4809,7 @@
       "debug_only": false,
       "description": "Split-pane layout management. (focus).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -4843,6 +4893,7 @@
       "debug_only": false,
       "description": "Split-pane layout management. (last).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -4881,6 +4932,7 @@
       "debug_only": false,
       "description": "Split-pane layout management. (list).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -4972,6 +5024,7 @@
       "debug_only": false,
       "description": "Split-pane layout management. (surfaces).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -5103,6 +5156,7 @@
       "debug_only": false,
       "description": "Code review panel and comments. (list).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -5235,6 +5289,7 @@
       "debug_only": false,
       "description": "Code review panel and comments. (refresh).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -5273,6 +5328,7 @@
       "debug_only": false,
       "description": "Code review panel and comments. (send comments).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -5648,6 +5704,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (close).",
       "errors": [
+        "invalid_params",
         "invalid_state",
         "not_found",
         "unavailable"
@@ -5688,6 +5745,7 @@
       "description": "Terminal surface (pane content) lifecycle and IO. (create).",
       "errors": [
         "internal_error",
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -5707,6 +5765,13 @@
           "tab_id": {
             "format": "tab:N",
             "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "terminal",
+              "browser"
+            ]
           },
           "url": {
             "type": "string"
@@ -5733,6 +5798,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (current).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -5772,6 +5838,7 @@
       "description": "Terminal surface (pane content) lifecycle and IO. (drag to split).",
       "errors": [
         "internal_error",
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -5816,6 +5883,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (focus).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -5856,6 +5924,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (health).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -5894,6 +5963,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (list).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -6069,6 +6139,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (refresh).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -6427,6 +6498,33 @@
       },
       "threading": "off_main"
     },
+    "surface.resolve_tty": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Terminal surface (pane content) lifecycle and IO. (resolve_tty): the terminal surface whose tty matches, for CLI hooks that bind their caller by TTY.",
+      "errors": [
+        "invalid_params",
+        "not_found"
+      ],
+      "focus_intent": false,
+      "handler": "v2SurfaceResolveTTY",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "tty": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tty"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
     "surface.send_key": {
       "auth_required": true,
       "debug_only": false,
@@ -6521,6 +6619,8 @@
       "description": "Terminal surface (pane content) lifecycle and IO. (split).",
       "errors": [
         "internal_error",
+        "invalid_params",
+        "limit_reached",
         "not_found",
         "unavailable"
       ],
@@ -6567,6 +6667,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (trigger flash).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -6605,6 +6706,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (wait).",
       "errors": [
+        "client_disconnected",
         "internal_error",
         "invalid_params",
         "not_found",
@@ -6895,6 +6997,7 @@
       "debug_only": false,
       "description": "Top-level OS window management. (current).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7181,6 +7284,9 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (close).",
       "errors": [
+        "internal_error",
+        "invalid_params",
+        "invalid_state",
         "not_found",
         "protected",
         "unavailable"
@@ -7223,6 +7329,7 @@
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (create).",
       "errors": [
         "invalid_params",
+        "not_found",
         "unavailable"
       ],
       "focus_intent": false,
@@ -7282,6 +7389,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (current).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7320,6 +7428,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (equalize splits).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7361,6 +7470,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (last).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7399,6 +7509,8 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (list).",
       "errors": [
+        "invalid_params",
+        "not_found",
         "unavailable"
       ],
       "focus_intent": false,
@@ -7480,6 +7592,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (list meta blocks).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7518,6 +7631,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (list status).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7628,6 +7742,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (next).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7666,6 +7781,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (previous).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7704,6 +7820,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (rename).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7839,6 +7956,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (reset sidebar).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -7877,6 +7995,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (select).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -8041,6 +8160,7 @@
       "debug_only": false,
       "description": "Workspace (tab) lifecycle, ordering, and metadata. (sidebar state).",
       "errors": [
+        "invalid_params",
         "not_found",
         "unavailable"
       ],
@@ -8082,8 +8202,10 @@
         "branch_checked_out",
         "cleanup_failed",
         "git_command_failed",
+        "invalid_params",
         "layout_not_found",
         "not_a_git_repo",
+        "not_found",
         "unavailable",
         "worktree_path_exists"
       ],
@@ -8186,7 +8308,9 @@
       "debug_only": false,
       "description": "Git worktree lifecycle. (open).",
       "errors": [
+        "invalid_params",
         "not_a_git_repo",
+        "not_found",
         "unavailable",
         "worktree_not_found"
       ],
@@ -8245,7 +8369,9 @@
       "description": "Git worktree lifecycle. (remove).",
       "errors": [
         "git_command_failed",
+        "invalid_params",
         "not_a_git_repo",
+        "not_found",
         "unavailable",
         "worktree_dirty",
         "worktree_not_found"

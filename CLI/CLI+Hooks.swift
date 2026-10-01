@@ -1227,19 +1227,12 @@ extension ProgramaCLI {
         guard let ttyName = resolveCallerTTYName() else {
             return nil
         }
-        guard let payload = try? client.sendV2(method: V2MethodNames.debugTerminals) else {
+        guard let payload = try? client.sendV2(method: V2MethodNames.surfaceResolveTty, params: ["tty": ttyName]),
+              let workspaceId = normalizedHandleValue(payload["workspace_id"] as? String),
+              let surfaceId = normalizedHandleValue(payload["surface_id"] as? String) else {
             return nil
         }
-        let terminals = payload["terminals"] as? [[String: Any]] ?? []
-        for terminal in terminals {
-            guard normalizedTTYName(terminal["tty"] as? String) == ttyName,
-                  let workspaceId = normalizedHandleValue(terminal["workspace_id"] as? String),
-                  let surfaceId = normalizedHandleValue(terminal["surface_id"] as? String) else {
-                continue
-            }
-            return CallerTerminalBinding(workspaceId: workspaceId, surfaceId: surfaceId)
-        }
-        return nil
+        return CallerTerminalBinding(workspaceId: workspaceId, surfaceId: surfaceId)
     }
 
     private func resolveCallerTTYName() -> String? {
