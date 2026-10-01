@@ -35,7 +35,7 @@ extension TabManager {
         timer.schedule(deadline: .now() + interval, repeating: interval)
         timer.setEventHandler { [weak self] in
             DispatchQueue.main.async { [weak self] in
-                guard let self, !self.isStopped else { return }
+                guard let self, !self.isStopped, NSApp.isActive else { return }
                 self.refreshTrackedWorkspaceGitMetadata()
             }
         }
@@ -45,7 +45,10 @@ extension TabManager {
 
     /// Refresh the selected workspace more aggressively so branch checkouts and
     /// newly created PRs show up in the sidebar without waiting for the slower
-    /// background sweep across every tracked workspace.
+    /// background sweep across every tracked workspace. Runs only while the app is active and
+    /// this TabManager's window is the main window, so a background app or a second window
+    /// spawns no git or GitHub calls on this 5 s cadence. The `gh` lookups inside a probe are
+    /// throttled further by `GitMetadataProber` (branch change, then every 60 s).
     func startSelectedWorkspaceGitMetadataPollTimer() {
         guard !isStopped, selectedWorkspaceGitMetadataPollTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
@@ -53,12 +56,18 @@ extension TabManager {
         timer.schedule(deadline: .now() + interval, repeating: interval)
         timer.setEventHandler { [weak self] in
             DispatchQueue.main.async { [weak self] in
-                guard let self, !self.isStopped else { return }
+                guard let self, !self.isStopped, self.isFrontmostForGitMetadataPolling else { return }
                 self.refreshSelectedWorkspaceGitMetadata()
             }
         }
         timer.resume()
         selectedWorkspaceGitMetadataPollTimer = timer
+    }
+
+    private var isFrontmostForGitMetadataPolling: Bool {
+        guard NSApp.isActive, let window else { return false }
+        // `isMainWindow` stays true while a sheet, popover or panel of this window is key.
+        return window.isMainWindow || window.isKeyWindow
     }
 
     /// Pure tier decision for the background sweep: should this workspace's periodic

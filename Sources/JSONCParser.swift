@@ -84,119 +84,182 @@ enum JSONCParser {
         }
     }
 
+    // Both scanners walk Unicode scalars, never `Character`s: Swift merges "\r\n" into one
+    // grapheme that never equals "\n", so a Character scan let a `//` comment in a CRLF file
+    // swallow the rest of the file. Scalars also keep a combining mark after a quote from
+    // hiding the quote.
     private static func stripComments(from source: String) throws -> String {
-        var result = ""
-        var index = source.startIndex
+        let scalars = Array(source.unicodeScalars)
+        var result = String.UnicodeScalarView()
+        var index = 0
         var inString = false
         var isEscaped = false
 
-        while index < source.endIndex {
-            let character = source[index]
+        while index < scalars.count {
+            let scalar = scalars[index]
 
             if inString {
-                result.append(character)
+                result.append(scalar)
                 if isEscaped {
                     isEscaped = false
-                } else if character == "\\" {
+                } else if scalar == "\\" {
                     isEscaped = true
-                } else if character == "\"" {
+                } else if scalar == "\"" {
                     inString = false
                 }
-                index = source.index(after: index)
+                index += 1
                 continue
             }
 
-            if character == "\"" {
+            if scalar == "\"" {
                 inString = true
-                result.append(character)
-                index = source.index(after: index)
+                result.append(scalar)
+                index += 1
                 continue
             }
 
-            if character == "/" {
-                let nextIndex = source.index(after: index)
-                if nextIndex < source.endIndex {
-                    let next = source[nextIndex]
-                    if next == "/" {
-                        index = source.index(after: nextIndex)
-                        while index < source.endIndex && source[index] != "\n" {
-                            index = source.index(after: index)
-                        }
-                        continue
+            if scalar == "/", index + 1 < scalars.count {
+                let next = scalars[index + 1]
+                if next == "/" {
+                    index += 2
+                    while index < scalars.count && scalars[index] != "\n" && scalars[index] != "\r" {
+                        index += 1
                     }
-                    if next == "*" {
-                        index = source.index(after: nextIndex)
-                        var didClose = false
-                        while index < source.endIndex {
-                            let current = source[index]
-                            let followingIndex = source.index(after: index)
-                            if current == "*" && followingIndex < source.endIndex && source[followingIndex] == "/" {
-                                index = source.index(after: followingIndex)
-                                didClose = true
-                                break
-                            }
-                            index = followingIndex
+                    continue
+                }
+                if next == "*" {
+                    index += 2
+                    var didClose = false
+                    while index < scalars.count {
+                        if scalars[index] == "*", index + 1 < scalars.count, scalars[index + 1] == "/" {
+                            index += 2
+                            didClose = true
+                            break
                         }
-                        guard didClose else {
-                            throw JSONCError.unterminatedBlockComment
-                        }
-                        continue
+                        index += 1
                     }
-                }
-            }
-
-            result.append(character)
-            index = source.index(after: index)
-        }
-
-        return result
-    }
-
-    private static func stripTrailingCommas(from source: String) -> String {
-        var result = ""
-        var index = source.startIndex
-        var inString = false
-        var isEscaped = false
-
-        while index < source.endIndex {
-            let character = source[index]
-
-            if inString {
-                result.append(character)
-                if isEscaped {
-                    isEscaped = false
-                } else if character == "\\" {
-                    isEscaped = true
-                } else if character == "\"" {
-                    inString = false
-                }
-                index = source.index(after: index)
-                continue
-            }
-
-            if character == "\"" {
-                inString = true
-                result.append(character)
-                index = source.index(after: index)
-                continue
-            }
-
-            if character == "," {
-                var lookahead = source.index(after: index)
-                while lookahead < source.endIndex && source[lookahead].isWhitespace {
-                    lookahead = source.index(after: lookahead)
-                }
-                if lookahead < source.endIndex && (source[lookahead] == "}" || source[lookahead] == "]") {
-                    index = source.index(after: index)
+                    guard didClose else {
+                        throw JSONCError.unterminatedBlockComment
+                    }
                     continue
                 }
             }
 
-            result.append(character)
-            index = source.index(after: index)
+            result.append(scalar)
+            index += 1
         }
 
-        return result
+        return String(result)
+    }
+
+    private static func stripTrailingCommas(from source: String) -> String {
+        let scalars = Array(source.unicodeScalars)
+        var result = String.UnicodeScalarView()
+        var index = 0
+        var inString = false
+        var isEscaped = false
+
+        while index < scalars.count {
+            let scalar = scalars[index]
+
+            if inString {
+                result.append(scalar)
+                if isEscaped {
+                    isEscaped = false
+                } else if scalar == "\\" {
+                    isEscaped = true
+                } else if scalar == "\"" {
+                    inString = false
+                }
+                index += 1
+                continue
+            }
+
+            if scalar == "\"" {
+                inString = true
+                result.append(scalar)
+                index += 1
+                continue
+            }
+
+            if scalar == "," {
+                var lookahead = index + 1
+                while lookahead < scalars.count && scalars[lookahead].properties.isWhitespace {
+                    lookahead += 1
+                }
+                if lookahead < scalars.count && (scalars[lookahead] == "}" || scalars[lookahead] == "]") {
+                    index += 1
+                    continue
+                }
+            }
+
+            result.append(scalar)
+            index += 1
+        }
+
+        return String(result)
+    }
+
+    /// True when any JSON object in `data` (plain JSON, already run through `preprocess`)
+    /// repeats a key. Foundation's parsers do not promise which duplicate wins, and the trust
+    /// digest (`JSONSerialization`) and command decoding (`JSONDecoder`) are different parsers,
+    /// so a config with duplicate keys could be approved as one thing and run as another.
+    /// Callers reject such configs outright. Keys compare after JSON unescaping, so `"a"` and
+    /// `"\u0061"` count as the same key. Returns false for text that is not well-formed enough
+    /// to scan; the real parser reports those errors.
+    static func containsDuplicateObjectKeys(_ data: Data) -> Bool {
+        guard let source = String(data: data, encoding: .utf8) else { return false }
+        let scalars = Array(source.unicodeScalars)
+        // One entry per open container: nil for an array, the keys seen so far for an object.
+        var stack: [Set<String>?] = []
+        var index = 0
+        while index < scalars.count {
+            let scalar = scalars[index]
+            switch scalar {
+            case "{":
+                stack.append(Set<String>())
+                index += 1
+            case "[":
+                stack.append(nil)
+                index += 1
+            case "}", "]":
+                if !stack.isEmpty { stack.removeLast() }
+                index += 1
+            case "\"":
+                let start = index
+                index += 1
+                var isEscaped = false
+                while index < scalars.count {
+                    let current = scalars[index]
+                    index += 1
+                    if isEscaped {
+                        isEscaped = false
+                    } else if current == "\\" {
+                        isEscaped = true
+                    } else if current == "\"" {
+                        break
+                    }
+                }
+                var lookahead = index
+                while lookahead < scalars.count && scalars[lookahead].properties.isWhitespace {
+                    lookahead += 1
+                }
+                guard lookahead < scalars.count, scalars[lookahead] == ":",
+                      let last = stack.indices.last, var keys = stack[last] else { continue }
+                var literal = String.UnicodeScalarView()
+                literal.append(contentsOf: scalars[start..<index])
+                let rawKey = String(literal)
+                let key = (try? JSONSerialization.jsonObject(
+                    with: Data("[\(rawKey)]".utf8)
+                ) as? [String])?.first ?? rawKey
+                if keys.contains(key) { return true }
+                keys.insert(key)
+                stack[last] = keys
+            default:
+                index += 1
+            }
+        }
+        return false
     }
 
     enum JSONCError: LocalizedError {

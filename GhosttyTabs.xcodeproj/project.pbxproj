@@ -298,6 +298,8 @@
 					F3000000A1B2C3D4E5F60718 /* CJKIMEInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */; };
 					F4000000A1B2C3D4E5F60718 /* GhosttyConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4000001A1B2C3D4E5F60718 /* GhosttyConfigTests.swift */; };
 					F5000000A1B2C3D4E5F60718 /* SessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5000001A1B2C3D4E5F60718 /* SessionPersistenceTests.swift */; };
+				BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */; };
+				BEEF5040A1B2C3D4E5F60003 /* ConfigFixSweepRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5040A1B2C3D4E5F60004 /* ConfigFixSweepRegressionTests.swift */; };
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */; };
 				3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */; };
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */; };
@@ -708,6 +710,8 @@
 				F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CJKIMEInputTests.swift; sourceTree = "<group>"; };
 				F4000001A1B2C3D4E5F60718 /* GhosttyConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfigTests.swift; sourceTree = "<group>"; };
 				F5000001A1B2C3D4E5F60718 /* SessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPersistenceTests.swift; sourceTree = "<group>"; };
+				BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFixSweepCONFTests.swift; sourceTree = "<group>"; };
+				BEEF5040A1B2C3D4E5F60004 /* ConfigFixSweepRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFixSweepRegressionTests.swift; sourceTree = "<group>"; };
 				RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RendererRealizationPlannerTests.swift; sourceTree = "<group>"; };
 				D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAutosaveCoordinatorTests.swift; sourceTree = "<group>"; };
 				SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWALCoreTests.swift; sourceTree = "<group>"; };
@@ -1230,6 +1234,8 @@
 					F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */,
 					F4000001A1B2C3D4E5F60718 /* GhosttyConfigTests.swift */,
 					F5000001A1B2C3D4E5F60718 /* SessionPersistenceTests.swift */,
+					BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */,
+					BEEF5040A1B2C3D4E5F60004 /* ConfigFixSweepRegressionTests.swift */,
 					RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */,
 					D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */,
 					SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */,
@@ -1695,6 +1701,8 @@
 					F3000000A1B2C3D4E5F60718 /* CJKIMEInputTests.swift in Sources */,
 					F4000000A1B2C3D4E5F60718 /* GhosttyConfigTests.swift in Sources */,
 					F5000000A1B2C3D4E5F60718 /* SessionPersistenceTests.swift in Sources */,
+					BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */,
+					BEEF5040A1B2C3D4E5F60003 /* ConfigFixSweepRegressionTests.swift in Sources */,
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */,
 					3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */,
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */,

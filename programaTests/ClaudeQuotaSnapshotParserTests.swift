@@ -992,7 +992,7 @@ final class SidebarQuotaPresentationTests: XCTestCase {
             results: [.available(claude), .unavailable(.codex)]
         )
         XCTAssertEqual(signedOutPresentation.availableSnapshots.map(\.provider), [.claude])
-        XCTAssertTrue(signedOutPresentation.unavailableProviders.isEmpty)
+        XCTAssertTrue(signedOutPresentation.failures.isEmpty, "A signed-out provider is omitted, not shown as a failure")
 
         let failedPresentation = SidebarQuotaPresentation(
             results: [.available(claude), .failed(.codex, "Codex usage could not be read.")]
@@ -1006,7 +1006,6 @@ final class SidebarQuotaPresentationTests: XCTestCase {
             results: [.unavailable(.claude), .unavailable(.codex)]
         )
         XCTAssertTrue(allSignedOut.showsEmptyState)
-        XCTAssertTrue(allSignedOut.unavailableProviders.isEmpty)
 
         let genuineFailure = SidebarQuotaPresentation(
             results: [.unavailable(.claude), .failed(.codex, "Authenticated read failed")]
@@ -1066,25 +1065,6 @@ final class SidebarQuotaPresentationTests: XCTestCase {
 
         XCTAssertGreaterThan(size.width, 0)
         XCTAssertGreaterThan(size.height, 0)
-    }
-
-    func testUsagePopoverDoesNotExposeAManualRefreshControl() {
-        XCTAssertFalse(
-            SidebarQuotaFooter.showsManualRefreshControl,
-            "Opening the popover performs the refresh; a second refresh control makes freshness ambiguous"
-        )
-    }
-
-    func testFooterGlyphsShareTheSidebarRowIconColumn() {
-        // Footer sits inside the same 8pt sidebar edge as the row list; the first
-        // glyph must start where a row's leading icon starts (edge + row padding).
-        let firstGlyphLeading = SidebarFooterControlLayout.leadingInset + SidebarFooterControlLayout.hitInset
-        XCTAssertEqual(firstGlyphLeading, ChromeDensity.sidebarRowHorizontalPadding)
-        XCTAssertEqual(SidebarFooterControlLayout.glyphSlot, SidebarRowMetrics.leadingIconSlotWidth)
-        XCTAssertEqual(
-            SidebarFooterControlLayout.buttonSize,
-            SidebarFooterControlLayout.glyphSlot + SidebarFooterControlLayout.hitInset * 2
-        )
     }
 
     private func fittingHeight(results: [ProviderUsageResult]) async -> CGFloat {

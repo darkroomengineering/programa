@@ -19125,6 +19125,210 @@
           }
         }
       }
+    },
+    "conf.settingsFile.parseError": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "settings.json could not be read, so the last valid settings stay in effect. %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "settings.json を読み込めなかったため、最後に有効だった設定を引き続き使用しています。%@"
+          }
+        }
+      }
+    },
+    "conf.programaConfig.invalidCommand.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command Needs Correction"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コマンドの修正が必要です"
+          }
+        }
+      }
+    },
+    "conf.programaConfig.invalidCommand.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This programa.json command contains control characters (such as Escape or Tab) that the shell would act on but the confirmation dialog cannot show. Remove them and try again. Nothing was run."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この programa.json のコマンドには、シェルが解釈するものの確認ダイアログには表示できない制御文字（Escape や Tab など）が含まれています。それらを削除してもう一度お試しください。何も実行されていません。"
+          }
+        }
+      }
+    },
+    "conf.programaConfig.urlRefused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "url=%@ (not opened: only http and https URLs load)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "url=%@（開きません: http と https の URL のみ読み込めます）"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.bundledMissing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bundled Programa CLI was not found at %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同梱の Programa CLI が %@ に見つかりませんでした。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.parentNotDirectory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expected %@ to be a directory."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ はディレクトリである必要があります。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.destinationIsDirectory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is a directory. Remove or rename it and try again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ はディレクトリです。削除するか名前を変更してから、もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.installVerificationFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installed symlink at %@ did not point to the bundled programa CLI."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ にインストールしたシンボリックリンクが、同梱の programa CLI を指していませんでした。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.uninstallVerificationFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to remove %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を削除できませんでした。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.notProgramaCLI": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is not a link to the Programa CLI, so it was left in place. Remove it yourself if you no longer need it."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ は Programa CLI へのリンクではないため、そのまま残しました。不要な場合はご自身で削除してください。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.privilegedCommandFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Administrator action failed: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理者権限での操作に失敗しました: %@"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.osascriptStatus": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "osascript exited with status %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "osascript がステータス %@ で終了しました。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
