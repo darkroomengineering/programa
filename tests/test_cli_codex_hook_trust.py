@@ -397,6 +397,40 @@ class CodexHookTrustTests(unittest.TestCase):
         self.assertEqual((self.codex_home / "hooks.json").read_bytes(), original_hooks)
         self.assertEqual((self.codex_home / "config.toml").read_bytes(), original_config)
 
+    def test_reinstall_updates_programa_in_place_when_foreign_groups_follow_it(self) -> None:
+        """A later tool's groups must keep their positions across a Programa reinstall."""
+        foreign_command = (
+            'bun --no-env-file "/x/darkroom/source/src/scripts/codex-hook.ts" '
+            '"src/hooks/session-end.ts"'
+        )
+        hooks: dict[str, Any] = {"hooks": {}}
+        for event, command_event in (
+            ("SessionEnd", "session-end"),
+            ("UserPromptSubmit", "prompt-submit"),
+        ):
+            hooks["hooks"][event] = [
+                {"hooks": [owned_handler(command_event)]},
+                {"hooks": [{"type": "command", "command": foreign_command, "timeout": 5}]},
+            ]
+        self.write_hooks(hooks)
+
+        install = self.run_cli("install-hooks")
+        self.assert_succeeded(install)
+
+        installed = self.read_hooks()["hooks"]
+        for event in ("SessionEnd", "UserPromptSubmit"):
+            groups = installed[event]
+            self.assertEqual(len(groups), 2, f"{event} must not gain or lose groups")
+            self.assertTrue(
+                is_programa_handler(event, groups[0]["hooks"][0]["command"]),
+                f"{event} Programa handler must stay at 0:0",
+            )
+            self.assertEqual(
+                groups[1]["hooks"],
+                [{"type": "command", "command": foreign_command, "timeout": 5}],
+                f"{event} foreign handler must stay at 1:0",
+            )
+
     def test_uninstall_refuses_to_delete_a_user_comment_with_stale_trust(self) -> None:
         """A positional trust table cannot own comments that follow its assignments."""
         hooks = {"hooks": {"SessionStart": [{"hooks": [owned_handler("session-start")]}]}}
