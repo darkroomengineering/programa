@@ -56,15 +56,15 @@ def main() -> int:
             time.sleep(0.3)
             _must(_focused_pane(c) == focused, "surface.split moved the focused pane")
 
-            sid = c.list_surfaces()[0][1]
-            c._call("tab.action", {"action": "duplicate", "surface_id": sid})
-            time.sleep(0.3)
-            _must(_focused_pane(c) == focused, "tab.action duplicate moved the focused pane")
-
             # 5. browser tab close with a bad index (done while a browser tab exists)
             browser_id = c.open_browser("about:blank")
             time.sleep(0.5)
             _must(_focused_pane(c) == focused, "browser.open_split moved the focused pane")
+
+            # duplicate only applies to browser tabs
+            c._call("tab.action", {"action": "duplicate", "surface_id": browser_id})
+            time.sleep(0.3)
+            _must(_focused_pane(c) == focused, "tab.action duplicate moved the focused pane")
             surfaces_before = [s[1] for s in c.list_surfaces()]
             try:
                 c._call("browser.tab.close", {"index": 99})

@@ -3,7 +3,7 @@
 
 resolve_tty: a known tty (as /dev/ttysNNN or bare ttysNNN) resolves to exactly that surface and
 returns only its ids (no `terminals` list); an unknown tty is not_found; a missing tty is
-invalid_params. The tty is attached with surface.report_tty and read back through
+invalid_params. The tty is the one the shell integration reports, read back through
 debug.terminals (Debug builds only, which is what CI runs).
 
 agent.spawn: pane_id equals the pane pane/surface listing reports for the returned surface_id.
@@ -12,7 +12,6 @@ agent.spawn: pane_id equals the pane pane/surface listing reports for the return
 import os
 import sys
 import time
-import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -40,9 +39,10 @@ def _tty_of(c: ProgramaClient, surface_id: str) -> str | None:
 
 
 def _test_resolve_tty(c: ProgramaClient, ws: str, surface: str) -> None:
-    tty = "ttys" + str(int(uuid.uuid4().int % 900000) + 100000)
-    c._call("surface.report_tty", {"workspace_id": ws, "surface_id": surface, "tty_name": tty})
-    wait_until(lambda: _tty_of(c, surface) == tty, timeout_s=5.0, message="tty never appeared in debug.terminals")
+    # Use the tty the shell integration reports for the surface. A fake tty sent through
+    # surface.report_tty is overwritten as soon as the real shell reports its own.
+    wait_until(lambda: bool(_tty_of(c, surface)), timeout_s=15.0, message="surface never reported a tty")
+    tty = str(_tty_of(c, surface)).rsplit("/", 1)[-1]
 
     for form in (f"/dev/{tty}", tty):
         res = c._call("surface.resolve_tty", {"tty": form}) or {}
