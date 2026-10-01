@@ -838,9 +838,9 @@ struct ProgramaCLI {
                     guard let target = self.optionValue(ctx.commandArgs, name: "--window") else {
                         throw CLIError(message: "focus-window requires --window")
                     }
-                    // v1 only ever accepted a literal window UUID (no index/ref resolution) — preserve
-                    // that exactly rather than widening acceptance via normalizeWindowHandle.
-                    guard self.isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                    // A UUID or a short ref (new-window prints a ref); bare indexes are rejected.
+                    guard self.isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines))
+                        || self.isHandleRef(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
                         throw CLIError(message: "ERROR: Invalid window id")
                     }
                     do {
@@ -864,14 +864,15 @@ struct ProgramaCLI {
                   --window <id|ref>   Window to close (required)
 
                 Example:
-                  programa close-window --window 0
+                  programa close-window --window <window-uuid>
                   programa close-window --window window:1
                 """,
                 execute: { ctx in
                     guard let target = self.optionValue(ctx.commandArgs, name: "--window") else {
                         throw CLIError(message: "close-window requires --window")
                     }
-                    guard self.isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                    guard self.isUUID(target.trimmingCharacters(in: .whitespacesAndNewlines))
+                        || self.isHandleRef(target.trimmingCharacters(in: .whitespacesAndNewlines)) else {
                         throw CLIError(message: "ERROR: Invalid window id")
                     }
                     do {
@@ -5313,7 +5314,8 @@ struct ProgramaCLI {
         case "focus-window", "close-window":
             let parsed = try parse(values: ["window"])
             try require(["window"], in: parsed.options)
-            guard let rawWindow = parsed.options["window"], isUUID(rawWindow.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            guard let rawWindow = parsed.options["window"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  isUUID(rawWindow) || isHandleRef(rawWindow) else {
                 throw CLIError(message: "\(command): invalid window id")
             }
 
