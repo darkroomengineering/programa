@@ -17,7 +17,11 @@ extension TerminalController {
                 return .err(code: "unavailable", message: "TabManager not available", data: nil)
             }
             guard let name else { return v2InvalidParam("name") }
-            guard let workspace = tabManager.selectedWorkspace else {
+            // Honors workspace_id/surface_id like layout.apply; the selected workspace otherwise.
+            guard let workspace = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
+                if v2HasNonNullParam(params, "workspace_id") || v2HasNonNullParam(params, "surface_id") {
+                    return .err(code: "not_found", message: "Workspace not found", data: nil)
+                }
                 return .err(code: "no_active_workspace", message: "No active workspace with capturable panes to save", data: nil)
             }
             guard let node = workspace.captureCustomLayout() else {

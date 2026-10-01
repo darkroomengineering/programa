@@ -25,9 +25,7 @@ enum V2CommandCatalog {
         "agent.task.start",
         "agent.task.update",
         "app.browsers",
-        "app.focus_override.set",
         "app.reload_config",
-        "app.simulate_active",
         "auth.login",
         "browser.addinitscript",
         "browser.addscript",
@@ -101,7 +99,6 @@ enum V2CommandCatalog {
         "browser.uncheck",
         "browser.url.get",
         "browser.wait",
-        "debug.terminals",
         "feedback.open",
         "feedback.submit",
         "layout.apply",
@@ -157,6 +154,7 @@ enum V2CommandCatalog {
         "surface.report_pwd",
         "surface.report_shell_state",
         "surface.report_tty",
+        "surface.resolve_tty",
         "surface.send_key",
         "surface.send_text",
         "surface.split",
@@ -209,6 +207,8 @@ enum V2CommandCatalog {
 
     /// Methods only available in DEBUG builds, appended after `baseMethods`.
     static let debugMethods: [String] = [
+        "app.focus_override.set",
+        "app.simulate_active",
         "debug.app.activate",
         "debug.bonsplit_underflow.count",
         "debug.bonsplit_underflow.reset",
@@ -240,6 +240,7 @@ enum V2CommandCatalog {
         "debug.terminal.is_focused",
         "debug.terminal.read_text",
         "debug.terminal.render_stats",
+        "debug.terminals",
         "debug.type",
         "debug.viewtree",
         "debug.window.screenshot",

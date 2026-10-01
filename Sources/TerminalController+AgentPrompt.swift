@@ -40,7 +40,8 @@ extension TerminalController {
             return .err(code: "invalid_params", message: "Missing text", data: nil)
         }
 
-        let totalTimeoutMs = max(1, v2Int(params, "timeout_ms") ?? v2Int(params, "timeout") ?? 120_000)
+        let requestedTimeoutMs = v2Int(params, "timeout_ms") ?? v2Int(params, "timeout") ?? 120_000
+        let totalTimeoutMs = min(Self.watchedWaitMaxTimeoutMs, max(1, requestedTimeoutMs))
         let workingGraceMs = max(1, v2Int(params, "working_grace_ms") ?? 3_000)
         let totalDeadline = Date().addingTimeInterval(Double(totalTimeoutMs) / 1000.0)
 
@@ -62,6 +63,7 @@ extension TerminalController {
         var windowId: UUID?
         var baselineState: AgentActivityState?
         var alreadyWorkingAtSendTime = false
+        var queued = false
         // Token for whichever watcher got registered inside the initial send+register hop:
         // the "working" watcher in the normal case, or an "idle" watcher directly when the
         // surface was already mid-task (`alreadyWorkingAtSendTime`) and there is nothing to
@@ -118,6 +120,7 @@ extension TerminalController {
             } else {
                 terminalPanel.sendText(textToSend)
                 terminalPanel.surface.requestBackgroundSurfaceStartIfNeeded()
+                queued = true
             }
 
             // Register the watcher in this SAME hop -- see file header step 1.
@@ -140,7 +143,7 @@ extension TerminalController {
             return .err(code: "internal_error", message: "Failed to resolve surface", data: nil)
         }
 
-        func result(workingObserved: Bool, finalState: AgentActivityState?, warning: String? = nil) -> V2CallResult {
+        func result(workingObserved: Bool, finalState: AgentActivityState?, warning: String? = nil, closed: Bool = false) -> V2CallResult {
             var payload: [String: Any] = [
                 "workspace_id": workspaceId.uuidString,
                 "workspace_ref": self.v2Ref(kind: .workspace, uuid: workspaceId),
@@ -154,15 +157,20 @@ extension TerminalController {
             if let warning {
                 payload["warning"] = warning
             }
+            // The surface was not attached: the prompt went to the pending queue.
+            if queued { payload["queued"] = true }
+            if closed { payload["outcome"] = "closed" }
             return .ok(payload)
         }
 
         if alreadyWorkingAtSendTime {
             // Already mid-task when we sent -- nothing to grace-wait for; go straight to
             // watching for idle, per file header step 1's "already working" branch.
-            let remaining = totalDeadline.timeIntervalSinceNow
-            guard remaining > 0, idleSemaphore.wait(timeout: .now() + max(0, remaining)) == .success else {
+            let outcome = v2WatchedWait(idleSemaphore, until: totalDeadline, surfaceId: surfaceIdOut)
+            guard case .signaled = outcome else {
                 AgentStateWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: firstPhaseWaiterToken)
+                if case .surfaceClosed = outcome { return result(workingObserved: true, finalState: nil, closed: true) }
+                if case .clientGone = outcome { return v2ClientGoneError }
                 return .err(
                     code: "timeout",
                     message: "Agent (already working when the prompt was sent) did not return to idle before timeout",
@@ -175,7 +183,16 @@ extension TerminalController {
         // Step 2: grace window for a "working" transition.
         let remaining = max(0, totalDeadline.timeIntervalSinceNow)
         let graceWait = min(Double(workingGraceMs) / 1000.0, remaining)
-        let observedWorking = workingSemaphore.wait(timeout: .now() + graceWait) == .success
+        let graceOutcome = v2WatchedWait(workingSemaphore, until: Date().addingTimeInterval(graceWait), surfaceId: surfaceIdOut)
+        if case .surfaceClosed = graceOutcome {
+            AgentStateWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: firstPhaseWaiterToken)
+            return result(workingObserved: false, finalState: nil, closed: true)
+        }
+        if case .clientGone = graceOutcome {
+            AgentStateWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: firstPhaseWaiterToken)
+            return v2ClientGoneError
+        }
+        let observedWorking: Bool = { if case .signaled = graceOutcome { return true }; return false }()
         if !observedWorking {
             AgentStateWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: firstPhaseWaiterToken)
 
@@ -222,9 +239,11 @@ extension TerminalController {
         if let idleSetupError { return idleSetupError }
 
         if let idleWaiterToken {
-            let remaining = totalDeadline.timeIntervalSinceNow
-            guard remaining > 0, idleSemaphore.wait(timeout: .now() + max(0, remaining)) == .success else {
+            let outcome = v2WatchedWait(idleSemaphore, until: totalDeadline, surfaceId: surfaceIdOut)
+            guard case .signaled = outcome else {
                 AgentStateWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: idleWaiterToken)
+                if case .surfaceClosed = outcome { return result(workingObserved: true, finalState: nil, closed: true) }
+                if case .clientGone = outcome { return v2ClientGoneError }
                 return .err(
                     code: "timeout",
                     message: "Agent started working but did not return to idle before timeout",

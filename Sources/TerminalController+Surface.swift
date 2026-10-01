@@ -106,6 +106,10 @@ extension TerminalController {
             guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
                 return .err(code: "not_found", message: "Workspace not found", data: nil)
             }
+            // Validate before raising the window or switching workspace (no side effects on error).
+            guard ws.panels[surfaceId] != nil else {
+                return .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
+            }
 
             if let windowId = v2ResolveWindowId(tabManager: tabManager) {
                 _ = AppDelegate.shared?.focusMainWindow(windowId: windowId)
@@ -115,10 +119,6 @@ extension TerminalController {
             // Make sure the workspace is selected so focus effects apply to the visible UI.
             if tabManager.selectedTabId != ws.id {
                 tabManager.selectWorkspace(ws)
-            }
-
-            guard ws.panels[surfaceId] != nil else {
-                return .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
             }
 
             ws.focusPanel(surfaceId)
@@ -139,16 +139,23 @@ extension TerminalController {
                 return .err(code: "not_found", message: "Workspace not found", data: nil)
             }
             let requestedSurfaceId: UUID? = v2UUID(params, "surface_id")
-            // Fall back to focused surface if the requested surface no longer exists (e.g. closed teammate pane)
-            let targetSurfaceId: UUID? = requestedSurfaceId.flatMap({ ws.panels[$0] != nil ? $0 : nil }) ?? ws.focusedPanelId
-            guard let targetSurfaceId, ws.panels[targetSurfaceId] != nil else {
+            // An explicit surface_id that no longer resolves (e.g. a closed teammate pane) is an
+            // error: splitting whatever the user has focused instead would land in the wrong place.
+            if v2HasNonNullParam(params, "surface_id"), requestedSurfaceId.map({ ws.panels[$0] == nil }) ?? true {
+                return .err(code: "not_found", message: "Surface not found", data: ["surface_id": v2OrNull(v2String(params, "surface_id"))])
+            }
+            // No surface_id (e.g. a CLI call outside a Programa terminal): split the focused surface.
+            guard let targetSurfaceId = requestedSurfaceId ?? ws.focusedPanelId, ws.panels[targetSurfaceId] != nil else {
                 return .err(code: "not_found", message: "No focused surface", data: nil)
+            }
+            if let limitError = v2PaneLimitError(for: ws) {
+                return limitError
             }
 
             v2MaybeFocusWindow(for: tabManager)
             v2MaybeSelectWorkspace(tabManager, workspace: ws)
 
-            let focus = v2Bool(params, "focus") ?? true
+            let focus = v2FocusAllowed(requested: v2Bool(params, "focus") ?? true)
             if let newId = tabManager.newSplit(tabId: ws.id, surfaceId: targetSurfaceId, direction: direction, focus: focus) {
                 let paneUUID = ws.paneId(forPanelId: newId)?.id
                 let windowId = v2ResolveWindowId(tabManager: tabManager)
@@ -565,6 +572,46 @@ extension TerminalController {
         }
     }
 
+    /// Same rule as the CLI's `normalizedTTYName` (CLI/CLI+Hooks.swift): trimmed, "not a tty"
+    /// is no name, and only the last path component counts ("/dev/ttys004" == "ttys004").
+    nonisolated static func v2NormalizedTTYName(_ raw: String?) -> String? {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty, trimmed != "not a tty" else { return nil }
+        if let last = trimmed.split(separator: "/").last, !last.isEmpty { return String(last) }
+        return trimmed
+    }
+
+    /// `surface.resolve_tty`: the one terminal surface whose tty matches `tty`, for CLI hooks
+    /// that bind their caller by TTY. Returns only that surface's ids, never the terminal list.
+    /// Runs on main: `surfaceTTYNames` and the window/workspace model are main-actor state and
+    /// this is a one-shot lookup per hook invocation, not telemetry. Never changes selection.
+    nonisolated func v2SurfaceResolveTTY(params: [String: Any]) -> V2CallResult {
+        guard let ttyName = Self.v2NormalizedTTYName(v2RawString(params, "tty")) else {
+            return v2InvalidParam("tty")
+        }
+        return v2MainSync {
+            var tabManagers: [TabManager] = []
+            if let app = AppDelegate.shared {
+                tabManagers = app.listMainWindowSummaries().compactMap { app.tabManagerFor(windowId: $0.windowId) }
+            }
+            if let tabManager, !tabManagers.contains(where: { $0 === tabManager }) {
+                tabManagers.append(tabManager)
+            }
+            for workspace in tabManagers.flatMap(\.tabs) {
+                for (surfaceId, rawTTY) in workspace.surfaceTTYNames
+                where Self.v2NormalizedTTYName(rawTTY) == ttyName && workspace.panels[surfaceId] is TerminalPanel {
+                    return .ok([
+                        "workspace_id": workspace.id.uuidString,
+                        "workspace_ref": v2Ref(kind: .workspace, uuid: workspace.id),
+                        "surface_id": surfaceId.uuidString,
+                        "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+                    ])
+                }
+            }
+            return .err(code: "not_found", message: "No terminal surface has that tty", data: ["tty": ttyName])
+        }
+    }
+
     nonisolated func v2DebugTerminals(params _: [String: Any]) -> V2CallResult {
         v2MainSync {
             guard let app = AppDelegate.shared else {
@@ -872,7 +919,10 @@ extension TerminalController {
                 "socket.surface.send_text workspace=\(ws.id.uuidString.prefix(8)) surface=\(surfaceId.uuidString.prefix(8)) queued=\(queued ? 1 : 0) chars=\(text.count) ms=\(String(format: "%.2f", sendMs))"
             )
 #endif
-            return .ok(["workspace_id": ws.id.uuidString, "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id), "surface_id": surfaceId.uuidString, "surface_ref": v2Ref(kind: .surface, uuid: surfaceId), "window_id": v2OrNull(v2ResolveWindowId(tabManager: tabManager)?.uuidString), "window_ref": v2Ref(kind: .window, uuid: v2ResolveWindowId(tabManager: tabManager))])
+            var payload: [String: Any] = ["workspace_id": ws.id.uuidString, "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id), "surface_id": surfaceId.uuidString, "surface_ref": v2Ref(kind: .surface, uuid: surfaceId), "window_id": v2OrNull(v2ResolveWindowId(tabManager: tabManager)?.uuidString), "window_ref": v2Ref(kind: .window, uuid: v2ResolveWindowId(tabManager: tabManager))]
+            // The surface was not attached: the text waits in the panel's pending queue.
+            if queued { payload["queued"] = true }
+            return .ok(payload)
         }
     }
 
@@ -1111,6 +1161,16 @@ extension TerminalController {
         return chunks
     }
 
+    /// Chunks as keys are pressed: a CR immediately followed by LF is one Return, matching
+    /// `TerminalSurface.sendInput`'s previous-was-CR rule ("ls\r\n" must not press Return twice).
+    nonisolated static func socketKeyChunks(_ text: String) -> [SocketTextChunk] {
+        var previousWasCR = false
+        return socketTextChunks(text).filter { chunk in
+            defer { previousWasCR = chunk == .control("\r") }
+            return !(previousWasCR && chunk == .control("\n"))
+        }
+    }
+
     private nonisolated static func isSocketControlScalar(_ scalar: UnicodeScalar) -> Bool {
         switch scalar.value {
         case 0x0A, 0x0D, 0x09, 0x1B, 0x7F:
@@ -1145,7 +1205,7 @@ extension TerminalController {
     // (a separate v2MainSync call) would reopen the exact race window surface.wait's atomic
     // check+register pattern exists to close.
     func sendSocketText(_ text: String, surface: ghostty_surface_t) {
-        let chunks = Self.socketTextChunks(text)
+        let chunks = Self.socketKeyChunks(text)
 #if DEBUG
         let startedAt = ProcessInfo.processInfo.systemUptime
 #endif

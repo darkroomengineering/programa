@@ -332,6 +332,25 @@ enum AgentSupervisionMetadata {
         aggregateTaskState(for: workspace, records: records)?.rawValue
     }
 
+    /// Socket `agent_state` (DECISION D3): what the workspace is doing now. Only unfinished
+    /// helpers count, so one failed helper does not pin the workspace to `failed` forever;
+    /// finished helpers are reported separately by `helperOutcomes`. Values: idle|working|blocked.
+    static func currentActivityState(
+        for workspace: Workspace,
+        records: [AgentTaskRecord]
+    ) -> String? {
+        aggregateTaskState(for: workspace, records: records.filter { !$0.state.isFinished })?.rawValue
+    }
+
+    /// Finished-helper counts for `workspace.list` / `system.tree` (`helper_outcomes`).
+    static func helperOutcomes(records: [AgentTaskRecord]) -> [String: Int] {
+        var outcomes: [String: Int] = ["failed": 0, "completed": 0, "cancelled": 0]
+        for record in records where record.state.isFinished {
+            outcomes[record.state.rawValue, default: 0] += 1
+        }
+        return outcomes
+    }
+
     static func aggregateSource(
         for workspace: Workspace,
         records: [AgentTaskRecord]

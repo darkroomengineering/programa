@@ -59,13 +59,13 @@ class TerminalController {
     var tabManager: TabManager?
     private nonisolated(unsafe) var accessMode: SocketControlMode = .programaOnly
     private let myPid = getpid()
-    private nonisolated(unsafe) static var socketCommandPolicyDepth: Int = 0
-    private nonisolated static let socketCommandPolicyLock = NSLock()
-    // Each connection has its own handler thread. Focus intent belongs to that request,
-    // not to the process-wide activation-suppression depth shared by concurrent commands.
+    // Each connection has its own handler thread. "In a socket command" and focus intent
+    // belong to that request, so both are thread-local; v2MainSync carries them to main.
+    private nonisolated static let socketCommandActiveThreadKey = "com.darkroom.programa.socket-command-active"
     private nonisolated static let socketCommandFocusAllowanceThreadKey =
         "com.darkroom.programa.socket-command-focus-allowance"
     private nonisolated static let socketListenBacklog: Int32 = 128
+    private nonisolated static let clientSendTimeoutSeconds: TimeInterval = 10
     private nonisolated static let acceptFailureBaseBackoffMs = 10
     private nonisolated static let acceptFailureMaxBackoffMs = 5_000
     private nonisolated static let acceptFailureMinimumRearmDelayMs = 100
@@ -339,8 +339,8 @@ class TerminalController {
         set { browserRPCState.nextElementOrdinal = newValue }
     }
     var v2BrowserElementRefs: [String: V2BrowserElementRefEntry] {
-        get { browserRPCState.elementRefs }
-        set { browserRPCState.elementRefs = newValue }
+        get { Self.v2AssertBrowserRPCStateOnMain(); return browserRPCState.elementRefs }
+        set { Self.v2AssertBrowserRPCStateOnMain(); browserRPCState.elementRefs = newValue }
     }
     var v2BrowserElementRefTokensBySurface: [UUID: Set<String>] {
         get { browserRPCState.elementRefTokensBySurface }
@@ -355,16 +355,16 @@ class TerminalController {
         set { browserRPCState.elementRefBytesBySurface = newValue }
     }
     var v2BrowserFrameSelectorBySurface: [UUID: String] {
-        get { browserRPCState.frameSelectorBySurface }
-        set { browserRPCState.frameSelectorBySurface = newValue }
+        get { Self.v2AssertBrowserRPCStateOnMain(); return browserRPCState.frameSelectorBySurface }
+        set { Self.v2AssertBrowserRPCStateOnMain(); browserRPCState.frameSelectorBySurface = newValue }
     }
     /// Bumped on every committed main-frame navigation of a browser surface. Element refs
     /// (`v2BrowserElementRefs`) capture the generation at allocation time so a ref from a
     /// previous page can be rejected instead of silently re-resolving against the new DOM
     /// (M6a). Main-thread only, same discipline as the other v2Browser state above.
     var v2BrowserNavigationGenerationBySurface: [UUID: UInt64] {
-        get { browserRPCState.navigationGenerationBySurface }
-        set { browserRPCState.navigationGenerationBySurface = newValue }
+        get { Self.v2AssertBrowserRPCStateOnMain(); return browserRPCState.navigationGenerationBySurface }
+        set { Self.v2AssertBrowserRPCStateOnMain(); browserRPCState.navigationGenerationBySurface = newValue }
     }
     var v2BrowserInitScriptsBySurface: [UUID: [String]] {
         get { browserRPCState.initScriptsBySurface }
@@ -543,9 +543,7 @@ class TerminalController {
     }
 
     nonisolated static func shouldSuppressSocketCommandActivation() -> Bool {
-        socketCommandPolicyLock.lock()
-        defer { socketCommandPolicyLock.unlock() }
-        return socketCommandPolicyDepth > 0
+        (Thread.current.threadDictionary[socketCommandActiveThreadKey] as? NSNumber)?.boolValue ?? false
     }
 
     nonisolated static func socketCommandAllowsInAppFocusMutations() -> Bool {
@@ -580,34 +578,27 @@ class TerminalController {
         return focusIntentV2Methods.contains(commandKey)
     }
 
-    private nonisolated static func withSocketCommandFocusAllowance<T>(
-        _ allowsFocusMutation: Bool,
+    private nonisolated static func withSocketCommandThreadState<T>(
+        inCommand: Bool,
+        allowsFocusMutation: Bool,
         _ body: () -> T
     ) -> T {
         let threadDictionary = Thread.current.threadDictionary
-        let previousValue = threadDictionary[socketCommandFocusAllowanceThreadKey]
+        let keys = [socketCommandActiveThreadKey, socketCommandFocusAllowanceThreadKey]
+        let previousValues = keys.map { threadDictionary[$0] }
+        threadDictionary[socketCommandActiveThreadKey] = inCommand
         threadDictionary[socketCommandFocusAllowanceThreadKey] = allowsFocusMutation
         defer {
-            if let previousValue {
-                threadDictionary[socketCommandFocusAllowanceThreadKey] = previousValue
-            } else {
-                threadDictionary.removeObject(forKey: socketCommandFocusAllowanceThreadKey)
-            }
+            // Assigning nil removes the key, so an outermost scope leaves no marker behind.
+            for (key, previousValue) in zip(keys, previousValues) { threadDictionary[key] = previousValue }
         }
         return body()
     }
 
     private func withSocketCommandPolicy<T>(commandKey: String, isV2: Bool, _ body: () -> T) -> T {
         let allowsFocusMutation = Self.socketCommandAllowsInAppFocusMutations(commandKey: commandKey, isV2: isV2)
-        Self.socketCommandPolicyLock.lock()
-        Self.socketCommandPolicyDepth += 1
-        Self.socketCommandPolicyLock.unlock()
-        defer {
-            Self.socketCommandPolicyLock.lock()
-            Self.socketCommandPolicyDepth = max(0, Self.socketCommandPolicyDepth - 1)
-            Self.socketCommandPolicyLock.unlock()
-        }
-        return Self.withSocketCommandFocusAllowance(allowsFocusMutation, body)
+        _ = Self.v2TakeSelectorResolutionFailure()
+        return Self.withSocketCommandThreadState(inCommand: true, allowsFocusMutation: allowsFocusMutation, body)
     }
 
 #if DEBUG
@@ -1086,25 +1077,16 @@ class TerminalController {
         return timeval(tv_sec: Int(seconds), tv_usec: Int32(microseconds.rounded()))
     }
 
-    private nonisolated static func configureSocketTimeouts(_ fd: Int32, timeout: TimeInterval) {
+    private nonisolated static func configureSocketTimeouts(
+        _ fd: Int32,
+        timeout: TimeInterval,
+        options: [Int32] = [SO_RCVTIMEO, SO_SNDTIMEO]
+    ) {
         var socketTimeout = makeSocketTimeout(timeout)
-        _ = withUnsafePointer(to: &socketTimeout) { ptr in
-            setsockopt(
-                fd,
-                SOL_SOCKET,
-                SO_RCVTIMEO,
-                ptr,
-                socklen_t(MemoryLayout<timeval>.size)
-            )
-        }
-        _ = withUnsafePointer(to: &socketTimeout) { ptr in
-            setsockopt(
-                fd,
-                SOL_SOCKET,
-                SO_SNDTIMEO,
-                ptr,
-                socklen_t(MemoryLayout<timeval>.size)
-            )
+        for option in options {
+            _ = withUnsafePointer(to: &socketTimeout) { ptr in
+                setsockopt(fd, SOL_SOCKET, option, ptr, socklen_t(MemoryLayout<timeval>.size))
+            }
         }
     }
 
@@ -1680,6 +1662,9 @@ class TerminalController {
             }
 
             consecutiveFailures = 0
+            // Send-only: a stalled reader (e.g. a suspended watch-events) fails the write and tears
+            // down instead of pinning the writer; a receive timeout would drop idle persistent clients.
+            Self.configureSocketTimeouts(clientSocket, timeout: Self.clientSendTimeoutSeconds, options: [SO_SNDTIMEO])
 
             // Capture peer PID immediately — before the client can disconnect.
             // ncat --send-only closes the connection right after writing, so by
@@ -1758,6 +1743,7 @@ class TerminalController {
         // `close(socket)` defer is declared FIRST (runs last) and `connection.teardown()` is
         // declared SECOND (runs first).
         let connection = SocketConnection(socket: socket)
+        Self.v2SetCurrentSocketClientFD(socket)  // lets long waits notice a hung-up client
         defer { close(socket) }
         defer { connection.teardown() }
 
@@ -2104,8 +2090,8 @@ class TerminalController {
             return v2Result(id: id, self.v2SurfaceRefresh(params: params))
         case "surface.health":
             return v2Result(id: id, self.v2SurfaceHealth(params: params))
-        case "debug.terminals":
-            return v2Result(id: id, self.v2DebugTerminals(params: params))
+        case "surface.resolve_tty":
+            return v2Result(id: id, self.v2SurfaceResolveTTY(params: params))
         case "surface.send_text":
             return v2Result(id: id, self.v2SurfaceSendText(params: params))
         case "surface.send_key":
@@ -2181,11 +2167,6 @@ class TerminalController {
         case "notification.clear":
             return v2Result(id: id, self.v2NotificationClear(params: params))
 
-        // App focus
-        case "app.focus_override.set":
-            return v2Result(id: id, self.v2AppFocusOverride(params: params))
-        case "app.simulate_active":
-            return v2Result(id: id, self.v2AppSimulateActive())
         case "app.reload_config":
             return v2Result(id: id, self.v2AppReloadConfig(params: params))
         case "app.browsers":
@@ -2223,7 +2204,13 @@ class TerminalController {
             return v2Result(id: id, self.v2Unsubscribe(params: params, connection: connection))
 
 #if DEBUG
-        // Debug / test-only
+        // Debug / test-only (Release answers method_not_found)
+        case "debug.terminals":
+            return v2Result(id: id, self.v2DebugTerminals(params: params))
+        case "app.focus_override.set":
+            return v2Result(id: id, self.v2AppFocusOverride(params: params))
+        case "app.simulate_active":
+            return v2Result(id: id, self.v2AppSimulateActive())
         case "debug.glass.set":
             return v2Result(id: id, self.v2DebugGlassSet(params: params))
         case "debug.shortcut.set":
@@ -2311,7 +2298,6 @@ class TerminalController {
     }
 
     // MARK: - V2 Helpers (encoding + result plumbing)
-    // MARK: - V2 Helpers (encoding + result plumbing)
 
     nonisolated func v2OrNull(_ value: Any?) -> Any {
         // Avoid relying on `?? NSNull()` inference (Swift toolchains can disagree).
@@ -2326,11 +2312,16 @@ class TerminalController {
             }
         }
         // AppDelegate and Workspace focus guards run inside the main-thread closure, so carry
-        // only this request's allowance across the hop and restore the main thread afterward.
+        // this request's in-command marker and focus allowance across the hop, then restore main.
+        let inCommand = Self.shouldSuppressSocketCommandActivation()
         let allowsFocusMutation = Self.socketCommandAllowsInAppFocusMutations()
+        let caller = Thread.current
         return DispatchQueue.main.sync {
             MainActor.assumeIsolated {
-                Self.withSocketCommandFocusAllowance(allowsFocusMutation, body)
+                _ = Self.v2TakeSelectorResolutionFailure()
+                let value = Self.withSocketCommandThreadState(inCommand: inCommand, allowsFocusMutation: allowsFocusMutation, body)
+                Self.v2MoveSelectorResolutionFailure(to: caller)
+                return value
             }
         }
     }
@@ -2369,6 +2360,9 @@ class TerminalController {
         case .ok(let payload):
             return v2Ok(id: id, result: payload)
         case .err(let code, let message, let data):
+            if code == "unavailable", let failure = Self.v2TakeSelectorResolutionFailure() {
+                return v2Error(id: id, code: failure.code, message: failure.message, data: failure.data)
+            }
             return v2Error(id: id, code: code, message: message, data: data)
         }
     }
@@ -2664,11 +2658,11 @@ class TerminalController {
         // no manager owns falls back to self.tabManager so the handler can report not_found for it
         // (v2ResolveWorkspace fails there); returning nil would surface it as "unavailable" instead.
         if v2HasNonNullParam(params, "window_id") {
-            guard let windowId = v2UUID(params, "window_id") else { return nil }
-            return v2MainSync { AppDelegate.shared?.tabManagerFor(windowId: windowId) }
+            guard let windowId = v2UUID(params, "window_id") else { return v2SelectorUnresolved(params, "window_id") }
+            return v2MainSync { AppDelegate.shared?.tabManagerFor(windowId: windowId) } ?? v2SelectorUnresolved(params, "window_id")
         }
         if v2HasNonNullParam(params, "workspace_id") {
-            guard let workspaceId = v2UUID(params, "workspace_id") else { return nil }
+            guard let workspaceId = v2UUID(params, "workspace_id") else { return v2SelectorUnresolved(params, "workspace_id") }
             return v2MainSync {
                 if let tabManager = AppDelegate.shared?.tabManagerFor(tabId: workspaceId) {
                     return tabManager
@@ -2677,7 +2671,7 @@ class TerminalController {
             }
         }
         if v2HasNonNullParam(params, "surface_id") {
-            guard let surfaceId = v2UUID(params, "surface_id") else { return nil }
+            guard let surfaceId = v2UUID(params, "surface_id") else { return v2SelectorUnresolved(params, "surface_id") }
             return v2MainSync {
                 if let tabManager = AppDelegate.shared?.locateSurface(surfaceId: surfaceId)?.tabManager {
                     return tabManager
@@ -2686,7 +2680,7 @@ class TerminalController {
             }
         }
         if v2HasNonNullParam(params, "tab_id") {
-            guard let tabId = v2UUID(params, "tab_id") else { return nil }
+            guard let tabId = v2UUID(params, "tab_id") else { return v2SelectorUnresolved(params, "tab_id") }
             return v2MainSync {
                 if let tabManager = AppDelegate.shared?.locateSurface(surfaceId: tabId)?.tabManager {
                     return tabManager
@@ -2893,9 +2887,9 @@ class TerminalController {
     ) -> String? {
         let pasteboard = NSPasteboard.general
         let snapshot = snapshotPasteboardItems(pasteboard)
-        defer {
-            restorePasteboardItems(snapshot, to: pasteboard)
-        }
+        // If another app copies after our export write, keep its contents and drop this capture.
+        var exportChangeCount: Int?
+        defer { if exportChangeCount.map({ $0 == pasteboard.changeCount }) ?? true { restorePasteboardItems(snapshot, to: pasteboard) } }
 
         let initialChangeCount = pasteboard.changeCount
         guard performBindingAction("write_screen_file:copy,vt") else {
@@ -2904,6 +2898,7 @@ class TerminalController {
         guard pasteboard.changeCount != initialChangeCount else {
             return nil
         }
+        exportChangeCount = pasteboard.changeCount
         guard let exportedPath = Self.normalizedExportedScreenPath(readGeneralPasteboardString(pasteboard)) else {
             return nil
         }
@@ -2919,7 +2914,8 @@ class TerminalController {
         }
 
         guard let data = try? Data(contentsOf: fileURL),
-              var output = String(data: data, encoding: .utf8) else {
+              var output = String(data: data, encoding: .utf8),
+              pasteboard.changeCount == exportChangeCount else {
             return nil
         }
         if let lineLimit {
