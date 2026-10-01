@@ -1975,15 +1975,13 @@ extension ProgramaCLI {
         }
         if rawHooks == nil, !install { return root }
         var hooks = rawHooks as? [String: Any] ?? [:]
+        var updatedEvents = Set<String>()
         for event in Array(hooks.keys) {
             guard let rawGroups = hooks[event] as? [Any] else {
                 throw CodexHooksError(message: "hooks.json event \(event) must be an array")
             }
-            // Codex trust keys are positional. On install the first owned handler of
-            // a spec event is rewritten where it stands so foreign handlers that
-            // follow it keep their (group, handler) positions.
+            // Trust keys are positional: rewrite Programa's first handler in place; a sole-handler group drops stale matchers.
             let spec = install ? Self.codexHookSpecs.first { $0.event == event } : nil
-            var updatedInPlace = false
             var rewritten: [[String: Any]] = []
             for (groupIndex, rawGroup) in rawGroups.enumerated() {
                 guard var group = rawGroup as? [String: Any] else {
@@ -1993,7 +1991,6 @@ extension ProgramaCLI {
                     throw CodexHooksError(message: "hooks.json \(event) group \(groupIndex).hooks must be an array")
                 }
                 var handlers: [[String: Any]] = []
-                var ownedOnlyGroup = false
                 for (handlerIndex, rawHandler) in rawHandlers.enumerated() {
                     guard let handler = rawHandler as? [String: Any] else {
                         throw CodexHooksError(message: "hooks.json \(event) handler \(handlerIndex) must be an object")
@@ -2001,37 +1998,19 @@ extension ProgramaCLI {
                     if let command = handler["command"], !(command is String) {
                         throw CodexHooksError(message: "hooks.json \(event) handler \(handlerIndex).command must be a string")
                     }
-                    if !codexIsOwnedHandler(handler, event: event) {
-                        handlers.append(handler)
-                    } else if let spec, !updatedInPlace {
-                        updatedInPlace = true
-                        handlers.append(Self.codexCanonicalHandler(spec))
-                        ownedOnlyGroup = rawHandlers.count == 1
-                    }
+                    if !codexIsOwnedHandler(handler, event: event) { handlers.append(handler) }
+                    else if let spec, updatedEvents.insert(event).inserted { handlers.append(Self.codexCanonicalHandler(spec)) }
                 }
-                if ownedOnlyGroup {
-                    // A group holding only Programa's handler is replaced whole so a
-                    // stale matcher cannot narrow it.
-                    rewritten.append(["hooks": handlers])
-                } else if !handlers.isEmpty {
+                if !handlers.isEmpty {
+                    if rawHandlers.count == 1, codexIsOwnedHandler(handlers[0], event: event) { group = [:] }
                     group["hooks"] = handlers
                     rewritten.append(group)
                 }
             }
-            if rewritten.isEmpty { hooks.removeValue(forKey: event) }
-            else { hooks[event] = rewritten }
+            hooks[event] = rewritten.isEmpty ? nil : rewritten
         }
-        if install {
-            for spec in Self.codexHookSpecs {
-                var groups = hooks[spec.event] as? [[String: Any]] ?? []
-                let hasOwned = groups.contains { group in
-                    (group["hooks"] as? [[String: Any]] ?? []).contains { codexIsOwnedHandler($0, event: spec.event) }
-                }
-                if !hasOwned {
-                    groups.append(["hooks": [Self.codexCanonicalHandler(spec)]])
-                }
-                hooks[spec.event] = groups
-            }
+        for spec in Self.codexHookSpecs where install && !updatedEvents.contains(spec.event) {
+            hooks[spec.event] = (hooks[spec.event] as? [[String: Any]] ?? []) + [["hooks": [Self.codexCanonicalHandler(spec)]]]
         }
         root["hooks"] = hooks
         try codexValidateForeignHandlerPositions(before: source, after: root)
@@ -2039,11 +2018,7 @@ extension ProgramaCLI {
     }
 
     private static func codexCanonicalHandler(_ spec: CodexHookSpec) -> [String: Any] {
-        [
-            "type": "command",
-            "command": codexHookCommand(spec.commandEvent),
-            "timeout": spec.timeout,
-        ]
+        ["type": "command", "command": codexHookCommand(spec.commandEvent), "timeout": spec.timeout]
     }
 
     private func codexValidateForeignHandlerPositions(
