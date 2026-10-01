@@ -370,17 +370,18 @@ class CodexHookTrustTests(unittest.TestCase):
                 )
 
     def test_install_refuses_to_reassign_a_foreign_positional_trust_key(self) -> None:
-        """Removing a legacy group must not shift foreign trust onto Programa's replacement."""
+        """Dropping a duplicate Programa group must not shift foreign trust positions."""
         hooks = {
             "hooks": {
                 "Stop": [
+                    {"hooks": [owned_handler("stop")]},
                     {"hooks": [owned_handler("stop")]},
                     {"hooks": [foreign_handler("position-sensitive-stop")]},
                 ]
             }
         }
         original_hooks = self.write_hooks(hooks)
-        foreign_key = f"{self.codex_home.resolve() / 'hooks.json'}:stop:1:0"
+        foreign_key = f"{self.codex_home.resolve() / 'hooks.json'}:stop:2:0"
         original_config = (
             f'[hooks.state.{json.dumps(foreign_key)}]\n'
             'trusted_hash = "sha256:foreign-position"\n'
