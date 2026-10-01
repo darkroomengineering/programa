@@ -430,6 +430,47 @@ enum GhosttyPasteboardHelper {
             .map { escapeForShell($0.path) }
     }
 
+    /// Exactly the names `saveImageFileURLIfNeeded` writes:
+    /// `clipboard-<yyyy-MM-dd-HHmmss>-<8 hex>.<ext>`. A user's own
+    /// `clipboard-report.png` in the same directory never matches.
+    private static let temporaryImageFilenamePattern = try? NSRegularExpression(
+        pattern: "^clipboard-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}-[0-9A-Fa-f]{8}\\.[A-Za-z0-9]{1,5}$"
+    )
+
+    static func isAppWrittenTemporaryImageFilename(_ name: String) -> Bool {
+        guard let temporaryImageFilenamePattern else { return false }
+        let range = NSRange(name.startIndex..., in: name)
+        return temporaryImageFilenamePattern.firstMatch(in: name, range: range) != nil
+    }
+
+    /// Pasted clipboard images are written to the temporary directory and
+    /// handed to the shell as a path, so nothing deletes them at paste time.
+    /// Removes the ones this app wrote more than `maxAge` ago. Returns the
+    /// number of files removed. Run off-main at launch.
+    @discardableResult
+    static func removeStaleTemporaryImageFiles(
+        in directory: URL = FileManager.default.temporaryDirectory,
+        olderThan maxAge: TimeInterval = 24 * 60 * 60,
+        now: Date = Date()
+    ) -> Int {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        ) else { return 0 }
+        var removed = 0
+        for entry in entries where isAppWrittenTemporaryImageFilename(entry.lastPathComponent) {
+            guard let values = try? entry.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
+                  values.isRegularFile == true,
+                  let modifiedAt = values.contentModificationDate,
+                  now.timeIntervalSince(modifiedAt) > maxAge else { continue }
+            if (try? FileManager.default.removeItem(at: entry)) != nil {
+                removed += 1
+            }
+        }
+        return removed
+    }
+
     static func cleanupTransferredTemporaryImageFiles(_ fileURLs: [URL]) {
         for fileURL in fileURLs {
             let normalizedURL = fileURL.standardizedFileURL

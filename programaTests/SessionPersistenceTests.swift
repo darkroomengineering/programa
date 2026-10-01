@@ -287,9 +287,11 @@ final class SessionPersistenceTests: XCTestCase {
         let snapshotURL = tempDir.appendingPathComponent("session.json", isDirectory: false)
         let historyDirectory = try XCTUnwrap(SessionPersistenceStore.historyDirectoryURL(fileURL: snapshotURL))
         try FileManager.default.createDirectory(at: historyDirectory, withIntermediateDirectories: true)
+        // Pruning is per bundle, so the seeds carry the running bundle's archive suffix.
+        let ownSuffix = SessionPersistenceStore.historyArchiveSuffix()
 
         for index in 0..<12 {
-            let filename = "20260101-0000\(String(format: "%02d", index)).json"
+            let filename = "20260101-0000\(String(format: "%02d", index))-\(ownSuffix)"
             let fileURL = historyDirectory.appendingPathComponent(filename, isDirectory: false)
             try Data("{\"seed\":\(index)}".utf8).write(to: fileURL)
         }
@@ -309,10 +311,10 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(entries.count, 10)
 
         let remainingNames = Set(entries.map { $0.lastPathComponent })
-        XCTAssertFalse(remainingNames.contains("20260101-000000.json"), "Oldest seeded entry should be pruned")
-        XCTAssertFalse(remainingNames.contains("20260101-000001.json"), "Second-oldest seeded entry should be pruned")
-        XCTAssertFalse(remainingNames.contains("20260101-000002.json"), "Third-oldest seeded entry should be pruned")
-        XCTAssertTrue(remainingNames.contains("20260101-000011.json"), "Newest seeded entry should survive pruning")
+        XCTAssertFalse(remainingNames.contains("20260101-000000-\(ownSuffix)"), "Oldest seeded entry should be pruned")
+        XCTAssertFalse(remainingNames.contains("20260101-000001-\(ownSuffix)"), "Second-oldest seeded entry should be pruned")
+        XCTAssertFalse(remainingNames.contains("20260101-000002-\(ownSuffix)"), "Third-oldest seeded entry should be pruned")
+        XCTAssertTrue(remainingNames.contains("20260101-000011-\(ownSuffix)"), "Newest seeded entry should survive pruning")
         XCTAssertEqual(
             entries.first?.lastPathComponent.hasPrefix("20260102-"),
             true,
@@ -359,8 +361,9 @@ final class SessionPersistenceTests: XCTestCase {
         try FileManager.default.createDirectory(at: historyDirectory, withIntermediateDirectories: true)
 
         let hostileEntryCount = SessionPersistenceStore.historyDirectoryScanLimit + 44
+        let ownSuffix = SessionPersistenceStore.historyArchiveSuffix()
         for index in 0..<hostileEntryCount {
-            let name = "20260101-\(String(format: "%06d", index)).json"
+            let name = "20260101-\(String(format: "%06d", index))-\(ownSuffix)"
             try Data("{\"seed\":\(index)}".utf8).write(to: historyDirectory.appendingPathComponent(name))
         }
 
@@ -1997,13 +2000,30 @@ final class SessionPersistenceTests: XCTestCase {
     }
 
     func testNewEscrowRegistrationsUseVersionedBundleScopedHolderPaths() {
+        let perUser = "/var/folders/ab/cd/T/"
         XCTAssertEqual(
-            SessionEscrowClient.escrowSocketPath(controlSocketPath: "/tmp/programa.sock"),
-            "/tmp/programa-escrow-v2.sock"
+            SessionEscrowClient.escrowSocketPath(controlSocketPath: "/tmp/programa.sock", perUserTemporaryDirectory: perUser),
+            "/var/folders/ab/cd/T/programa-escrow-v2.sock"
         )
         XCTAssertEqual(
-            SessionEscrowClient.escrowSocketPath(controlSocketPath: "/tmp/programa-debug-review.sock"),
-            "/tmp/programa-debug-review-escrow-v2.sock"
+            SessionEscrowClient.escrowSocketPath(
+                controlSocketPath: "/tmp/programa-debug-review.sock", perUserTemporaryDirectory: perUser
+            ),
+            "/var/folders/ab/cd/T/programa-debug-review-escrow-v2.sock"
+        )
+        // A control socket outside the shared /tmp keeps its sibling path.
+        XCTAssertEqual(
+            SessionEscrowClient.escrowSocketPath(
+                controlSocketPath: "/Users/me/.programa/programa.sock", perUserTemporaryDirectory: perUser
+            ),
+            "/Users/me/.programa/programa-escrow-v2.sock"
+        )
+        // A per-user path that would overflow sun_path falls back to /tmp.
+        XCTAssertEqual(
+            SessionEscrowClient.escrowSocketPath(
+                controlSocketPath: "/tmp/programa.sock", perUserTemporaryDirectory: "/" + String(repeating: "x", count: 120)
+            ),
+            "/tmp/programa-escrow-v2.sock"
         )
     }
 

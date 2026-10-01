@@ -566,10 +566,7 @@ enum SessionPersistenceStore {
         fileURL: URL,
         limit: Int
     ) -> (snapshot: AppSessionSnapshot, filename: String)? {
-        let archiveSuffix = "\(sanitizedBundleIdentifier(Bundle.main.bundleIdentifier)).json"
-        let candidates = historyFileURLs(fileURL: fileURL)
-            .filter { $0.lastPathComponent.split(separator: "-", maxSplits: 2).last == Substring(archiveSuffix) }
-            .prefix(max(0, limit))
+        let candidates = ownedHistoryFileURLs(fileURL: fileURL).prefix(max(0, limit))
         for entry in candidates {
             guard let data = boundedSnapshotData(at: entry),
                   let snapshot = decodeSnapshot(from: data),
@@ -652,13 +649,37 @@ enum SessionPersistenceStore {
             .appendingPathComponent("session-history", isDirectory: true)
     }
 
-    /// Newest-first list of archived snapshot files, or `[]` if none exist yet.
+    /// Newest-first list of archived snapshot files from every bundle, or `[]` if none exist
+    /// yet. Manual browsing keeps other bundles' archives visible on purpose.
     static func historyFileURLs(
         fileURL: URL? = nil,
         scanLimit: Int = historyDirectoryScanLimit
     ) -> [URL] {
         guard let historyDirectory = historyDirectoryURL(fileURL: fileURL) else { return [] }
         return historyEntries(in: historyDirectory, scanLimit: scanLimit).entries
+    }
+
+    /// Newest-first list of the archives written by `bundleIdentifier`. `session-history/` is
+    /// shared by production, tagged and debug builds, so automatic choices (`latest`, startup
+    /// fallback, pruning) must only ever see the running bundle's own archives.
+    static func ownedHistoryFileURLs(
+        fileURL: URL? = nil,
+        scanLimit: Int = historyDirectoryScanLimit,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) -> [URL] {
+        let suffix = historyArchiveSuffix(bundleIdentifier: bundleIdentifier)
+        return historyFileURLs(fileURL: fileURL, scanLimit: scanLimit)
+            .filter { isHistoryArchive($0, suffix: suffix) }
+    }
+
+    /// The `<bundleId>.json` tail of an archive filename (`<yyyyMMdd-HHmmss>-<bundleId>.json`).
+    static func historyArchiveSuffix(bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> String {
+        "\(sanitizedBundleIdentifier(bundleIdentifier)).json"
+    }
+
+    private static func isHistoryArchive(_ url: URL, suffix: String) -> Bool {
+        // The timestamp holds exactly one dash; bundle ids may contain more.
+        url.lastPathComponent.split(separator: "-", maxSplits: 2).last == Substring(suffix)
     }
 
     /// Decodes an archived (or live) snapshot file's bytes without enforcing the current
@@ -704,7 +725,8 @@ enum SessionPersistenceStore {
         now: Date = Date(),
         maxHistoryEntries: Int = SessionPersistencePolicy.maxSnapshotHistoryEntries,
         historyScanObserver: ((HistoryScanResult) -> Void)? = nil,
-        includeScrollback: Bool = true
+        includeScrollback: Bool = true,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) -> Bool {
         guard let fileURL = fileURL ?? defaultSnapshotFileURL(),
               let historyDirectory = historyDirectoryURL(fileURL: fileURL),
@@ -723,9 +745,10 @@ enum SessionPersistenceStore {
             return false
         }
 
+        let archiveSuffix = historyArchiveSuffix(bundleIdentifier: bundleIdentifier)
         let duplicateScan = historyEntries(in: historyDirectory, scanLimit: historyDirectoryScanLimit)
         historyScanObserver?(duplicateScan)
-        if let newestEntry = duplicateScan.entries.first,
+        if let newestEntry = duplicateScan.entries.first(where: { isHistoryArchive($0, suffix: archiveSuffix) }),
            let newestData = boundedSnapshotData(at: newestEntry),
            newestData == data {
             return false
@@ -733,7 +756,7 @@ enum SessionPersistenceStore {
 
         let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
         let modifiedAt = (attributes?[.modificationDate] as? Date) ?? now
-        let filename = "\(historyTimestampFormatter.string(from: modifiedAt))-\(sanitizedBundleIdentifier(Bundle.main.bundleIdentifier)).json"
+        let filename = "\(historyTimestampFormatter.string(from: modifiedAt))-\(archiveSuffix)"
         let destination = historyDirectory.appendingPathComponent(filename, isDirectory: false)
 
         // Stage the copy beside the destination and swap it in, rather than deleting the
@@ -764,7 +787,7 @@ enum SessionPersistenceStore {
             return false
         }
 
-        let pruneScan = pruneHistory(in: historyDirectory, keeping: maxHistoryEntries)
+        let pruneScan = pruneHistory(in: historyDirectory, keeping: maxHistoryEntries, archiveSuffix: archiveSuffix)
         historyScanObserver?(pruneScan)
         return true
     }
@@ -805,9 +828,11 @@ enum SessionPersistenceStore {
     }
 
     @discardableResult
-    private static func pruneHistory(in directory: URL, keeping maxEntries: Int) -> HistoryScanResult {
+    private static func pruneHistory(in directory: URL, keeping maxEntries: Int, archiveSuffix: String) -> HistoryScanResult {
         let scan = historyEntries(in: directory, scanLimit: historyDirectoryScanLimit)
-        for staleEntry in scan.entries.dropFirst(max(0, maxEntries)) {
+        // Per bundle: a debug or tagged launch must never evict production's archives.
+        let ownEntries = scan.entries.filter { isHistoryArchive($0, suffix: archiveSuffix) }
+        for staleEntry in ownEntries.dropFirst(max(0, maxEntries)) {
             try? FileManager.default.removeItem(at: staleEntry)
         }
         return scan
