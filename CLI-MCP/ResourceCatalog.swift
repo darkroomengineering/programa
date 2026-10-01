@@ -16,7 +16,7 @@ import MCP
 /// Poll-on-read only -- no `resources/subscribe` support. Live push updates would need
 /// investigating whether the socket's existing `watch-events` mechanism
 /// (`Sources/TerminalController+Subscriptions.swift`) covers "surface text changed"; that's
-/// explicitly deferred (docs/plans/mcp-server.md §3.3 stretch note), not attempted here.
+/// deliberately not attempted (see docs/mcp-server.md, Resources).
 enum ResourceCatalog {
     static func register(on server: Server) async {
         await server.withMethodHandler(ListResources.self) { _ in

@@ -33,7 +33,7 @@ extension TerminalController {
         if let requestedId, requestedId.lowercased() != "latest" {
             targetURL = entries.first { v2SnapshotHistoryId(for: $0) == requestedId }
         } else {
-            targetURL = entries.first
+            targetURL = SessionPersistenceStore.ownedHistoryFileURLs().first
         }
 
         guard let targetURL else {

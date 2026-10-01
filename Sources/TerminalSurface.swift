@@ -40,26 +40,6 @@ struct TerminalSurfaceReviveDescriptor {
     var retainedDescriptor: SessionEscrowRetainedDescriptor? = nil
 }
 
-final class GhosttyMetalLayer: CAMetalLayer {
-    private let lock = NSLock()
-    private var drawableCount: Int = 0
-    private var lastDrawableTime: CFTimeInterval = 0
-
-    func debugStats() -> (count: Int, last: CFTimeInterval) {
-        lock.lock()
-        defer { lock.unlock() }
-        return (drawableCount, lastDrawableTime)
-    }
-
-    override func nextDrawable() -> CAMetalDrawable? {
-        lock.lock()
-        drawableCount += 1
-        lastDrawableTime = CACurrentMediaTime()
-        lock.unlock()
-        return super.nextDrawable()
-    }
-}
-
 final class TerminalSurfaceRegistry {
     static let shared = TerminalSurfaceRegistry()
 

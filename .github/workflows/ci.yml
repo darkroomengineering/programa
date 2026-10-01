@@ -667,14 +667,19 @@ jobs:
 
           PROGRAMA_CLI_BIN="$CLI_BIN" python3 tests/test_cli_codex_hook_trust.py
 
-      - name: Run CLI consent and socket discovery regressions
+      - name: Run CLI sweep regressions
         if: ${{ !cancelled() && steps.cli-build.outcome == 'success' }}
         run: |
           set -euo pipefail
           CLI_BIN="$RUNNER_TEMP/programa-cli-regression/Debug/programa"
           test -x "$CLI_BIN"
           result=0
-          for t in tests/test_cli_noninteractive_install_regression.py tests/test_cli_socket_no_autodiscovery_regression.py; do
+          for t in \
+            tests/test_cli_noninteractive_install_regression.py \
+            tests/test_cli_socket_no_autodiscovery_regression.py \
+            tests/test_cli_wait_surface_agent_state.py \
+            tests/test_cli_claude_settings_preservation.py \
+            tests/test_shell_state_report_ordering.py; do
             PROGRAMA_CLI_BIN="$CLI_BIN" python3 "$t" || result=1
           done
           exit "$result"

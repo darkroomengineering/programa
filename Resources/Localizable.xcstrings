@@ -9113,6 +9113,23 @@
         }
       }
     },
+    "dialog.programaConfig.confirmCommand.configNeverDigested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programa now checks each project config file. Review this config and trust it again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programa はプロジェクトの設定ファイルを個別に確認するようになりました。この設定を確認し、もう一度信頼してください。"
+          }
+        }
+      }
+    },
     "dialog.programaConfig.confirmCommand.messageWithCommand": {
       "extractionState": "manual",
       "localizations": {

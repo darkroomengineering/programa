@@ -385,6 +385,7 @@ extension TerminalController {
                     let automaticTitle = agentAutomaticTitle(task: task, role: role, siblingNumber: 1)
                     workspace.automaticAgentTitle = automaticTitle
                     workspace.agentParentWorkspaceId = parentWorkspaceId
+                    tabManager.canonicalizeHierarchyOrderIfNeeded()
                     let surfaceId = workspace.focusedTerminalPanel?.id
 
                     do {
@@ -469,6 +470,7 @@ extension TerminalController {
                 )
                 workspace.automaticAgentTitle = automaticTitle
                 workspace.agentParentWorkspaceId = parentWorkspaceId
+                tabManager.canonicalizeHierarchyOrderIfNeeded()
                 let surfaceId = workspace.focusedTerminalPanel?.id
                 tabManager.openCompanionBrowserSplitIfEnabled(for: workspace)
 

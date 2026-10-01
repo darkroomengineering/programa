@@ -6463,7 +6463,7 @@ struct ProgramaCLI {
           PROGRAMA_TAB_ID         Optional alias used by `tab-action`/`rename-tab` as default --tab.
           PROGRAMA_SURFACE_ID     Auto-set in programa terminals. Used as default --surface.
           PROGRAMA_SOCKET_PATH    Override the Unix socket path. Without this, the CLI defaults
-                              to ~/Library/Application Support/programa/programa.sock and auto-discovers tagged/debug sockets.
+                              to ~/Library/Application Support/programa/programa.sock and never connects to tagged/debug sockets on its own.
         """
     }
 

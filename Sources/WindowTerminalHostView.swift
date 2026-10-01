@@ -366,10 +366,6 @@ final class WindowTerminalHostView: NSView {
         return dividerCursorKind(at: windowPoint, in: rootView) != nil
     }
 
-    private func shouldPassThroughToSplitDivider(at point: NSPoint) -> Bool {
-        splitDividerCursorKind(at: point) != nil
-    }
-
     private static func dividerCursorKind(at windowPoint: NSPoint, in view: NSView) -> DividerCursorKind? {
         guard !view.isHidden else { return nil }
 

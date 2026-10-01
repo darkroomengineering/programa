@@ -223,6 +223,9 @@ struct ProgramaConfigExecutor {
         } ?? .trusted
         let trusted = trustState == .trusted
         let configChanged = trustState == .changed
+        let configNeverDigested = configChanged && configSourcePath.map {
+            !ProgramaDirectoryTrust.shared.hasRecordedDigest(configPath: $0)
+        } == true
 
         guard configChanged || requiresConfirmation(confirmFlag: confirmFlag, isTrusted: trusted) else {
             return true
@@ -273,7 +276,8 @@ struct ProgramaConfigExecutor {
             affirmativeButtonTitle: affirmativeButtonTitle,
             detail: detail,
             configPath: offerTrust ? configSourcePath : nil,
-            configChanged: configChanged
+            configChanged: configChanged,
+            configNeverDigested: configNeverDigested
         )
     }
 
@@ -399,7 +403,8 @@ struct ProgramaConfigExecutor {
         affirmativeButtonTitle: String,
         detail: String,
         configPath: String?,
-        configChanged: Bool = false
+        configChanged: Bool = false,
+        configNeverDigested: Bool = false
     ) -> Bool {
         let alert = NSAlert()
         alert.messageText = title
@@ -409,10 +414,15 @@ struct ProgramaConfigExecutor {
         // each surface on its own line.
         var informativeText = String(format: messageFormat, detail)
         if configChanged {
-            let changedWarning = String(
-                localized: "dialog.programaConfig.confirmCommand.configChanged",
-                defaultValue: "This folder's programa.json has changed since you trusted it."
-            )
+            let changedWarning = configNeverDigested
+                ? String(
+                    localized: "dialog.programaConfig.confirmCommand.configNeverDigested",
+                    defaultValue: "Programa now checks each project config file. Review this config and trust it again."
+                )
+                : String(
+                    localized: "dialog.programaConfig.confirmCommand.configChanged",
+                    defaultValue: "This folder's programa.json has changed since you trusted it."
+                )
             informativeText = changedWarning + "\n\n" + informativeText
         }
         alert.informativeText = informativeText

@@ -108,8 +108,6 @@ enum GhosttyPasteboardHelper {
     private static let shellEscapeCharacters = "\\ ()[]{}<>\"'`!#$&;|*?\t"
     private static let temporaryImageFilenamePrefix = "clipboard-"
     private static let objectReplacementCharacter = Character(UnicodeScalar(0xFFFC)!)
-    private static let temporaryImageOwnershipLock = NSLock()
-    private static var ownedTemporaryImagePaths: Set<String> = []
 
     static func pasteboard(for location: ghostty_clipboard_e) -> NSPasteboard? {
         switch location {
@@ -415,7 +413,6 @@ enum GhosttyPasteboardHelper {
             return nil
         }
 
-        registerOwnedTemporaryImageFile(fileURL)
         return fileURL
     }
 
@@ -469,32 +466,6 @@ enum GhosttyPasteboardHelper {
             }
         }
         return removed
-    }
-
-    static func cleanupTransferredTemporaryImageFiles(_ fileURLs: [URL]) {
-        for fileURL in fileURLs {
-            let normalizedURL = fileURL.standardizedFileURL
-            guard normalizedURL.isFileURL,
-                  consumeOwnedTemporaryImageFile(normalizedURL) else {
-                continue
-            }
-            try? FileManager.default.removeItem(at: normalizedURL)
-        }
-    }
-
-    private static func registerOwnedTemporaryImageFile(_ fileURL: URL) {
-        let normalizedPath = fileURL.standardizedFileURL.path
-        temporaryImageOwnershipLock.lock()
-        ownedTemporaryImagePaths.insert(normalizedPath)
-        temporaryImageOwnershipLock.unlock()
-    }
-
-    private static func consumeOwnedTemporaryImageFile(_ fileURL: URL) -> Bool {
-        let normalizedPath = fileURL.standardizedFileURL.path
-        temporaryImageOwnershipLock.lock()
-        let didOwnFile = ownedTemporaryImagePaths.remove(normalizedPath) != nil
-        temporaryImageOwnershipLock.unlock()
-        return didOwnFile
     }
 }
 

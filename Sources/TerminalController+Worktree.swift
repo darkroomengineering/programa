@@ -42,6 +42,7 @@ extension TerminalController {
             baseDirectory: worktreeBaseDirectory
         )
 
+        let branchExisted = GitWorktreeManager.branchExistsLocally(branch, repoRoot: repoRoot)
         switch GitWorktreeManager.add(repoRoot: repoRoot, branch: branch, base: base, path: path) {
         case .success(let entry):
             let completion = v2MainSync {
@@ -58,7 +59,9 @@ extension TerminalController {
             if case .err(let originalCode, let originalMessage, _) = completion {
                 switch GitWorktreeManager.remove(repoRoot: repoRoot, path: entry.path, force: false) {
                 case .success:
-                    break
+                    if !branchExisted {
+                        GitWorktreeManager.deleteBranchIfUnused(branch, repoRoot: repoRoot)
+                    }
                 case .worktreeNotFound, .worktreeDirty, .gitCommandFailed:
                     return .err(
                         code: "cleanup_failed",

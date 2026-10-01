@@ -98,7 +98,7 @@ Embedded browser settings from Settings > Browser.
 | `hostsToOpenInEmbeddedBrowser` | array | `[]` | Allowlist of hosts that should stay inside the embedded browser. |
 | `urlsToAlwaysOpenExternally` | array | `[]` | Rules that always open matching URLs in the system browser. |
 | `externalBrowser` | string | `""` | Bundle identifier of the browser that opens http(s) links leaving Programa, for example `com.apple.Safari`. Empty uses the macOS default browser. Other URL schemes (`mailto:`, `slack://`, `file:`) keep their registered handlers. |
-| `externalAppOpenAllowlist` | array | `[]` | Bundle identifiers of apps for which you chose Always allow in the external app open prompt. Links that open these apps skip the prompt. |
+| `externalAppOpenAllowlist` | array | `[]` | Entries for which you chose Always allow in the external app open prompt, each written as `bundleId\|scheme`, for example `com.tinyspeck.slackmacgap\|slack`. Links with that scheme that open that app skip the prompt. Bare bundle identifiers are ignored. |
 | `insecureHttpHostsAllowedInEmbeddedBrowser` | array | `["localhost", "127.0.0.1", "::1", "0.0.0.0", "*.localtest.me"]` | HTTP hosts allowed in the embedded browser without a warning prompt. |
 | `proxy` | object |  | Route the embedded browser through a proxy. Requires host and port; type defaults to socks5. |
 

@@ -2985,19 +2985,6 @@ class TerminalController {
         return decoded
     }
 
-    func readTerminalTextForSessionSnapshot(
-        terminalPanel: TerminalPanel,
-        includeScrollback: Bool = false,
-        lineLimit: Int? = nil
-    ) -> String? {
-        readTerminalTextForSnapshot(
-            terminalPanel: terminalPanel,
-            includeScrollback: includeScrollback,
-            lineLimit: lineLimit
-        )
-    }
-
-
     deinit {
         if let browserDownloadObserver {
             NotificationCenter.default.removeObserver(browserDownloadObserver)

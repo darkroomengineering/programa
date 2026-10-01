@@ -41,7 +41,7 @@ extension ProgramaCLI {
     private func parseTreeCommandOptions(_ args: [String]) throws -> TreeCommandOptions {
         let (workspaceOpt, rem0) = parseOption(args, name: "--workspace")
         if rem0.contains("--workspace") {
-            throw CLIError(message: "tree requires --workspace <id|ref|index>")
+            throw CLIError(message: "tree requires --workspace <id|ref>")
         }
 
         var includeAll = false
@@ -60,7 +60,7 @@ extension ProgramaCLI {
         }
 
         if let unknown = remaining.first(where: { $0.hasPrefix("--") }) {
-            throw CLIError(message: "tree: unknown flag '\(unknown)'. Known flags: --all --workspace <id|ref|index> --json")
+            throw CLIError(message: "tree: unknown flag '\(unknown)'. Known flags: --all --workspace <id|ref> --json")
         }
         if let extra = remaining.first {
             throw CLIError(message: "tree: unexpected argument '\(extra)'")
@@ -555,7 +555,7 @@ extension ProgramaCLI {
 
             Flags:
               --all                         Include all windows (default: current window only)
-              --workspace <id|ref|index>   Show only one workspace
+              --workspace <id|ref>         Show only one workspace
               --json                        Structured JSON output
 
             Output:
@@ -585,7 +585,7 @@ extension ProgramaCLI {
         [
             CommandDescriptor(
                 names: ["tree"],
-                helpLines: ["tree [--all] [--workspace <id|ref|index>]"],
+                helpLines: ["tree [--all] [--workspace <id|ref>]"],
                 execute: { ctx in
                     try self.runTreeCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
                 }

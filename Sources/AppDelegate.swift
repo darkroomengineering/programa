@@ -5422,10 +5422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // Submit only inside a pane the agent-detection state already knows hosts an agent;
             // a plain shell must never receive an implicit Return.
             // A blocked agent is waiting on a permission or y/n prompt; never answer that with a capture.
-            guard let workspace,
-                  let presence = workspace.panelAgentPresence[returnPanelId],
-                  presence.state != .blocked,
-                  !presence.isStale(now: Date()) else { return }
+            guard let workspace, workspace.canAutoSubmitToAgent(panelId: returnPanelId) else { return }
             terminalPanel.sendInput("\r")
         })
     }

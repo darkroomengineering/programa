@@ -8,6 +8,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Added
 - New `agent.needs_input` socket method reports a surface as blocked on the user and posts its notification in one call, instead of three separate calls that could fail independently.
+- New `surface.resolve_tty` socket method finds the terminal surface for a tty without changing focus. `agent.spawn` returns the new terminal's `pane_id` and `pane_ref`, and `agent.detection.list` reports manifests it rejected in a `rejected` list.
 - Tab colors and the Tab Color menu in the glass tab bar; pane tabs show their color as a tinted background.
 - `programa wait-surface --agent-state <idle|working|blocked|any_change>` waits for the agent in a surface to reach a state.
 - On Windows, pasting text with line breaks or control characters into a program that has not turned on bracketed paste (cmd.exe, PowerShell) asks first, with a preview.
@@ -16,7 +17,10 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Only one copy of Programa runs at a time: launching a second copy brings the running app forward and exits.
 - Closing a window with its red button or Close Window asks first when any of its workspaces has a running process, with the same confirmation as closing the last workspace. The socket method `window.close` still closes without asking.
 - Splitting a pane or opening a pane from the socket or CLI no longer moves focus; only explicit focus commands do.
-- Opening another app from a web page or a terminal link asks first, per link scheme.
+- Opening another app from a web page or a terminal link asks first, per link scheme. Your earlier "Always allow" choices for opening external apps are reset: the setting now stores one `bundleId|scheme` entry per choice, and bare bundle ids are ignored.
+- Every trusted `programa.json` asks for approval once more after updating. Trust is now recorded per config file, and the dialog says so when a config was trusted before that change.
+- `programa claude`, `codex` and `opencode` `install-integration` run without a terminal now need `--yes`.
+- The CLI no longer connects to a dev, staging or tagged app's socket on its own. Point it at one with `--socket` or `PROGRAMA_SOCKET_PATH`.
 - A program that writes to the clipboard with OSC 52 asks before the clipboard changes.
 - Browser cookie methods act on the current page's site by default; `all_domains: true` widens them, and a `domain` filter matches the exact host or its subdomains only. `browser.state.save` writes its file with `0600` permissions to an absolute path and exports only the current site's cookies unless asked for more.
 - Socket errors are consistent: a reference that does not resolve returns `not_found` (a malformed one stays `invalid_params`), splitting a workspace that already has four panes returns `limit_reached` before anything is created, and closing a window's last workspace returns `invalid_state`.

@@ -207,7 +207,11 @@ extension TerminalController {
             if panelType == .browser {
                 newPanelId = ws.newBrowserSurface(inPane: paneId, url: url, focus: v2FocusAllowed())?.id
             } else {
-                newPanelId = ws.newTerminalSurface(inPane: paneId, focus: v2FocusAllowed())?.id
+                let terminalPanel = ws.newTerminalSurface(inPane: paneId, focus: v2FocusAllowed())
+                // A terminal created without focus is never attached to a visible view, so start
+                // its shell explicitly or it would sit idle until the user selects it.
+                terminalPanel?.surface.requestBackgroundSurfaceStartIfNeeded()
+                newPanelId = terminalPanel?.id
             }
 
             guard let newPanelId else {

@@ -118,13 +118,12 @@ candidate that accepts a connection, then the first candidate that exists as a s
 2. the requested path
 3. `~/Library/Application Support/programa/programa.sock`
 4. `/tmp/programa.sock`
-5. `/tmp/programa-debug.sock`
-6. `/tmp/programa-staging.sock`
-7. the 12 most recently modified `programa*.sock` files in `/tmp` and the Application Support
-   `programa` folder
-8. the path recorded in `last-socket-path`
 
-If none exists, the requested path is used and the connection error names it.
+If none exists, the requested path is used and the connection error names it. The client never
+connects on its own to a dev (`/tmp/programa-debug.sock`), staging or tagged socket, or the one
+recorded in `last-socket-path`, because a command meant for your app would land in a different
+build. When such sockets are live, the CLI lists them on stderr; pass `--socket <path>` or set
+`PROGRAMA_SOCKET_PATH` and `PROGRAMA_SOCKET` to use one.
 
 Inside a Programa terminal, both variables point at the socket of the app that hosts it, so a
 script run there talks to that app. To drive a different instance, such as a tagged build, set both
@@ -450,6 +449,18 @@ does for child-exit) at a fixed ~100ms interval on the connection's own thread; 
 `TerminalController+Telemetry.swift`'s `v2SurfaceReportAgentState`/`v2SurfaceClearAgentState` via
 `DispatchQueue.main.async`).
 
+## `surface.resolve_tty`
+
+Finds the terminal surface attached to a tty, for CLI hooks that bind their caller by tty.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `tty` | string | yes | A `/dev/ttysNNN` path or the bare name (`ttys004`). |
+
+Returns `{"workspace_id", "workspace_ref", "surface_id", "surface_ref"}` for the one matching
+terminal surface. Errors: `invalid_params` when `tty` is missing or empty, `not_found` when no
+terminal surface has that tty. The lookup changes no focus or selection.
+
 ## Text delivery: `queued`
 
 `surface.send_text` and `agent.prompt` include `"queued": true` in the result when the target
@@ -747,6 +758,10 @@ replaced a working bundled manifest. `states` is the full state-rule list (`buck
 scaffold --force` can seed a forced override from what's currently loaded instead of writing a
 blank manifest over a working one.
 
+The result also carries `rejected`: manifest files that were not loaded because a pattern does
+not compile, as `[{"agent", "path", "reason"}]`. It is empty when every manifest loaded, and
+tells an author why their override is not active.
+
 ### `agent.detection.classify`
 
 | Field | Type | Required | Notes |
@@ -757,6 +772,14 @@ blank manifest over a working one.
 Result: `{"requested_agent", "recognized_via" ("explicit"|"screen_pattern"|null), "agent", "display_name", "bucket", "confidence", "matched_pattern", "workspace_id"?, "surface_id"?}` (all
 null when nothing was recognized/classified). Errors: `not_found` (unknown `agent`), plus
 whatever `surface.read_text` can return for the target surface.
+
+## `agent.spawn`
+
+Starts an agent in a new workspace. A nested-workspace spawn returns `agent_id`,
+`workspace_id`, `workspace_ref`, `pane_id`, `pane_ref`, `surface_id`, `surface_ref`, `focused`
+and `agent`; `pane_id` and `pane_ref` identify the pane hosting the spawned terminal, so
+callers can target it without a separate lookup. The new workspace is created without taking
+focus.
 
 ## `agent.event` (docs/plans/agent-events.md)
 
@@ -854,6 +877,12 @@ Set once per shell spawn in `Sources/TerminalSurface.swift`, alongside the other
 `BrowserAvailability.shortKeysByBundleIdentifier`) and `PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID` is
 the raw bundle identifier, resolved via one `NSWorkspace.urlForApplication(toOpen:)` Launch
 Services call. Both are omitted if resolution fails.
+
+## Debug-only methods
+
+`debug.*` methods, including `debug.terminals` (the window, workspace, pane and surface mapping
+of every terminal), exist only in Debug builds. Release builds answer them with
+`method_not_found`.
 
 ## Tests
 

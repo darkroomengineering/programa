@@ -83,6 +83,17 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
         trustState(configPath: configPath, globalConfigPath: globalConfigPath) == .trusted
     }
 
+    /// True when a digest is recorded for this exact config file. A `.changed` config without
+    /// one sits under a root trusted before per-file digests existed (or was never approved
+    /// itself), so the user has not reviewed this file's content, as opposed to edited it.
+    func hasRecordedDigest(configPath: String) -> Bool {
+        let trustKey = Self.trustKey(for: configPath)
+        let configKey = Self.configKey(for: configPath)
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return trustedDirectories[trustKey]?[configKey] != nil
+    }
+
     /// Three-state trust query. Fails closed: a root that is absent is `.untrusted`; a root that
     /// is present but holds no digest for this exact config, or a digest that differs, is
     /// `.changed`; an unreadable config is `.untrusted`. Nothing is ever adopted silently.
