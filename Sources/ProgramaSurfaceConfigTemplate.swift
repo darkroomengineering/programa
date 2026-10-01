@@ -97,7 +97,8 @@ func programaCurrentSurfaceFontSizePoints(_ surface: ghostty_surface_t) -> Float
         return nil
     }
 
-    let ctFont = Unmanaged<CTFont>.fromOpaque(quicklookFont).takeUnretainedValue()
+    // `ghostty_surface_quicklook_font` returns a +1 copy (`copyWithAttributes`).
+    let ctFont = Unmanaged<CTFont>.fromOpaque(quicklookFont).takeRetainedValue()
     let points = Float(CTFontGetSize(ctFont))
     guard points > 0 else { return nil }
     return points

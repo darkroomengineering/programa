@@ -550,6 +550,7 @@ enum SessionWALCore {
         case cannotOpenLock
         case cannotLock
         case cannotOpenWAL
+        case cannotWriteWAL(Error)
         case cannotCommitMeta
         case cannotCommitFrame
     }
@@ -646,12 +647,19 @@ enum SessionWALCore {
                 guard let handle = try? FileHandle(forWritingTo: paths.walURL) else {
                     throw CoreError.cannotOpenWAL
                 }
-                handle.seekToEndOfFile()
-                handle.write(data)
-                if synchronize || didRotate {
-                    handle.synchronizeFile()
+                defer { try? handle.close() }
+                // Throwing FileHandle APIs only: the legacy non-throwing
+                // seek/write/sync methods raise an Objective-C exception on
+                // ENOSPC or EIO, which no Swift `catch` can stop.
+                do {
+                    _ = try handle.seekToEnd()
+                    try handle.write(contentsOf: data)
+                    if synchronize || didRotate {
+                        try handle.synchronize()
+                    }
+                } catch {
+                    throw CoreError.cannotWriteWAL(error)
                 }
-                handle.closeFile()
                 currentSize += Int64(data.count)
             }
 
@@ -947,10 +955,14 @@ enum SessionWALCore {
         guard let handle = try? FileHandle(forWritingTo: nextURL) else {
             throw CoreError.cannotCommitMeta
         }
-        handle.truncateFile(atOffset: 0)
-        handle.write(data)
-        handle.synchronizeFile()
-        handle.closeFile()
+        do {
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: 0)
+            try handle.write(contentsOf: data)
+            try handle.synchronize()
+        } catch {
+            throw CoreError.cannotCommitMeta
+        }
         guard atomicRename(from: nextURL, to: paths.metaURL) else {
             throw CoreError.cannotCommitMeta
         }
@@ -961,8 +973,12 @@ enum SessionWALCore {
         guard let handle = try? FileHandle(forWritingTo: paths.walURL) else {
             throw CoreError.cannotOpenWAL
         }
-        handle.synchronizeFile()
-        handle.closeFile()
+        defer { try? handle.close() }
+        do {
+            try handle.synchronize()
+        } catch {
+            throw CoreError.cannotWriteWAL(error)
+        }
     }
 
     private static func fileSize(at url: URL) -> Int64 {
@@ -1002,6 +1018,9 @@ private final class SessionWALWriter {
     var lastMetaWriteAt: Date = .distantPast
     var lastWALSyncAt: Date = .distantPast
     var hasUnsynchronizedWALWrites = false
+    /// Set after the first failed WAL append is logged, so a full disk
+    /// produces one diagnostics line per surface, not one per tick.
+    var hasLoggedAppendFailure = false
     /// Incremented every time `wal.log` is rotated to `wal.log.1`. Recorded
     /// alongside a captured frame's WAL offset so restore can tell whether a
     /// rotation happened after the frame was captured (see the file-level
@@ -1615,12 +1634,23 @@ final class SessionWALStore {
         let data = Data(capture.bytes)
         let shouldSynchronize = forceSync
             || date.timeIntervalSince(writer.lastWALSyncAt) >= SessionWALPolicy.walSyncInterval
-        guard let result = try? SessionWALCore.append(
-            data,
-            to: writer.paths,
-            synchronize: shouldSynchronize,
-            capturedGeneration: capture.generation
-        ), !result.didSuppress else { return }
+        let result: SessionWALCore.AppendResult
+        do {
+            result = try SessionWALCore.append(
+                data,
+                to: writer.paths,
+                synchronize: shouldSynchronize,
+                capturedGeneration: capture.generation
+            )
+        } catch {
+            // Skip this chunk (disk full, EIO); the next tick tries again.
+            if !writer.hasLoggedAppendFailure {
+                writer.hasLoggedAppendFailure = true
+                dilog("session.wal", "append_failed surface=\(writer.context.surfaceId.prefix(8)) bytes=\(data.count) error=\(error)")
+            }
+            return
+        }
+        guard !result.didSuppress else { return }
 
         writer.currentWalSize = result.currentWalSize
         writer.walGeneration = result.walGeneration

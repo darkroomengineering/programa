@@ -216,12 +216,16 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
     private enum PendingSocketInput {
         case text(Data)
+        /// Text delivered through the key-text path (`sendInput`), not as a paste.
+        case keyText(String)
         case key(PendingKeyEvent)
 
         var estimatedBytes: Int {
             switch self {
             case .text(let data):
                 return data.count
+            case .keyText(let text):
+                return max(text.utf8.count, 1)
             case .key(let event):
                 return max(event.label.utf8.count, 1)
             }
@@ -411,7 +415,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
     @Published var searchState: SearchState? = nil {
 	        didSet {
 	            if let searchState {
-	                hostedView.cancelFocusRequest()
 #if DEBUG
                 dlog("find.searchState created tab=\(tabId.uuidString.prefix(5)) surface=\(id.uuidString.prefix(5))")
 #endif
@@ -564,8 +567,23 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// Surfaces gated under the *current* generation, so
     /// `clearSessionRestoreGateAndFlushPendingSurfaces(generation:)` can nudge
     /// exactly the surfaces belonging to the restore pass it is closing out.
-    /// Weak: a surface torn down mid-restore must not be kept alive here.
-    private static var surfacesAwaitingRestoreSettle = NSHashTable<TerminalSurface>.weakObjects()
+    /// Weak: a surface torn down mid-restore must not be kept alive here. A
+    /// Swift `weak` box, not `NSHashTable.weakObjects()`, which does not
+    /// reliably weak-store this non-NSObject class (see
+    /// `TerminalSurfaceRegistry`).
+    private struct WeakRestoreSettleBox {
+        weak var surface: TerminalSurface?
+    }
+    private static var surfacesAwaitingRestoreSettle: [WeakRestoreSettleBox] = []
+
+    private static func addAwaitingRestoreSettle(_ surface: TerminalSurface) {
+        surfacesAwaitingRestoreSettle.removeAll { $0.surface == nil || $0.surface === surface }
+        surfacesAwaitingRestoreSettle.append(WeakRestoreSettleBox(surface: surface))
+    }
+
+    private static func removeAwaitingRestoreSettle(_ surface: TerminalSurface) {
+        surfacesAwaitingRestoreSettle.removeAll { $0.surface == nil || $0.surface === surface }
+    }
 
     /// Called by `Workspace+Persistence.restoreSessionSnapshot` after
     /// `applySessionDividerPositions` has run and one additional main-queue
@@ -575,9 +593,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// pass's surfaces on the fallback-timer ceiling.
     static func clearSessionRestoreGateAndFlushPendingSurfaces(generation: Int) {
         settlingRestorePassCount = max(0, settlingRestorePassCount - 1)
-        let pending = surfacesAwaitingRestoreSettle.allObjects.filter { $0.gatedRestoreGeneration == generation }
+        let pending = surfacesAwaitingRestoreSettle.compactMap(\.surface)
+            .filter { $0.gatedRestoreGeneration == generation }
         for surface in pending {
-            surfacesAwaitingRestoreSettle.remove(surface)
+            removeAwaitingRestoreSettle(surface)
         }
         for surface in pending {
             surface.isGatedForSessionRestoreSettle = false
@@ -612,6 +631,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 // forever; see `reviveSeedFallbackMaxAttempts`'s doc comment.
                 self.isGatedForSessionRestoreSettle = false
                 self.gatedRestoreGeneration = nil
+                Self.removeAwaitingRestoreSettle(self)
             }
             self.seedRevivedScrollbackIfPending(trigger: "fallback-timer")
         }
@@ -1141,9 +1161,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let line = "[\(timestamp)] \(message)\n"
         if let handle = FileHandle(forWritingAtPath: surfaceLogPath) {
-            handle.seekToEndOfFile()
-            handle.write(Data(line.utf8))
-            handle.closeFile()
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data(line.utf8))
+            try? handle.close()
         } else {
             _ = FileManager.default.createFile(atPath: surfaceLogPath, contents: line.data(using: .utf8))
         }
@@ -1155,9 +1175,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let line = "[\(timestamp)] \(message)\n"
         if let handle = FileHandle(forWritingAtPath: sizeLogPath) {
-            handle.seekToEndOfFile()
-            handle.write(Data(line.utf8))
-            handle.closeFile()
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data(line.utf8))
+            try? handle.close()
         } else {
             _ = FileManager.default.createFile(atPath: sizeLogPath, contents: line.data(using: .utf8))
         }
@@ -1819,7 +1839,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             if TerminalSurface.isSessionRestoreSettling {
                 isGatedForSessionRestoreSettle = true
                 gatedRestoreGeneration = TerminalSurface.currentSessionRestoreGeneration
-                TerminalSurface.surfacesAwaitingRestoreSettle.add(self)
+                TerminalSurface.addAwaitingRestoreSettle(self)
             }
             // Bounded fallback: covers a surface created already at its
             // final size, where no further `updateSize` call ever lands to
@@ -1923,7 +1943,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
     }
 
     /// Issue #182 slice 1 escrow trigger (`Sources/SessionEscrow.swift`).
-    /// Reads the raw pty master fd and `dup()`s it -- both on the main
+    /// Reads the raw pty master fd and duplicates it (`F_DUPFD_CLOEXEC`,
+    /// so the copy never leaks into spawned children) -- both on the main
     /// actor, matching the cost class of the sibling `child_pid`/
     /// `pty_path` accessors called just above -- then hands the dup off to
     /// `SessionEscrowClient` on its own background queue for the actual
@@ -1932,7 +1953,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// surface only ever attempts this once regardless of how many
     /// `resolveSessionWALIdentity` retries follow. Never touches the
     /// ghostty-owned fd itself: `ghostty_surface_pty_master_fd` does not
-    /// dup or transfer ownership, so `dup()` here is required before the
+    /// dup or transfer ownership, so a duplicate here is required before the
     /// fd can safely outlive this surface.
     /// Tells the escrow holder to drop this session, but only when the
     /// surface is going away because the user closed it for good.
@@ -1990,7 +2011,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         guard !hasAttemptedSessionEscrow else { return }
         hasAttemptedSessionEscrow = true
         guard let childPID = Int32(exactly: descriptor.childPID) else { return }
-        let dupedFD = dup(descriptor.masterFD)
+        let dupedFD = fcntl(descriptor.masterFD, F_DUPFD_CLOEXEC, 0)
         guard dupedFD >= 0 else { return }
         let surfaceId = id.uuidString
         let walWorkingDirectory = workingDirectory
@@ -2021,7 +2042,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         hasAttemptedSessionEscrow = true
         let rawMasterFD = ghostty_surface_pty_master_fd(surface)
         guard rawMasterFD >= 0 else { return }
-        let dupedFD = dup(rawMasterFD)
+        let dupedFD = fcntl(rawMasterFD, F_DUPFD_CLOEXEC, 0)
         guard dupedFD >= 0 else { return }
         SessionEscrowClient.shared.escrow(
             surfaceId: surfaceId,
@@ -2522,36 +2543,72 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// Send text with control characters (Return, Tab, etc.) delivered as key
     /// events so the shell processes them, while regular text is sent via the
     /// normal key-text path.  Mirrors `TerminalController.sendSocketText`.
-    func sendInput(_ text: String) {
-        guard let surface = surface else { return }
+    ///
+    /// Before the runtime surface exists the input is queued, like `sendText`,
+    /// and flushed in order once it starts. Returns false only when queueing
+    /// had to evict older pending input to stay under the pending-input cap.
+    @discardableResult
+    func sendInput(_ text: String) -> Bool {
+        var segments: [PendingSocketInput] = []
         var bufferedText = ""
         var previousWasCR = false
+        func flushBuffered() {
+            guard !bufferedText.isEmpty else { return }
+            segments.append(.keyText(bufferedText))
+            bufferedText = ""
+        }
+        func appendKey(_ keycode: UInt32, label: String) {
+            flushBuffered()
+            segments.append(.key(PendingKeyEvent(keycode: keycode, mods: GHOSTTY_MODS_NONE, label: label)))
+        }
         for scalar in text.unicodeScalars {
             switch scalar.value {
             case 0x0A: // \n — skip if preceded by \r (already sent Return)
                 if !previousWasCR {
-                    flushText(&bufferedText, surface: surface)
-                    sendKeyEvent(surface: surface, keycode: 0x24) // kVK_Return
+                    appendKey(0x24, label: "enter") // kVK_Return
                 }
                 previousWasCR = false
             case 0x0D:
-                flushText(&bufferedText, surface: surface)
-                sendKeyEvent(surface: surface, keycode: 0x24) // kVK_Return
+                appendKey(0x24, label: "enter") // kVK_Return
                 previousWasCR = true
             case 0x09:
-                flushText(&bufferedText, surface: surface)
-                sendKeyEvent(surface: surface, keycode: 0x30) // kVK_Tab
+                appendKey(0x30, label: "tab") // kVK_Tab
                 previousWasCR = false
             case 0x1B:
-                flushText(&bufferedText, surface: surface)
-                sendKeyEvent(surface: surface, keycode: 0x35) // kVK_Escape
+                appendKey(0x35, label: "escape") // kVK_Escape
                 previousWasCR = false
             default:
                 bufferedText.unicodeScalars.append(scalar)
                 previousWasCR = false
             }
         }
-        flushText(&bufferedText, surface: surface)
+        flushBuffered()
+        guard !segments.isEmpty else { return true }
+
+        guard let surface = surface else {
+            var evicted = false
+            for segment in segments where enqueuePendingSocketInput(segment) {
+                evicted = true
+            }
+            requestBackgroundSurfaceStartIfNeeded()
+            return !evicted
+        }
+        for segment in segments {
+            deliver(segment, to: surface)
+        }
+        return true
+    }
+
+    private func deliver(_ input: PendingSocketInput, to surface: ghostty_surface_t) {
+        switch input {
+        case .text(let chunk):
+            writeTextData(chunk, to: surface)
+        case .keyText(let text):
+            var buffer = text
+            flushText(&buffer, surface: surface)
+        case .key(let event):
+            sendKeyEvent(surface: surface, keycode: event.keycode, mods: event.mods)
+        }
     }
 
     private func flushText(_ buffer: inout String, surface: ghostty_surface_t) {
@@ -2760,12 +2817,24 @@ final class TerminalSurface: Identifiable, ObservableObject {
         }
     }
 
-    private func enqueuePendingSocketInput(_ input: PendingSocketInput) {
+    /// Returns true when older pending input had to be evicted to make room.
+    @discardableResult
+    private func enqueuePendingSocketInput(_ input: PendingSocketInput) -> Bool {
         let incomingBytes = input.estimatedBytes
+        var evictedItems = 0
+        var evictedBytes = 0
         while !pendingSocketInputQueue.isEmpty,
               pendingSocketInputBytes + incomingBytes > maxPendingSocketInputBytes {
             let dropped = pendingSocketInputQueue.removeFirst()
             pendingSocketInputBytes -= dropped.estimatedBytes
+            evictedItems += 1
+            evictedBytes += dropped.estimatedBytes
+        }
+        if evictedItems > 0 {
+            dilog(
+                "surface.input",
+                "pending_input_evicted surface=\(id.uuidString.prefix(8)) items=\(evictedItems) bytes=\(evictedBytes) cap=\(maxPendingSocketInputBytes)"
+            )
         }
 
         pendingSocketInputQueue.append(input)
@@ -2781,6 +2850,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             "keys=\(pendingKeys) bytes=\(pendingSocketInputBytes)"
         )
 #endif
+        return evictedItems > 0
     }
 
     private func flushPendingSocketInputIfNeeded() {
@@ -2792,13 +2862,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
         var queuedKeys = 0
         for item in queued {
-            switch item {
-            case .text(let chunk):
-                writeTextData(chunk, to: surface)
-            case .key(let event):
-                queuedKeys += 1
-                sendKeyEvent(surface: surface, keycode: event.keycode, mods: event.mods)
-            }
+            if case .key = item { queuedKeys += 1 }
+            deliver(item, to: surface)
         }
 #if DEBUG
         dlog(

@@ -9691,6 +9691,40 @@
         }
       }
     },
+    "sess.clipboardWrite.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Clipboard Write?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリップボードへの書き込みを許可しますか？"
+          }
+        }
+      }
+    },
+    "sess.clipboardWrite.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A program running in this terminal wants to replace your clipboard contents. Allow it to write to the clipboard?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このターミナルで実行中のプログラムがクリップボードの内容を置き換えようとしています。クリップボードへの書き込みを許可しますか？"
+          }
+        }
+      }
+    },
     "error.clipboardFolderPath": {
       "extractionState": "manual",
       "localizations": {

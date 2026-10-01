@@ -144,14 +144,26 @@ extension GhosttyNSView {
             return nil
         }
 
+        // One visible-text read per resolution, shared by the pointer and
+        // viewport-offset lookups (each read copies up to rows * 4 lines).
+        var cachedVisibleText: VisibleTerminalText??
+        func visibleText() -> VisibleTerminalText? {
+            if let cachedVisibleText { return cachedVisibleText }
+            let snapshot = readVisibleTerminalText(workspace: workspace, terminalSurface: termSurface)
+            cachedVisibleText = .some(snapshot)
+            return snapshot
+        }
+
         let snapshotPoint = preferredPointerPoint(from: point)
-        let pointSnapshotResolution = snapshotPoint.flatMap {
-            resolveVisibleWordPath(
-                at: $0,
-                cwd: cwd,
-                workspace: workspace,
-                terminalSurface: termSurface
-            )
+        let pointSnapshotResolution = snapshotPoint.flatMap { point in
+            visibleText().flatMap { resolveVisibleWordPath(at: point, cwd: cwd, visibleText: $0) }
+        }
+        // The pointer-anchored snapshot is the only source tied directly to the
+        // actual pointer location and wins over quicklook and viewport offsets
+        // (which can lag or target a sibling entry in multi-column `ls` output),
+        // so the quicklook and viewport lookups are skipped once it resolves.
+        if let pointSnapshotResolution {
+            return pointSnapshotResolution
         }
 
         var text = ghostty_text_s()
@@ -183,26 +195,13 @@ extension GhosttyNSView {
 #else
                 let viewportOffsetStart = Int(text.offset_start)
 #endif
-                viewportResolution = resolveVisibleWordPathFromViewportOffset(
-                    viewportOffsetStart,
-                    cwd: cwd,
-                    workspace: workspace,
-                    terminalSurface: termSurface
-                )
+                viewportResolution = visibleText().flatMap {
+                    resolveVisibleWordPathFromViewportOffset(viewportOffsetStart, cwd: cwd, visibleText: $0)
+                }
             }
 
             if let viewportResolution {
-                // The pointer-anchored snapshot is the only source tied directly to the
-                // actual click location. Prefer it over quicklook and viewport offsets,
-                // which can lag or target a sibling entry in multi-column `ls` output.
-                if let pointSnapshotResolution {
-                    return pointSnapshotResolution
-                }
                 return viewportResolution
-            }
-
-            if let pointSnapshotResolution {
-                return pointSnapshotResolution
             }
 
             if let quicklookResolution {
@@ -210,7 +209,7 @@ extension GhosttyNSView {
             }
         }
 
-        return pointSnapshotResolution
+        return nil
     }
 
     #if DEBUG
@@ -347,25 +346,44 @@ extension GhosttyNSView {
         return convert(window.mouseLocationOutsideOfEventStream, from: nil)
     }
 
-    private func resolveVisibleWordPathFromViewportOffset(
-        _ viewportOffsetStart: Int,
-        cwd: String,
+    private struct VisibleTerminalText {
+        let lines: [String]
+        let rows: Int
+        let cols: Int
+        let size: ghostty_surface_size_s
+    }
+
+    private func readVisibleTerminalText(
         workspace: Workspace,
         terminalSurface: TerminalSurface
-    ) -> WordPathResolution? {
+    ) -> VisibleTerminalText? {
         guard let panel = workspace.terminalPanel(for: terminalSurface.id),
               let surface else {
             return nil
         }
-
         let size = ghostty_surface_size(surface)
         let rows = max(Int(size.rows), 1)
         let cols = max(Int(size.columns), 1)
-        let visibleText = TerminalController.shared.readTerminalTextForSnapshot(
+        let text = TerminalController.shared.readTerminalTextForSnapshot(
             terminalPanel: panel,
             lineLimit: max(200, rows * 4)
         ) ?? ""
-        let visibleLines = programaVisibleTerminalLines(from: visibleText, rows: rows)
+        return VisibleTerminalText(
+            lines: programaVisibleTerminalLines(from: text, rows: rows),
+            rows: rows,
+            cols: cols,
+            size: size
+        )
+    }
+
+    private func resolveVisibleWordPathFromViewportOffset(
+        _ viewportOffsetStart: Int,
+        cwd: String,
+        visibleText: VisibleTerminalText
+    ) -> WordPathResolution? {
+        let rows = visibleText.rows
+        let cols = visibleText.cols
+        let visibleLines = visibleText.lines
         let rowOffset = max(0, rows - visibleLines.count)
         let rowFromTop = max(0, min(rows - 1, viewportOffsetStart / cols))
         let visibleRow = rowFromTop - rowOffset
@@ -390,26 +408,15 @@ extension GhosttyNSView {
     private func resolveVisibleWordPath(
         at point: NSPoint,
         cwd: String,
-        workspace: Workspace,
-        terminalSurface: TerminalSurface
+        visibleText: VisibleTerminalText
     ) -> WordPathResolution? {
-        guard let panel = workspace.terminalPanel(for: terminalSurface.id),
-              let surface else {
-            return nil
-        }
-
-        let size = ghostty_surface_size(surface)
-        let rows = max(Int(size.rows), 1)
-        let cols = max(Int(size.columns), 1)
-        let resolvedCellWidth = cellSize.width > 0 ? cellSize.width : CGFloat(size.cell_width_px)
-        let resolvedCellHeight = cellSize.height > 0 ? cellSize.height : CGFloat(size.cell_height_px)
+        let rows = visibleText.rows
+        let cols = visibleText.cols
+        let resolvedCellWidth = cellSize.width > 0 ? cellSize.width : CGFloat(visibleText.size.cell_width_px)
+        let resolvedCellHeight = cellSize.height > 0 ? cellSize.height : CGFloat(visibleText.size.cell_height_px)
         guard resolvedCellWidth > 0, resolvedCellHeight > 0 else { return nil }
 
-        let visibleText = TerminalController.shared.readTerminalTextForSnapshot(
-            terminalPanel: panel,
-            lineLimit: max(200, rows * 4)
-        ) ?? ""
-        let visibleLines = programaVisibleTerminalLines(from: visibleText, rows: rows)
+        let visibleLines = visibleText.lines
         let rowOffset = max(0, rows - visibleLines.count)
         let xInset = max(0, (bounds.width - (CGFloat(cols) * resolvedCellWidth)) / 2)
         let yInset = max(0, (bounds.height - (CGFloat(rows) * resolvedCellHeight)) / 2)

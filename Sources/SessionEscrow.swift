@@ -45,10 +45,11 @@ import Bonsplit
 /// `TerminalSurface.attemptSessionEscrow(surface:surfaceId:childPID:)`
 /// (called from `resolveSessionWALIdentity`, the same bounded retry loop
 /// that already resolves `childPID`/`ptyPath` for `SessionWALStore`) reads
-/// `ghostty_surface_pty_master_fd(surface)` and `dup()`s it once the child
+/// `ghostty_surface_pty_master_fd(surface)` and duplicates it
+/// (`F_DUPFD_CLOEXEC`) once the child
 /// PID is known -- both on the main actor, matching the existing sibling
 /// accessor calls' cost class. The dup and the actual socket send are
-/// deliberately split: only the cheap `dup()` syscall happens on main; the
+/// deliberately split: only the cheap duplicate syscall happens on main; the
 /// send (which can block on socket I/O) is handed to
 /// `SessionEscrowClient`'s own background queue immediately after.
 ///
@@ -130,10 +131,10 @@ import Bonsplit
 /// `HeldSession` carries a `stopRequested` flag (mutated only under
 /// `SessionEscrowHolder.registryLock`) and a `DispatchSemaphore` the drain
 /// thread signals exactly once, right after it stops. The drain loop itself
-/// no longer blocks in a bare `read()`: it `poll()`s the fd first (bounded,
-/// `SessionEscrowPolicy.drainPollIntervalMilliseconds`) so it can notice
-/// `stopRequested` promptly even while the child is producing no output at
-/// all, and only calls the actual (now effectively non-blocking, since
+/// no longer blocks in a bare `read()`: it `poll()`s the fd together with
+/// the session's self-pipe (`HeldSession.requestStop()` writes one byte to
+/// it), so a stop is noticed immediately even while the child is producing
+/// no output at all, and only calls the actual (now effectively non-blocking, since
 /// `poll` already confirmed readability) `read()` once data is pending --
 /// this is the "bounded by one `drainReadBufferSize` read" a retrieval
 /// waits out. A retrieval request sets `stopRequested`, blocks on the
@@ -170,6 +171,22 @@ enum SessionEscrowPolicy {
         staleAfter: TimeInterval = heartbeatStaleAfter
     ) -> Bool {
         (nowSystemUptime - lastActivitySystemUptime) >= staleAfter
+    }
+
+    /// Whether a connection whose heartbeat went stale should start
+    /// draining its sessions. Only when the peer pid is known to be gone
+    /// (`kill(pid, 0)` fails with `ESRCH`); an unknown pid keeps the
+    /// staleness backstop. `processProbe` returns `kill`'s result and errno.
+    static func shouldDrainOnStaleHeartbeat(
+        peerPID: pid_t?,
+        processProbe: (pid_t) -> (result: Int32, errno: Int32) = { pid in
+            let result = kill(pid, 0)
+            return (result, result == 0 ? 0 : errno)
+        }
+    ) -> Bool {
+        guard let peerPID, peerPID > 0 else { return true }
+        let probe = processProbe(peerPID)
+        return probe.result != 0 && probe.errno == ESRCH
     }
     /// The holder is a cold-launched copy of the full app binary (AppKit +
     /// SwiftUI + GhosttyKit all linked in), so dyld/Swift-runtime startup
@@ -265,6 +282,35 @@ enum SessionEscrowPolicy {
     /// How long the holder waits, with an empty registry and no live
     /// connections, before exiting.
     static let idleExitGrace: TimeInterval = 30
+}
+
+/// The holder's grant/deny rule for one retrieve request, separated from
+/// the socket I/O in `SessionEscrowHolder.handleRetrieveRequest`.
+enum HolderRetrieveDecision: Equatable {
+    case grant
+    case deny(EscrowWireFormat.RetrieveDenyReason)
+
+    /// Unknown session, then token mismatch, then not draining. A session
+    /// that is not draining may still belong to a live app -- only that
+    /// app's EOF (or a stale heartbeat from a dead pid) proves otherwise --
+    /// so the caller gets `notDraining`, which it retries briefly instead
+    /// of falling back for good (the 2026-08-10 mass-drain).
+    static func decide(sessionExists: Bool, tokenMatches: Bool, isDraining: Bool) -> HolderRetrieveDecision {
+        guard sessionExists else { return .deny(.unknownSession) }
+        guard tokenMatches else { return .deny(.tokenMismatch) }
+        guard isDraining else { return .deny(.notDraining) }
+        return .grant
+    }
+
+    static func label(for reason: EscrowWireFormat.RetrieveDenyReason) -> String {
+        switch reason {
+        case .unknownSession: return "unknown"
+        case .tokenMismatch: return "token_mismatch"
+        case .notDraining: return "not_draining"
+        case .drainStopTimeout: return "drain_stop_timeout"
+        case .unspecified: return "unspecified"
+        }
+    }
 }
 
 // MARK: - Wire format
@@ -492,7 +538,31 @@ enum UnixDomainFDPassing {
                 return .indeterminate(connectErrno)
             }
         }
+        // A listener owned by another uid (a planted socket in a shared
+        // directory) must never receive a PTY master or a retrieve token.
+        guard peerIsCurrentUser(fd) else {
+            close(fd)
+            return .indeterminate(EPERM)
+        }
         return .live(fd)
+    }
+
+    /// Whether the process on the other end of the connected `fd` runs as
+    /// this process's effective uid. False when `getpeereid` fails.
+    static func peerIsCurrentUser(_ fd: Int32) -> Bool {
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        guard getpeereid(fd, &uid, &gid) == 0 else { return false }
+        return uid == geteuid()
+    }
+
+    /// The peer's pid (`LOCAL_PEERPID`) captured at connect time, or nil
+    /// when the kernel does not report one.
+    static func peerPID(_ fd: Int32) -> pid_t? {
+        var pid: pid_t = 0
+        var length = socklen_t(MemoryLayout<pid_t>.size)
+        guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0, pid > 0 else { return nil }
+        return pid
     }
 
     /// Compatibility wrapper for callers that only need a connected fd.
@@ -741,7 +811,9 @@ final class SessionEscrowRetainedDescriptor: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard masterFD >= 0 else { return nil }
-        let fd = dup(masterFD)
+        // F_DUPFD_CLOEXEC, not dup(): the copy must not leak into children
+        // spawned by a concurrent fork/exec.
+        let fd = fcntl(masterFD, F_DUPFD_CLOEXEC, 0)
         return fd >= 0 ? fd : nil
     }
 
@@ -793,9 +865,21 @@ final class SessionEscrowClient {
     static let shared = SessionEscrowClient()
     private static let migrationQueue = DispatchQueue(label: "com.darkroom.programa.scrollback-migration", qos: .utility)
 
-    private static func legacySessions() throws -> [(sessionId: String, meta: SessionWALMeta)] {
-        guard let root = SessionWALPaths.sessionsRootURL() else { throw CocoaError(.fileNoSuchFile) }
+    private static let unreadableLegacyMetaLock = NSLock()
+    private static var loggedUnreadableLegacyMeta: Set<String> = []
+
+    /// Sessions still claimed by the v1 holder socket. An unreadable
+    /// `meta.json` is skipped (logged once per path), never a reason to
+    /// fail the whole scan: one corrupt file must not latch the migration
+    /// into a permanent "legacy sessions pending" state. Only a failure to
+    /// list the sessions directory throws.
+    static func legacySessions(
+        root rootOverride: URL? = nil,
+        legacySocketPath socketPathOverride: String? = nil
+    ) throws -> [(sessionId: String, meta: SessionWALMeta)] {
+        guard let root = rootOverride ?? SessionWALPaths.sessionsRootURL() else { throw CocoaError(.fileNoSuchFile) }
         guard FileManager.default.fileExists(atPath: root.path) else { return [] }
+        let socketPath = socketPathOverride ?? legacySocketPath()
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         var result: [(sessionId: String, meta: SessionWALMeta)] = []
@@ -803,8 +887,19 @@ final class SessionEscrowClient {
             guard UUID(uuidString: entry.lastPathComponent) != nil else { continue }
             let paths = SessionWALPaths(sessionDirectory: entry)
             guard FileManager.default.fileExists(atPath: paths.metaURL.path) else { continue }
-            let meta = try decoder.decode(SessionWALMeta.self, from: Data(contentsOf: paths.metaURL))
-            if meta.escrowed == true, meta.escrowSocketPath == legacySocketPath() {
+            let meta: SessionWALMeta
+            do {
+                meta = try decoder.decode(SessionWALMeta.self, from: Data(contentsOf: paths.metaURL))
+            } catch {
+                unreadableLegacyMetaLock.lock()
+                let firstTime = loggedUnreadableLegacyMeta.insert(paths.metaURL.path).inserted
+                unreadableLegacyMetaLock.unlock()
+                if firstTime {
+                    dilog("escrow.migration", "skip_unreadable_meta session=\(entry.lastPathComponent.prefix(8)) error=\(error)")
+                }
+                continue
+            }
+            if meta.escrowed == true, meta.escrowSocketPath == socketPath {
                 result.append((entry.lastPathComponent, meta))
             }
         }
@@ -812,6 +907,8 @@ final class SessionEscrowClient {
     }
 
     static func hasLegacySessions() -> Bool {
+        // Only a directory-listing failure lands here; unreadable entries
+        // are skipped inside `legacySessions`.
         guard let legacy = try? legacySessions() else { return true }
         return !legacy.isEmpty || !SessionEscrowRetainedDescriptor.pending().isEmpty
     }
@@ -1176,13 +1273,26 @@ final class SessionEscrowClient {
     /// Version the holder policy so upgraded apps register with the new
     /// snapshot-aware reaper. Retrieval still uses the socket recorded in
     /// each session's metadata, allowing old holders to hand sessions over.
-    static func escrowSocketPath(controlSocketPath: String = SocketControlSettings.socketPath()) -> String {
+    ///
+    /// A control socket under the world-writable `/tmp` moves the escrow
+    /// socket into the per-user (0700) `NSTemporaryDirectory()`, so another
+    /// local user cannot pre-create or squat the path. Falls back to the
+    /// sibling path when the per-user one would not fit `sun_path`.
+    static func escrowSocketPath(
+        controlSocketPath: String = SocketControlSettings.socketPath(),
+        perUserTemporaryDirectory: String = NSTemporaryDirectory()
+    ) -> String {
         let baseURL = URL(fileURLWithPath: controlSocketPath)
-        let name = baseURL.deletingPathExtension().lastPathComponent + "-escrow-v2"
-        return baseURL.deletingLastPathComponent()
-            .appendingPathComponent(name)
-            .appendingPathExtension("sock")
-            .path
+        let fileName = baseURL.deletingPathExtension().lastPathComponent + "-escrow-v2.sock"
+        let sibling = baseURL.deletingLastPathComponent().appendingPathComponent(fileName).path
+        let parent = baseURL.deletingLastPathComponent().standardizedFileURL.path
+        guard parent == "/tmp" || parent == "/private/tmp", !perUserTemporaryDirectory.isEmpty else {
+            return sibling
+        }
+        let perUser = URL(fileURLWithPath: perUserTemporaryDirectory, isDirectory: true)
+            .appendingPathComponent(fileName).path
+        // sockaddr_un.sun_path is 104 bytes including the terminating NUL.
+        return perUser.utf8.count < 104 ? perUser : sibling
     }
 
     private static func receiveEscrowAcknowledgement(over fd: Int32, sessionId: String) -> Bool {
@@ -1543,7 +1653,11 @@ extension SessionEscrowClient {
                     return .failed
                 }
                 collected.append(chunk)
-                if receivedFD == nil { receivedFD = chunkFD }
+                if receivedFD == nil {
+                    receivedFD = chunkFD
+                } else if let chunkFD {
+                    close(chunkFD)
+                }
             case .eof:
                 if let receivedFD { close(receivedFD) }
                 logOutcome("eof")
@@ -1638,8 +1752,16 @@ enum SessionEscrowHolder {
         /// `SessionEscrowPolicy.unclaimedSessionTTL` has elapsed.
         var drainingStartedAt: Date?
         /// Set (under `SessionEscrowHolder.registryLock`) to ask an active
-        /// drain thread to stop after its next bounded read/poll cycle.
+        /// drain thread to stop after its current read. Set it through
+        /// `requestStop()`, which also wakes the drain thread's `poll`.
         var stopRequested = false
+        /// Self-pipe that wakes the drain thread's `poll` on a stop request
+        /// instead of waiting out `drainPollIntervalMilliseconds`. Opened only
+        /// once draining starts (`openWakePipeIfNeeded`), so a held-but-live
+        /// session costs the holder one fd, not three. -1 until then, or when
+        /// `pipe()` failed; the drain then falls back to the poll interval.
+        private(set) var wakeReadFD: Int32 = -1
+        private(set) var wakeWriteFD: Int32 = -1
         /// Signaled by the drain thread exactly once, right after it has
         /// actually stopped and flushed its last chunk. A retrieval blocks
         /// on this (bounded by `SessionEscrowPolicy.retrieveDrainStopTimeout`)
@@ -1652,6 +1774,38 @@ enum SessionEscrowHolder {
             self.fd = fd
             self.token = token
             self.childPID = childPID
+        }
+
+        /// Opens the stop self-pipe. Idempotent; callers must hold
+        /// `SessionEscrowHolder.registryLock`.
+        func openWakePipeIfNeeded() {
+            guard wakeReadFD < 0 else { return }
+            var wakePipe: [Int32] = [-1, -1]
+            guard pipe(&wakePipe) == 0 else { return }
+            for wakeFD in wakePipe {
+                _ = UnixDomainFDPassing.setCloseOnExec(on: wakeFD)
+                let flags = fcntl(wakeFD, F_GETFL, 0)
+                if flags >= 0 { _ = fcntl(wakeFD, F_SETFL, flags | O_NONBLOCK) }
+            }
+            wakeReadFD = wakePipe[0]
+            wakeWriteFD = wakePipe[1]
+        }
+
+        /// Asks the drain thread to stop and wakes its `poll`. Callers must
+        /// hold `SessionEscrowHolder.registryLock`.
+        func requestStop() {
+            stopRequested = true
+            guard wakeWriteFD >= 0 else { return }
+            var byte: UInt8 = 1
+            // Non-blocking: a full pipe already guarantees a wakeup.
+            _ = write(wakeWriteFD, &byte, 1)
+        }
+
+        /// Empties the self-pipe after a wakeup (non-blocking reads).
+        func consumeWakeups() {
+            guard wakeReadFD >= 0 else { return }
+            var sink = [UInt8](repeating: 0, count: 64)
+            while read(wakeReadFD, &sink, sink.count) > 0 {}
         }
 
         /// Closes `fd` exactly once, however this session's life ends
@@ -1679,6 +1833,8 @@ enum SessionEscrowHolder {
             if !closed {
                 close(fd)
             }
+            if wakeReadFD >= 0 { close(wakeReadFD) }
+            if wakeWriteFD >= 0 { close(wakeWriteFD) }
         }
     }
 
@@ -1771,7 +1927,14 @@ enum SessionEscrowHolder {
         while true {
             let clientFD = accept(listenFD, nil, nil)
             guard clientFD >= 0 else { continue }
+            guard UnixDomainFDPassing.peerIsCurrentUser(clientFD) else {
+                dilog("escrow.conn", "refused connFD=\(clientFD) reason=peer_uid_mismatch")
+                close(clientFD)
+                continue
+            }
+            _ = UnixDomainFDPassing.setCloseOnExec(on: clientFD)
             UnixDomainFDPassing.suppressSigPipe(on: clientFD)
+            let peerPID = UnixDomainFDPassing.peerPID(clientFD)
             #if DEBUG
             dlog("session.escrow.holder.accept connFD=\(clientFD)")
             #endif
@@ -1798,7 +1961,7 @@ enum SessionEscrowHolder {
                     activeConnectionCount -= 1
                     registryLock.unlock()
                 }
-                serve(connectionFD: clientFD)
+                serve(connectionFD: clientFD, peerPID: peerPID)
             }
         }
     }
@@ -1812,7 +1975,7 @@ enum SessionEscrowHolder {
     /// .retrieve` sends one `retrieveRequestType` frame, reads the
     /// response, and closes -- which this loop sees as an ordinary EOF with
     /// no locally-registered sessions to drain).
-    private static func serve(connectionFD: Int32) {
+    private static func serve(connectionFD: Int32, peerPID: pid_t?) {
         var timeout = timeval(tv_sec: SessionEscrowPolicy.recvTimeoutSeconds, tv_usec: 0)
         setsockopt(connectionFD, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
 
@@ -1842,6 +2005,16 @@ enum SessionEscrowHolder {
                 let now = ProcessInfo.processInfo.systemUptime
                 if SessionEscrowPolicy.isConnectionStale(lastActivitySystemUptime: lastActivity, nowSystemUptime: now) {
                     let elapsed = now - lastActivity
+                    // A missed heartbeat alone does not prove death: App Nap,
+                    // SIGSTOP or a debugger pause stall the app's timer while
+                    // Ghostty still reads the same masters. A dead app always
+                    // closes this socket (close-on-exec), so drain on staleness
+                    // only once the peer pid is gone.
+                    guard SessionEscrowPolicy.shouldDrainOnStaleHeartbeat(peerPID: peerPID) else {
+                        dilog("escrow.conn", "heartbeat_stale_peer_alive connFD=\(connectionFD) peerPID=\(peerPID.map(String.init) ?? "nil") awakeElapsed=\(String(format: "%.1f", elapsed)) sessions=\(registeredSessionIds.count)")
+                        lastActivity = now
+                        continue readLoop
+                    }
                     dilog("escrow.conn", "death connFD=\(connectionFD) reason=heartbeat_stale awakeElapsed=\(String(format: "%.1f", elapsed)) drainedCount=\(registeredSessionIds.count)")
                     break readLoop
                 }
@@ -2025,6 +2198,7 @@ enum SessionEscrowHolder {
             let startedAt = Date()
             session.isDraining = true
             session.drainingStartedAt = startedAt
+            session.openWakePipeIfNeeded()
             registryLock.unlock()
             dilog("escrow.drain", "begin session=\(sessionId.prefix(8)) at=\(startedAt.timeIntervalSince1970)")
             Thread.detachNewThread {
@@ -2050,33 +2224,24 @@ enum SessionEscrowHolder {
         }
 
         registryLock.lock()
-        guard let session = registry[sessionId] else {
+        let candidate = registry[sessionId]
+        let decision = HolderRetrieveDecision.decide(
+            sessionExists: candidate != nil,
+            tokenMatches: candidate.map { constantTimeTokensEqual($0.token, token) } ?? false,
+            isDraining: candidate?.isDraining ?? false
+        )
+        guard case .grant = decision, let session = candidate else {
             registryLock.unlock()
-            deny(reason: .unknownSession, label: "unknown")
-            return
-        }
-        guard constantTimeTokensEqual(session.token, token) else {
-            registryLock.unlock()
-            deny(reason: .tokenMismatch, label: "token_mismatch")
-            return
-        }
-        guard session.isDraining else {
-            // The escrowing app may genuinely still be alive -- only IT can
-            // prove otherwise, via EOF or heartbeat staleness on its own
-            // connection. The reason on the wire tells the (valid-token)
-            // caller this denial is the retrieve-before-drain race and worth
-            // retrying briefly, instead of a permanent fallback -- the
-            // 2026-08-10 mass-drain was exactly that fallback, 4 seconds
-            // before the drain would have made this same request grantable.
-            registryLock.unlock()
-            deny(reason: .notDraining, label: "not_draining")
+            if case .deny(let reason) = decision {
+                deny(reason: reason, label: HolderRetrieveDecision.label(for: reason))
+            }
             return
         }
         // Remove immediately: no second caller can ever observe this
         // session id in the registry again, regardless of how the rest of
         // this function turns out.
         registry.removeValue(forKey: sessionId)
-        session.stopRequested = true
+        session.requestStop()
         registryLock.unlock()
 
         let waitStartedAt = Date()
@@ -2160,7 +2325,7 @@ enum SessionEscrowHolder {
     /// doesn't leak how many leading bytes matched. `EscrowWireFormat
     /// .tokenSize` is a small (32-byte) constant, so the extra fixed work
     /// here is negligible.
-    private static func constantTimeTokensEqual(_ lhs: [UInt8], _ rhs: [UInt8]) -> Bool {
+    static func constantTimeTokensEqual(_ lhs: [UInt8], _ rhs: [UInt8]) -> Bool {
         guard lhs.count == rhs.count else { return false }
         var diff: UInt8 = 0
         for i in 0..<lhs.count {
@@ -2270,7 +2435,7 @@ enum SessionEscrowHolder {
                ) {
                 expired.append(session)
                 registry.removeValue(forKey: session.sessionId)
-                session.stopRequested = true
+                session.requestStop()
             }
         }
         registryLock.unlock()
@@ -2316,10 +2481,19 @@ enum SessionEscrowHolder {
         while collected.count < EscrowWireFormat.frameSize {
             switch UnixDomainFDPassing.receiveChunk(maxBytes: EscrowWireFormat.frameSize - collected.count, from: connectionFD) {
             case .data(let chunk, let fd):
-                guard !chunk.isEmpty else { return .eof }
+                guard !chunk.isEmpty else {
+                    if let fd { close(fd) }
+                    if let capturedFD { close(capturedFD) }
+                    return .eof
+                }
                 collected.append(chunk)
-                if capturedFD == nil { capturedFD = fd }
+                if capturedFD == nil {
+                    capturedFD = fd
+                } else if let fd {
+                    close(fd)
+                }
             case .eof, .error:
+                if let capturedFD { close(capturedFD) }
                 return .eof
             case .timeout:
                 if collected.isEmpty { return .timeout }
@@ -2350,16 +2524,19 @@ enum SessionEscrowHolder {
     /// open and untouched so it can be handed back; closing it here would
     /// SIGHUP the child.
     private static func drain(session: HeldSession) {
-        guard let paths = SessionWALPaths.make(sessionId: session.sessionId) else {
-            #if DEBUG
-            dlog("session.escrow.holder.drain.fail session=\(session.sessionId.prefix(8)) reason=no_paths")
-            #endif
-            endDraining(session: session, stoppedForRetrieve: false)
-            return
+        let paths = SessionWALPaths.make(sessionId: session.sessionId)
+        // Capturing to wal.log is best effort; holding the master is not. A
+        // missing path or a failed append stops capture for this session but
+        // keeps reading (so the child never blocks on a full PTY buffer) and
+        // keeps the master retrievable -- see `SessionEscrowPolicy.drainAction`.
+        var capturePaths = paths
+        if paths == nil {
+            dilog("escrow.drain", "capture_off session=\(session.sessionId.prefix(8)) reason=no_paths")
         }
-        try? FileManager.default.createDirectory(at: paths.sessionDirectory, withIntermediateDirectories: true)
-        var currentSize = (try? FileManager.default.attributesOfItem(atPath: paths.walURL.path))
-            .flatMap { $0[.size] as? Int64 } ?? 0
+        if let paths {
+            try? FileManager.default.createDirectory(at: paths.sessionDirectory, withIntermediateDirectories: true)
+        }
+        var currentSize = paths.flatMap { (try? FileManager.default.attributesOfItem(atPath: $0.walURL.path))?[.size] as? Int64 } ?? 0
         var totalDrained: Int64 = 0
         var lastWALSyncAt = Date.distantPast
         var hasUnsynchronizedWrites = false
@@ -2379,41 +2556,45 @@ enum SessionEscrowHolder {
             _ = fcntl(session.fd, F_SETFL, currentFlags & ~O_NONBLOCK)
         }
         #if DEBUG
-        dlog("session.escrow.holder.drain.start session=\(session.sessionId.prefix(8)) fd=\(session.fd) walPath=\(paths.walURL.path) startSize=\(currentSize) clearedNonblock=\(currentFlags >= 0)")
+        dlog("session.escrow.holder.drain.start session=\(session.sessionId.prefix(8)) fd=\(session.fd) walPath=\(paths?.walURL.path ?? "nil") startSize=\(currentSize) clearedNonblock=\(currentFlags >= 0)")
         #endif
 
         var buffer = [UInt8](repeating: 0, count: SessionEscrowPolicy.drainReadBufferSize)
-        var stoppedForRetrieve = false
+        var outcome = DrainOutcome.closeMaster
         readLoop: while true {
             if isStopRequested(session) {
-                stoppedForRetrieve = true
+                outcome = .stoppedForRetrieve
                 break readLoop
             }
 
             // Capture admission before reading, so a chunk read around an
             // off/on transition cannot be written under the newer generation.
-            let capturePolicy = paths.policyPaths.flatMap { try? SessionScrollbackPolicyStore.read(at: $0) }
+            let capturePolicy = capturePaths?.policyPaths.flatMap { try? SessionScrollbackPolicyStore.read(at: $0) }
 
-            // poll() first, bounded, so a retrieval's `stopRequested` is
-            // noticed within one poll interval even when the child is
-            // producing no output at all -- never block indefinitely in a
-            // bare `read()`. See the file-level "Drain/retrieve
-            // coordination" doc comment.
-            var pfd = pollfd(fd: session.fd, events: Int16(POLLIN), revents: 0)
-            let pollResult = poll(&pfd, 1, SessionEscrowPolicy.drainPollIntervalMilliseconds)
+            // poll() the master and the stop self-pipe together, bounded,
+            // so a retrieval's `requestStop()` wakes this thread at once and
+            // the bound only paces WAL syncs and policy re-reads. See the
+            // file-level "Drain/retrieve coordination" doc comment.
+            var pollFDs = [
+                pollfd(fd: session.fd, events: Int16(POLLIN), revents: 0),
+                pollfd(fd: session.wakeReadFD, events: Int16(POLLIN), revents: 0),
+            ]
+            let pollResult = poll(&pollFDs, nfds_t(pollFDs.count), SessionEscrowPolicy.drainPollIntervalMilliseconds)
             if pollResult < 0 {
                 let pollErrno = errno
                 if pollErrno == EINTR { continue readLoop }
-                #if DEBUG
-                dlog("session.escrow.holder.drain.end session=\(session.sessionId.prefix(8)) reason=poll_error errno=\(pollErrno) totalDrained=\(totalDrained)")
-                #endif
+                dilog("escrow.drain", "end session=\(session.sessionId.prefix(8)) reason=poll_error errno=\(pollErrno) totalDrained=\(totalDrained) master=kept")
+                outcome = drainOutcome(for: .pollFailed) ?? .keepMaster
                 break readLoop
             }
-            guard pollResult > 0 else {
-                // Timed out with nothing readable -- loop back to
-                // re-check `stopRequested` rather than blocking further.
+            if pollFDs[1].revents != 0 {
+                session.consumeWakeups()
+            }
+            guard pollFDs[0].revents != 0 else {
+                // Timed out (or only woken) with nothing readable -- loop
+                // back to re-check `stopRequested` rather than blocking.
                 let now = Date()
-                if hasUnsynchronizedWrites,
+                if hasUnsynchronizedWrites, let paths,
                    now.timeIntervalSince(lastWALSyncAt) >= SessionWALPolicy.walSyncInterval,
                    (try? SessionWALCore.synchronizeWAL(at: paths)) != nil {
                     lastWALSyncAt = now
@@ -2436,14 +2617,15 @@ enum SessionEscrowHolder {
                 // this should no longer occur now that O_NONBLOCK is
                 // cleared above, but if that fcntl silently failed for any
                 // reason, treat it as "keep waiting", never as a reason to
-                // close the fd. EINTR is a plain retry. Anything else is a
-                // genuine, unrecoverable error on this fd -- stop.
+                // close the fd. EINTR is a plain retry. Anything else (EIO
+                // once the slave side is gone) ends the session.
                 if readErrno == EAGAIN || readErrno == EWOULDBLOCK || readErrno == EINTR {
                     continue readLoop
                 }
                 #if DEBUG
                 dlog("session.escrow.holder.drain.end session=\(session.sessionId.prefix(8)) reason=error errno=\(readErrno) totalDrained=\(totalDrained)")
                 #endif
+                outcome = drainOutcome(for: .readFailed) ?? .closeMaster
                 break readLoop
             }
             guard n > 0 else {
@@ -2454,22 +2636,29 @@ enum SessionEscrowHolder {
                 #if DEBUG
                 dlog("session.escrow.holder.drain.end session=\(session.sessionId.prefix(8)) reason=eof totalDrained=\(totalDrained)")
                 #endif
+                outcome = drainOutcome(for: .endOfStream) ?? .closeMaster
                 break readLoop
             }
+            guard let walPaths = capturePaths, let capturePolicy, capturePolicy.enabled else { continue readLoop }
             let chunk = Data(buffer.prefix(n))
-            guard let capturePolicy, capturePolicy.enabled else { continue readLoop }
             let now = Date()
             let shouldSynchronize =
                 now.timeIntervalSince(lastWALSyncAt) >= SessionWALPolicy.walSyncInterval
-            guard let appendResult = try? SessionWALCore.append(
-                chunk,
-                to: paths,
-                synchronize: shouldSynchronize,
-                capturedGeneration: capturePolicy.generation
-            ) else {
-                #if DEBUG
-                dlog("session.escrow.holder.drain.end session=\(session.sessionId.prefix(8)) reason=wal_append_failed totalDrained=\(totalDrained)")
-                #endif
+            let appendResult: SessionWALCore.AppendResult
+            do {
+                appendResult = try SessionWALCore.append(
+                    chunk,
+                    to: walPaths,
+                    synchronize: shouldSynchronize,
+                    capturedGeneration: capturePolicy.generation
+                )
+            } catch {
+                dilog("escrow.drain", "capture_off session=\(session.sessionId.prefix(8)) reason=wal_append_failed error=\(error) totalDrained=\(totalDrained) master=kept")
+                guard let failureOutcome = drainOutcome(for: .walAppendFailed) else {
+                    capturePaths = nil
+                    continue readLoop
+                }
+                outcome = failureOutcome
                 break readLoop
             }
             if appendResult.didSuppress { continue readLoop }
@@ -2488,14 +2677,42 @@ enum SessionEscrowHolder {
             // Check again right after finishing this chunk so a retrieval
             // that arrived mid-read doesn't wait a full extra poll cycle.
             if isStopRequested(session) {
-                stoppedForRetrieve = true
+                outcome = .stoppedForRetrieve
                 break readLoop
             }
         }
-        if hasUnsynchronizedWrites {
+        if hasUnsynchronizedWrites, let paths {
             try? SessionWALCore.synchronizeWAL(at: paths)
         }
-        endDraining(session: session, stoppedForRetrieve: stoppedForRetrieve)
+        endDraining(session: session, outcome: outcome)
+    }
+
+    /// How a drain thread ended. Decides what happens to the master.
+    enum DrainOutcome: Equatable {
+        /// A retrieval or expiry asked to stop; the waiter owns the fd next.
+        case stoppedForRetrieve
+        /// The drain cannot continue, but the child may still be alive: keep
+        /// the master in the registry so it stays retrievable (and expirable).
+        case keepMaster
+        /// The child is gone: close the master and forget the session.
+        case closeMaster
+    }
+
+    /// Faults the drain loop can hit after it started.
+    enum DrainFault {
+        case walAppendFailed, pollFailed, readFailed, endOfStream
+    }
+
+    /// Pure decision seam for the drain loop. `nil` means "keep draining
+    /// without capture". Only a master-side end of stream or read error
+    /// closes the master: a WAL write failure (disk full, EIO) or a `poll`
+    /// failure must never SIGHUP the escrowed child.
+    static func drainOutcome(for fault: DrainFault) -> DrainOutcome? {
+        switch fault {
+        case .walAppendFailed: return nil
+        case .pollFailed: return .keepMaster
+        case .readFailed, .endOfStream: return .closeMaster
+        }
     }
 
     private static func isStopRequested(_ session: HeldSession) -> Bool {
@@ -2504,19 +2721,25 @@ enum SessionEscrowHolder {
         return session.stopRequested
     }
 
-    /// Common drain exit bookkeeping. `stoppedForRetrieve: true` means a
-    /// retrieval asked this thread to stop -- the fd must be left open and
-    /// untouched (`handleRetrieveRequest` is the one waiting on
-    /// `drainStoppedSemaphore` and owns what happens to the fd next).
-    /// `stoppedForRetrieve: false` means a genuine end-of-stream/error/setup
-    /// failure -- the child is gone (or this session was never usable), so
-    /// this IS the final close, and the session is removed from the
-    /// registry so a stray later retrieve cleanly denies instead of
-    /// finding a stale entry.
-    private static func endDraining(session: HeldSession, stoppedForRetrieve: Bool) {
-        if stoppedForRetrieve {
+    /// Common drain exit bookkeeping. `.stoppedForRetrieve` means a
+    /// retrieval (or expiry) asked this thread to stop -- the fd must be
+    /// left open and untouched (the caller waiting on
+    /// `drainStoppedSemaphore` owns what happens to the fd next).
+    /// `.keepMaster` leaves the fd open and registered for the same reason.
+    /// `.closeMaster` means a genuine end-of-stream or master read error --
+    /// the child is gone, so this IS the final close, and the session is
+    /// removed from the registry so a stray later retrieve cleanly denies
+    /// instead of finding a stale entry.
+    private static func endDraining(session: HeldSession, outcome: DrainOutcome) {
+        switch outcome {
+        case .stoppedForRetrieve, .keepMaster:
+            // `keepMaster` leaves the session registered and draining, with
+            // no thread reading it: a later retrieve or expiry consumes this
+            // signal immediately instead of timing out.
             session.drainStoppedSemaphore.signal()
             return
+        case .closeMaster:
+            break
         }
         registryLock.lock()
         session.markClosedIfNeeded()

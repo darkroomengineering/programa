@@ -95,7 +95,7 @@ def main():
     nonce = uuid.uuid4().hex
     tag = "ci-wal-" + nonce[:10]
     control = Path("/tmp") / f"programa-debug-{tag}.sock"
-    holder_socket = control.with_name(control.stem + "-escrow-v2.sock")
+    holder_socket = Path(tempfile.gettempdir()) / f"{control.stem}-escrow-v2.sock"
     require(not control.exists() and not holder_socket.exists(), "Unique fixture socket already exists")
     owned = {}
     current = None
