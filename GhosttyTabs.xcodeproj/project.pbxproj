@@ -304,6 +304,7 @@
 					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */; };
 				BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */; };
 					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */; };
+					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */; };
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */; };
 				3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */; };
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */; };
@@ -720,6 +721,7 @@
 				BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFDPassingRegressionTests.swift; sourceTree = "<group>"; };
 				BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFixSweepCONFTests.swift; sourceTree = "<group>"; };
 				BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFixSweepSESSTests.swift; sourceTree = "<group>"; };
+				BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFixSweepWKSPTests.swift; sourceTree = "<group>"; };
 				RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RendererRealizationPlannerTests.swift; sourceTree = "<group>"; };
 				D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAutosaveCoordinatorTests.swift; sourceTree = "<group>"; };
 				SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWALCoreTests.swift; sourceTree = "<group>"; };
@@ -1248,6 +1250,7 @@
 					BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */,
 					BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */,
 					BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */,
+					BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */,
 					RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */,
 					D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */,
 					SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */,
@@ -1719,6 +1722,7 @@
 					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */,
 					BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */,
 					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */,
+					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */,
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */,
 					3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */,
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */,

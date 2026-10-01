@@ -113,7 +113,12 @@ struct SidebarAgentIndicator: Equatable {
     static func make(for workspace: Workspace, now: Date = Date()) -> SidebarAgentIndicator? {
         let winner = workspace.panelAgentPresence.values.reduce(nil as AgentPresence?) { partial, presence in
             guard let partial else { return presence }
-            return presence.state.severity >= partial.state.severity ? presence : partial
+            if presence.state.severity != partial.state.severity {
+                return presence.state.severity > partial.state.severity ? presence : partial
+            }
+            // Equal severity: the freshest report wins, so dictionary order never decides the
+            // stale flag.
+            return presence.lastEventAt > partial.lastEventAt ? presence : partial
         }
         guard let winner else { return nil }
 

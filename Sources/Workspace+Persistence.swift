@@ -207,10 +207,7 @@ extension Workspace {
             if let newSourceSurfaceId = oldToNewPanelIds[oldSourceSurfaceId] {
                 reviewPanel.sourceSurfaceId = newSourceSurfaceId
             }
-            reviewPanel.sendToSourceSurface = { [weak self, weak reviewPanel] text in
-                guard let self, let reviewPanel else { return false }
-                return self.sendReviewComments(sourceSurfaceId: reviewPanel.sourceSurfaceId, text: text)
-            }
+            reviewPanel.sendToSourceSurface = makeReviewSendClosure(for: reviewPanel)
             installReviewPanelSubscription(reviewPanel)
             reviewPanel.refresh()
         }
@@ -698,12 +695,26 @@ extension Workspace {
         // unspecified denial is worth retrying; one long dead is not.
         let heartbeatFreshEnoughToRetryUnspecifiedDeny = Date().timeIntervalSince(meta.lastHeartbeatAt)
             < SessionEscrowPolicy.heartbeatStaleAfter + SessionEscrowPolicy.retrieveDenyRetryWindow
-        guard let masterFD = SessionEscrowClient.retrieve(
+        let masterFD: Int32
+        switch SessionEscrowClient.retrieveOutcome(
             sessionId: oldSessionId,
             tokenHex: tokenHex,
             socketPath: socketPath,
             allowUnspecifiedDenyRetry: heartbeatFreshEnoughToRetryUnspecifiedDeny
-        ) else {
+        ) {
+        case .granted(let fd):
+            masterFD = fd
+        case .denied(.unknownSession):
+            // Only this explicit denial proves the holder no longer owns the session (token
+            // errors do not; see migrateLegacySessions). Clear the claim
+            // so later launches stop counting the dir as an escrowed orphan and rebuilding a
+            // recovery window for it until the 24h sweep.
+            if let paths = SessionWALPaths.make(sessionId: oldSessionId) {
+                _ = try? SessionWALCore.clearEscrowClaim(at: paths, ifSocketMatches: socketPath)
+            }
+            dilog("escrow.reattach", "session=\(oldSessionId.prefix(8)) outcome=fallback reason=denied_permanent claim=cleared")
+            return nil
+        case .denied, .failed:
             dilog("escrow.reattach", "session=\(oldSessionId.prefix(8)) outcome=fallback reason=retrieve_failed")
             return nil
         }

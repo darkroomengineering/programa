@@ -266,6 +266,7 @@ final class AgentOverviewViewModel: ObservableObject {
     @Published private(set) var outputGate = AgentOverviewOutputGate()
     @Published var messageText = ""
     @Published var isShowingMessageSheet = false
+    @Published var messageSendError: String?
     @Published var filter = AgentOverviewFilter.all { didSet { reconcileVisibleSelection() } }
     @Published var search = "" { didSet { reconcileVisibleSelection() } }
 
@@ -376,15 +377,25 @@ final class AgentOverviewViewModel: ObservableObject {
     func beginSendingMessage() {
         guard canUseTerminalActions else { return }
         messageText = ""
+        messageSendError = nil
         isShowingMessageSheet = true
     }
 
     func sendMessage() {
         let trimmed = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         guard selection?.allowsTerminalControl == true,
-              !trimmed.isEmpty,
-              let panel = resolveTerminalPanel() else { return }
-        panel.sendInput(trimmed + "\n")
+              let resolved = resolveSelection(),
+              let panel = resolved.panel else {
+            // Keep the sheet and the draft so the user can retry once the terminal is back.
+            messageSendError = String(
+                localized: "workspace.agentOverview.sendMessage.unavailable",
+                defaultValue: "This terminal is no longer available. Your message was not sent."
+            )
+            return
+        }
+        resolved.workspace.deliverTextToAgent(trimmed, terminalPanel: panel)
+        messageSendError = nil
         isShowingMessageSheet = false
         messageText = ""
     }
@@ -916,6 +927,12 @@ private struct AgentOverviewRootView: View {
                 axis: .vertical
             )
             .lineLimit(3...8)
+            if let error = viewModel.messageSendError {
+                Text(error)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Spacer()
                 Button(String(localized: "agentOverview.cancel", defaultValue: "Cancel")) {

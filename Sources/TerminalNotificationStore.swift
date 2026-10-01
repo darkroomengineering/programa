@@ -154,7 +154,6 @@ final class TerminalNotificationStore: ObservableObject {
     private var hasRequestedAutomaticAuthorization = false
     private var hasDeferredAuthorizationRequest = false
     private var hasPromptedForSettings = false
-    private var userDefaultsObserver: NSObjectProtocol?
     private let settingsPromptWindowRetryDelay: TimeInterval = 0.5
     private let settingsPromptWindowRetryLimit = 20
     private var notificationSettingsWindowProvider: () -> NSWindow? = {
@@ -188,23 +187,8 @@ final class TerminalNotificationStore: ObservableObject {
 
     private init() {
         indexes = Self.buildIndexes(for: notifications)
-        userDefaultsObserver = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.refreshDockBadge()
-            }
-        }
         refreshDockBadge()
         refreshAuthorizationStatus()
-    }
-
-    deinit {
-        if let userDefaultsObserver {
-            NotificationCenter.default.removeObserver(userDefaultsObserver)
-        }
     }
 
     static func dockBadgeLabel(unreadCount: Int, isEnabled: Bool, runTag: String? = nil) -> String? {
@@ -565,6 +549,27 @@ final class TerminalNotificationStore: ObservableObject {
         clearFocusedReadIndicator(forTabId: tabId, surfaceId: surfaceId)
         center.removeDeliveredNotificationsOffMain(withIdentifiers: idsToClear)
         center.removePendingNotificationRequestsOffMain(withIdentifiers: idsToClear)
+    }
+
+    /// Moves a surface's notifications to another workspace when the surface itself moves there
+    /// (drag between workspaces or windows), so its unread badge and history follow it.
+    func rekeyNotifications(surfaceId: UUID, fromTabId: UUID, toTabId: UUID) {
+        guard fromTabId != toTabId,
+              notifications.contains(where: { $0.tabId == fromTabId && $0.surfaceId == surfaceId }) else { return }
+        notifications = notifications.map { notification in
+            guard notification.tabId == fromTabId, notification.surfaceId == surfaceId else { return notification }
+            return TerminalNotification(
+                id: notification.id,
+                tabId: toTabId,
+                surfaceId: notification.surfaceId,
+                title: notification.title,
+                subtitle: notification.subtitle,
+                body: notification.body,
+                createdAt: notification.createdAt,
+                isRead: notification.isRead
+            )
+        }
+        clearFocusedReadIndicator(forTabId: fromTabId, surfaceId: surfaceId)
     }
 
     func clearNotifications(forTabId tabId: UUID) {

@@ -14,10 +14,18 @@ import CoreText
 extension Workspace {
     static func currentSplitButtonTooltips() -> BonsplitConfiguration.SplitButtonTooltips {
         BonsplitConfiguration.SplitButtonTooltips(
-            newTerminal: KeyboardShortcutSettings.Action.newSurface.tooltip("New Terminal"),
-            newBrowser: KeyboardShortcutSettings.Action.openBrowser.tooltip("New Browser"),
-            splitRight: KeyboardShortcutSettings.Action.splitRight.tooltip("Split Right"),
-            splitDown: KeyboardShortcutSettings.Action.splitDown.tooltip("Split Down")
+            newTerminal: KeyboardShortcutSettings.Action.newSurface.tooltip(
+                String(localized: "workspace.splitButton.newTerminal", defaultValue: "New Terminal")
+            ),
+            newBrowser: KeyboardShortcutSettings.Action.openBrowser.tooltip(
+                String(localized: "workspace.splitButton.newBrowser", defaultValue: "New Browser")
+            ),
+            splitRight: KeyboardShortcutSettings.Action.splitRight.tooltip(
+                String(localized: "tabBar.splitRight", defaultValue: "Split Right")
+            ),
+            splitDown: KeyboardShortcutSettings.Action.splitDown.tooltip(
+                String(localized: "tabBar.splitDown", defaultValue: "Split Down")
+            )
         )
     }
 

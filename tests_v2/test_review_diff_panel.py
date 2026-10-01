@@ -70,6 +70,7 @@ def _read_terminal_text_until(c: ProgramaClient, surface_id: str, needle: str, t
 def main() -> int:
     repo_dir = _make_dirty_git_repo()
     workspace_id = ""
+    canary_path: Path | None = None
 
     try:
         with ProgramaClient(SOCKET_PATH) as c:
@@ -144,9 +145,24 @@ def main() -> int:
                 timeout_s=10.0,
             )
 
+            # A comment carrying a shell command substitution. Review text is delivered as one
+            # paste with no implicit Return into a plain shell (no agent presence), so the shell
+            # must never execute it. Typed-key delivery used to turn each newline into Return.
+            canary_path = Path(tempfile.gettempdir()) / f"fixsweep-review-{int(time.time() * 1000)}"
+            c._call(
+                "review.comment.add",
+                {
+                    "surface_id": review_surface_id,
+                    "file_path": "src_foo.txt",
+                    "start_line": 3,
+                    "text": f"`touch {canary_path}`\nsecond line `touch {canary_path}`",
+                },
+                timeout_s=10.0,
+            )
+
             # 3. review.send_comments delivers the serialized text into the source surface.
             sent = c._call("review.send_comments", {"surface_id": review_surface_id}, timeout_s=10.0) or {}
-            _must(int(sent.get("sent_count") or 0) == 2, f"Expected 2 comments sent: {sent}")
+            _must(int(sent.get("sent_count") or 0) == 3, f"Expected 3 comments sent: {sent}")
             _must(
                 str(sent.get("target_surface_id") or "") == source_surface_id,
                 f"Expected review.send_comments to target the reviewed surface: {sent}",
@@ -155,6 +171,13 @@ def main() -> int:
             terminal_text = _read_terminal_text_until(c, source_surface_id, marker)
             _must(marker in terminal_text, f"Expected marker {marker!r} to land in the reviewed terminal: {terminal_text!r}")
             _must("untracked.txt" in terminal_text, f"Expected serialized file path to land in the terminal: {terminal_text!r}")
+
+            # Give a shell that wrongly received Return time to run the substitution.
+            time.sleep(1.5)
+            _must(
+                not canary_path.exists(),
+                f"Review comment text was executed by the plain shell (found {canary_path})",
+            )
 
             # Pending comments are cleared after a successful send.
             post_send_list = c._call("review.comment.list", {"surface_id": review_surface_id}, timeout_s=10.0) or {}
@@ -175,6 +198,8 @@ def main() -> int:
             except Exception:
                 pass
         shutil.rmtree(repo_dir, ignore_errors=True)
+        if canary_path is not None:
+            canary_path.unlink(missing_ok=True)
 
     print("PASS: review.open/comment/send_comments round-trip through the socket API")
     return 0

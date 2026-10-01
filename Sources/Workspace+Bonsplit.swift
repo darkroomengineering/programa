@@ -601,7 +601,9 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                 ttyName: surfaceTTYNames[panelId],
                 cachedTitle: cachedTitle,
                 customTitle: panelCustomTitles[panelId],
-                manuallyUnread: manualUnreadPanelIds.contains(panelId)
+                manuallyUnread: manualUnreadPanelIds.contains(panelId),
+                sourceWorkspaceId: id,
+                agentPresence: panelAgentPresence[panelId]
             )
             if isUndoStaging, let originalIndex = undoStageOriginalIndex,
                let staged = pendingDetachedSurfaces.removeValue(forKey: tabId) {
@@ -669,6 +671,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     }
 
     func splitTabBar(_ controller: BonsplitController, didSelectTab tab: Bonsplit.Tab, inPane pane: PaneID) {
+        guard !suppressSelectionDelegateCallbacks else { return }
         applyTabSelection(tabId: tab.id, inPane: pane)
     }
 
@@ -727,6 +730,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     }
 
     func splitTabBar(_ controller: BonsplitController, didFocusPane pane: PaneID) {
+        guard !suppressSelectionDelegateCallbacks else { return }
         // When a pane is focused, focus its selected tab's panel
         guard let tab = controller.selectedTab(inPane: pane) else { return }
 #if DEBUG
@@ -767,12 +771,16 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             lastTerminalConfigInheritancePanelId = nil
         }
         PortScanner.shared.unregisterPanel(workspaceId: id, panelId: panelId)
-        AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: id, surfaceId: panelId)
         // Detach preserves the panel UUID and the live panel object for
         // reattach in another window (DetachedSurfaceTransfer) -- browser
-        // automation state must survive the trip, so it is only pruned on
-        // permanent close.
-        if !isDetaching {
+        // automation state, notifications and agent presence must survive
+        // the trip, so they are only pruned on permanent close. The transfer
+        // carries the presence and re-keys the notifications on attach.
+        if isDetaching {
+            panelAgentPresence.removeValue(forKey: panelId)
+        } else {
+            AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: id, surfaceId: panelId)
+            clearPanelAgentState(panelId: panelId)
             TerminalController.shared.v2BrowserPermanentlyRemoveSurfaceState(surfaceId: panelId)
         }
         if progressSourcePanelId == panelId {

@@ -256,6 +256,7 @@ struct ReviewPanelView: View {
             }
             .buttonStyle(.plain)
             .safeHelp(String(localized: "review.refresh.help", defaultValue: "Refresh diff"))
+            .accessibilityLabel(String(localized: "review.refresh.help", defaultValue: "Refresh diff"))
         }
     }
 
@@ -441,6 +442,15 @@ struct ReviewPanelView: View {
     }
 
     private func lineRow(_ row: ReviewPanelAnnotatedLine, filePath: String) -> some View {
+        Button {
+            handleLineTap(filePath: filePath, anchorLine: row.anchorLine)
+        } label: {
+            lineRowLabel(row)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func lineRowLabel(_ row: ReviewPanelAnnotatedLine) -> some View {
         HStack(spacing: 0) {
             Text(row.line.oldLineNumber.map(String.init) ?? "")
                 .frame(width: 36, alignment: .trailing)
@@ -459,9 +469,6 @@ struct ReviewPanelView: View {
         .padding(.horizontal, 4)
         .background(backgroundColor(for: row.line.kind))
         .contentShape(Rectangle())
-        .onTapGesture {
-            handleLineTap(filePath: filePath, anchorLine: row.anchorLine)
-        }
     }
 
     private func backgroundColor(for kind: ReviewDiffLineKind) -> Color {
@@ -593,6 +600,7 @@ struct ReviewPanelView: View {
             }
             .buttonStyle(.plain)
             .safeHelp(String(localized: "review.comment.remove.help", defaultValue: "Remove comment"))
+            .accessibilityLabel(String(localized: "review.comment.remove.help", defaultValue: "Remove comment"))
         }
         .padding(6)
         .background(Color.primary.opacity(0.04))

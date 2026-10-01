@@ -42,7 +42,15 @@ final class AgentManifestLoader: @unchecked Sendable {
         let source: ManifestSource
     }
 
+    /// A manifest file that decoded but was rejected because a pattern does not compile.
+    struct RejectedManifest: Sendable, Equatable {
+        let agent: String
+        let path: String
+        let invalidPatterns: [String]
+    }
+
     private let lock = NSLock()
+    private var rejected: [RejectedManifest] = []
     private var manifestsByAgent: [String: AgentManifest] = [:]
     private var sourceByAgent: [String: ManifestSource] = [:]
     private var isLoaded = false
@@ -62,7 +70,20 @@ final class AgentManifestLoader: @unchecked Sendable {
 
         var byAgent: [String: AgentManifest] = [:]
         var bySource: [String: ManifestSource] = [:]
+        var rejectedManifests: [RejectedManifest] = []
         let decoder = JSONDecoder()
+
+        /// Invalid regexes are rejected here, once, instead of silently never matching on
+        /// every sampling tick.
+        func accept(_ manifest: AgentManifest, url: URL) -> Bool {
+            let invalid = manifest.invalidPatterns()
+            guard invalid.isEmpty else {
+                rejectedManifests.append(RejectedManifest(agent: manifest.agent, path: url.path, invalidPatterns: invalid))
+                NSLog("[AgentManifestLoader] rejected %@ (%@): invalid patterns %@", manifest.agent, url.path, invalid.description)
+                return false
+            }
+            return true
+        }
 
         for agentId in Self.bundledAgentIds {
             guard let url = Bundle.main.url(forResource: agentId, withExtension: "json", subdirectory: "AgentDetection"),
@@ -73,6 +94,7 @@ final class AgentManifestLoader: @unchecked Sendable {
 #endif
                 continue
             }
+            guard accept(manifest, url: url) else { continue }
             byAgent[manifest.agent] = manifest
             bySource[manifest.agent] = .bundled
         }
@@ -90,6 +112,7 @@ final class AgentManifestLoader: @unchecked Sendable {
 #endif
                     continue
                 }
+                guard accept(manifest, url: url) else { continue }
                 byAgent[manifest.agent] = manifest
                 bySource[manifest.agent] = .override
 #if DEBUG
@@ -100,6 +123,16 @@ final class AgentManifestLoader: @unchecked Sendable {
 
         manifestsByAgent = byAgent
         sourceByAgent = bySource
+        rejected = rejectedManifests
+    }
+
+    /// Manifest files rejected at load because a pattern does not compile, so the
+    /// `agent.detection.*` surface can tell an author why their override is not active.
+    func rejectedManifests() -> [RejectedManifest] {
+        loadIfNeeded()
+        lock.lock()
+        defer { lock.unlock() }
+        return rejected
     }
 
     /// Looks up a manifest by its stable agent id (e.g. "claude-code").
@@ -148,6 +181,7 @@ final class AgentManifestLoader: @unchecked Sendable {
         isLoaded = false
         manifestsByAgent = [:]
         sourceByAgent = [:]
+        rejected = []
         lock.unlock()
         loadIfNeeded()
     }
@@ -160,6 +194,7 @@ final class AgentManifestLoader: @unchecked Sendable {
         isLoaded = false
         manifestsByAgent = [:]
         sourceByAgent = [:]
+        rejected = []
         lock.unlock()
     }
 #endif

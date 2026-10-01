@@ -204,7 +204,13 @@ final class BrowserPaneDropTargetView: NSView {
         pasteboardTypes: [NSPasteboard.PasteboardType]?,
         eventType: NSEvent.EventType?
     ) -> Bool {
-        guard DragOverlayRoutingPolicy.hasBonsplitTabTransfer(pasteboardTypes) else { return false }
+        guard capturesEventType(eventType) else { return false }
+        return DragOverlayRoutingPolicy.hasBonsplitTabTransfer(pasteboardTypes)
+    }
+
+    /// Event types during which a tab drag can be in flight. Checked before reading the drag
+    /// pasteboard so other events (clicks, keys, scroll) skip that IPC round trip.
+    static func capturesEventType(_ eventType: NSEvent.EventType?) -> Bool {
         guard let eventType else { return false }
 
         switch eventType {
@@ -228,8 +234,8 @@ final class BrowserPaneDropTargetView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard bounds.contains(point), dropContext != nil else { return nil }
 
-        let pasteboardTypes = NSPasteboard(name: .drag).types
         let eventType = NSApp.currentEvent?.type
+        let pasteboardTypes = Self.capturesEventType(eventType) ? NSPasteboard(name: .drag).types : nil
         let capture = Self.shouldCaptureHitTesting(
             pasteboardTypes: pasteboardTypes,
             eventType: eventType
