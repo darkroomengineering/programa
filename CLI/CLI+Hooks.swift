@@ -1895,16 +1895,23 @@ extension ProgramaCLI {
 
     func withCodexHooksLock<T>(at home: String, _ body: () throws -> T) throws -> T {
         let path = (home as NSString).appendingPathComponent(".programa-hooks.lock")
+        var existing = stat()
+        let createdLock = path.withCString { Darwin.lstat($0, &existing) } != 0
         let descriptor = path.withCString { Darwin.open($0, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600) }
         guard descriptor >= 0 else { throw codexPOSIXError("open lock", path: path) }
         defer { Darwin.close(descriptor) }
+        var succeeded = false
+        // A declined or failed run leaves no new file behind in the user's Codex home.
+        defer { if createdLock && !succeeded { _ = path.withCString { unlink($0) } } }
         var info = stat()
         guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG else {
             throw CodexHooksError(message: "\(path) is not a regular lock file")
         }
         guard flock(descriptor, LOCK_EX) == 0 else { throw codexPOSIXError("lock", path: path) }
         defer { flock(descriptor, LOCK_UN) }
-        return try body()
+        let result = try body()
+        succeeded = true
+        return result
     }
 
     func codexReadRegularFile(_ path: String, limit: Int, refuseSymlink: Bool) throws -> CodexFileSnapshot? {
