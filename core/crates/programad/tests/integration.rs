@@ -413,7 +413,7 @@ async fn full_session_lifecycle_survives_client_disconnect() {
 }
 
 /// `workspace.*` links `programa-domain`'s state model into the daemon
-/// socket (core/docs/programad.md "Process layer"): a client opens a
+/// socket (core/ABI.md "Process layer"): a client opens a
 /// session (a PTY), creates a workspace whose one pane holds a surface
 /// referencing that session, confirms `workspace.snapshot` reflects it, then
 /// closes the session and confirms the surface is gone. "Gone" (not a

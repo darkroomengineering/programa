@@ -38,7 +38,7 @@ Edited:
 
 ## What we learned
 
-The living spec (`docs/remote-daemon-spec.md`) records the design decisions and the reasons behind them.
+The spec (`docs/remote-daemon-spec.md`, read it with `git show 903027ccef:docs/remote-daemon-spec.md`) records the design decisions and the reasons behind them.
 
 Port mirroring was tried first and abandoned. The original design probed the remote host for listening ports and mirrored each one to local loopback with `ssh -L`. That was replaced by a single shared local proxy endpoint per SSH transport, brokered over the daemon's stdio RPC (`proxy.open/close/write/proxy.stream.subscribe` plus pushed `proxy.stream.*` events). Section 4.4 states the conclusion plainly: automatic mirroring of every remote listening port is an explicit non-goal. A re-implementation should start from one proxy endpoint per transport, not per port.
 

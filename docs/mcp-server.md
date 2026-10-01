@@ -78,7 +78,7 @@ back.
 
 ## Tools
 
-187 tools, named after the socket method they call, with `.` replaced by `_`:
+Each tool is named after the socket method it calls, with `.` replaced by `_`:
 `surface.read_text` becomes `surface_read_text`, `review.comment.add` becomes
 `review_comment_add`.
 

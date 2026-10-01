@@ -5,9 +5,8 @@ workspaces contain panes, panes contain ordered surfaces, and a recursive layout
 describes pane splits. The session_id is an opaque caller-owned identity. The
 core never owns PTY, renderer, or native UI handles.
 
-The first macOS adapter seeds one existing pane, dispatches reorder_surface,
-and projects the returned order onto existing Bonsplit tab objects. Full macOS
-workspace and split lifecycle migration remains later work.
+The Windows app consumes this ABI through `programa-ffi`
+(`programa_core.dll`). The macOS app does not link the shared core.
 
 ## C API and ownership
 
@@ -141,13 +140,12 @@ revision_overflow, serialization_error, internal_error, and panic.
 ## Process layer
 
 `programa-domain` (above) is a state model with no process of its own: it is
-linked into whatever owns the window. Two things link it today, and they
-share the same state model but not a process.
+linked into whatever owns the window. Two things link it, and they share the
+same state model but not a process.
 
 - **`programa-ffi`** wraps `programa-domain::Core` behind the C ABI documented
-  above and is statically linked into the macOS app (`libprograma_core.a`,
-  built by `scripts/build-shared-core.sh`). It runs in the app's own process,
-  on the app's own thread, with no IPC in the loop.
+  above and ships as `programa_core.dll` in the Windows app. It runs in the
+  app's own process, on the app's own thread, with no IPC in the loop.
 - **`programad`** (`core/crates/programad`, moved in from
   `darkroomengineering/programa-core`) is a separate headless process that
   owns PTYs, session write-ahead logs, and attach/detach/fd-handoff, and now
@@ -188,10 +186,10 @@ for a surface to outlive its session (e.g. showing a "process exited" state
 in the pane instead of collapsing it), that's a `programa-domain` schema
 change, not a `programad` one.
 
-**What remains:** the macOS app still runs its own in-process adapter
-(`Sources/SharedWorkspaceCore.swift`) against `programa-ffi` rather than
-`programad`'s socket, so today there are two live links to the same state
-model and no single source of truth yet. Remote transport
+**What remains:** the Windows app runs `programa-ffi` in process rather than
+talking to `programad`'s socket, so there are two links to the same state
+model and no single source of truth yet. The macOS app keeps its own Swift
+workspace model and links neither. Remote transport
 (`core/docs/remote-transport.md`) and org mode
 (`docs/plans/rust-core-spike.md` "Reframe") are unimplemented; both build on
 `programad` owning the socket, not on anything `workspace.*` changes here.

@@ -64,7 +64,10 @@ methods except `auth.login` require successful authentication on that
 connection.
 
 Columns and rows must be integers from 1 through 65535. `session.read.max_len`
-is capped at 1 MiB, as is decoded `session.write.data`. `session.close` defaults
+is capped at 1 MiB, as is decoded `session.write.data`. `session.write` makes
+one non-blocking write to the PTY and returns `{"written": n}`; `n` can be
+smaller than the decoded data, and is 0 when the PTY input buffer is full, so
+a client resends the bytes after `n` until all are written. `session.close` defaults
 to terminating the child; `kill:false` is rejected because dropping daemon PTY
 ownership cannot truthfully preserve the process.
 Close sends `SIGHUP`; if the child has not exited after 500 ms, the request

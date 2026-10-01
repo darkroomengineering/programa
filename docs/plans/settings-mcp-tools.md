@@ -3,7 +3,7 @@
 Status: planned, 2026-09-02.
 Scope: `settings.describe` / `settings.get` / `settings.set` socket methods, the matching
 `programa-mcp` tools and a schema resource, docs, and tests. No UI work.
-Follow-up to `docs/plans/mcp-server.md`.
+Follow-up to the MCP server (`docs/mcp-server.md`).
 
 ## Correction to the briefing
 

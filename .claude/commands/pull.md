@@ -1,16 +1,12 @@
 # Pull
 
-Pull latest main and update all submodules to their latest remote main. No commits, no pushes.
+Pull latest main and check out the submodule commits main pins. No commits, no pushes.
 
 ## Steps
 
 1. `git pull origin main`
-2. For each submodule (ghostty):
-   - `cd <submodule>`
-   - `git fetch origin`
-   - Check if behind: `git rev-list HEAD..origin/main --count`
-   - If behind, merge: `git merge origin/main --no-edit`
-   - Do NOT push. We only land submodule changes via PRs.
-   - Go back to repo root
-3. `git submodule update --init --recursive`
-4. Report: current commit, which submodules were updated and by how many commits
+2. `git submodule update --init --recursive`
+   - This checks out the exact `ghostty` commit the parent repo pins. Never merge the fork's
+     `main` into `ghostty/`: it is far ahead of the pin, and moving the pin pulls in unrelated
+     upstream changes (see `docs/ghostty-fork.md`).
+3. Report: current commit, and whether the `ghostty` pin changed (`git diff HEAD@{1} --stat -- ghostty`)

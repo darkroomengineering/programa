@@ -7,7 +7,7 @@ completing with `conclusion: success`). There is no nightly/beta channel and no 
 step for ordinary changes — merge to `main`, let CI go green, and the release ships itself.
 
 This command is only for **milestone marketing-version bumps** (e.g. `0.15.0` → `0.16.0`), which
-are still done manually via a PR + optional `vX.Y.Z` tag marker.
+are still done manually via a PR, with an optional `vX.Y.Z` tag as a marker.
 
 ## When to use this
 
@@ -43,14 +43,13 @@ are still done manually via a PR + optional `vX.Y.Z` tag marker.
    - **Only include changes that affect the end-user experience** - things users will see, feel, or interact with
    - Write clear, user-facing descriptions (not raw commit messages)
    - **Credit contributors inline** (see Contributor Credits below)
-   - Also update the docs changelog page at `web/app/docs/changelog/page.tsx` with the same content
    - If there are no user-facing changes, ask the user if they still want to bump the version
 
 5. **Bump the version**
    - Run `./scripts/bump-version.sh` (bumps minor by default; accepts `patch`, `major`, or an explicit version)
 
 6. **Commit and push the release branch**
-   - Stage: `CHANGELOG.md`, `web/app/docs/changelog/page.tsx`, `GhosttyTabs.xcodeproj/project.pbxproj`
+   - Stage: `CHANGELOG.md`, `GhosttyTabs.xcodeproj/project.pbxproj`
    - Commit message: `Bump version to X.Y.Z`
    - Push: `git push -u origin release/vX.Y.Z`
 
@@ -76,8 +75,8 @@ are still done manually via a PR + optional `vX.Y.Z` tag marker.
       git tag vX.Y.Z
       git push origin vX.Y.Z
       ```
-    - This also triggers `release.yml` via its `push: tags: v*` trigger, publishing under that
-      exact tag.
+    - The tag is only a marker: `release.yml` runs on green `CI` for `main`, not on tags, so
+      pushing it publishes nothing.
 
 11. **Monitor the release workflow**
     - Watch: `gh run watch --repo darkroomengineering/programa`

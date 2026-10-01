@@ -26,7 +26,7 @@ creation, and release assets. The four python files here (`test_cli_*.py`) drive
 as a subprocess through `PROGRAMA_CLI_BIN`.
 
 **`tests_v2/`** — the thing under test is app behaviour you can observe over the
-socket. Everything here talks to a live instance, whether through `programa.py` or
+socket. Everything here talks to a live instance, whether through `tests_v2/programa_client.py` or
 by speaking JSON-RPC directly. The lag/perf/CPU harnesses live here for that
 reason. See `docs/cpu-harness.md` for the CPU measurement harness specifically.
 
@@ -55,14 +55,3 @@ host can still create windows, start shells, and mutate its own preferences.
 `tests_v2` in particular will attach to whatever socket it
 finds, which is why running it locally risks driving your real Programa
 instance rather than a build under test.
-
-## Display resolution churn regression (`programaUITests`)
-
-`DisplayResolutionRegressionUITests.testRapidDisplayResolutionChangesKeepTerminalResponsive`
-churns a virtual display through four resolutions while the app's window sits on it, and asserts
-the terminal keeps presenting frames. The churn step attaches to the job's persistent virtual
-display (`--attach-id`) rather than creating a second `CGVirtualDisplay`, because a headless CI
-session reliably holds only one. On `macos-26` runners AppKit can move the window off the virtual
-display once its mode starts changing, so the step reads the launch diagnostics and self-skips
-(exit 0) when `targetDisplayMoveSucceeded` never reaches `"1"`. When placement works, the step
-runs the regression and a real rendering failure still fails the job.

@@ -1,7 +1,8 @@
 # Detached Sessions / Process Survival
 
 Status: shipped in 0.3.0 (2026-07-24) as "Detached sessions". Modeled on herdr.dev's detached-session
-UX. Companion doc to `docs/remote-daemon-spec.md` (SSH remote path) — this plan is the **local**
+UX. Companion doc to `docs/remote-daemon-spec.md` (SSH remote path, removed with SSH remote
+workspaces; read it with `git show 903027ccef:docs/remote-daemon-spec.md`). This plan is the **local**
 counterpart and explicitly reuses/extends that spec's `session.*` naming and resize semantics
 rather than inventing a parallel scheme.
 
@@ -360,8 +361,8 @@ reduced scope.
 2. **Ghostty submodule change**: add the externally-supplied-fd surface backend identified in
    Phase 0 step 2. Push to Darkroom fork per `CLAUDE.md`'s submodule workflow *before* bumping
    the parent pointer.
-3. **Swift integration** (`Sources/TerminalSurface.swift`, new file
-   `Sources/TerminalSurface+DetachedSession.swift`):
+3. **Swift integration** (`Sources/TerminalSurface.swift`; the separate
+   `TerminalSurface+DetachedSession.swift` this plan proposed was not created):
    - New per-surface opt-in flag (`keepAliveOnClose: Bool`), surfaced as a context-menu action
      ("Keep Running When Closed") on terminal panels — likely first exposed only for
      agent-detected surfaces (`AgentScreenDetectionEngine.swift` already classifies agent
@@ -494,7 +495,7 @@ reattach" scope.
 - `daemon/remote/cmd/programad-remote/main_sessions.go`, `tmux_store.go`, `main.go`,
   `main_proxy.go` (existing Go daemon patterns to mirror for `daemon/local`)
 - `daemon/remote/README.md`, `docs/remote-daemon-spec.md` (prior-art spec and naming to align
-  with)
+  with; both removed, see `git show 903027ccef:docs/remote-daemon-spec.md`)
 - `docs/socket-api.md` (v2 socket method conventions, threading policy references)
 - `tests_v2/programa_client.py` and sibling `test_ssh_remote_*` files (test harness patterns to extend)
 - `CLAUDE.md` (root) — typing-latency pitfalls, submodule workflow, socket threading/focus

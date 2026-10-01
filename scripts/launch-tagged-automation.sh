@@ -104,21 +104,29 @@ fi
 
 TAG_ID="$(sanitize_bundle "$TAG")"
 TAG_SLUG="$(sanitize_path "$TAG")"
-APP="$HOME/Library/Developer/Xcode/DerivedData/programa-${TAG_SLUG}/Build/Products/Debug/Programa DEV ${TAG}.app"
+# reload.sh builds into the shared DerivedData by default and into a per-tag
+# directory with --isolated; accept either.
+APP=""
+for DERIVED in "programa-shared" "programa-${TAG_SLUG}"; do
+  CANDIDATE="$HOME/Library/Developer/Xcode/DerivedData/${DERIVED}/Build/Products/Debug/Programa DEV ${TAG}.app"
+  if [[ -d "$CANDIDATE" ]]; then
+    APP="$CANDIDATE"
+    break
+  fi
+done
 BID="com.darkroom.programa.debug.${TAG_ID}"
 SOCK="/tmp/programa-debug-${TAG_SLUG}.sock"
-DSOCK="$HOME/Library/Application Support/programa/programad-dev-${TAG_SLUG}.sock"
 LOG="/tmp/programa-debug-${TAG_SLUG}.log"
 
-if [[ ! -d "$APP" ]]; then
-  echo "error: tagged app not found at $APP" >&2
+if [[ -z "$APP" ]]; then
+  echo "error: tagged app 'Programa DEV ${TAG}.app' not found in DerivedData/programa-shared or DerivedData/programa-${TAG_SLUG}; run ./scripts/reload.sh --tag ${TAG} first" >&2
   exit 1
 fi
 
 /usr/bin/osascript -e "tell application id \"${BID}\" to quit" >/dev/null 2>&1 || true
 sleep 0.5
 pkill -f "Programa DEV ${TAG}.app/Contents/MacOS/Programa DEV" || true
-rm -f "$SOCK" "$DSOCK"
+rm -f "$SOCK"
 sleep 0.5
 
 OPEN_ENV=(
@@ -129,7 +137,6 @@ OPEN_ENV=(
   -u PROGRAMA_PANEL_ID
   -u PROGRAMA_SURFACE_ID
   -u PROGRAMA_WORKSPACE_ID
-  -u PROGRAMAD_UNIX_PATH
   -u PROGRAMA_TAG
   -u PROGRAMA_PORT
   -u PROGRAMA_PORT_END
@@ -148,7 +155,6 @@ OPEN_ENV=(
   -u XDG_DATA_DIRS
   "PROGRAMA_SOCKET_MODE=${MODE}"
   "PROGRAMA_SOCKET_PATH=${SOCK}"
-  "PROGRAMAD_UNIX_PATH=${DSOCK}"
   "PROGRAMA_DEBUG_LOG=${LOG}"
 )
 
@@ -174,7 +180,6 @@ fi
 echo "app: $APP"
 echo "bundle_id: $BID"
 echo "socket: $SOCK"
-echo "programad_socket: $DSOCK"
 echo "log: $LOG"
 echo "mode: $MODE"
 echo "socket_ready: $(if [[ -S "$SOCK" ]]; then echo yes; else echo no; fi)"

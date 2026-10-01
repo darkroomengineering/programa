@@ -26,8 +26,8 @@ programa browser --surface surface:7 tab close
 
 Over MCP, the same methods are the `browser_*` tools in `programa-mcp` (`browser_open_split`,
 `browser_navigate`, `browser_snapshot`, `browser_get_text`, `browser_screenshot`,
-`browser_console_list`, and so on). A few Playwright-shaped tools (network routing, viewport,
-raw input injection) return `not_supported` because WKWebView has no DevTools Protocol. Only the three `focus_browser_*` tools move focus;
+`browser_console_list`, and so on). Playwright-shaped tools for network routing, viewport
+emulation and raw input injection do not exist: WKWebView has no DevTools Protocol to drive them. Only the three `focus_browser_*` tools move focus;
 everything else leaves the user where they are. See [mcp-server.md](mcp-server.md) for the
 full list and the setup.
 

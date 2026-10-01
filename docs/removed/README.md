@@ -10,7 +10,6 @@ Reductive pass of 2026-09-02, base commit 903027ccef. Core kept: the Ghostty ter
 | Mobile bridge, iOS companion, vendored iroh packages | [mobile-bridge-and-ios.md](mobile-bridge-and-ios.md) | 67,000 |
 | Browser data import wizard | [browser-data-import.md](browser-data-import.md) | 3,800 |
 | Browser extensions | [browser-extensions.md](browser-extensions.md) | 950 |
-| Browser developer tools and inspector dock | [browser-developer-tools.md](browser-developer-tools.md) | deferred, not removed; the doc explains why |
 | Browser React Grab overlay | [browser-react-grab.md](browser-react-grab.md) | 470 |
 | AppleScript support | [applescript.md](applescript.md) | 720 |
 | Inline VS Code (serve-web) | [inline-vscode.md](inline-vscode.md) | 610 |

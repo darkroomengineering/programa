@@ -9,8 +9,12 @@ while IFS= read -r path || [[ -n "$path" ]]; do
   SAW_CHANGED_PATH=true
 
   case "$path" in
-    # Localization-only resource edits are scoped out per request
-    Resources/*.xcstrings|Resources/*/*.xcstrings|Resources/*.strings|Resources/*/*.strings)
+    # String catalogs compile into the app, so a malformed catalog must build.
+    Resources/*.xcstrings|Resources/*/*.xcstrings)
+      RUN_APP_JOBS=true
+      ;;
+    # Legacy .strings resources are scoped out per request
+    Resources/*.strings|Resources/*/*.strings)
       continue
       ;;
     # Explicitly skip doc-only translation assets
@@ -25,7 +29,12 @@ while IFS= read -r path || [[ -n "$path" ]]; do
     *.md|docs/*|plans/*|AGENTS.md|CHANGELOG.md|TODO.md|README.md|LICENSE*|THIRD_PARTY_LICENSES.md|.editorconfig|.gitattributes|.gitignore|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg)
       continue
       ;;
-    # Repository metadata / workflow-only edits are not app/runtime changes
+    # The main CI workflow runs the jobs it defines, so an edit to it must
+    # exercise them instead of merging unrun.
+    .github/workflows/ci.yml)
+      RUN_APP_JOBS=true
+      ;;
+    # Other repository metadata / workflow edits are not app/runtime changes
     .github/*)
       continue
       ;;

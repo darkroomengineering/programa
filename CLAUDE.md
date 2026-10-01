@@ -8,6 +8,14 @@ Run the setup script to initialize submodules and build GhosttyKit:
 ./scripts/setup.sh
 ```
 
+## Repository map
+
+- `Sources/`, `CLI/`, `CLI-MCP/`: the macOS app, the `programa` CLI and the MCP server (Swift).
+- `contracts/v2/`: the socket API contract; it generates `Sources/V2CommandCatalog.swift` and `CLI/V2MethodNames.swift`.
+- `core/`: the Rust shared core and `programad`, used by the Windows app only (the macOS app does not link it). `cd core && cargo test` (and the same in `core/crates/programa-terminal`) is the one test suite that runs locally.
+- `windows/`: the WinUI 3 app, built by `scripts/build-windows.ps1` in the `windows-build` CI job.
+- `vendor/bonsplit/`: vendored split/tab library (not a submodule). `ghostty/`: the Ghostty submodule.
+
 ## Local dev
 
 After making code changes, always run the reload script with a tag to build the Debug app:
@@ -123,7 +131,7 @@ tail -f "$(cat /tmp/programa-last-debug-log-path 2>/dev/null || echo /tmp/progra
 - Tagged Debug app (`./scripts/reload.sh --tag <tag>`): `/tmp/programa-debug-<tag>.log`
 - `reload.sh` writes the current path to `/tmp/programa-last-debug-log-path`
 - `reload.sh` writes the selected dev CLI path to `/tmp/programa-last-cli-path`
-- `reload.sh` updates `/tmp/programa-cli` and `$HOME/.local/bin/programa-dev` to that CLI
+- `reload.sh` updates `/tmp/programa-cli` and `$HOME/.local/bin/programa-dev` to that CLI. It does not put a `programa` command on `PATH`; `--install-shim` also writes a `programa` shim into the first writable `PATH` directory ahead of the installed app, which then shadows the installed CLI for every shell and agent hook until you delete it
 
 - Implementation: `vendor/bonsplit/Sources/Bonsplit/Public/DebugEventLog.swift`
 - Free function `dlog("message")` — logs with timestamp and appends to file in real time
@@ -166,6 +174,17 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 - **All user-facing strings must be localized.** Use `String(localized: "key.name", defaultValue: "English text")` for every string shown in the UI (labels, buttons, menus, dialogs, tooltips, error messages). Keys go in `Resources/Localizable.xcstrings` with translations for all supported languages (currently English and Japanese). Never use bare string literals in SwiftUI `Text()`, `Button()`, alert titles, etc.
 - **Shortcut policy:** Every new Programa-owned keyboard shortcut must be added to `KeyboardShortcutSettings`, visible/editable in Settings, supported in `~/.config/programa/settings.json`, and documented in the keyboard shortcut and configuration docs.
 
+## CI gates
+
+These run in CI; run the relevant one before pushing:
+
+- `python3 scripts/check-structural-budgets.py`: line budgets for lifecycle owner files. `CLI/programa.swift`, `CLI/CLI+Hooks.swift`, `Sources/TerminalController.swift` and `Sources/CommandPaletteController.swift` sit at their cap, so free lines (or move code into a new file) before adding any.
+- `scripts/check-v2-contract.sh`: v2 socket methods are contract-first. Edit `contracts/v2/methods.json`, then `python3 scripts/gen-v2-contract.py`; never hand-edit the generated Swift.
+- `python3 scripts/check-settings-docs.py`: every settings key and shortcut action is documented.
+- New Swift files need four `project.pbxproj` entries (PBXBuildFile, PBXFileReference, group child, Sources build phase) or the build fails with "cannot find type in scope".
+- Every new chrome or overlay `NSHostingView` sets `safeAreaRegions = []`.
+- Files that call `dlog` import `Bonsplit` and wrap the call in `#if DEBUG`.
+
 ## Test quality policy
 
 - Do not add tests that only verify source code text, method signatures, AST fragments, or grep-style patterns.
@@ -193,11 +212,16 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 
 ## Testing policy
 
-**Never run tests locally.** All tests (E2E, UI, python socket tests) run via GitHub Actions or on the VM.
+**Never run tests locally.** All tests (E2E, UI, python socket tests) run via GitHub Actions or on the VM. The exceptions touch no app state: `cd core && cargo test` and `node --test scripts/*.test.js`.
 
 - **E2E / UI tests:** trigger `.github/workflows/test-e2e.yml` with `gh workflow run test-e2e.yml -f test_filter=<TestClass[/testMethod]>`. Optional inputs: `-f ref=<branch-or-sha>` (default: the current ref), `-f test_timeout=<seconds>` (default 120), `-f record_video=true`, `-f runner=macos-26|macos-15|macos-14` (default `macos-15`).
 - **Unit tests:** run in CI. The `programa-unit` scheme is app-hosted: its default `TEST_HOST` is the untagged Debug app, which opens windows, starts shells and writes preferences, so never run it as is. The only local path is the tagged build-for-testing recipe in `docs/testing-layout.md` ("Running them").
-- **Python socket tests (tests_v2/):** these connect to a running Programa instance's socket. Never launch an untagged `Programa DEV.app` to run them. If you must test locally, use a tagged build's socket (`/tmp/programa-debug-<tag>.sock`) with `PROGRAMA_SOCKET=/tmp/programa-debug-<tag>.sock`
+- **Python socket tests (tests_v2/):** these connect to a running Programa instance's socket. Never launch an untagged `Programa DEV.app` to run them. If you must test locally, point both socket variables at a tagged build's socket and drop the production ids; inside a Programa terminal `PROGRAMA_SOCKET_PATH` otherwise still targets the production app:
+
+  ```bash
+  unset PROGRAMA_SOCKET; export PROGRAMA_SOCKET_PATH=/tmp/programa-debug-<tag>.sock PROGRAMA_SOCKET=/tmp/programa-debug-<tag>.sock
+  unset PROGRAMA_WORKSPACE_ID PROGRAMA_SURFACE_ID PROGRAMA_TAB_ID PROGRAMA_PANEL_ID
+  ```
 - **Never `open` an untagged `Programa DEV.app`** from DerivedData. It conflicts with the user's running debug instance.
 
 ## Ghostty submodule workflow
