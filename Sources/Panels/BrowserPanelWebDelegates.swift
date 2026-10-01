@@ -370,16 +370,14 @@ class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {
            browserShouldOpenURLExternally(url) {
             // Only a real link click or form submit may reach the confirmation prompt;
             // script-driven navigations to another app are dropped.
-            if ExternalOpenPolicy.navigationTypeHasUserGesture(navigationAction.navigationType) {
-                let opened = BrowserLinkOpenSettings.openExternally(url)
-                #if DEBUG
-                dlog("browser.navigation.external source=navDelegate dispatched=\(opened ? 1 : 0) url=\(url.absoluteString)")
-                #endif
-            } else {
-                #if DEBUG
-                dlog("browser.navigation.external source=navDelegate blocked=noUserGesture url=\(url.absoluteString)")
-                #endif
-            }
+            let opened = ExternalOpenPolicy.openFromWebContent(
+                url,
+                navigationType: navigationAction.navigationType,
+                webView: webView
+            )
+            #if DEBUG
+            dlog("browser.navigation.external source=navDelegate dispatched=\(opened ? 1 : 0) url=\(url.absoluteString)")
+            #endif
             decisionHandler(.cancel)
             return
         }
@@ -528,16 +526,14 @@ class BrowserUIDelegate: NSObject, WKUIDelegate {
         // External URL schemes → hand off to macOS, don't create a popup
         if let url = navigationAction.request.url,
            browserShouldOpenURLExternally(url) {
-            if ExternalOpenPolicy.navigationTypeHasUserGesture(navigationAction.navigationType) {
-                let opened = BrowserLinkOpenSettings.openExternally(url)
-                #if DEBUG
-                dlog("browser.navigation.external source=uiDelegate dispatched=\(opened ? 1 : 0) url=\(url.absoluteString)")
-                #endif
-            } else {
-                #if DEBUG
-                dlog("browser.navigation.external source=uiDelegate blocked=noUserGesture url=\(url.absoluteString)")
-                #endif
-            }
+            let opened = ExternalOpenPolicy.openFromWebContent(
+                url,
+                navigationType: navigationAction.navigationType,
+                webView: webView
+            )
+            #if DEBUG
+            dlog("browser.navigation.external source=uiDelegate dispatched=\(opened ? 1 : 0) url=\(url.absoluteString)")
+            #endif
             return nil
         }
 
@@ -555,9 +551,11 @@ class BrowserUIDelegate: NSObject, WKUIDelegate {
             hasRecentMiddleClickIntent: ProgramaWebView.hasRecentMiddleClickIntent(for: webView)
         )
 
-        if isScriptedPopup, let popupWebView = openPopup?(configuration, windowFeatures) {
+        if isScriptedPopup, let openPopup {
+            // nil means the panel refused (popup cap); do not reopen it as a tab.
+            let popupWebView = openPopup(configuration, windowFeatures)
 #if DEBUG
-            dlog("browser.nav.createWebView.action kind=popup")
+            dlog("browser.nav.createWebView.action kind=popup created=\(popupWebView == nil ? 0 : 1)")
 #endif
             return popupWebView
         }

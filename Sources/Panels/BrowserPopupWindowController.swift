@@ -285,10 +285,27 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
         childPopups.removeAll { $0 === child }
     }
 
+    var descendantPopupCount: Int {
+        childPopups.reduce(0) { $0 + 1 + $1.descendantPopupCount }
+    }
+
+    /// Takes key focus only when the opener web view has it, so a background page's
+    /// popup cannot pull keystrokes away from a terminal.
     fileprivate func showPanelIfNeeded() {
         guard !hasShownPanel else { return }
         hasShownPanel = true
-        panel.makeKeyAndOrderFront(self)
+        if openerHasKeyFocus {
+            panel.makeKeyAndOrderFront(self)
+        } else {
+            panel.orderFront(self)
+        }
+    }
+
+    private var openerHasKeyFocus: Bool {
+        guard let opener = parentPopupController?.webView ?? openerPanel?.webView,
+              let window = opener.window, window.isKeyWindow,
+              let responder = window.firstResponder as? NSView else { return false }
+        return responder === opener || responder.isDescendant(of: opener)
     }
 
     func setBrowserThemeMode(_ mode: BrowserThemeMode) {
@@ -348,6 +365,9 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         let nextDepth = nestingDepth + 1
+        if let openerPanel, openerPanel.openPopupCount >= BrowserPanel.maxOpenPopups {
+            return nil
+        }
         if nextDepth > Self.maxNestingDepth {
             #if DEBUG
             dlog("popup.nested.blocked depth=\(nextDepth) max=\(Self.maxNestingDepth)")
@@ -454,7 +474,7 @@ private class PopupUIDelegate: NSObject, WKUIDelegate {
         // External URL check
         if let url = navigationAction.request.url,
            browserShouldOpenURLExternally(url) {
-            BrowserLinkOpenSettings.openExternally(url)
+            ExternalOpenPolicy.openFromWebContent(url, navigationType: navigationAction.navigationType, webView: webView)
             return nil
         }
 
@@ -565,9 +585,7 @@ private class PopupNavigationDelegate: NSObject, WKNavigationDelegate {
 
         // External URL schemes → hand off to macOS
         if browserShouldOpenURLExternally(url) {
-            if ExternalOpenPolicy.navigationTypeHasUserGesture(navigationAction.navigationType) {
-                BrowserLinkOpenSettings.openExternally(url)
-            }
+            ExternalOpenPolicy.openFromWebContent(url, navigationType: navigationAction.navigationType, webView: webView)
             #if DEBUG
             dlog("popup.nav.external url=\(url.absoluteString) gesture=\(ExternalOpenPolicy.navigationTypeHasUserGesture(navigationAction.navigationType) ? 1 : 0)")
             #endif

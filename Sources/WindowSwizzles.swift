@@ -42,11 +42,12 @@ private final class ProgramaFieldEditorOwningWebViewBox: NSObject {
     }
 }
 
+#if DEBUG
 // Widened from `private extension` to `extension`: AppDelegate.installWindowResponderSwizzles()
 // (in AppDelegate.swift) references these @objc methods via #selector(...) for method swizzling. Refs #95.
+// DEBUG-only: the swizzle exists solely for typing-timing instrumentation.
 extension NSApplication {
     @objc func programa_applicationSendEvent(_ event: NSEvent) {
-#if DEBUG
         let typingTimingStart = event.type == .keyDown ? ProgramaTypingTiming.start() : nil
         let phaseTotalStart = event.type == .keyDown ? ProcessInfo.processInfo.systemUptime : 0
         if event.type == .keyDown {
@@ -69,10 +70,10 @@ extension NSApplication {
                 )
             }
         }
-#endif
         programa_applicationSendEvent(event)
     }
 }
+#endif
 
 // Widened from `private extension` to `extension`: AppDelegate.installWindowResponderSwizzles()
 // (in AppDelegate.swift) references these @objc methods via #selector(...) for method swizzling. Refs #95.
@@ -833,4 +834,53 @@ extension NSWindow {
         return hitWebView === webView
     }
 
+}
+
+// User-initiated main-window close (red button, File > Close, Close Window shortcut)
+// confirms like closing the last workspace when a workspace has a running process.
+// Programmatic `close()` (socket `window.close`, last-workspace close, termination) skips
+// this gate. The red button's action is proxied rather than using `windowShouldClose`
+// because SwiftUI owns the launch window's delegate; `performClose:` reaches the same
+// proxy because AppKit implements it by clicking the close button.
+private var programaCloseButtonOriginalActionKey: UInt8 = 0
+
+private final class ProgramaCloseButtonOriginalAction: NSObject {
+    let action: Selector
+    weak var target: AnyObject?
+
+    init(action: Selector, target: AnyObject?) {
+        self.action = action
+        self.target = target
+    }
+}
+
+extension NSWindow {
+    /// Idempotent; re-run on every main-window register because AppKit can rebuild titlebar buttons.
+    func programaInstallMainWindowCloseConfirmation() {
+        guard let button = standardWindowButton(.closeButton),
+              let originalAction = button.action,
+              originalAction != #selector(NSWindow.programa_mainWindowCloseButtonPressed(_:)) else { return }
+        objc_setAssociatedObject(
+            self,
+            &programaCloseButtonOriginalActionKey,
+            ProgramaCloseButtonOriginalAction(action: originalAction, target: button.target),
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        button.target = self
+        button.action = #selector(NSWindow.programa_mainWindowCloseButtonPressed(_:))
+    }
+
+    @objc func programa_mainWindowCloseButtonPressed(_ sender: Any?) {
+        if let app = AppDelegate.shared, !app.isTerminatingApp,
+           let context = app.mainWindowContexts[ObjectIdentifier(self)],
+           !context.tabManager.confirmCloseWindowIfNeeded() {
+            return
+        }
+        guard let original = objc_getAssociatedObject(self, &programaCloseButtonOriginalActionKey)
+            as? ProgramaCloseButtonOriginalAction else {
+            close()
+            return
+        }
+        NSApp.sendAction(original.action, to: original.target ?? self, from: sender)
+    }
 }

@@ -5566,7 +5566,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
     /// `commandPaletteOverlayContainerIdentifier`) as a sibling of `contentView`, not
     /// nested inside it. Adding a second, decoy view with the same identifier under
     /// `contentView` does not shadow it -- the production tree walk
-    /// (`AppDelegate.commandPaletteOverlayContainer(in:)`) finds the real one first and
+    /// (`commandPaletteOverlayIsPresented(in:)`) finds the real one first and
     /// returns immediately, so it never reaches a test's own decoy node. Tests that need
     /// to simulate the overlay's visual state must locate and mutate this real view.
     private func findRealCommandPaletteOverlayContainer(in window: NSWindow) -> NSView? {

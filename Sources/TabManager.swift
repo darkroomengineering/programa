@@ -632,7 +632,10 @@ class TabManager: ObservableObject {
     weak var window: NSWindow?
     var onWindowCloseTeardown: (() -> Void)?
 
-    @Published var tabs: [Workspace] = []
+    /// Kept in sidebar hierarchy order (see `canonicalizeHierarchyOrderIfNeeded`).
+    @Published var tabs: [Workspace] = [] {
+        didSet { canonicalizeHierarchyOrderIfNeeded() }
+    }
     @Published var isWorkspaceCycleHot: Bool = false
     @Published private(set) var pendingBackgroundWorkspaceLoadIds: Set<UUID> = []
     @Published private(set) var debugPinnedWorkspaceLoadIds: Set<UUID> = []
@@ -1858,14 +1861,52 @@ class TabManager: ObservableObject {
         tabs = selectedPinned + remainingPinned + selectedUnpinned + remainingUnpinned
     }
 
+    /// Moves the notifying workspace's top-level group (root ancestor plus its children) to the
+    /// top; a child never moves away from its parent.
     func moveTabToTopForNotification(_ tabId: UUID) {
-        guard let index = tabs.firstIndex(where: { $0.id == tabId }) else { return }
+        canonicalizeHierarchyOrderIfNeeded()
+        guard let rootId = hierarchyRootId(of: tabId),
+              let index = tabs.firstIndex(where: { $0.id == rootId }) else { return }
         let pinnedCount = tabs.filter { $0.isPinned }.count
         guard index != pinnedCount else { return }
         let tab = tabs[index]
         guard !tab.isPinned else { return }
-        tabs.remove(at: index)
-        tabs.insert(tab, at: pinnedCount)
+        var reordered = tabs
+        reordered.remove(at: index)
+        reordered.insert(tab, at: min(pinnedCount, reordered.count))
+        tabs = reordered
+    }
+
+    /// The sidebar nests a workspace under its worktree parent, else its agent parent.
+    private func hierarchyParentId(of workspace: Workspace) -> UUID? {
+        workspace.worktreeParentWorkspaceId ?? workspace.agentParentWorkspaceId
+    }
+
+    private func hierarchyRootId(of tabId: UUID) -> UUID? {
+        let byId = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        guard var current = byId[tabId] else { return nil }
+        var visited: Set<UUID> = [current.id]
+        while let parentId = hierarchyParentId(of: current),
+              let parent = byId[parentId],
+              visited.insert(parentId).inserted {
+            current = parent
+        }
+        return current.id
+    }
+
+    /// ⌘1-9, Move Up/Down and drop planning index `tabs`, so `tabs` must match the sidebar:
+    /// every child directly after its parent (depth-first, siblings in their current order).
+    /// Reorders of a parent therefore carry its children. Call after setting a parent id on a
+    /// workspace that is already in `tabs`.
+    func canonicalizeHierarchyOrderIfNeeded() {
+        guard tabs.contains(where: { hierarchyParentId(of: $0) != nil }) else { return }
+        let entries = tabs.map {
+            SidebarWorkspaceHierarchyEntry(id: $0.id, parentId: hierarchyParentId(of: $0), isFolder: false, isCollapsed: false)
+        }
+        let orderedIds = SidebarWorkspaceHierarchy.visibleWorkspaceIds(entries)
+        guard orderedIds.count == tabs.count, orderedIds != tabs.map(\.id) else { return }
+        let byId = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        tabs = orderedIds.compactMap { byId[$0] }
     }
 
     @discardableResult
@@ -2371,9 +2412,14 @@ class TabManager: ObservableObject {
 
         let count = plan.panelIds.count
         let titleLines = plan.titles.map { "• \($0)" }.joined(separator: "\n")
-        let message = "This is about to close \(count) tab\(count == 1 ? "" : "s") in this pane:\n\(titleLines)"
+        let format = count == 1
+            ? String(localized: "shell.closeOtherTabs.message.one", defaultValue: "This is about to close 1 tab in this pane:\n%@")
+            : String(localized: "shell.closeOtherTabs.message.other", defaultValue: "This is about to close %1$lld tabs in this pane:\n%2$@")
+        let message = count == 1
+            ? String(format: format, titleLines)
+            : String(format: format, locale: .current, Int64(count), titleLines)
         guard confirmClose(
-            title: "Close other tabs?",
+            title: String(localized: "dialog.closeOtherTabs.title", defaultValue: "Close other tabs?"),
             message: message,
             acceptCmdD: false
         ) else { return }
@@ -2451,6 +2497,17 @@ class TabManager: ObservableObject {
             guard tabs.contains(where: { $0.id == workspace.id }) else { continue }
             closeWorkspaceIfRunningProcess(workspace, requiresConfirmation: false)
         }
+    }
+
+    /// Close-window gate for user-initiated closes (red button, Close Window shortcut).
+    /// Uses the same "needs confirm" rule and dialog as closing the last workspace.
+    func confirmCloseWindowIfNeeded() -> Bool {
+        guard tabs.contains(where: { workspaceNeedsConfirmClose($0) }) else { return true }
+        let plan = closeWorkspacesPlan(for: tabs)
+        let message = tabs.count == 1
+            ? String(localized: "shell.closeWindow.singleWorkspace.message", defaultValue: "This will close the current window and all of its panels.")
+            : plan.message
+        return confirmClose(title: plan.title, message: message, acceptCmdD: plan.acceptCmdD)
     }
 
     func selectWorkspace(_ workspace: Workspace) {
@@ -2545,7 +2602,7 @@ class TabManager: ObservableObject {
         if let collapsed, !collapsed.isEmpty {
             return collapsed
         }
-        return "Untitled Tab"
+        return String(localized: "shell.closeOtherTabs.untitledTab", defaultValue: "Untitled Tab")
     }
 
     private func orderedClosableWorkspaces(_ workspaceIds: [UUID], allowPinned: Bool) -> [Workspace] {

@@ -486,6 +486,7 @@ final class ProgramaWebView: WKWebView {
             )
         }
 #endif
+        lastKeyDownTimestamp = event.timestamp
         // Some Cmd-based key paths in WebKit don't consistently invoke performKeyEquivalent.
         // Route them through the same app-level shortcut handler as a fallback.
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command),
@@ -508,6 +509,13 @@ final class ProgramaWebView: WKWebView {
     /// `NSEvent.timestamp` (system uptime) of the last native left mouse-down. Design Mode uses it
     /// to reject `pick` messages that were not preceded by a real click.
     private(set) var lastPrimaryMouseDownTimestamp: TimeInterval?
+    /// `NSEvent.timestamp` of the last native keyDown delivered to this web view.
+    private(set) var lastKeyDownTimestamp: TimeInterval?
+
+    /// A real click or key press reached this web view within `ExternalOpenPolicy.nativeGestureWindow`.
+    func hasRecentNativeGesture(now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool {
+        ExternalOpenPolicy.isRecentNativeGesture([lastPrimaryMouseDownTimestamp, lastKeyDownTimestamp], now: now)
+    }
 
     override func mouseDown(with event: NSEvent) {
 #if DEBUG
@@ -574,30 +582,6 @@ final class ProgramaWebView: WKWebView {
         )
 #endif
         super.otherMouseUp(with: event)
-    }
-
-    /// Finds the nearest anchor element at a given view-local point.
-    /// Used as a context-menu download fallback.
-    private func findLinkAtPoint(_ point: NSPoint, completion: @escaping (URL?) -> Void) {
-        let flippedY = bounds.height - point.y
-        let js = """
-        (() => {
-            let el = document.elementFromPoint(\(point.x), \(flippedY));
-            while (el) {
-                if (el.tagName === 'A' && el.href) return el.href;
-                el = el.parentElement;
-            }
-            return '';
-        })();
-        """
-        evaluateJavaScript(js) { result, _ in
-            guard let href = result as? String, !href.isEmpty,
-                  let url = URL(string: href) else {
-                completion(nil)
-                return
-            }
-            completion(url)
-        }
     }
 
     // MARK: - Context menu download support
@@ -799,7 +783,14 @@ final class ProgramaWebView: WKWebView {
 
     private func isDownloadableScheme(_ url: URL) -> Bool {
         let scheme = url.scheme?.lowercased() ?? ""
-        return scheme == "http" || scheme == "https" || scheme == "file"
+        if scheme == "file" { return pageAllowsLocalFileTransfer }
+        return scheme == "http" || scheme == "https"
+    }
+
+    /// A remote page can point an <img> or link at any local path; only a page that is itself
+    /// a local file may have Copy Image / Download read local files.
+    private var pageAllowsLocalFileTransfer: Bool {
+        url?.isFileURL == true
     }
 
     private func isDataURLScheme(_ url: URL) -> Bool {
@@ -1328,6 +1319,11 @@ final class ProgramaWebView: WKWebView {
         }
 
         if scheme == "file" {
+            guard pageAllowsLocalFileTransfer else {
+                notifyContextMenuDownloadState(false)
+                debugContextDownload("browser.ctxdl.file trace=\(traceID) stage=refused reason=remotePage")
+                return
+            }
             DispatchQueue.global(qos: .userInitiated).async {
                 let readResult = Result { try BrowserContextTransferPolicy.boundedFileData(from: url) }
                 DispatchQueue.main.async {
@@ -1557,6 +1553,11 @@ final class ProgramaWebView: WKWebView {
         }
 
         if scheme == "file" {
+            guard pageAllowsLocalFileTransfer else {
+                debugContextDownload("browser.ctxcopy.fetch trace=\(traceID) stage=fileRefused reason=remotePage")
+                completion(nil)
+                return
+            }
             DispatchQueue.global(qos: .userInitiated).async {
                 let data = try? BrowserContextTransferPolicy.boundedFileData(from: sourceURL)
                 DispatchQueue.main.async {
@@ -2107,71 +2108,27 @@ final class ProgramaWebView: WKWebView {
                     )
                 }
 
-                // Fallback 2: simpler nearest-anchor lookup.
-                self.findLinkAtPoint(point) { fallbackURL in
+                if let dataImageURL {
                     self.debugContextDownload(
-                        "browser.ctxdl.resolve trace=\(traceID) kind=linked nearestAnchorURL=\(fallbackURL?.absoluteString ?? "nil")"
+                        "browser.ctxdl.resolve trace=\(traceID) kind=linked fallbackToDataURL=1"
                     )
-                    guard let fallbackURL else {
-                        if let dataImageURL {
-                            self.debugContextDownload(
-                                "browser.ctxdl.resolve trace=\(traceID) kind=linked fallbackToDataURL=1"
-                            )
-                            self.startContextMenuDownload(
-                                dataImageURL,
-                                sender: sender,
-                                fallbackAction: fallback.action,
-                                fallbackTarget: fallback.target,
-                                traceID: traceID
-                            )
-                            return
-                        }
-                        self.debugInspectElementsAtPoint(point, traceID: traceID, kind: "linked")
-                        self.runContextMenuFallback(
-                            action: fallback.action,
-                            target: fallback.target,
-                            sender: sender,
-                            traceID: traceID,
-                            reason: "no_link_or_image_url"
-                        )
-                        return
-                    }
-                    let normalized = self.normalizedLinkedDownloadURL(fallbackURL)
-                    self.debugContextDownload(
-                        "browser.ctxdl.resolve trace=\(traceID) kind=linked normalizedNearestAnchorURL=\(normalized.absoluteString)"
-                    )
-                    guard self.isDownloadSupportedScheme(normalized) else {
-                        if let dataImageURL {
-                            self.debugContextDownload(
-                                "browser.ctxdl.resolve trace=\(traceID) kind=linked fallbackToDataURL=1"
-                            )
-                            self.startContextMenuDownload(
-                                dataImageURL,
-                                sender: sender,
-                                fallbackAction: fallback.action,
-                                fallbackTarget: fallback.target,
-                                traceID: traceID
-                            )
-                            return
-                        }
-                        self.debugInspectElementsAtPoint(point, traceID: traceID, kind: "linked")
-                        self.runContextMenuFallback(
-                            action: fallback.action,
-                            target: fallback.target,
-                            sender: sender,
-                            traceID: traceID,
-                            reason: "nearest_anchor_unsupported_scheme"
-                        )
-                        return
-                    }
                     self.startContextMenuDownload(
-                        normalized,
+                        dataImageURL,
                         sender: sender,
                         fallbackAction: fallback.action,
                         fallbackTarget: fallback.target,
                         traceID: traceID
                     )
+                    return
                 }
+                self.debugInspectElementsAtPoint(point, traceID: traceID, kind: "linked")
+                self.runContextMenuFallback(
+                    action: fallback.action,
+                    target: fallback.target,
+                    sender: sender,
+                    traceID: traceID,
+                    reason: "no_link_or_image_url"
+                )
             }
         }
     }

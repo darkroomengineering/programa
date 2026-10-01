@@ -6835,40 +6835,6 @@
         }
       }
     },
-    "commandPalette.rename.clearCustomName": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "(clear custom name)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "（カスタム名をクリア）"
-          }
-        }
-      }
-    },
-    "commandPalette.rename.tabConfirmHint": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Press Enter to apply this tab name, or Escape to cancel."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enterキーでこのタブ名を適用、Escapeでキャンセルします。"
-          }
-        }
-      }
-    },
     "commandPalette.rename.tabDescription": {
       "extractionState": "manual",
       "localizations": {
@@ -6933,23 +6899,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "タブの名前を変更"
-          }
-        }
-      }
-    },
-    "commandPalette.rename.workspaceConfirmHint": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Press Enter to apply this workspace name, or Escape to cancel."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enterキーでこのワークスペース名を適用、Escapeでキャンセルします。"
           }
         }
       }
@@ -19496,6 +19445,210 @@
           "stringUnit": {
             "state": "translated",
             "value": "新規ターミナル"
+          }
+        }
+      }
+    },
+    "shell.omnibar.suggestion.selected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "selected %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択中 %@"
+          }
+        }
+      }
+    },
+    "shell.closeOtherTabs.message.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is about to close 1 tab in this pane:\n%@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このペインのタブを1個閉じます:\n%@"
+          }
+        }
+      }
+    },
+    "shell.closeOtherTabs.message.other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is about to close %1$lld tabs in this pane:\n%2$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このペインのタブを%1$lld個閉じます:\n%2$@"
+          }
+        }
+      }
+    },
+    "shell.externalOpen.requestedBy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requested by %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要求元: %@"
+          }
+        }
+      }
+    },
+    "shell.notification.action.show": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "表示"
+          }
+        }
+      }
+    },
+    "shell.download.confirm.unknownSource": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A web page"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webページ"
+          }
+        }
+      }
+    },
+    "shell.download.confirm.download": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード"
+          }
+        }
+      }
+    },
+    "shell.download.confirm.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download “%@”?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”をダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "shell.omnibar.searchFor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search %1$@ for \"%2$@\""
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@で“%2$@”を検索"
+          }
+        }
+      }
+    },
+    "shell.download.confirm.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ started this download without a click. It will be saved to your Downloads folder."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ がクリックなしでこのダウンロードを開始しました。ダウンロードフォルダに保存されます。"
+          }
+        }
+      }
+    },
+    "shell.closeOtherTabs.untitledTab": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled Tab"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無題のタブ"
+          }
+        }
+      }
+    },
+    "shell.closeWindow.singleWorkspace.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will close the current window and all of its panels."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のウィンドウとそのすべてのパネルを閉じます。"
           }
         }
       }

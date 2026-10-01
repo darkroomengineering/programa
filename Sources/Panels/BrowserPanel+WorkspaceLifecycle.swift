@@ -120,10 +120,19 @@ func resolveBrowserNavigableURL(_ input: String) -> URL? {
     guard !trimmed.isEmpty else { return nil }
     guard !trimmed.contains(" ") else { return nil }
 
-    // Check localhost/loopback before generic URL parsing because
-    // URL(string: "localhost:3777") treats "localhost" as a scheme.
     let lower = trimmed.lowercased()
-    if lower.hasPrefix("localhost") || lower.hasPrefix("127.0.0.1") || lower.hasPrefix("[::1]") {
+    if lower == "about:blank" {
+        return URL(string: "about:blank")
+    }
+    if trimmed.hasPrefix("/") {
+        return URL(fileURLWithPath: trimmed)
+    }
+    // host:port must be matched before generic URL parsing, which reads the host as a
+    // scheme ("my-nas:8080", "example.com:8080", "localhost:3777").
+    if trimmed.range(of: #"^[^/?#:\s]+:\d{1,5}([/?#].*)?$"#, options: .regularExpression) != nil {
+        return URL(string: "http://\(trimmed)")
+    }
+    if browserInputIsLoopbackHost(lower) {
         return URL(string: "http://\(trimmed)")
     }
 
@@ -146,6 +155,19 @@ func resolveBrowserNavigableURL(_ input: String) -> URL? {
     }
 
     return nil
+}
+
+/// Exact loopback host match on the input's host part ("localhostile.com" is not loopback).
+private func browserInputIsLoopbackHost(_ lowercasedInput: String) -> Bool {
+    let hostEnd = lowercasedInput.firstIndex(where: { "/?#".contains($0) }) ?? lowercasedInput.endIndex
+    let hostAndPort = lowercasedInput[..<hostEnd]
+    let host: Substring
+    if hostAndPort.hasPrefix("["), let close = hostAndPort.firstIndex(of: "]") {
+        host = hostAndPort[...close]
+    } else {
+        host = hostAndPort.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first ?? hostAndPort
+    }
+    return host == "localhost" || host == "127.0.0.1" || host == "[::1]"
 }
 
 extension BrowserPanel {
