@@ -25,10 +25,13 @@ class BrowserDownloadDelegate: NSObject, WKDownloadDelegate {
     private struct DownloadState {
         let tempURL: URL
         let suggestedFilename: String
+        let originURL: URL?
     }
 
     /// Tracks active downloads keyed by WKDownload identity.
     private var activeDownloads: [ObjectIdentifier: DownloadState] = [:]
+    /// Downloads the user declined at the no-gesture prompt; their cancellation is not a failure.
+    private var declinedDownloads: Set<ObjectIdentifier> = []
     private let activeDownloadsLock = NSLock()
     var onDownloadStarted: ((String) -> Void)?
     var onDownloadReadyToSave: (() -> Void)?
@@ -123,15 +126,95 @@ class BrowserDownloadDelegate: NSObject, WKDownloadDelegate {
         let tempFilename = "\(UUID().uuidString)-\(safeFilename)"
         let destURL = Self.tempDir.appendingPathComponent(tempFilename, isDirectory: false)
         try? FileManager.default.removeItem(at: destURL)
-        storeState(DownloadState(tempURL: destURL, suggestedFilename: safeFilename), for: download)
-        notifyOnMain { [weak self] in
-            self?.onDownloadStarted?(safeFilename)
+        let originURL = response.url ?? download.originalRequest?.url
+        let proceed = { [weak self] in
+            self?.storeState(DownloadState(tempURL: destURL, suggestedFilename: safeFilename, originURL: originURL), for: download)
+            self?.notifyOnMain { [weak self] in
+                self?.onDownloadStarted?(safeFilename)
+            }
+            #if DEBUG
+            dlog("download.decideDestination file=\(safeFilename)")
+            #endif
+            NSLog("BrowserPanel download: temp path=%@", destURL.path)
+            completionHandler(destURL)
         }
-        #if DEBUG
-        dlog("download.decideDestination file=\(safeFilename)")
-        #endif
-        NSLog("BrowserPanel download: temp path=%@", destURL.path)
-        completionHandler(destURL)
+        // A download a real click or key press started proceeds; one a page started on its
+        // own (timer, script) asks first.
+        notifyOnMain {
+            MainActor.assumeIsolated {
+                let webView = download.webView
+                if (webView as? ProgramaWebView)?.hasRecentNativeGesture() == true {
+                    proceed()
+                    return
+                }
+                Self.confirmUnrequestedDownload(
+                    filename: safeFilename,
+                    sourceHost: webView?.url?.host ?? originURL?.host,
+                    window: webView?.window
+                ) { allowed in
+                    if allowed {
+                        proceed()
+                    } else {
+                        #if DEBUG
+                        dlog("download.decideDestination file=\(safeFilename) declined=noGesture")
+                        #endif
+                        self.activeDownloadsLock.lock()
+                        self.declinedDownloads.insert(ObjectIdentifier(download))
+                        self.activeDownloadsLock.unlock()
+                        completionHandler(nil)
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private static func confirmUnrequestedDownload(
+        filename: String,
+        sourceHost: String?,
+        window: NSWindow?,
+        completion: @escaping (Bool) -> Void
+    ) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(
+            format: String(localized: "shell.download.confirm.title", defaultValue: "Download “%@”?"),
+            filename
+        )
+        alert.informativeText = String(
+            format: String(
+                localized: "shell.download.confirm.message",
+                defaultValue: "%@ started this download without a click. It will be saved to your Downloads folder."
+            ),
+            sourceHost ?? String(localized: "shell.download.confirm.unknownSource", defaultValue: "A web page")
+        )
+        alert.addButton(withTitle: String(localized: "shell.download.confirm.download", defaultValue: "Download"))
+        alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
+        let handle: (NSApplication.ModalResponse) -> Void = { completion($0 == .alertFirstButtonReturn) }
+        if let window {
+            alert.beginSheetModal(for: window, completionHandler: handle)
+        } else {
+            handle(alert.runModal())
+        }
+    }
+
+    /// Marks a finished download as coming from the internet so Gatekeeper checks it on open.
+    static func applyQuarantine(to fileURL: URL, originURL: URL?) {
+        var properties: [String: Any] = [
+            kLSQuarantineAgentNameKey as String: Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Programa",
+            kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String,
+        ]
+        if let originURL {
+            properties[kLSQuarantineDataURLKey as String] = originURL
+        }
+        var values = URLResourceValues()
+        values.quarantineProperties = properties
+        var mutableURL = fileURL
+        do {
+            try mutableURL.setResourceValues(values)
+        } catch {
+            NSLog("BrowserPanel download quarantine failed: %@", error.localizedDescription)
+        }
     }
 
     func downloadDidFinish(_ download: WKDownload) {
@@ -153,6 +236,7 @@ class BrowserDownloadDelegate: NSObject, WKDownloadDelegate {
                 from: info.tempURL,
                 to: destURL,
                 onReady: {
+                    Self.applyQuarantine(to: destURL, originURL: info.originURL)
                     NSLog("BrowserPanel download saved: %@", destURL.path)
                     self.onDownloadReadyToSave?()
                 },
@@ -176,6 +260,10 @@ class BrowserDownloadDelegate: NSObject, WKDownloadDelegate {
         if let info = removeState(for: download) {
             try? FileManager.default.removeItem(at: info.tempURL)
         }
+        activeDownloadsLock.lock()
+        let wasDeclined = declinedDownloads.remove(ObjectIdentifier(download)) != nil
+        activeDownloadsLock.unlock()
+        guard !wasDeclined else { return }
         notifyOnMain { [weak self] in
             self?.onDownloadFailed?(error)
         }

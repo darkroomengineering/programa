@@ -147,11 +147,13 @@ func omnibarSuggestionSupportsAutocompletion(query: String, suggestion: OmnibarS
     if case .search = suggestion.kind { return false }
     if case .remote = suggestion.kind { return false }
     guard let completion = omnibarSuggestionCompletion(for: suggestion) else { return false }
-    // Reject URLs whose host lacks a TLD (e.g. "https://news." → host "news").
+    // Reject a half-typed host ending in a dot (e.g. "https://news." → host "news.").
+    // Dotless hosts ("my-nas", "localhost") and IP literals complete normally.
     if let components = URLComponents(string: completion),
-       let host = components.host?.lowercased() {
-        let trimmedHost = host.hasSuffix(".") ? String(host.dropLast()) : host
-        if !trimmedHost.contains(".") { return false }
+       let host = components.host?.lowercased(),
+       host.hasSuffix("."),
+       !host.dropLast().contains(".") {
+        return false
     }
     let title = omnibarSuggestionTitle(for: suggestion)
     return omnibarSuggestionMatchesTypedPrefix(
@@ -927,7 +929,11 @@ struct OmnibarSuggestion: Identifiable, Hashable {
     var primaryText: String {
         switch kind {
         case .search(let engineName, let q):
-            return "Search \(engineName) for \"\(q)\""
+            return String(
+                format: String(localized: "shell.omnibar.searchFor", defaultValue: "Search %1$@ for \"%2$@\""),
+                engineName,
+                q
+            )
         case .navigate(let url):
             return Self.displayURLText(for: url)
         case .history(let url, let title):

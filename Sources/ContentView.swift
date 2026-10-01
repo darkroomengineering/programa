@@ -52,7 +52,6 @@ struct ContentView: View {
     enum CommandPaletteMode {
         case commands
         case renameInput(CommandPaletteRenameTarget)
-        case renameConfirm(CommandPaletteRenameTarget, proposedName: String)
         case workspaceDescriptionInput(CommandPaletteWorkspaceDescriptionTarget)
     }
 
@@ -1780,8 +1779,6 @@ struct ContentView: View {
                         commandPaletteCommandListView
                     case .renameInput(let target):
                         commandPaletteRenameInputView(target: target)
-                    case let .renameConfirm(target, proposedName):
-                        commandPaletteRenameConfirmView(target: target, proposedName: proposedName)
                     case .workspaceDescriptionInput(let target):
                         commandPaletteWorkspaceDescriptionInputView(
                             target: target,
@@ -2075,44 +2072,6 @@ struct ContentView: View {
         }
         .onAppear {
             resetCommandPaletteRenameFocus()
-        }
-    }
-
-    private func commandPaletteRenameConfirmView(
-        target: CommandPaletteRenameTarget,
-        proposedName: String
-    ) -> some View {
-        let trimmedName = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let nextName = trimmedName.isEmpty ? String(localized: "commandPalette.rename.clearCustomName", defaultValue: "(clear custom name)") : trimmedName
-
-        return VStack(spacing: 0) {
-            Text(nextName)
-                .font(.system(size: 13, weight: .regular))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 7)
-
-            Divider()
-
-            Text(renameConfirmHintText(target: target))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6)
-
-            Button(action: {
-                applyRenameFlow(target: target, proposedName: proposedName)
-            }) {
-                EmptyView()
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.defaultAction)
-            .frame(width: 0, height: 0)
-            .opacity(0)
-            .accessibilityHidden(true)
         }
     }
 
@@ -2984,15 +2943,6 @@ struct ContentView: View {
         }
     }
 
-    private func renameConfirmHintText(target: CommandPaletteRenameTarget) -> String {
-        switch target.kind {
-        case .workspace:
-            return String(localized: "commandPalette.rename.workspaceConfirmHint", defaultValue: "Press Enter to apply this workspace name, or Escape to cancel.")
-        case .tab:
-            return String(localized: "commandPalette.rename.tabConfirmHint", defaultValue: "Press Enter to apply this tab name, or Escape to cancel.")
-        }
-    }
-
     private var commandPaletteListScope: CommandPaletteListScope {
         Self.commandPaletteListScope(for: commandPaletteController.commandPaletteQuery)
     }
@@ -3519,7 +3469,6 @@ struct ContentView: View {
                 commandId: "palette.newTerminalTab",
                 title: constant(String(localized: "command.newTerminalTab.title", defaultValue: "New Tab (Terminal)")),
                 subtitle: constant(String(localized: "command.newTerminalTab.subtitle", defaultValue: "Tab")),
-                shortcutHint: "⌘T",
                 keywords: ["new", "terminal", "tab"]
             )
         )
@@ -3528,7 +3477,6 @@ struct ContentView: View {
                 commandId: "palette.newBrowserTab",
                 title: constant(String(localized: "command.newBrowserTab.title", defaultValue: "New Tab (Browser)")),
                 subtitle: constant(String(localized: "command.newBrowserTab.subtitle", defaultValue: "Tab")),
-                shortcutHint: "⌘⇧L",
                 keywords: ["new", "browser", "tab", "web"]
             )
         )
@@ -3537,7 +3485,6 @@ struct ContentView: View {
                 commandId: "palette.closeTab",
                 title: constant(String(localized: "command.closeTab.title", defaultValue: "Close Tab")),
                 subtitle: constant(String(localized: "command.closeTab.subtitle", defaultValue: "Tab")),
-                shortcutHint: "⌘W",
                 keywords: ["close", "tab"]
             )
         )
@@ -3546,7 +3493,6 @@ struct ContentView: View {
                 commandId: "palette.closeWorkspace",
                 title: constant(String(localized: "command.closeWorkspace.title", defaultValue: "Close Workspace")),
                 subtitle: constant(String(localized: "command.closeWorkspace.subtitle", defaultValue: "Workspace")),
-                shortcutHint: "⌘⇧W",
                 keywords: ["close", "workspace"]
             )
         )
@@ -3571,7 +3517,6 @@ struct ContentView: View {
                 commandId: "palette.reopenClosedBrowserTab",
                 title: constant(String(localized: "command.reopenClosedBrowserTab.title", defaultValue: "Reopen Closed Browser Tab")),
                 subtitle: constant(String(localized: "command.reopenClosedBrowserTab.subtitle", defaultValue: "Browser")),
-                shortcutHint: "⌘⇧T",
                 keywords: ["reopen", "closed", "browser"]
             )
         )
@@ -3630,7 +3575,6 @@ struct ContentView: View {
                 commandId: "palette.openSettings",
                 title: constant(String(localized: "command.openSettings.title", defaultValue: "Open Settings")),
                 subtitle: constant(String(localized: "command.openSettings.subtitle", defaultValue: "Global")),
-                shortcutHint: "⌘,",
                 keywords: ["settings", "preferences"]
             )
         )
@@ -3902,7 +3846,6 @@ struct ContentView: View {
                 commandId: "palette.browserBack",
                 title: constant(String(localized: "command.browserBack.title", defaultValue: "Back")),
                 subtitle: browserPanelSubtitle,
-                shortcutHint: "⌘[",
                 keywords: ["browser", "back", "history"],
                 when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
             )
@@ -3912,7 +3855,6 @@ struct ContentView: View {
                 commandId: "palette.browserForward",
                 title: constant(String(localized: "command.browserForward.title", defaultValue: "Forward")),
                 subtitle: browserPanelSubtitle,
-                shortcutHint: "⌘]",
                 keywords: ["browser", "forward", "history"],
                 when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
             )
@@ -3922,7 +3864,6 @@ struct ContentView: View {
                 commandId: "palette.browserReload",
                 title: constant(String(localized: "command.browserReload.title", defaultValue: "Reload Page")),
                 subtitle: browserPanelSubtitle,
-                shortcutHint: "⌘R",
                 keywords: ["browser", "reload", "refresh"],
                 when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
             )
@@ -3941,7 +3882,6 @@ struct ContentView: View {
                 commandId: "palette.browserFocusAddressBar",
                 title: constant(String(localized: "command.browserFocusAddressBar.title", defaultValue: "Focus Address Bar")),
                 subtitle: browserPanelSubtitle,
-                shortcutHint: "⌘L",
                 keywords: ["browser", "address", "omnibar", "url"],
                 when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
             )
@@ -4055,7 +3995,6 @@ struct ContentView: View {
                 commandId: "palette.terminalFind",
                 title: constant(String(localized: "command.terminalFind.title", defaultValue: "Find…")),
                 subtitle: terminalPanelSubtitle,
-                shortcutHint: "⌘F",
                 keywords: ["terminal", "find", "search"],
                 when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
             )
@@ -4065,7 +4004,6 @@ struct ContentView: View {
                 commandId: "palette.terminalFindNext",
                 title: constant(String(localized: "command.terminalFindNext.title", defaultValue: "Find Next")),
                 subtitle: terminalPanelSubtitle,
-                shortcutHint: "⌘G",
                 keywords: ["terminal", "find", "next", "search"],
                 when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
             )
@@ -4075,7 +4013,6 @@ struct ContentView: View {
                 commandId: "palette.terminalFindPrevious",
                 title: constant(String(localized: "command.terminalFindPrevious.title", defaultValue: "Find Previous")),
                 subtitle: terminalPanelSubtitle,
-                shortcutHint: "⌥⌘G",
                 keywords: ["terminal", "find", "previous", "search"],
                 when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
             )
@@ -4085,7 +4022,6 @@ struct ContentView: View {
                 commandId: "palette.terminalHideFind",
                 title: constant(String(localized: "command.terminalHideFind.title", defaultValue: "Hide Find Bar")),
                 subtitle: terminalPanelSubtitle,
-                shortcutHint: "⌘⇧F",
                 keywords: ["terminal", "hide", "find", "search"],
                 when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
             )
@@ -4794,8 +4730,6 @@ struct ContentView: View {
             runSelectedCommandPaletteResult()
         case .renameInput(let target):
             continueRenameFlow(target: target)
-        case .renameConfirm(let target, let proposedName):
-            applyRenameFlow(target: target, proposedName: proposedName)
         case .workspaceDescriptionInput(let target):
 #if DEBUG
             let newlineCount = commandPaletteController.commandPaletteWorkspaceDescriptionDraft.reduce(into: 0) { count, character in
@@ -4916,8 +4850,6 @@ struct ContentView: View {
             mode = commandPaletteListScope.rawValue
         case .renameInput:
             mode = "rename_input"
-        case .renameConfirm:
-            mode = "rename_confirm"
         case .workspaceDescriptionInput:
             mode = "workspace_description_input"
         }
@@ -5208,8 +5140,6 @@ struct ContentView: View {
             return "commands"
         case .renameInput:
             return "renameInput"
-        case .renameConfirm:
-            return "renameConfirm"
         case .workspaceDescriptionInput:
             return "workspaceDescriptionInput"
         }
@@ -5306,8 +5236,6 @@ struct ContentView: View {
             switch commandPaletteController.commandPaletteMode {
             case .commands, .renameInput:
                 break
-            case .renameConfirm:
-                return
             case .workspaceDescriptionInput:
                 return
             }

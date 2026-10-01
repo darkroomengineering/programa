@@ -178,6 +178,7 @@ struct BrowserPanelView: View {
     }
 
     private var remoteSuggestionsEnabled: Bool {
+#if DEBUG
         // Deterministic UI-test hook: force remote path on even if a persisted
         // setting disabled suggestions in previous sessions.
         if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_REMOTE_SUGGESTIONS_JSON"] != nil ||
@@ -188,6 +189,7 @@ struct BrowserPanelView: View {
         if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_DISABLE_REMOTE_SUGGESTIONS"] == "1" {
             return false
         }
+#endif
         return searchSuggestionsEnabled
     }
 
@@ -1492,8 +1494,12 @@ struct BrowserPanelView: View {
     }
 
     private func forcedRemoteSuggestionsForUITest() -> [String]? {
+#if DEBUG
         let raw = ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_REMOTE_SUGGESTIONS_JSON"]
             ?? UserDefaults.standard.string(forKey: "PROGRAMA_UI_TEST_REMOTE_SUGGESTIONS_JSON")
+#else
+        let raw: String? = nil
+#endif
         guard let raw,
               let data = raw.data(using: .utf8),
               let parsed = try? JSONSerialization.jsonObject(with: data) as? [Any] else {

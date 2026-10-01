@@ -221,7 +221,10 @@ struct OmnibarSuggestionsView: View {
                 .accessibilityIdentifier("BrowserOmnibarSuggestions.Row.\(idx)")
                 .accessibilityValue(
                     idx == selectedIndex
-                        ? "selected \(item.listText)"
+                        ? String(
+                            format: String(localized: "shell.omnibar.suggestion.selected", defaultValue: "selected %@"),
+                            item.listText
+                        )
                         : item.listText
                 )
                 .onHover { hovering in

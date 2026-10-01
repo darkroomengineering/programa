@@ -2,11 +2,6 @@ import Foundation
 import WebKit
 import AppKit
 
-struct BrowserProxyEndpoint: Equatable {
-    let host: String
-    let port: Int
-}
-
 enum GhosttyBackgroundTheme {
     static func clampedOpacity(_ opacity: Double) -> CGFloat {
         CGFloat(max(0.0, min(1.0, opacity)))
@@ -301,9 +296,21 @@ enum BrowserLinkOpenSettings {
     /// The launch is asynchronous, so `true` means the launch (or the confirmation
     /// prompt) was dispatched, not that it finished; a launch error is logged, not surfaced.
     @discardableResult
-    static func openExternally(_ url: URL, defaults: UserDefaults = .standard, workspace: NSWorkspace = .shared) -> Bool {
+    static func openExternally(
+        _ url: URL,
+        defaults: UserDefaults = .standard,
+        workspace: NSWorkspace = .shared,
+        sourceHost: String? = nil,
+        allowRememberedApproval: Bool = true
+    ) -> Bool {
         if !ExternalOpenPolicy.opensWithoutPrompt(url) {
-            return ExternalOpenPolicy.confirmAndOpen(url, defaults: defaults, workspace: workspace)
+            return ExternalOpenPolicy.confirmAndOpen(
+                url,
+                defaults: defaults,
+                workspace: workspace,
+                sourceHost: sourceHost,
+                allowRememberedApproval: allowRememberedApproval
+            )
         }
         let scheme = url.scheme?.lowercased()
         let isWebLink = scheme == "http" || scheme == "https"
@@ -628,7 +635,14 @@ enum ExternalOpenPolicy {
     static let maxRemembered = 200
 
     private static let freeSchemes: Set<String> = ["http", "https", "mailto"]
-    private static let executableExtensions: Set<String> = ["app", "command", "sh", "tool"]
+    /// Runnable or launch-redirecting file types. `terminal`/`jar`/`workflow` execute; `fileloc`,
+    /// `inetloc` and `webloc` re-target LaunchServices to another location.
+    private static let executableExtensions: Set<String> = [
+        "app", "command", "sh", "tool", "terminal", "jar", "fileloc", "inetloc", "webloc", "workflow",
+    ]
+    /// How recent a native click or key press on the originating web view must be for a
+    /// remembered "Always allow" to skip the prompt. Script-forged navigation types do not count.
+    static let nativeGestureWindow: TimeInterval = 1.0
 
     enum Requirement: Equatable {
         case openWithoutPrompt
@@ -643,6 +657,35 @@ enum ExternalOpenPolicy {
     /// Web pages may only reach the prompt through a real link click or form submit.
     static func navigationTypeHasUserGesture(_ type: WKNavigationType) -> Bool {
         type == .linkActivated || type == .formSubmitted
+    }
+
+    /// True when any of `timestamps` (system uptime, as `NSEvent.timestamp`) is within
+    /// `nativeGestureWindow` before `now`.
+    static func isRecentNativeGesture(_ timestamps: [TimeInterval?], now: TimeInterval) -> Bool {
+        timestamps.contains { timestamp in
+            guard let timestamp else { return false }
+            let age = now - timestamp
+            return age >= 0 && age <= nativeGestureWindow
+        }
+    }
+
+    /// External open requested by web content. Needs a link-click/form navigation type; a
+    /// remembered approval applies only after a native gesture on that web view, else it prompts.
+    @discardableResult
+    static func openFromWebContent(_ url: URL, navigationType: WKNavigationType, webView: WKWebView) -> Bool {
+        guard navigationTypeHasUserGesture(navigationType) else { return false }
+        let hadNativeGesture = (webView as? ProgramaWebView)?.hasRecentNativeGesture() ?? false
+        return BrowserLinkOpenSettings.openExternally(
+            url,
+            sourceHost: webView.url?.host,
+            allowRememberedApproval: hadNativeGesture
+        )
+    }
+
+    /// Allowlist entries are `bundleId|scheme`, so approving Terminal for `ssh` never approves
+    /// Terminal for another scheme or a file.
+    static func allowlistKey(bundleIdentifier: String, scheme: String) -> String {
+        "\(bundleIdentifier)|\(scheme.lowercased())"
     }
 
     /// App bundles and anything runnable. These always prompt, even for an allow-listed app.
@@ -665,29 +708,43 @@ enum ExternalOpenPolicy {
         for url: URL,
         handlerBundleIdentifier: String?,
         allowlist: [String],
-        targetIsExecutable: Bool
+        targetIsExecutable: Bool,
+        allowRememberedApproval: Bool = true
     ) -> Requirement {
         if opensWithoutPrompt(url) { return .openWithoutPrompt }
-        if targetIsExecutable { return .prompt(offerAlwaysAllow: false) }
-        if let handlerBundleIdentifier, allowlist.contains(handlerBundleIdentifier) {
+        // Files never get a remembered approval: the handler app is not the risk, the file is.
+        if targetIsExecutable || url.isFileURL { return .prompt(offerAlwaysAllow: false) }
+        if allowRememberedApproval,
+           let handlerBundleIdentifier,
+           let scheme = url.scheme,
+           allowlist.contains(allowlistKey(bundleIdentifier: handlerBundleIdentifier, scheme: scheme)) {
             return .openWithoutPrompt
         }
         return .prompt(offerAlwaysAllow: handlerBundleIdentifier != nil)
     }
 
+    /// Remembered `bundleId|scheme` entries. Legacy bundle-only entries are dropped, so those
+    /// apps prompt once more.
     static func allowlist(defaults: UserDefaults = .standard) -> [String] {
         (defaults.string(forKey: allowlistKey) ?? "")
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .filter { entry in
+                let parts = entry.split(separator: "|", omittingEmptySubsequences: false)
+                return parts.count == 2 && !parts[0].isEmpty && !parts[1].isEmpty
+            }
     }
 
-    static func addToAllowlist(_ bundleIdentifier: String, defaults: UserDefaults = .standard) {
+    static func addToAllowlist(_ bundleIdentifier: String, scheme: String, defaults: UserDefaults = .standard) {
         let trimmed = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !trimmed.contains("\n") else { return }
+        let trimmedScheme = scheme.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmedScheme.isEmpty,
+              !trimmed.contains("\n"), !trimmed.contains("|"),
+              !trimmedScheme.contains("\n"), !trimmedScheme.contains("|") else { return }
+        let key = allowlistKey(bundleIdentifier: trimmed, scheme: trimmedScheme)
         var entries = allowlist(defaults: defaults)
-        guard !entries.contains(trimmed), entries.count < maxRemembered else { return }
-        entries.append(trimmed)
+        guard !entries.contains(key), entries.count < maxRemembered else { return }
+        entries.append(key)
         defaults.set(entries.joined(separator: "\n"), forKey: allowlistKey)
     }
 
@@ -703,7 +760,9 @@ enum ExternalOpenPolicy {
         _ url: URL,
         defaults: UserDefaults = .standard,
         workspace: NSWorkspace = .shared,
-        window: NSWindow? = nil
+        window: NSWindow? = nil,
+        sourceHost: String? = nil,
+        allowRememberedApproval: Bool = true
     ) -> Bool {
         let handlerURL = workspace.urlForApplication(toOpen: url)
         let handlerBundleIdentifier = handlerURL.flatMap { Bundle(url: $0)?.bundleIdentifier }
@@ -711,7 +770,8 @@ enum ExternalOpenPolicy {
             for: url,
             handlerBundleIdentifier: handlerBundleIdentifier,
             allowlist: allowlist(defaults: defaults),
-            targetIsExecutable: targetIsExecutable(url)
+            targetIsExecutable: targetIsExecutable(url),
+            allowRememberedApproval: allowRememberedApproval
         )
         switch requirement {
         case .openWithoutPrompt:
@@ -722,7 +782,13 @@ enum ExternalOpenPolicy {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = String(localized: "externalOpen.title", defaultValue: "Open in \(appName)?")
-            alert.informativeText = url.isFileURL ? url.path : url.absoluteString
+            let target = url.isFileURL ? url.path : url.absoluteString
+            if let sourceHost, !sourceHost.isEmpty {
+                let format = String(localized: "shell.externalOpen.requestedBy", defaultValue: "Requested by %@")
+                alert.informativeText = target + "\n\n" + String(format: format, sourceHost)
+            } else {
+                alert.informativeText = target
+            }
             alert.addButton(withTitle: String(localized: "externalOpen.open", defaultValue: "Open"))
             alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
             if offerAlwaysAllow {
@@ -736,8 +802,9 @@ enum ExternalOpenPolicy {
                 guard response == .alertFirstButtonReturn else { return }
                 if offerAlwaysAllow,
                    alert.suppressionButton?.state == .on,
-                   let handlerBundleIdentifier {
-                    addToAllowlist(handlerBundleIdentifier, defaults: defaults)
+                   let handlerBundleIdentifier,
+                   let scheme = url.scheme {
+                    addToAllowlist(handlerBundleIdentifier, scheme: scheme, defaults: defaults)
                 }
                 if !workspace.open(url) {
                     NSLog("ExternalOpenPolicy: failed to open %@", url.absoluteString)

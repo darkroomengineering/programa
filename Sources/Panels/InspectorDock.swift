@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 
 /// Canonical helpers for detecting and reasoning about WebKit's hosted Web Inspector
 /// (the attached "WKInspector*" view hierarchy) inside the browser view stack.
@@ -16,6 +17,17 @@ enum InspectorDock {
     /// no public type to check against.
     static func isInspectorView(_ view: NSView) -> Bool {
         String(describing: type(of: view)).contains("WKInspector")
+    }
+
+    /// Cheap pre-check run on pointer events: WebKit attaches a docked inspector as a sibling
+    /// of the inspected web view, so without a second web view (or WKInspector view) among
+    /// `host`'s direct subviews there is no inspector divider to find and no subtree to walk.
+    static func mayHostAttachedInspector(_ host: NSView) -> Bool {
+        host.subviews.contains { view in
+            if view is ProgramaWebView { return false }
+            if view is WKWebView { return true }
+            return isInspectorView(view)
+        }
     }
 
     /// Depth-first flattening of every descendant of `root` (not including `root` itself).

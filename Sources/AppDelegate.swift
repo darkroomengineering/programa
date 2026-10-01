@@ -809,13 +809,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     var core: ProgramaCoreProviding = InProcessCore.shared
 
-    private static let cachedIsRunningUnderXCTest = detectRunningUnderXCTest(ProcessInfo.processInfo.environment)
-
-    private var isRunningUnderXCTestCached: Bool {
-        Self.cachedIsRunningUnderXCTest
-    }
-
-    private static func detectRunningUnderXCTest(_ env: [String: String]) -> Bool {
+    static func detectRunningUnderXCTest(_ env: [String: String]) -> Bool {
         if SessionMachineryGate.isUnitTesting { return true }
 #if DEBUG
         if env.keys.contains(where: { $0.hasPrefix("PROGRAMA_UI_TEST_") }) { return true }
@@ -864,14 +858,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             self.sidebarState = sidebarState
             self.sidebarSelectionState = sidebarSelectionState
             self.window = window
-        }
-    }
-
-    private final class MainWindowController: NSWindowController, NSWindowDelegate {
-        var onClose: (() -> Void)?
-
-        func windowWillClose(_ notification: Notification) {
-            onClose?()
         }
     }
 
@@ -972,6 +958,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         method_exchangeImplementations(originalMethod, swizzledMethod)
     }()
+#if DEBUG
     private static let didInstallApplicationSendEventSwizzle: Void = {
         let targetClass: AnyClass = NSApplication.self
         let originalSelector = #selector(NSApplication.sendEvent(_:))
@@ -982,6 +969,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         method_exchangeImplementations(originalMethod, swizzledMethod)
     }()
+#endif
 
 #if DEBUG
     var didSetupJumpUnreadUITest = false
@@ -1193,12 +1181,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 workingDirectory: directory,
                 debugSource: "application.openURLs"
             )
-        }
-    }
-
-    func applicationWillFinishLaunching(_ notification: Notification) {
-        if !isRunningUnderXCTest(ProcessInfo.processInfo.environment) {
-            deferToExistingInstanceIfNeeded()
         }
     }
 
@@ -1542,7 +1524,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             isTaggedDevBuild: SocketControlSettings.isTaggedDevBuild(),
             isQuitWarningEnabled: QuitWarningSettings.isEnabled()
         )
-        SessionMachineryGate.isApplicationTerminating = true
         // A warning dialog can still cancel this termination request. The final
         // `applicationWillTerminate` callback is the only point that records a clean exit.
         let saved = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
@@ -1570,6 +1551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         guard lifecycleDecision.shouldWarn else {
             dilog("app.quit", "pid=\(getpid()) outcome=terminate_now reason=\(lifecycleDecision.logReason)")
+            finalizeStagedTerminalClosesThenMarkTerminating()
             return .terminateNow
         }
         dilog("app.quit", "pid=\(getpid()) outcome=warning reason=ordinary_quit")
@@ -1594,6 +1576,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             let shouldQuit = response == .alertFirstButtonReturn
             if shouldQuit {
                 self.appLifecycleCoordinator.confirmQuit()
+                self.finalizeStagedTerminalClosesThenMarkTerminating()
             } else {
                 // Reset so that the next quit attempt can show the dialog again.
                 self.appLifecycleCoordinator.cancelTermination()
@@ -1609,18 +1592,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     func applicationWillTerminate(_ notification: Notification) {
         appLifecycleCoordinator.willTerminate()
-        SessionMachineryGate.isApplicationTerminating = true
+        finalizeStagedTerminalClosesThenMarkTerminating()
         saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false, cleanShutdown: true)
-        // Finalize any terminal closes still sitting in their undo grace period so a staged close
-        // doesn't quietly leak instead of tearing down cleanly on quit.
-        for context in mainWindowContexts.values {
-            context.tabManager.closedTerminalUndoStore.expireAll()
-        }
         sessionAutosave.stopSessionAutosaveTimer()
         TerminalController.shared.stop()
         BrowserProfileStore.shared.flushPendingSaves()
         notificationStore?.clearAll()
         enableSuddenTerminationIfNeeded()
+    }
+
+    /// Staged (undo-able) terminal closes finalize with the terminating flag clear so their
+    /// escrowed sessions are released, not kept for the next launch's recovery.
+    private func finalizeStagedTerminalClosesThenMarkTerminating() {
+        SessionMachineryGate.isApplicationTerminating = false
+        for context in mainWindowContexts.values {
+            context.tabManager.closedTerminalUndoStore.expireAll()
+        }
+        SessionMachineryGate.isApplicationTerminating = true
     }
 
     func applicationWillResignActive(_ notification: Notification) {
@@ -2596,7 +2584,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return
         }
         DispatchQueue.global(qos: .utility).async { [weak self] in
+            // Two tries: a listener still waking up can miss the first 0.5 s window.
             let reachable = SocketConnectProbe.canConnect(at: expectedPath, timeout: 0.5)
+                || SocketConnectProbe.canConnect(at: expectedPath, timeout: 0.5)
             guard !reachable else { return }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -2608,7 +2598,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     func restartSocketListenerIfEnabled(source: String) {
-        guard let tabManager,
+        // The active window's manager can be nil (no key main window at wake); any live one serves.
+        guard let tabManager = tabManager ?? TerminalController.shared.tabManager ?? mainWindowContexts.values.first?.tabManager,
               let config = socketListenerConfigurationIfEnabled() else { return }
         let restartPath = TerminalController.shared.activeSocketPath(preferredPath: config.path)
         TerminalController.shared.stop()
@@ -2720,6 +2711,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         discardOrphanedMainWindowContexts()
 
         tabManager.window = window
+        window.programaInstallMainWindowCloseConfirmation()
 
         let key = ObjectIdentifier(window)
         #if DEBUG
@@ -3726,21 +3718,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return nil
     }
 
-    func locateGhosttySurface(_ surface: ghostty_surface_t?) -> (windowId: UUID, workspaceId: UUID, panelId: UUID, tabManager: TabManager)? {
-        guard let surface else { return nil }
-        for ctx in mainWindowContexts.values {
-            for ws in ctx.tabManager.tabs {
-                for (panelId, panel) in ws.panels {
-                    guard let terminal = panel as? TerminalPanel else { continue }
-                    if terminal.surface.surface == surface {
-                        return (ctx.windowId, ws.id, panelId, ctx.tabManager)
-                    }
-                }
-            }
-        }
-        return nil
-    }
-
     func refreshTerminalSurfacesAfterGhosttyConfigReload(source: String) {
         var refreshedCount = 0
         forEachTerminalPanel { terminalPanel in
@@ -4057,21 +4034,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return UUID(uuidString: idPart)
     }
 
-    private func commandPaletteOverlayContainer(in window: NSWindow) -> NSView? {
-        guard let searchRoot = window.contentView?.superview ?? window.contentView else { return nil }
-        var stack: [NSView] = [searchRoot]
-        while let candidate = stack.popLast() {
-            if candidate.identifier == commandPaletteOverlayContainerIdentifier {
-                return candidate
-            }
-            stack.append(contentsOf: candidate.subviews)
-        }
-        return nil
-    }
-
     private func isCommandPaletteOverlayPresented(in window: NSWindow) -> Bool {
-        guard let container = commandPaletteOverlayContainer(in: window) else { return false }
-        return !container.isHidden && container.alphaValue > 0.001
+        commandPaletteOverlayIsPresented(in: window)
     }
 
     private func isCommandPaletteResponderActive(in window: NSWindow) -> Bool {
@@ -4338,21 +4302,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return activeContext
         }
         return mainWindowContexts.values.first
-    }
-
-    private func activateMainWindowContextForShortcutEvent(_ event: NSEvent) {
-        let preferredWindow = mainWindowForShortcutEvent(event)
-#if DEBUG
-        dlog(
-            "shortcut.activate.pre event=\(NSWindow.keyDescription(event)) preferred={\(debugWindowToken(preferredWindow))} \(debugShortcutRouteSnapshot(event: event))"
-        )
-#endif
-        _ = synchronizeActiveMainWindowContext(preferredWindow: preferredWindow)
-#if DEBUG
-        dlog(
-            "shortcut.activate.post event=\(NSWindow.keyDescription(event)) preferred={\(debugWindowToken(preferredWindow))} \(debugShortcutRouteSnapshot(event: event))"
-        )
-#endif
     }
 
     @discardableResult
@@ -5739,7 +5688,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     private func installWindowResponderSwizzles() {
+#if DEBUG
         _ = Self.didInstallApplicationSendEventSwizzle
+#endif
         _ = Self.didInstallWindowKeyEquivalentSwizzle
         _ = Self.didInstallWindowFirstResponderSwizzle
         _ = Self.didInstallWindowSendEventSwizzle
@@ -7101,7 +7052,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             NSSound.beep()
             return true
         }
-        targetWindow.close()
+        // Same gate as the red button, called directly so it also holds in native full screen.
+        targetWindow.programa_mainWindowCloseButtonPressed(nil)
         return true
     }
 
@@ -8327,11 +8279,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return numberKeyDigit
     }
 
-    private func numberedShortcutDigit(event: NSEvent, shortcut: StoredShortcut) -> Int? {
-        guard !shortcut.hasChord else { return nil }
-        return numberedShortcutDigit(event: event, stroke: shortcut.firstStroke)
-    }
-
     private func numberedShortcutDigit(
         eventCharacter: String?,
         applyShiftSymbolNormalization: Bool,
@@ -8467,7 +8414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let actions = [
             UNNotificationAction(
                 identifier: TerminalNotificationStore.actionShowIdentifier,
-                title: "Show"
+                title: String(localized: "shell.notification.action.show", defaultValue: "Show")
             )
         ]
 
@@ -8574,10 +8521,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             .processIdentifier
     }
 
-    /// Runs from `applicationWillFinishLaunching`, before the socket listener, session restore,
-    /// or any window exists, so a losing launch has no side effects. Waits briefly for an
-    /// exiting instance (quit-then-relaunch, Sparkle relaunch) before deferring to it.
-    private func deferToExistingInstanceIfNeeded() {
+    /// Runs at the top of `ProgramaApp.init`, before defaults migrations, Ghostty configuration,
+    /// the socket listener, session restore or any window, so a losing launch changes nothing.
+    /// Waits briefly for an exiting instance (quit-then-relaunch, Sparkle relaunch) before
+    /// deferring to it.
+    static func deferToExistingInstanceIfNeeded() {
         guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
         let ownPid = getpid()
         let ownLaunchDate = NSRunningApplication.current.launchDate
@@ -8605,7 +8553,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         dilog("single_instance", "pid=\(ownPid) outcome=exit reason=existing_instance existing=\(existing.processIdentifier)")
         // This launch holds activation; hand it over so focus does not fall back to the
         // previous app when we exit.
-        NSApp.yieldActivation(to: existing)
+        NSApplication.shared.yieldActivation(to: existing)
         existing.activate(from: .current)
         // Opening the app sends a reopen event, so the existing instance shows a window even
         // when it hid them all instead of quitting.

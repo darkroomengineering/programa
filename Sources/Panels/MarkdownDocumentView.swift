@@ -369,6 +369,27 @@ struct MarkdownCodeBlockView: View {
     }
 }
 
+// MARK: - Link routing
+
+/// Links in rendered Markdown: web and mail links open as usual, Markdown files open in a
+/// Markdown panel, and every other target goes through `ExternalOpenPolicy`'s prompt, so a
+/// README cannot launch `x.command` with one click.
+@MainActor
+enum MarkdownLinkRouter {
+    static func open(_ url: URL) -> OpenURLAction.Result {
+        if ExternalOpenPolicy.opensWithoutPrompt(url) { return .systemAction }
+        if url.isFileURL,
+           ["md", "markdown"].contains(url.pathExtension.lowercased()),
+           let workspace = AppDelegate.shared?.tabManager?.selectedWorkspace,
+           let paneId = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first,
+           workspace.newMarkdownSurface(inPane: paneId, filePath: url.path, focus: true) != nil {
+            return .handled
+        }
+        ExternalOpenPolicy.confirmAndOpen(url)
+        return .handled
+    }
+}
+
 // MARK: - MarkdownDocumentView
 
 /// The full-document Markdown rendering boundary.
@@ -409,6 +430,7 @@ struct MarkdownDocumentView: View {
                 }
             }
         }
+        .environment(\.openURL, OpenURLAction { MarkdownLinkRouter.open($0) })
     }
 
     private var theme: Theme {
