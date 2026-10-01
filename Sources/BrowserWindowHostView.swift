@@ -805,7 +805,6 @@ final class WindowBrowserHostView: NSView {
         for slot in visibleSlots {
             let pointInSlot = slot.convert(point, from: self)
             guard slot.bounds.contains(pointInSlot),
-                  InspectorDock.mayHostAttachedInspector(slot),
                   let hit = hostedInspectorDividerCandidate(in: slot) else {
                 continue
             }
