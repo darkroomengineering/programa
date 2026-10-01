@@ -1946,6 +1946,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// closed immediately once the revived panel has taken its place in the
     /// same pane, so no tab is ever left showing two panels or an empty one.
     private func reconcileOrphanedEscrowedSessions() {
+        // Automated runs relaunch the app many times in a row, and each run leaves its shells
+        // escrowed. Snapshot restore already skips these runs; recovering their orphans would
+        // add the previous run's terminals as extra workspaces to every fresh launch.
+        guard !SessionRestorePolicy.isRunningUnderAutomatedTests() else {
+            dilog("escrow.reconcile", "skipped=automated_tests")
+            return
+        }
         var known = startupEndedHiddenSessionIds
         for context in mainWindowContexts.values {
             for workspace in context.tabManager.tabs {

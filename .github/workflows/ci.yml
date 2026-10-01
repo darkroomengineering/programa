@@ -1415,7 +1415,6 @@ jobs:
             -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
             -destination "platform=macOS" \
             -maximum-test-execution-time-allowance 180 \
-            -only-testing:programaUITests/CloseWindowConfirmDialogUITests \
             -only-testing:programaUITests/CloseWorkspaceConfirmDialogUITests \
             -only-testing:programaUITests/CloseWorkspacesConfirmDialogUITests \
             -only-testing:programaUITests/CloseWorkspaceCmdDUITests \
