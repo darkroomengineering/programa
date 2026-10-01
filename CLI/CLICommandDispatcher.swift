@@ -71,7 +71,7 @@ struct CLICommandDispatcher {
             continue
         }
         if arg == "-v" || arg == "--version" {
-            print(cli.versionSummary())
+            cli.printVersion(jsonOutput: jsonOutput)
             return
         }
         if arg == "-h" || arg == "--help" {
@@ -132,7 +132,7 @@ struct CLICommandDispatcher {
 
     switch command {
     case "version":
-        print(cli.versionSummary())
+        cli.printVersion(jsonOutput: jsonOutput)
         return
     case "help":
         print(cli.usage())

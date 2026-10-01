@@ -52,8 +52,8 @@ struct ProgramaTool {
 }
 
 /// JSON Schema building blocks shared by every `*Tools.swift` file. Kept minimal on purpose --
-/// only the shapes this catalog's 187 tools actually need (see the escape hatch in the Phase 3
-/// briefing for what to do if a handler needs something richer).
+/// only the shapes this catalog's tools actually need; add a builder here when a handler
+/// needs something richer.
 enum ProgramaToolSchema {
     static func string(_ description: String) -> Value {
         ["type": "string", "description": .string(description)]
@@ -163,13 +163,11 @@ enum ToolCatalog {
     /// The full, ordered tool catalog. `ListTools` and `CallTool` are both driven off this one
     /// table (see `register(on:)`), so they cannot drift apart.
     ///
-    /// `browser.*` (85 methods) is exposed via `BrowserTools.swift` (82 tools) plus the three
+    /// `browser.*` is exposed via `BrowserTools.swift` plus the three
     /// focus-stealing browser methods in `FocusTools.swift` (`browser.focus_webview`,
     /// `browser.focus`, `browser.tab.switch`).
     ///
-    /// Deliberately excludes (see `docs/plans/mcp-server.md` §3 and the Phase 3 briefing for
-    /// the authoritative rationale, restated here so a future reader doesn't mistake these for
-    /// oversights):
+    /// Deliberately excludes (so a future reader doesn't mistake these for oversights):
     /// - `debug.*`: DEBUG-build-only test-harness hooks that can simulate keystrokes and
     ///   activate the app.
     /// - `auth.login`, `settings.open`, `feedback.open`, `feedback.submit`, `markdown.open`:

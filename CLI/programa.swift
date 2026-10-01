@@ -142,7 +142,27 @@ enum SocketPasswordResolver {
         return normalizedScope
     }
 
+    /// The app keeps its password in the file above; the Keychain only holds a legacy copy.
+    /// A scan that found nothing is remembered by a marker that stays valid until the login
+    /// keychain changes, so calls without a password skip the Keychain query.
+    private static func keychainEmptyMarkerPath(socketPath: String) -> String? {
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        let scope = keychainScope(socketPath: socketPath) ?? "default"
+        return appSupport.appendingPathComponent(directoryName, isDirectory: true).appendingPathComponent(".socket-keychain-empty-\(scope)").path
+    }
+
+    private static func modificationTime(_ path: String) -> Int? {
+        var info = stat()
+        return lstat(path, &info) == 0 ? Int(info.st_mtimespec.tv_sec) : nil
+    }
+
     private static func loadFromKeychain(socketPath: String) -> String? {
+        let marker = keychainEmptyMarkerPath(socketPath: socketPath)
+        let keychainModified = modificationTime(NSHomeDirectory() + "/Library/Keychains/login.keychain-db")
+        if let marker, let keychainModified, let markerModified = modificationTime(marker), markerModified > keychainModified {
+            return nil
+        }
+        var everyServiceMissing = true
         for service in keychainServices(socketPath: socketPath) {
             let authContext = LAContext()
             authContext.interactionNotAllowed = true
@@ -157,10 +177,9 @@ enum SocketPasswordResolver {
             ]
             var result: CFTypeRef?
             let status = SecItemCopyMatching(query as CFDictionary, &result)
-            if status == errSecItemNotFound || status == errSecInteractionNotAllowed || status == errSecAuthFailed {
-                continue
-            }
             guard status == errSecSuccess else {
+                // A locked or denied item is not proof of absence; only remember clean misses.
+                everyServiceMissing = everyServiceMissing && status == errSecItemNotFound
                 continue
             }
             guard let data = result as? Data,
@@ -169,14 +188,16 @@ enum SocketPasswordResolver {
             }
             return password
         }
+        if everyServiceMissing, keychainModified != nil, let marker {
+            FileManager.default.createFile(atPath: marker, contents: nil, attributes: [.posixPermissions: 0o600])
+        }
         return nil
     }
 }
 
 // CLISocketPathSource / CLISocketPathResolver live in
 // `CLI/SocketPathResolution.swift`, shared with the MCP sidecar
-// (`CLI-MCP/MCPSocketBridge.swift`) -- see that file's header comment and
-// docs/plans/mcp-server.md §1.4/§6.
+// (`CLI-MCP/MCPSocketBridge.swift`).
 
 struct CLIProcessResult {
     let status: Int32
@@ -405,8 +426,6 @@ struct CLIArgumentGrammar {
     var minPositionals: Int = 0
     /// `nil` means unbounded.
     var maxPositionals: Int? = 0
-    /// Whether `--name=value` syntax is accepted in addition to `--name value`.
-    var allowEquals: Bool = false
 }
 
 /// Single source of truth for a CLI command's name(s), its one-line entry in
@@ -481,53 +500,6 @@ struct CommandDescriptor {
 struct ProgramaCLI {
     let args: [String]
 
-    private static let debugLastSocketHintPath = "/tmp/programa-last-socket-path"
-
-    static func normalizedEnvValue(_ value: String?) -> String? {
-        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmed.isEmpty else {
-            return nil
-        }
-        return trimmed
-    }
-
-    private static func pathIsSocket(_ path: String) -> Bool {
-        var st = stat()
-        guard lstat(path, &st) == 0 else { return false }
-        return (st.st_mode & S_IFMT) == S_IFSOCK
-    }
-
-    private static func debugSocketPathFromHintFile() -> String? {
-#if DEBUG
-        guard let raw = try? String(contentsOfFile: debugLastSocketHintPath, encoding: .utf8) else {
-            return nil
-        }
-        guard let hinted = normalizedEnvValue(raw),
-              hinted.hasPrefix("/tmp/programa-debug"),
-              hinted.hasSuffix(".sock"),
-              pathIsSocket(hinted) else {
-            return nil
-        }
-        return hinted
-#else
-        return nil
-#endif
-    }
-
-    private static func defaultSocketPath(environment: [String: String]) -> String {
-        if let explicit = normalizedEnvValue(environment["PROGRAMA_SOCKET_PATH"]) {
-            return explicit
-        }
-#if DEBUG
-        if let hinted = debugSocketPathFromHintFile() {
-            return hinted
-        }
-        return "/tmp/programa-debug.sock"
-#else
-        return "/tmp/programa.sock"
-#endif
-    }
-
     func run() throws {
         try CLICommandDispatcher(cli: self).run()
     }
@@ -596,11 +568,14 @@ struct ProgramaCLI {
             CommandDescriptor(names: ["omc"], helpLines: ["omc [omc-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
             CommandDescriptor(
                 names: ["codex"],
-                helpLines: ["codex <install-integration|uninstall-integration>"],
+                helpLines: ["codex <install-integration|uninstall-integration> [--yes]"],
                 connectionPolicy: .local,
                 detailedUsage: """
-                Usage: programa codex <install-integration|uninstall-integration>
+                Usage: programa codex <install-integration|uninstall-integration> [--yes]
                        programa codex <install-hooks|uninstall-hooks>  (legacy aliases, still supported)
+
+                Shows the changes and asks before applying them. --yes (-y) applies
+                without asking; without it a non-interactive stdin exits 1 unchanged.
 
                 Install or remove Programa's Codex notification hooks in
                 ~/.codex/hooks.json (or $CODEX_HOME/hooks.json), and the
@@ -610,10 +585,10 @@ struct ProgramaCLI {
             ),
             CommandDescriptor(
                 names: ["claude"],
-                helpLines: ["claude <install-integration|uninstall-integration>"],
+                helpLines: ["claude <install-integration|uninstall-integration> [--yes]"],
                 connectionPolicy: .local,
                 detailedUsage: """
-                Usage: programa claude <install-integration|uninstall-integration>
+                Usage: programa claude <install-integration|uninstall-integration> [--yes]
 
                 Install or remove Programa's persistent Claude Code hooks in
                 ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json),
@@ -621,15 +596,17 @@ struct ProgramaCLI {
                 ~/.claude/skills/programa/.
                 Unlike the runtime wrapper, this makes the integration work from
                 any terminal, not just programa's.
+                --yes (-y) applies without asking; without it a non-interactive
+                stdin exits 1 unchanged.
                 """,
                 execute: nil
             ),
             CommandDescriptor(
                 names: ["opencode"],
-                helpLines: ["opencode <install-integration|uninstall-integration>"],
+                helpLines: ["opencode <install-integration|uninstall-integration> [--yes]"],
                 connectionPolicy: .local,
                 detailedUsage: """
-                Usage: programa opencode <install-integration|uninstall-integration>
+                Usage: programa opencode <install-integration|uninstall-integration> [--yes]
 
                 Install or remove Programa's OpenCode plugin in
                 ~/.config/opencode/plugins/programa.js (or $OPENCODE_CONFIG_DIR/plugins/programa.js),
@@ -637,6 +614,8 @@ struct ProgramaCLI {
                 ~/.config/opencode/skills/programa/ (or $OPENCODE_CONFIG_DIR/skills/programa/).
                 OpenCode auto-loads local plugin files, so no opencode.json edit or
                 npm install is needed.
+                --yes (-y) applies without asking; without it a non-interactive
+                stdin exits 1 unchanged.
                 """,
                 execute: nil
             ),
@@ -668,8 +647,8 @@ struct ProgramaCLI {
                 Check connectivity to the programa socket server.
                 """,
                 execute: { ctx in
-                    _ = try ctx.client.sendV2(method: V2MethodNames.systemPing)
-                    print("PONG")
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.systemPing)
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: "PONG")
                 }
             ),
 
@@ -836,7 +815,7 @@ struct ProgramaCLI {
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
                     let response = try ctx.client.sendV2(method: V2MethodNames.windowCreate)
-                    print("OK \((response["window_id"] as? String) ?? "")")
+                    self.printV2Payload(response, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(response, idFormat: ctx.idFormat, kinds: ["window"]))
                 }
             ),
 
@@ -1315,7 +1294,7 @@ struct ProgramaCLI {
                     }
                     let response = try ctx.client.sendV2(method: V2MethodNames.workspaceCreate, params: params)
                     let wsId = (response["workspace_ref"] as? String) ?? (response["workspace_id"] as? String) ?? ""
-                    print("OK \(wsId)")
+                    self.printV2Payload(response, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(response, idFormat: ctx.idFormat, kinds: ["workspace"]))
                     if let commandText = commandOpt, !wsId.isEmpty {
                         let text = self.unescapeSendText(commandText + "\\n")
                         let sendParams: [String: Any] = ["text": text, "workspace_id": wsId]
@@ -2165,7 +2144,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["wait-surface"],
-                helpLines: ["wait-surface [--workspace <id|ref>] [--surface <id|ref>] (--pattern <regex> | --exit) [--timeout <seconds>] [--lines <n>]"],
+                helpLines: ["wait-surface [--workspace <id|ref>] [--surface <id|ref>] (--pattern <regex> | --exit | --agent-state <state>) [--timeout <seconds>] [--lines <n>]"],
                 argumentContract: .waitSurface,
                 detailedUsage: """
                 Usage: programa wait-surface [flags]
@@ -2179,16 +2158,21 @@ struct ProgramaCLI {
                   --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
                   --pattern <regex>      Wait until output (screen + scrollback) matches this regex
                   --exit                 Wait until the surface's child process exits
+                  --agent-state <state>  Wait until the agent's reported state is idle, working,
+                                         blocked, or any_change (lifecycle-hook agents)
                   --timeout <seconds>    Give up after this long (default: 30)
                   --lines <n>            Cap how much scrollback --pattern rereads per check (default: 2000)
 
-                Exactly one of --pattern / --exit is required. A marker already present when the
-                call arrives (or a process that has already exited) resolves immediately --
+                Exactly one of --pattern / --exit / --agent-state is required. A marker already
+                present when the call arrives (or a process that has already exited, or an agent
+                already in the state; a surface with no reported state counts as idle) resolves
+                immediately --
                 `waited: false` in JSON output distinguishes that from an actual wait.
 
                 Example:
                   programa wait-surface --pattern 'BUILD (SUCCEEDED|FAILED)' --timeout 120
                   programa wait-surface --surface surface:2 --exit --timeout 10
+                  programa wait-surface --surface surface:2 --agent-state idle --timeout 300
                 """,
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
@@ -2196,13 +2180,14 @@ struct ProgramaCLI {
                     let (patternArg, rem2) = self.parseOption(rem1, name: "--pattern")
                     let (timeoutArg, rem3) = self.parseOption(rem2, name: "--timeout")
                     let (linesArg, rem4) = self.parseOption(rem3, name: "--lines")
-                    let exitFlag = rem4.contains("--exit")
-                    let trailing = rem4.filter { $0 != "--exit" }
+                    let (agentStateArg, rem5) = self.parseOption(rem4, name: "--agent-state")
+                    let exitFlag = rem5.contains("--exit")
+                    let trailing = rem5.filter { $0 != "--exit" }
                     if !trailing.isEmpty {
                         throw CLIError(message: "wait-surface: unexpected arguments: \(trailing.joined(separator: " "))")
                     }
-                    guard (patternArg != nil) != exitFlag else {
-                        throw CLIError(message: "wait-surface requires exactly one of --pattern <regex> or --exit")
+                    guard [patternArg != nil, exitFlag, agentStateArg != nil].filter({ $0 }).count == 1 else {
+                        throw CLIError(message: "wait-surface requires exactly one of --pattern <regex>, --exit, or --agent-state <idle|working|blocked|any_change>")
                     }
 
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
@@ -2218,6 +2203,8 @@ struct ProgramaCLI {
 
                     if let patternArg {
                         params["pattern"] = patternArg
+                    } else if let agentStateArg {
+                        params["agent_state"] = agentStateArg
                     } else {
                         params["exit"] = true
                     }
@@ -2251,6 +2238,8 @@ struct ProgramaCLI {
                         print(match)
                     } else if exitFlag {
                         print("exited")
+                    } else if agentStateArg != nil {
+                        print((payload["state"] as? String) ?? "ok")
                     } else {
                         print("ok")
                     }
@@ -2733,14 +2722,14 @@ struct ProgramaCLI {
                         )
                     }()
 
-                    _ = try ctx.client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.notificationCreateForTarget, params: [
                         "workspace_id": targetWorkspace,
                         "surface_id": targetSurface,
                         "title": title,
                         "subtitle": subtitle,
                         "body": body,
                     ])
-                    print("OK")
+                    self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: "OK")
                 }
             ),
 
@@ -2814,7 +2803,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["set-status"],
-                helpLines: [],
+                helpLines: ["set-status <key> <value> [--icon <name>] [--color <#hex>] [--url <url>] [--priority <n>] [--format <plain|markdown>] [--workspace <id|ref>]"],
                 detailedUsage: """
                 Usage: programa set-status <key> <value> [flags]
 
@@ -2825,6 +2814,10 @@ struct ProgramaCLI {
                 Flags:
                   --icon <name>          Icon name (e.g. "sparkle", "hammer")
                   --color <#hex>         Pill color (e.g. "#ff9500")
+                  --url <url>            Link attached to the pill (alias: --link)
+                  --priority <n>         Sort order, higher first (-9999 to 9999)
+                  --format <plain|markdown>  How the value is rendered (default: plain)
+                  --pid <pid>            Process behind this key (its listening ports are tracked)
                   --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
 
                 Example:
@@ -2834,7 +2827,7 @@ struct ProgramaCLI {
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs, stopAtDashDash: false)
                     guard parsed.positional.count >= 2 else {
-                        throw CLIError(message: "ERROR: Missing status key or value — usage: set_status <key> <value> [--icon=X] [--color=#hex] [--url=X] [--priority=N] [--format=plain|markdown] [--tab=X]")
+                        throw CLIError(message: "ERROR: Missing status key or value — usage: programa set-status <key> <value> [--icon <name>] [--color <#hex>] [--url <url>] [--priority <n>] [--format plain|markdown] [--pid <pid>] [--workspace <id|ref>]")
                     }
                     var params: [String: Any] = [
                         "key": parsed.positional[0],
@@ -2866,7 +2859,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["clear-status"],
-                helpLines: [],
+                helpLines: ["clear-status <key> [--workspace <id|ref>]"],
                 detailedUsage: """
                 Usage: programa clear-status <key> [flags]
 
@@ -2878,11 +2871,11 @@ struct ProgramaCLI {
                 Example:
                   programa clear-status build
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["workspace"], minPositionals: 1, maxPositionals: 1, allowEquals: true),
+                grammar: CLIArgumentGrammar(valueOptions: ["workspace"], minPositionals: 1, maxPositionals: 1),
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     guard let key = parsed.positional.first, parsed.positional.count == 1 else {
-                        throw CLIError(message: "ERROR: Missing metadata key — usage: clear_status <key> [--tab=X]")
+                        throw CLIError(message: "ERROR: Missing metadata key — usage: programa clear-status <key> [--workspace <id|ref>]")
                     }
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
                     _ = try ctx.client.sendV2(method: V2MethodNames.workspaceClearStatus, params: ["workspace_id": workspaceId, "key": key])
@@ -2892,7 +2885,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["list-status"],
-                helpLines: [],
+                helpLines: ["list-status [--workspace <id|ref>]"],
                 detailedUsage: """
                 Usage: programa list-status [flags]
 
@@ -2905,7 +2898,7 @@ struct ProgramaCLI {
                   programa list-status
                   programa list-status --workspace workspace:2
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["workspace"], allowEquals: true),
+                grammar: CLIArgumentGrammar(valueOptions: ["workspace"]),
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
@@ -2921,7 +2914,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["set-progress"],
-                helpLines: [],
+                helpLines: ["set-progress <0.0-1.0> [--label <text>] [--workspace <id|ref>]"],
                 argumentContract: .setProgress,
                 detailedUsage: """
                 Usage: programa set-progress <0.0-1.0> [flags]
@@ -2939,7 +2932,7 @@ struct ProgramaCLI {
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     guard let first = parsed.positional.first else {
-                        throw CLIError(message: "ERROR: Missing progress value — usage: set_progress <0.0-1.0> [--label=X] [--tab=X]")
+                        throw CLIError(message: "ERROR: Missing progress value — usage: programa set-progress <0.0-1.0> [--label <text>] [--workspace <id|ref>]")
                     }
                     guard let value = Double(first), value.isFinite else {
                         throw CLIError(message: "ERROR: Invalid progress value '\(first)' — must be 0.0 to 1.0")
@@ -2954,7 +2947,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["clear-progress"],
-                helpLines: [],
+                helpLines: ["clear-progress [--workspace <id|ref>]"],
                 detailedUsage: """
                 Usage: programa clear-progress [flags]
 
@@ -2966,7 +2959,7 @@ struct ProgramaCLI {
                 Example:
                   programa clear-progress
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["workspace"], allowEquals: true),
+                grammar: CLIArgumentGrammar(valueOptions: ["workspace"]),
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
@@ -2977,7 +2970,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["log"],
-                helpLines: [],
+                helpLines: ["log [--level <level>] [--source <name>] [--workspace <id|ref>] [--] <message>"],
                 detailedUsage: """
                 Usage: programa log [flags] [--] <message>
 
@@ -2996,7 +2989,7 @@ struct ProgramaCLI {
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     guard !parsed.positional.isEmpty else {
-                        throw CLIError(message: "ERROR: Missing message — usage: log [--level=X] [--source=X] [--tab=X] -- <message>")
+                        throw CLIError(message: "ERROR: Missing message — usage: programa log [--level <level>] [--source <name>] [--workspace <id|ref>] [--] <message>")
                     }
                     let levelStr = parsed.options["level"] ?? "info"
                     guard ["info", "progress", "success", "warning", "error"].contains(levelStr) else {
@@ -3015,7 +3008,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["clear-log"],
-                helpLines: [],
+                helpLines: ["clear-log [--workspace <id|ref>]"],
                 detailedUsage: """
                 Usage: programa clear-log [flags]
 
@@ -3027,7 +3020,7 @@ struct ProgramaCLI {
                 Example:
                   programa clear-log
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["workspace"], allowEquals: true),
+                grammar: CLIArgumentGrammar(valueOptions: ["workspace"]),
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
@@ -3038,7 +3031,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["list-log"],
-                helpLines: [],
+                helpLines: ["list-log [--limit <n>] [--workspace <id|ref>]"],
                 argumentContract: .listLog,
                 detailedUsage: """
                 Usage: programa list-log [flags]
@@ -3058,7 +3051,7 @@ struct ProgramaCLI {
                     var params: [String: Any] = [:]
                     if let limitStr = parsed.options["limit"] {
                         guard !limitStr.isEmpty else {
-                            throw CLIError(message: "ERROR: Missing limit value — usage: list_log [--limit=N] [--tab=X]")
+                            throw CLIError(message: "ERROR: Missing limit value — usage: programa list-log [--limit <n>] [--workspace <id|ref>]")
                         }
                         guard let limit = Int(limitStr), limit >= 0 else {
                             throw CLIError(message: "ERROR: Invalid limit '\(limitStr)' — must be >= 0")
@@ -3078,7 +3071,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["sidebar-state"],
-                helpLines: [],
+                helpLines: ["sidebar-state [--workspace <id|ref>]"],
                 detailedUsage: """
                 Usage: programa sidebar-state [flags]
 
@@ -3092,7 +3085,7 @@ struct ProgramaCLI {
                   programa sidebar-state
                   programa sidebar-state --workspace workspace:2
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["workspace"], allowEquals: true),
+                grammar: CLIArgumentGrammar(valueOptions: ["workspace"]),
                 execute: { ctx in
                     let parsed = self.parseFlagArgs(ctx.commandArgs)
                     let workspaceId = try self.resolveSidebarWorkspaceId(options: parsed.options, windowOverride: ctx.windowId, client: ctx.client)
@@ -3777,7 +3770,7 @@ struct ProgramaCLI {
         }
     }
 
-    private func resolveCommandSurface(
+    func resolveCommandSurface(
         explicitSurface: String?,
         explicitWorkspace: String?,
         windowId: String?,
@@ -4533,378 +4526,6 @@ struct ProgramaCLI {
         return root
     }
 
-    // MARK: - Agent detection commands (docs/agent-detection-manifests.md)
-
-    private func runAgentDetectionCommand(
-        commandArgs: [String],
-        client: SocketClient,
-        jsonOutput: Bool,
-        idFormat: CLIIDFormat,
-        windowId: String?
-    ) throws {
-        var positional = commandArgs
-        guard let subcommandRaw = positional.first else {
-            throw CLIError(message: "agent-detection requires a subcommand: list, scaffold, test")
-        }
-        positional.removeFirst()
-
-        switch subcommandRaw.lowercased() {
-        case "list":
-            try runAgentDetectionList(args: positional, client: client, jsonOutput: jsonOutput, idFormat: idFormat)
-        case "scaffold":
-            try runAgentDetectionScaffold(args: positional, client: client, jsonOutput: jsonOutput, windowId: windowId)
-        case "test":
-            try runAgentDetectionTest(args: positional, client: client, jsonOutput: jsonOutput, idFormat: idFormat, windowId: windowId)
-        default:
-            throw CLIError(message: "agent-detection: unknown subcommand '\(subcommandRaw)' (expected list, scaffold, test)")
-        }
-    }
-
-    private func runAgentDetectionList(
-        args: [String],
-        client: SocketClient,
-        jsonOutput: Bool,
-        idFormat: CLIIDFormat
-    ) throws {
-        if let unknown = args.first(where: { $0.hasPrefix("--") && $0 != "--json" }) {
-            throw CLIError(message: "agent-detection list: unknown flag '\(unknown)'")
-        }
-
-        let payload = try client.sendV2(method: V2MethodNames.agentDetectionList)
-        if jsonOutput {
-            print(jsonString(payload))
-            return
-        }
-
-        let manifests = payload["manifests"] as? [[String: Any]] ?? []
-        guard !manifests.isEmpty else {
-            print("No agent-detection manifests loaded")
-            return
-        }
-        for entry in manifests {
-            let agent = entry["agent"] as? String ?? "?"
-            let displayName = entry["display_name"] as? String ?? agent
-            let source = entry["source"] as? String ?? "?"
-            let processNames = (entry["process_names"] as? [String] ?? []).joined(separator: ", ")
-            let shadowsBundled = (entry["shadows_bundled"] as? Bool) ?? false
-            var line = "\(agent)  (\(displayName), source=\(source), process_names=[\(processNames)])"
-            if shadowsBundled {
-                line += "  [shadows bundled manifest]"
-            }
-            print(line)
-        }
-    }
-
-    /// Mirrors `AgentManifestLoader.bundledAgentIds`
-    /// (Sources/AgentManifestLoader.swift:21-29) -- this CLI target can't import that type, so
-    /// this is a manually-kept-in-sync copy, used only to gate `agent-detection scaffold`'s
-    /// bundled-shadowing guard below.
-    private static let agentDetectionBundledIds: Set<String> = [
-        "claude-code", "codex", "gemini-cli", "opencode", "copilot-cli", "cursor-agent", "aider"
-    ]
-
-    private func runAgentDetectionScaffold(
-        args: [String],
-        client: SocketClient,
-        jsonOutput: Bool,
-        windowId: String?
-    ) throws {
-        let (wsArg, rem0) = parseOption(args, name: "--workspace")
-        let (sfArg, rem1) = parseOption(rem0, name: "--surface")
-        let force = hasFlag(rem1, name: "--force")
-        var positional = rem1.filter { $0 != "--force" }
-
-        guard let agentId = positional.first, !agentId.hasPrefix("--") else {
-            throw CLIError(message: "agent-detection scaffold requires <agent-id>")
-        }
-        positional.removeFirst()
-        if let unknown = positional.first(where: { $0.hasPrefix("--") }) {
-            throw CLIError(message: "agent-detection scaffold: unknown flag '\(unknown)'")
-        }
-        guard isValidAgentDetectionId(agentId) else {
-            throw CLIError(message: "agent-detection scaffold: <agent-id> must be lowercase letters, digits, and hyphens only")
-        }
-
-        let destinationDirectory = ("~/.config/programa/agent-detection" as NSString).expandingTildeInPath
-        let destinationPath = (destinationDirectory as NSString).appendingPathComponent("\(agentId).json")
-
-        // A user override at `destinationPath` fully replaces the bundled manifest for this
-        // agent id (no field merge -- AgentManifestLoader.swift's header), and a freshly
-        // scaffolded manifest starts with empty `patterns` (safe -- see
-        // `agentDetectionScaffoldJSON`'s doc comment -- but inert). Scaffolding one of the seven
-        // bundled ids without --force would therefore silently replace working screen-based
-        // detection with a manifest that detects nothing at all. Refuse by default; --force
-        // seeds the new file from the bundled manifest's own patterns instead of starting blank,
-        // so forcing degrades to "edit a copy of what already worked."
-        var seedStates: [[String: Any]]?
-        if Self.agentDetectionBundledIds.contains(agentId) {
-            guard force else {
-                throw CLIError(message: """
-                agent-detection scaffold: '\(agentId)' is one of programa's bundled agents. A user override at \(destinationPath) fully replaces its bundled manifest (no merge) -- and a freshly scaffolded manifest starts with empty patterns, so screen-based detection for '\(agentId)' would silently stop working until you fill them back in. Pass --force to proceed anyway; the bundled manifest's existing patterns will be seeded into the new file so you start from a working copy, not a blank one.
-                """)
-            }
-            let listPayload = try client.sendV2(method: V2MethodNames.agentDetectionList)
-            let manifests = listPayload["manifests"] as? [[String: Any]] ?? []
-            if let match = manifests.first(where: { ($0["agent"] as? String) == agentId }) {
-                seedStates = match["states"] as? [[String: Any]]
-            }
-        }
-
-        let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-
-        var readParams: [String: Any] = [:]
-        let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-        if let wsId { readParams["workspace_id"] = wsId }
-        let sfId = try resolveCommandSurface(
-            explicitSurface: sfArg, explicitWorkspace: wsArg,
-            windowId: windowId, workspaceHandle: wsId, client: client
-        )
-        if let sfId { readParams["surface_id"] = sfId }
-
-        // Capture the currently visible screen only (no --scrollback/--lines), same socket
-        // method 'read-screen' calls, via the same client -- see CommandDescriptor(names:
-        // ["read-screen"]) above.
-        let readPayload = try client.sendV2(method: V2MethodNames.surfaceReadText, params: readParams)
-        let capturedText = (readPayload["text"] as? String) ?? ""
-
-        if !force, FileManager.default.fileExists(atPath: destinationPath) {
-            throw CLIError(message: "agent-detection scaffold: \(destinationPath) already exists (use --force to overwrite)")
-        }
-
-        do {
-            try FileManager.default.createDirectory(atPath: destinationDirectory, withIntermediateDirectories: true)
-        } catch {
-            throw CLIError(message: "agent-detection scaffold: failed to create \(destinationDirectory): \(error.localizedDescription)")
-        }
-
-        let manifestJSON = agentDetectionScaffoldJSON(agentId: agentId, capturedText: capturedText, seedStates: seedStates)
-        do {
-            try manifestJSON.write(toFile: destinationPath, atomically: true, encoding: .utf8)
-        } catch {
-            throw CLIError(message: "agent-detection scaffold: failed to write \(destinationPath): \(error.localizedDescription)")
-        }
-
-        if jsonOutput {
-            print(jsonString(["path": destinationPath, "agent": agentId, "seeded_from_bundled": seedStates != nil]))
-        } else {
-            print("Wrote starter manifest: \(destinationPath)")
-            if seedStates != nil {
-                print("Seeded from the bundled '\(agentId)' manifest's existing patterns -- review them, they were verified against the bundled agent's UI, not necessarily yours.")
-            }
-            print("Next: review/fill in its \"patterns\" arrays, then run 'programa agent-detection test \(agentId)' to check them against the live screen.")
-        }
-    }
-
-    private func runAgentDetectionTest(
-        args: [String],
-        client: SocketClient,
-        jsonOutput: Bool,
-        idFormat: CLIIDFormat,
-        windowId: String?
-    ) throws {
-        let (wsArg, rem0) = parseOption(args, name: "--workspace")
-        let (sfArg, rem1) = parseOption(rem0, name: "--surface")
-        var positional = rem1
-
-        var agentId: String?
-        if let first = positional.first, !first.hasPrefix("--") {
-            agentId = first
-            positional.removeFirst()
-        }
-        if let unknown = positional.first {
-            throw CLIError(message: "agent-detection test: unexpected arguments: \(unknown)")
-        }
-
-        let workspaceArg = wsArg ?? (windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-
-        var params: [String: Any] = [:]
-        let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
-        if let wsId { params["workspace_id"] = wsId }
-        let sfId = try resolveCommandSurface(
-            explicitSurface: sfArg, explicitWorkspace: wsArg,
-            windowId: windowId, workspaceHandle: wsId, client: client
-        )
-        if let sfId { params["surface_id"] = sfId }
-        if let agentId { params["agent"] = agentId }
-
-        let payload = try client.sendV2(method: V2MethodNames.agentDetectionClassify, params: params)
-        if jsonOutput {
-            print(jsonString(formatIDs(payload, mode: idFormat)))
-            return
-        }
-
-        guard let recognizedAgent = payload["agent"] as? String else {
-            if let agentId {
-                print("No manifest loaded for '\(agentId)'")
-            } else {
-                print("No loaded manifest recognized this screen")
-            }
-            return
-        }
-        let displayName = payload["display_name"] as? String ?? recognizedAgent
-        guard let bucket = payload["bucket"] as? String else {
-            print("\(recognizedAgent) (\(displayName)) recognized, but no state pattern matched the current screen")
-            return
-        }
-        let confidence = payload["confidence"] as? String ?? "?"
-        let matchedPattern = payload["matched_pattern"] as? String ?? "?"
-        print("\(recognizedAgent) (\(displayName)): \(bucket)  [confidence=\(confidence), pattern=\(matchedPattern)]")
-    }
-
-    private func isValidAgentDetectionId(_ value: String) -> Bool {
-        !value.isEmpty && value.allSatisfy { $0.isLowercase || $0.isNumber || $0 == "-" }
-    }
-
-    private func agentDetectionDisplayName(forAgentId agentId: String) -> String {
-        agentId
-            .split(separator: "-")
-            .map { $0.isEmpty ? "" : $0.prefix(1).uppercased() + $0.dropFirst() }
-            .joined(separator: " ")
-    }
-
-    /// Wraps `value` as a single JSON string literal (quotes + escaping) via JSONSerialization,
-    /// so arbitrary captured terminal text (quotes, backslashes, control characters, unicode) can
-    /// be embedded into hand-assembled JSON safely, without a bespoke escaper.
-    private func jsonEscapedString(_ value: String) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: [value], options: [.withoutEscapingSlashes]),
-              let arrayJSON = String(data: data, encoding: .utf8),
-              arrayJSON.hasPrefix("["), arrayJSON.hasSuffix("]") else {
-            return "\"\""
-        }
-        return String(arrayJSON.dropFirst().dropLast())
-    }
-
-    private func lastLines(_ text: String, maxLines: Int) -> String {
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        guard lines.count > maxLines else { return text }
-        return lines.suffix(maxLines).joined(separator: "\n")
-    }
-
-    /// Encodes `values` as a compact JSON string array literal (e.g. `["a","b"]`) via
-    /// `JSONSerialization`, so a bundled manifest's existing `patterns` (fetched over the wire
-    /// from `agent.detection.list`) can be re-embedded into scaffolded JSON verbatim and safely,
-    /// without a bespoke escaper.
-    private func jsonEncodedStringArray(_ values: [String]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: values, options: [.withoutEscapingSlashes]),
-              let json = String(data: data, encoding: .utf8) else {
-            return "[]"
-        }
-        return json
-    }
-
-    private func agentDetectionStateBlockLiteral(
-        bucket: String,
-        priority: Int,
-        anchorLines: Int,
-        patternsJSON: String,
-        confidence: String,
-        notes: String
-    ) -> String {
-        "    {\n"
-            + "      \"bucket\": \(jsonEscapedString(bucket)),\n"
-            + "      \"priority\": \(priority),\n"
-            + "      \"anchor_last_n_lines\": \(anchorLines),\n"
-            + "      \"patterns\": \(patternsJSON),\n"
-            + "      \"confidence\": \(jsonEscapedString(confidence)),\n"
-            + "      \"source_notes\": \(jsonEscapedString(notes))\n"
-            + "    }"
-    }
-
-    /// Builds a starter manifest matching `AgentManifest`'s schema (Sources/AgentManifest.swift)
-    /// -- this CLI target cannot import that type directly, so the shape is mirrored by hand.
-    ///
-    /// When `seedStates` is nil (the common case: scaffolding an agent with no bundled
-    /// manifest), all three `states[].patterns` are left empty -- confirmed safe:
-    /// `AgentManifest.classify(text:)` iterates a state's patterns with a `for` loop, so an
-    /// empty array matches nothing, never everything -- with a TODO in `source_notes` plus the
-    /// captured screen as reference text, since JSON has no comments.
-    ///
-    /// When `seedStates` is non-nil (forced scaffold of a bundled agent id -- see
-    /// `runAgentDetectionScaffold`'s bundled-shadowing guard), those states' own patterns are
-    /// reused verbatim instead, so the result is an editable copy of a working manifest rather
-    /// than a blank one.
-    private func agentDetectionScaffoldJSON(
-        agentId: String,
-        capturedText: String,
-        seedStates: [[String: Any]]?
-    ) -> String {
-        let displayName = agentDetectionDisplayName(forAgentId: agentId)
-        let truncated = lastLines(capturedText, maxLines: 30)
-        let screenReference: String
-        if truncated.isEmpty {
-            screenReference = "No screen text was captured (surface appeared empty at scaffold time)."
-        } else {
-            let lineCount = truncated.split(separator: "\n", omittingEmptySubsequences: false).count
-            screenReference = "Captured screen (last \(lineCount) lines) for reference, delete once patterns are reviewed:\n\(truncated)"
-        }
-
-        let stateBlocks: [String]
-        if let seedStates, !seedStates.isEmpty {
-            stateBlocks = seedStates.map { state in
-                let bucket = state["bucket"] as? String ?? "idle"
-                let priority = (state["priority"] as? Int) ?? ((state["priority"] as? NSNumber)?.intValue ?? 0)
-                let anchorLines = (state["anchor_last_n_lines"] as? Int) ?? ((state["anchor_last_n_lines"] as? NSNumber)?.intValue ?? 6)
-                let patterns = (state["patterns"] as? [String]) ?? []
-                let confidence = state["confidence"] as? String ?? "low"
-                let notes = "SEEDED from the bundled '\(agentId)' manifest (forced override) -- "
-                    + "review these, they were verified against the bundled agent's UI, not "
-                    + "necessarily yours. \(screenReference)"
-                return agentDetectionStateBlockLiteral(
-                    bucket: bucket,
-                    priority: priority,
-                    anchorLines: anchorLines,
-                    patternsJSON: jsonEncodedStringArray(patterns),
-                    confidence: confidence,
-                    notes: notes
-                )
-            }
-        } else {
-            let templates: [(bucket: String, priority: Int, anchorLines: Int, hint: String)] = [
-                (
-                    "blocked", 100, 12,
-                    "Add regex patterns that appear when \(displayName) is waiting on you -- a y/n confirmation, a permission prompt, etc."
-                ),
-                (
-                    "working", 50, 6,
-                    "Add regex patterns that appear while \(displayName) is actively working -- a spinner, \"Thinking\", token counters, etc."
-                ),
-                (
-                    "idle", 0, 4,
-                    "Add regex patterns that match \(displayName)'s prompt when it's idle and ready for the next instruction."
-                )
-            ]
-            stateBlocks = templates.map { template in
-                let notes = "TODO: \(template.hint) Patterns are intentionally empty -- an empty "
-                    + "list matches nothing (never everything; see AgentManifest.classify). \(screenReference)"
-                return agentDetectionStateBlockLiteral(
-                    bucket: template.bucket,
-                    priority: template.priority,
-                    anchorLines: template.anchorLines,
-                    patternsJSON: "[]",
-                    confidence: "low",
-                    notes: notes
-                )
-            }
-        }
-
-        let states = stateBlocks.joined(separator: ",\n")
-
-        return """
-        {
-          "version": 1,
-          "agent": \(jsonEscapedString(agentId)),
-          "display_name": \(jsonEscapedString(displayName)),
-          "recognize": {
-            "process_names": [\(jsonEscapedString(agentId))],
-            "screen_patterns": []
-          },
-          "states": [
-        \(states)
-          ]
-        }
-        """
-    }
-
     /// Every branch name already present in `repo` that looks like `<prefix>/<number>`, as the
     /// set of those trailing numbers. Used by `race` to pick a starting index that does not
     /// collide, so racing twice in a row works instead of failing on every index.
@@ -5515,6 +5136,10 @@ struct ProgramaCLI {
                 skipNext = true
                 continue
             }
+            if !pastTerminator, arg.hasPrefix(name + "=") {
+                values.append(String(arg.dropFirst(name.count + 1)))
+                continue
+            }
             remaining.append(arg)
         }
         return (values, remaining)
@@ -5530,8 +5155,11 @@ struct ProgramaCLI {
     }
 
     func optionValue(_ args: [String], name: String) -> String? {
-        guard let index = args.firstIndex(of: name), index + 1 < args.count else { return nil }
-        return args[index + 1]
+        for (index, arg) in args.enumerated() {
+            if arg == name { return index + 1 < args.count ? args[index + 1] : nil }
+            if arg.hasPrefix(name + "=") { return String(arg.dropFirst(name.count + 1)) }
+        }
+        return nil
     }
 
     func hasFlag(_ args: [String], name: String) -> Bool {
@@ -5565,8 +5193,7 @@ struct ProgramaCLI {
         _ args: [String],
         command: String,
         valueFlags: Set<String>,
-        booleanFlags: Set<String> = [],
-        allowEquals: Bool
+        booleanFlags: Set<String> = []
     ) throws -> (positional: [String], options: [String: String]) {
         var positional: [String] = []
         var options: [String: String] = [:]
@@ -5613,9 +5240,6 @@ struct ProgramaCLI {
             }
 
             if hasEqualsValue {
-                guard allowEquals else {
-                    throw CLIError(message: "\(command): unexpected option syntax --\(name)=; use --\(name) <value>")
-                }
                 let value = String(parts[1])
                 guard !value.isEmpty else {
                     throw CLIError(message: "\(command): --\(name) requires a value")
@@ -5642,15 +5266,13 @@ struct ProgramaCLI {
             values: Set<String> = [],
             booleans: Set<String> = [],
             minPositionals: Int = 0,
-            maxPositionals: Int? = 0,
-            allowEquals: Bool = false
+            maxPositionals: Int? = 0
         ) throws -> (positional: [String], options: [String: String]) {
             let parsed = try preflightFlagArguments(
                 args,
                 command: command,
                 valueFlags: values,
-                booleanFlags: booleans,
-                allowEquals: allowEquals
+                booleanFlags: booleans
             )
             guard parsed.positional.count >= minPositionals else {
                 throw CLIError(message: "\(command): missing required argument")
@@ -5677,8 +5299,7 @@ struct ProgramaCLI {
                 values: grammar.valueOptions,
                 booleans: grammar.booleanOptions,
                 minPositionals: grammar.minPositionals,
-                maxPositionals: grammar.maxPositionals,
-                allowEquals: grammar.allowEquals
+                maxPositionals: grammar.maxPositionals
             )
             try require(grammar.requiredOptions, in: parsed.options)
             return
@@ -5822,8 +5443,7 @@ struct ProgramaCLI {
             let parsed = try parse(
                 values: ["icon", "color", "url", "link", "priority", "format", "pid", "workspace"],
                 minPositionals: 2,
-                maxPositionals: nil,
-                allowEquals: true
+                maxPositionals: nil
             )
             if let priority = parsed.options["priority"], Int(priority) == nil {
                 throw CLIError(message: "set-status: --priority must be an integer")
@@ -5836,7 +5456,7 @@ struct ProgramaCLI {
             }
 
         case "log":
-            let parsed = try parse(values: ["level", "source", "workspace"], minPositionals: 1, maxPositionals: nil, allowEquals: true)
+            let parsed = try parse(values: ["level", "source", "workspace"], minPositionals: 1, maxPositionals: nil)
             if let level = parsed.options["level"], !["info", "progress", "success", "warning", "error"].contains(level) {
                 throw CLIError(message: "log: invalid --level value")
             }
@@ -5854,8 +5474,7 @@ struct ProgramaCLI {
             let parsed = try parse(
                 values: ["workspace", "window", "surface", "direction"],
                 minPositionals: 1,
-                maxPositionals: 2,
-                allowEquals: true
+                maxPositionals: 2
             )
             if parsed.positional.count == 2, parsed.positional[0].lowercased() != "open" {
                 throw CLIError(message: "markdown: unexpected subcommand \(parsed.positional[0])")
@@ -5865,8 +5484,7 @@ struct ProgramaCLI {
             let parsed = try parse(
                 values: ["workspace", "window", "surface", "direction", "mode", "base-branch", "preamble"],
                 minPositionals: 1,
-                maxPositionals: nil,
-                allowEquals: true
+                maxPositionals: nil
             )
             let subcommand = parsed.positional[0].lowercased()
             guard ["open", "refresh", "comment", "send"].contains(subcommand) else {
@@ -5885,8 +5503,7 @@ struct ProgramaCLI {
             let parsed = try parse(
                 values: ["workspace", "window"],
                 minPositionals: 1,
-                maxPositionals: 2,
-                allowEquals: true
+                maxPositionals: 2
             )
             let subcommand = parsed.positional[0].lowercased()
             guard ["open", "list"].contains(subcommand) else {
@@ -5920,8 +5537,7 @@ struct ProgramaCLI {
                 values: ["repo", "base", "path", "layout"],
                 booleans: ["focus", "force", "json", "all"],
                 minPositionals: 1,
-                maxPositionals: nil,
-                allowEquals: true
+                maxPositionals: nil
             )
             guard ["create", "open", "remove", "list"].contains(parsed.positional[0].lowercased()) else {
                 throw CLIError(message: "worktree: unknown subcommand \(parsed.positional[0])")
@@ -5946,8 +5562,7 @@ struct ProgramaCLI {
                 values: ["surface", "workspace"],
                 booleans: ["force", "json"],
                 minPositionals: 1,
-                maxPositionals: 2,
-                allowEquals: true
+                maxPositionals: 2
             )
             let subcommand = parsed.positional[0].lowercased()
             guard ["list", "scaffold", "test"].contains(subcommand) else {
@@ -5961,8 +5576,7 @@ struct ProgramaCLI {
             let parsed = try parse(
                 values: ["n", "agent", "base", "prefix", "layout"],
                 minPositionals: 1,
-                maxPositionals: nil,
-                allowEquals: true
+                maxPositionals: nil
             )
             if let rawN = parsed.options["n"] {
                 guard let n = Int(rawN), n >= 1, n <= 8 else {
@@ -5980,8 +5594,7 @@ struct ProgramaCLI {
                 values: ["workspace", "cwd"],
                 booleans: ["force", "json"],
                 minPositionals: 1,
-                maxPositionals: nil,
-                allowEquals: true
+                maxPositionals: nil
             )
             guard ["save", "apply", "list"].contains(parsed.positional[0].lowercased()) else {
                 throw CLIError(message: "layout: unknown subcommand \(parsed.positional[0])")
@@ -6064,7 +5677,11 @@ struct ProgramaCLI {
         case "shortcuts", "feedback", "themes", "claude-teams", "omo", "omx", "omc":
             return
         case "codex", "claude", "opencode":
-            _ = try parse(booleans: ["yes", "y"], minPositionals: 1, maxPositionals: 1)
+            // `-y` is a single-dash token, so it arrives as a positional after the subcommand.
+            let parsed = try parse(booleans: ["yes", "y"], minPositionals: 1, maxPositionals: 2)
+            guard parsed.positional.count == 1 || parsed.positional[1] == "-y" else {
+                throw CLIError(message: "\(command): unexpected arguments: \(parsed.positional[1])")
+            }
         case "aside":
             _ = try parse(booleans: ["yes", "y", "with-devtools"], minPositionals: 1, maxPositionals: 1)
         // Commands with richer bespoke contracts are validated by their
@@ -6095,8 +5712,7 @@ struct ProgramaCLI {
             let parsed = try preflightFlagArguments(
                 args,
                 command: command,
-                valueFlags: ["panel", "workspace"],
-                allowEquals: false
+                valueFlags: ["panel", "workspace"]
             )
             guard parsed.positional.isEmpty else {
                 throw CLIError(message: "focus-panel: unexpected arguments: \(parsed.positional.joined(separator: " "))")
@@ -6110,8 +5726,7 @@ struct ProgramaCLI {
                 args,
                 command: command,
                 valueFlags: ["workspace", "surface", "lines"],
-                booleanFlags: ["scrollback"],
-                allowEquals: false
+                booleanFlags: ["scrollback"]
             )
             guard parsed.positional.isEmpty else {
                 throw CLIError(message: "read-screen: unexpected arguments: \(parsed.positional.joined(separator: " "))")
@@ -6126,15 +5741,17 @@ struct ProgramaCLI {
             let parsed = try preflightFlagArguments(
                 args,
                 command: command,
-                valueFlags: ["workspace", "surface", "pattern", "timeout", "lines"],
-                booleanFlags: ["exit"],
-                allowEquals: false
+                valueFlags: ["workspace", "surface", "pattern", "timeout", "lines", "agent-state"],
+                booleanFlags: ["exit"]
             )
             guard parsed.positional.isEmpty else {
                 throw CLIError(message: "wait-surface: unexpected arguments: \(parsed.positional.joined(separator: " "))")
             }
-            guard (parsed.options["pattern"] != nil) != (parsed.options["exit"] != nil) else {
-                throw CLIError(message: "wait-surface requires exactly one of --pattern <regex> or --exit")
+            guard ["pattern", "exit", "agent-state"].filter({ parsed.options[$0] != nil }).count == 1 else {
+                throw CLIError(message: "wait-surface requires exactly one of --pattern <regex>, --exit, or --agent-state <idle|working|blocked|any_change>")
+            }
+            if let state = parsed.options["agent-state"], !["idle", "working", "blocked", "any_change"].contains(state) {
+                throw CLIError(message: "wait-surface: --agent-state must be one of idle, working, blocked, any_change")
             }
             if let timeout = parsed.options["timeout"] {
                 guard let seconds = Double(timeout), seconds.isFinite, seconds > 0 else {
@@ -6152,8 +5769,7 @@ struct ProgramaCLI {
                 args,
                 command: command,
                 valueFlags: ["output"],
-                booleanFlags: ["agent-state", "workspace-lifecycle", "no-reconnect"],
-                allowEquals: false
+                booleanFlags: ["agent-state", "workspace-lifecycle", "no-reconnect"]
             )
             guard parsed.positional.isEmpty else {
                 throw CLIError(message: "watch-events: unexpected arguments: \(parsed.positional.joined(separator: " "))")
@@ -6170,8 +5786,7 @@ struct ProgramaCLI {
             let parsed = try preflightFlagArguments(
                 args,
                 command: command,
-                valueFlags: ["label", "workspace"],
-                allowEquals: true
+                valueFlags: ["label", "workspace"]
             )
             guard parsed.positional.count == 1, let rawValue = parsed.positional.first else {
                 throw CLIError(message: "set-progress requires a progress value")
@@ -6184,8 +5799,7 @@ struct ProgramaCLI {
             let parsed = try preflightFlagArguments(
                 args,
                 command: command,
-                valueFlags: ["limit", "workspace"],
-                allowEquals: true
+                valueFlags: ["limit", "workspace"]
             )
             guard parsed.positional.isEmpty else {
                 throw CLIError(message: "list-log: unexpected arguments: \(parsed.positional.joined(separator: " "))")
@@ -6421,6 +6035,16 @@ struct ProgramaCLI {
             throw CLIError(message: "rpc params must be a JSON object")
         }
         return params
+    }
+
+    func printVersion(jsonOutput: Bool) {
+        guard jsonOutput else { return print(versionSummary()) }
+        let info = resolvedVersionInfo()
+        var payload: [String: Any] = ["summary": versionSummary()]
+        payload["version"] = info["CFBundleShortVersionString"]
+        payload["build"] = info["CFBundleVersion"]
+        payload["commit"] = info["ProgramaCommit"].flatMap { normalizedCommitHash($0) }
+        print(jsonString(payload))
     }
 
     func versionSummary() -> String {
@@ -6813,6 +6437,15 @@ struct ProgramaCLI {
           programa <path>                Open a directory in a new workspace (launches programa if needed)
           programa [global-options] <command> [options]
 
+        Global Options (before the command):
+          --socket <path>                  Socket to connect to (default: see PROGRAMA_SOCKET_PATH below)
+          --json                           JSON output; errors print {"ok":false,"error":{...}} on stdout
+          --id-format <refs|uuids|both>    Handle format in output (default: refs)
+          --window <id|ref>                Target this window (focuses it first)
+          --password <value>               Socket password
+          -v, --version                    Print the version and exit
+          -h, --help                       Print this help and exit
+
         Handle Inputs:
           Use UUIDs or short refs (window:1/workspace:2/pane:3/surface:4) where commands accept window, workspace, pane, or surface inputs.
           `tab-action` also accepts `tab:<n>` in addition to `surface:<n>`.
@@ -6857,8 +6490,39 @@ struct ProgramaMain {
         do {
             try cli.run()
         } catch {
-            FileHandle.standardError.write(Data("Error: \(error)\n".utf8))
+            if jsonOutputRequested(CommandLine.arguments) {
+                print(cli.jsonString(["ok": false, "error": jsonErrorObject(error)] as [String: Any]))
+            } else {
+                FileHandle.standardError.write(Data("Error: \(error)\n".utf8))
+            }
             exit(1)
         }
+    }
+
+    /// Mirrors the global-option loop in `CLICommandDispatcher.run()`: `--json` counts only
+    /// before the command name.
+    static func jsonOutputRequested(_ args: [String]) -> Bool {
+        var index = 1
+        while index < args.count {
+            let arg = args[index]
+            if arg == "--json" { return true }
+            if ["--socket", "--id-format", "--window", "--password"].contains(arg) { index += 2; continue }
+            guard arg.hasPrefix("-") else { return false }
+            index += 1
+        }
+        return false
+    }
+
+    /// Socket errors arrive as "<code>: <message>" (`SocketClient.sendV2`); everything else is a
+    /// CLI-side error with code "error".
+    static func jsonErrorObject(_ error: Error) -> [String: Any] {
+        let text = String(describing: error)
+        if let separator = text.range(of: ": "),
+           case let code = String(text[..<separator.lowerBound]),
+           code.contains("_") || ["unavailable", "timeout", "error"].contains(code),
+           code.allSatisfy({ $0.isLowercase || $0 == "_" }) {
+            return ["code": code, "message": String(text[separator.upperBound...])]
+        }
+        return ["code": "error", "message": text]
     }
 }

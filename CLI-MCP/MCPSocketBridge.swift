@@ -4,7 +4,7 @@ import Darwin
 
 /// Failure modes talking to Programa's v2 control socket.
 ///
-/// The wire protocol (docs/plans/mcp-server.md §1.2) is newline-delimited
+/// The wire protocol (docs/socket-api.md) is newline-delimited
 /// JSON, NOT JSON-RPC 2.0 -- responses are `{"ok":true,"result":...}` /
 /// `{"ok":false,"error":{"code":...,"message":...}}`, and a legacy
 /// pre-JSON `ERROR: ...` line can appear before the JSON protocol engages
@@ -72,10 +72,9 @@ struct MCPSocketBridge {
     }
 
     /// Resolves the Programa control socket path the same way the CLI does
-    /// (`CLI/programa.swift`'s `run()`, lines ~1387-1405): `PROGRAMA_SOCKET_PATH`
-    /// takes priority over `PROGRAMA_SOCKET` (matching `tests_v2/programa_client.py:58-60`),
-    /// then falls back to `CLISocketPathResolver`'s tagged-debug / discovery /
-    /// stable-default logic, shared via `CLI/SocketPathResolution.swift`.
+    /// (`CLICommandDispatcher.run()`): `PROGRAMA_SOCKET_PATH` takes priority over
+    /// `PROGRAMA_SOCKET`, then `CLISocketPathResolver` (`CLI/SocketPathResolution.swift`)
+    /// tries the `PROGRAMA_TAG` sockets and the stable defaults only.
     static func resolveSocketPath(environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
         let envSocketPath: String? = {
             for key in ["PROGRAMA_SOCKET_PATH", "PROGRAMA_SOCKET"] {

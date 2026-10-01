@@ -3,7 +3,7 @@ name: programa
 description: Drive the programa terminal app from inside a programa surface — inspect windows/workspaces/panes/surfaces, split panes and run commands without stealing the user's focus, read output from sibling panes, spawn and coordinate a helper agent, and wait on it. Use whenever an agent is running inside programa (PROGRAMA_SURFACE_ID and PROGRAMA_SOCKET_PATH are set) and needs to control the app itself, not just the shell inside one pane. Do not use, and do not call the programa CLI at all, when those two variables are unset — that means the agent is not running inside programa.
 ---
 
-<!-- Installed and managed by `programa claude install-integration` / `programa codex install-hooks` / `programa opencode install-integration`. Manual edits to an installed copy get overwritten on the next install — edit the source at repo root (darkroomengineering/programa) instead. -->
+<!-- Installed and managed by `programa claude install-integration` / `programa codex install-integration` (legacy alias `install-hooks`) / `programa opencode install-integration`. Manual edits to an installed copy get overwritten on the next install — edit the source at repo root (darkroomengineering/programa) instead. -->
 
 # programa
 
@@ -97,6 +97,8 @@ programa new-pane --direction down --workspace workspace:2
 programa new-surface --pane pane:4              # new tab in an existing pane
 ```
 
+A workspace holds at most 4 panes. A split or new pane past that fails with error code `limit_reached` (`data.max_panes` is 4) instead of creating anything. Fall back to `agent_spawn` (a helper gets its own nested workspace) or to a new workspace with `programa new-workspace`.
+
 ## Reading output from a sibling pane
 
 `read-screen` (alias `capture-pane`, for tmux muscle memory) returns terminal text as plain text — the visible viewport by default, or scrollback on request:
@@ -140,7 +142,7 @@ programa notify --title "Helper agent done" --body "Tests pass, ready for review
 
 ## Waiting on a server, a test run, or another agent
 
-`wait-surface` blocks server-side until a surface's output matches a regex or its process exits, so you don't have to poll:
+`wait-surface` blocks server-side until a surface's output matches a regex, its process exits, or the agent in it reaches a state, so you don't have to poll:
 
 ```bash
 # Block until the build in a sibling pane finishes, up to 2 minutes
@@ -150,7 +152,7 @@ programa wait-surface --surface "$handle" --pattern 'BUILD (SUCCEEDED|FAILED)' -
 programa wait-surface --surface "$handle" --exit --timeout 600
 ```
 
-Exactly one of `--pattern <regex>` or `--exit` is required. Match on whatever the process actually prints ("PASS", "Server started", a prompt returning), not a fixed sleep duration. The wait is answered by the app the moment the condition is met — there is no missed-event window even if the output appears while the call is being issued.
+Exactly one of `--pattern <regex>`, `--exit`, or `--agent-state <state>` is required. Match on whatever the process actually prints ("PASS", "Server started", a prompt returning), not a fixed sleep duration. The wait is answered by the app the moment the condition is met — there is no missed-event window even if the output appears while the call is being issued.
 
 `wait-surface` also has a third condition, `--agent-state <idle|working|blocked|any_change>`, for a sibling pane running another agent whose lifecycle hooks report status automatically (Claude Code/Codex/OpenCode installs wire this up for you, no extra setup) — block on what the agent is *doing*, not what it prints:
 
@@ -227,7 +229,7 @@ Two browsers, two jobs. Do not reach for a Chrome extension for either.
   programa browser --surface surface:7 tab close
   ```
 
-  `programa browser --help` lists the rest (wait, fill, eval, cookies, console, errors). Network routing, viewport, and raw input injection are not supported on WKWebView and return `not_supported`. Over MCP the same calls are the `browser_*` tools of `programa-mcp`.
+  `programa browser --help` lists the rest (wait, fill, eval, cookies, console, errors). Network routing, viewport control, and raw input injection are not available on WKWebView, so there are no commands for them. Over MCP the same calls are the `browser_*` tools of `programa-mcp`.
 
 - **Logged-in sites, private dashboards, CI logs, anything that needs the user's real browser profile:** use Aside through its MCP server if it is registered (tools from the `aside` server, or `aside-devtools` for raw Chrome DevTools control), or delegate a whole task from the shell:
 

@@ -500,7 +500,7 @@ extension ProgramaCLI {
         let subcommand = ["active": "session-start", "idle": "stop", "notify": "notification"][rawSubcommand] ?? rawSubcommand
         let hookArgs = Array(commandArgs.dropFirst())
         let hookWsFlag = optionValue(hookArgs, name: "--workspace")
-        let rawInput = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let rawInput = readAgentHookStdin()
         let context = AgentHookContext(
             client: client,
             parsed: parseAgentHookInput(rawInput: rawInput, hookArgs: hookArgs),
@@ -1867,8 +1867,8 @@ extension ProgramaCLI {
         let environment = ProcessInfo.processInfo.environment
         let override = environment["CODEX_HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         let explicit = override?.isEmpty == false
-        let rawHome = explicit ? override! : NSString(string: "~/.codex").expandingTildeInPath
-        let expanded = NSString(string: rawHome).expandingTildeInPath
+        let rawHome = explicit ? override! : "~/.codex"
+        let expanded = Self.integrationExpandTilde(rawHome)
         let absolute = expanded.hasPrefix("/")
             ? URL(fileURLWithPath: expanded).standardizedFileURL.path
             : URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(expanded).standardizedFileURL.path
@@ -1885,7 +1885,7 @@ extension ProgramaCLI {
         return CodexPaths(home: home, lockHome: canonicalHome, hooks: hooks, configLink: configLink, configTarget: configTarget)
     }
 
-    private func codexResolveConfigTarget(_ path: String) throws -> String {
+    func codexResolveConfigTarget(_ path: String) throws -> String {
         var info = stat()
         let result = path.withCString { Darwin.lstat($0, &info) }
         if result != 0 {
@@ -2688,7 +2688,7 @@ extension ProgramaCLI {
     description: Drive the programa terminal app from inside a programa surface — inspect windows/workspaces/panes/surfaces, split panes and run commands without stealing the user's focus, read output from sibling panes, spawn and coordinate a helper agent, and wait on it. Use whenever an agent is running inside programa (PROGRAMA_SURFACE_ID and PROGRAMA_SOCKET_PATH are set) and needs to control the app itself, not just the shell inside one pane. Do not use, and do not call the programa CLI at all, when those two variables are unset — that means the agent is not running inside programa.
     ---
 
-    <!-- Installed and managed by `programa claude install-integration` / `programa codex install-hooks` / `programa opencode install-integration`. Manual edits to an installed copy get overwritten on the next install — edit the source at repo root (darkroomengineering/programa) instead. -->
+    <!-- Installed and managed by `programa claude install-integration` / `programa codex install-integration` (legacy alias `install-hooks`) / `programa opencode install-integration`. Manual edits to an installed copy get overwritten on the next install — edit the source at repo root (darkroomengineering/programa) instead. -->
 
     # programa
 
@@ -2782,6 +2782,8 @@ extension ProgramaCLI {
     programa new-surface --pane pane:4              # new tab in an existing pane
     ```
 
+    A workspace holds at most 4 panes. A split or new pane past that fails with error code `limit_reached` (`data.max_panes` is 4) instead of creating anything. Fall back to `agent_spawn` (a helper gets its own nested workspace) or to a new workspace with `programa new-workspace`.
+
     ## Reading output from a sibling pane
 
     `read-screen` (alias `capture-pane`, for tmux muscle memory) returns terminal text as plain text — the visible viewport by default, or scrollback on request:
@@ -2825,7 +2827,7 @@ extension ProgramaCLI {
 
     ## Waiting on a server, a test run, or another agent
 
-    `wait-surface` blocks server-side until a surface's output matches a regex or its process exits, so you don't have to poll:
+    `wait-surface` blocks server-side until a surface's output matches a regex, its process exits, or the agent in it reaches a state, so you don't have to poll:
 
     ```bash
     # Block until the build in a sibling pane finishes, up to 2 minutes
@@ -2835,7 +2837,7 @@ extension ProgramaCLI {
     programa wait-surface --surface "$handle" --exit --timeout 600
     ```
 
-    Exactly one of `--pattern <regex>` or `--exit` is required. Match on whatever the process actually prints ("PASS", "Server started", a prompt returning), not a fixed sleep duration. The wait is answered by the app the moment the condition is met — there is no missed-event window even if the output appears while the call is being issued.
+    Exactly one of `--pattern <regex>`, `--exit`, or `--agent-state <state>` is required. Match on whatever the process actually prints ("PASS", "Server started", a prompt returning), not a fixed sleep duration. The wait is answered by the app the moment the condition is met — there is no missed-event window even if the output appears while the call is being issued.
 
     `wait-surface` also has a third condition, `--agent-state <idle|working|blocked|any_change>`, for a sibling pane running another agent whose lifecycle hooks report status automatically (Claude Code/Codex/OpenCode installs wire this up for you, no extra setup) — block on what the agent is *doing*, not what it prints:
 
@@ -2870,6 +2872,57 @@ extension ProgramaCLI {
     ```
 
     It sends the text, waits (briefly) for the helper to report it started working, then waits for it to go idle again. If the helper never reports any activity at all, the JSON response carries a `warning` noting its hooks may not be installed, rather than hanging or failing outright — check that field if `prompt-agent` returns suspiciously fast.
+
+    ## Writing a recap
+
+    When the user asks for a recap or summary of a change, write it as markdown to `.programa/recaps/<slug>.md` (repo root resolved with `git rev-parse --show-toplevel` from your cwd), then open it:
+
+    ```bash
+    programa recap open <slug>
+    ```
+
+    Use the same panel that renders `programa markdown open` for it, so lean on its formatting:
+
+    - ` ```mermaid ` fenced blocks for flow diagrams (rendered offline, no network call)
+    - GitHub-style alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`) for callouts
+    - a `:::compare` block for before/after code, rendered side by side:
+
+      ````
+      :::compare
+      ```swift before
+      old code
+      ```
+      ```swift after
+      new code
+      ```
+      :::
+      ````
+
+    `programa recap list` shows the slugs already saved. Keep the recap itself short and plain, the same way you'd summarize the change in chat.
+
+    ## Browser work
+
+    Two browsers, two jobs. Do not reach for a Chrome extension for either.
+
+    - **Local previews, smoke tests, screenshots you read back, DOM checks, console errors:** use programa's embedded browser. It opens beside your pane, keeps its own profile, and never moves the user's focus:
+
+      ```bash
+      programa browser open-split http://localhost:3000            # prints the new surface id
+      programa browser --surface surface:7 snapshot --interactive  # interactive elements only
+      programa browser --surface surface:7 click "button.submit" --snapshot-after
+      programa browser --surface surface:7 screenshot --out /tmp/after.png
+      programa browser --surface surface:7 tab close
+      ```
+
+      `programa browser --help` lists the rest (wait, fill, eval, cookies, console, errors). Network routing, viewport control, and raw input injection are not available on WKWebView, so there are no commands for them. Over MCP the same calls are the `browser_*` tools of `programa-mcp`.
+
+    - **Logged-in sites, private dashboards, CI logs, anything that needs the user's real browser profile:** use Aside through its MCP server if it is registered (tools from the `aside` server, or `aside-devtools` for raw Chrome DevTools control), or delegate a whole task from the shell:
+
+      ```bash
+      aside "Open the staging dashboard and tell me whether the last deploy is green"
+      ```
+
+      `programa aside status` says whether Aside is installed and registered; `programa aside install-mcp` registers it with Claude Code and Codex. Do not run the installer yourself unless the user asks, it edits their agent config.
 
     ## Reference
 
@@ -2962,264 +3015,6 @@ extension ProgramaCLI {
             return
         }
         try fm.removeItem(atPath: path)
-    }
-
-    // MARK: - Claude Code integration (persistent hooks)
-
-    /// The persistent hook command installed into ~/.claude/settings.json (or
-    /// $CLAUDE_CONFIG_DIR/settings.json). Unlike the runtime wrapper injected by
-    /// Resources/bin/claude (which always runs inside a programa terminal and can
-    /// assume programa is reachable), this command runs from *any* terminal, so it
-    /// defensively checks both that it's inside a programa surface and that the
-    /// programa CLI is on PATH before calling out. Mirrors the codex guard shape.
-    private static func claudeHookCommand(_ event: String) -> String {
-        "[ -n \"$PROGRAMA_SURFACE_ID\" ] && command -v programa >/dev/null 2>&1 && programa claude-hook \(event) || echo '{}'"
-    }
-
-    /// Identifier used to detect programa-owned hooks during install/uninstall.
-    private static let claudeHookCommandMarker = "programa claude-hook"
-
-    private struct ClaudeHookEventSpec {
-        let name: String
-        let event: String
-        let timeout: Int
-        let isAsync: Bool
-    }
-
-    /// The lifecycle events the runtime wrapper's HOOKS_JSON injects
-    /// (Resources/bin/claude:207), reproduced here for the persistent file.
-    private static let claudeHookEventSpecs: [ClaudeHookEventSpec] = [
-        ClaudeHookEventSpec(name: "SessionStart", event: "session-start", timeout: 10, isAsync: false),
-        ClaudeHookEventSpec(name: "Stop", event: "stop", timeout: 10, isAsync: false),
-        ClaudeHookEventSpec(name: "SessionEnd", event: "session-end", timeout: 1, isAsync: false),
-        ClaudeHookEventSpec(name: "Notification", event: "notification", timeout: 10, isAsync: false),
-        ClaudeHookEventSpec(name: "UserPromptSubmit", event: "prompt-submit", timeout: 10, isAsync: false),
-        ClaudeHookEventSpec(name: "PreToolUse", event: "pre-tool-use", timeout: 5, isAsync: true),
-        ClaudeHookEventSpec(name: "SubagentStart", event: "subagent-start", timeout: 5, isAsync: false),
-        ClaudeHookEventSpec(name: "SubagentStop", event: "subagent-stop", timeout: 5, isAsync: false)
-    ]
-
-    /// Builds the programa-owned hook groups, keyed by Claude Code lifecycle event
-    /// name, in Claude Code's settings.json hooks schema (matcher + hooks array).
-    private static var claudeHooksPayload: [String: Any] {
-        var hooks: [String: Any] = [:]
-        for spec in claudeHookEventSpecs {
-            var hookEntry: [String: Any] = [
-                "type": "command",
-                "command": claudeHookCommand(spec.event),
-                "timeout": spec.timeout
-            ]
-            if spec.isAsync {
-                hookEntry["async"] = true
-            }
-            hooks[spec.name] = [[
-                "matcher": "",
-                "hooks": [hookEntry]
-            ] as [String: Any]]
-        }
-        return hooks
-    }
-
-    /// Resolves the target settings.json, respecting Claude Code's own
-    /// CLAUDE_CONFIG_DIR override.
-    private static func claudeSettingsPath() -> String {
-        if let override = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !override.isEmpty {
-            let expanded = NSString(string: override).expandingTildeInPath
-            return (expanded as NSString).appendingPathComponent("settings.json")
-        }
-        return NSString(string: "~/.claude/settings.json").expandingTildeInPath
-    }
-
-    func runClaudeInstallIntegration() throws {
-        let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
-            || ProcessInfo.processInfo.arguments.contains("-y")
-        let settingsPath = Self.claudeSettingsPath()
-        let settingsDir = (settingsPath as NSString).deletingLastPathComponent
-        let fm = FileManager.default
-
-        try fm.createDirectory(atPath: settingsDir, withIntermediateDirectories: true, attributes: nil)
-
-        let existingSettingsContent: String?
-        if fm.fileExists(atPath: settingsPath) {
-            guard let content = try? String(contentsOfFile: settingsPath, encoding: .utf8) else {
-                throw CLIError(message: "Could not read \(settingsPath). Check file permissions.")
-            }
-            existingSettingsContent = content
-        } else {
-            existingSettingsContent = nil
-        }
-
-        // Missing file = empty JSON object. Existing-but-unparsable = stop; never overwrite.
-        var existing: [String: Any] = [:]
-        if let existingSettingsContent {
-            let trimmed = existingSettingsContent.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                guard let data = existingSettingsContent.data(using: .utf8),
-                      let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    throw CLIError(
-                        message: "\(settingsPath) is not valid JSON. Fix or remove the file manually, then re-run this command."
-                    )
-                }
-                existing = parsed
-            }
-        }
-
-        var hooks = existing["hooks"] as? [String: Any] ?? [:]
-        let programaHooks = Self.claudeHooksPayload
-        for (eventName, programaGroups) in programaHooks {
-            guard let programaGroupArray = programaGroups as? [[String: Any]] else { continue }
-            var eventGroups = hooks[eventName] as? [[String: Any]] ?? []
-            eventGroups.removeAll { group in
-                guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
-                return groupHooks.allSatisfy { hook in
-                    (hook["command"] as? String)?.contains(Self.claudeHookCommandMarker) == true
-                }
-            }
-            eventGroups.append(contentsOf: programaGroupArray)
-            hooks[eventName] = eventGroups
-        }
-        existing["hooks"] = hooks
-
-        let newJsonData = try JSONSerialization.data(withJSONObject: existing, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        let newContent = String(data: newJsonData, encoding: .utf8) ?? ""
-        let settingsChanged = existingSettingsContent != newContent
-
-        // Also install the `programa` agent skill into ~/.claude/skills (or
-        // $CLAUDE_CONFIG_DIR/skills) alongside the hooks, so a fresh Claude
-        // Code session inside programa knows it can drive the app. Refs #165.
-        let skillPath = Self.agentSkillFilePath(skillsRoot: (settingsDir as NSString).appendingPathComponent("skills"))
-        let skillState = agentSkillInstallState(path: skillPath)
-
-        if !settingsChanged && !skillState.changed {
-            print("programa Claude Code integration is already installed. Nothing to change.")
-            return
-        }
-
-        if settingsChanged {
-            print("  \(settingsPath):")
-            if let existingSettingsContent, !existingSettingsContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                printSimpleDiff(old: existingSettingsContent, new: newContent)
-            } else {
-                print("    (new file)")
-                let lines = newContent.components(separatedBy: "\n")
-                for (i, line) in lines.enumerated() {
-                    let lineLabel = String(format: "%3d", i + 1)
-                    print("    \u{001B}[32m\(lineLabel) +\(line)\u{001B}[0m")
-                }
-            }
-            print("")
-        }
-        if skillState.changed {
-            printAgentSkillDiff(path: skillPath, existing: skillState.existing)
-        }
-
-        if !skipConfirm {
-            print("Apply these changes? [Y/n] ", terminator: "")
-            guard let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                  response.isEmpty || response == "y" || response == "yes" else {
-                print("Aborted.")
-                return
-            }
-        }
-
-        if settingsChanged {
-            try writeClaudeSettings(newJsonData, replacing: existingSettingsContent, at: settingsPath)
-        }
-        if skillState.changed {
-            try writeAgentSkillFile(path: skillPath)
-        }
-
-        print("")
-        print("Installed. The Claude Code integration now works from any terminal, not just programa's.")
-        print("To remove: programa claude uninstall-integration")
-    }
-
-    /// Writes settings.json through a symlink (an atomic write to the link path would
-    /// replace the user's link with a regular file) and only while the file still holds
-    /// the content the change was computed from, under the same sidecar lock the Codex
-    /// installer uses, so a concurrent edit is reported instead of overwritten.
-    private func writeClaudeSettings(_ data: Data, replacing previous: String?, at path: String) throws {
-        let target = try codexResolveConfigTarget(path)
-        try withCodexHooksLock(at: (path as NSString).deletingLastPathComponent) {
-            guard (try? String(contentsOfFile: target, encoding: .utf8)) == previous else {
-                throw CLIError(message: "\(path) changed while the integration was being updated. Re-run this command.")
-            }
-            try data.write(to: URL(fileURLWithPath: target), options: .atomic)
-        }
-    }
-
-    func runClaudeUninstallIntegration() throws {
-        let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
-            || ProcessInfo.processInfo.arguments.contains("-y")
-        let settingsPath = Self.claudeSettingsPath()
-        let settingsDir = (settingsPath as NSString).deletingLastPathComponent
-        let skillPath = Self.agentSkillFilePath(skillsRoot: (settingsDir as NSString).appendingPathComponent("skills"))
-        let skillContent = agentSkillUninstallState(path: skillPath)
-        let fm = FileManager.default
-
-        var hooksRemoval: (newJsonData: Data, newContent: String, oldContent: String)?
-        if fm.fileExists(atPath: settingsPath),
-           let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
-           var parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           var hooks = parsed["hooks"] as? [String: Any] {
-            var removedCount = 0
-            for eventName in hooks.keys {
-                guard var eventGroups = hooks[eventName] as? [[String: Any]] else { continue }
-                let before = eventGroups.count
-                eventGroups.removeAll { group in
-                    guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
-                    return groupHooks.allSatisfy { hook in
-                        (hook["command"] as? String)?.contains(Self.claudeHookCommandMarker) == true
-                    }
-                }
-                removedCount += before - eventGroups.count
-                if eventGroups.isEmpty {
-                    hooks.removeValue(forKey: eventName)
-                } else {
-                    hooks[eventName] = eventGroups
-                }
-            }
-            if removedCount > 0 {
-                parsed["hooks"] = hooks
-                let newJsonData = try JSONSerialization.data(withJSONObject: parsed, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-                let newContent = String(data: newJsonData, encoding: .utf8) ?? ""
-                let oldContent = String(data: data, encoding: .utf8) ?? ""
-                hooksRemoval = (newJsonData, newContent, oldContent)
-            }
-        }
-
-        if hooksRemoval == nil && skillContent == nil {
-            print("No programa hooks found.")
-            return
-        }
-
-        if let hooksRemoval {
-            print("  \(settingsPath):")
-            printSimpleDiff(old: hooksRemoval.oldContent, new: hooksRemoval.newContent)
-            print("")
-        }
-        if let skillContent {
-            printAgentSkillRemovalDiff(path: skillPath, content: skillContent)
-        }
-
-        if !skipConfirm {
-            print("Apply these changes? [Y/n] ", terminator: "")
-            guard let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                  response.isEmpty || response == "y" || response == "yes" else {
-                print("Aborted.")
-                return
-            }
-        }
-
-        if let hooksRemoval {
-            try writeClaudeSettings(hooksRemoval.newJsonData, replacing: hooksRemoval.oldContent, at: settingsPath)
-        }
-        if skillContent != nil {
-            try removeAgentSkillFileIfManaged(path: skillPath)
-        }
-        print("Removed programa Claude Code integration.")
     }
 
     /// Print a unified-diff-style view with context lines and line numbers.
@@ -3448,7 +3243,7 @@ extension ProgramaCLI {
         export const ProgramaPlugin = async ({ directory, worktree, $ }) => {
           const hook = (event, extra = []) =>
             $`programa opencode-hook ${event} --cwd ${directory} ${extra}`.quiet().nothrow()
-          await hook("session-start")
+          hook("session-start")
           return {
             "chat.message": async (input) => {
               await hook("prompt-submit", ["--session", input?.sessionID ?? ""])
@@ -3472,10 +3267,10 @@ extension ProgramaCLI {
         if let override = ProcessInfo.processInfo.environment["OPENCODE_CONFIG_DIR"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
-            let expanded = NSString(string: override).expandingTildeInPath
+            let expanded = integrationExpandTilde(override)
             return (expanded as NSString).appendingPathComponent("plugins")
         }
-        return NSString(string: "~/.config/opencode/plugins").expandingTildeInPath
+        return integrationExpandTilde("~/.config/opencode/plugins")
     }
 
     /// Resolves the target skills directory, respecting the same
@@ -3488,15 +3283,13 @@ extension ProgramaCLI {
         if let override = ProcessInfo.processInfo.environment["OPENCODE_CONFIG_DIR"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
-            let expanded = NSString(string: override).expandingTildeInPath
+            let expanded = integrationExpandTilde(override)
             return (expanded as NSString).appendingPathComponent("skills")
         }
-        return NSString(string: "~/.config/opencode/skills").expandingTildeInPath
+        return integrationExpandTilde("~/.config/opencode/skills")
     }
 
     func runOpenCodeInstallIntegration() throws {
-        let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
-            || ProcessInfo.processInfo.arguments.contains("-y")
         let pluginsDir = Self.openCodePluginsDir()
         let pluginPath = (pluginsDir as NSString).appendingPathComponent("programa.js")
         let fm = FileManager.default
@@ -3535,14 +3328,7 @@ extension ProgramaCLI {
             printAgentSkillDiff(path: skillPath, existing: skillState.existing)
         }
 
-        if !skipConfirm {
-            print("Apply these changes? [Y/n] ", terminator: "")
-            guard let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                  response.isEmpty || response == "y" || response == "yes" else {
-                print("Aborted.")
-                return
-            }
-        }
+        try confirmIntegrationChanges()
 
         if pluginChanged {
             try newContent.write(toFile: pluginPath, atomically: true, encoding: .utf8)
@@ -3557,8 +3343,6 @@ extension ProgramaCLI {
     }
 
     func runOpenCodeUninstallIntegration() throws {
-        let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
-            || ProcessInfo.processInfo.arguments.contains("-y")
         let pluginsDir = Self.openCodePluginsDir()
         let pluginPath = (pluginsDir as NSString).appendingPathComponent("programa.js")
         let fm = FileManager.default
@@ -3589,14 +3373,7 @@ extension ProgramaCLI {
             printAgentSkillRemovalDiff(path: skillPath, content: skillContent)
         }
 
-        if !skipConfirm {
-            print("Apply these changes? [Y/n] ", terminator: "")
-            guard let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                  response.isEmpty || response == "y" || response == "yes" else {
-                print("Aborted.")
-                return
-            }
-        }
+        try confirmIntegrationChanges()
 
         if existingPluginContent != nil {
             try fm.removeItem(atPath: pluginPath)

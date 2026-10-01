@@ -7,12 +7,7 @@ import Darwin
 /// This file is compiled into BOTH the `programa-cli` and `programa-mcp`
 /// Xcode targets (see `GhosttyTabs.xcodeproj/project.pbxproj`'s Sources build
 /// phases for each target) rather than being duplicated, so the two clients'
-/// socket-discovery logic cannot drift apart -- see
-/// `docs/plans/mcp-server.md` §1.4 and §6 risk register ("CLI and MCP
-/// sidecar socket-path-resolution logic drifting apart").
-///
-/// Extracted verbatim from `CLI/programa.swift` (Phase 2 of the MCP server
-/// plan); behavior is unchanged from the original inline definition.
+/// socket-discovery logic cannot drift apart.
 
 enum CLISocketPathSource {
     case explicitFlag
@@ -91,6 +86,18 @@ enum CLISocketPathResolver {
             return path
         }
 
+        // Never auto-select another live instance (a tagged dev build, staging, the last
+        // socket some build wrote): a command meant for the user's app would silently land
+        // in that one. Name them so the caller can opt in explicitly.
+        let others = dedupe([fallbackSocketPath, stagingSocketPath] + discoverTaggedSockets(limit: 12) + [readLastSocketPath()].compactMap { $0 })
+            .filter { !candidates.contains($0) && canConnect(to: $0) }
+        if !others.isEmpty {
+            FileHandle.standardError.write(Data((
+                "No Programa socket at \(requestedPath). Other Programa sockets are running: "
+                + others.joined(separator: ", ")
+                + ". To use one, set PROGRAMA_SOCKET_PATH and PROGRAMA_SOCKET (or pass --socket).\n"
+            ).utf8))
+        }
         return requestedPath
     }
 
@@ -104,18 +111,12 @@ enum CLISocketPathResolver {
         }
 
         // The App Support socket lives in an owner-only directory; /tmp is world-writable, so the
-        // legacy /tmp path is tried after it.
+        // legacy /tmp path is tried after it. Only the stable defaults are implicit candidates.
         if requestedPath != legacyDefaultSocketPath {
             candidates.append(requestedPath)
         }
         candidates.append(defaultSocketPath)
         candidates.append(legacyDefaultSocketPath)
-        candidates.append(fallbackSocketPath)
-        candidates.append(stagingSocketPath)
-        candidates.append(contentsOf: discoverTaggedSockets(limit: 12))
-        if let last = readLastSocketPath() {
-            candidates.append(last)
-        }
         return candidates
     }
 
