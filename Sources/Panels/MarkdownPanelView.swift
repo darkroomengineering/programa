@@ -85,6 +85,12 @@ struct MarkdownPanelView: View {
                 Divider()
                     .padding(.horizontal, 16)
 
+                if panel.isTruncated {
+                    truncationNotice
+                        .padding(.horizontal, 24)
+                        .padding(.top, 12)
+                }
+
                 MarkdownDocumentView(
                     content: panel.content,
                     baseURL: URL(fileURLWithPath: panel.filePath).deletingLastPathComponent(),
@@ -94,6 +100,18 @@ struct MarkdownPanelView: View {
                     .padding(.vertical, 16)
             }
         }
+    }
+
+    private var truncationNotice: some View {
+        Label(
+            String(
+                localized: "workspace.markdown.truncated",
+                defaultValue: "This file is larger than 2 MB. Only the first 2 MB is shown."
+            ),
+            systemImage: "exclamationmark.triangle"
+        )
+        .font(.caption)
+        .foregroundColor(.secondary)
     }
 
     private var filePathHeader: some View {
@@ -296,6 +314,7 @@ struct MarkdownSearchOverlay: View {
                 }
                 .buttonStyle(SearchButtonStyle())
                 .safeHelp(String(localized: "search.nextMatch.help", defaultValue: "Next match (Return)"))
+                .accessibilityLabel(String(localized: "menu.find.findNext", defaultValue: "Find Next"))
 
                 Button(action: {
 #if DEBUG
@@ -307,6 +326,7 @@ struct MarkdownSearchOverlay: View {
                 }
                 .buttonStyle(SearchButtonStyle())
                 .safeHelp(String(localized: "search.previousMatch.help", defaultValue: "Previous match (Shift+Return)"))
+                .accessibilityLabel(String(localized: "menu.find.findPrevious", defaultValue: "Find Previous"))
 
                 Button(action: {
 #if DEBUG
@@ -318,6 +338,7 @@ struct MarkdownSearchOverlay: View {
                 }
                 .buttonStyle(SearchButtonStyle())
                 .safeHelp(String(localized: "search.close.help", defaultValue: "Close (Esc)"))
+                .accessibilityLabel(String(localized: "workspace.markdown.find.close", defaultValue: "Close Find"))
             }
             .padding(8)
             .background(.background)
@@ -431,7 +452,6 @@ private struct MarkdownPointerObserver: NSViewRepresentable {
 final class MarkdownPanelPointerObserverView: NSView {
     var onPointerDown: (() -> Void)?
     private var eventMonitor: Any?
-    private weak var forwardedMouseTarget: NSView?
 
     override var mouseDownCanMoveWindow: Bool { false }
 
@@ -450,24 +470,9 @@ final class MarkdownPanelPointerObserverView: NSView {
         }
     }
 
-    // This overlay never takes part in hit-testing. It only ever did so while
-    // the first-click-focus preference was on, and that preference is gone.
+    // This overlay never takes part in hit-testing; it observes left-clicks through a local
+    // event monitor so markdown text selection and links keep their native handling.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override func mouseDown(with event: NSEvent) {
-        onPointerDown?()
-        forwardedMouseTarget = forwardedTarget(for: event)
-        forwardedMouseTarget?.mouseDown(with: event)
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        forwardedMouseTarget?.mouseDragged(with: event)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        forwardedMouseTarget?.mouseUp(with: event)
-        forwardedMouseTarget = nil
-    }
 
     func shouldHandle(_ event: NSEvent) -> Bool {
         guard event.type == .leftMouseDown,
@@ -491,25 +496,5 @@ final class MarkdownPanelPointerObserverView: NSView {
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
             self?.handleEventIfNeeded(event) ?? event
         }
-    }
-
-    private func forwardedTarget(for event: NSEvent) -> NSView? {
-        guard let window else {
-#if DEBUG
-            NSLog("MarkdownPanelPointerObserverView.forwardedTarget skipped, window=0 contentView=0")
-#endif
-            return nil
-        }
-        guard let contentView = window.contentView else {
-#if DEBUG
-            NSLog("MarkdownPanelPointerObserverView.forwardedTarget skipped, window=1 contentView=0")
-#endif
-            return nil
-        }
-        isHidden = true
-        defer { isHidden = false }
-        let point = contentView.convert(event.locationInWindow, from: nil)
-        let target = contentView.hitTest(point)
-        return target === self ? nil : target
     }
 }

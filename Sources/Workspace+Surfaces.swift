@@ -12,6 +12,39 @@ import Network
 import CoreText
 
 extension Workspace {
+    /// Send route for a review panel's comments. Resolves the workspace currently holding the
+    /// source terminal at send time (same lookup as `installReviewPanelSubscription`) rather
+    /// than capturing the creating or restoring workspace, so comments keep delivering after
+    /// either panel moves. Falls back to this workspace when the source can't be located.
+    /// Bonsplit selects every tab it creates. Re-selects `tabId` in its pane and restores the
+    /// previously focused pane without running the select/focus delegate side effects, so a
+    /// background tab creation leaves selection and focus exactly as they were.
+    func restorePaneSelectionWithoutFocus(_ tabId: TabID) {
+        let focusedPaneId = bonsplitController.focusedPaneId
+        suppressSelectionDelegateCallbacks = true
+        defer { suppressSelectionDelegateCallbacks = false }
+        bonsplitController.selectTab(tabId)
+        if let focusedPaneId {
+            bonsplitController.focusPane(focusedPaneId)
+        }
+    }
+
+    /// Same predicate as the `shouldSplitPane` delegate veto, checked before a split builds its
+    /// panel so a vetoed split never constructs (and leaks) one.
+    var canAddSplitPane: Bool {
+        isRestoringSessionLayout || bonsplitController.allPaneIds.count < SplitPolicy.maxPanesPerWorkspace
+    }
+
+    func makeReviewSendClosure(for reviewPanel: ReviewPanel) -> (String) -> Bool {
+        { [weak self, weak reviewPanel] text in
+            guard let reviewPanel else { return false }
+            guard let owningWorkspace = Workspace.workspaceOwning(surfaceId: reviewPanel.sourceSurfaceId) ?? self else {
+                return false
+            }
+            return owningWorkspace.sendReviewComments(sourceSurfaceId: reviewPanel.sourceSurfaceId, text: text)
+        }
+    }
+
     func seedTerminalInheritanceFontPoints(
         panelId: UUID,
         configTemplate: ProgramaSurfaceConfigTemplate?
@@ -203,6 +236,8 @@ extension Workspace {
         }
 
         guard let paneId = sourcePaneId else { return nil }
+        // Veto at the pane cap before constructing a panel (a BrowserPanel builds a WKWebView).
+        guard canAddSplitPane else { return nil }
         let inheritedConfig = inheritedTerminalConfig(preferredPanelId: panelId, inPane: paneId)
 
         // Inherit working directory: prefer the source panel's reported cwd,
@@ -265,6 +300,7 @@ extension Workspace {
             panelTitles.removeValue(forKey: newPanel.id)
             surfaceIdToPanelId.removeValue(forKey: newTab.id)
             terminalInheritanceFontPointsByPanelId.removeValue(forKey: newPanel.id)
+            newPanel.close()
             return nil
         }
 
@@ -309,9 +345,12 @@ extension Workspace {
         workingDirectory: String? = nil,
         startupEnvironment: [String: String] = [:],
         reviveDescriptor: TerminalSurfaceReviveDescriptor? = nil,
-        pendingScrollbackSeedText: String? = nil
+        pendingScrollbackSeedText: String? = nil,
+        selectInPane: Bool = true
     ) -> TerminalPanel? {
-        let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
+        // `selectInPane: false` keeps the pane's selected tab (and therefore focus) unchanged.
+        let shouldFocusNewTab = selectInPane && (focus ?? (bonsplitController.focusedPaneId == paneId))
+        let previousSelectedTabId = selectInPane ? nil : bonsplitController.selectedTab(inPane: paneId)?.id
         let previousFocusedPanelId = focusedPanelId
         let previousHostedView = focusedTerminalPanel?.hostedView
 
@@ -345,10 +384,14 @@ extension Workspace {
             panels.removeValue(forKey: newPanel.id)
             panelTitles.removeValue(forKey: newPanel.id)
             terminalInheritanceFontPointsByPanelId.removeValue(forKey: newPanel.id)
+            newPanel.close()
             return nil
         }
 
         surfaceIdToPanelId[newTabId] = newPanel.id
+        if let previousSelectedTabId {
+            restorePaneSelectionWithoutFocus(previousSelectedTabId)
+        }
 
         // bonsplit's createTab may not reliably emit didSelectTab, and its internal selection
         // updates can be deferred. Force a deterministic selection + focus path so the new
@@ -396,6 +439,8 @@ extension Workspace {
         }
 
         guard let paneId = sourcePaneId else { return nil }
+        // Veto at the pane cap before constructing a panel (a BrowserPanel builds a WKWebView).
+        guard canAddSplitPane else { return nil }
 
         // Create browser panel
         let browserPanel = BrowserPanel(
@@ -429,6 +474,7 @@ extension Workspace {
             surfaceIdToPanelId.removeValue(forKey: newTab.id)
             panels.removeValue(forKey: browserPanel.id)
             panelTitles.removeValue(forKey: browserPanel.id)
+            browserPanel.close()
             return nil
         }
         setPreferredBrowserProfileID(browserPanel.profileID)
@@ -465,9 +511,12 @@ extension Workspace {
         focus: Bool? = nil,
         insertAtEnd: Bool = false,
         preferredProfileID: UUID? = nil,
-        bypassInsecureHTTPHostOnce: String? = nil
+        bypassInsecureHTTPHostOnce: String? = nil,
+        selectInPane: Bool = true
     ) -> BrowserPanel? {
-        let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
+        // `selectInPane: false` keeps the pane's selected tab (and therefore focus) unchanged.
+        let shouldFocusNewTab = selectInPane && (focus ?? (bonsplitController.focusedPaneId == paneId))
+        let previousSelectedTabId = selectInPane ? nil : bonsplitController.selectedTab(inPane: paneId)?.id
         let sourcePanelId = effectiveSelectedPanelId(inPane: paneId)
         let previousFocusedPanelId = focusedPanelId
         let previousHostedView = focusedTerminalPanel?.hostedView
@@ -495,6 +544,7 @@ extension Workspace {
         ) else {
             panels.removeValue(forKey: browserPanel.id)
             panelTitles.removeValue(forKey: browserPanel.id)
+            browserPanel.close()
             return nil
         }
 
@@ -507,7 +557,10 @@ extension Workspace {
         // is treated as a same-position no-op once the moved tab's own removal is accounted for).
         if insertAtEnd {
             let targetIndex = bonsplitController.tabs(inPane: paneId).count
-            _ = bonsplitController.reorderTab(newTabId, toIndex: targetIndex)
+            _ = bonsplitController.reorderTab(newTabId, toIndex: targetIndex, selectMovedTab: selectInPane)
+        }
+        if let previousSelectedTabId {
+            restorePaneSelectionWithoutFocus(previousSelectedTabId)
         }
 
         // Match terminal behavior: enforce deterministic selection + focus.
@@ -547,6 +600,8 @@ extension Workspace {
         }
 
         guard let paneId = sourcePaneId else { return nil }
+        // Veto at the pane cap before constructing a panel (a BrowserPanel builds a WKWebView).
+        guard canAddSplitPane else { return nil }
 
         let markdownPanel = MarkdownPanel(workspaceId: id, filePath: filePath)
         panels[markdownPanel.id] = markdownPanel
@@ -569,6 +624,7 @@ extension Workspace {
             surfaceIdToPanelId.removeValue(forKey: newTab.id)
             panels.removeValue(forKey: markdownPanel.id)
             panelTitles.removeValue(forKey: markdownPanel.id)
+            markdownPanel.close()
             return nil
         }
 
@@ -610,6 +666,8 @@ extension Workspace {
         }
 
         guard let paneId = sourcePaneId else { return nil }
+        // Veto at the pane cap before constructing a panel (a BrowserPanel builds a WKWebView).
+        guard canAddSplitPane else { return nil }
 
         guard let directory = normalizedSidebarDirectory(panelDirectories[panelId] ?? currentDirectory) else {
             return nil
@@ -621,17 +679,7 @@ extension Workspace {
             mode: mode,
             baseBranch: baseBranch
         )
-        reviewPanel.sendToSourceSurface = { [weak self, weak reviewPanel] text in
-            guard let reviewPanel else { return false }
-            // Resolve the workspace currently holding the source terminal at send time (same
-            // lookup as `installReviewPanelSubscription`) rather than capturing the creating
-            // workspace, so comments keep delivering after either panel moves. Fall back to the
-            // creating workspace when the source can't be located.
-            guard let owningWorkspace = Workspace.workspaceOwning(surfaceId: reviewPanel.sourceSurfaceId) ?? self else {
-                return false
-            }
-            return owningWorkspace.sendReviewComments(sourceSurfaceId: reviewPanel.sourceSurfaceId, text: text)
-        }
+        reviewPanel.sendToSourceSurface = makeReviewSendClosure(for: reviewPanel)
         panels[reviewPanel.id] = reviewPanel
         panelTitles[reviewPanel.id] = reviewPanel.displayTitle
         updatePanelDirectory(panelId: reviewPanel.id, directory: directory)
@@ -654,6 +702,7 @@ extension Workspace {
             panels.removeValue(forKey: reviewPanel.id)
             panelTitles.removeValue(forKey: reviewPanel.id)
             panelDirectories.removeValue(forKey: reviewPanel.id)
+            reviewPanel.close()
             return nil
         }
 
@@ -701,6 +750,7 @@ extension Workspace {
         ) else {
             panels.removeValue(forKey: markdownPanel.id)
             panelTitles.removeValue(forKey: markdownPanel.id)
+            markdownPanel.close()
             return nil
         }
 

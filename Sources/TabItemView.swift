@@ -343,13 +343,6 @@ struct TabItemView: View, Equatable {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
-    // Shared by the metadata/log/progress row transitions below: they insert and
-    // remove with a slide-down under normal motion, and a plain dissolve when
-    // Reduce Motion is on.
-    private var reduceMotionAwareRowTransition: AnyTransition {
-        reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top))
-    }
-
     var body: some View {
         let _ = workspaceObservationGeneration
         let closeWorkspaceTooltip = String(localized: "sidebar.closeWorkspace.tooltip", defaultValue: "Close Workspace")
@@ -560,7 +553,7 @@ struct TabItemView: View, Equatable {
                         isActive: usesInvertedActiveForeground,
                         onFocus: { updateSelection() }
                     )
-                    .transition(reduceMotionAwareRowTransition)
+                    .transition(.opacity)
                 }
                 if !metadataBlocks.isEmpty {
                     SidebarMetadataMarkdownBlocks(
@@ -568,7 +561,7 @@ struct TabItemView: View, Equatable {
                         isActive: usesInvertedActiveForeground,
                         onFocus: { updateSelection() }
                     )
-                    .transition(reduceMotionAwareRowTransition)
+                    .transition(.opacity)
                 }
             }
 
@@ -584,7 +577,7 @@ struct TabItemView: View, Equatable {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                .transition(reduceMotionAwareRowTransition)
+                .transition(.opacity)
             }
 
             // Progress bar
@@ -608,7 +601,7 @@ struct TabItemView: View, Equatable {
                             .lineLimit(1)
                     }
                 }
-                .transition(reduceMotionAwareRowTransition)
+                .transition(.opacity)
             }
 
             // Branch + directory row
@@ -714,9 +707,9 @@ struct TabItemView: View, Equatable {
                 .lineLimit(1)
             }
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: tab.logEntries.count)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: tab.progress != nil)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: tab.metadataBlocks.count)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: tab.logEntries.count)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: tab.progress != nil)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: tab.metadataBlocks.count)
         .padding(.leading, showsWorktreeBadge ? 14 : 0)
         .padding(.horizontal, rowMetrics.horizontalPadding)
         .padding(.vertical, rowMetrics.verticalPadding)
@@ -1500,7 +1493,7 @@ struct TabItemView: View, Equatable {
     }
 
     private var pullRequestForegroundColor: Color {
-        isActive ? .white.opacity(0.75) : .secondary
+        activeSecondaryColor(0.75)
     }
 
     private func openPullRequestLink(_ url: URL) {

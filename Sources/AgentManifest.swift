@@ -87,13 +87,14 @@ extension AgentManifest {
     /// always calls this off-main — see AgentScreenDetectionEngine.swift).
     func classify(text: String) -> ClassificationResult? {
         guard !text.isEmpty else { return nil }
+        let cappedText = Self.cappedSample(text)
         let orderedStates = states.sorted { $0.priority > $1.priority }
         for stateRule in orderedStates {
-            let anchoredText = Self.tailLines(text, maxLines: stateRule.anchorLastNLines)
+            let anchoredText = Self.tailLines(cappedText, maxLines: stateRule.anchorLastNLines)
             guard !anchoredText.isEmpty else { continue }
             let range = NSRange(anchoredText.startIndex..<anchoredText.endIndex, in: anchoredText)
             for pattern in stateRule.patterns {
-                guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+                guard let regex = Self.compiledRegex(pattern) else { continue }
                 if regex.firstMatch(in: anchoredText, options: [], range: range) != nil {
                     return ClassificationResult(bucket: stateRule.bucket, matchedPattern: pattern)
                 }
@@ -102,11 +103,61 @@ extension AgentManifest {
         return nil
     }
 
+    /// True when any `recognize.screenPatterns` entry matches `text` (Phase A recognition).
+    func recognizes(text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let cappedText = Self.cappedSample(text)
+        let range = NSRange(cappedText.startIndex..<cappedText.endIndex, in: cappedText)
+        return recognize.screenPatterns.contains { pattern in
+            Self.compiledRegex(pattern)?.firstMatch(in: cappedText, options: [], range: range) != nil
+        }
+    }
+
+    /// Every pattern (recognition and state rules) that fails to compile. A manifest with any
+    /// invalid pattern is rejected at load (`AgentManifestLoader`), so it never reaches sampling.
+    func invalidPatterns() -> [String] {
+        let all = recognize.screenPatterns + states.flatMap(\.patterns)
+        return all.filter { Self.compiledRegex($0) == nil }
+    }
+
+    /// Upper bound on the text one rule matches against. Agent state lives at the bottom of the
+    /// screen, so an oversized sample keeps its tail. Bounds regex cost per sample.
+    static let maxSampleUTF8Bytes = 64 * 1024
+
+    static func cappedSample(_ text: String) -> String {
+        guard text.utf8.count > maxSampleUTF8Bytes else { return text }
+        // A scalar split at the cut decodes to U+FFFD, which no pattern relies on.
+        return String(decoding: text.utf8.suffix(maxSampleUTF8Bytes), as: UTF8.self)
+    }
+
+    /// Compiles each distinct pattern once per process; the sampling loop runs every tick.
+    static func compiledRegex(_ pattern: String) -> NSRegularExpression? {
+        AgentManifestRegexCache.shared.regex(for: pattern)
+    }
+
     private static func tailLines(_ text: String, maxLines: Int) -> String {
         guard maxLines > 0 else { return text }
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         guard lines.count > maxLines else { return text }
         return lines.suffix(maxLines).joined(separator: "\n")
+    }
+}
+
+/// Process-wide compiled-regex cache for manifest patterns. `NSRegularExpression` is immutable
+/// and safe to share across threads once built. Invalid patterns cache as a miss.
+final class AgentManifestRegexCache: @unchecked Sendable {
+    static let shared = AgentManifestRegexCache()
+
+    private let lock = NSLock()
+    private var compiled: [String: NSRegularExpression?] = [:]
+
+    func regex(for pattern: String) -> NSRegularExpression? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = compiled[pattern] { return cached }
+        let regex = try? NSRegularExpression(pattern: pattern)
+        compiled[pattern] = .some(regex)
+        return regex
     }
 }
 
