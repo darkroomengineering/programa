@@ -1909,6 +1909,39 @@ class TabManager: ObservableObject {
         tabs = orderedIds.compactMap { byId[$0] }
     }
 
+    /// Move Up/Down: swaps the workspace and its children with the neighbouring sibling and
+    /// its children, so the order stays canonical and `canonicalizeHierarchyOrderIfNeeded`
+    /// does not undo the move. A workspace with no sibling in that direction stays put.
+    @discardableResult
+    func moveWorkspaceAmongSiblings(tabId: UUID, by delta: Int) -> Bool {
+        guard delta == 1 || delta == -1,
+              let index = tabs.firstIndex(where: { $0.id == tabId }) else { return false }
+        let presentIds = Set(tabs.map(\.id))
+        func parent(_ workspace: Workspace) -> UUID? {
+            hierarchyParentId(of: workspace).flatMap { presentIds.contains($0) ? $0 : nil }
+        }
+        let workspace = tabs[index]
+        let siblingIndices = tabs.indices.filter {
+            parent(tabs[$0]) == parent(workspace) && tabs[$0].isPinned == workspace.isPinned
+        }
+        guard let position = siblingIndices.firstIndex(of: index),
+              siblingIndices.indices.contains(position + delta) else { return false }
+        let upper = min(index, siblingIndices[position + delta])
+        let lower = max(index, siblingIndices[position + delta])
+        var members: Set<UUID> = [tabs[lower].id]
+        var lowerEnd = lower + 1
+        while lowerEnd < tabs.count, let parentId = parent(tabs[lowerEnd]), members.contains(parentId) {
+            members.insert(tabs[lowerEnd].id)
+            lowerEnd += 1
+        }
+        var reordered = tabs
+        let lowerBlock = Array(reordered[lower..<lowerEnd])
+        reordered.removeSubrange(lower..<lowerEnd)
+        reordered.insert(contentsOf: lowerBlock, at: upper)
+        tabs = reordered
+        return true
+    }
+
     @discardableResult
     func reorderWorkspace(tabId: UUID, toIndex targetIndex: Int) -> Bool {
         guard let currentIndex = tabs.firstIndex(where: { $0.id == tabId }) else { return false }

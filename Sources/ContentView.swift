@@ -5295,11 +5295,8 @@ struct ContentView: View {
     }
 
     private func moveSelectedWorkspace(by delta: Int) {
-        guard let workspace = tabManager.selectedWorkspace,
-              let currentIndex = selectedWorkspaceIndex() else { return }
-        let targetIndex = currentIndex + delta
-        guard targetIndex >= 0, targetIndex < tabManager.tabs.count else { return }
-        _ = tabManager.reorderWorkspace(tabId: workspace.id, toIndex: targetIndex)
+        guard let workspace = tabManager.selectedWorkspace else { return }
+        tabManager.moveWorkspaceAmongSiblings(tabId: workspace.id, by: delta)
         tabManager.selectWorkspace(workspace)
     }
 

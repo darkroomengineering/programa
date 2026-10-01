@@ -212,4 +212,26 @@ final class NotificationReorderHierarchyTests: XCTestCase {
         manager.moveTabToTopForNotification(c.id)
         XCTAssertEqual(manager.tabs.map(\.id), [b.id, c.id, a.id])
     }
+
+    func testMoveDownCarriesChildrenPastTheNextSibling() {
+        let (manager, a, b, c) = makeManager()
+        c.agentParentWorkspaceId = a.id
+        manager.canonicalizeHierarchyOrderIfNeeded()
+
+        XCTAssertTrue(manager.moveWorkspaceAmongSiblings(tabId: a.id, by: 1))
+        XCTAssertEqual(manager.tabs.map(\.id), [b.id, a.id, c.id], "Move Down must not be undone by the hierarchy order")
+
+        XCTAssertTrue(manager.moveWorkspaceAmongSiblings(tabId: a.id, by: -1))
+        XCTAssertEqual(manager.tabs.map(\.id), [a.id, c.id, b.id])
+    }
+
+    func testOnlyChildCannotMoveOutOfItsParent() {
+        let (manager, a, b, c) = makeManager()
+        c.agentParentWorkspaceId = a.id
+        manager.canonicalizeHierarchyOrderIfNeeded()
+
+        XCTAssertFalse(manager.moveWorkspaceAmongSiblings(tabId: c.id, by: -1))
+        XCTAssertFalse(manager.moveWorkspaceAmongSiblings(tabId: c.id, by: 1))
+        XCTAssertEqual(manager.tabs.map(\.id), [a.id, c.id, b.id])
+    }
 }
