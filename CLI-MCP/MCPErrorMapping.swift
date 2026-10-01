@@ -3,7 +3,7 @@ import MCP
 
 /// Translates `MCPSocketBridge` failures into an MCP tool-call error.
 ///
-/// The v2 socket protocol is NOT JSON-RPC 2.0 (docs/plans/mcp-server.md §1.2):
+/// The v2 socket protocol is NOT JSON-RPC 2.0 (docs/socket-api.md):
 /// its errors are a flat `{"code":..., "message":...}` object, and a legacy
 /// pre-JSON `ERROR: ...` line can appear before the JSON protocol engages.
 /// Neither shape is passed through raw -- both are mapped here onto a

@@ -401,7 +401,7 @@ from (`git checkout 903027ccef -- <paths>`) and a "what we learned" section (not
 - **`applescript.md`** — AppleScript support (`Sources/AppleScriptSupport.swift`,
   `Resources/programa.sdef`).
 - **`browser-data-import.md`** — browser data import wizard.
-- **`browser-developer-tools.md`** — **not actually removed**; scoped for the same pass but the
+- **`browser-developer-tools.md`** (in `docs/plans/`): **not actually removed**; scoped for the same pass but the
   implementer stopped and reported back instead of guessing. The hosted inspector dock is still
   live (`Sources/Panels/InspectorDock.swift`).
 - **`browser-extensions.md`** — browser extension support

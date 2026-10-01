@@ -603,7 +603,10 @@ final class BrowserPanel: Panel, ObservableObject {
                     .switchToLatest()
                     .sink { [weak self] needle in
                         guard let self else { return }
-                        NSLog("Find: browser needle updated panel=%@ needle=%@", self.id.uuidString, needle)
+#if DEBUG
+                        // The needle is user text; never send it to the unified system log in Release.
+                        dlog("find.browser.needle panel=\(self.id.uuidString.prefix(5)) length=\(needle.count)")
+#endif
                         self.executeFindSearch(needle)
                     }
             } else if oldValue != nil {
@@ -665,6 +668,7 @@ final class BrowserPanel: Panel, ObservableObject {
     @Published var isDesignModeActive: Bool = false
     var designModeMessageHandler: DesignModeMessageHandler?
     var pendingDesignModeReturnTargetPanelId: UUID?
+    var pendingDesignModeReturnTargetArmedAt: TimeInterval?
     var passkeyHandoffMessageHandler: PasskeyHandoffMessageHandler?
     // At most one handoff prompt per navigation — reset when a new provisional
     // navigation starts (see configureNavigationDelegateCallbacks).
@@ -921,6 +925,9 @@ final class BrowserPanel: Panel, ObservableObject {
         // Enable developer extras (DevTools)
         configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         configuration.preferences.isElementFullscreenEnabled = true
+        // WebKit defaults this to true on macOS; false matches Safari's pop-up blocking, so
+        // window.open only works inside a user gesture.
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
 
         // Enable JavaScript
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -1006,6 +1013,7 @@ final class BrowserPanel: Panel, ObservableObject {
             // Invalidate element refs (@eN) allocated on the previous page (M6a) — this is the
             // single choke point for a committed main-frame navigation.
             TerminalController.shared.v2BrowserBumpNavigationGeneration(forSurface: self.id)
+            self.resetDesignModeForMainFrameCommit()
         }
         navigationDelegate.didFinish = { [weak self] webView in
             Task { @MainActor [weak self] in
@@ -1745,10 +1753,23 @@ final class BrowserPanel: Panel, ObservableObject {
 
     // MARK: - Popup window management
 
+    /// Popups (including nested ones) a single panel may keep open; further requests are denied.
+    static let maxOpenPopups = 8
+
+    var openPopupCount: Int {
+        popupControllers.reduce(0) { $0 + 1 + $1.descendantPopupCount }
+    }
+
     func createFloatingPopup(
         configuration: WKWebViewConfiguration,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
+        guard openPopupCount < Self.maxOpenPopups else {
+#if DEBUG
+            dlog("popup.blocked reason=cap count=\(openPopupCount) max=\(Self.maxOpenPopups)")
+#endif
+            return nil
+        }
         let controller = BrowserPopupWindowController(
             configuration: configuration,
             windowFeatures: windowFeatures,

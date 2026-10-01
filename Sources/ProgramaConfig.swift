@@ -524,6 +524,13 @@ final class ProgramaConfigStore: ObservableObject {
             NSLog("[ProgramaConfig] JSONC preprocessing error at %@: %@", path, String(describing: error))
             return nil
         }
+        // The trust digest and this decoder are different parsers; a repeated key could be
+        // approved under one value and executed under the other. See
+        // `JSONCParser.containsDuplicateObjectKeys`.
+        guard !JSONCParser.containsDuplicateObjectKeys(sanitized) else {
+            NSLog("[ProgramaConfig] rejecting %@: an object repeats a key", path)
+            return nil
+        }
 
         do {
             return try JSONDecoder().decode(ProgramaConfigFile.self, from: sanitized)

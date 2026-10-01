@@ -185,6 +185,9 @@ extension TerminalController {
             guard let focusedPanelId = ws.focusedPanelId else {
                 return .err(code: "not_found", message: "No focused surface to split", data: nil)
             }
+            if let limitError = v2PaneLimitError(for: ws) {
+                return limitError
+            }
 
             let newPanelId: UUID?
             if panelType == .browser {
@@ -533,7 +536,7 @@ extension TerminalController {
                     workspace: sourceWorkspace,
                     paneId: $0,
                     index: sourceIndex,
-                    focus: true
+                    focus: v2FocusAllowed()
                 )
             }
 

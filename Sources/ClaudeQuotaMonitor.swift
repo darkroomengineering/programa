@@ -307,6 +307,12 @@ struct ClaudeProviderUsageFetcher: ProviderUsageFetching {
         timeout: TimeInterval,
         now: Date
     ) async -> ProviderUsageResult {
+        // DECISION D2: usage numbers come only from the statusline cache file, which only some
+        // setups write. Without it there is nothing to show, so report the provider as
+        // unavailable (the footer omits it) without spawning `claude auth status`.
+        guard FileManager.default.fileExists(atPath: cacheURL.path) else {
+            return .unavailable(.claude)
+        }
         switch await authStatus(executableURL: executableURL, timeout: timeout) {
         case .loggedOut:
             return .unavailable(.claude)

@@ -21,7 +21,6 @@ struct SidebarQuotaPresentation {
 
     let availableSnapshots: [ProviderUsageSnapshot]
     let failures: [Failure]
-    let unavailableProviders: [ProviderUsageProvider] = []
 
     var showsEmptyState: Bool {
         availableSnapshots.isEmpty && failures.isEmpty
@@ -41,8 +40,6 @@ struct SidebarQuotaPresentation {
 
 /// Provider usage content hosted by the sidebar footer's on-demand popover.
 struct SidebarQuotaFooter: View {
-    static let showsManualRefreshControl = false
-
     @ObservedObject var store: ProviderUsageStore
 
     private var presentation: SidebarQuotaPresentation {

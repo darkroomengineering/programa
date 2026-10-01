@@ -48,6 +48,13 @@ final class MarkdownPanel: Panel, ObservableObject {
     /// Whether the file has been deleted or is unreadable.
     @Published private(set) var isFileUnavailable: Bool = false
 
+    /// True when the file is larger than `maxDisplayBytes` and only its first part is shown.
+    @Published private(set) var isTruncated: Bool = false
+
+    /// Largest prefix of the file that is read and rendered. A multi-megabyte file would
+    /// otherwise stall the main thread in the markdown renderer.
+    nonisolated static let maxDisplayBytes = 2 * 1024 * 1024
+
     /// Token incremented to trigger focus flash animation.
     @Published private(set) var focusFlashToken: Int = 0
 
@@ -67,6 +74,14 @@ final class MarkdownPanel: Panel, ObservableObject {
     private static let maxReattachAttempts = 6
     /// Delay between reattach attempts (total window: attempts * delay = 3s).
     private static let reattachDelay: TimeInterval = 0.5
+    /// Content-change events inside this window collapse into one reload (editors and
+    /// generators often write a file in many small chunks).
+    private nonisolated static let reloadCoalesceDelay: TimeInterval = 0.15
+
+    /// Bumped by every load request; a read that finishes after a newer request is dropped.
+    private var loadGeneration: Int = 0
+    /// Pending coalesced reload, only touched on `watchQueue`.
+    private nonisolated(unsafe) var pendingReload: DispatchWorkItem?
 
     // MARK: - Find state plumbing
 
@@ -83,7 +98,7 @@ final class MarkdownPanel: Panel, ObservableObject {
 
         loadFileContent()
         startFileWatcher()
-        if isFileUnavailable && fileWatchSource == nil {
+        if fileWatchSource == nil {
             // Session restore can create a panel before the file is recreated.
             // Retry briefly so atomic-rename recreations can reconnect.
             scheduleReattach(attempt: 1)
@@ -201,28 +216,70 @@ final class MarkdownPanel: Panel, ObservableObject {
 
     // MARK: - File I/O
 
+    /// Reads the file off the main thread and publishes the result when it lands. Only the
+    /// newest request applies, so an older slow read never overwrites newer content.
     private func loadFileContent() {
         guard !isClosed else { return }
-        do {
-            let newContent = try String(contentsOfFile: filePath, encoding: .utf8)
-            content = newContent
-            isFileUnavailable = false
-        } catch {
-            // Fallback: try ISO Latin-1, which accepts all 256 byte values,
-            // covering legacy encodings like Windows-1252.
-            if let data = FileManager.default.contents(atPath: filePath),
-               let decoded = String(data: data, encoding: .isoLatin1) {
-                content = decoded
-                isFileUnavailable = false
-            } else {
-                content = ""
-                isFileUnavailable = true
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let path = filePath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Self.readDisplayableContent(atPath: path, maxBytes: Self.maxDisplayBytes)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.applyLoadedContent(result, generation: generation)
+                }
             }
+        }
+    }
+
+    private func applyLoadedContent(_ result: LoadedContent?, generation: Int) {
+        guard !isClosed, generation == loadGeneration else { return }
+        if let result {
+            content = result.text
+            isTruncated = result.isTruncated
+            isFileUnavailable = false
+        } else {
+            content = ""
+            isTruncated = false
+            isFileUnavailable = true
         }
         if let state = searchState {
             state.searchText = isFileUnavailable ? "" : MarkdownDocumentSearch.text(from: content)
             recomputeMatches()
         }
+    }
+
+    struct LoadedContent: Equatable, Sendable {
+        let text: String
+        let isTruncated: Bool
+    }
+
+    /// Returns the first `maxBytes` of a regular file (symlinks followed) decoded as UTF-8,
+    /// falling back to ISO Latin-1, which accepts all 256 byte values and covers legacy
+    /// encodings like Windows-1252. Returns nil for a missing, unreadable or non-regular file
+    /// (a FIFO or device would block or never end).
+    nonisolated static func readDisplayableContent(atPath path: String, maxBytes: Int) -> LoadedContent? {
+        var info = stat()
+        guard stat(path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
+              let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: maxBytes + 1) ?? Data() else { return nil }
+        let isTruncated = data.count > maxBytes
+        let bytes = isTruncated ? data.prefix(maxBytes) : data
+        if let text = String(data: bytes, encoding: .utf8) {
+            return LoadedContent(text: text, isTruncated: isTruncated)
+        }
+        if isTruncated {
+            // The cut can land inside a multi-byte scalar; drop at most 3 trailing bytes.
+            for trim in 1...3 where bytes.count > trim {
+                if let text = String(data: bytes.dropLast(trim), encoding: .utf8) {
+                    return LoadedContent(text: text, isTruncated: true)
+                }
+            }
+        }
+        guard let text = String(data: bytes, encoding: .isoLatin1) else { return nil }
+        return LoadedContent(text: text, isTruncated: isTruncated)
     }
 
     // MARK: - File watcher via DispatchSource
@@ -243,6 +300,8 @@ final class MarkdownPanel: Panel, ObservableObject {
             guard let self else { return }
             let flags = source.data
             if flags.contains(.delete) || flags.contains(.rename) {
+                self.pendingReload?.cancel()
+                self.pendingReload = nil
                 // File was deleted or renamed. The old file descriptor points to
                 // a stale inode, so we must always stop and reattach the watcher
                 // even if the new file is already readable (atomic save case).
@@ -250,20 +309,26 @@ final class MarkdownPanel: Panel, ObservableObject {
                     guard !self.isClosed else { return }
                     self.stopFileWatcher()
                     self.loadFileContent()
-                    if self.isFileUnavailable {
+                    // File already replaced — reattach to the new inode immediately.
+                    if FileManager.default.fileExists(atPath: self.filePath) {
+                        self.startFileWatcher()
+                    }
+                    if self.fileWatchSource == nil {
                         // File not yet replaced — retry until it reappears.
                         self.scheduleReattach(attempt: 1)
-                    } else {
-                        // File already replaced — reattach to the new inode immediately.
-                        self.startFileWatcher()
                     }
                 }
             } else {
-                // Content changed — reload.
-                DispatchQueue.main.async {
-                    guard !self.isClosed else { return }
-                    self.loadFileContent()
+                // Content changed — reload once the burst settles.
+                self.pendingReload?.cancel()
+                let reload = DispatchWorkItem { [weak self] in
+                    DispatchQueue.main.async {
+                        guard let self, !self.isClosed else { return }
+                        self.loadFileContent()
+                    }
                 }
+                self.pendingReload = reload
+                self.watchQueue.asyncAfter(deadline: .now() + Self.reloadCoalesceDelay, execute: reload)
             }
         }
 
@@ -285,7 +350,6 @@ final class MarkdownPanel: Panel, ObservableObject {
             DispatchQueue.main.async {
                 guard !self.isClosed else { return }
                 if FileManager.default.fileExists(atPath: self.filePath) {
-                    self.isFileUnavailable = false
                     self.loadFileContent()
                     self.startFileWatcher()
                 } else {

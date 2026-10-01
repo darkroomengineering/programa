@@ -228,11 +228,13 @@ extension TerminalController {
     /// `blocked`, or `any_change`). Exactly one of `pattern` / `exit` / `agent_state` must be
     /// provided.
     nonisolated func v2SurfaceWait(params: [String: Any]) -> V2CallResult {
-        let timeoutMs = max(1, v2Int(params, "timeout_ms") ?? v2Int(params, "timeout") ?? 30_000)
+        let requestedTimeoutMs = v2Int(params, "timeout_ms") ?? v2Int(params, "timeout") ?? 30_000
+        let timeoutMs = min(Self.watchedWaitMaxTimeoutMs, max(1, requestedTimeoutMs))
         let timeout = Double(timeoutMs) / 1000.0
         let deadline = Date().addingTimeInterval(timeout)
 
-        let patternRaw = v2String(params, "pattern")
+        // Raw (untrimmed): leading/trailing whitespace can be part of the regex.
+        let patternRaw = v2RawString(params, "pattern").flatMap { $0.isEmpty ? nil : $0 }
         let waitForExit = v2Bool(params, "exit") ?? false
         let agentStateRaw = v2String(params, "agent_state")
 
@@ -340,6 +342,11 @@ extension TerminalController {
             }
 
             if waitForExit {
+                // Only terminals have a child process; a browser exit wait would never resolve.
+                guard panel is TerminalPanel else {
+                    setupError = .err(code: "invalid_params", message: "exit waits need a terminal surface", data: ["surface_id": surfaceId.uuidString])
+                    return
+                }
                 exitWaiterToken = SurfaceExitWaitRegistry.shared.addWaiter(surfaceId: surfaceId) {
                     exitSemaphore.signal()
                 }
@@ -385,6 +392,7 @@ extension TerminalController {
 
         func result(
             waited: Bool,
+            closed: Bool = false,
             matched: String? = nil,
             agentState: AgentActivityState?? = nil,
             agentStateSource: AgentStateSource?? = nil
@@ -407,6 +415,9 @@ extension TerminalController {
                 "condition": condition,
                 "waited": waited
             ]
+            if closed {
+                payload["outcome"] = "closed"
+            }
             if let matched {
                 payload["match"] = matched
             }
@@ -430,21 +441,28 @@ extension TerminalController {
             guard let exitWaiterToken else {
                 return .err(code: "internal_error", message: "Failed to register exit watcher", data: nil)
             }
-            if exitSemaphore.wait(timeout: .now() + timeout) == .success {
-                return result(waited: true)
-            }
+            let outcome = v2WatchedWait(exitSemaphore, until: deadline, surfaceId: surfaceIdOut)
+            if case .signaled = outcome { return result(waited: true) }
             SurfaceExitWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: exitWaiterToken)
-            return .err(code: "timeout", message: "Surface did not exit before timeout", data: ["timeout_ms": timeoutMs])
+            switch outcome {
+            case .surfaceClosed: return result(waited: true, closed: true)
+            case .clientGone: return v2ClientGoneError
+            case .signaled, .timedOut:
+                return .err(code: "timeout", message: "Surface did not exit before timeout", data: ["timeout_ms": timeoutMs])
+            }
         }
 
         if let agentStateCondition {
             guard let agentStateWaiterToken else {
                 return .err(code: "internal_error", message: "Failed to register agent_state watcher", data: nil)
             }
-            if agentStateSemaphore.wait(timeout: .now() + timeout) == .success {
+            let outcome = v2WatchedWait(agentStateSemaphore, until: deadline, surfaceId: surfaceIdOut)
+            if case .signaled = outcome {
                 return result(waited: true, agentState: resolvedAgentState, agentStateSource: resolvedAgentStateSource)
             }
             AgentStateWaitRegistry.shared.removeWaiter(surfaceId: surfaceIdOut, token: agentStateWaiterToken)
+            if case .surfaceClosed = outcome { return result(waited: true, closed: true) }
+            if case .clientGone = outcome { return v2ClientGoneError }
             return .err(
                 code: "timeout",
                 message: "Surface's agent_state did not reach '\(agentStateCondition.rawValue)' before timeout",
@@ -454,24 +472,22 @@ extension TerminalController {
 
         // Pattern condition: poll on this connection's own thread (not main, not a shared
         // command queue -- see file header) until the regex matches new state or the deadline
-        // passes. Each tick re-resolves the surface, so a surface closed mid-wait resolves to a
-        // clear error instead of hanging until timeout.
+        // passes. Each tick re-locates the surface by id in every window (not via the request's
+        // workspace selector, which may now point at another selected workspace), so a surface
+        // closed mid-wait resolves as `outcome: closed` instead of hanging until timeout.
         guard let regex else {
             return .err(code: "internal_error", message: "Missing compiled pattern", data: nil)
         }
         while Date() < deadline {
             Thread.sleep(forTimeInterval: Self.surfaceWaitPollInterval)
+            if v2SocketClientDisconnected() { return v2ClientGoneError }
 
             var tickError: V2CallResult?
             var tickMatch: String?
+            var surfaceClosed = false
             v2MainSync {
-                guard let tabManager = self.v2ResolveTabManager(params: params),
-                      let ws = self.v2ResolveWorkspace(params: params, tabManager: tabManager) else {
-                    tickError = .err(code: "not_found", message: "Workspace not found", data: nil)
-                    return
-                }
-                guard let panel = ws.panels[surfaceIdOut] else {
-                    tickError = .err(code: "not_found", message: "Surface closed while waiting", data: ["surface_id": surfaceIdOut.uuidString])
+                guard let panel = self.v2WorkspaceContaining(surfaceId: surfaceIdOut)?.panels[surfaceIdOut] else {
+                    surfaceClosed = true
                     return
                 }
                 guard let terminalPanel = panel as? TerminalPanel else {
@@ -483,6 +499,7 @@ extension TerminalController {
                 }
                 tickMatch = self.v2SurfaceWaitFirstMatch(regex: regex, in: text)
             }
+            if surfaceClosed { return result(waited: true, closed: true) }
             if let tickError { return tickError }
             if let tickMatch { return result(waited: true, matched: tickMatch) }
         }

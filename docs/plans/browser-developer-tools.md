@@ -1,9 +1,9 @@
 # Browser developer tools and the hosted inspector dock
 
-**Status: NOT removed.** This sub-feature was scoped for removal in the same pass as browser data
-import, browser extensions, and React Grab, but the implementer stopped before touching it and is
-reporting back instead of guessing. Nothing under this heading has been deleted; this doc records
-why, so the next attempt does not repeat the discovery work.
+**Status: kept.** This feature was scoped for removal in the 2026-09-02 reductive pass, together
+with browser data import, browser extensions, and React Grab, and was not removed. Nothing under
+this heading has been deleted; this doc records why, so a future removal does not repeat the
+discovery work.
 
 ## What it does (still present)
 

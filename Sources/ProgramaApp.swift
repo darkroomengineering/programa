@@ -101,13 +101,21 @@ struct programaApp: App {
         // Never returns if the holder-mode argument is present.
         SessionEscrowHolder.runIfRequested()
 
+        // First instance wins. Exits here when another instance is live, before any
+        // migration, configuration or history rotation below can touch shared state.
+        if !AppDelegate.detectRunningUnderXCTest(ProcessInfo.processInfo.environment) {
+            AppDelegate.deferToExistingInstanceIfNeeded()
+        }
+
         // Writing to a socket whose peer has hung up raises SIGPIPE, whose
         // default disposition kills the process. Programa's socket/CLI
         // clients can disconnect at any moment, so this must be ignored and
         // surfaced as an EPIPE write error instead.
         signal(SIGPIPE, SIG_IGN)
 
+#if DEBUG
         UITestLaunchManifest.applyIfPresent()
+#endif
 
         if SocketControlSettings.shouldBlockUntaggedDebugLaunch() {
             Self.terminateForMissingLaunchTag()
@@ -282,11 +290,13 @@ struct programaApp: App {
                     programaConfigStore.wireDirectoryTracking(tabManager: tabManager)
                     programaConfigStore.loadAll()
                     applyAppearance()
+#if DEBUG
                     if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_SHOW_SETTINGS"] == "1" {
                         DispatchQueue.main.async {
                             appDelegate.openPreferencesWindow(debugSource: "uiTestShowSettings")
                         }
                     }
+#endif
                 }
                 .onChange(of: appearanceMode) {
                     applyAppearance()
@@ -889,11 +899,8 @@ struct programaApp: App {
     }
 
     private func moveSelectedWorkspace(in manager: TabManager, by delta: Int) {
-        guard let workspace = manager.selectedWorkspace,
-              let currentIndex = selectedWorkspaceIndex(in: manager, workspaceId: workspace.id) else { return }
-        let targetIndex = currentIndex + delta
-        guard targetIndex >= 0, targetIndex < manager.tabs.count else { return }
-        _ = manager.reorderWorkspace(tabId: workspace.id, toIndex: targetIndex)
+        guard let workspace = manager.selectedWorkspace else { return }
+        manager.moveWorkspaceAmongSiblings(tabId: workspace.id, by: delta)
         manager.selectWorkspace(workspace)
     }
 
@@ -1653,7 +1660,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func writeFocusDiagnosticsIfNeeded(stage: String) {
+#if DEBUG
         let env = ProcessInfo.processInfo.environment
+#else
+        let env: [String: String] = [:]
+#endif
         guard let path = env["PROGRAMA_UI_TEST_DIAGNOSTICS_PATH"], !path.isEmpty else { return }
 
         var payload = loadFocusDiagnostics(at: path)
@@ -1966,8 +1977,14 @@ enum ProgramaRuntimeDebugCapture {
         let sessionID: String
     }
 
+    /// Release builds never read these variables: an inherited environment must not make the
+    /// app post terminal state to a URL.
     private static let configuration: Configuration? = {
+#if DEBUG
         let env = ProcessInfo.processInfo.environment
+#else
+        let env: [String: String] = [:]
+#endif
         guard let baseURLString = env["PROGRAMA_RUNTIME_DEBUG_BASE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               let baseURL = URL(string: baseURLString),
               let token = env["PROGRAMA_RUNTIME_DEBUG_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines),

@@ -1629,59 +1629,20 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
                 return
             }
 
-            // This class serializes access to the shared TerminalController. With the preflight
-            // response fully consumed above, a positive policy depth identifies request 2's
-            // parsed dispatch scope without making that internal signal part of the assertion.
-            var dispatchEntryObserved = false
-            let dispatchEntryDeadline = DispatchTime.now() + 1.0
-            while !dispatchEntryObserved {
-                if TerminalController.shouldSuppressSocketCommandActivation() {
-                    dispatchEntryObserved = true
-                    break
-                }
-
-                let now = DispatchTime.now().uptimeNanoseconds
-                guard now < dispatchEntryDeadline.uptimeNanoseconds else {
-                    observation.withLock {
-                        $0.errorDescription = "Timed out waiting for window.list to enter parsed dispatch"
-                    }
-                    break
-                }
-
-                let remainingNanoseconds = dispatchEntryDeadline.uptimeNanoseconds - now
-                let remainingMilliseconds = max(1, (remainingNanoseconds + 999_999) / 1_000_000)
-                var descriptor = pollfd(fd: clientFD, events: Int16(POLLIN), revents: 0)
-                let pollResult = Darwin.poll(
-                    &descriptor,
-                    1,
-                    Int32(min(UInt64(5), remainingMilliseconds))
+            // The socket-command scope is per-thread, so it cannot be observed from here. While
+            // main is blocked, window.list must stay unanswered for the whole observation window.
+            do {
+                try self.waitForReadable(
+                    from: clientFD,
+                    until: .now() + 0.5,
+                    operation: "checking for an off-main window.list response"
                 )
-                if pollResult > 0 {
-                    observation.withLock { $0.responseArrivedWhileBlocked = true }
-                    break
-                }
-                if pollResult < 0, errno != EINTR {
-                    observation.withLock {
-                        $0.errorDescription = String(describing: self.posixError("poll while waiting for parsed dispatch"))
-                    }
-                    break
-                }
-            }
-
-            if dispatchEntryObserved {
-                do {
-                    try self.waitForReadable(
-                        from: clientFD,
-                        until: .now() + 0.2,
-                        operation: "checking for an off-main window.list response"
-                    )
-                    observation.withLock { $0.responseArrivedWhileBlocked = true }
-                } catch let error as NSError
-                    where error.domain == NSPOSIXErrorDomain && error.code == Int(ETIMEDOUT) {
-                    observation.withLock { $0.confirmedNoResponseWhileBlocked = true }
-                } catch {
-                    observation.withLock { $0.errorDescription = String(describing: error) }
-                }
+                observation.withLock { $0.responseArrivedWhileBlocked = true }
+            } catch let error as NSError
+                where error.domain == NSPOSIXErrorDomain && error.code == Int(ETIMEDOUT) {
+                observation.withLock { $0.confirmedNoResponseWhileBlocked = true }
+            } catch {
+                observation.withLock { $0.errorDescription = String(describing: error) }
             }
 
             mainQueueRelease.signal()

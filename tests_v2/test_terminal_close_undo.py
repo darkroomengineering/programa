@@ -13,7 +13,9 @@ What this asserts, and why:
      just as undoable as an interactive one).
   2. Cmd+Shift+T (`debug.shortcut.simulate`) within the grace period restores the
      surface count and the *same* surface id reappears -- proving the live panel was
-     reattached rather than a fresh terminal being spawned.
+     reattached rather than a fresh terminal being spawned. The output of a command
+     run before the close is still on screen after the undo, and a second command
+     run after the undo round-trips, so the shell process itself survived.
   3. Closing again and waiting past the real 5s grace period leaves the surface
      permanently closed (count stays down), proving the undo window actually expires
      instead of undoing forever.
@@ -31,6 +33,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -59,6 +62,26 @@ def _wait_for_surface_count(c: ProgramaClient, workspace_id: str, expected: int,
     )
 
 
+def _wait_for_text(c: ProgramaClient, surface_id: str, needle: str, timeout_s: float = 10.0) -> str:
+    deadline = time.time() + timeout_s
+    last = ""
+    while time.time() < deadline:
+        last = c.read_terminal_text(surface_id)
+        if needle in last:
+            return last
+        time.sleep(0.2)
+    raise ProgramaClientError(
+        f"Timed out waiting for {needle!r} in surface {surface_id}. Last text tail: {last[-400:]!r}"
+    )
+
+
+def _echo_marker(c: ProgramaClient, surface_id: str, marker: str) -> None:
+    # Split the marker in the typed command so the terminal's echo of the command
+    # line never matches; only the command's output contains it whole.
+    half = len(marker) // 2
+    c.send_surface(surface_id, f"echo {marker[:half]}''{marker[half:]}\n")
+
+
 def main() -> int:
     with ProgramaClient(SOCKET_PATH) as c:
         c.activate_app()
@@ -75,6 +98,10 @@ def main() -> int:
             c.new_surface(panel_type="terminal")
             baseline = _wait_for_surface_count(c, workspace_id, 2, timeout_s=8.0)
             target_surface_id = baseline[-1][1]
+
+            before_marker = f"FIXSWEEP_BEFORE_{uuid.uuid4().hex[:10]}"
+            _echo_marker(c, target_surface_id, before_marker)
+            _wait_for_text(c, target_surface_id, before_marker)
 
             # --- Close via socket (the agent-close path) and verify it's undoable ---
             c.close_surface(target_surface_id)
@@ -94,6 +121,12 @@ def main() -> int:
                 any(row[1] == target_surface_id for row in restored),
                 f"expected restored surfaces to include the original id {target_surface_id}: {restored!r}",
             )
+            # Same process, not a fresh shell: the pre-close output is still there and
+            # a new command still runs.
+            _wait_for_text(c, target_surface_id, before_marker, timeout_s=5.0)
+            after_marker = f"FIXSWEEP_AFTER_{uuid.uuid4().hex[:10]}"
+            _echo_marker(c, target_surface_id, after_marker)
+            _wait_for_text(c, target_surface_id, after_marker)
 
             # --- Close again, let the real grace period fully elapse, confirm it stays closed ---
             c.close_surface(target_surface_id)

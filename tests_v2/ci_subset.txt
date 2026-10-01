@@ -3,7 +3,7 @@
 # tests. The full suite still runs manually on the VM via
 # scripts/run-tests-v2.sh.
 #
-# Do NOT add: test_ctrl_interactive.py, test_splits_focus_close_resize.py,
+# Do NOT add: test_splits_focus_close_resize.py,
 # test_visual_screenshots.py, test_notifications.py.
 test_cli_id_format_defaults.py
 # test_windows_api.py — excluded on CI: moved surfaces report in_window=false on
@@ -43,3 +43,10 @@ test_terminal_close_undo.py
 test_mcp_server_e2e.py
 test_opencode_install_integration.py
 test_tmux_compat_matrix.py
+test_socket_error_contract_sweep.py
+# Kept out (timing, focus or render dependent): test_socket_limits_and_focus_sweep.py
+# (focus + browser panel), test_browser_wait_function_page_world.py (WebKit load timing),
+# test_suspended_subscriber_does_not_block_server.py (kernel socket-buffer behavior, 2000-call flood).
+test_layout_save_targets_workspace_id.py
+test_surface_wait_exit_on_close.py
+test_surface_resolve_tty_and_agent_spawn_pane.py

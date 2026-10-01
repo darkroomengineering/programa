@@ -283,6 +283,7 @@ extension TerminalController {
         guard let surfaceId = v2CachedUUID(params, "surface_id") else {
             return v2InvalidParam("surface_id")
         }
+        if let limitError = v2TextLimitError(params, Self.v2AgentIdentityLimits) { return limitError }
         guard let rawState = v2RawString(params, "state"),
               let state = AgentActivityState(rawValue: rawState.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) else {
             return .err(code: "invalid_params", message: "Invalid state — use: working, blocked, idle", data: nil)
@@ -376,6 +377,7 @@ extension TerminalController {
         guard let surfaceId = v2CachedUUID(params, "surface_id") else {
             return v2InvalidParam("surface_id")
         }
+        if let limitError = v2TextLimitError(params, Self.v2AgentIdentityLimits) { return limitError }
         guard let rawEventType = v2RawString(params, "event_type")?.trimmingCharacters(in: .whitespacesAndNewlines),
               !rawEventType.isEmpty,
               let outcome = AgentEventNormalizer.classify(eventType: rawEventType) else {
@@ -464,6 +466,8 @@ extension TerminalController {
         guard let surfaceId = v2CachedUUID(params, "surface_id") else {
             return v2InvalidParam("surface_id")
         }
+        if let limitError = v2TextLimitError(params, Self.v2AgentIdentityLimits) { return limitError }
+        if let limitError = v2TextLimitError(params, Self.v2NotificationTextLimits) { return limitError }
         let rawProvider = v2RawString(params, "provider")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let provider = (rawProvider?.isEmpty == false) ? rawProvider! : "unknown"
         let title = (params["title"] as? String) ?? ""

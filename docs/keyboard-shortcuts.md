@@ -109,17 +109,18 @@ All, Needs input, and Failed filters or search by workspace/agent name to find a
 | ⌘ ⇧ N | New window |
 | ⌃ ⌘ F | Toggle full screen |
 | ⌥ ⌘ F | Send feedback |
-| ⌃ ⌘ W | Hide window, keeping its sessions running |
+| ⌃ ⌘ W | Close Window |
 | ⌘ ⇧ P | Command palette |
 | ⌘ , | Settings |
 | ⌘ ⇧ , | Reload configuration |
 | ⌘ Q | Quit |
 
-Closing a window with its red button or Close Window keeps its workspaces and terminal
-processes running. Click Programa in the Dock to reopen it. When no main window is
-visible, New Window and New Workspace reopen the most recently closed window first.
-Close Surface and Close Workspace still end the selected session; quitting the app
-uses session recovery on the next launch rather than keeping every process running.
+Closing a window with its red button or Close Window ends its workspaces and their
+terminal processes. When any workspace in the window has a running process, Programa
+asks first, with the same confirmation as closing the last workspace. The socket
+method `window.close` closes without asking. Close Surface and Close Workspace end the
+selected session. Quitting is different: the next launch restores the windows that
+were open at quit from session data.
 
 ## Review
 

@@ -119,6 +119,11 @@ final class WindowCommandPaletteOverlayController: NSObject {
     private var focusLockTimer: DispatchSourceTimer?
     private var scheduledFocusWorkItem: DispatchWorkItem?
     private var isPaletteVisible = false
+
+    /// Visible-overlay state read on every keyDown; O(1), unlike a view-tree search.
+    var isPresented: Bool {
+        containerView.window != nil && !containerView.isHidden && containerView.alphaValue > 0.001
+    }
     private var windowDidBecomeKeyObserver: NSObjectProtocol?
     private var windowDidResignKeyObserver: NSObjectProtocol?
 
@@ -572,6 +577,12 @@ final class WindowCommandPaletteOverlayController: NSObject {
         let pointInTheme = themeFrame.convert(windowPoint, from: nil)
         return themeFrame.hitTest(pointInTheme)
     }
+}
+
+/// True when `window` has a mounted, visible palette overlay. Never creates a controller.
+@MainActor
+func commandPaletteOverlayIsPresented(in window: NSWindow) -> Bool {
+    (objc_getAssociatedObject(window, &commandPaletteWindowOverlayKey) as? WindowCommandPaletteOverlayController)?.isPresented ?? false
 }
 
 @MainActor

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """worktree.create -> worktree.remove: the branch must still resolve afterward (git never
-deletes it), and the associated workspace must be closed."""
+deletes it), and the associated workspace must be closed. A worktree holding an untracked
+file is refused with `worktree_dirty` (directory and file survive) unless `force: true`."""
 
 from __future__ import annotations
 
@@ -50,6 +51,42 @@ def _create_git_repo(root: Path) -> Path:
     _run_git(["add", "README.md"], repo)
     _run_git(["-c", "commit.gpgsign=false", "commit", "-m", "init"], repo)
     return repo
+
+
+def _check_dirty_worktree_is_refused_without_force(c: ProgramaClient, repo_path: Path) -> None:
+    branch = "feature-remove-dirty"
+    created = c._call(
+        "worktree.create",
+        {"repo": str(repo_path), "branch": branch},
+        timeout_s=30.0,
+    ) or {}
+    workspace_id = str(created.get("workspace_id") or "")
+    worktree_path = Path(str((created.get("worktree") or {}).get("path") or ""))
+    _must(bool(workspace_id), f"worktree.create returned no workspace_id: {created}")
+    _must(worktree_path.is_dir(), f"worktree.create returned no usable worktree path: {created}")
+
+    untracked = worktree_path / "uncommitted-notes.txt"
+    untracked.write_text("work in progress\n", encoding="utf-8")
+
+    try:
+        c._call("worktree.remove", {"repo": str(repo_path), "branch": branch}, timeout_s=30.0)
+        raise AssertionError("worktree.remove without force must refuse a worktree with untracked files")
+    except ProgramaClientError as exc:
+        _must(str(exc).startswith("worktree_dirty"), f"expected worktree_dirty, got: {exc}")
+    _must(worktree_path.is_dir(), "a refused worktree.remove must leave the worktree directory in place")
+    _must(untracked.is_file(), "a refused worktree.remove must leave the untracked file in place")
+
+    removed = c._call(
+        "worktree.remove",
+        {"repo": str(repo_path), "branch": branch, "force": True},
+        timeout_s=30.0,
+    ) or {}
+    _must(bool(removed.get("removed")), f"worktree.remove force=true did not report removed=true: {removed}")
+    _must(not worktree_path.exists(), "worktree.remove force=true must delete the dirty worktree")
+    _must(
+        _git_branch_exists(repo_path, branch),
+        f"Branch {branch!r} must survive even a forced worktree.remove",
+    )
 
 
 def main() -> int:
@@ -104,6 +141,8 @@ def main() -> int:
                 not any(str(row.get("branch") or "") == branch for row in rows),
                 f"worktree.list should no longer show a worktree for removed branch {branch!r}: {rows}",
             )
+
+            _check_dirty_worktree_is_refused_without_force(c, repo_path)
     finally:
         if created_workspace:
             try:
@@ -113,7 +152,10 @@ def main() -> int:
                 pass
         shutil.rmtree(temp_root, ignore_errors=True)
 
-    print("PASS: worktree.remove closes the workspace and removes the worktree, but never deletes the branch")
+    print(
+        "PASS: worktree.remove closes the workspace and removes the worktree, refuses a dirty "
+        "worktree without force, and never deletes the branch"
+    )
     return 0
 
 

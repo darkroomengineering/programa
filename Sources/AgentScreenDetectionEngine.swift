@@ -202,8 +202,11 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                             guard let terminalPanel = panel as? TerminalPanel else { continue }
                             guard !alreadyCandidates.contains(panelId) else { continue }
                             guard workspace.panelAgentStateSources[panelId] != .hooks else { continue }
-                            guard let text = TerminalController.shared.v2SurfaceWaitReadText(
+                            // Viewport only: a full-scrollback read on every tick costs main-thread
+                            // time proportional to history size, and detection needs only the tail.
+                            guard let text = TerminalController.shared.readTerminalText(
                                 terminalPanel: terminalPanel,
+                                includeScrollback: false,
                                 lineLimit: Self.recognitionTailLineLimit
                             ) else { continue }
                             samples.append((panelId, workspace.id, text))
@@ -215,12 +218,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
 
         for sample in samples {
             for manifest in manifests {
-                let matched = manifest.recognize.screenPatterns.contains { pattern in
-                    guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
-                    let range = NSRange(sample.text.startIndex..<sample.text.endIndex, in: sample.text)
-                    return regex.firstMatch(in: sample.text, options: [], range: range) != nil
-                }
-                guard matched else { continue }
+                guard manifest.recognizes(text: sample.text) else { continue }
                 promoteCandidate(surfaceId: sample.surfaceId, workspaceId: sample.workspaceId, manifest: manifest)
                 break
             }
@@ -261,8 +259,9 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                         return
                     }
                     workspaceId = ws.id
-                    sampledText = TerminalController.shared.v2SurfaceWaitReadText(
+                    sampledText = TerminalController.shared.readTerminalText(
                         terminalPanel: terminalPanel,
+                        includeScrollback: false,
                         lineLimit: Self.sampleTailLineLimit
                     )
                 }

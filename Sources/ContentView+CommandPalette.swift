@@ -590,9 +590,6 @@ extension ContentView {
         if let action = commandPaletteShortcutAction(for: contribution.commandId) {
             return KeyboardShortcutSettings.shortcut(for: action).displayString
         }
-        if let staticShortcut = commandPaletteStaticShortcutHint(for: contribution.commandId) {
-            return staticShortcut
-        }
         return contribution.shortcutHint
     }
     func commandPaletteShortcutAction(for commandId: String) -> KeyboardShortcutSettings.Action? {
@@ -655,46 +652,40 @@ extension ContentView {
             return .toggleSplitZoom
         case "palette.triggerFlash":
             return .triggerFlash
-        default:
-            return nil
-        }
-    }
-    func commandPaletteStaticShortcutHint(for commandId: String) -> String? {
-        switch commandId {
         case "palette.closeTab":
-            return "⌘W"
+            return .closeTab
         case "palette.closeWorkspace":
-            return "⌘⇧W"
+            return .closeWorkspace
         case "palette.reopenClosedBrowserTab":
-            return "⌘⇧T"
+            return .reopenClosedBrowserPanel
         case "palette.openSettings":
-            return "⌘,"
+            return .openSettings
         case "palette.browserBack":
-            return "⌘["
+            return .browserBack
         case "palette.browserForward":
-            return "⌘]"
+            return .browserForward
         case "palette.browserReload":
-            return "⌘R"
+            return .browserReload
         case "palette.browserFocusAddressBar":
-            return "⌘L"
+            return .focusBrowserAddressBar
         case "palette.browserZoomIn":
-            return "⌘="
+            return .browserZoomIn
         case "palette.browserZoomOut":
-            return "⌘-"
+            return .browserZoomOut
         case "palette.browserZoomReset":
-            return "⌘0"
-        case "palette.terminalFind":
-            return "⌘F"
-        case "palette.terminalFindNext":
-            return "⌘G"
-        case "palette.terminalFindPrevious":
-            return "⌥⌘G"
-        case "palette.terminalHideFind":
-            return "⌘⇧F"
+            return .browserZoomReset
         case "palette.terminalUseSelectionForFind":
-            return "⌘E"
+            return .useSelectionForFind
         case "palette.toggleFullScreen":
-            return "\u{2303}\u{2318}F"
+            return .toggleFullScreen
+        case "palette.newClaudeWorkspace":
+            return .newClaudeWorkspace
+        case "palette.reloadConfiguration":
+            return .reloadConfiguration
+        case "palette.sendFeedback":
+            return .sendFeedback
+        case "palette.openReviewPanel":
+            return .openReview
         default:
             return nil
         }

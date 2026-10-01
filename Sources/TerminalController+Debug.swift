@@ -980,8 +980,6 @@ extension TerminalController {
         let panelId: String
         let drawCount: Int
         let lastDrawTime: Double
-        let metalDrawableCount: Int
-        let metalLastDrawableTime: Double
         let presentCount: Int
         let lastPresentTime: Double
         let layerClass: String
@@ -1022,8 +1020,6 @@ extension TerminalController {
                 panelId: panelId.uuidString,
                 drawCount: stats.drawCount,
                 lastDrawTime: stats.lastDrawTime,
-                metalDrawableCount: stats.metalDrawableCount,
-                metalLastDrawableTime: stats.metalLastDrawableTime,
                 presentCount: stats.presentCount,
                 lastPresentTime: stats.lastPresentTime,
                 layerClass: stats.layerClass,

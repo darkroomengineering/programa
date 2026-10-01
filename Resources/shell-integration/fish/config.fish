@@ -105,6 +105,38 @@ if test "$_programa_integration_enabled" != 0
         env $child_env "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 &
     end
 
+    # Shell-state reports run before every command and prompt, so they must not wait on a
+    # CLI process. Each report runs the CLI in the background with the next ticket and waits
+    # (at most 2 s) until the previous ticket is done, so a `prompt` report never overtakes
+    # the `running` report before it. A report whose successor was already issued is skipped
+    # (each report is the full state). Same runner as the bash integration.
+    set -g _PROGRAMA_SHELL_STATE_SEQ 0
+    set -g _PROGRAMA_SHELL_STATE_RUNNER 'ticket=$1 file=$2; shift 2; i=0
+while [ "$ticket" -gt 1 ] && [ $i -lt 200 ]; do
+    done_ticket=; { read -r done_ticket < "$file"; } 2>/dev/null
+    [ "$done_ticket" = "$((ticket - 1))" ] && break
+    sleep 0.01; i=$((i + 1))
+done
+latest=; { read -r latest < "$file.latest"; } 2>/dev/null
+[ "${latest:-0}" -gt "$ticket" ] 2>/dev/null || PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1 "$@" >/dev/null 2>&1
+printf "%s\\n" "$ticket" > "$file"'
+    function _programa_relay_rpc_ordered_bg --argument-names method params
+        set -l relay_cli (_programa_relay_cli_path)
+        test -n "$relay_cli"; or return 1
+        set -l state_dir $HOME
+        set -q TMPDIR; and test -n "$TMPDIR"; and set state_dir $TMPDIR
+        set -l file "$state_dir/.programa-shell-state.$fish_pid"
+        set -g _PROGRAMA_SHELL_STATE_SEQ (math $_PROGRAMA_SHELL_STATE_SEQ + 1)
+        if test "$_PROGRAMA_SHELL_STATE_SEQ" = 1
+            printf '0\n' >$file
+        end
+        printf '%s\n' $_PROGRAMA_SHELL_STATE_SEQ >$file.latest
+        /bin/sh -c "$_PROGRAMA_SHELL_STATE_RUNNER" programa-shell-state \
+            $_PROGRAMA_SHELL_STATE_SEQ $file $relay_cli rpc $method $params >/dev/null 2>&1 &
+        disown $last_pid 2>/dev/null
+        return 0
+    end
+
     function _programa_relay_rpc --argument-names method params
         _programa_has_port_scan_transport; or return 1
         set -l relay_cli (_programa_relay_cli_path)
@@ -190,7 +222,7 @@ if test "$_programa_integration_enabled" != 0
         test -n "$workspace_id"; or set workspace_id "$PROGRAMA_TAB_ID"
         set -l state_json (_programa_json_escape "$state")
         set -l params "{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"state\":\"$state_json\"}"
-        _programa_relay_rpc "surface.report_shell_state" "$params"; or return 0
+        _programa_relay_rpc_ordered_bg "surface.report_shell_state" "$params"; or return 0
         set -g _PROGRAMA_SHELL_ACTIVITY_LAST "$state"
     end
 

@@ -63,9 +63,8 @@ enum DragOverlayRoutingPolicy {
         pasteboardTypes: [NSPasteboard.PasteboardType]?,
         eventType: NSEvent.EventType?
     ) -> Bool {
-        guard shouldCaptureFileDropDestination(pasteboardTypes: pasteboardTypes) else { return false }
         guard isDragMouseEvent(eventType) else { return false }
-        return true
+        return shouldCaptureFileDropDestination(pasteboardTypes: pasteboardTypes)
     }
 
     static func shouldCaptureSidebarExternalOverlay(
@@ -94,7 +93,9 @@ enum DragOverlayRoutingPolicy {
         return hasBonsplitTabTransfer(pasteboardTypes) || hasSidebarTabReorder(pasteboardTypes)
     }
 
-    private static func isDragMouseEvent(_ eventType: NSEvent.EventType?) -> Bool {
+    /// Callers check this before reading `NSPasteboard(name: .drag).types`, an IPC round trip
+    /// that hit-testing would otherwise pay on every pointer event.
+    static func isDragMouseEvent(_ eventType: NSEvent.EventType?) -> Bool {
         eventType == .leftMouseDragged
             || eventType == .rightMouseDragged
             || eventType == .otherMouseDragged
@@ -323,7 +324,8 @@ struct SidebarExternalDropOverlay: View {
     let draggedTabId: UUID?
 
     var body: some View {
-        let dragPasteboardTypes = NSPasteboard(name: .drag).types
+        // Read the drag pasteboard (an IPC round trip) only while a sidebar drag is active.
+        let dragPasteboardTypes = draggedTabId == nil ? nil : NSPasteboard(name: .drag).types
         let shouldCapture = DragOverlayRoutingPolicy.shouldCaptureSidebarExternalOverlay(
             draggedTabId: draggedTabId,
             pasteboardTypes: dragPasteboardTypes

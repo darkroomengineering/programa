@@ -110,7 +110,8 @@ enum CanonicalSubprocessRunner {
         timeout: TimeInterval?,
         stdoutLimit: Int,
         stderrLimit: Int,
-        executableURL: URL? = nil
+        executableURL: URL? = nil,
+        environmentOverrides: [String: String] = [:]
     ) -> CanonicalSubprocessResult {
         let stdout = Pipe()
         let stderr = Pipe()
@@ -130,6 +131,7 @@ enum CanonicalSubprocessRunner {
             path: launchPath,
             arguments: launchArguments,
             currentDirectory: currentDirectory,
+            environmentOverrides: environmentOverrides,
             stdout: stdout,
             stderr: stderr
         ) {
@@ -262,6 +264,7 @@ enum CanonicalSubprocessRunner {
         path: String,
         arguments: [String],
         currentDirectory: String,
+        environmentOverrides: [String: String],
         stdout: Pipe,
         stderr: Pipe
     ) -> SpawnResult {
@@ -309,7 +312,9 @@ enum CanonicalSubprocessRunner {
 
         guard var argv = duplicatedCStringArray([path] + arguments),
               var environment = duplicatedCStringArray(
-                  ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" }
+                  ProcessInfo.processInfo.environment
+                      .merging(environmentOverrides) { _, override in override }
+                      .map { "\($0.key)=\($0.value)" }
               ) else {
             return .failure("could not allocate subprocess arguments")
         }
@@ -431,6 +436,63 @@ enum CanonicalSubprocessRunner {
     }
 }
 
+// MARK: - Automatic git invocations
+
+extension CanonicalSubprocessRunner {
+    /// Options for every git command Programa runs on its own (sidebar polling, review diff,
+    /// worktree helpers), placed before the subcommand. The working directory can be any path a
+    /// terminal reported (including through OSC 7), so repository config there is untrusted:
+    /// `core.fsmonitor` names a command git would run, `safe.bareRepository=explicit` stops a
+    /// bare repository committed inside a checkout from being discovered, and
+    /// `--no-optional-locks` keeps a background probe from taking `index.lock` while the user
+    /// runs git themselves.
+    static let automaticGitOptions: [String] = [
+        "--no-optional-locks",
+        "-c", "core.fsmonitor=false",
+        "-c", "core.untrackedCache=false",
+        "-c", "safe.bareRepository=explicit",
+    ]
+
+    /// Environment for automatic git commands and for `gh`, which runs git internally where
+    /// command-line `-c` cannot reach. `GIT_CONFIG_COUNT` entries apply at command-line scope,
+    /// the same as `-c`.
+    static let automaticGitEnvironment: [String: String] = [
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_CONFIG_COUNT": "3",
+        "GIT_CONFIG_KEY_0": "core.fsmonitor",
+        "GIT_CONFIG_VALUE_0": "false",
+        "GIT_CONFIG_KEY_1": "core.untrackedCache",
+        "GIT_CONFIG_VALUE_1": "false",
+        "GIT_CONFIG_KEY_2": "safe.bareRepository",
+        "GIT_CONFIG_VALUE_2": "explicit",
+    ]
+
+    static func automaticGitArguments(_ arguments: [String]) -> [String] {
+        automaticGitOptions + arguments
+    }
+
+    /// Runs `git` with `automaticGitOptions` before `arguments` and `automaticGitEnvironment`.
+    static func runAutomaticGit(
+        arguments: [String],
+        currentDirectory: String,
+        timeout: TimeInterval?,
+        stdoutLimit: Int,
+        stderrLimit: Int,
+        executableURL: URL? = nil
+    ) -> CanonicalSubprocessResult {
+        run(
+            executable: "git",
+            arguments: automaticGitArguments(arguments),
+            currentDirectory: currentDirectory,
+            timeout: timeout,
+            stdoutLimit: stdoutLimit,
+            stderrLimit: stderrLimit,
+            executableURL: executableURL,
+            environmentOverrides: automaticGitEnvironment
+        )
+    }
+}
+
 // MARK: - GitMetadataProber
 //
 // Stateless git/GitHub CLI probing library: given a working directory, runs `git`/`gh`
@@ -438,7 +500,9 @@ enum CanonicalSubprocessRunner {
 // TabManager (which owns the stateful scheduling/timers/dedup around these probes) so the
 // probing logic itself has no dependency on TabManager instance state and can be tested and
 // reasoned about independently. A `struct` (not an `enum` namespace) so TabManager can hold
-// a thin owned instance; the API surface itself remains static/stateless.
+// a thin owned instance; the API surface is static. The one piece of shared state is the
+// process-wide pull-request lookup throttle (`PullRequestLookupThrottle`), which limits the
+// GitHub `gh` calls while the cheap local git probes keep their own cadence.
 struct GitMetadataProber {
     enum WorkspacePullRequestSnapshot: Equatable {
         case unsupportedRepository
@@ -466,6 +530,93 @@ struct GitMetadataProber {
     }
 
     private nonisolated static let workspacePullRequestProbeTimeout: TimeInterval = 5.0
+
+    // MARK: PR lookup throttle (DECISION D1)
+    //
+    // The local git probe runs every 5 s for the selected workspace; `gh pr list` and
+    // `gh pr checks` are network calls to GitHub, so they run only when the branch of a
+    // directory changes or the last answer is older than `pullRequestLookupRefreshInterval`.
+    // After a `gh` failure the next attempt waits `pullRequestLookupBackoff(failures:)`.
+
+    nonisolated static let pullRequestLookupRefreshInterval: TimeInterval = 60
+    nonisolated static let pullRequestLookupMaxBackoff: TimeInterval = 600
+    private nonisolated static let pullRequestLookupInitialBackoff: TimeInterval = 5
+    private nonisolated static let pullRequestLookupCacheLimit = 256
+
+    /// Wait before retrying `gh` after `failures` consecutive transient failures:
+    /// 5 s, 10 s, 20 s, ... capped at 10 minutes. Starts short so the startup retry burst
+    /// (TabManager's initial probe delays) can still recover from one slow first call.
+    nonisolated static func pullRequestLookupBackoff(failures: Int) -> TimeInterval {
+        guard failures > 0 else { return 0 }
+        let exponent = Double(min(failures - 1, 16))
+        return min(pullRequestLookupInitialBackoff * pow(2, exponent), pullRequestLookupMaxBackoff)
+    }
+
+    private final class PullRequestLookupThrottle: @unchecked Sendable {
+        struct Entry {
+            let branch: String
+            var snapshot: WorkspacePullRequestSnapshot
+            var lastAttemptAt: Date
+            var consecutiveFailures: Int
+        }
+
+        private let lock = NSLock()
+        private var entries: [String: Entry] = [:]
+
+        /// The cached answer when a fresh `gh` lookup is not due yet, else nil.
+        func cachedSnapshot(directory: String, branch: String, now: Date) -> WorkspacePullRequestSnapshot? {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let entry = entries[directory], entry.branch == branch else { return nil }
+            let wait = entry.consecutiveFailures > 0
+                ? GitMetadataProber.pullRequestLookupBackoff(failures: entry.consecutiveFailures)
+                : GitMetadataProber.pullRequestLookupRefreshInterval
+            return now.timeIntervalSince(entry.lastAttemptAt) < wait ? entry.snapshot : nil
+        }
+
+        func record(
+            _ snapshot: WorkspacePullRequestSnapshot,
+            directory: String,
+            branch: String,
+            now: Date,
+            limit: Int
+        ) {
+            lock.lock()
+            defer { lock.unlock() }
+            let previous = entries[directory].flatMap { $0.branch == branch ? $0 : nil }
+            if case .transientFailure = snapshot {
+                // Keep showing the last good answer during the backoff.
+                let lastGood = previous.map(\.snapshot).flatMap { cached -> WorkspacePullRequestSnapshot? in
+                    if case .transientFailure = cached { return nil }
+                    return cached
+                }
+                entries[directory] = Entry(
+                    branch: branch,
+                    snapshot: lastGood ?? .transientFailure,
+                    lastAttemptAt: now,
+                    consecutiveFailures: (previous?.consecutiveFailures ?? 0) + 1
+                )
+            } else {
+                entries[directory] = Entry(branch: branch, snapshot: snapshot, lastAttemptAt: now, consecutiveFailures: 0)
+            }
+            if entries.count > limit,
+               let oldest = entries.min(by: { $0.value.lastAttemptAt < $1.value.lastAttemptAt })?.key {
+                entries.removeValue(forKey: oldest)
+            }
+        }
+
+        func removeAll() {
+            lock.lock()
+            entries.removeAll()
+            lock.unlock()
+        }
+    }
+
+    private nonisolated static let pullRequestLookupThrottle = PullRequestLookupThrottle()
+
+    nonisolated static func resetPullRequestLookupThrottleForTesting() {
+        pullRequestLookupThrottle.removeAll()
+    }
 
     // Widened from `private` to `internal`: called from TabManager.swift.
     nonisolated static func initialWorkspaceGitMetadataSnapshot(
@@ -503,6 +654,25 @@ struct GitMetadataProber {
             return .notFound
         }
 
+        let now = Date()
+        if let cached = pullRequestLookupThrottle.cachedSnapshot(directory: directory, branch: branch, now: now) {
+            return cached
+        }
+        let snapshot = uncachedWorkspacePullRequestSnapshot(directory: directory, branch: branch)
+        pullRequestLookupThrottle.record(
+            snapshot,
+            directory: directory,
+            branch: branch,
+            now: now,
+            limit: pullRequestLookupCacheLimit
+        )
+        return snapshot
+    }
+
+    private nonisolated static func uncachedWorkspacePullRequestSnapshot(
+        directory: String,
+        branch: String
+    ) -> WorkspacePullRequestSnapshot {
         let repoSlugs = githubRepositorySlugs(directory: directory)
         guard !repoSlugs.isEmpty else {
             return .unsupportedRepository
@@ -830,6 +1000,8 @@ struct GitMetadataProber {
         return result.stdout
     }
 
+    /// Every probe here is automatic, so git gets `automaticGitOptions` and both git and `gh`
+    /// get `automaticGitEnvironment`.
     private nonisolated static func runCommandResult(
         directory: String,
         executable: String,
@@ -838,11 +1010,14 @@ struct GitMetadataProber {
     ) -> CanonicalSubprocessResult {
         CanonicalSubprocessRunner.run(
             executable: executable,
-            arguments: arguments,
+            arguments: executable == "git"
+                ? CanonicalSubprocessRunner.automaticGitArguments(arguments)
+                : arguments,
             currentDirectory: directory,
             timeout: timeout,
             stdoutLimit: commandStdoutLimit,
-            stderrLimit: commandStderrLimit
+            stderrLimit: commandStderrLimit,
+            environmentOverrides: CanonicalSubprocessRunner.automaticGitEnvironment
         )
     }
 

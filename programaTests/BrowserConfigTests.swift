@@ -4970,7 +4970,7 @@ final class ExternalOpenPolicyTests: XCTestCase {
     }
 
     func testAllowlistedAppOpensWithoutPromptButExecutablesAlwaysAsk() throws {
-        let allow = ["com.tinyspeck.slackmacgap", "com.apple.finder"]
+        let allow = ["com.tinyspeck.slackmacgap|slack", "com.apple.finder|file"]
         XCTAssertEqual(
             ExternalOpenPolicy.requirement(for: try url("slack://open"), handlerBundleIdentifier: "com.tinyspeck.slackmacgap", allowlist: allow, targetIsExecutable: false),
             .openWithoutPrompt
@@ -5033,10 +5033,10 @@ final class ExternalOpenPolicyTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         XCTAssertEqual(ExternalOpenPolicy.allowlist(defaults: defaults), [])
-        ExternalOpenPolicy.addToAllowlist("com.example.app", defaults: defaults)
-        ExternalOpenPolicy.addToAllowlist("com.example.app", defaults: defaults)
-        ExternalOpenPolicy.addToAllowlist("bad\nid", defaults: defaults)
-        XCTAssertEqual(ExternalOpenPolicy.allowlist(defaults: defaults), ["com.example.app"])
+        ExternalOpenPolicy.addToAllowlist("com.example.app", scheme: "example", defaults: defaults)
+        ExternalOpenPolicy.addToAllowlist("com.example.app", scheme: "example", defaults: defaults)
+        ExternalOpenPolicy.addToAllowlist("bad\nid", scheme: "example", defaults: defaults)
+        XCTAssertEqual(ExternalOpenPolicy.allowlist(defaults: defaults), ["com.example.app|example"])
     }
 
     func testOnlyClicksAndFormSubmitsCountAsUserGestures() {

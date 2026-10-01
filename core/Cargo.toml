@@ -24,12 +24,11 @@ uuid = { version = "1.11", features = ["v4"] }
 base64 = "0.22"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-anyhow = "1.0.95"
 tempfile = "3.15"
 
 # programa-domain is linked into programad so the daemon and the in-process
-# core (programa-ffi, consumed by the macOS app) share one state model. See
-# core/docs/programad.md "Process layer".
+# core (programa-ffi, consumed by the Windows app) share one state model. See
+# core/ABI.md "Process layer".
 programa-domain = { path = "crates/programa-domain" }
 programa-proto = { path = "crates/programa-proto" }
 

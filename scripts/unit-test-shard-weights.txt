@@ -1,20 +1,53 @@
-# Relative cost of the heaviest programaTests classes, used by scripts/ci-run-unit-tests.sh to
-# balance unit-test shards greedily. Classes not listed weigh DEFAULT (6, about the mean test
-# count per class). Weights are test-method counts as a proxy for duration; replace them with
-# measured per-class seconds from a CI xcresult when balance drifts. Format: <ClassName> <weight>.
-DEFAULT 6
-AppDelegateShortcutRoutingTests 134
-SessionPersistenceTests 105
-TerminalControllerSocketSecurityTests 41
-WorkspacePanelGitBranchTests 31
-ProgramaConfigDecodingTests 30
-GhosttyMouseFocusTests 30
-BrowserSnapshotJavaScriptPolicyTests 28
-GhosttyConfigTests 27
-CommandPaletteSearchEngineTests 24
-ZshShellIntegrationHandoffTests 24
-KeyboardShortcutSettingsFileStoreTests 23
-GhosttyPasteboardHelperTests 22
-BrowserWindowPortalLifecycleTests 22
-TerminalControllerV2BrowserStateRestoreTests 21
-NotificationDockBadgeTests 21
+# Relative cost of programaTests classes, used by scripts/ci-run-unit-tests.sh to balance
+# unit-test shards greedily. Unit: 0.1 s of shard wall time. Parallel classes are the measured
+# per-class test seconds x 10 / 2 (each shard runs 2 test clones); AppDelegateShortcutRoutingTests
+# runs serially in shard 1, so its weight is its measured seconds x 10. Measured from the
+# "Test case ... (N seconds)" lines of the unit-tests-shard jobs of main CI runs 36773601542 and
+# 36626257627 (mean of the two). Classes not listed measured under 0.3 s and weigh DEFAULT.
+# The stateful weight uses the run at the current shard layout (55 s); it measured 288 s the day
+# before, so re-measure when shard 1 is the slower shard again. Format: <ClassName> <weight>.
+DEFAULT 1
+AppDelegateShortcutRoutingTests 550
+TerminalControllerSocketSecurityTests 210
+BrowserWindowPortalLifecycleTests 100
+MCPSocketBridgeTests 80
+GhosttySurfaceOverlayTests 66
+BrowserSnapshotJavaScriptPolicyTests 40
+PortScannerBurstLifecycleTests 40
+BrowserDeveloperToolsVisibilityPersistenceTests 34
+TerminalNotificationDirectInteractionTests 23
+UpdateCheckTimeoutTests 21
+SessionEscrowReattachRegressionTests 19
+TabManagerPullRequestProbeTests 18
+TerminalWindowPortalLifecycleTests 18
+BrowserHistoryStoreTests 16
+WorkspaceTabColorSettingsTests 14
+BrowserJavaScriptDialogDelegateTests 13
+CodexUsageSnapshotParserTests 12
+TabManagerReopenClosedBrowserFocusTests 11
+SessionAutosaveCoordinatorTests 9
+NotificationDockBadgeTests 8
+ZshShellIntegrationHandoffTests 8
+ReviewPanelRowPlannerTests 7
+GhosttyPasteboardHelperTests 6
+ProgramaWebViewKeyEquivalentTests 5
+CanonicalSubprocessRunnerTests 4
+CommandPaletteSearchEngineTests 4
+SessionPersistenceTests 4
+ClaudeQuotaSnapshotParserTests 3
+GhosttyDefaultBackgroundNotificationDispatcherTests 3
+TerminalControllerV2RefInvariantTests 3
+WindowBrowserSlotViewTests 3
+WorkspacePanelGitBranchTests 3
+AccessibilityInsertTextRegressionTests 2
+AgentActivityStateTests 2
+BrowserPanelHostContainerViewTests 2
+BrowserSessionHistoryRestoreTests 2
+FishShellIntegrationHandoffTests 2
+KeyboardShortcutSettingsFileStoreTests 2
+LayoutAndSelectorBoundaryTests 2
+MarkdownPanelPointerObserverViewTests 2
+TabManagerCloseCurrentPanelTests 2
+TabManagerSessionSnapshotTests 2
+WindowGlassEffectTests 2
+WorkspaceSplitWorkingDirectoryTests 2

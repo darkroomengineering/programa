@@ -118,13 +118,12 @@ candidate that accepts a connection, then the first candidate that exists as a s
 2. the requested path
 3. `~/Library/Application Support/programa/programa.sock`
 4. `/tmp/programa.sock`
-5. `/tmp/programa-debug.sock`
-6. `/tmp/programa-staging.sock`
-7. the 12 most recently modified `programa*.sock` files in `/tmp` and the Application Support
-   `programa` folder
-8. the path recorded in `last-socket-path`
 
-If none exists, the requested path is used and the connection error names it.
+If none exists, the requested path is used and the connection error names it. The client never
+connects on its own to a dev (`/tmp/programa-debug.sock`), staging or tagged socket, or the one
+recorded in `last-socket-path`, because a command meant for your app would land in a different
+build. When such sockets are live, the CLI lists them on stderr; pass `--socket <path>` or set
+`PROGRAMA_SOCKET_PATH` and `PROGRAMA_SOCKET` to use one.
 
 Inside a Programa terminal, both variables point at the socket of the app that hosts it, so a
 script run there talks to that app. To drive a different instance, such as a tagged build, set both
@@ -149,9 +148,14 @@ A client authenticates once per connection:
 ```
 
 Until it succeeds, every other method returns `auth_required`. A wrong password returns
-`auth_failed` and a missing one returns `invalid_params`. Changing the password in Settings
+`auth_failed` and a missing one returns `invalid_params`. After five failed `auth.login`
+attempts the server closes the connection. Changing the password in Settings
 invalidates existing authenticated connections. Outside password mode, `auth.login` succeeds
 with `"required": false` and nothing else is needed.
+
+Password mode keeps out processes that do not know the password. It is not a boundary against
+other processes of the same macOS user: they can read the password file or the environment of
+a process that has the password, so treat any same-user process as able to connect.
 
 ### Error codes
 
@@ -167,13 +171,20 @@ with an optional `data` field. Codes that any method can return:
 | `auth_required` | The socket is in password mode and this connection has not sent a successful `auth.login`. |
 | `auth_failed` | `auth.login` had the wrong password. |
 | `invalid_params` | A required parameter was missing or had the wrong type. |
-| `not_found` | A referenced window, workspace, pane, surface or similar object does not exist. |
-| `unavailable` | The app or a required subsystem cannot handle the request right now. |
+| `not_found` | A referenced window, workspace, pane, surface or similar object does not exist, including a well-formed ref (`workspace:7`) or UUID that matches nothing. A malformed value is `invalid_params`. |
+| `unavailable` | The app or a required subsystem cannot handle the request right now. Never used for a reference that does not resolve. |
 | `internal_error` | An unexpected server-side failure. |
 | `encode_error` | The server could not encode its own response. |
 
 Individual methods add their own codes (for example `invalid_state`, `not_supported`, `timeout`,
 `layout_not_found`, `worktree_dirty`). The full list per method is in `contracts/v2/methods.json`.
+Two that scripts commonly meet:
+
+- `limit_reached`: `surface.split` and `pane.create` on a workspace that already has four panes.
+  The message is "Workspace already has the maximum of 4 panes" and `data` is
+  `{"max_panes": 4}`. The check runs before anything is created.
+- `invalid_state`: `workspace.close` on a window's last workspace. Close the window with
+  `window.close` instead.
 
 ### Units
 
@@ -358,7 +369,7 @@ Request params (exactly one of `pattern` / `exit` / `agent_state` is required):
 | `pattern` | string | one of `pattern`/`exit`/`agent_state` | Regex (ICU/`NSRegularExpression` syntax) matched against the surface's current text (screen + scrollback) on every check. |
 | `exit` | bool | one of `pattern`/`exit`/`agent_state` | Wait for the surface's child process to exit. |
 | `agent_state` | string | one of `pattern`/`exit`/`agent_state` | Wait for the surface's #164 agent activity state to reach `idle`, `working`, `blocked`, or transition at all (`any_change`). |
-| `timeout_ms` | int | no | Default `30000`. Also accepts `timeout` (same units) for convenience. |
+| `timeout_ms` | int | no | Default `30000`, at most `3600000` (one hour). Also accepts `timeout` (same units) for convenience. |
 | `lines` | int | no | Caps how many trailing lines of scrollback `pattern` rereads per check (default `2000`); does not apply to `exit`/`agent_state`. |
 
 Response (`ok: true`):
@@ -392,9 +403,12 @@ Response (`ok: true`):
   hook has ever reported for it. Manifest schema/authoring guidance for the `"inferred"` tier:
   `docs/agent-detection-manifests.md`.
 - Timeout: `{"ok": false, "error": {"code": "timeout", "message": "...", "data": {"timeout_ms": N}}}`.
-- If the target surface doesn't exist (or, for `pattern`/`agent_state`, is closed while the wait
-  is in flight), the response is `not_found`, not a timeout — callers shouldn't have to wait out
-  the full timeout to learn the surface is gone.
+- If the target surface does not exist when the call arrives, the response is `not_found`.
+- If the surface closes while the wait is in flight, the wait resolves at once with
+  `ok: true` and `"outcome": "closed"`, so callers never wait out the full timeout to learn the
+  surface is gone.
+- `exit` on a browser surface returns `invalid_params` immediately: a browser has no child
+  process to exit.
 
 ### `agent_state` condition values and the no-state rule
 
@@ -434,6 +448,24 @@ does for child-exit) at a fixed ~100ms interval on the connection's own thread; 
 (`Workspace.updatePanelAgentState`/`clearPanelAgentState`, always called from
 `TerminalController+Telemetry.swift`'s `v2SurfaceReportAgentState`/`v2SurfaceClearAgentState` via
 `DispatchQueue.main.async`).
+
+## `surface.resolve_tty`
+
+Finds the terminal surface attached to a tty, for CLI hooks that bind their caller by tty.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `tty` | string | yes | A `/dev/ttysNNN` path or the bare name (`ttys004`). |
+
+Returns `{"workspace_id", "workspace_ref", "surface_id", "surface_ref"}` for the one matching
+terminal surface. Errors: `invalid_params` when `tty` is missing or empty, `not_found` when no
+terminal surface has that tty. The lookup changes no focus or selection.
+
+## Text delivery: `queued`
+
+`surface.send_text` and `agent.prompt` include `"queued": true` in the result when the target
+terminal was not attached yet and the text went to its pending queue; it is delivered once the
+terminal attaches. The field is absent or `false` when the text was written directly.
 
 ## `agent.prompt` (#166)
 
@@ -726,6 +758,10 @@ replaced a working bundled manifest. `states` is the full state-rule list (`buck
 scaffold --force` can seed a forced override from what's currently loaded instead of writing a
 blank manifest over a working one.
 
+The result also carries `rejected`: manifest files that were not loaded because a pattern does
+not compile, as `[{"agent", "path", "reason"}]`. It is empty when every manifest loaded, and
+tells an author why their override is not active.
+
 ### `agent.detection.classify`
 
 | Field | Type | Required | Notes |
@@ -736,6 +772,14 @@ blank manifest over a working one.
 Result: `{"requested_agent", "recognized_via" ("explicit"|"screen_pattern"|null), "agent", "display_name", "bucket", "confidence", "matched_pattern", "workspace_id"?, "surface_id"?}` (all
 null when nothing was recognized/classified). Errors: `not_found` (unknown `agent`), plus
 whatever `surface.read_text` can return for the target surface.
+
+## `agent.spawn`
+
+Starts an agent in a new workspace. A nested-workspace spawn returns `agent_id`,
+`workspace_id`, `workspace_ref`, `pane_id`, `pane_ref`, `surface_id`, `surface_ref`, `focused`
+and `agent`; `pane_id` and `pane_ref` identify the pane hosting the spawned terminal, so
+callers can target it without a separate lookup. The new workspace is created without taking
+focus.
 
 ## `agent.event` (docs/plans/agent-events.md)
 
@@ -791,6 +835,21 @@ updates `AgentSupervisionRegistry` in the same handler call. Existing methods
 hook configuration on user machines doesn't need reinstalling to pick it up. Errors:
 `invalid_params`, `not_found`.
 
+## Workspace `agent_state` and `helper_outcomes`
+
+`workspace.list` and `system.tree` entries carry an aggregate `agent_state` of `idle`,
+`working` or `blocked`. It combines hook-reported and inferred surface states with helpers that
+have not finished yet; a finished helper does not hold it at failed or completed. Finished
+helpers are counted in `helper_outcomes`, for example
+`{"failed": 1, "completed": 2, "cancelled": 0}`.
+
+## Browser cookies (`browser.cookies.get`, `browser.cookies.clear`)
+
+Both methods act on the current page's site by default. `all_domains: true` widens them to every
+site. `domain` matches the exact host or a subdomain of it: `example.com` matches
+`a.example.com` but not `notexample.com`. `path` filters by cookie path. `browser.cookies.clear`
+with no filter clears the current site's cookies only.
+
 ## Browser Availability (`app.browsers`, `PROGRAMA_DEFAULT_BROWSER*`)
 
 Two ways a terminal or agent can check which browsers are available, so scripts don't have
@@ -819,6 +878,12 @@ Set once per shell spawn in `Sources/TerminalSurface.swift`, alongside the other
 the raw bundle identifier, resolved via one `NSWorkspace.urlForApplication(toOpen:)` Launch
 Services call. Both are omitted if resolution fails.
 
+## Debug-only methods
+
+`debug.*` methods, including `debug.terminals` (the window, workspace, pane and surface mapping
+of every terminal), exist only in Debug builds. Release builds answer them with
+`method_not_found`.
+
 ## Tests
 
 `tests_v2/` contains socket integration tests, using `tests_v2/programa_client.py` where a client
@@ -844,8 +909,7 @@ it's DEBUG-only. `contracts/v2/protocol.json` covers the wire framing (JSON line
 `scripts/check-v2-contract.sh` regenerates into a temp dir and diffs against the checked-in
 copies; it runs in CI (`workflow-guard-tests`) and fails the build on any drift.
 `tests_v2/test_v2_contract_matches_capabilities.py` checks the same thing at runtime, against
-a live `system.capabilities` response, and `programaTests/V2CommandCatalogContractTests.swift`
-checks the compiled `V2CommandCatalog` arrays against the contract directly.
+a live `system.capabilities` response.
 
 **The rule this exists to enforce: a v2 handler's params, result shape, or error codes change
 only after `contracts/v2/methods.json` changes first**, then regenerate

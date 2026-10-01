@@ -260,4 +260,85 @@ mod tests {
             programa_core_destroy(core);
         }
     }
+
+    unsafe fn error_code(buffer: ProgramaBuffer) -> String {
+        let json: serde_json::Value = serde_json::from_slice(&take_buffer(buffer)).unwrap();
+        json["error"]["code"].as_str().unwrap().to_owned()
+    }
+
+    #[test]
+    fn ffi_call_contains_a_panic_as_a_structured_error() {
+        unsafe {
+            let mut output = ProgramaBuffer::default();
+            let status = ffi_call(&mut output, || -> Result<Vec<u8>, ApiError> {
+                panic!("contained by the ABI boundary")
+            });
+            assert_eq!(status, STATUS_ERROR);
+            assert_eq!(error_code(output), "panic");
+        }
+    }
+
+    #[test]
+    fn ffi_call_rejects_a_null_result_pointer() {
+        unsafe {
+            let status = ffi_call(std::ptr::null_mut(), || Ok(b"{}".to_vec()));
+            assert_eq!(status, STATUS_ERROR);
+        }
+    }
+
+    #[test]
+    fn null_core_handle_is_an_invalid_argument_on_every_entry_point() {
+        unsafe {
+            let request = br#"{"command":"create_workspace","workspace_id":"w","pane_id":"p","surface_id":"s","session_id":"session"}"#;
+            let mut dispatch = ProgramaBuffer::default();
+            assert_eq!(
+                programa_core_dispatch(
+                    std::ptr::null_mut(),
+                    request.as_ptr(),
+                    request.len(),
+                    &mut dispatch
+                ),
+                STATUS_ERROR
+            );
+            assert_eq!(error_code(dispatch), "invalid_argument");
+
+            let mut snapshot = ProgramaBuffer::default();
+            assert_eq!(
+                programa_core_snapshot(std::ptr::null_mut(), &mut snapshot),
+                STATUS_ERROR
+            );
+            assert_eq!(error_code(snapshot), "invalid_argument");
+
+            programa_core_destroy(std::ptr::null_mut());
+        }
+    }
+
+    #[test]
+    fn buffer_free_accepts_null_and_owned_buffers_and_ignores_inconsistent_lengths() {
+        unsafe {
+            programa_core_buffer_free(ProgramaBuffer::default());
+
+            let core = programa_core_create();
+            let mut snapshot = ProgramaBuffer::default();
+            assert_eq!(programa_core_snapshot(core, &mut snapshot), STATUS_OK);
+            assert!(!snapshot.data.is_null());
+            assert!(snapshot.len <= snapshot.capacity);
+            programa_core_buffer_free(snapshot);
+            programa_core_destroy(core);
+
+            // len > capacity cannot come from this library, so the buffer is
+            // left alone rather than handed to the allocator.
+            let mut bytes = vec![7u8; 4];
+            let data = bytes.as_mut_ptr();
+            let capacity = bytes.capacity();
+            std::mem::forget(bytes);
+            programa_core_buffer_free(ProgramaBuffer {
+                data,
+                len: capacity + 1,
+                capacity,
+            });
+            let reclaimed = Vec::from_raw_parts(data, 4, capacity);
+            assert_eq!(reclaimed, vec![7u8; 4]);
+        }
+    }
 }

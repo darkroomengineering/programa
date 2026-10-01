@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CI-only end-to-end coverage for the `programa-mcp` sidecar (docs/plans/mcp-server.md).
+"""CI-only end-to-end coverage for the `programa-mcp` sidecar (docs/mcp-server.md).
 
 Spawns the real `programa-mcp` binary as a subprocess, speaks MCP over stdio against a
 *live, running* tagged Programa build's control socket, and exercises the sidecar the way an

@@ -6835,40 +6835,6 @@
         }
       }
     },
-    "commandPalette.rename.clearCustomName": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "(clear custom name)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "（カスタム名をクリア）"
-          }
-        }
-      }
-    },
-    "commandPalette.rename.tabConfirmHint": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Press Enter to apply this tab name, or Escape to cancel."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enterキーでこのタブ名を適用、Escapeでキャンセルします。"
-          }
-        }
-      }
-    },
     "commandPalette.rename.tabDescription": {
       "extractionState": "manual",
       "localizations": {
@@ -6933,23 +6899,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "タブの名前を変更"
-          }
-        }
-      }
-    },
-    "commandPalette.rename.workspaceConfirmHint": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Press Enter to apply this workspace name, or Escape to cancel."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enterキーでこのワークスペース名を適用、Escapeでキャンセルします。"
           }
         }
       }
@@ -9164,6 +9113,23 @@
         }
       }
     },
+    "dialog.programaConfig.confirmCommand.configNeverDigested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programa now checks each project config file. Review this config and trust it again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programa はプロジェクトの設定ファイルを個別に確認するようになりました。この設定を確認し、もう一度信頼してください。"
+          }
+        }
+      }
+    },
     "dialog.programaConfig.confirmCommand.messageWithCommand": {
       "extractionState": "manual",
       "localizations": {
@@ -9687,6 +9653,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "クリップボードへのアクセスを許可しますか？"
+          }
+        }
+      }
+    },
+    "sess.clipboardWrite.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Clipboard Write?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリップボードへの書き込みを許可しますか？"
+          }
+        }
+      }
+    },
+    "sess.clipboardWrite.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A program running in this terminal wants to replace your clipboard contents. Allow it to write to the clipboard?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このターミナルで実行中のプログラムがクリップボードの内容を置き換えようとしています。クリップボードへの書き込みを許可しますか？"
           }
         }
       }
@@ -15947,6 +15947,23 @@
         }
       }
     },
+    "sock.notification.defaultTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notification"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通知"
+          }
+        }
+      }
+    },
     "socketControl.allowAll.description": {
       "extractionState": "manual",
       "localizations": {
@@ -19122,6 +19139,550 @@
           "stringUnit": {
             "state": "translated",
             "value": "3秒待ってもターミナルの準備ができなかったため、何も送信されていません。"
+          }
+        }
+      }
+    },
+    "conf.settingsFile.parseError": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "settings.json could not be read, so the last valid settings stay in effect. %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "settings.json を読み込めなかったため、最後に有効だった設定を引き続き使用しています。%@"
+          }
+        }
+      }
+    },
+    "conf.programaConfig.invalidCommand.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command Needs Correction"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コマンドの修正が必要です"
+          }
+        }
+      }
+    },
+    "conf.programaConfig.invalidCommand.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This programa.json command contains control characters (such as Escape or Tab) that the shell would act on but the confirmation dialog cannot show. Remove them and try again. Nothing was run."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この programa.json のコマンドには、シェルが解釈するものの確認ダイアログには表示できない制御文字（Escape や Tab など）が含まれています。それらを削除してもう一度お試しください。何も実行されていません。"
+          }
+        }
+      }
+    },
+    "conf.programaConfig.urlRefused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "url=%@ (not opened: only http and https URLs load)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "url=%@（開きません: http と https の URL のみ読み込めます）"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.bundledMissing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bundled Programa CLI was not found at %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同梱の Programa CLI が %@ に見つかりませんでした。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.parentNotDirectory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expected %@ to be a directory."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ はディレクトリである必要があります。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.destinationIsDirectory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is a directory. Remove or rename it and try again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ はディレクトリです。削除するか名前を変更してから、もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.installVerificationFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installed symlink at %@ did not point to the bundled programa CLI."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ にインストールしたシンボリックリンクが、同梱の programa CLI を指していませんでした。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.uninstallVerificationFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to remove %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を削除できませんでした。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.notProgramaCLI": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is not a link to the Programa CLI, so it was left in place. Remove it yourself if you no longer need it."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ は Programa CLI へのリンクではないため、そのまま残しました。不要な場合はご自身で削除してください。"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.privilegedCommandFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Administrator action failed: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理者権限での操作に失敗しました: %@"
+          }
+        }
+      }
+    },
+    "conf.cliInstaller.error.osascriptStatus": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "osascript exited with status %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "osascript がステータス %@ で終了しました。"
+          }
+        }
+      }
+    },
+    "workspace.markdown.truncated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is larger than 2 MB. Only the first 2 MB is shown."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このファイルは 2 MB を超えています。最初の 2 MB のみ表示しています。"
+          }
+        }
+      }
+    },
+    "workspace.defaultTitle.terminal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナル"
+          }
+        }
+      }
+    },
+    "workspace.agentOverview.sendMessage.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This terminal is no longer available. Your message was not sent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このターミナルは利用できなくなりました。メッセージは送信されませんでした。"
+          }
+        }
+      }
+    },
+    "workspace.notificationSound.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "なし"
+          }
+        }
+      }
+    },
+    "workspace.notificationSound.default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デフォルト"
+          }
+        }
+      }
+    },
+    "workspace.markdown.find.close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Find"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索を閉じる"
+          }
+        }
+      }
+    },
+    "workspace.splitButton.newBrowser": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Browser"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規ブラウザ"
+          }
+        }
+      }
+    },
+    "workspace.splitButton.newTerminal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Terminal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規ターミナル"
+          }
+        }
+      }
+    },
+    "shell.omnibar.suggestion.selected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "selected %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択中 %@"
+          }
+        }
+      }
+    },
+    "shell.closeOtherTabs.message.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is about to close 1 tab in this pane:\n%@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このペインのタブを1個閉じます:\n%@"
+          }
+        }
+      }
+    },
+    "shell.closeOtherTabs.message.other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is about to close %1$lld tabs in this pane:\n%2$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このペインのタブを%1$lld個閉じます:\n%2$@"
+          }
+        }
+      }
+    },
+    "shell.externalOpen.requestedBy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requested by %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要求元: %@"
+          }
+        }
+      }
+    },
+    "shell.notification.action.show": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "表示"
+          }
+        }
+      }
+    },
+    "shell.download.confirm.unknownSource": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A web page"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webページ"
+          }
+        }
+      }
+    },
+    "shell.download.confirm.download": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード"
+          }
+        }
+      }
+    },
+    "shell.download.confirm.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download “%@”?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”をダウンロードしますか？"
+          }
+        }
+      }
+    },
+    "shell.omnibar.searchFor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search %1$@ for \"%2$@\""
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@で“%2$@”を検索"
+          }
+        }
+      }
+    },
+    "shell.download.confirm.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ started this download without a click. It will be saved to your Downloads folder."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ がクリックなしでこのダウンロードを開始しました。ダウンロードフォルダに保存されます。"
+          }
+        }
+      }
+    },
+    "shell.closeOtherTabs.untitledTab": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled Tab"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無題のタブ"
+          }
+        }
+      }
+    },
+    "shell.closeWindow.singleWorkspace.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will close the current window and all of its panels."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のウィンドウとそのすべてのパネルを閉じます。"
           }
         }
       }

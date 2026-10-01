@@ -13,7 +13,7 @@
 
 ## Automation and agents
 
-- [socket-api.md](socket-api.md): the control socket, its security model, discovery, and every method.
+- [socket-api.md](socket-api.md): the control socket, its security model, discovery, and the core methods; the full method list is `contracts/v2/methods.json`.
 - [mcp-server.md](mcp-server.md): the MCP server and its tools.
 - [agent-skill.md](agent-skill.md): the installable agent skill.
 - [agent-detection-manifests.md](agent-detection-manifests.md): the manifest format for screen-based agent detection.

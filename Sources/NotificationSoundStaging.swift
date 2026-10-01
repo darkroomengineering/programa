@@ -18,7 +18,7 @@ enum NotificationSoundSettings {
     static let defaultCustomCommand = ""
 
     static let systemSounds: [(label: String, value: String)] = [
-        ("Default", "default"),
+        (String(localized: "workspace.notificationSound.default", defaultValue: "Default"), "default"),
         ("Basso", "Basso"),
         ("Blow", "Blow"),
         ("Bottle", "Bottle"),
@@ -33,7 +33,7 @@ enum NotificationSoundSettings {
         ("Sosumi", "Sosumi"),
         ("Submarine", "Submarine"),
         ("Tink", "Tink"),
-        ("None", "none"),
+        (String(localized: "workspace.notificationSound.none", defaultValue: "None"), "none"),
     ]
 
     static func sound(defaults: UserDefaults = .standard) -> UNNotificationSound? {

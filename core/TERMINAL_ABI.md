@@ -80,6 +80,14 @@ removed first, so pasted text cannot close the bracket. Without bracketing the
 bytes are sent unchanged. Both calls return a scrolled-back view to the bottom. A zero
 length is valid and a null data pointer is accepted only with length 0.
 
+    bool programa_terminal_paste_needs_confirmation(session, const uint8_t *data,
+                                                    size_t len);
+
+True when the program has not enabled bracketed paste and the text contains a
+line break or another C0 control byte (tab excepted) or DEL, so pasting it
+could run commands at once. The Windows app asks before pasting such text.
+False for a null session or invalid data.
+
     bool programa_terminal_application_cursor(session);
 
 True while the program has enabled application cursor keys (DECCKM), so the
@@ -92,8 +100,10 @@ caller sends ESC O A instead of ESC [ A for the arrow keys.
     int32_t programa_terminal_scroll(session, int32_t lines);
     int32_t programa_terminal_scroll_to_bottom(session);
 
-Resize applies the same bounds as create and informs the PTY; a size equal to
-the current one is a no-op. Scroll moves the viewport into scrollback by lines
+Resize checks the same limits as create but does not raise small values: fewer
+than 2 columns or rows, or a zero cell size, returns INVALID_ARGUMENT, where
+create would raise it to the minimum. A valid size informs the PTY; a size
+equal to the current one is a no-op. Scroll moves the viewport into scrollback by lines
 (positive is toward older output). Scroll to bottom returns to the live screen.
 
 ## Snapshot and change notification

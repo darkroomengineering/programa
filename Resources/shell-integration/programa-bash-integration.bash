@@ -76,6 +76,37 @@ _programa_relay_rpc() {
     return 0
 }
 
+# Shell-state reports run before every command and prompt, so they must not wait on a CLI
+# process (bash has no Unix-socket builtin). Each report runs the CLI in the background with
+# the next ticket and waits (at most 2 s) until the previous ticket is done, so a `prompt`
+# report never overtakes the `running` report before it. A finished background job can linger
+# as a zombie, so tickets live in a per-shell file rather than in `kill -0` checks. Each report
+# is the full shell state, so a report whose successor was already issued is skipped: a late
+# `prompt` can never land after a newer `running`.
+_PROGRAMA_SHELL_STATE_SEQ=0
+_PROGRAMA_SHELL_STATE_RUNNER='ticket=$1 file=$2; shift 2; i=0
+while [ "$ticket" -gt 1 ] && [ $i -lt 200 ]; do
+    done_ticket=; { read -r done_ticket < "$file"; } 2>/dev/null
+    [ "$done_ticket" = "$((ticket - 1))" ] && break
+    sleep 0.01; i=$((i + 1))
+done
+latest=; { read -r latest < "$file.latest"; } 2>/dev/null
+[ "${latest:-0}" -gt "$ticket" ] 2>/dev/null || PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1 "$@" >/dev/null 2>&1
+printf "%s\n" "$ticket" > "$file"'
+_programa_relay_rpc_ordered_bg() {
+    local method="$1"
+    local params="$2"
+    local relay_cli=""
+    local file="${TMPDIR:-$HOME}/.programa-shell-state.$$"
+    relay_cli="$(_programa_relay_cli_path)" || return 1
+    _PROGRAMA_SHELL_STATE_SEQ=$((_PROGRAMA_SHELL_STATE_SEQ + 1))
+    (( _PROGRAMA_SHELL_STATE_SEQ == 1 )) && printf '0\n' > "$file"
+    printf '%s\n' "$_PROGRAMA_SHELL_STATE_SEQ" > "$file.latest"
+    # Spawned from a subshell so the interactive shell registers no job (no "[1] PID" noise).
+    ( /bin/sh -c "$_PROGRAMA_SHELL_STATE_RUNNER" programa-shell-state \
+        "$_PROGRAMA_SHELL_STATE_SEQ" "$file" "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 & )
+}
+
 _programa_relay_workspace_id() {
     if [[ -n "$PROGRAMA_WORKSPACE_ID" ]]; then
         printf '%s\n' "$PROGRAMA_WORKSPACE_ID"
@@ -380,7 +411,13 @@ _programa_report_shell_activity_state() {
     workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
     state_json="$(_programa_json_escape "$state")"
     params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"state\":\"$state_json\"}"
-    _programa_relay_rpc "surface.report_shell_state" "$params" || return 0
+    if (( BASH_SUBSHELL > 0 )); then
+        # bash 4.4-5.2 runs preexec from PS0 in a `$(...)` subshell, where a ticket taken here
+        # is lost to the parent; keep that one report synchronous so ordering still holds.
+        _programa_relay_rpc "surface.report_shell_state" "$params" || return 0
+    else
+        _programa_relay_rpc_ordered_bg "surface.report_shell_state" "$params" || return 0
+    fi
     _PROGRAMA_SHELL_ACTIVITY_LAST="$state"
 }
 

@@ -67,7 +67,10 @@ def _run(
     env = os.environ.copy()
     for var in ("PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID", "PROGRAMA_PANEL_ID", "PROGRAMA_TAB_ID"):
         env.pop(var, None)
-    env["CODEX_HOME"] = codex_home
+    # The Codex skill lands under $HOME/.agents/skills: point HOME (and
+    # CFFIXED_USER_HOME, which Foundation's home lookup honors) at the temp dir so
+    # a run never writes into the developer's real home.
+    env.update(CODEX_HOME=codex_home, HOME=codex_home, CFFIXED_USER_HOME=codex_home)
     return subprocess.run(
         [cli] + args,
         capture_output=True,
@@ -327,16 +330,16 @@ def test_eof_does_not_authorize_changes(cli: str) -> None:
 
         before = artifacts()
         declined = invoke("install-integration")
-        _must(declined.returncode == 0, f"Declining installation must exit cleanly: {_merged(declined)}")
-        _must("Aborted." in _merged(declined), f"EOF must decline installation: {_merged(declined)}")
+        _must(declined.returncode == 1, f"Non-interactive install without --yes must exit 1: {_merged(declined)}")
+        _must("pass --yes" in _merged(declined), f"EOF must decline installation: {_merged(declined)}")
         _must(artifacts() == before, f"EOF must not authorize installation: {_merged(declined)}")
         installed = invoke("install-integration", consent=True)
         _must(installed.returncode == 0, f"explicit installation failed: {_merged(installed)}")
         before = artifacts()
         _must(bool(before), "explicit installation must produce managed artifacts")
         declined = invoke("uninstall-integration")
-        _must(declined.returncode == 0, f"Declining uninstall must exit cleanly: {_merged(declined)}")
-        _must("Aborted." in _merged(declined), f"EOF must decline uninstall: {_merged(declined)}")
+        _must(declined.returncode == 1, f"Non-interactive uninstall without --yes must exit 1: {_merged(declined)}")
+        _must("pass --yes" in _merged(declined), f"EOF must decline uninstall: {_merged(declined)}")
         _must(artifacts() == before, f"EOF must not authorize uninstall: {_merged(declined)}")
         print("  PASS: EOF preserves installation and uninstallation artifacts")
 

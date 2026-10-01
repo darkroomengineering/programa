@@ -477,8 +477,9 @@ extension Workspace {
         if panelPullRequests.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             panelPullRequests = panelPullRequests.filter { validSurfaceIds.contains($0.key) }
         }
-        if panelAgentPresence.keys.contains(where: { !validSurfaceIds.contains($0) }) {
-            panelAgentPresence = panelAgentPresence.filter { validSurfaceIds.contains($0.key) }
+        // Through clearPanelAgentState so surface.wait waiters and subscribers see the removal.
+        for panelId in panelAgentPresence.keys where !validSurfaceIds.contains(panelId) {
+            clearPanelAgentState(panelId: panelId)
         }
         if didPruneListeningPorts {
             recomputeListeningPorts()

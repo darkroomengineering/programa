@@ -13,7 +13,8 @@ on:
       - "scripts/ensure-ghosttykit.sh"
       - "scripts/required-zig-version.sh"
       - "scripts/download-prebuilt-ghosttykit.sh"
-      - "scripts/update-ghosttykit.sh"
+      - "scripts/install-zig.sh"
+      - "scripts/zig-macos-aarch64.sha256"
       - ".github/workflows/build-ghosttykit.yml"
   pull_request:
     paths:
@@ -25,7 +26,8 @@ on:
       - "scripts/ensure-ghosttykit.sh"
       - "scripts/required-zig-version.sh"
       - "scripts/download-prebuilt-ghosttykit.sh"
-      - "scripts/update-ghosttykit.sh"
+      - "scripts/install-zig.sh"
+      - "scripts/zig-macos-aarch64.sha256"
       - ".github/workflows/build-ghosttykit.yml"
 
 concurrency:
@@ -85,6 +87,20 @@ jobs:
           export DEVELOPER_DIR="$XCODE_DIR"
           xcodebuild -version
 
+      - name: Resolve zig version
+        if: steps.check-release.outputs.exists == 'false'
+        id: zig-version
+        run: printf 'version=%s\n' "$(./scripts/required-zig-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # install-zig.sh re-checks the tarball against scripts/zig-macos-aarch64.sha256
+      # on every run, so a cache hit never skips the checksum.
+      - name: Cache zig toolchain tarball
+        if: steps.check-release.outputs.exists == 'false'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ~/.cache/programa-zig-dist
+          key: zig-dist-macos-arm64-${{ steps.zig-version.outputs.version }}
+
       - name: Cache Zig packages
         if: steps.check-release.outputs.exists == 'false'
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
@@ -97,19 +113,7 @@ jobs:
         if: steps.check-release.outputs.exists == 'false'
         run: |
           set -euo pipefail
-          ZIG_REQUIRED="$(./scripts/required-zig-version.sh)"
-          if command -v zig >/dev/null 2>&1 && [ "$(zig version 2>/dev/null)" = "$ZIG_REQUIRED" ]; then
-            echo "zig ${ZIG_REQUIRED} already installed"
-          else
-            echo "Installing zig ${ZIG_REQUIRED} from tarball"
-            curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-aarch64-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
-            tar xf /tmp/zig.tar.xz -C /tmp
-            sudo mkdir -p /usr/local/bin /usr/local/lib
-            sudo cp -f /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/zig /usr/local/bin/zig
-            sudo cp -rf /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/lib /usr/local/lib/zig
-            export PATH="/usr/local/bin:$PATH"
-            zig version
-          fi
+          ./scripts/install-zig.sh
           cd ghostty && zig build -Demit-xcframework=true -Demit-macos-app=false -Dxcframework-target=native -Doptimize=ReleaseFast
 
       - name: Package xcframework

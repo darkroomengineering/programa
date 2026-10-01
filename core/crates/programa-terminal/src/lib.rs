@@ -518,6 +518,17 @@ fn paste_bytes(data: &[u8], requested: bool, mode: &TermMode) -> Vec<u8> {
     output
 }
 
+/// True when pasting `data` unbracketed could run commands the user did not
+/// see: the program has not enabled bracketed paste and the text holds a line
+/// break or another C0 control byte (tab excepted). Frontends confirm before
+/// pasting such text.
+fn paste_needs_confirmation(data: &[u8], mode: &TermMode) -> bool {
+    !mode.contains(TermMode::BRACKETED_PASTE)
+        && data
+            .iter()
+            .any(|byte| matches!(byte, 0x00..=0x08 | 0x0a..=0x1f | 0x7f))
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
         .lock()
@@ -930,6 +941,25 @@ pub unsafe extern "C" fn programa_terminal_paste(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn programa_terminal_paste_needs_confirmation(
+    value: *mut ProgramaTerminalSession,
+    data: *const u8,
+    len: usize,
+) -> bool {
+    catch_unwind(AssertUnwindSafe(|| {
+        let Ok(value) = session(value) else {
+            return false;
+        };
+        let Ok(data) = bytes(data, len) else {
+            return false;
+        };
+        let mode = *value.term.lock().mode();
+        paste_needs_confirmation(data, &mode)
+    }))
+    .unwrap_or(false)
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn programa_terminal_is_terminated(
     value: *mut ProgramaTerminalSession,
 ) -> bool {
@@ -1047,6 +1077,22 @@ mod tests {
         );
         assert_eq!(out, b"\x1b[200~a[201~rm -rf /\nb\tc\x1b[201~");
         assert_eq!(out.windows(6).filter(|w| *w == b"\x1b[201~").count(), 1);
+    }
+
+    #[test]
+    fn unbracketed_multi_line_or_control_paste_needs_confirmation() {
+        let plain = TermMode::empty();
+        assert!(!paste_needs_confirmation(b"echo hello", &plain));
+        assert!(!paste_needs_confirmation(b"a\tb", &plain));
+        assert!(!paste_needs_confirmation(b"", &plain));
+        assert!(paste_needs_confirmation(b"dir\r\ndel /q *\r\n", &plain));
+        assert!(paste_needs_confirmation(b"ls\n", &plain));
+        assert!(paste_needs_confirmation(b"a\x1b[201~b", &plain));
+        assert!(paste_needs_confirmation(b"a\x7fb", &plain));
+        assert!(!paste_needs_confirmation(
+            b"dir\r\ndel /q *\r\n",
+            &TermMode::BRACKETED_PASTE
+        ));
     }
 
     #[test]

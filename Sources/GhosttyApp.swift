@@ -299,6 +299,9 @@ class GhosttyApp {
             if kind == GHOSTTY_CLIPBOARD_REQUEST_PASTE {
                 alert.messageText = String(localized: "dialog.clipboardConfirmation.paste.title", defaultValue: "Allow Unsafe Paste?")
                 alert.informativeText = String(localized: "dialog.clipboardConfirmation.paste.message", defaultValue: "This clipboard text may execute commands when pasted into the terminal. Allow this paste?")
+            } else if kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE {
+                alert.messageText = String(localized: "sess.clipboardWrite.title", defaultValue: "Allow Clipboard Write?")
+                alert.informativeText = String(localized: "sess.clipboardWrite.message", defaultValue: "A program running in this terminal wants to replace your clipboard contents. Allow it to write to the clipboard?")
             } else {
                 alert.messageText = String(localized: "dialog.clipboardConfirmation.read.title", defaultValue: "Allow Clipboard Access?")
                 alert.informativeText = String(localized: "dialog.clipboardConfirmation.read.message", defaultValue: "A program running in this terminal requested your clipboard contents. Allow it to read the clipboard?")
@@ -327,7 +330,8 @@ class GhosttyApp {
             clipboardConfirmations[identity]?.finish(allow: false)
         }
         guard let window, let kind,
-              kind == GHOSTTY_CLIPBOARD_REQUEST_PASTE || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ else {
+              kind == GHOSTTY_CLIPBOARD_REQUEST_PASTE || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ
+                || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE else {
             completion("")
             return
         }
@@ -474,6 +478,9 @@ class GhosttyApp {
     private init() {
         backgroundLogWriter = BackgroundLogWriter(url: backgroundLogURL)
         initializeGhostty()
+        DispatchQueue.global(qos: .utility).async {
+            GhosttyPasteboardHelper.removeStaleTemporaryImageFiles()
+        }
     }
 
     #if DEBUG
@@ -483,9 +490,9 @@ class GhosttyApp {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let line = "[\(timestamp)] \(message)\n"
         if let handle = FileHandle(forWritingAtPath: initLogPath) {
-            handle.seekToEndOfFile()
-            handle.write(Data(line.utf8))
-            handle.closeFile()
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data(line.utf8))
+            try? handle.close()
         } else {
             _ = FileManager.default.createFile(atPath: initLogPath, contents: line.data(using: .utf8))
         }
@@ -581,31 +588,51 @@ class GhosttyApp {
                 }
             }
         }
-        runtimeConfig.write_clipboard_cb = { _, location, content, len, _ in
-            // Write clipboard
+        runtimeConfig.write_clipboard_cb = { userdata, location, content, len, confirm in
+            // Write clipboard. Prefer text/plain, else the first item.
             guard let content = content, len > 0 else { return }
             let buffer = UnsafeBufferPointer(start: content, count: Int(len))
 
-            var fallback: String?
+            var chosen: String?
             for item in buffer {
                 guard let dataPtr = item.data else { continue }
                 let value = String(cString: dataPtr)
-
-                if let mimePtr = item.mime {
-                    let mime = String(cString: mimePtr)
-                    if mime.hasPrefix("text/plain") {
-                        GhosttyPasteboardHelper.writeString(value, to: location)
-                        return
-                    }
+                if let mimePtr = item.mime, String(cString: mimePtr).hasPrefix("text/plain") {
+                    chosen = value
+                    break
                 }
-
-                if fallback == nil {
-                    fallback = value
+                if chosen == nil {
+                    chosen = value
                 }
             }
+            guard let chosen else { return }
 
-            if let fallback {
-                GhosttyPasteboardHelper.writeString(fallback, to: location)
+            guard confirm else {
+                GhosttyPasteboardHelper.writeString(chosen, to: location)
+                return
+            }
+            // `clipboard-write = ask`: an OSC 52 write waits for the user. Deny
+            // (Cancel is the default button) or no window means no write.
+            let callbackContext = GhosttyApp.callbackContext(from: userdata)
+            let presentConfirmation = {
+                MainActor.assumeIsolated { () -> Void in
+                    let window = callbackContext.flatMap {
+                        GhosttyApp.resolveTerminalSurface(tabId: $0.tabId, surfaceId: $0.surfaceId)
+                    }?.hostedView.window
+                    GhosttyApp.handleClipboardConfirmation(
+                        contents: chosen,
+                        kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE,
+                        window: window
+                    ) { confirmedContent in
+                        guard !confirmedContent.isEmpty else { return }
+                        GhosttyPasteboardHelper.writeString(confirmedContent, to: location)
+                    }
+                }
+            }
+            if Thread.isMainThread {
+                presentConfirmation()
+            } else {
+                DispatchQueue.main.async(execute: presentConfirmation)
             }
         }
         runtimeConfig.close_surface_cb = { userdata, needsConfirmClose in
@@ -1926,7 +1953,8 @@ class GhosttyApp {
                 return false
             }
             return performOnMain {
-                guard let tabManager = AppDelegate.shared?.tabManager else { return false }
+                guard let app = AppDelegate.shared,
+                      let tabManager = app.tabManagerFor(tabId: tabId) ?? app.tabManager else { return false }
                 return tabManager.moveSplitFocus(tabId: tabId, surfaceId: surfaceId, direction: direction)
             }
         case GHOSTTY_ACTION_RESIZE_SPLIT:
@@ -1937,7 +1965,8 @@ class GhosttyApp {
             }
             let amount = action.action.resize_split.amount
             return performOnMain {
-                guard let tabManager = AppDelegate.shared?.tabManager else { return false }
+                guard let app = AppDelegate.shared,
+                      let tabManager = app.tabManagerFor(tabId: tabId) ?? app.tabManager else { return false }
                 return tabManager.resizeSplit(
                     tabId: tabId,
                     surfaceId: surfaceId,
@@ -1950,7 +1979,8 @@ class GhosttyApp {
                 return false
             }
             return performOnMain {
-                guard let tabManager = AppDelegate.shared?.tabManager else { return false }
+                guard let app = AppDelegate.shared,
+                      let tabManager = app.tabManagerFor(tabId: tabId) ?? app.tabManager else { return false }
                 return tabManager.equalizeSplits(tabId: tabId)
             }
         case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
@@ -1959,7 +1989,8 @@ class GhosttyApp {
                 return false
             }
             return performOnMain {
-                guard let tabManager = AppDelegate.shared?.tabManager else { return false }
+                guard let app = AppDelegate.shared,
+                      let tabManager = app.tabManagerFor(tabId: tabId) ?? app.tabManager else { return false }
                 return tabManager.toggleSplitZoom(tabId: tabId, surfaceId: surfaceId)
             }
         case GHOSTTY_ACTION_SCROLLBAR:

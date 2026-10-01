@@ -47,7 +47,14 @@ extension TerminalController {
                 "states": states
             ]
         }
-        return .ok(["manifests": payloads])
+        let rejected: [[String: Any]] = AgentManifestLoader.shared.rejectedManifests().map { item in
+            [
+                "agent": item.agent,
+                "path": item.path,
+                "reason": "invalid patterns: " + item.invalidPatterns.joined(separator: ", ")
+            ]
+        }
+        return .ok(["manifests": payloads, "rejected": rejected])
     }
 
     nonisolated func v2AgentDetectionClassify(params: [String: Any]) -> V2CallResult {

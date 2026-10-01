@@ -93,5 +93,5 @@ loading of both native libraries. The stable and build-numbered EXEs in a build 
 The EXE is unsigned; no Windows publisher-signing certificate is configured.
 
 No CI job launches the desktop UI. GPU rendering, drag behavior, IME, Narrator, and clean-machine
-deployment need the interactive checks above. Full macOS feature parity and migration of macOS
-workspace and session lifecycle into the shared core remain incomplete.
+deployment need the interactive checks above. Full macOS feature parity remains incomplete; the
+macOS app does not use the shared core.

@@ -684,7 +684,6 @@ final class GhosttySurfaceScrollView: NSView {
         windowObserverGeneration &+= 1
         deferredSearchOverlayMutationWorkItem?.cancel()
         dropZoneOverlayView.removeFromSuperview()
-        cancelFocusRequest()
     }
 
     override var safeAreaInsets: NSEdgeInsets { NSEdgeInsetsZero }
@@ -2579,10 +2578,6 @@ final class GhosttySurfaceScrollView: NSView {
 
         guard let textField = responder as? NSTextField else { return false }
         return textField.isDescendant(of: self) && isSearchOverlayOrDescendant(textField)
-    }
-
-    func cancelFocusRequest() {
-        // Intentionally no-op (no retry loops).
     }
 
     private func synchronizeSurfaceView() {

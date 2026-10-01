@@ -25,8 +25,6 @@ extension GhosttySurfaceScrollView {
     struct DebugRenderStats {
         let drawCount: Int
         let lastDrawTime: CFTimeInterval
-        let metalDrawableCount: Int
-        let metalLastDrawableTime: CFTimeInterval
         let presentCount: Int
         let lastPresentTime: CFTimeInterval
         let layerClass: String
@@ -42,7 +40,6 @@ extension GhosttySurfaceScrollView {
 
     func debugRenderStats() -> DebugRenderStats {
         let layerClass = surfaceView.layer.map { String(describing: type(of: $0)) } ?? "nil"
-        let (metalCount, metalLast) = (surfaceView.layer as? GhosttyMetalLayer)?.debugStats() ?? (0, 0)
         let (drawCount, lastDraw): (Int, CFTimeInterval) = surfaceView.terminalSurface.map { terminalSurface in
             Self.drawStats(for: terminalSurface.id)
         } ?? (0, 0)
@@ -59,8 +56,6 @@ extension GhosttySurfaceScrollView {
         return DebugRenderStats(
             drawCount: drawCount,
             lastDrawTime: lastDraw,
-            metalDrawableCount: metalCount,
-            metalLastDrawableTime: metalLast,
             presentCount: presentCount,
             lastPresentTime: lastPresent,
             layerClass: layerClass,

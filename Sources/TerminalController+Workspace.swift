@@ -42,10 +42,11 @@ extension TerminalController {
             "worktree_folder_repo_root": v2OrNull(workspace.worktreeFolderRepoRoot),
             "is_worktree_folder": workspace.isWorktreeFolder,
             "agent_parent_workspace_id": v2OrNull(workspace.agentParentWorkspaceId?.uuidString),
-            "agent_state": v2OrNull(AgentSupervisionMetadata.aggregateState(
+            "agent_state": v2OrNull(AgentSupervisionMetadata.currentActivityState(
                 for: workspace,
                 records: helpers
             )),
+            "helper_outcomes": AgentSupervisionMetadata.helperOutcomes(records: helpers),
             "agent_state_source": v2OrNull(AgentSupervisionMetadata.aggregateSource(
                 for: workspace,
                 records: helpers
@@ -222,13 +223,21 @@ extension TerminalController {
                     "pinned": true
                 ])
             }
-            tabManager.closeWorkspace(ws)
-            return .ok([
+            let closeData: [String: Any] = [
                 "window_id": v2OrNull(windowId?.uuidString),
                 "window_ref": v2Ref(kind: .window, uuid: windowId),
                 "workspace_id": wsId.uuidString,
                 "workspace_ref": v2Ref(kind: .workspace, uuid: wsId)
-            ])
+            ]
+            // TabManager.closeWorkspace silently keeps a window's last workspace.
+            guard tabManager.tabs.count > 1 else {
+                return .err(code: "invalid_state", message: "Use window.close to close the last workspace", data: closeData)
+            }
+            tabManager.closeWorkspace(ws)
+            guard !tabManager.tabs.contains(where: { $0.id == wsId }) else {
+                return .err(code: "internal_error", message: "Workspace was not closed", data: closeData)
+            }
+            return .ok(closeData)
         }
     }
 
@@ -590,19 +599,19 @@ extension TerminalController {
                 finish(["description": NSNull()])
 
             case "move_up":
-                guard let currentIndex = tabManager.tabs.firstIndex(where: { $0.id == workspace.id }) else {
+                guard tabManager.tabs.contains(where: { $0.id == workspace.id }) else {
                     result = .err(code: "not_found", message: "Workspace not found", data: nil)
                     return result
                 }
-                _ = tabManager.reorderWorkspace(tabId: workspace.id, toIndex: max(currentIndex - 1, 0))
+                tabManager.moveWorkspaceAmongSiblings(tabId: workspace.id, by: -1)
                 finish(["index": v2OrNull(tabManager.tabs.firstIndex(where: { $0.id == workspace.id }))])
 
             case "move_down":
-                guard let currentIndex = tabManager.tabs.firstIndex(where: { $0.id == workspace.id }) else {
+                guard tabManager.tabs.contains(where: { $0.id == workspace.id }) else {
                     result = .err(code: "not_found", message: "Workspace not found", data: nil)
                     return result
                 }
-                _ = tabManager.reorderWorkspace(tabId: workspace.id, toIndex: min(currentIndex + 1, tabManager.tabs.count - 1))
+                tabManager.moveWorkspaceAmongSiblings(tabId: workspace.id, by: 1)
                 finish(["index": v2OrNull(tabManager.tabs.firstIndex(where: { $0.id == workspace.id }))])
 
             case "move_top":
@@ -840,7 +849,7 @@ extension TerminalController {
                 guard let newPanel = workspace.newBrowserSurface(
                     inPane: paneId,
                     url: browserPanel.currentURL,
-                    focus: true
+                    focus: v2FocusAllowed()
                 ) else {
                     result = .err(code: "internal_error", message: "Failed to duplicate tab", data: nil)
                     return result
@@ -861,7 +870,7 @@ extension TerminalController {
                 }
 
                 let targetIndex = insertionIndexToRight(anchorTabId: anchorTabId, inPane: paneId)
-                guard let newPanel = workspace.newTerminalSurface(inPane: paneId, focus: true) else {
+                guard let newPanel = workspace.newTerminalSurface(inPane: paneId, focus: v2FocusAllowed()) else {
                     result = .err(code: "internal_error", message: "Failed to create tab", data: nil)
                     return result
                 }
@@ -888,7 +897,7 @@ extension TerminalController {
                 }
 
                 let targetIndex = insertionIndexToRight(anchorTabId: anchorTabId, inPane: paneId)
-                guard let newPanel = workspace.newBrowserSurface(inPane: paneId, url: url, focus: true) else {
+                guard let newPanel = workspace.newBrowserSurface(inPane: paneId, url: url, focus: v2FocusAllowed()) else {
                     result = .err(code: "internal_error", message: "Failed to create tab", data: nil)
                     return result
                 }

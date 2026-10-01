@@ -111,6 +111,7 @@
 			A5001006 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5001016 /* GhosttyKit.xcframework */; };
 		A5001007 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001019 /* TerminalController.swift */; };
 		H1AP0002 /* AppLifecycleCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1AP0001 /* AppLifecycleCoordinator.swift */; };
+		BEAD00000000000000000002 /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEAD00000000000000000001 /* MainWindowController.swift */; };
 		H1SN0002 /* AppDelegate+SessionSnapshotPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */; };
 		A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0004 /* TerminalController+BrowserAutomation.swift */; };
 		H1BR0002 /* BrowserRPCDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1BR0001 /* BrowserRPCDispatcher.swift */; };
@@ -121,6 +122,7 @@
 		NRTC0014 /* TerminalController+Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0004 /* TerminalController+Workspace.swift */; };
 		WTMG000003 /* TerminalController+Worktree.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000004 /* TerminalController+Worktree.swift */; };
 		WTMG000007 /* TerminalController+Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000008 /* TerminalController+Layout.swift */; };
+		ACED00000000000000000003 /* TerminalController+SocketContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACED00000000000000000004 /* TerminalController+SocketContext.swift */; };
 			SNAP000001 /* TerminalController+Snapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = SNAP000002 /* TerminalController+Snapshot.swift */; };
 		NRTC0015 /* TerminalController+Surface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0005 /* TerminalController+Surface.swift */; };
 		NRTC0016 /* TerminalController+Pane.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0006 /* TerminalController+Pane.swift */; };
@@ -177,6 +179,8 @@
 		RVPN0000000000000000000E /* TerminalController+Review.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN0000000000000000000D /* TerminalController+Review.swift */; };
 		RVPN00000000000000000010 /* CLI+Review.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN0000000000000000000F /* CLI+Review.swift */; };
 		RCAP000001 /* CLI+Recap.swift in Sources */ = {isa = PBXBuildFile; fileRef = RCAP000002 /* CLI+Recap.swift */; };
+		FADE00000000000000000003 /* CLI+HookSettingsIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE00000000000000000004 /* CLI+HookSettingsIO.swift */; };
+		FADE00000000000000000001 /* CLI+AgentDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE00000000000000000002 /* CLI+AgentDetection.swift */; };
 		A5001290 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A5001291 /* MarkdownUI */; };
 		A5001405 /* PanelContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001415 /* PanelContentView.swift */; };
 		A5001406 /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001416 /* Workspace.swift */; };
@@ -290,6 +294,7 @@
 					B900001AA1B2C3D4E5F60719 /* CloseWorkspaceConfirmDialogUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000019A1B2C3D4E5F60719 /* CloseWorkspaceConfirmDialogUITests.swift */; };
 					B9000023A1B2C3D4E5F60719 /* CloseWorkspaceCmdDUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000022A1B2C3D4E5F60719 /* CloseWorkspaceCmdDUITests.swift */; };
 					B9000025A1B2C3D4E5F60719 /* CloseWindowConfirmDialogUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000026A1B2C3D4E5F60719 /* CloseWindowConfirmDialogUITests.swift */; };
+					BEEF50100000000000000003 /* WindowCloseConfirmCancelUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50100000000000000004 /* WindowCloseConfirmCancelUITests.swift */; };
 					D0E0F0B0A1B2C3D4E5F60718 /* BrowserPaneNavigationKeybindUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E0F0B1A1B2C3D4E5F60718 /* BrowserPaneNavigationKeybindUITests.swift */; };
 					D0E0F0B2A1B2C3D4E5F60718 /* BrowserOmnibarSuggestionsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E0F0B3A1B2C3D4E5F60718 /* BrowserOmnibarSuggestionsUITests.swift */; };
 					E1000000A1B2C3D4E5F60718 /* MenuKeyEquivalentRoutingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000001A1B2C3D4E5F60718 /* MenuKeyEquivalentRoutingUITests.swift */; };
@@ -298,6 +303,14 @@
 					F3000000A1B2C3D4E5F60718 /* CJKIMEInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */; };
 					F4000000A1B2C3D4E5F60718 /* GhosttyConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4000001A1B2C3D4E5F60718 /* GhosttyConfigTests.swift */; };
 					F5000000A1B2C3D4E5F60718 /* SessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5000001A1B2C3D4E5F60718 /* SessionPersistenceTests.swift */; };
+				BEEF5040A1B2C3D4E5F60003 /* ConfigFixSweepRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5040A1B2C3D4E5F60004 /* ConfigFixSweepRegressionTests.swift */; };
+					BEEF50200000000000000004 /* WorkspaceFixSweepWKSPRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50200000000000000003 /* WorkspaceFixSweepWKSPRegressionTests.swift */; };
+					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */; };
+				BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */; };
+					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */; };
+					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */; };
+					BEEF50100000000000000001 /* ShellFixSweepSHELTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50100000000000000002 /* ShellFixSweepSHELTests.swift */; };
+			BEEF5030000000000000000A /* SocketFixSweepSOCKTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5030000000000000000B /* SocketFixSweepSOCKTests.swift */; };
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */; };
 				3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */; };
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */; };
@@ -315,6 +328,7 @@
 		DA7A10CA710E000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DA7A10CA710E000000000001 /* Localizable.xcstrings */; };
 		DA7A10CA710E000000000004 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DA7A10CA710E000000000002 /* InfoPlist.xcstrings */; };
 		MRMD000003 /* mermaid.min.js in Resources */ = {isa = PBXBuildFile; fileRef = MRMD000004 /* mermaid.min.js */; };
+		ACED00000000000000000001 /* programa-browser-snapshot.js in Resources */ = {isa = PBXBuildFile; fileRef = ACED00000000000000000002 /* programa-browser-snapshot.js */; };
 						E12E88F82733EC42F32C36A3 /* BrowserConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 970226F3C99D0D937CD00539 /* BrowserConfigTests.swift */; };
 					1F14445B9627DE9D3AF4FD2E /* BrowserPanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C7B1B978620BE162CC057E /* BrowserPanelTests.swift */; };
 					46F6AC15863EC84DCD3770A2 /* TerminalAndGhosttyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */; };
@@ -529,6 +543,7 @@
 		CESH000003 /* session_escrow_shim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = session_escrow_shim.h; sourceTree = "<group>"; };
 		A5001019 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
 		H1AP0001 /* AppLifecycleCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycleCoordinator.swift; sourceTree = "<group>"; };
+		BEAD00000000000000000001 /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
 		H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+SessionSnapshotPersistence.swift"; sourceTree = "<group>"; };
 		A5FF0004 /* TerminalController+BrowserAutomation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+BrowserAutomation.swift"; sourceTree = "<group>"; };
 		H1BR0001 /* BrowserRPCDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserRPCDispatcher.swift; sourceTree = "<group>"; };
@@ -539,6 +554,7 @@
 		NRTC0004 /* TerminalController+Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Workspace.swift"; sourceTree = "<group>"; };
 		WTMG000004 /* TerminalController+Worktree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Worktree.swift"; sourceTree = "<group>"; };
 		WTMG000008 /* TerminalController+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Layout.swift"; sourceTree = "<group>"; };
+		ACED00000000000000000004 /* TerminalController+SocketContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SocketContext.swift"; sourceTree = "<group>"; };
 			SNAP000002 /* TerminalController+Snapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Snapshot.swift"; sourceTree = "<group>"; };
 		NRTC0005 /* TerminalController+Surface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Surface.swift"; sourceTree = "<group>"; };
 		NRTC0006 /* TerminalController+Pane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Pane.swift"; sourceTree = "<group>"; };
@@ -591,6 +607,8 @@
 		RVPN0000000000000000000D /* TerminalController+Review.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Review.swift"; sourceTree = "<group>"; };
 		RVPN0000000000000000000F /* CLI+Review.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Review.swift"; sourceTree = "<group>"; };
 		RCAP000002 /* CLI+Recap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Recap.swift"; sourceTree = "<group>"; };
+		FADE00000000000000000004 /* CLI+HookSettingsIO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+HookSettingsIO.swift"; sourceTree = "<group>"; };
+		FADE00000000000000000002 /* CLI+AgentDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentDetection.swift"; sourceTree = "<group>"; };
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
 		MDRD00000000000000000002 /* MarkdownDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownDocumentView.swift; sourceTree = "<group>"; };
 		MRMD000002 /* MermaidDiagramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MermaidDiagramView.swift; sourceTree = "<group>"; };
@@ -699,6 +717,7 @@
 					B9000019A1B2C3D4E5F60719 /* CloseWorkspaceConfirmDialogUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloseWorkspaceConfirmDialogUITests.swift; sourceTree = "<group>"; };
 					B9000022A1B2C3D4E5F60719 /* CloseWorkspaceCmdDUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloseWorkspaceCmdDUITests.swift; sourceTree = "<group>"; };
 					B9000026A1B2C3D4E5F60719 /* CloseWindowConfirmDialogUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloseWindowConfirmDialogUITests.swift; sourceTree = "<group>"; };
+					BEEF50100000000000000004 /* WindowCloseConfirmCancelUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCloseConfirmCancelUITests.swift; sourceTree = "<group>"; };
 						D0E0F0B1A1B2C3D4E5F60718 /* BrowserPaneNavigationKeybindUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserPaneNavigationKeybindUITests.swift; sourceTree = "<group>"; };
 						D0E0F0B3A1B2C3D4E5F60718 /* BrowserOmnibarSuggestionsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserOmnibarSuggestionsUITests.swift; sourceTree = "<group>"; };
 						E1000001A1B2C3D4E5F60718 /* MenuKeyEquivalentRoutingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuKeyEquivalentRoutingUITests.swift; sourceTree = "<group>"; };
@@ -708,6 +727,14 @@
 				F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CJKIMEInputTests.swift; sourceTree = "<group>"; };
 				F4000001A1B2C3D4E5F60718 /* GhosttyConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfigTests.swift; sourceTree = "<group>"; };
 				F5000001A1B2C3D4E5F60718 /* SessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPersistenceTests.swift; sourceTree = "<group>"; };
+				BEEF5040A1B2C3D4E5F60004 /* ConfigFixSweepRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFixSweepRegressionTests.swift; sourceTree = "<group>"; };
+				BEEF50200000000000000003 /* WorkspaceFixSweepWKSPRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFixSweepWKSPRegressionTests.swift; sourceTree = "<group>"; };
+				BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFDPassingRegressionTests.swift; sourceTree = "<group>"; };
+				BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFixSweepCONFTests.swift; sourceTree = "<group>"; };
+				BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFixSweepSESSTests.swift; sourceTree = "<group>"; };
+				BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFixSweepWKSPTests.swift; sourceTree = "<group>"; };
+				BEEF50100000000000000002 /* ShellFixSweepSHELTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellFixSweepSHELTests.swift; sourceTree = "<group>"; };
+				BEEF5030000000000000000B /* SocketFixSweepSOCKTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketFixSweepSOCKTests.swift; sourceTree = "<group>"; };
 				RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RendererRealizationPlannerTests.swift; sourceTree = "<group>"; };
 				D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAutosaveCoordinatorTests.swift; sourceTree = "<group>"; };
 				SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWALCoreTests.swift; sourceTree = "<group>"; };
@@ -725,6 +752,7 @@
 		DA7A10CA710E000000000001 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		DA7A10CA710E000000000002 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		MRMD000004 /* mermaid.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = mermaid.min.js; sourceTree = "<group>"; };
+		ACED00000000000000000002 /* programa-browser-snapshot.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "programa-browser-snapshot.js"; sourceTree = "<group>"; };
 				970226F3C99D0D937CD00539 /* BrowserConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserConfigTests.swift; sourceTree = "<group>"; };
 				58C7B1B978620BE162CC057E /* BrowserPanelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserPanelTests.swift; sourceTree = "<group>"; };
 				02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAndGhosttyTests.swift; sourceTree = "<group>"; };
@@ -814,6 +842,7 @@
 				DA7A10CA710E000000000003 /* Localizable.xcstrings in Resources */,
 				DA7A10CA710E000000000004 /* InfoPlist.xcstrings in Resources */,
 				MRMD000003 /* mermaid.min.js in Resources */,
+				ACED00000000000000000001 /* programa-browser-snapshot.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1003,6 +1032,7 @@
 				AGRP0002A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift */,
 				WTMG000004 /* TerminalController+Worktree.swift */,
 				WTMG000008 /* TerminalController+Layout.swift */,
+				ACED00000000000000000004 /* TerminalController+SocketContext.swift */,
 					SNAP000002 /* TerminalController+Snapshot.swift */,
 				NRTC0005 /* TerminalController+Surface.swift */,
 				NRTC0006 /* TerminalController+Pane.swift */,
@@ -1017,6 +1047,7 @@
 				D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */,
 				A5001090 /* AppDelegate.swift */,
 				H1AP0001 /* AppLifecycleCoordinator.swift */,
+				BEAD00000000000000000001 /* MainWindowController.swift */,
 				H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */,
 				C5E68FD3C9918B5717603304 /* SessionAutosaveCoordinator.swift */,
 				DDE5A5F043A04829779CF356 /* ShortcutRouting.swift */,
@@ -1123,6 +1154,8 @@
 				H1HK0001 /* HookInstallationCoordinator.swift */,
 				RVPN0000000000000000000F /* CLI+Review.swift */,
 				RCAP000002 /* CLI+Recap.swift */,
+				FADE00000000000000000004 /* CLI+HookSettingsIO.swift */,
+				FADE00000000000000000002 /* CLI+AgentDetection.swift */,
 				FE22E2E37BA6C8A7447AD12D /* SocketPathResolution.swift */,
 				5C0A7E41B93D2F6A18E4D057 /* SocketClient.swift */,
 			);
@@ -1183,6 +1216,7 @@
 				DA7A10CA710E000000000001 /* Localizable.xcstrings */,
 				DA7A10CA710E000000000002 /* InfoPlist.xcstrings */,
 				MRMD000004 /* mermaid.min.js */,
+				ACED00000000000000000002 /* programa-browser-snapshot.js */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -1208,6 +1242,7 @@
 							B9000022A1B2C3D4E5F60719 /* CloseWorkspaceCmdDUITests.swift */,
 							B9000019A1B2C3D4E5F60719 /* CloseWorkspaceConfirmDialogUITests.swift */,
 							B9000026A1B2C3D4E5F60719 /* CloseWindowConfirmDialogUITests.swift */,
+							BEEF50100000000000000004 /* WindowCloseConfirmCancelUITests.swift */,
 							B9000016A1B2C3D4E5F60719 /* MultiWindowNotificationsUITests.swift */,
 							818DBCD4AB69EB72573E8138 /* SidebarResizeUITests.swift */,
 							B8F266256A1A3D9A45BD840F /* SidebarHelpMenuUITests.swift */,
@@ -1230,6 +1265,14 @@
 					F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */,
 					F4000001A1B2C3D4E5F60718 /* GhosttyConfigTests.swift */,
 					F5000001A1B2C3D4E5F60718 /* SessionPersistenceTests.swift */,
+					BEEF5040A1B2C3D4E5F60004 /* ConfigFixSweepRegressionTests.swift */,
+					BEEF50200000000000000003 /* WorkspaceFixSweepWKSPRegressionTests.swift */,
+					BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */,
+					BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */,
+					BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */,
+					BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */,
+					BEEF50100000000000000002 /* ShellFixSweepSHELTests.swift */,
+					BEEF5030000000000000000B /* SocketFixSweepSOCKTests.swift */,
 					RRPL0001A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift */,
 					D3F772E2747D24AE2FAAC541 /* SessionAutosaveCoordinatorTests.swift */,
 					SWCT000002A1B2C3D4E5F607 /* SessionWALCoreTests.swift */,
@@ -1547,6 +1590,7 @@
 				A5FF0008 /* HostedViewPortalRegistry.swift in Sources */,
 				A5001007 /* TerminalController.swift in Sources */,
 				H1AP0002 /* AppLifecycleCoordinator.swift in Sources */,
+				BEAD00000000000000000002 /* MainWindowController.swift in Sources */,
 				H1SN0002 /* AppDelegate+SessionSnapshotPersistence.swift in Sources */,
 				A5FF0014 /* TerminalController+BrowserAutomation.swift in Sources */,
 				H1BR0002 /* BrowserRPCDispatcher.swift in Sources */,
@@ -1559,6 +1603,7 @@
 				AGRP0001A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift in Sources */,
 				WTMG000003 /* TerminalController+Worktree.swift in Sources */,
 				WTMG000007 /* TerminalController+Layout.swift in Sources */,
+				ACED00000000000000000003 /* TerminalController+SocketContext.swift in Sources */,
 					SNAP000001 /* TerminalController+Snapshot.swift in Sources */,
 				NRTC0015 /* TerminalController+Surface.swift in Sources */,
 				NRTC0016 /* TerminalController+Pane.swift in Sources */,
@@ -1673,6 +1718,7 @@
 							B900001AA1B2C3D4E5F60719 /* CloseWorkspaceConfirmDialogUITests.swift in Sources */,
 							B9000023A1B2C3D4E5F60719 /* CloseWorkspaceCmdDUITests.swift in Sources */,
 							B9000025A1B2C3D4E5F60719 /* CloseWindowConfirmDialogUITests.swift in Sources */,
+							BEEF50100000000000000003 /* WindowCloseConfirmCancelUITests.swift in Sources */,
 							B9000015A1B2C3D4E5F60719 /* MultiWindowNotificationsUITests.swift in Sources */,
 							B8F266236A1A3D9A45BD840F /* SidebarResizeUITests.swift in Sources */,
 							B8F266246A1A3D9A45BD840F /* SidebarHelpMenuUITests.swift in Sources */,
@@ -1695,6 +1741,14 @@
 					F3000000A1B2C3D4E5F60718 /* CJKIMEInputTests.swift in Sources */,
 					F4000000A1B2C3D4E5F60718 /* GhosttyConfigTests.swift in Sources */,
 					F5000000A1B2C3D4E5F60718 /* SessionPersistenceTests.swift in Sources */,
+					BEEF5040A1B2C3D4E5F60003 /* ConfigFixSweepRegressionTests.swift in Sources */,
+					BEEF50200000000000000004 /* WorkspaceFixSweepWKSPRegressionTests.swift in Sources */,
+					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */,
+					BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */,
+					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */,
+					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */,
+					BEEF50100000000000000001 /* ShellFixSweepSHELTests.swift in Sources */,
+					BEEF5030000000000000000A /* SocketFixSweepSOCKTests.swift in Sources */,
 					RRPL0002A1B2C3D4E5F60718 /* RendererRealizationPlannerTests.swift in Sources */,
 					3C03A46E60CFD11D198C9504 /* SessionAutosaveCoordinatorTests.swift in Sources */,
 					SWCT000001A1B2C3D4E5F607 /* SessionWALCoreTests.swift in Sources */,
@@ -1753,6 +1807,8 @@
 				B9000031A1B2C3D4E5F60719 /* CLI+Markdown.swift in Sources */,
 				RVPN00000000000000000010 /* CLI+Review.swift in Sources */,
 				RCAP000001 /* CLI+Recap.swift in Sources */,
+				FADE00000000000000000003 /* CLI+HookSettingsIO.swift in Sources */,
+				FADE00000000000000000001 /* CLI+AgentDetection.swift in Sources */,
 				B9000035A1B2C3D4E5F60719 /* CLI+Browser.swift in Sources */,
 				A51DE0700000000000000001 /* CLI+Aside.swift in Sources */,
 					B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */,

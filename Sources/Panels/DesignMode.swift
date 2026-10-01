@@ -67,8 +67,9 @@ struct DesignModePickRect: Equatable {
 
 struct DesignModePickPayload: Equatable {
     static let htmlTruncationLimit = 4000
-    static let truncationMarker = "\n... [truncated]"
+    static let truncationMarker = " ... [truncated]"
     static let fieldLengthLimit = 2000
+    static let cssKeyLimit = 64
 
     let html: String
     let css: [String: String]
@@ -77,16 +78,21 @@ struct DesignModePickPayload: Equatable {
     let url: String
 
     init(html: String, css: [String: String], selector: String, rect: DesignModePickRect, url: String) {
-        self.html = Self.truncatedHTML(html)
         // The page script is untrusted and these fields land in a terminal: no line breaks, bounded length.
+        self.html = Self.truncatedHTML(Self.singleLineHTML(html))
         var cleanCSS: [String: String] = [:]
-        for (key, value) in css {
-            cleanCSS[Self.singleLine(key)] = Self.singleLine(value)
+        for key in css.keys.sorted().prefix(Self.cssKeyLimit) {
+            cleanCSS[Self.singleLine(key)] = Self.singleLine(css[key] ?? "")
         }
         self.css = cleanCSS
         self.selector = Self.singleLine(selector)
         self.rect = rect
         self.url = Self.singleLine(url)
+    }
+
+    /// Line breaks become spaces so markup stays readable on one line.
+    static func singleLineHTML(_ value: String) -> String {
+        String(String.UnicodeScalarView(value.unicodeScalars.map { $0 == "\n" || $0 == "\r" ? " " : $0 }))
     }
 
     static func singleLine(_ value: String) -> String {
@@ -141,7 +147,29 @@ struct DesignModePickPayload: Equatable {
 // MARK: - Text composition (pure, unit-testable)
 
 enum DesignModeTextComposer {
+    static let maxComposedBytes = 16 * 1024
+
     static func compose(payload: DesignModePickPayload, screenshotPath: String?) -> String {
+        capped(composeUncapped(payload: payload, screenshotPath: screenshotPath))
+    }
+
+    /// Bounds the block typed into the terminal, cutting on a character boundary.
+    static func capped(_ text: String) -> String {
+        guard text.utf8.count > maxComposedBytes else { return text }
+        let marker = DesignModePickPayload.truncationMarker
+        let budget = maxComposedBytes - marker.utf8.count
+        var out = ""
+        var used = 0
+        for character in text {
+            let size = character.utf8.count
+            if used + size > budget { break }
+            out.append(character)
+            used += size
+        }
+        return out + marker
+    }
+
+    private static func composeUncapped(payload: DesignModePickPayload, screenshotPath: String?) -> String {
         var lines: [String] = []
         lines.append("Element: \(payload.selector)")
         lines.append("URL: \(payload.url)")
@@ -274,6 +302,10 @@ func activateDesignModeRoute(in workspace: Workspace) -> Bool {
 // MARK: - WKScriptMessageHandler
 
 private let designModeMessageHandlerName = "programaDesignMode"
+/// The picker runs in its own JS world: page scripts cannot see its globals or post to its handler.
+private let designModeContentWorld = WKContentWorld.world(name: "programa.designMode")
+/// An armed return target older than this is dropped instead of receiving a capture.
+private let designModeReturnTargetLifetime: TimeInterval = 10 * 60
 
 /// A `pick` posted by the page script counts only when it follows a real click in the web view;
 /// the script itself cannot be trusted to prove a user acted.
@@ -307,9 +339,9 @@ enum DesignModeBridgeMessage {
 }
 
 class DesignModeMessageHandler: NSObject, WKScriptMessageHandler {
-    private let onMessage: @MainActor (DesignModeBridgeMessage) -> Void
+    private let onMessage: @MainActor (DesignModeBridgeMessage, WKWebView?) -> Void
 
-    init(onMessage: @escaping @MainActor (DesignModeBridgeMessage) -> Void) {
+    init(onMessage: @escaping @MainActor (DesignModeBridgeMessage, WKWebView?) -> Void) {
         self.onMessage = onMessage
     }
 
@@ -325,8 +357,9 @@ class DesignModeMessageHandler: NSObject, WKScriptMessageHandler {
         }
         guard let body = message.body as? [String: Any],
               let bridgeMessage = DesignModeBridgeMessage(body: body) else { return }
+        let sourceWebView = message.webView
         Task { @MainActor in
-            onMessage(bridgeMessage)
+            onMessage(bridgeMessage, sourceWebView)
         }
     }
 }
@@ -457,8 +490,9 @@ enum DesignModePickerScript {
                 e.preventDefault();
                 e.stopPropagation();
                 var el = lastTarget || document.elementFromPoint(e.clientX, e.clientY);
-                deactivate();
+                // pick before deactivate: the app accepts a pick only while the picker is active.
                 if (el) pick(el);
+                deactivate();
             }
 
             function onKeyDown(e) {
@@ -510,26 +544,56 @@ enum DesignModePickerScript {
 
 extension BrowserPanel {
     func setupDesignModeMessageHandler(for webView: WKWebView) {
-        let handler = DesignModeMessageHandler { [weak self] message in
-            self?.handleDesignModeBridgeMessage(message)
+        let handler = DesignModeMessageHandler { [weak self] message, sourceWebView in
+            self?.handleDesignModeBridgeMessage(message, from: sourceWebView)
         }
         designModeMessageHandler = handler
-        webView.configuration.userContentController.add(handler, name: designModeMessageHandlerName)
+        webView.configuration.userContentController.add(
+            handler,
+            contentWorld: designModeContentWorld,
+            name: designModeMessageHandlerName
+        )
     }
 
     func armDesignModeRoundTrip(returnTo panelId: UUID) {
         pendingDesignModeReturnTargetPanelId = panelId
+        pendingDesignModeReturnTargetArmedAt = ProcessInfo.processInfo.systemUptime
     }
 
     func clearDesignModeRoundTrip(reason: String = "unspecified") {
         pendingDesignModeReturnTargetPanelId = nil
+        pendingDesignModeReturnTargetArmedAt = nil
     }
 
-    func handleDesignModeBridgeMessage(_ message: DesignModeBridgeMessage) {
+    /// A committed main-frame navigation or reload drops the page's picker script, so the
+    /// picker state and any armed return target end with it.
+    func resetDesignModeForMainFrameCommit() {
+        isDesignModeActive = false
+        clearDesignModeRoundTrip(reason: "mainFrameCommit")
+    }
+
+    func handleDesignModeBridgeMessage(_ message: DesignModeBridgeMessage, from sourceWebView: WKWebView?) {
+        guard sourceWebView === webView else {
+#if DEBUG
+            dlog("designMode.message dropped: stale web view")
+#endif
+            return
+        }
         switch message {
         case .stateChange(let isActive):
             isDesignModeActive = isActive
+            if !isActive, pendingDesignModeReturnTargetPanelId != nil {
+                // Escape ends the round trip; a later click must not paste. A pick arrives
+                // before its own deactivation and has already consumed the target.
+                clearDesignModeRoundTrip(reason: "deactivated")
+            }
         case .pick(let payload):
+            guard isDesignModeActive else {
+#if DEBUG
+                dlog("designMode.pick dropped: picker inactive")
+#endif
+                return
+            }
             let lastMouseDown = (webView as? ProgramaWebView)?.lastPrimaryMouseDownTimestamp
             guard DesignModePickGate.accepts(
                 lastNativeMouseDown: lastMouseDown,
@@ -540,9 +604,12 @@ extension BrowserPanel {
 #endif
                 return
             }
-            guard let returnPanelId = pendingDesignModeReturnTargetPanelId else {
-                // No return terminal armed (e.g. focused directly inside the browser panel with
-                // no terminal to return to): drop the capture.
+            guard let returnPanelId = pendingDesignModeReturnTargetPanelId,
+                  let armedAt = pendingDesignModeReturnTargetArmedAt,
+                  ProcessInfo.processInfo.systemUptime - armedAt <= designModeReturnTargetLifetime else {
+                // No (or an expired) return terminal armed, e.g. focused directly inside the
+                // browser panel with no terminal to return to: drop the capture.
+                clearDesignModeRoundTrip(reason: "pick.noTarget")
                 return
             }
             clearDesignModeRoundTrip(reason: "pick")
@@ -569,10 +636,17 @@ extension BrowserPanel {
 
     func injectDesignMode() async {
         let script = DesignModePickerScript.source(handlerName: designModeMessageHandlerName)
-        do {
-            _ = try await webView.evaluateJavaScript(script)
-        } catch {
-            NSLog("DesignMode: injection failed: %@", error.localizedDescription)
+        let failure: Error? = await withCheckedContinuation { continuation in
+            webView.evaluateJavaScript(script, in: nil, in: designModeContentWorld) { result in
+                if case .failure(let error) = result {
+                    continuation.resume(returning: error)
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+        if let failure {
+            NSLog("DesignMode: injection failed: %@", failure.localizedDescription)
             isDesignModeActive = false
         }
     }
@@ -580,6 +654,8 @@ extension BrowserPanel {
     func toggleDesignMode() {
         webView.evaluateJavaScript(
             "window.__PROGRAMA_DESIGN_MODE__ && window.__PROGRAMA_DESIGN_MODE__.toggle();",
+            in: nil,
+            in: designModeContentWorld,
             completionHandler: nil
         )
     }

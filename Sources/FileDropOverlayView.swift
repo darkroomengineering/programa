@@ -79,15 +79,18 @@ final class FileDropOverlayView: NSView {
     // file-drop, bonsplit tab drags, and sidebar tab reorder drags cannot conflict.
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        let pb = NSPasteboard(name: .drag)
         let eventType = NSApp.currentEvent?.type
+        // Only drag-motion events can capture; skip the drag pasteboard IPC for everything else.
+        let pasteboardTypes = DragOverlayRoutingPolicy.isDragMouseEvent(eventType)
+            ? NSPasteboard(name: .drag).types
+            : nil
         let shouldCapture = DragOverlayRoutingPolicy.shouldCaptureFileDropOverlay(
-            pasteboardTypes: pb.types,
+            pasteboardTypes: pasteboardTypes,
             eventType: eventType
         )
 #if DEBUG
         logHitTestDecision(
-            pasteboardTypes: pb.types,
+            pasteboardTypes: pasteboardTypes,
             eventType: eventType,
             shouldCapture: shouldCapture
         )

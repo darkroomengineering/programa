@@ -1189,12 +1189,14 @@ if tail -n "+${final_hook_line}" "${STATE_DIR}/operations.log" | grep -Eq '^muta
 fi
 
 # Main can also advance after alias bytes verify. The final pre-publication
-# recheck must preserve metadata, latest status, and the tag ref.
+# recheck must preserve metadata, latest status, and the tag ref, and end the
+# run with a notice (exit 0): the assets are already public, and the run for
+# the new main commit reconciles the rest.
 reset_state
 seed_sealed_candidate 103; seed_rolling 102; : > "${STATE_DIR}/operations.log"
 unset final_main_race_status
 FAKE_GH_ADVANCE_MAIN_BEFORE_METADATA="$(target_sha_for 104)" invoke_rolling || final_main_race_status=$?
-[[ "${final_main_race_status:-0}" -ne 0 ]] || fail "pre-metadata main advancement did not stop reconciliation"
+[[ "${final_main_race_status:-0}" -eq 0 ]] || fail "pre-metadata main advancement after public uploads ended the run red"
 grep -Fq "main-advanced-before-metadata $(target_sha_for 104)" "${STATE_DIR}/operations.log" || fail "pre-metadata main race hook was not reached"
 assert_asset_equals rolling appcast.xml "${FIXTURE_DIR}/103/appcast.xml"
 assert_asset_equals rolling programa-macos.dmg "${FIXTURE_DIR}/103/programa-macos.dmg"
@@ -1209,12 +1211,13 @@ if tail -n "+${final_main_hook_line}" "${STATE_DIR}/operations.log" | grep -Eq '
 fi
 
 # Notes generation is an external call and can race with main advancing. The
-# publisher must recheck main after notes return and before metadata/ref writes.
+# publisher must recheck main after notes return and before metadata/ref writes,
+# and stop with a notice (exit 0) because the assets are already public.
 reset_state
 seed_sealed_candidate 103; seed_rolling 102; : > "${STATE_DIR}/operations.log"
 unset notes_main_race_status
 FAKE_GH_ADVANCE_MAIN_DURING_NOTES="$(target_sha_for 104)" invoke_rolling || notes_main_race_status=$?
-[[ "${notes_main_race_status:-0}" -ne 0 ]] || fail "main advancement during notes did not stop publication"
+[[ "${notes_main_race_status:-0}" -eq 0 ]] || fail "main advancement during notes after public uploads ended the run red"
 grep -Fq "main-advanced-during-notes $(target_sha_for 104)" "${STATE_DIR}/operations.log" || fail "notes main-race hook was not reached"
 assert_file_equals "$(release_dir rolling)/title" 'Rolling 0.64.73'
 assert_file_equals "$(release_dir rolling)/body" 'notes-102'

@@ -25,8 +25,8 @@ enum WorktreeTools {
                 // Deliberately whitelist keys instead of forwarding `arguments` wholesale: this
                 // guarantees a `focus` argument can never reach the socket for this tool, even
                 // if a caller supplies one (it is not in the schema above, but nothing stops a
-                // client from sending it anyway). See docs/plans/mcp-server.md and the Phase 3
-                // briefing's "worktree.create is the special case" note.
+                // client from sending it anyway). worktree.create is the one tool where an agent must
+                // not be able to move the user's focus.
                 var params: [String: Any] = [:]
                 for key in ["repo", "branch", "base", "layout", "path", "window_id", "workspace_id", "surface_id"] {
                     guard let value = arguments[key] else { continue }

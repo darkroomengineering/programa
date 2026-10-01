@@ -26,13 +26,13 @@ pub struct AppState {
     /// / `auth_unconfigured` codes).
     pub password: Option<String>,
     /// The shared state model from `programa-domain`, the same crate the
-    /// in-process macOS core links via `programa-ffi` (`core/ABI.md`). PTYs
+    /// Windows app links in process via `programa-ffi` (`core/ABI.md`). PTYs
     /// stay in `sessions` above; this only tracks workspaces, panes,
     /// surfaces, layout, and selection. A domain surface that is a terminal
     /// carries a `session_id` that names a session in `sessions`, but the
     /// two are otherwise independent: closing this lock never blocks on
     /// session I/O and vice versa. See `workspace_dispatch` below and
-    /// `core/docs/programad.md` "Process layer" for the reconciliation rule
+    /// `core/ABI.md` "Process layer" for the reconciliation rule
     /// applied on `session.close` and when a session's child exits.
     pub domain: Mutex<DomainCore>,
 }

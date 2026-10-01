@@ -55,7 +55,12 @@ enum ReviewDiffParser {
     /// Parses (potentially multi-file) `git diff --no-color` unified-diff output.
     static func parse(_ diffText: String) -> [ReviewFileDiff] {
         guard !diffText.isEmpty else { return [] }
-        let lines = diffText.components(separatedBy: "\n")
+        var lines = diffText.components(separatedBy: "\n")
+        // git ends its output with a newline, which leaves one empty element after the split.
+        // Left in, the last hunk would read it as an extra blank context line.
+        if diffText.hasSuffix("\n") {
+            lines.removeLast()
+        }
 
         var result: [ReviewFileDiff] = []
         var index = 0

@@ -59,6 +59,9 @@ final class Workspace: Identifiable, ObservableObject {
 
     /// When true, suppresses auto-creation in didSplitPane (programmatic splits handle their own panels)
     var isProgrammaticSplit = false
+    /// While true, bonsplit select/focus delegate callbacks do not re-apply selection or focus.
+    /// Set only by `restorePaneSelectionWithoutFocus`.
+    var suppressSelectionDelegateCallbacks = false
     /// When true, the split-cap delegate veto is bypassed: session restore must
     /// rebuild pre-cap layouts (5+ panes) without losing panes.
     var isRestoringSessionLayout = false
@@ -292,7 +295,7 @@ final class Workspace: Identifiable, ObservableObject {
     // MARK: - Initialization
 
     init(
-        title: String = "Terminal",
+        title: String = String(localized: "workspace.defaultTitle.terminal", defaultValue: "Terminal"),
         workingDirectory: String? = nil,
         portOrdinal: Int = 0,
         configTemplate: ProgramaSurfaceConfigTemplate? = nil,
@@ -406,7 +409,7 @@ final class Workspace: Identifiable, ObservableObject {
     /// The panel's surface is already running a shell process.
     init(
         claimedPanel: TerminalPanel,
-        title: String = "Terminal",
+        title: String = String(localized: "workspace.defaultTitle.terminal", defaultValue: "Terminal"),
         workingDirectory: String? = nil,
         portOrdinal: Int = 0,
         configTemplate: ProgramaSurfaceConfigTemplate? = nil
@@ -597,6 +600,11 @@ final class Workspace: Identifiable, ObservableObject {
         let cachedTitle: String?
         let customTitle: String?
         let manuallyUnread: Bool
+        /// Workspace the surface was detached from; its notifications stay keyed there until
+        /// the transfer attaches (re-keyed) or is finalized (cleared).
+        let sourceWorkspaceId: UUID
+        /// Agent presence carried across the move so the destination keeps the agent's state.
+        let agentPresence: AgentPresence?
         private var state: State = .pending
 
         init(
@@ -613,7 +621,9 @@ final class Workspace: Identifiable, ObservableObject {
             ttyName: String?,
             cachedTitle: String?,
             customTitle: String?,
-            manuallyUnread: Bool
+            manuallyUnread: Bool,
+            sourceWorkspaceId: UUID,
+            agentPresence: AgentPresence?
         ) {
             self.panelId = panelId
             self.panel = panel
@@ -629,6 +639,8 @@ final class Workspace: Identifiable, ObservableObject {
             self.cachedTitle = cachedTitle
             self.customTitle = customTitle
             self.manuallyUnread = manuallyUnread
+            self.sourceWorkspaceId = sourceWorkspaceId
+            self.agentPresence = agentPresence
         }
 
         fileprivate var isPending: Bool {
@@ -673,6 +685,16 @@ final class Workspace: Identifiable, ObservableObject {
             state = .finalized
             panel.close()
             TerminalController.shared.v2BrowserPermanentlyRemoveSurfaceState(surfaceId: panelId)
+            AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: sourceWorkspaceId, surfaceId: panelId)
+            if agentPresence != nil {
+                AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
+                SocketEventBroadcaster.shared.publishAgentState(
+                    workspaceId: sourceWorkspaceId,
+                    surfaceId: panelId,
+                    state: nil,
+                    source: nil
+                )
+            }
         }
     }
 
@@ -856,17 +878,29 @@ final class Workspace: Identifiable, ObservableObject {
         return workspace
     }
 
+    /// True when `panelId` hosts an agent that agent detection already knows about and that can
+    /// take an implicit Return: presence exists, it is not blocked on a permission or y/n prompt,
+    /// and it is not stale. A plain shell must never receive an implicit Return.
+    func canAutoSubmitToAgent(panelId: UUID, now: Date = Date()) -> Bool {
+        guard let presence = panelAgentPresence[panelId] else { return false }
+        return presence.state != .blocked && !presence.isStale(now: now)
+    }
+
+    /// Delivers `text` to `terminalPanel` as one paste (bracketed paste when the program enabled
+    /// it), so embedded newlines stay inside a single prompt instead of each becoming Return.
+    /// Submits with a single Return only when `canAutoSubmitToAgent` holds. The paste and the
+    /// Return queue in order while the surface is not realized yet.
+    func deliverTextToAgent(_ text: String, terminalPanel: TerminalPanel) {
+        terminalPanel.sendText(text)
+        if canAutoSubmitToAgent(panelId: terminalPanel.id) {
+            terminalPanel.surface.sendNamedKey("enter")
+        }
+        terminalPanel.surface.forceRefresh(reason: "workspace.deliverTextToAgent")
+    }
+
     func sendReviewComments(sourceSurfaceId: UUID, text: String) -> Bool {
         guard let terminalPanel = terminalPanel(for: sourceSurfaceId) else { return false }
-        // Deferred terminal input can be evicted from its bounded queue. Keep review drafts
-        // until a live surface can accept dispatch rather than treating that queue as delivery.
-        guard let surface = terminalPanel.surface.surface else {
-            terminalPanel.surface.requestBackgroundSurfaceStartIfNeeded()
-            return false
-        }
-        let textToSend = text + "\r"
-        TerminalController.shared.sendSocketText(textToSend, surface: surface)
-        terminalPanel.surface.forceRefresh(reason: "reviewPanel.sendComments")
+        deliverTextToAgent(text, terminalPanel: terminalPanel)
         return true
     }
 
@@ -908,7 +942,9 @@ final class Workspace: Identifiable, ObservableObject {
 
     func resolvedPanelTitle(panelId: UUID, fallback: String) -> String {
         let trimmedFallback = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
-        let fallbackTitle = trimmedFallback.isEmpty ? "Tab" : trimmedFallback
+        let fallbackTitle = trimmedFallback.isEmpty
+            ? String(localized: "panel.displayName.fallback", defaultValue: "Tab")
+            : trimmedFallback
         if let custom = panelCustomTitles[panelId]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !custom.isEmpty {
             return custom
@@ -1281,6 +1317,9 @@ final class Workspace: Identifiable, ObservableObject {
         terminalInheritanceFontPointsByPanelId.removeAll(keepingCapacity: false)
         lastTerminalConfigInheritancePanelId = nil
         lastTerminalConfigInheritanceFontPoints = nil
+        // A closing workspace must not leave its app-wide layout observers (including
+        // NSWindow.didUpdateNotification) registered until the 2 s timeout. Idempotent.
+        clearLayoutFollowUp()
     }
 
     /// Close a panel.
@@ -1762,6 +1801,9 @@ final class Workspace: Identifiable, ObservableObject {
         }
         if let ttyName = normalizedSidebarTTYName(detached.ttyName) {
             _ = setSidebarTTYName(panelId: detached.panelId, ttyName: ttyName)
+            // Port tracking is keyed by workspace; the source unregistered this panel on detach.
+            PortScanner.shared.registerTTY(workspaceId: id, panelId: detached.panelId, ttyName: ttyName)
+            PortScanner.shared.kick(workspaceId: id, panelId: detached.panelId)
         } else {
             surfaceTTYNames.removeValue(forKey: detached.panelId)
         }
@@ -1821,6 +1863,14 @@ final class Workspace: Identifiable, ObservableObject {
         }
 
         surfaceIdToPanelId[newTabId] = detached.panelId
+        if let agentPresence = detached.agentPresence {
+            panelAgentPresence[detached.panelId] = agentPresence
+        }
+        AppDelegate.shared?.notificationStore?.rekeyNotifications(
+            surfaceId: detached.panelId,
+            fromTabId: detached.sourceWorkspaceId,
+            toTabId: id
+        )
         if let index {
             _ = bonsplitController.reorderTab(newTabId, toIndex: index)
         }
@@ -1838,6 +1888,9 @@ final class Workspace: Identifiable, ObservableObject {
         }
         scheduleTerminalGeometryReconcile()
         guard detached.markAttached(to: id) else { return nil }
+        if detached.panel is TerminalPanel {
+            reinstallReviewSubscriptions(watchingSourceSurfaceId: detached.panelId)
+        }
 
 #if DEBUG
         dlog(
@@ -1848,6 +1901,21 @@ final class Workspace: Identifiable, ObservableObject {
         )
 #endif
         return detached.panelId
+    }
+
+    /// A review panel's refresh trigger watches its source terminal's owning workspace, resolved
+    /// at install time. When that terminal moves to this workspace, reinstall every review panel
+    /// subscription that watches it so idle-edge refreshes keep firing.
+    private func reinstallReviewSubscriptions(watchingSourceSurfaceId sourceSurfaceId: UUID) {
+        guard let contexts = AppDelegate.shared?.mainWindowContexts.values else { return }
+        for context in contexts {
+            for workspace in context.tabManager.tabs {
+                for case let reviewPanel as ReviewPanel in workspace.panels.values
+                where reviewPanel.sourceSurfaceId == sourceSurfaceId {
+                    workspace.installReviewPanelSubscription(reviewPanel)
+                }
+            }
+        }
     }
 
     /// Reinstalls per-panel-kind workspace binding and lifecycle subscriptions when a panel is

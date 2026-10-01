@@ -18,7 +18,6 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
 use nix::pty::{openpty, OpenptyResult};
-use nix::sys::termios;
 
 /// Serializes descriptor creation that cannot request CLOEXEC atomically on
 /// every supported Unix platform with every `Command::spawn` fork window.
@@ -168,17 +167,5 @@ fn set_nonblocking(fd: &OwnedFd) -> io::Result<()> {
     let mut flags = OFlag::from_bits_truncate(flags);
     flags.insert(OFlag::O_NONBLOCK);
     fcntl(raw, FcntlArg::F_SETFL(flags)).map_err(io::Error::from)?;
-    Ok(())
-}
-
-/// Put the master fd's underlying termios in a sane default state. Not
-/// currently exercised by callers (the slave/child sets its own raw/cooked
-/// mode as usual); kept as a documented no-op hook because several v1
-/// escrow-poc notes call this out as an easy place for future echo/flow
-/// control bugs to hide.
-#[allow(dead_code)]
-fn ensure_default_termios(fd: &OwnedFd) -> io::Result<()> {
-    let attrs = termios::tcgetattr(fd).map_err(io::Error::from)?;
-    termios::tcsetattr(fd, termios::SetArg::TCSANOW, &attrs).map_err(io::Error::from)?;
     Ok(())
 }

@@ -21,7 +21,8 @@
 Run many coding agents in parallel and always know which one needs you.
 
 The features below describe the macOS app. A native Windows frontend using
-WinUI 3 is in development, with shared core behavior and platform-native UI.
+WinUI 3 is in development, built on a Rust shared core (`core/`) that the macOS
+app does not use.
 See [Windows support](#windows-preview) and the
 [Windows testing guide](docs/windows-testing.md).
 
@@ -42,13 +43,6 @@ More: named layouts (`programa layout save/apply`), a markdown viewer panel, ins
   <img src="./docs/assets/macos-badge.png" alt="Download Programa for macOS" width="180" />
 </a>
 
-or
-
-```bash
-brew tap darkroomengineering/programa
-brew install --cask programa
-```
-
 The macOS app auto-updates. Every commit on `main` that passes CI advances the
 [rolling release](https://github.com/darkroomengineering/programa/releases/tag/rolling),
 which provides `programa-macos.dmg`. macOS ships independently of Windows: the
@@ -68,10 +62,10 @@ reattaches to them live on the next launch.
 
 ### Windows preview
 
-The Windows frontend uses WinUI 3 controls. macOS retains
-its AppKit/SwiftUI interface. Workspace, tab, split, and session behavior belongs
-in the shared core; each frontend handles its platform's rendering, input,
-window management, and accessibility.
+The Windows frontend uses WinUI 3 controls, and its workspace, tab, split, and
+session state lives in the Rust shared core (`core/`). The macOS app keeps its
+own AppKit/SwiftUI interface and Swift state model. Each frontend handles its
+platform's rendering, input, window management, and accessibility.
 
 The Windows download is `programa-windows.exe` on the same
 [rolling release](https://github.com/darkroomengineering/programa/releases/tag/rolling)

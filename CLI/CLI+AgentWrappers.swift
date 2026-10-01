@@ -429,6 +429,9 @@ extension ProgramaCLI {
     }
 
     private static let omoPluginName = "oh-my-opencode"
+    /// Exact version installed into the shadow package. A floating `latest` would run any new
+    /// npm release's install scripts as the user; bump this deliberately after reviewing one.
+    private static let omoPluginVersion = "5.1.7"
 
     private func resolveExecutableInPath(_ name: String) -> String? {
         let entries = ProcessInfo.processInfo.environment["PATH"]?.split(separator: ":").map(String.init) ?? []
@@ -469,11 +472,10 @@ extension ProgramaCLI {
         }
 
         // Keep the shadow package isolated from stale/yanked pins in the user's
-        // opencode package.json. bun will update this manifest with the resolved
-        // oh-my-opencode version when installation succeeds.
+        // opencode package.json, and pinned to the one reviewed release.
         let packageManifest: [String: Any] = [
             "dependencies": [
-                Self.omoPluginName: "latest"
+                Self.omoPluginName: Self.omoPluginVersion
             ],
             "name": "programa-omo-shadow",
             "private": true
@@ -679,7 +681,7 @@ extension ProgramaCLI {
             let installDir = shadowDir
             if let bunPath = resolveExecutableInPath("bun") {
                 FileHandle.standardError.write("Installing oh-my-opencode plugin (this may take a minute on first run)...\n".data(using: .utf8)!)
-                let installArguments = ["add", Self.omoPluginName]
+                let installArguments = ["add", "--exact", "\(Self.omoPluginName)@\(Self.omoPluginVersion)"]
                 let firstAttemptStatus = try omoRunPackageInstall(
                     executablePath: bunPath,
                     arguments: installArguments,
@@ -703,7 +705,7 @@ extension ProgramaCLI {
                 FileHandle.standardError.write("Installing oh-my-opencode plugin (this may take a minute on first run)...\n".data(using: .utf8)!)
                 let status = try omoRunPackageInstall(
                     executablePath: npmPath,
-                    arguments: ["install", Self.omoPluginName],
+                    arguments: ["install", "--save-exact", "\(Self.omoPluginName)@\(Self.omoPluginVersion)"],
                     currentDirectoryURL: installDir
                 )
                 if status != 0 {

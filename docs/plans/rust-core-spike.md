@@ -1,6 +1,6 @@
 # Rust core spike: decide with numbers, not a rewrite
 
-Status: spike complete, decision recorded (2026-09-15); reconciled with the Windows frontend that landed on main (2026-09-16)
+Status: superseded. The Rust core serves the Windows app only and is not part of the macOS app (`core/ABI.md`). Spike recorded 2026-09-15.
 
 ## Question
 
@@ -49,7 +49,7 @@ No fixes were applied in either pass because no hotspot existed. Conclusion: the
 
 Repo: `~/Developer/@darkroom/programa-spike` (5 commits, `cargo build --release` clean). Pinned: `gpui-kit 0.6.1` (which pulls `gpui-pre 0.3.5`, Longbridge's private republish of a Zed gpui snapshot; the `gpui` crate on crates.io is unrelated), `alacritty_terminal 0.26.0`.
 
-Works: PTY-backed shells, canvas grid render with 256 and truecolor, cursor, keyboard including Ctrl and Alt-as-Meta, wheel scrollback, tabs with Cmd+T/W/1-9, recursively nested splits with Cmd+D and Cmd+Shift+D, click focus, reflow on resize. Screenshot in the spike repo at `docs/screenshot.png`. Cut: drag-resize of splits, dock panels, terminfo, IME, native menu, accessibility, any socket API.
+Works: PTY-backed shells, canvas grid render with 256 and truecolor, cursor, keyboard including Ctrl and Alt-as-Meta, wheel scrollback, tabs with Cmd+T/W/1-9, recursively nested splits with Cmd+D and Cmd+Shift+D, click focus, reflow on resize. Screenshot in the spike repository (not this one) at `docs/screenshot.png`. Cut: drag-resize of splits, dock panels, terminfo, IME, native menu, accessibility, any socket API.
 
 | Metric | Programa (tagged Debug, today) | Spike (release) | Caveat |
 |---|---|---|---|

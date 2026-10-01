@@ -19,6 +19,23 @@ struct ProgramaConfigExecutor {
 
         let resolvedCommand = command.command.map { substituteParameters(in: $0, values: parameterValues) }
 
+        guard !commandTexts(of: command, resolvedCommand: resolvedCommand)
+            .contains(where: containsDisallowedControlCharacters) else {
+            let alert = NSAlert()
+            alert.messageText = String(
+                localized: "conf.programaConfig.invalidCommand.title",
+                defaultValue: "Command Needs Correction"
+            )
+            alert.informativeText = String(
+                localized: "conf.programaConfig.invalidCommand.message",
+                defaultValue: "This programa.json command contains control characters (such as Escape or Tab) that the shell would act on but the confirmation dialog cannot show. Remove them and try again. Nothing was run."
+            )
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: String(localized: "common.ok", defaultValue: "OK"))
+            alert.runModal()
+            return
+        }
+
         guard confirmIfUntrusted(
             kind: .command,
             confirmFlag: command.confirm == true,
@@ -90,6 +107,67 @@ struct ProgramaConfigExecutor {
         return true
     }
 
+    /// True when `text` holds a C0 control other than a newline, DEL, or a C1 control. Shell
+    /// line editors act on these (ESC sequences, ^U, ^W, ^Y, Tab completion), and NSAlert shows
+    /// most of them as nothing, so the dialog and the shell would disagree about the command.
+    /// Newlines stay allowed: they separate the lines of a multi-line command, and the dialog
+    /// shows each one as a visible ⏎.
+    static func containsDisallowedControlCharacters(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            (scalar.value < 0x20 && scalar != "\n") || (0x7F...0x9F).contains(scalar.value)
+        }
+    }
+
+    /// Every command string an entry would type into a terminal: the top-level command, or
+    /// each surface command of a workspace layout.
+    static func commandTexts(of command: ProgramaCommandDefinition, resolvedCommand: String?) -> [String] {
+        if let text = resolvedCommand ?? command.command {
+            return [text]
+        }
+        guard let layout = command.workspace?.layout else { return [] }
+        return surfaceDefinitions(in: layout).compactMap(\.command)
+    }
+
+    private static func surfaceDefinitions(in node: ProgramaLayoutNode) -> [ProgramaSurfaceDefinition] {
+        switch node {
+        case let .pane(pane):
+            return pane.surfaces
+        case let .split(split):
+            return split.children.flatMap(surfaceDefinitions(in:))
+        }
+    }
+
+    /// Whether a config-sourced browser surface may load `rawURL`: only absolute http(s)
+    /// URLs. `file:`, `javascript:`, custom app schemes and the like are refused.
+    static func isAllowedConfigBrowserURL(_ rawURL: String) -> Bool {
+        guard let url = URL(string: rawURL),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty else {
+            return false
+        }
+        return true
+    }
+
+    /// The layout with every browser surface URL that `isAllowedConfigBrowserURL` refuses
+    /// removed, so such a surface opens blank instead of loading it.
+    static func layoutRefusingNonHTTPBrowserURLs(_ node: ProgramaLayoutNode) -> ProgramaLayoutNode {
+        switch node {
+        case var .pane(pane):
+            pane.surfaces = pane.surfaces.map { surface in
+                var surface = surface
+                if surface.type == .browser, let url = surface.url, !isAllowedConfigBrowserURL(url) {
+                    surface.url = nil
+                }
+                return surface
+            }
+            return .pane(pane)
+        case var .split(split):
+            split.children = split.children.map(layoutRefusingNonHTTPBrowserURLs)
+            return .split(split)
+        }
+    }
+
     /// The security decision, isolated from the UI so it can be tested directly.
     ///
     /// | directory | `confirm:` | prompt? |
@@ -145,6 +223,9 @@ struct ProgramaConfigExecutor {
         } ?? .trusted
         let trusted = trustState == .trusted
         let configChanged = trustState == .changed
+        let configNeverDigested = configChanged && configSourcePath.map {
+            !ProgramaDirectoryTrust.shared.hasRecordedDigest(configPath: $0)
+        } == true
 
         guard configChanged || requiresConfirmation(confirmFlag: confirmFlag, isTrusted: trusted) else {
             return true
@@ -184,13 +265,19 @@ struct ProgramaConfigExecutor {
             )
         }
 
+        // When settings.json manages the trusted roots, a root granted from this dialog would be
+        // dropped on the next reapply, so the checkbox is only offered for a config whose root the
+        // file already trusts (recording its digest survives the reapply).
+        let trustIsFileManaged = KeyboardShortcutSettings.settingsFileStore.isTrustedDirectoriesManagedByFile()
+        let offerTrust = !trusted && !(trustIsFileManaged && trustState == .untrusted)
         return showConfirmDialog(
             title: title,
             messageFormat: messageFormat,
             affirmativeButtonTitle: affirmativeButtonTitle,
             detail: detail,
-            configPath: trusted ? nil : configSourcePath,
-            configChanged: configChanged
+            configPath: offerTrust ? configSourcePath : nil,
+            configChanged: configChanged,
+            configNeverDigested: configNeverDigested
         )
     }
 
@@ -224,10 +311,13 @@ struct ProgramaConfigExecutor {
             ),
             sanitizeForDisplay(workspaceName)
         )]
+        if let cwd = workspace.cwd, !cwd.isEmpty {
+            lines.append("  cwd=" + sanitizeForDisplay(cwd))
+        }
 
         let surfaceLines = workspace.layout.map(surfaceDescriptions(in:)) ?? []
         if surfaceLines.isEmpty {
-            return lines[0]
+            return lines.joined(separator: "\n")
         }
         lines.append("")
         lines.append(contentsOf: surfaceLines.map { "  " + $0 })
@@ -260,10 +350,24 @@ struct ProgramaConfigExecutor {
     }
 
     /// Human-readable summary of one surface's observable effects, or nil if it does
-    /// nothing (no command, cwd, or env). Every attacker-controlled string is sanitized
+    /// nothing (no command, cwd, env, or URL). Every attacker-controlled string is sanitized
     /// individually before composition.
     private static func describeSurface(_ surface: ProgramaSurfaceDefinition) -> String? {
         var parts: [String] = []
+
+        if surface.type == .browser, let url = surface.url, !url.isEmpty {
+            if isAllowedConfigBrowserURL(url) {
+                parts.append("url=" + sanitizeForDisplay(url))
+            } else {
+                parts.append(String(
+                    format: String(
+                        localized: "conf.programaConfig.urlRefused",
+                        defaultValue: "url=%@ (not opened: only http and https URLs load)"
+                    ),
+                    sanitizeForDisplay(url)
+                ))
+            }
+        }
 
         if let command = surface.command, !command.isEmpty {
             parts.append(sanitizeForDisplay(command))
@@ -299,7 +403,8 @@ struct ProgramaConfigExecutor {
         affirmativeButtonTitle: String,
         detail: String,
         configPath: String?,
-        configChanged: Bool = false
+        configChanged: Bool = false,
+        configNeverDigested: Bool = false
     ) -> Bool {
         let alert = NSAlert()
         alert.messageText = title
@@ -309,10 +414,15 @@ struct ProgramaConfigExecutor {
         // each surface on its own line.
         var informativeText = String(format: messageFormat, detail)
         if configChanged {
-            let changedWarning = String(
-                localized: "dialog.programaConfig.confirmCommand.configChanged",
-                defaultValue: "This folder's programa.json has changed since you trusted it."
-            )
+            let changedWarning = configNeverDigested
+                ? String(
+                    localized: "dialog.programaConfig.confirmCommand.configNeverDigested",
+                    defaultValue: "Programa now checks each project config file. Review this config and trust it again."
+                )
+                : String(
+                    localized: "dialog.programaConfig.confirmCommand.configChanged",
+                    defaultValue: "This folder's programa.json has changed since you trusted it."
+                )
             informativeText = changedWarning + "\n\n" + informativeText
         }
         alert.informativeText = informativeText
@@ -467,9 +577,11 @@ struct ProgramaConfigExecutor {
     private static func sanitizeForDisplay(_ text: String) -> String {
         // Collapse newlines WITHIN this single value -- the composed multi-line summary
         // still needs real newlines BETWEEN entries, which callers add after this returns.
+        // Each line break becomes a visible ⏎, so a multi-line command reads as several
+        // commands instead of one joined line.
         let collapsed = strippingDangerousScalars(text).replacingOccurrences(
-            of: "[\\r\\n]+",
-            with: " ",
+            of: "\\r\\n|\\r|\\n",
+            with: " ⏎ ",
             options: .regularExpression
         )
         let trimmed = collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -527,6 +639,6 @@ struct ProgramaConfigExecutor {
         }
 
         guard let layout = wsDef.layout else { return }
-        newWorkspace.applyCustomLayout(layout, baseCwd: resolvedCwd)
+        newWorkspace.applyCustomLayout(layoutRefusingNonHTTPBrowserURLs(layout), baseCwd: resolvedCwd)
     }
 }

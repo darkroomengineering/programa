@@ -160,24 +160,28 @@ struct GitWorktreeManager {
             return .worktreePathExists
         }
 
+        // `--` ends option parsing, so a caller-supplied path or base such as `--detach` is
+        // read as a path or ref name, never as an option. `-b <branch>` is an option value and
+        // is safe before it.
         var arguments = ["worktree", "add"]
-        if branchExistsLocally(branch, repoRoot: repoRoot) {
-            arguments.append(path)
-            arguments.append(branch)
+        let branchExisted = branchExistsLocally(branch, repoRoot: repoRoot)
+        if branchExisted {
+            arguments.append(contentsOf: ["--", path, branch])
         } else {
-            arguments.append(contentsOf: ["-b", branch])
-            arguments.append(path)
-            arguments.append(base ?? "HEAD")
+            arguments.append(contentsOf: ["-b", branch, "--", path, base ?? "HEAD"])
         }
 
         let result = runGitCommand(directory: repoRoot, arguments: arguments)
         guard let result else {
             return .gitCommandFailed(message: "Failed to run git")
         }
-        if result.timedOut {
-            return .gitCommandFailed(message: "git worktree add timed out")
-        }
-        guard result.exitStatus == 0 else {
+        guard !result.timedOut, result.exitStatus == 0 else {
+            if !branchExisted {
+                deleteBranchIfUnused(branch, repoRoot: repoRoot)
+            }
+            if result.timedOut {
+                return .gitCommandFailed(message: "git worktree add timed out")
+            }
             let message = (result.stderr ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             return .gitCommandFailed(message: message.isEmpty ? "git worktree add failed" : message)
         }
@@ -188,14 +192,28 @@ struct GitWorktreeManager {
         return .success(entry)
     }
 
+    /// Deletes local branch `branch` when no worktree has it checked out. Used to undo a
+    /// branch that this process created with `worktree add -b` when the add (or the caller's
+    /// follow-up) failed. Callers must only pass a branch they created: this does not check
+    /// whether the branch holds commits. Returns whether the branch is gone afterwards.
+    @discardableResult
+    nonisolated static func deleteBranchIfUnused(_ branch: String, repoRoot: String) -> Bool {
+        guard branchExistsLocally(branch, repoRoot: repoRoot) else { return true }
+        guard worktreeEntry(forBranch: branch, repoRoot: repoRoot) == nil else { return false }
+        let result = runGitCommand(
+            directory: repoRoot,
+            arguments: ["update-ref", "-d", "refs/heads/\(branch)"]
+        )
+        return result?.exitStatus == 0 && result?.timedOut == false
+    }
+
     // MARK: - Remove
 
-    /// Removes the worktree at `path`. Never passes `--force` to git regardless of caller
-    /// intent for dirty-state override -- `force` here only controls whether we retry with
-    /// `--force` after confirming the worktree is *not* dirty for some other git-refusal
-    /// reason (e.g. locked). A dirty worktree always surfaces as `.worktreeDirty` so the
-    /// caller can require an explicit second confirmation instead of silently discarding
-    /// uncommitted work. This function never deletes the underlying branch.
+    /// Removes the worktree at `path`. With `force: false`, git refuses a worktree with
+    /// modified or untracked files and that refusal surfaces as `.worktreeDirty`, so the caller
+    /// can ask for an explicit second confirmation instead of discarding uncommitted work.
+    /// With `force: true`, `--force` is passed to git and a dirty worktree is removed. This
+    /// function never deletes the underlying branch.
     nonisolated static func remove(repoRoot: String, path: String, force: Bool) -> RemoveOutcome {
         guard worktreeEntry(atPath: path, repoRoot: repoRoot) != nil else {
             return .worktreeNotFound
@@ -205,7 +223,7 @@ struct GitWorktreeManager {
         if force {
             arguments.append("--force")
         }
-        arguments.append(path)
+        arguments.append(contentsOf: ["--", path])
 
         let result = runGitCommand(directory: repoRoot, arguments: arguments)
         guard let result else {
@@ -238,8 +256,7 @@ struct GitWorktreeManager {
         arguments: [String],
         timeout: TimeInterval = defaultTimeout
     ) -> CanonicalSubprocessResult? {
-        CanonicalSubprocessRunner.run(
-            executable: "git",
+        CanonicalSubprocessRunner.runAutomaticGit(
             arguments: arguments,
             currentDirectory: directory,
             timeout: timeout,

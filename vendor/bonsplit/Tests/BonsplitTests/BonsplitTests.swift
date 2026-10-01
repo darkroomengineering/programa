@@ -522,7 +522,7 @@ final class BonsplitTests: XCTestCase {
     }
 
     @MainActor
-    func testDoubleClickingEmptyTrailingTabBarSpaceRequestsNewTerminalTab() {
+    func testDoubleClickingEmptyTrailingTabBarSpaceDoesNotRequestNewTab() {
         let appearance = BonsplitConfiguration.Appearance(showSplitButtons: false)
         let configuration = BonsplitConfiguration(appearance: appearance)
         let controller = BonsplitController(configuration: configuration)
@@ -561,10 +561,12 @@ final class BonsplitTests: XCTestCase {
             XCTFail("Expected mouse event")
             return
         }
-        NSApp.sendEvent(event)
+        // Empty tab-bar space behaves like a title bar: a double-click runs the system
+        // double-click action (zoom or minimize), never a new tab.
+        window.sendEvent(event)
 
-        XCTAssertEqual(spy.requestedKind, "terminal")
-        XCTAssertEqual(spy.requestedPaneId, pane.id)
+        XCTAssertNil(spy.requestedKind)
+        XCTAssertNil(spy.requestedPaneId)
     }
 
     func testIconSaturationKeepsRasterFaviconInColorWhenInactive() {

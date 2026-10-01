@@ -188,9 +188,31 @@ extension ProgramaCLI {
         return nil
     }
 
-    private func tmuxWorkspaceItems(client: SocketClient) throws -> [[String: Any]] {
-        let payload = try client.sendV2(method: V2MethodNames.workspaceList)
-        return payload["workspaces"] as? [[String: Any]] ?? []
+    /// Workspaces the shim can target: the caller's window first (it plays tmux's current
+    /// session), then every other window. A bare `workspace.list` answers for the app's
+    /// current window, so a pane printed by `split-window -P` became unreachable as soon as
+    /// the user moved to another window.
+    private func tmuxWorkspaceItems(client: SocketClient, allWindows: Bool = true) throws -> [[String: Any]] {
+        let callerParams: [String: Any] = tmuxCallerWorkspaceHandle().map { ["workspace_id": $0] } ?? [:]
+        let payload: [String: Any]
+        if let scoped = try? client.sendV2(method: V2MethodNames.workspaceList, params: callerParams) {
+            payload = scoped
+        } else {
+            payload = try client.sendV2(method: V2MethodNames.workspaceList)
+        }
+        var items = payload["workspaces"] as? [[String: Any]] ?? []
+        guard allWindows else { return items }
+        var seen = Set(items.compactMap { $0["id"] as? String })
+        let windows = try client.sendV2(method: V2MethodNames.windowList)["windows"] as? [[String: Any]] ?? []
+        for window in windows {
+            guard let windowId = window["id"] as? String, windowId != payload["window_id"] as? String else { continue }
+            let other = try client.sendV2(method: V2MethodNames.workspaceList, params: ["window_id": windowId])
+            for item in other["workspaces"] as? [[String: Any]] ?? [] {
+                guard let id = item["id"] as? String, seen.insert(id).inserted else { continue }
+                items.append(item)
+            }
+        }
+        return items
     }
 
     private func tmuxIsClaudeTeamWorkspace(_ item: [String: Any]) -> Bool {
@@ -764,6 +786,45 @@ extension ProgramaCLI {
         if let lastError { throw lastError }
     }
 
+    /// The pane across the border opposite `direction` (the right neighbor for `left`), from
+    /// `pane.list` pixel frames: the nearest pane whose facing edge lies beyond this pane's
+    /// opposite edge and that overlaps it on the other axis. Nil when there is none.
+    private func tmuxOppositeNeighborPaneId(
+        of paneId: String,
+        direction: String,
+        workspaceId: String,
+        client: SocketClient
+    ) throws -> String? {
+        let payload = try client.sendV2(method: V2MethodNames.paneList, params: ["workspace_id": workspaceId])
+        let panes = payload["panes"] as? [[String: Any]] ?? []
+        typealias Edges = (minX: Double, minY: Double, maxX: Double, maxY: Double)
+        func edges(_ pane: [String: Any]) -> Edges? {
+            guard let frame = pane["pixel_frame"] as? [String: Any] else { return nil }
+            let value = { (key: String) in (frame[key] as? NSNumber)?.doubleValue ?? 0 }
+            return (value("x"), value("y"), value("x") + value("width"), value("y") + value("height"))
+        }
+        guard let own = panes.first(where: { ($0["id"] as? String) == paneId }).flatMap(edges) else { return nil }
+        let horizontal = direction == "left" || direction == "right"
+        let slack = 4.0 // divider thickness
+        var best: (id: String, distance: Double)?
+        for pane in panes {
+            guard let id = pane["id"] as? String, id != paneId, let other = edges(pane) else { continue }
+            let overlaps = horizontal
+                ? other.minY < own.maxY && other.maxY > own.minY
+                : other.minX < own.maxX && other.maxX > own.minX
+            let distance: Double
+            switch direction {
+            case "left": distance = other.minX - own.maxX
+            case "right": distance = own.minX - other.maxX
+            case "up": distance = other.minY - own.maxY
+            default: distance = own.minY - other.maxY
+            }
+            guard overlaps, distance >= -slack, distance < (best?.distance ?? .greatestFiniteMagnitude) else { continue }
+            best = (id, distance)
+        }
+        return best?.id
+    }
+
     /// Reads a surface's text. Without `scrollback` or `lines` only the visible screen is
     /// returned; `lines` reads that many rows counting up from the bottom of the scrollback.
     private func tmuxReadPaneText(
@@ -1213,11 +1274,14 @@ extension ProgramaCLI {
                 throw CLIError(message: "agent.spawn did not return surface_id")
             }
             if parsed.hasFlag("-P") {
-                let context = try tmuxFormatContext(
-                    workspaceId: workspaceId,
-                    surfaceId: surfaceId,
-                    client: client
-                )
+                // A fast-exiting command can close the helper workspace before this lookup
+                // runs; the spawn itself succeeded, so print from its response instead of failing.
+                var context = (try? tmuxFormatContext(workspaceId: workspaceId, surfaceId: surfaceId, client: client))
+                    ?? ["session_name": "programa", "window_id": "@\(workspaceId)", "window_uuid": workspaceId, "surface_id": surfaceId]
+                if let paneId = created["pane_id"] as? String {
+                    context["pane_id"] = "%\(paneId)"
+                    context["pane_uuid"] = paneId
+                }
                 let fallback = context["pane_id"] ?? surfaceId
                 print(tmuxRenderFormat(parsed.value("-F"), context: context, fallback: fallback))
             }
@@ -1368,7 +1432,7 @@ extension ProgramaCLI {
 
         case "list-windows", "lsw":
             let parsed = try parseTmuxArguments(rawArgs, valueFlags: ["-F", "-t"], boolFlags: [])
-            let items = try tmuxWorkspaceItems(client: client)
+            let items = try tmuxWorkspaceItems(client: client, allWindows: false)
             for item in items {
                 guard let workspaceId = item["id"] as? String else { continue }
                 let context = try tmuxFormatContext(workspaceId: workspaceId, client: client)
@@ -1442,6 +1506,7 @@ extension ProgramaCLI {
             // -x / -y set an absolute size in columns / rows (a trailing % is ignored).
             // pane.resize can only move a border outward (grow the pane), and a pane has its
             // border on the right/bottom when it is a first child and left/top when it is a second.
+            var unhonored: [String] = []
             for (flag, current, growing) in [
                 ("-x", pane["columns"] as? Int, ["right", "left"]),
                 ("-y", pane["rows"] as? Int, ["down", "up"]),
@@ -1455,7 +1520,7 @@ extension ProgramaCLI {
                 }
                 let delta = wanted - current
                 if delta < 0 {
-                    FileHandle.standardError.write(Data("resize-pane \(flag): shrinking to an absolute size is not supported; pane left at \(current)\n".utf8))
+                    unhonored.append("resize-pane \(flag): shrinking to an absolute size is not supported; pane left at \(current)")
                 } else if delta > 0 {
                     try tmuxResizePane(
                         workspaceId: target.workspaceId,
@@ -1486,14 +1551,34 @@ extension ProgramaCLI {
                     }
                     return value
                 } ?? 1
-                try tmuxResizePane(
-                    workspaceId: target.workspaceId,
-                    paneId: target.paneId,
-                    directions: [direction],
-                    cells: cells,
-                    pane: pane,
-                    client: client
-                )
+                do {
+                    try tmuxResizePane(
+                        workspaceId: target.workspaceId,
+                        paneId: target.paneId,
+                        directions: [direction],
+                        cells: cells,
+                        pane: pane,
+                        client: client
+                    )
+                } catch {
+                    // tmux moves the opposite border when the pane has none on that side (the
+                    // leftmost pane with -L shrinks): grow the neighbor across that border instead.
+                    guard let neighbor = try tmuxOppositeNeighborPaneId(
+                        of: target.paneId, direction: direction, workspaceId: target.workspaceId, client: client
+                    ) else { throw error }
+                    try tmuxResizePane(
+                        workspaceId: target.workspaceId,
+                        paneId: neighbor,
+                        directions: [direction],
+                        cells: cells,
+                        pane: pane,
+                        client: client
+                    )
+                }
+            }
+            // A size that cannot be honored is a failure, not a silent no-op.
+            if !unhonored.isEmpty {
+                throw CLIError(message: unhonored.joined(separator: "\n"))
             }
 
         case "wait-for":

@@ -109,9 +109,8 @@ struct ReviewDiffProber {
     /// staged files. Falls back to `["HEAD"]` if the empty-tree id can't be obtained, matching
     /// prior behavior (the subsequent diff will then fail and surface `.commandFailed`).
     private nonisolated static func headDiffRangeArgs(repoRoot: String) -> [String] {
-        let verify = CanonicalSubprocessRunner.run(
-            executable: "git",
-            arguments: ["rev-parse", "--verify", "--quiet", "HEAD"],
+        let verify = CanonicalSubprocessRunner.runAutomaticGit(
+            arguments: diffGitOptions + ["rev-parse", "--verify", "--quiet", "HEAD"],
             currentDirectory: repoRoot,
             timeout: defaultTimeout,
             stdoutLimit: commandStdoutLimit,
@@ -142,7 +141,7 @@ struct ReviewDiffProber {
         switch runCommandResult(
             directory: repoRoot,
             executable: "git",
-            arguments: ["diff", "--no-color", "--find-renames"] + diffRangeArgs
+            arguments: ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--find-renames"] + diffRangeArgs
         ) {
         case .failure(let error):
             return .failure(error)
@@ -165,7 +164,7 @@ struct ReviewDiffProber {
         switch runCommandResult(
             directory: repoRoot,
             executable: "git",
-            arguments: ["diff", "--numstat", "--find-renames"] + diffRangeArgs
+            arguments: ["diff", "--numstat", "--no-ext-diff", "--no-textconv", "--find-renames"] + diffRangeArgs
         ) {
         case .failure(let error):
             return .failure(error)
@@ -201,10 +200,11 @@ struct ReviewDiffProber {
     // MARK: - Untracked files
 
     private nonisolated static func untrackedFileDiffs(repoRoot: String) -> [ReviewFileDiff] {
-        guard let output = runCommand(directory: repoRoot, executable: "git", arguments: ["ls-files", "--others", "--exclude-standard"]) else {
+        guard let output = runCommand(directory: repoRoot, executable: "git", arguments: ["ls-files", "-z", "--others", "--exclude-standard"]) else {
             return []
         }
-        let paths = output.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+        // NUL-separated so a path with a tab, quote or newline arrives verbatim, not C-quoted.
+        let paths = output.split(separator: "\0").map(String.init).filter { !$0.isEmpty }
         return paths.map { untrackedFileDiff(repoRoot: repoRoot, path: $0) }
     }
 
@@ -236,15 +236,30 @@ struct ReviewDiffProber {
 
     // MARK: - Process plumbing
 
-    private nonisolated static func runCommand(directory: String, executable: String, arguments: [String]) -> String? {
-        let result = CanonicalSubprocessRunner.run(
-            executable: executable,
-            arguments: arguments,
+    /// Neutralizes user git config the parser cannot cope with: octal-quoted non-ASCII paths
+    /// (`core.quotePath`), `a/`/`b/` prefixes removed or renamed (`diff.noprefix`,
+    /// `diff.mnemonicPrefix`). External diff drivers and textconv filters are disabled per
+    /// command with `--no-ext-diff --no-textconv`. Every call also gets the automatic-git
+    /// hardening (`CanonicalSubprocessRunner.automaticGitOptions`).
+    private static let diffGitOptions: [String] = [
+        "-c", "core.quotePath=false",
+        "-c", "diff.noprefix=false",
+        "-c", "diff.mnemonicPrefix=false",
+    ]
+
+    /// Runs `git` (the only executable this prober uses) with the hardening above.
+    private nonisolated static func runGit(directory: String, arguments: [String]) -> CanonicalSubprocessResult {
+        CanonicalSubprocessRunner.runAutomaticGit(
+            arguments: diffGitOptions + arguments,
             currentDirectory: directory,
             timeout: defaultTimeout,
             stdoutLimit: commandStdoutLimit,
             stderrLimit: commandStderrLimit
         )
+    }
+
+    private nonisolated static func runCommand(directory: String, executable: String, arguments: [String]) -> String? {
+        let result = runGit(directory: directory, arguments: arguments)
         guard result.exitStatus == 0, result.outcome == .exited else {
             return nil
         }
@@ -255,14 +270,7 @@ struct ReviewDiffProber {
     /// empty string -- used everywhere a command failure must not be silently read as "no
     /// changes". See M12 in docs/audits/codebase-audit-2026-09-11.md.
     private nonisolated static func runCommandResult(directory: String, executable: String, arguments: [String]) -> Result<String, ReviewDiffError> {
-        let result = CanonicalSubprocessRunner.run(
-            executable: executable,
-            arguments: arguments,
-            currentDirectory: directory,
-            timeout: defaultTimeout,
-            stdoutLimit: commandStdoutLimit,
-            stderrLimit: commandStderrLimit
-        )
+        let result = runGit(directory: directory, arguments: arguments)
         guard result.exitStatus == 0, result.outcome == .exited else {
             let stderrText = (result.stderr ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let commandDescription = ([executable] + arguments).joined(separator: " ")

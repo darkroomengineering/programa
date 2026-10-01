@@ -34,7 +34,10 @@ ssize_t session_escrow_send(int socket_fd, int fd, const void *payload, size_t p
 /// Receives up to `payload_len` bytes into `payload` in one `recvmsg`
 /// call. If an `SCM_RIGHTS` ancillary fd is attached to the received
 /// message, `*out_fd` is set to it; otherwise `*out_fd` is set to -1.
-/// `out_fd` must not be NULL.
+/// `out_fd` must not be NULL. Every received fd is marked `FD_CLOEXEC`
+/// before this returns; fds beyond the first are closed. A truncated
+/// control message (`MSG_CTRUNC`) closes all received fds and returns -1
+/// with `errno` = `EMSGSIZE`.
 ///
 /// Returns the number of bytes read (may be less than `payload_len` --
 /// callers must loop for exact framing), 0 on EOF, or -1 on error with
