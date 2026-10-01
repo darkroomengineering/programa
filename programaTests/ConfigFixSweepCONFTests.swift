@@ -350,13 +350,14 @@ final class ConfigFixSweepCONFTests: XCTestCase {
         {"commands":[{"name":"x","workspace":{"name":"dev","layout":{"direction":"horizontal","children":[
         {"pane":{"surfaces":[{"type":"terminal","command":"first-thing"}]}},
         {"direction":"vertical","children":[
-        {"pane":{"surfaces":[{"type":"terminal","command":"second-thing"}]}}]}]}}}]}
+        {"pane":{"surfaces":[{"type":"terminal","command":"second-thing"}]}},
+        {"pane":{"surfaces":[{"type":"terminal","command":"third-thing"}]}}]}]}}}]}
         """
         let command = try XCTUnwrap(decodeConfig(json).commands.first)
 
         XCTAssertEqual(
             ProgramaConfigExecutor.commandTexts(of: command, resolvedCommand: nil),
-            ["first-thing", "second-thing"]
+            ["first-thing", "second-thing", "third-thing"]
         )
     }
 
