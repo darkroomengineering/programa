@@ -946,19 +946,16 @@ extension TabManager {
                 }
             } else if layout == "tdlr_close_bottom_then_exit_top_left" {
                 // Alternate repro flow:
-                // 1) split top/down
-                // 2) split left/right for each row (2x2)
-                // 3) close both bottom panes
-                // 4) trigger Ctrl+D in top-left
+                // 1) split each column top/down (2x2; the right column already exists, and a
+                //    fifth pane would exceed SplitPolicy.maxPanesPerWorkspace)
+                // 2) close both bottom panes
+                // 3) trigger Ctrl+D in top-left
+                let topRight = rightPanel
                 guard let bottomLeft = tab.newTerminalSplit(from: leftPanelId, orientation: .vertical) else {
                     write(["setupError": "Failed to create bottom-left split", "done": "1"])
                     return
                 }
-                guard let topRight = tab.newTerminalSplit(from: leftPanelId, orientation: .horizontal) else {
-                    write(["setupError": "Failed to create top-right split", "done": "1"])
-                    return
-                }
-                guard let bottomRight = tab.newTerminalSplit(from: bottomLeft.id, orientation: .horizontal) else {
+                guard let bottomRight = tab.newTerminalSplit(from: topRight.id, orientation: .vertical) else {
                     write(["setupError": "Failed to create bottom-right split", "done": "1"])
                     return
                 }
