@@ -124,7 +124,11 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
 
         let entries = GitWorktreeManager.listWorktrees(repoRoot: repo.path)
 
-        XCTAssertEqual(entries?.first?.path, repo.path)
+        // git reports the realpath (/private/var/...); the temp URL may still be the /var symlink.
+        XCTAssertEqual(
+            entries?.first.map { URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path },
+            repo.resolvingSymlinksInPath().path
+        )
         XCTAssertEqual(entries?.first?.branch, "feature-x")
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: marker.path),
