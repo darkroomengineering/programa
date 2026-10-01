@@ -107,7 +107,8 @@ _programa_socket_rpc_direct() {
 
 # Fallback for _programa_socket_rpc_direct: the CLI in the background with the next ticket,
 # waiting (at most 2 s) until the previous ticket is done, so the prompt never waits and
-# reports still arrive in order. Same runner as the bash and fish integrations.
+# reports still arrive in order. A report whose successor was already issued is skipped (each
+# report is the full state). Same runner as the bash and fish integrations.
 typeset -g _PROGRAMA_SHELL_STATE_SEQ=0
 typeset -g _PROGRAMA_SHELL_STATE_FILE="${TMPDIR:-$HOME}/.programa-shell-state.$$"
 typeset -g _PROGRAMA_SHELL_STATE_RUNNER='ticket=$1 file=$2; shift 2; i=0
@@ -116,12 +117,14 @@ while [ "$ticket" -gt 1 ] && [ $i -lt 200 ]; do
     [ "$done_ticket" = "$((ticket - 1))" ] && break
     sleep 0.01; i=$((i + 1))
 done
-PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1 "$@" >/dev/null 2>&1
+latest=; { read -r latest < "$file.latest"; } 2>/dev/null
+[ "${latest:-0}" -gt "$ticket" ] 2>/dev/null || PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1 "$@" >/dev/null 2>&1
 printf "%s\n" "$ticket" > "$file"'
 _programa_relay_rpc_ordered_bg() {
     local method="$1" params="$2" relay_cli=""
     relay_cli="$(_programa_relay_cli_path)" || return 1
     (( ++_PROGRAMA_SHELL_STATE_SEQ == 1 )) && print -r -- 0 >| "$_PROGRAMA_SHELL_STATE_FILE"
+    print -r -- "$_PROGRAMA_SHELL_STATE_SEQ" >| "$_PROGRAMA_SHELL_STATE_FILE.latest"
     /bin/sh -c "$_PROGRAMA_SHELL_STATE_RUNNER" programa-shell-state \
         "$_PROGRAMA_SHELL_STATE_SEQ" "$_PROGRAMA_SHELL_STATE_FILE" "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 &!
 }
@@ -523,7 +526,12 @@ _programa_report_shell_activity_state() {
     state_json="${state_json//\\/\\\\}"
     state_json="${state_json//\"/\\\"}"
     params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"state\":\"$state_json\"}"
-    _programa_socket_rpc_direct "{\"id\":1,\"method\":\"surface.report_shell_state\",\"params\":$params}" \
+    # While a background report is still in flight, queue behind it instead of overtaking it.
+    local pending=0
+    (( _PROGRAMA_SHELL_STATE_SEQ > 0 )) \
+        && [[ "$(<$_PROGRAMA_SHELL_STATE_FILE)" != "$_PROGRAMA_SHELL_STATE_SEQ" ]] 2>/dev/null \
+        && pending=1
+    { (( ! pending )) && _programa_socket_rpc_direct "{\"id\":1,\"method\":\"surface.report_shell_state\",\"params\":$params}"; } \
         || _programa_relay_rpc_ordered_bg "surface.report_shell_state" "$params" \
         || return 0
     _PROGRAMA_SHELL_ACTIVITY_LAST="$state"

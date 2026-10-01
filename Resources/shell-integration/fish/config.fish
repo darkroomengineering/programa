@@ -108,7 +108,8 @@ if test "$_programa_integration_enabled" != 0
     # Shell-state reports run before every command and prompt, so they must not wait on a
     # CLI process. Each report runs the CLI in the background with the next ticket and waits
     # (at most 2 s) until the previous ticket is done, so a `prompt` report never overtakes
-    # the `running` report before it. Same runner as the bash integration.
+    # the `running` report before it. A report whose successor was already issued is skipped
+    # (each report is the full state). Same runner as the bash integration.
     set -g _PROGRAMA_SHELL_STATE_SEQ 0
     set -g _PROGRAMA_SHELL_STATE_RUNNER 'ticket=$1 file=$2; shift 2; i=0
 while [ "$ticket" -gt 1 ] && [ $i -lt 200 ]; do
@@ -116,7 +117,8 @@ while [ "$ticket" -gt 1 ] && [ $i -lt 200 ]; do
     [ "$done_ticket" = "$((ticket - 1))" ] && break
     sleep 0.01; i=$((i + 1))
 done
-PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1 "$@" >/dev/null 2>&1
+latest=; { read -r latest < "$file.latest"; } 2>/dev/null
+[ "${latest:-0}" -gt "$ticket" ] 2>/dev/null || PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1 "$@" >/dev/null 2>&1
 printf "%s\\n" "$ticket" > "$file"'
     function _programa_relay_rpc_ordered_bg --argument-names method params
         set -l relay_cli (_programa_relay_cli_path)
@@ -128,6 +130,7 @@ printf "%s\\n" "$ticket" > "$file"'
         if test "$_PROGRAMA_SHELL_STATE_SEQ" = 1
             printf '0\n' >$file
         end
+        printf '%s\n' $_PROGRAMA_SHELL_STATE_SEQ >$file.latest
         /bin/sh -c "$_PROGRAMA_SHELL_STATE_RUNNER" programa-shell-state \
             $_PROGRAMA_SHELL_STATE_SEQ $file $relay_cli rpc $method $params >/dev/null 2>&1 &
         disown $last_pid 2>/dev/null

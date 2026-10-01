@@ -80,7 +80,9 @@ _programa_relay_rpc() {
 # process (bash has no Unix-socket builtin). Each report runs the CLI in the background with
 # the next ticket and waits (at most 2 s) until the previous ticket is done, so a `prompt`
 # report never overtakes the `running` report before it. A finished background job can linger
-# as a zombie, so tickets live in a per-shell file rather than in `kill -0` checks.
+# as a zombie, so tickets live in a per-shell file rather than in `kill -0` checks. Each report
+# is the full shell state, so a report whose successor was already issued is skipped: a late
+# `prompt` can never land after a newer `running`.
 _PROGRAMA_SHELL_STATE_SEQ=0
 _PROGRAMA_SHELL_STATE_RUNNER='ticket=$1 file=$2; shift 2; i=0
 while [ "$ticket" -gt 1 ] && [ $i -lt 200 ]; do
@@ -88,7 +90,8 @@ while [ "$ticket" -gt 1 ] && [ $i -lt 200 ]; do
     [ "$done_ticket" = "$((ticket - 1))" ] && break
     sleep 0.01; i=$((i + 1))
 done
-PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1 "$@" >/dev/null 2>&1
+latest=; { read -r latest < "$file.latest"; } 2>/dev/null
+[ "${latest:-0}" -gt "$ticket" ] 2>/dev/null || PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1 "$@" >/dev/null 2>&1
 printf "%s\n" "$ticket" > "$file"'
 _programa_relay_rpc_ordered_bg() {
     local method="$1"
@@ -98,6 +101,7 @@ _programa_relay_rpc_ordered_bg() {
     relay_cli="$(_programa_relay_cli_path)" || return 1
     _PROGRAMA_SHELL_STATE_SEQ=$((_PROGRAMA_SHELL_STATE_SEQ + 1))
     (( _PROGRAMA_SHELL_STATE_SEQ == 1 )) && printf '0\n' > "$file"
+    printf '%s\n' "$_PROGRAMA_SHELL_STATE_SEQ" > "$file.latest"
     # Spawned from a subshell so the interactive shell registers no job (no "[1] PID" noise).
     ( /bin/sh -c "$_PROGRAMA_SHELL_STATE_RUNNER" programa-shell-state \
         "$_PROGRAMA_SHELL_STATE_SEQ" "$file" "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 & )

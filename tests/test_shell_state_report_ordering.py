@@ -3,7 +3,9 @@
 
 The zsh and bash integrations report `running` before a command and `prompt` after it. A
 slow CLI must not delay the shell, a late `running` must not land after the next `prompt`,
-and bash must not print job-control noise ("[1] 1234") into the user's terminal.
+and bash must not print job-control noise ("[1] 1234") into the user's terminal. Each report
+is the full shell state, so a fallback report may be skipped once a newer one was issued; the
+CLI must still see the reports in order and finish on the newest state.
 
 The real integration scripts are sourced into a real shell. The CLI is a stub that sleeps
 longer for `running` than for `prompt`, so any lost ordering shows up in its log. The fake
@@ -135,6 +137,14 @@ class ShellStateReportTests(unittest.TestCase):
         calls = "\n".join(f"_programa_report_shell_activity_state {s}" for s in STATES)
         return f'source "{integration}"\n{calls}\nsleep {settle}\n'
 
+    def assert_delivered_in_order(self, stderr: str) -> None:
+        logged = self.logged()
+        self.assertTrue(logged, stderr)
+        self.assertEqual(logged[-1], STATES[-1], f"the newest state must land last: {logged}")
+        remaining = iter(enumerate(STATES))
+        self.assertTrue(all(any(state == want for _, want in remaining) for state in logged),
+                        f"reports arrived out of order: {logged}")
+
     def test_zsh_fallback_keeps_order_without_blocking(self) -> None:
         with FakeSocket(self.sock_path, AUTH_REQUIRED):
             # The reports themselves must return long before the 0.4 s stub finishes.
@@ -142,7 +152,7 @@ class ShellStateReportTests(unittest.TestCase):
             script = script.replace("sleep 3", 'echo "REPORTS_DONE $EPOCHREALTIME"; sleep 3')
             start = time.time()
             proc = self.run_shell(["zsh", "-f"], 'zmodload zsh/datetime; ' + script, 3)
-        self.assertEqual(self.logged(), STATES, proc.stderr)
+        self.assert_delivered_in_order(proc.stderr)
         done = re.search(r"REPORTS_DONE (\d+\.\d+)", proc.stdout)
         self.assertIsNotNone(done, proc.stdout + proc.stderr)
         self.assertLess(float(done.group(1)) - start, 1.0, "the four reports must not wait on the slow CLI")
@@ -166,7 +176,7 @@ class ShellStateReportTests(unittest.TestCase):
                 with FakeSocket(self.sock_path, AUTH_REQUIRED):
                     proc = self.run_shell([bash, "--norc", "--noprofile", "-i", "-m"],
                                           self.report_script(BASH_INTEGRATION, 3), 3)
-                self.assertEqual(self.logged(), STATES, proc.stderr)
+                self.assert_delivered_in_order(proc.stderr)
                 self.assertIsNone(re.search(r"\[\d+\]\s+\d+", proc.stderr + proc.stdout),
                                   f"job-control noise leaked: {proc.stderr!r}")
 
