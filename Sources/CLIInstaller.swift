@@ -1,12 +1,4 @@
-import AppKit
-import SwiftUI
-import Bonsplit
-import CoreServices
-import UserNotifications
-import WebKit
-import Combine
-import ObjectiveC.runtime
-import Darwin
+import Foundation
 
 struct ProgramaCLIPathInstaller {
     struct InstallOutcome {
@@ -27,22 +19,46 @@ struct ProgramaCLIPathInstaller {
         case destinationIsDirectory(path: String)
         case installVerificationFailed(path: String)
         case uninstallVerificationFailed(path: String)
+        case destinationNotProgramaCLI(path: String)
         case privilegedCommandFailed(message: String)
 
         var errorDescription: String? {
             switch self {
             case .bundledCLIMissing(let expectedPath):
-                return "Bundled Programa CLI was not found at \(expectedPath)."
+                return String(
+                    format: String(localized: "conf.cliInstaller.error.bundledMissing", defaultValue: "Bundled Programa CLI was not found at %@."),
+                    expectedPath
+                )
             case .destinationParentNotDirectory(let path):
-                return "Expected \(path) to be a directory."
+                return String(
+                    format: String(localized: "conf.cliInstaller.error.parentNotDirectory", defaultValue: "Expected %@ to be a directory."),
+                    path
+                )
             case .destinationIsDirectory(let path):
-                return "\(path) is a directory. Remove or rename it and try again."
+                return String(
+                    format: String(localized: "conf.cliInstaller.error.destinationIsDirectory", defaultValue: "%@ is a directory. Remove or rename it and try again."),
+                    path
+                )
             case .installVerificationFailed(let path):
-                return "Installed symlink at \(path) did not point to the bundled programa CLI."
+                return String(
+                    format: String(localized: "conf.cliInstaller.error.installVerificationFailed", defaultValue: "Installed symlink at %@ did not point to the bundled programa CLI."),
+                    path
+                )
             case .uninstallVerificationFailed(let path):
-                return "Failed to remove \(path)."
+                return String(
+                    format: String(localized: "conf.cliInstaller.error.uninstallVerificationFailed", defaultValue: "Failed to remove %@."),
+                    path
+                )
+            case .destinationNotProgramaCLI(let path):
+                return String(
+                    format: String(localized: "conf.cliInstaller.error.notProgramaCLI", defaultValue: "%@ is not a link to the Programa CLI, so it was left in place. Remove it yourself if you no longer need it."),
+                    path
+                )
             case .privilegedCommandFailed(let message):
-                return "Administrator action failed: \(message)"
+                return String(
+                    format: String(localized: "conf.cliInstaller.error.privilegedCommandFailed", defaultValue: "Administrator action failed: %@"),
+                    message
+                )
             }
         }
     }
@@ -102,6 +118,11 @@ struct ProgramaCLIPathInstaller {
     }
 
     func uninstall() throws -> UninstallOutcome {
+        // Only ever delete our own symlink: anything else at this path (another tool's
+        // binary, a user's script) is not ours to remove.
+        if destinationEntryExists(), !destinationIsProgramaCLISymlink() {
+            throw InstallerError.destinationNotProgramaCLI(path: destinationURL.path)
+        }
         do {
             let removedExistingEntry = try uninstallWithoutAdministratorPrivileges()
             return UninstallOutcome(
@@ -164,6 +185,23 @@ struct ProgramaCLIPathInstaller {
             throw InstallerError.uninstallVerificationFailed(path: destinationURL.path)
         }
         return existed
+    }
+
+    /// True when the destination is a symlink into a `.app` bundle's bundled CLI
+    /// (`<something>.app/Contents/Resources/bin/programa`). Read without following the link,
+    /// so a link left dangling by a deleted app still qualifies.
+    private func destinationIsProgramaCLISymlink() -> Bool {
+        guard let rawTarget = try? fileManager.destinationOfSymbolicLink(atPath: destinationURL.path) else {
+            return false
+        }
+        let target = URL(
+            fileURLWithPath: rawTarget,
+            relativeTo: destinationURL.deletingLastPathComponent()
+        ).standardizedFileURL.path
+        let bundledSuffix = "/Contents/Resources/bin/programa"
+        guard target.hasSuffix(bundledSuffix) else { return false }
+        let bundlePath = String(target.dropLast(bundledSuffix.count))
+        return bundlePath.hasSuffix(".app")
     }
 
     /// Check if the destination path has any filesystem entry (including dangling symlinks).
@@ -285,7 +323,10 @@ struct ProgramaCLIPathInstaller {
             )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let details = stderrText.isEmpty ? stdoutText : stderrText
             let message = details.isEmpty
-                ? "osascript exited with status \(process.terminationStatus)."
+                ? String(
+                    format: String(localized: "conf.cliInstaller.error.osascriptStatus", defaultValue: "osascript exited with status %@."),
+                    String(process.terminationStatus)
+                )
                 : details
             throw InstallerError.privilegedCommandFailed(message: message)
         }

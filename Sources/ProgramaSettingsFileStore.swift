@@ -1,3 +1,4 @@
+import Bonsplit
 import Combine
 import Foundation
 
@@ -21,6 +22,10 @@ final class ProgramaSettingsFileStore {
     static let shared = ProgramaSettingsFileStore()
 
     static let currentSchemaVersion = 1
+    /// Posted (on any thread) after every reload attempt, including one that kept the previous
+    /// settings because the file failed to parse. Settings observes it to refresh which rows
+    /// are managed by the file and whether to show the parse-error banner.
+    static let didReloadNotification = Notification.Name("programa.settingsFile.didReload")
     static let schemaURLString = "https://raw.githubusercontent.com/darkroomengineering/programa/main/Resources/settings.schema.json"
 
     private static let releaseBundleIdentifier = "com.darkroom.programa"
@@ -79,6 +84,7 @@ final class ProgramaSettingsFileStore {
     private var activeManagedUserDefaults: [String: ManagedSettingsValue] = [:]
     private var activeManagedCustomSettings = ManagedCustomSettings()
     private var isApplyingManagedSettings = false
+    private var lastParseError: String?
     private(set) var activeSourcePath: String?
 
     init(
@@ -159,20 +165,57 @@ final class ProgramaSettingsFileStore {
     }
 
     private func reloadOnManagedSettingsQueue() {
+        defer { notificationCenter.post(name: Self.didReloadNotification, object: self) }
         let previousShortcuts = synchronized { shortcutsByAction }
         let previousActiveSourcePath = synchronized { activeSourcePath }
-        let resolved = resolveSettings()
+        let resolved: ResolvedSettingsSnapshot
+        switch resolveSettings() {
+        case .resolved(let snapshot):
+            resolved = snapshot
+        case .invalid(let path, let message):
+            // A file that fails to parse is usually a save in the middle of an edit. Keep every
+            // value applied from the last good parse instead of restoring the pre-file backups
+            // (which would flip socket mode, clear the password and drop trusted directories
+            // until the next good save), and tell the user what is wrong.
+            dilog("settings.file", "parse error at \(path), keeping previous settings: \(message)")
+            synchronized {
+                lastParseError = message
+                if activeSourcePath == nil { activeSourcePath = path }
+            }
+            return
+        }
         applyManagedSettings(snapshot: resolved)
         synchronized {
             shortcutsByAction = resolved.shortcuts
             activeManagedUserDefaults = resolved.managedUserDefaults
             activeManagedCustomSettings = resolved.managedCustomSettings
             activeSourcePath = resolved.path
+            lastParseError = nil
         }
 
         if previousShortcuts != resolved.shortcuts || previousActiveSourcePath != resolved.path {
             KeyboardShortcutSettings.notifySettingsFileDidChange()
         }
+    }
+
+    /// The parse error of the active settings file when its last reload failed (the previous
+    /// good settings stay applied meanwhile), or nil when it parsed.
+    func currentParseError() -> String? {
+        synchronized { lastParseError }
+    }
+
+    /// Whether settings.json currently sets the UserDefaults key `defaultsKey`. A control bound
+    /// to such a key is reverted on the next reapply, so Settings disables it.
+    func isManagedByFile(defaultsKey: String) -> Bool {
+        synchronized { activeManagedUserDefaults[defaultsKey] != nil }
+    }
+
+    func isTrustedDirectoriesManagedByFile() -> Bool {
+        synchronized { activeManagedCustomSettings.trustedDirectories != nil }
+    }
+
+    func isSocketPasswordManagedByFile() -> Bool {
+        synchronized { activeManagedCustomSettings.socketPassword != nil }
     }
 
     func override(for action: KeyboardShortcutSettings.Action) -> StoredShortcut? {
@@ -278,33 +321,40 @@ final class ProgramaSettingsFileStore {
         return body()
     }
 
-    private func resolveSettings() -> ResolvedSettingsSnapshot {
+    private enum ResolveResult {
+        case resolved(ResolvedSettingsSnapshot)
+        /// The active file exists but could not be parsed. An invalid primary never falls
+        /// through to the fallback file.
+        case invalid(path: String, message: String)
+    }
+
+    private func resolveSettings() -> ResolveResult {
         switch loadSettings(at: primaryPath) {
         case .parsed(let snapshot):
-            return snapshot
-        case .invalid:
-            return ResolvedSettingsSnapshot(path: primaryPath)
+            return .resolved(snapshot)
+        case .invalid(let message):
+            return .invalid(path: primaryPath, message: message)
         case .missing:
             break
         }
 
         guard let fallbackPath else {
-            return ResolvedSettingsSnapshot(path: nil)
+            return .resolved(ResolvedSettingsSnapshot(path: nil))
         }
 
         switch loadSettings(at: fallbackPath) {
         case .parsed(let snapshot):
-            return snapshot
-        case .invalid:
-            return ResolvedSettingsSnapshot(path: fallbackPath)
+            return .resolved(snapshot)
+        case .invalid(let message):
+            return .invalid(path: fallbackPath, message: message)
         case .missing:
-            return ResolvedSettingsSnapshot(path: nil)
+            return .resolved(ResolvedSettingsSnapshot(path: nil))
         }
     }
 
     private enum LoadResult {
         case missing
-        case invalid
+        case invalid(String)
         case parsed(ResolvedSettingsSnapshot)
     }
 
@@ -313,19 +363,19 @@ final class ProgramaSettingsFileStore {
             return .missing
         }
         guard let data = fileManager.contents(atPath: path), !data.isEmpty else {
-            return .invalid
+            return .invalid("the file is empty")
         }
 
         do {
             let sanitized = try JSONCParser.preprocess(data: data)
             let object = try JSONSerialization.jsonObject(with: sanitized, options: [])
             guard let root = object as? [String: Any] else {
-                return .invalid
+                return .invalid("the top level is not a JSON object")
             }
             return .parsed(parseSettingsFile(root: root, sourcePath: path))
         } catch {
             NSLog("[ProgramaSettingsFileStore] parse error at %@: %@", path, String(describing: error))
-            return .invalid
+            return .invalid((error as NSError).localizedDescription)
         }
     }
 
@@ -1090,8 +1140,9 @@ final class ProgramaSettingsFileStore {
     }
 
     private func applyManagedCustomSettings(_ settings: ManagedCustomSettings) {
-        if let trustedDirectories = settings.trustedDirectories,
-           ProgramaDirectoryTrust.shared.allTrustedPaths != trustedDirectories {
+        // `replaceAll` keeps the digests of roots that stay and is a no-op when the set is
+        // unchanged, so a reapply never wipes per-config trust digests.
+        if let trustedDirectories = settings.trustedDirectories {
             ProgramaDirectoryTrust.shared.replaceAll(with: trustedDirectories)
         }
 

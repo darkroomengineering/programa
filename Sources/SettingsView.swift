@@ -97,6 +97,8 @@ struct SettingsView: View {
     @ObservedObject private var notificationStore = TerminalNotificationStore.shared
     @StateObject private var keyboardShortcutSettingsObserver = KeyboardShortcutSettingsObserver.shared
     @StateObject private var terminalThemeSettings = TerminalThemeSettingsModel()
+    @StateObject private var settingsFileStatus = SettingsFileStatusModel()
+    @FocusState private var trustedDirectoriesEditorFocused: Bool
     @State private var shortcutResetToken = UUID()
     @State private var topBlurOpacity: Double = 0
     @State private var topBlurBaselineOffset: CGFloat?
@@ -224,12 +226,23 @@ struct SettingsView: View {
         browserInsecureHTTPAllowlistDraft != browserInsecureHTTPAllowlist
     }
 
+    /// Commits the textarea when it loses focus or Settings closes, never per keystroke: each
+    /// save replaces the trusted set, and a half-typed path must not stand in for a real one.
+    /// `replaceAll` keeps the per-config digests of roots that stay.
     private func saveTrustedDirectories() {
+        guard !settingsFileStatus.trustedDirectoriesManaged else { return }
         let paths = trustedDirectoriesDraft
             .split(separator: "\n", omittingEmptySubsequences: true)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         ProgramaDirectoryTrust.shared.replaceAll(with: paths)
+    }
+
+    /// Re-reads the trusted set into the textarea, unless the user is mid-edit in it, so trust
+    /// granted from the run dialog (or settings.json) is not overwritten by a stale draft.
+    private func reseedTrustedDirectoriesDraft() {
+        guard !trustedDirectoriesEditorFocused else { return }
+        trustedDirectoriesDraft = ProgramaDirectoryTrust.shared.allTrustedPaths.joined(separator: "\n")
     }
 
     private var canPreviewNotificationSound: Bool {
@@ -335,6 +348,18 @@ struct SettingsView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    if let parseError = settingsFileStatus.parseError {
+                        SettingsCard {
+                            SettingsCardNote(String(
+                                format: String(
+                                    localized: "conf.settingsFile.parseError",
+                                    defaultValue: "settings.json could not be read, so the last valid settings stay in effect. %@"
+                                ),
+                                parseError
+                            ))
+                            .accessibilityIdentifier("SettingsFileParseErrorBanner")
+                        }
+                    }
                     switch selectedTab {
                     case .general:
                         appSection
@@ -522,6 +547,7 @@ struct SettingsView: View {
                     Text(placement.displayName).tag(placement.rawValue)
                 }
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(WorkspacePlacementSettings.placementKey))
 
             SettingsCardDivider()
 
@@ -535,6 +561,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(WorkspaceAutoReorderSettings.key))
 
             SettingsCardDivider()
 
@@ -549,6 +576,7 @@ struct SettingsView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 200)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(PreferredEditorSettings.key))
 
             SettingsCardDivider()
 
@@ -563,6 +591,7 @@ struct SettingsView: View {
                         String(localized: "settings.app.showInMenuBar", defaultValue: "Show in Menu Bar")
                     )
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(MenuBarExtraSettings.showInMenuBarKey))
 
 
             SettingsCardDivider()
@@ -577,6 +606,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(QuitWarningSettings.warnBeforeQuitKey))
 
             SettingsCardDivider()
 
@@ -622,6 +652,7 @@ struct SettingsView: View {
                         String(localized: "settings.app.commandPaletteSearchAllSurfaces", defaultValue: "Command Palette Searches All Surfaces")
                     )
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey))
 
         }
 
@@ -674,6 +705,7 @@ struct SettingsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(NotificationSoundSettings.key))
 
             SettingsCardDivider()
 
@@ -691,6 +723,7 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(NotificationSoundSettings.customCommandKey))
 
             SettingsCardDivider()
 
@@ -715,6 +748,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(LongCommandNotificationSettings.thresholdSecondsKey))
         }
     }
 
@@ -865,6 +899,7 @@ struct SettingsView: View {
         SettingsSectionHeader(title: String(localized: "settings.section.appearance", defaultValue: "Appearance"))
         SettingsCard {
             ThemePickerRow(selectedMode: appearanceMode, onSelect: { mode in appearanceMode = mode.rawValue })
+                .managedBySettingsFile(settingsFileStatus.isManaged(AppearanceSettings.appearanceModeKey))
 
             SettingsCardDivider()
 
@@ -880,6 +915,7 @@ struct SettingsView: View {
                         String(localized: "settings.app.minimalMode", defaultValue: "Minimal Mode")
                     )
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(WorkspacePresentationModeSettings.modeKey))
         }
 
     }
@@ -897,6 +933,7 @@ struct SettingsView: View {
                     Text(style.displayName).tag(style.rawValue)
                 }
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(SidebarActiveTabIndicatorSettings.styleKey))
             // Selection-highlight and notification-badge hex pickers, the inline
             // palette editor and a section-local Reset Palette used to follow. The
             // editor duplicated settings.json, which its own note already pointed at
@@ -924,6 +961,7 @@ struct SettingsView: View {
                         String(localized: "settings.sidebarAppearance.showClaudeQuota", defaultValue: "Show Provider Usage")
                     )
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged("sidebarShowClaudeQuota"))
             // Light/dark tint hex, tint opacity and a section-local reset used to
             // live here. They were per-pixel tuning of one surface, shipped to
             // every user, and the same four keys are already bound by the Debug
@@ -948,6 +986,7 @@ struct SettingsView: View {
                     Text(mode.displayName).tag(mode.rawValue)
                 }
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(SocketControlSettings.appStorageKey))
 
             SettingsCardDivider()
 
@@ -979,6 +1018,7 @@ struct SettingsView: View {
                         }
                     }
                 }
+                .managedBySettingsFile(settingsFileStatus.socketPasswordManaged)
                 if let message = socketPasswordStatusMessage {
                     Text(message)
                         .font(.caption)
@@ -1015,6 +1055,7 @@ struct SettingsView: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("SettingsClaudeCodeHooksToggle")
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(ClaudeCodeIntegrationSettings.hooksEnabledKey))
 
             SettingsCardDivider()
 
@@ -1033,6 +1074,7 @@ struct SettingsView: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("SettingsAgentBrowserSplitToggle")
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(AgentBrowserSplitSettings.key))
         }
 
         SettingsCard {
@@ -1065,6 +1107,7 @@ struct SettingsView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 200)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(ClaudeCodeIntegrationSettings.customClaudePathKey))
         }
 
     }
@@ -1078,6 +1121,7 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(ProgramaPortRangePolicy.baseDefaultsKey))
 
             SettingsCardDivider()
 
@@ -1086,6 +1130,7 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(ProgramaPortRangePolicy.rangeDefaultsKey))
 
             SettingsCardDivider()
 
@@ -1147,10 +1192,26 @@ struct SettingsView: View {
                     )
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
-                    .onChange(of: trustedDirectoriesDraft) {
-                        saveTrustedDirectories()
+                    .focused($trustedDirectoriesEditorFocused)
+                    .onChange(of: trustedDirectoriesEditorFocused) { _, isFocused in
+                        if !isFocused {
+                            saveTrustedDirectories()
+                        }
+                    }
+                    .onDisappear {
+                        if trustedDirectoriesEditorFocused {
+                            saveTrustedDirectories()
+                        }
+                    }
+                    .onReceive(
+                        NotificationCenter.default
+                            .publisher(for: ProgramaDirectoryTrust.didChangeNotification)
+                            .receive(on: RunLoop.main)
+                    ) { _ in
+                        reseedTrustedDirectoriesDraft()
                     }
             }
+            .managedBySettingsFile(settingsFileStatus.trustedDirectoriesManaged)
 
             SettingsCardDivider()
             SettingsCardNote(String(localized: "settings.customCommands.trustedDirectories.note", defaultValue: "Place a programa.json in your project root to define custom commands. Trust a directory from the confirmation dialog, or add paths here. For git repos, trusting the root covers all subdirectories."))
@@ -1174,6 +1235,7 @@ struct SettingsView: View {
                     Text(engine.displayName).tag(engine.rawValue)
                 }
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserSearchSettings.searchEngineKey))
 
             SettingsCardDivider()
 
@@ -1182,6 +1244,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserSearchSettings.searchSuggestionsEnabledKey))
 
             SettingsCardDivider()
 
@@ -1197,6 +1260,7 @@ struct SettingsView: View {
                     Text(mode.displayName).tag(mode.rawValue)
                 }
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserThemeSettings.modeKey))
         }
 
     }
@@ -1213,6 +1277,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowserKey))
 
             SettingsCardDivider()
 
@@ -1224,6 +1289,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.interceptTerminalOpenCommandInProgramaBrowserKey))
 
             SettingsCardDivider()
 
@@ -1238,6 +1304,7 @@ struct SettingsView: View {
                     Text(browser.name).tag(browser.bundleIdentifier)
                 }
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.externalBrowserBundleIdentifierKey))
             .onAppear {
                 installedExternalBrowsers = BrowserLinkOpenSettings.installedBrowsers()
             }
@@ -1267,6 +1334,7 @@ struct SettingsView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                 }
+                .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.browserHostWhitelistKey))
 
                 SettingsCardDivider()
 
@@ -1292,6 +1360,7 @@ struct SettingsView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                 }
+                .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.browserExternalOpenPatternsKey))
             }
 
             SettingsCardDivider()
@@ -1354,6 +1423,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserInsecureHTTPSettings.allowlistKey))
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
         }
@@ -1412,6 +1482,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(ShortcutHintDebugSettings.showHintsOnCommandHoldKey))
 
             SettingsCardDivider()
 
@@ -1508,6 +1579,68 @@ struct SettingsView: View {
         browserInsecureHTTPAllowlist = browserInsecureHTTPAllowlistDraft
     }
 
+}
+
+/// Which Settings rows settings.json currently controls, and the file's parse error if its last
+/// reload failed. Refreshes on every settings-file reload.
+@MainActor
+private final class SettingsFileStatusModel: ObservableObject {
+    @Published private(set) var parseError: String?
+    @Published private(set) var managedDefaultsKeysRevision: UInt64 = 0
+    @Published private(set) var trustedDirectoriesManaged = false
+    @Published private(set) var socketPasswordManaged = false
+
+    private let notificationCenter: NotificationCenter
+    private var reloadObserver: NSObjectProtocol?
+
+    init(notificationCenter: NotificationCenter = .default) {
+        self.notificationCenter = notificationCenter
+        refresh()
+        reloadObserver = notificationCenter.addObserver(
+            forName: ProgramaSettingsFileStore.didReloadNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refresh()
+            }
+        }
+    }
+
+    deinit {
+        if let reloadObserver {
+            notificationCenter.removeObserver(reloadObserver)
+        }
+    }
+
+    func isManaged(_ defaultsKey: String) -> Bool {
+        _ = managedDefaultsKeysRevision
+        return KeyboardShortcutSettings.settingsFileStore.isManagedByFile(defaultsKey: defaultsKey)
+    }
+
+    private func refresh() {
+        let store = KeyboardShortcutSettings.settingsFileStore
+        parseError = store.currentParseError()
+        trustedDirectoriesManaged = store.isTrustedDirectoriesManagedByFile()
+        socketPasswordManaged = store.isSocketPasswordManagedByFile()
+        managedDefaultsKeysRevision &+= 1
+    }
+}
+
+private extension View {
+    /// Disables a Settings row whose value settings.json controls (the store would revert any
+    /// edit on its next reapply) and says so under the row.
+    @ViewBuilder
+    func managedBySettingsFile(_ isManaged: Bool) -> some View {
+        if isManaged {
+            VStack(alignment: .leading, spacing: 0) {
+                self.disabled(true)
+                SettingsCardNote(String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json"))
+            }
+        } else {
+            self
+        }
+    }
 }
 
 @MainActor

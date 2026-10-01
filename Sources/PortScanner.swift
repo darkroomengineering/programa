@@ -271,7 +271,16 @@ final class PortScanner: @unchecked Sendable {
         let ttyList = uniqueTTYs.joined(separator: ",")
 
         // 1. ps -t tty1,tty2,... -o pid=,tty=
-        let pidToTTY = ttyList.isEmpty ? [:] : runPS(ttyList: ttyList)
+        // A nil result means `ps` hung or failed: skip this cycle rather than publish "no
+        // ports" for every panel. The next kick or burst tick scans again.
+        let pidToTTY: [Int: String]
+        if ttyList.isEmpty {
+            pidToTTY = [:]
+        } else if let scanned = runPS(ttyList: ttyList) {
+            pidToTTY = scanned
+        } else {
+            return
+        }
         let agentPidToWorkspaces = expandAgentProcessTree(agentPIDsByWorkspace: agentPIDsByWorkspace)
 
         let allPids = Set(pidToTTY.keys).union(agentPidToWorkspaces.keys)
@@ -289,7 +298,7 @@ final class PortScanner: @unchecked Sendable {
 
         // 2. lsof -nP -a -p <all_pids> -iTCP -sTCP:LISTEN -F pn
         let pidsCsv = allPids.sorted().map(String.init).joined(separator: ",")
-        let pidToPorts = runLsof(pidsCsv: pidsCsv)
+        guard let pidToPorts = runLsof(pidsCsv: pidsCsv) else { return }
 
         // 3. Join: PID→TTY + PID→ports → TTY→ports
         var portsByTTY: [String: Set<Int>] = [:]
@@ -489,7 +498,7 @@ final class PortScanner: @unchecked Sendable {
         }
 
         let pidsCsv = agentPidToWorkspaces.keys.sorted().map(String.init).joined(separator: ",")
-        let pidToPorts = runLsof(pidsCsv: pidsCsv)
+        guard let pidToPorts = runLsof(pidsCsv: pidsCsv) else { return }
         var agentPortsByWorkspace: [UUID: Set<Int>] = [:]
         for (pid, ports) in pidToPorts {
             guard let workspaceIdsForPid = agentPidToWorkspaces[pid] else { continue }
@@ -644,25 +653,34 @@ final class PortScanner: @unchecked Sendable {
         return pidToWorkspaces
     }
 
-    private func runPS(ttyList: String) -> [Int: String] {
+    /// Every `ps`/`lsof` run is bounded: a hung `lsof` (for example on a stale network mount)
+    /// used to block this serial queue, and with it all port scanning, for the rest of the
+    /// session. Returns nil when the tool timed out or could not run; callers skip the cycle.
+    private static let subprocessTimeout: TimeInterval = 5
+    private static let subprocessStdoutLimit = 16 * 1024 * 1024
+    private static let subprocessStderrLimit = 1024 * 1024
+
+    private func runBoundedTool(_ path: String, arguments: [String]) -> String? {
+        let result = CanonicalSubprocessRunner.run(
+            executable: path,
+            arguments: arguments,
+            currentDirectory: "/",
+            timeout: Self.subprocessTimeout,
+            stdoutLimit: Self.subprocessStdoutLimit,
+            stderrLimit: Self.subprocessStderrLimit,
+            executableURL: URL(fileURLWithPath: path)
+        )
+        // `ps -t` and `lsof` exit 1 when nothing matched; only a run that did not finish
+        // normally is a failure.
+        guard result.outcome == .exited else { return nil }
+        return result.stdout ?? ""
+    }
+
+    private func runPS(ttyList: String) -> [Int: String]? {
         // `ps -t tty1,tty2,... -o pid=,tty=` — targeted scan, much cheaper than -ax.
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-t", ttyList, "-o", "pid=,tty="]
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-        } catch {
-            return [:]
+        guard let output = runBoundedTool("/bin/ps", arguments: ["-t", ttyList, "-o", "pid=,tty="]) else {
+            return nil
         }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        guard let output = String(data: data, encoding: .utf8) else { return [:] }
 
         var mapping: [Int: String] = [:]
         for line in output.split(separator: "\n") {
@@ -675,23 +693,9 @@ final class PortScanner: @unchecked Sendable {
     }
 
     private func runAllProcesses() -> [Int: Int] {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-ax", "-o", "pid=,ppid="]
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-        } catch {
+        guard let output = runBoundedTool("/bin/ps", arguments: ["-ax", "-o", "pid=,ppid="]) else {
             return [:]
         }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        guard let output = String(data: data, encoding: .utf8) else { return [:] }
 
         var mapping: [Int: Int] = [:]
         for line in output.split(separator: "\n") {
@@ -704,7 +708,8 @@ final class PortScanner: @unchecked Sendable {
         return mapping
     }
 
-    private func runLsof(pidsCsv: String) -> [Int: Set<Int>] {
+    /// Nil when any `lsof` chunk failed to finish: a partial answer would drop ports.
+    private func runLsof(pidsCsv: String) -> [Int: Set<Int>]? {
         let pids = pidsCsv.split(separator: ",").compactMap { Int($0) }
         guard pids.count > Self.lsofMaximumPIDsPerInvocation else {
             return runLsofChunk(pidsCsv: pidsCsv)
@@ -713,7 +718,8 @@ final class PortScanner: @unchecked Sendable {
         var result: [Int: Set<Int>] = [:]
         for chunk in Self.lsofPIDChunks(pids) {
             let csv = chunk.map(String.init).joined(separator: ",")
-            for (pid, ports) in runLsofChunk(pidsCsv: csv) {
+            guard let chunkResult = runLsofChunk(pidsCsv: csv) else { return nil }
+            for (pid, ports) in chunkResult {
                 result[pid, default: []].formUnion(ports)
             }
         }
@@ -747,26 +753,17 @@ final class PortScanner: @unchecked Sendable {
         return chunks
     }
 
-    private func runLsofChunk(pidsCsv: String) -> [Int: Set<Int>] {
+    private func runLsofChunk(pidsCsv: String) -> [Int: Set<Int>]? {
         if let lsofChunkOverride { return lsofChunkOverride(pidsCsv) }
-        // `lsof -nP -a -p <pids> -iTCP -sTCP:LISTEN -F pn`
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-nP", "-a", "-p", pidsCsv, "-iTCP", "-sTCP:LISTEN", "-Fpn"]
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-        } catch {
-            return [:]
+        // `lsof -b -w -nP -a -p <pids> -iTCP -sTCP:LISTEN -F pn`. `-b` avoids kernel calls
+        // that can block (stat/lstat/readlink on a dead mount); `-w` drops the warnings `-b`
+        // would print.
+        guard let output = runBoundedTool(
+            "/usr/sbin/lsof",
+            arguments: ["-b", "-w", "-nP", "-a", "-p", pidsCsv, "-iTCP", "-sTCP:LISTEN", "-Fpn"]
+        ) else {
+            return nil
         }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        guard let output = String(data: data, encoding: .utf8) else { return [:] }
 
         // Parse lsof -F output: lines starting with 'p' = PID, 'n' = name (host:port).
         var result: [Int: Set<Int>] = [:]
