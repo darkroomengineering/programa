@@ -61,7 +61,7 @@ If you make changes to the ghostty submodule, rebuild the xcframework:
 
 ```bash
 cd ghostty
-zig build -Demit-xcframework=true -Doptimize=ReleaseFast
+zig build -Demit-xcframework=true -Demit-macos-app=false -Dxcframework-target=native -Doptimize=ReleaseFast
 ```
 
 ## Running Tests
@@ -84,36 +84,10 @@ gh workflow run ci.yml --ref my-feature -f notification_ui=true
 
 The `ghostty` submodule points to a fork of the upstream Ghostty project maintained by Darkroom Engineering.
 
-### Making changes to ghostty
-
-```bash
-cd ghostty
-git checkout -b my-feature
-# make changes
-git add .
-git commit -m "Description of changes"
-git push origin my-feature
-```
-
-### Keeping the fork updated
-
-```bash
-cd ghostty
-git fetch origin
-git checkout main
-git merge origin/main
-git push origin main
-```
-
-Then update the parent repo:
-
-```bash
-cd ..
-git add ghostty
-git commit -m "Update ghostty submodule"
-```
-
-See `docs/ghostty-fork.md` for details on fork changes and conflict notes.
+Ghostty changes follow [docs/ghostty-fork.md](docs/ghostty-fork.md): branch off the SHA the
+parent repo pins (not off the fork's `main`, which is far ahead of the pin), push the branch to
+the fork, then commit the new submodule pointer in the parent repo. Never merge the fork's
+`main` into the submodule to update it.
 
 ## License
 

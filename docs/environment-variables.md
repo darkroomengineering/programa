@@ -1,8 +1,11 @@
 # Environment variables
 
-Every `PROGRAMA_*` and `PROGRAMAD_*` variable that Programa's app, CLI, MCP server, shell
-integration, scripts and daemon read or set. Variables marked "Debug builds" are compiled out of
-Release builds.
+The user-facing `PROGRAMA_*` and `PROGRAMAD_*` variables that Programa's app, CLI, MCP server,
+shell integration, scripts and daemon read or set. Variables marked "Debug builds" are compiled out
+of Release builds. Internal hand-offs between Programa's own processes and scripts (for example
+`PROGRAMA_ZSH_RESTORE_TERM`, `PROGRAMA_RELOAD_LOCK_FD`, the `PROGRAMA_TEST_*` and
+`PROGRAMA_LAG_*` test knobs) are not listed; they are not a stable interface.
+`PROGRAMA_ISSUE_483_PORTAL_RECOVERY` is a Swift compile-time flag, not an environment variable.
 
 ## Set in every Programa terminal
 
@@ -102,16 +105,16 @@ The standalone daemon in `core/` is described in `core/docs/programad.md`.
 | `PROGRAMAD_PASSWORD` | Requires `auth.login` with this password. `--password-file PATH` is the file-based alternative. |
 
 `PROGRAMAD_AUTH_TOKEN`, `PROGRAMA_SOCKET_PASSWORD` and `PROGRAMA_SOCKET_AUTH_TOKEN` are removed
-from the environment of every child process the daemon starts. `PROGRAMAD_UNIX_PATH`,
-`PROGRAMAD_SOCKET` and `PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD` are set or cleared by
-`scripts/reload.sh`, `scripts/reloads.sh`, `scripts/launch-tagged-automation.sh` and the shell
-integration, but no app, CLI or daemon code reads them.
+from the environment of every child process the daemon starts. The shell integration clears
+`PROGRAMAD_UNIX_PATH` and `PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD` from the shell environment;
+no app, CLI or daemon code reads them.
 
 ## Build, reload and CI scripts
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `PROGRAMA_SKIP_ZIG_BUILD` | `reload.sh`, `build-ghostty-cli-helper.sh` | `1` skips the Zig builds. |
+| `PROGRAMA_SKIP_ZIG_BUILD` | `reload.sh`, `build-ghostty-cli-helper.sh` | `1` skips the Zig builds and bundles a stub Ghostty CLI helper. The CI unit-test shards set it. |
+| `ZIG_DIST_CACHE_DIR`, `ZIG_INSTALL_ROOT` | `install-zig.sh` | Where the checksum-verified zig tarball is kept (default `~/.cache/programa-zig-dist`, cached by CI) and where it is extracted (default `~/.local/share/programa-zig`). |
 | `PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND` | `reload.sh`, `reloadp.sh`, `reloads.sh` | Command to run instead of `scripts/ensure-ghosttykit.sh`. |
 | `PROGRAMA_GHOSTTYKIT_CACHE_DIR` | `ensure-ghosttykit.sh` | GhosttyKit cache folder. Default `~/.cache/programa/ghosttykit`. |
 | `PROGRAMA_GHOSTTYKIT_LOCK_TIMEOUT`, `PROGRAMA_GHOSTTYKIT_LOCK_POLL_INTERVAL` | `ensure-ghosttykit.sh` | Seconds to wait for the cache lock (default 300) and between polls (default 1). |

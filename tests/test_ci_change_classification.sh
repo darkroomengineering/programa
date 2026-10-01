@@ -48,9 +48,19 @@ run_case \
   $'Resources/ghostty/themes/preview.png\n'
 
 run_case \
-  "documentation workflow and localization paths only" \
+  "documentation, other workflows and legacy strings only" \
   false \
-  $'docs/socket-control.md\nREADME.md\n.github/workflows/ci.yml\nResources/Localizable.xcstrings\nResources/ja.lproj/Localizable.strings\n'
+  $'docs/socket-control.md\nREADME.md\n.github/workflows/release.yml\n.github/pull_request_template.md\nResources/ja.lproj/Localizable.strings\n'
+
+run_case \
+  "string catalog compiles into the app" \
+  true \
+  $'docs/socket-control.md\nResources/Localizable.xcstrings\n'
+
+run_case \
+  "main CI workflow runs the jobs it edits" \
+  true \
+  $'README.md\n.github/workflows/ci.yml\n'
 
 run_case \
   "empty changed path set" \

@@ -24,8 +24,9 @@ app.
 - **Candidates.** Each ship also seals a `rolling-candidate-<build>` **draft** release that
   holds the versioned DMG and EXE and the dSYMs. Drafts are invisible on the public releases
   page and to `releases/latest`, so they never add a second entry. After the candidate's
-  assets are promoted into `rolling`, the reconciler deletes every older candidate draft and
-  keeps only the newest as a private rollback archive. Download it with
+  assets are promoted into `rolling`, the reconciler keeps the five newest candidate drafts
+  (`CANDIDATE_KEEP_COUNT` in `scripts/publish_rolling_release.sh`) as private rollback
+  archives and deletes the older ones. Download it with
   `gh release download rolling-candidate-<build> --repo darkroomengineering/programa`
   (collaborator access required, because it is a draft).
 

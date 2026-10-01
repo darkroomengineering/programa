@@ -294,7 +294,7 @@ If per-language highlighting is wanted later (v1.1+), the two real options to ev
 
 ## 4. Data model and serialization format
 
-### `ReviewComment` (new file, `Sources/Panels/ReviewComment.swift`)
+### `ReviewComment` (`Sources/ReviewComment.swift`)
 
 ```swift
 struct ReviewComment: Identifiable, Codable, Equatable {

@@ -163,6 +163,23 @@ require_selected_target_is_current_main() {
     fail "candidate target ${SELECTED_TARGET} is no longer current main ${current_main} at ${checkpoint}"
 }
 
+# After the appcast and aliases are public, main moving on is not an error: the
+# release run for the new main commit reconciles rolling's title, notes and ref.
+# Stop without touching them and exit 0, so the run does not end red after users
+# can already download the build.
+stop_quietly_if_main_moved() {
+  local checkpoint="$1" current_main
+  current_main="$("${GH_BIN}" api \
+    "repos/${REPOSITORY}/git/ref/heads/main" \
+    --jq .object.sha)" || fail "could not read current main ref at ${checkpoint}"
+  [[ "${current_main}" =~ ^[0-9a-f]{40}$ ]] || \
+    fail "current main ref did not resolve to a commit SHA at ${checkpoint}"
+  if [[ "${current_main}" != "${SELECTED_TARGET}" ]]; then
+    echo "::notice title=Rolling metadata deferred::main moved to ${current_main} after ${SELECTED_TARGET} assets were published (${checkpoint}); the next release run updates rolling's title, notes and ref."
+    exit 0
+  fi
+}
+
 query_releases_paginated() {
   local output="$1"
   "${GH_BIN}" api --paginate \
@@ -603,14 +620,12 @@ fi
 [[ "${ROLLING_IMMUTABLE_AT_START}" == "false" ]] || \
   fail "rolling must remain a legacy mutable release"
 
-# There used to be a second high-water snapshot here, taken after the
-# selected candidate was published as a non-latest prerelease archive (a real
-# gh mutation with real latency, and therefore a real race window). Candidates
-# no longer publish (see the promotion path below), so nothing mutates or
-# queries GitHub between the initial snapshot above and this point — a second
-# snapshot here would be redundant with it. The pre-publication snapshot below,
-# taken after the appcast/alias uploads and immediately before rolling's
-# metadata and ref change, remains the meaningful race gate.
+# The initial snapshot above is the high-water gate for the uploads: nothing
+# queries or changes GitHub between it and here. A newer main commit stops the
+# run here, while nothing public has changed. After the uploads, a moved main
+# ends the run with a notice (stop_quietly_if_main_moved), and the
+# pre-publication snapshot below still guards the metadata and ref against a
+# concurrent publisher.
 require_selected_target_is_current_main "alias publication gate"
 # The enclosure lands before the feed that points at it, so a client never reads
 # an appcast whose DMG is not yet downloadable.
@@ -675,7 +690,7 @@ if [[ "${FINAL_ACTION}" == "reject" ]]; then
 fi
 [[ "${FINAL_ACTION}" == "repair" || "${FINAL_ACTION}" == "promote" ]] || \
   fail "state module returned an unknown pre-publication promotion action"
-require_selected_target_is_current_main "release metadata publication gate"
+stop_quietly_if_main_moved "release metadata publication gate"
 
 NOTES_FILE="${TEMP_DIR}/release-notes.md"
 RAW_NOTES_FILE="${TEMP_DIR}/release-notes.raw.md"
@@ -713,7 +728,7 @@ NODE
 fi
 
 if [[ "${PRESERVE_PUBLISHED_METADATA}" != "true" ]]; then
-  require_selected_target_is_current_main "post-notes release metadata publication gate"
+  stop_quietly_if_main_moved "post-notes release metadata publication gate"
   "${GH_BIN}" release edit "${ROLLING_TAG}" \
     --repo "${REPOSITORY}" \
     --title "Rolling ${SELECTED_VERSION}" \
@@ -723,8 +738,8 @@ if [[ "${PRESERVE_PUBLISHED_METADATA}" != "true" ]]; then
 fi
 
 if [[ "${STARTING_REF}" != "${SELECTED_TARGET}" ]]; then
-  require_selected_target_is_current_main "rolling ref publication gate"
-  # Rolling is required (lines 597-598) to already exist as a published
+  stop_quietly_if_main_moved "rolling ref publication gate"
+  # Rolling is required (the ROLLING_EXISTS check above) to already exist as a published
   # release before this point, so its tag ref is always present; a PATCH
   # failure here is a real error and must propagate, never be silently
   # retried as "create instead of move" (that masked genuine failures,

@@ -8,9 +8,31 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Added
 - New `agent.needs_input` socket method reports a surface as blocked on the user and posts its notification in one call, instead of three separate calls that could fail independently.
+- Tab colors and the Tab Color menu in the glass tab bar; pane tabs show their color as a tinted background.
+- `programa wait-surface --agent-state <idle|working|blocked|any_change>` waits for the agent in a surface to reach a state.
+- On Windows, pasting text with line breaks or control characters into a program that has not turned on bracketed paste (cmd.exe, PowerShell) asks first, with a preview.
 
 ### Changed
+- Only one copy of Programa runs at a time: launching a second copy brings the running app forward and exits.
+- Closing a window with its red button or Close Window asks first when any of its workspaces has a running process, with the same confirmation as closing the last workspace. The socket method `window.close` still closes without asking.
+- Splitting a pane or opening a pane from the socket or CLI no longer moves focus; only explicit focus commands do.
+- Opening another app from a web page or a terminal link asks first, per link scheme.
+- A program that writes to the clipboard with OSC 52 asks before the clipboard changes.
+- Browser cookie methods act on the current page's site by default; `all_domains: true` widens them, and a `domain` filter matches the exact host or its subdomains only. `browser.state.save` writes its file with `0600` permissions to an absolute path and exports only the current site's cookies unless asked for more.
+- Socket errors are consistent: a reference that does not resolve returns `not_found` (a malformed one stays `invalid_params`), splitting a workspace that already has four panes returns `limit_reached` before anything is created, and closing a window's last workspace returns `invalid_state`.
+- `surface.send_text` and `agent.prompt` report `"queued": true` when the text waits for a terminal that is not attached yet. `surface.wait` resolves with `"outcome": "closed"` when its surface closes, caps `timeout_ms` at one hour, and rejects `exit` on a browser surface.
+- A workspace's `agent_state` counts only helpers that are still running; finished helpers are counted in the new `helper_outcomes` field of `workspace.list` and `system.tree`.
+- Password mode closes a connection after five failed `auth.login` attempts and compares the password in constant time.
+- Agent hooks fail open: outside Programa, or when the app is not reachable, they answer the agent normally and let it continue. The Codex installer keeps everything it writes to `config.toml` inside one `# BEGIN programa` block.
+- Agent integration installers exit with a non-zero status when they fail.
+- CLI commands accept `--flag=value` as well as `--flag value`.
+- The tmux shim's `resize-pane` counts terminal cells, `capture-pane` shows the visible screen, and `send-keys` supports named keys.
+- The Rust core is no longer part of the macOS app; it serves the Windows app only.
 - Each workspace row now shows one agent indicator (Needs input, Working, or Idle) instead of the badge, status row, and notification text sometimes disagreeing with each other. It dims and shows "(stale)" after ten minutes with no update from the agent, and only clears when the agent itself reports it's resumed, not just from opening the workspace.
+
+### Removed
+- Browser socket methods that only ever answered `not_supported` (network routing, viewport emulation, raw input injection and similar) are gone; calling them is now an unknown-method error.
+- The library-validation and unsigned-executable-memory entitlements.
 
 ### Fixed
 - A window closed with the red button no longer comes back on the next launch. Since 0.5.0 a closed window was kept alive for Dock reopen and then saved and restored like a visible one, so every restart opened an extra window of stale workspaces. Closed windows now stay closed across a relaunch and their shells are ended at startup.

@@ -11,6 +11,7 @@ DERIVED_SET=0
 TAG=""
 LAUNCH=0
 ISOLATED=0
+INSTALL_SHIM=0
 PROGRAMA_DEBUG_LOG=""
 CLI_PATH=""
 LAST_SOCKET_PATH_DIR="$HOME/Library/Application Support/programa"
@@ -97,6 +98,31 @@ select_programa_shim_target() {
   return 1
 }
 
+# Managed `programa` shims an earlier --install-shim run left on PATH. They
+# shadow the installed app's CLI, so the default run names them.
+find_managed_programa_shims() {
+  local marker="programa dev shim (managed by scripts/reload.sh)"
+  local path_entry=""
+  local candidate=""
+  local seen=":"
+
+  IFS=':' read -r -a path_entries <<< "${PATH:-}"
+  for path_entry in "${path_entries[@]}" /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/bin"; do
+    [[ -z "$path_entry" ]] && continue
+    # PATH entries can hold a literal, unexpanded "~/".
+    # shellcheck disable=SC2088
+    if [[ "$path_entry" == "~/"* ]]; then
+      path_entry="$HOME/${path_entry#~/}"
+    fi
+    [[ "$seen" == *":$path_entry:"* ]] && continue
+    seen="${seen}${path_entry}:"
+    candidate="$path_entry/programa"
+    if [[ -f "$candidate" ]] && grep -q "$marker" "$candidate" 2>/dev/null; then
+      echo "$candidate"
+    fi
+  done
+}
+
 write_last_socket_path() {
   local socket_path="$1"
   mkdir -p "$LAST_SOCKET_PATH_DIR"
@@ -122,6 +148,11 @@ Options:
   --name <app name>      Override app display/bundle name.
   --bundle-id <id>       Override bundle identifier.
   --derived-data <path>  Override derived data path.
+  --install-shim         Also write a `programa` shim into the first writable PATH
+                         directory ahead of the installed app, so a bare `programa`
+                         runs this dev CLI. Off by default: the shim shadows the
+                         installed CLI for every shell and agent hook. Without it,
+                         use /tmp/programa-cli or ~/.local/bin/programa-dev.
   -h, --help             Show this help.
 EOF
 }
@@ -189,6 +220,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --isolated)
       ISOLATED=1
+      shift
+      ;;
+    --install-shim)
+      INSTALL_SHIM=1
       shift
       ;;
     --derived-data)
@@ -344,15 +379,11 @@ if [[ -n "$TAG" && "$APP_NAME" != "$SEARCH_APP_NAME" ]]; then
     /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$INFO_PLIST" 2>/dev/null \
       || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $BUNDLE_ID" "$INFO_PLIST"
     if [[ -n "${TAG_SLUG:-}" ]]; then
-      APP_SUPPORT_DIR="$HOME/Library/Application Support/programa"
-      PROGRAMAD_SOCKET="${APP_SUPPORT_DIR}/programad-dev-${TAG_SLUG}.sock"
       PROGRAMA_SOCKET="/tmp/programa-debug-${TAG_SLUG}.sock"
       PROGRAMA_DEBUG_LOG="/tmp/programa-debug-${TAG_SLUG}.log"
       write_last_socket_path "$PROGRAMA_SOCKET"
       echo "$PROGRAMA_DEBUG_LOG" > /tmp/programa-last-debug-log-path || true
       /usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$INFO_PLIST" 2>/dev/null || true
-      /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PROGRAMAD_UNIX_PATH \"${PROGRAMAD_SOCKET}\"" "$INFO_PLIST" 2>/dev/null \
-        || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMAD_UNIX_PATH string \"${PROGRAMAD_SOCKET}\"" "$INFO_PLIST"
       /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PROGRAMA_SOCKET_PATH \"${PROGRAMA_SOCKET}\"" "$INFO_PLIST" 2>/dev/null \
         || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMA_SOCKET_PATH string \"${PROGRAMA_SOCKET}\"" "$INFO_PLIST"
       /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PROGRAMA_DEBUG_LOG \"${PROGRAMA_DEBUG_LOG}\"" "$INFO_PLIST" 2>/dev/null \
@@ -361,10 +392,6 @@ if [[ -n "$TAG" && "$APP_NAME" != "$SEARCH_APP_NAME" ]]; then
         || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMA_SOCKET_ENABLE string 1" "$INFO_PLIST"
       /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PROGRAMA_SOCKET_MODE allowAll" "$INFO_PLIST" 2>/dev/null \
         || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMA_SOCKET_MODE string allowAll" "$INFO_PLIST"
-      /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD 1" "$INFO_PLIST" 2>/dev/null \
-        || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD string 1" "$INFO_PLIST"
-      /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PROGRAMATERM_REPO_ROOT \"${PWD}\"" "$INFO_PLIST" 2>/dev/null \
-        || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMATERM_REPO_ROOT string \"${PWD}\"" "$INFO_PLIST"
     fi
     /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der "$TAG_APP_PATH" >/dev/null 2>&1 || true
   fi
@@ -380,9 +407,16 @@ if [[ -x "$CLI_PATH" ]]; then
   DEV_CLI_SHIM="$HOME/.local/bin/programa-dev"
   write_dev_cli_shim "$DEV_CLI_SHIM" "/Applications/Programa.app/Contents/Resources/bin/programa"
 
-  PROGRAMA_SHIM_TARGET="$(select_programa_shim_target || true)"
-  if [[ -n "${PROGRAMA_SHIM_TARGET:-}" ]]; then
-    write_dev_cli_shim "$PROGRAMA_SHIM_TARGET" "/Applications/Programa.app/Contents/Resources/bin/programa"
+  if [[ "$INSTALL_SHIM" -eq 1 ]]; then
+    PROGRAMA_SHIM_TARGET="$(select_programa_shim_target || true)"
+    if [[ -n "${PROGRAMA_SHIM_TARGET:-}" ]]; then
+      write_dev_cli_shim "$PROGRAMA_SHIM_TARGET" "/Applications/Programa.app/Contents/Resources/bin/programa"
+    fi
+  else
+    while IFS= read -r STALE_SHIM; do
+      [[ -z "$STALE_SHIM" ]] && continue
+      echo "warning: $STALE_SHIM is a dev shim from an earlier --install-shim run and shadows the installed programa; remove it with: rm '$STALE_SHIM'" >&2
+    done < <(find_managed_programa_shims)
   fi
 fi
 
@@ -419,12 +453,6 @@ if [[ "$LAUNCH" -eq 1 ]]; then
   fi
   sleep 0.3
 
-  if [[ -n "${PROGRAMAD_SOCKET:-}" && -S "$PROGRAMAD_SOCKET" ]]; then
-    for PID in $(lsof -t "$PROGRAMAD_SOCKET" 2>/dev/null); do
-      kill "$PID" 2>/dev/null || true
-    done
-    rm -f "$PROGRAMAD_SOCKET"
-  fi
   if [[ -n "${PROGRAMA_SOCKET:-}" && -S "$PROGRAMA_SOCKET" ]]; then
     rm -f "$PROGRAMA_SOCKET"
   fi
@@ -439,7 +467,6 @@ if [[ "$LAUNCH" -eq 1 ]]; then
     -u PROGRAMA_SURFACE_ID
     -u PROGRAMA_TAB_ID
     -u PROGRAMA_PANEL_ID
-    -u PROGRAMAD_UNIX_PATH
     -u PROGRAMA_TAG
     -u PROGRAMA_DEBUG_LOG
     -u PROGRAMA_BUNDLE_ID
@@ -457,9 +484,9 @@ if [[ "$LAUNCH" -eq 1 ]]; then
 
   if [[ -n "${TAG_SLUG:-}" && -n "${PROGRAMA_SOCKET:-}" ]]; then
     # Ensure tag-specific socket paths win even if the caller has PROGRAMA_* overrides.
-    "${OPEN_CLEAN_ENV[@]}" PROGRAMA_TAG="$TAG_SLUG" PROGRAMA_SOCKET_ENABLE=1 PROGRAMA_SOCKET_MODE=allowAll PROGRAMA_SOCKET_PATH="$PROGRAMA_SOCKET" PROGRAMAD_UNIX_PATH="$PROGRAMAD_SOCKET" PROGRAMA_DEBUG_LOG="$PROGRAMA_DEBUG_LOG" PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 PROGRAMATERM_REPO_ROOT="$PWD" open -g "$APP_PATH"
+    "${OPEN_CLEAN_ENV[@]}" PROGRAMA_TAG="$TAG_SLUG" PROGRAMA_SOCKET_ENABLE=1 PROGRAMA_SOCKET_MODE=allowAll PROGRAMA_SOCKET_PATH="$PROGRAMA_SOCKET" PROGRAMA_DEBUG_LOG="$PROGRAMA_DEBUG_LOG" open -g "$APP_PATH"
   elif [[ -n "${TAG_SLUG:-}" ]]; then
-    "${OPEN_CLEAN_ENV[@]}" PROGRAMA_TAG="$TAG_SLUG" PROGRAMA_SOCKET_ENABLE=1 PROGRAMA_SOCKET_MODE=allowAll PROGRAMA_DEBUG_LOG="$PROGRAMA_DEBUG_LOG" PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 PROGRAMATERM_REPO_ROOT="$PWD" open -g "$APP_PATH"
+    "${OPEN_CLEAN_ENV[@]}" PROGRAMA_TAG="$TAG_SLUG" PROGRAMA_SOCKET_ENABLE=1 PROGRAMA_SOCKET_MODE=allowAll PROGRAMA_DEBUG_LOG="$PROGRAMA_DEBUG_LOG" open -g "$APP_PATH"
   else
     echo "/tmp/programa-debug.sock" > /tmp/programa-last-socket-path || true
     echo "/tmp/programa-debug.log" > /tmp/programa-last-debug-log-path || true

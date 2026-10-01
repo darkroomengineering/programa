@@ -390,21 +390,20 @@ jobs:
         run: |
           ./scripts/download-prebuilt-ghosttykit.sh
 
+      - name: Resolve zig version
+        id: zig-version
+        run: printf 'version=%s\n' "$(./scripts/required-zig-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # install-zig.sh re-checks the tarball against scripts/zig-macos-aarch64.sha256
+      # on every run, so a cache hit never skips the checksum.
+      - name: Cache zig toolchain tarball
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ~/.cache/programa-zig-dist
+          key: zig-dist-macos-arm64-${{ steps.zig-version.outputs.version }}
+
       - name: Install zig
-        run: |
-          ZIG_REQUIRED="$(./scripts/required-zig-version.sh)"
-          if command -v zig >/dev/null 2>&1 && [ "$(zig version 2>/dev/null)" = "$ZIG_REQUIRED" ]; then
-            echo "zig ${ZIG_REQUIRED} already installed"
-          else
-            echo "Installing zig ${ZIG_REQUIRED} from tarball"
-            curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-aarch64-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
-            tar xf /tmp/zig.tar.xz -C /tmp
-            sudo mkdir -p /usr/local/bin /usr/local/lib
-            sudo cp -f /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/zig /usr/local/bin/zig
-            sudo cp -rf /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/lib /usr/local/lib/zig
-            export PATH="/usr/local/bin:$PATH"
-            zig version
-          fi
+        run: ./scripts/install-zig.sh
 
       - name: Cache Zig packages
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
@@ -412,6 +411,16 @@ jobs:
           path: ~/.cache/zig
           key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}
           restore-keys: zig-packages-
+
+      # The "Copy Ghostty Resources" build phase compiles the Ghostty CLI helper
+      # (Resources/bin/ghostty) with zig. zig's local cache turns that into a
+      # no-op while the ghostty revision and zig version stay the same. No
+      # restore-keys: an exact key keeps the cache from accumulating old builds.
+      - name: Cache Ghostty CLI helper build
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ghostty/.zig-cache
+          key: ghostty-cli-helper-${{ steps.ghostty-revision.outputs.revision }}-zig${{ steps.zig-version.outputs.version }}
 
       - name: Cache DerivedData
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
@@ -496,6 +505,11 @@ jobs:
       PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-unit-${{ matrix.shard }}
       PROGRAMA_UNIT_TEST_SHARD: ${{ matrix.shard }}
       PROGRAMA_UNIT_TEST_SHARD_COUNT: 2
+      # No unit test runs the Ghostty CLI helper (Resources/bin/ghostty), so the
+      # shards take the build script's stub instead of compiling it with zig.
+      # build-app still builds the real helper; its artifact feeds the jobs that
+      # do run it (theme-picker-helper-regression, socket and UI tests).
+      PROGRAMA_SKIP_ZIG_BUILD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -524,8 +538,9 @@ jobs:
           sudo xcode-select -s "$XCODE_DIR" || true
           xcodebuild -version
 
-      - name: Verify native tab-strip hit testing
-        run: swift test --package-path vendor/bonsplit --filter BonsplitTests/testTabBarDragZoneUsesSuperviewCoordinatesAndYieldsToControls
+      - name: Run Bonsplit package tests
+        if: matrix.shard == 2
+        run: swift test --package-path vendor/bonsplit
 
       - name: Validate Release reload artifact discovery
         run: ./tests/test_reloadp_programa_artifact.sh
@@ -558,28 +573,6 @@ jobs:
         run: |
           ./scripts/download-prebuilt-ghosttykit.sh
 
-      - name: Install zig
-        run: |
-          ZIG_REQUIRED="$(./scripts/required-zig-version.sh)"
-          if command -v zig >/dev/null 2>&1 && [ "$(zig version 2>/dev/null)" = "$ZIG_REQUIRED" ]; then
-            echo "zig ${ZIG_REQUIRED} already installed"
-          else
-            echo "Installing zig ${ZIG_REQUIRED} from tarball"
-            curl -fSL "https://ziglang.org/download/${ZIG_REQUIRED}/zig-aarch64-macos-${ZIG_REQUIRED}.tar.xz" -o /tmp/zig.tar.xz
-            tar xf /tmp/zig.tar.xz -C /tmp
-            sudo mkdir -p /usr/local/bin /usr/local/lib
-            sudo cp -f /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/zig /usr/local/bin/zig
-            sudo cp -rf /tmp/zig-aarch64-macos-${ZIG_REQUIRED}/lib /usr/local/lib/zig
-            export PATH="/usr/local/bin:$PATH"
-            zig version
-          fi
-
-      - name: Cache Zig packages
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ~/.cache/zig
-          key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}
-          restore-keys: zig-packages-
 
       - name: Cache DerivedData
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
@@ -744,17 +737,30 @@ jobs:
   # Aggregate gate: downstream jobs and branch protection depend on the name
   # "unit-tests", not on the matrix job above, so sharding stays invisible to
   # everything that isn't ci.yml itself.
+  # Shards skipped by change-detection (docs, other workflows) count as a pass;
+  # a failed or cancelled shard, or a failed change-detection, does not.
   unit-tests:
-    needs: unit-tests-shard
+    needs:
+      - change-detection
+      - unit-tests-shard
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check shard results
+        env:
+          DETECTION_RESULT: ${{ needs.change-detection.result }}
+          RUN_APP_JOBS: ${{ needs.change-detection.outputs.run_app_jobs }}
+          SHARD_RESULT: ${{ needs.unit-tests-shard.result }}
         run: |
-          if [[ "${{ needs.unit-tests-shard.result }}" != "success" ]]; then
-            echo "unit-tests-shard: ${{ needs.unit-tests-shard.result }}" >&2
-            exit 1
+          if [[ "$SHARD_RESULT" == "success" ]]; then
+            exit 0
           fi
+          if [[ "$SHARD_RESULT" == "skipped" && "$DETECTION_RESULT" == "success" && "$RUN_APP_JOBS" != "true" ]]; then
+            echo "unit-tests-shard skipped: no app-relevant changes"
+            exit 0
+          fi
+          echo "unit-tests-shard: $SHARD_RESULT (change-detection: $DETECTION_RESULT, run_app_jobs: $RUN_APP_JOBS)" >&2
+          exit 1
 
   # Independent of unit-tests: same "programa" scheme app build-app already
   # produces, so this reuses that artifact instead of paying for its own
@@ -1274,7 +1280,9 @@ jobs:
             cat "$DIAG_PATH"
 
             # This runner cannot reliably place the app's window on the virtual
-            # display being churned (see docs/testing-layout.md). When that
+            # display being churned: on macos-26 AppKit can move the window off
+            # it once its mode starts changing. (The churn attaches to the job's
+            # persistent display because a headless session holds only one.) When that
             # happens the regression can't be exercised at all: skip rather than
             # fail so a harness limitation doesn't block CI, but only when the
             # placement itself failed — a working harness must still fail on a
@@ -1374,6 +1382,26 @@ jobs:
             -destination "platform=macOS" \
             -maximum-test-execution-time-allowance 180 \
             -only-testing:programaUITests/BrowserPaneNavigationKeybindUITests/testCmdFFocusesBrowserFindFieldAfterCmdDCmdLNavigation \
+            test-without-building
+
+      # Close confirmations guard against losing running processes; they run
+      # on every main push so a regression shows up one merge later at most.
+      - name: Run close-confirmation UI regressions
+        if: github.event_name != 'workflow_dispatch'
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
+          xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+            -disableAutomaticPackageResolution \
+            -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
+            -destination "platform=macOS" \
+            -maximum-test-execution-time-allowance 180 \
+            -only-testing:programaUITests/CloseWindowConfirmDialogUITests \
+            -only-testing:programaUITests/CloseWorkspaceConfirmDialogUITests \
+            -only-testing:programaUITests/CloseWorkspacesConfirmDialogUITests \
+            -only-testing:programaUITests/CloseWorkspaceCmdDUITests \
             test-without-building
 
       - name: Run multi-window notification focus UI regression

@@ -173,21 +173,11 @@ if [[ -f "$INFO_PLIST" ]]; then
   # Inject staging socket paths via LSEnvironment so the Release binary
   # (which defaults to the per-user stable socket) uses isolated sockets instead.
   STAGING_SLUG="${TAG_SLUG:-staging}"
-  APP_SUPPORT_DIR="$HOME/Library/Application Support/programa"
-  PROGRAMAD_SOCKET="${APP_SUPPORT_DIR}/programad-${STAGING_SLUG}.sock"
   PROGRAMA_SOCKET="/tmp/programa-${STAGING_SLUG}.sock"
   write_last_socket_path "$PROGRAMA_SOCKET"
   /usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$INFO_PLIST" 2>/dev/null || true
-  /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PROGRAMAD_UNIX_PATH \"${PROGRAMAD_SOCKET}\"" "$INFO_PLIST" 2>/dev/null \
-    || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMAD_UNIX_PATH string \"${PROGRAMAD_SOCKET}\"" "$INFO_PLIST"
   /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PROGRAMA_SOCKET_PATH \"${PROGRAMA_SOCKET}\"" "$INFO_PLIST" 2>/dev/null \
     || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PROGRAMA_SOCKET_PATH string \"${PROGRAMA_SOCKET}\"" "$INFO_PLIST"
-  if [[ -S "$PROGRAMAD_SOCKET" ]]; then
-    for PID in $(lsof -t "$PROGRAMAD_SOCKET" 2>/dev/null); do
-      kill "$PID" 2>/dev/null || true
-    done
-    rm -f "$PROGRAMAD_SOCKET"
-  fi
   if [[ -S "$PROGRAMA_SOCKET" ]]; then
     rm -f "$PROGRAMA_SOCKET"
   fi
@@ -209,7 +199,6 @@ OPEN_CLEAN_ENV=(
   -u PROGRAMA_SOCKET_PATH
   -u PROGRAMA_TAB_ID
   -u PROGRAMA_PANEL_ID
-  -u PROGRAMAD_UNIX_PATH
   -u PROGRAMA_TAG
   -u PROGRAMA_BUNDLE_ID
   -u PROGRAMA_SHELL_INTEGRATION
@@ -226,7 +215,7 @@ OPEN_CLEAN_ENV=(
 
 # Always inject staging socket paths via env to ensure they take effect
 # (LSEnvironment requires app restart to pick up plist changes).
-"${OPEN_CLEAN_ENV[@]}" PROGRAMA_SOCKET_PATH="$PROGRAMA_SOCKET" PROGRAMAD_UNIX_PATH="$PROGRAMAD_SOCKET" open -g "$APP_PATH"
+"${OPEN_CLEAN_ENV[@]}" PROGRAMA_SOCKET_PATH="$PROGRAMA_SOCKET" open -g "$APP_PATH"
 
 # Safety: ensure only one instance is running.
 sleep 0.2

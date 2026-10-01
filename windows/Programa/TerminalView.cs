@@ -161,12 +161,38 @@ public sealed class TerminalView : UserControl, IDisposable
             var content = Clipboard.GetContent();
             if (!content.Contains(StandardDataFormats.Text)) return;
             var text = await content.GetTextAsync();
-            if (ReferenceEquals(_session, session)) NativeTerminal.Paste(session, Encoding.UTF8.GetBytes(text), true);
+            var bytes = Encoding.UTF8.GetBytes(text);
+            if (!ReferenceEquals(_session, session)) return;
+            // cmd.exe and PowerShell never enable bracketed paste, so a multi-line
+            // clipboard would run every line at once.
+            if (NativeTerminal.PasteNeedsConfirmation(session, bytes) && !await ConfirmPasteAsync(text)) return;
+            if (ReferenceEquals(_session, session)) NativeTerminal.Paste(session, bytes, true);
         }
         catch (Exception error)
         {
             System.Diagnostics.Debug.WriteLine($"Clipboard paste failed: {error}");
         }
+    }
+
+    private async Task<bool> ConfirmPasteAsync(string text)
+    {
+        const int PreviewLines = 5;
+        var lines = text.Replace("\r\n", "\n").Split('\n');
+        var preview = string.Join("\n", lines.Take(PreviewLines));
+        if (lines.Length > PreviewLines) preview += "\n\u2026";
+        var content = new StackPanel { Spacing = 8 };
+        content.Children.Add(new TextBlock { Text = Localizer.Get("PasteConfirmMessage"), TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(new TextBlock { Text = preview, FontFamily = new FontFamily("Cascadia Mono, Consolas"), TextWrapping = TextWrapping.NoWrap, MaxLines = PreviewLines + 1 });
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = Localizer.Get("PasteConfirmTitle"),
+            Content = content,
+            PrimaryButtonText = Localizer.Get("TerminalPaste"),
+            CloseButtonText = Localizer.Get("Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
     public void Dispose()
@@ -648,6 +674,8 @@ internal static class NativeTerminal
     [DllImport(Dll, EntryPoint = "programa_terminal_copy_selection")] internal static extern int CopySelection(SafeSessionHandle session, out Buffer buffer);
     [DllImport(Dll, EntryPoint = "programa_terminal_is_terminated")]
     [return: MarshalAs(UnmanagedType.I1)] internal static extern bool IsTerminated(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_paste_needs_confirmation")]
+    [return: MarshalAs(UnmanagedType.I1)] private static extern bool PasteNeedsConfirmationNative(SafeSessionHandle session, byte[] data, nuint length);
     [DllImport(Dll, EntryPoint = "programa_terminal_paste")] private static extern int PasteNative(SafeSessionHandle session, byte[] data, nuint length, [MarshalAs(UnmanagedType.I1)] bool bracketed);
 
     internal static SafeSessionHandle? Create(byte[] config, out string error)
@@ -658,6 +686,7 @@ internal static class NativeTerminal
     }
     internal static int Write(SafeSessionHandle session, byte[] data) => WriteNative(session, data, (nuint)data.Length);
     internal static int Paste(SafeSessionHandle session, byte[] data, bool bracketed) => PasteNative(session, data, (nuint)data.Length, bracketed);
+    internal static bool PasteNeedsConfirmation(SafeSessionHandle session, byte[] data) => PasteNeedsConfirmationNative(session, data, (nuint)data.Length);
     internal static bool TryCopySelection(SafeSessionHandle session, out string value)
     {
         var status = CopySelection(session, out var buffer);

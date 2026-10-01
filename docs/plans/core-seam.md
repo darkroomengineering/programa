@@ -1,6 +1,6 @@
 # Core seam
 
-Status: in progress, 2026-09-15. Motivation: `docs/plans/rust-core-spike.md`
+Status: superseded. The Rust core is not part of the macOS app; `Sources/ProgramaCore.swift` is the only seam that remains. Started 2026-09-15. Motivation: `docs/plans/rust-core-spike.md`
 ("Reframe" section, and step 2 of its "Sequence") and
 `docs/removed/ssh-remote-workspaces.md` ("Why removed and what a future
 version should do differently") both land on the same conclusion — a future
@@ -142,8 +142,8 @@ instead of a direct call) a drop-in swap later.
   talks over a Unix-domain socket to a *second* process — the escrow
   holder — today). Folding it into the seam now would just rename call
   sites without changing anything observable; the honest seam-worthy move
-  is `SessionSnapshotting`, which is what a UI-layer caller (`AppDelegate`,
-  `CLI/CLI+Snapshot.swift` if it exists) actually reaches for.
+  is `SessionSnapshotting`, which is what a UI-layer caller (`AppDelegate`)
+  actually reaches for.
 - **Why `SessionAutosaving` is not a singleton on `ProgramaCoreProviding`**:
   `SessionAutosaveCoordinator` is constructed once per `AppDelegate`
   instance with injected closures (`snapshotProvider`, `saveSnapshot`) that

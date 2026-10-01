@@ -89,11 +89,35 @@ programa notify --title "Claude Code" --subtitle "Permission" --body "Approval n
 programa notify --title "Done" --workspace workspace:1 --surface surface:2
 ```
 
-## Integration Examples
+## Agent integrations
 
-### Claude Code
+Claude Code, Codex and OpenCode report their status and notifications through hooks that
+Programa installs for you. Run the one for your agent from any terminal:
 
-See the [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code) for hook configuration.
+```bash
+programa claude install-integration
+programa codex install-integration
+programa opencode install-integration
+```
+
+Each command prints the exact changes and asks before applying them; `--yes` (or `-y`)
+skips the prompt. They write:
+
+| Agent | Files |
+|---|---|
+| Claude Code | Hook entries in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`), and the `programa` skill in `~/.claude/skills/programa/SKILL.md`. |
+| Codex | Hook entries in `~/.codex/hooks.json`, a `# BEGIN programa` ... `# END programa` block in `~/.codex/config.toml` that trusts those hooks, and the skill in `~/.agents/skills/programa/SKILL.md`. |
+| OpenCode | The plugin `~/.config/opencode/plugins/programa.js` (or under `$OPENCODE_CONFIG_DIR`), and the skill in `~/.config/opencode/skills/programa/SKILL.md`. |
+
+Remove an integration with `programa claude uninstall-integration`, `programa codex
+uninstall-integration` or `programa opencode uninstall-integration`; each removes only what
+its installer wrote. Everything outside the managed entries stays as you left it, so do not
+add your own lines inside the Codex `# BEGIN programa` block.
+
+The hooks fail open: when the agent runs outside Programa, or Programa is not reachable,
+the hook answers the agent with its normal acknowledgement and the agent carries on.
+
+## Other agents
 
 ### GitHub Copilot CLI
 
@@ -144,51 +168,6 @@ Or for repo-level hooks, create `.github/hooks/notify.json`:
     "agentStop": [ ... ]
   }
 }
-```
-
-### OpenAI Codex
-
-Add to `~/.codex/config.toml`:
-
-```toml
-notify = ["bash", "-c", "command -v programa &>/dev/null && programa notify --title Codex --body \"$(echo $1 | jq -r '.\"last-assistant-message\" // \"Turn complete\"' 2>/dev/null | head -c 100)\" || osascript -e 'display notification \"Turn complete\" with title \"Codex\"'", "--"]
-```
-
-Or create a simple script `~/.local/bin/codex-notify.sh`:
-
-```bash
-#!/bin/bash
-MSG=$(echo "$1" | jq -r '."last-assistant-message" // "Turn complete"' 2>/dev/null | head -c 100)
-command -v programa &>/dev/null && programa notify --title "Codex" --body "$MSG" || osascript -e "display notification \"$MSG\" with title \"Codex\""
-```
-
-Then use:
-```toml
-notify = ["bash", "~/.local/bin/codex-notify.sh"]
-```
-
-### OpenCode Plugin
-
-Create `.opencode/plugins/programa-notify.js`:
-
-```javascript
-export const ProgramaNotificationPlugin = async ({ $, }) => {
-  const notify = async (title, body) => {
-    try {
-      await $`command -v programa && programa notify --title ${title} --body ${body}`;
-    } catch {
-      await $`osascript -e ${"display notification \"" + body + "\" with title \"" + title + "\""}`;
-    }
-  };
-
-  return {
-    event: async ({ event }) => {
-      if (event.type === "session.idle") {
-        await notify("OpenCode", "Session idle");
-      }
-    },
-  };
-};
 ```
 
 ## Environment Variables
