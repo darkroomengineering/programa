@@ -4004,6 +4004,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 TerminalController.shared.setActiveTabManager(nil)
             }
         }
+        repointSocketTabManagerIfOrphaned()
 
         if let store = notificationStore {
             for tab in context.tabManager.tabs {
@@ -8789,6 +8790,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
     }
 
+    /// The socket's active manager can belong to a window the app never made active (one
+    /// created over the socket without focus), so it is repointed on its own when that goes.
+    private func repointSocketTabManagerIfOrphaned() {
+        guard let socketManager = TerminalController.shared.tabManager,
+              !mainWindowContexts.values.contains(where: { $0.tabManager === socketManager }) else { return }
+        TerminalController.shared.setActiveTabManager(tabManager ?? mainWindowContexts.values.first?.tabManager)
+    }
+
     private func unregisterMainWindow(_ window: NSWindow) {
         // Reset cascade point so the next new window appears near the closing
         // window's position, matching upstream Ghostty behavior.
@@ -8849,6 +8858,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 TerminalController.shared.setActiveTabManager(nil)
             }
         }
+        repointSocketTabManagerIfOrphaned()
 
         teardownMainWindowContext(removed)
         releaseClosedMainWindowContent(window)
