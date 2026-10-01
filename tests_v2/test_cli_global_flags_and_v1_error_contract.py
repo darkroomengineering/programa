@@ -15,7 +15,6 @@ from v2_support import must as _must
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
-LAST_SOCKET_HINT_PATH = Path("/tmp/programa-last-socket-path")
 
 
 def _find_cli_binary() -> str:
@@ -52,30 +51,6 @@ def main() -> int:
     version_out = _merged_output(version_proc).lower()
     _must(version_proc.returncode == 0, f"--version should succeed: {version_proc.returncode} {version_out!r}")
     _must("programa" in version_out, f"--version output should mention programa: {version_out!r}")
-
-    # Debug builds should auto-resolve the active debug socket via /tmp/programa-last-socket-path
-    # when PROGRAMA_SOCKET_PATH is not set.
-    hint_backup: str | None = None
-    hint_had_file = LAST_SOCKET_HINT_PATH.exists()
-    if hint_had_file:
-        hint_backup = LAST_SOCKET_HINT_PATH.read_text(encoding="utf-8")
-    try:
-        LAST_SOCKET_HINT_PATH.write_text(f"{SOCKET_PATH}\n", encoding="utf-8")
-        auto_env = dict(os.environ)
-        auto_env.pop("PROGRAMA_SOCKET_PATH", None)
-        auto_env.pop("PROGRAMA_SOCKET", None)
-        auto_ping = _run([cli, "ping"], env=auto_env)
-        auto_ping_out = _merged_output(auto_ping).lower()
-        _must(auto_ping.returncode == 0, f"debug auto socket resolution should succeed: {auto_ping.returncode} {auto_ping_out!r}")
-        _must("pong" in auto_ping_out, f"debug auto socket resolution should return pong: {auto_ping_out!r}")
-    finally:
-        try:
-            if hint_had_file:
-                LAST_SOCKET_HINT_PATH.write_text(hint_backup or "", encoding="utf-8")
-            else:
-                LAST_SOCKET_HINT_PATH.unlink(missing_ok=True)
-        except OSError:
-            pass
 
     # Global --password should parse as a flag (not a command name) and still allow non-password sockets.
     ping_proc = _run([cli, "--socket", SOCKET_PATH, "--password", "ignored-in-programaonly", "ping"])

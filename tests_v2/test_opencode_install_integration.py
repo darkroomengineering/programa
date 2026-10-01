@@ -127,7 +127,7 @@ def test_modified_file_reinstall_shows_diff_and_restores(cli: str) -> None:
         plugin_path.write_text(modified, encoding="utf-8")
 
         proc2 = _run(cli, ["opencode", "install-integration"], config_dir, input_text="n\n")
-        _must(proc2.returncode == 0, f"declining reinstall should still exit 0: {_merged(proc2)}")
+        _must(proc2.returncode == 1, f"non-TTY reinstall without --yes must exit 1: {_merged(proc2)}")
         output = _merged(proc2)
         _must("+" in output or "-" in output, f"expected a diff view in output, got: {output}")
         _must(

@@ -25,10 +25,10 @@ struct HookInstallationCoordinator {
         case (.codex, _):
             return nil
         case (.claude, _):
-            print("Usage: programa claude <install-integration|uninstall-integration>")
+            print("Usage: programa claude <install-integration|uninstall-integration> [--yes]")
             throw CLIError(message: "Unknown claude subcommand: \(subcommand)")
         case (.opencode, _):
-            print("Usage: programa opencode <install-integration|uninstall-integration>")
+            print("Usage: programa opencode <install-integration|uninstall-integration> [--yes]")
             throw CLIError(message: "Unknown opencode subcommand: \(subcommand)")
         }
     }
@@ -80,9 +80,7 @@ extension ProgramaCLI {
             let renderedConfig = String(data: preparedConfig.rendered, encoding: .utf8) ?? ""
             let configChanged = (preparedConfig.snapshot?.data ?? Data()) != preparedConfig.rendered
 
-            let skillPath = Self.agentSkillFilePath(
-                skillsRoot: NSString(string: "~/.agents/skills").expandingTildeInPath
-            )
+            let skillPath = Self.agentSkillFilePath(skillsRoot: Self.integrationExpandTilde("~/.agents/skills"))
             let skillInstall = install ? agentSkillInstallState(path: skillPath) : nil
             let skillUninstall = install ? nil : agentSkillUninstallState(path: skillPath)
             let skillChanged = skillInstall?.changed == true || skillUninstall != nil
@@ -113,16 +111,7 @@ extension ProgramaCLI {
                 printAgentSkillRemovalDiff(path: skillPath, content: skillUninstall)
             }
 
-            let skipConfirm = ProcessInfo.processInfo.arguments.contains("--yes")
-                || ProcessInfo.processInfo.arguments.contains("-y")
-            if !skipConfirm {
-                print("Apply these changes? [Y/n] ", terminator: "")
-                guard let response = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                      response.isEmpty || response == "y" || response == "yes" else {
-                    print("Aborted.")
-                    return
-                }
-            }
+            try confirmIntegrationChanges()
 
             let freshHooks = try codexReadRegularFile(paths.hooks, limit: Self.codexMaximumFileBytes, refuseSymlink: true)
             guard freshHooks == hooksSnapshot else {

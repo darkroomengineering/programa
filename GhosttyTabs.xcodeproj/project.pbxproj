@@ -177,6 +177,8 @@
 		RVPN0000000000000000000E /* TerminalController+Review.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN0000000000000000000D /* TerminalController+Review.swift */; };
 		RVPN00000000000000000010 /* CLI+Review.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN0000000000000000000F /* CLI+Review.swift */; };
 		RCAP000001 /* CLI+Recap.swift in Sources */ = {isa = PBXBuildFile; fileRef = RCAP000002 /* CLI+Recap.swift */; };
+		FADE00000000000000000003 /* CLI+HookSettingsIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE00000000000000000004 /* CLI+HookSettingsIO.swift */; };
+		FADE00000000000000000001 /* CLI+AgentDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE00000000000000000002 /* CLI+AgentDetection.swift */; };
 		A5001290 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A5001291 /* MarkdownUI */; };
 		A5001405 /* PanelContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001415 /* PanelContentView.swift */; };
 		A5001406 /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001416 /* Workspace.swift */; };
@@ -598,6 +600,8 @@
 		RVPN0000000000000000000D /* TerminalController+Review.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Review.swift"; sourceTree = "<group>"; };
 		RVPN0000000000000000000F /* CLI+Review.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Review.swift"; sourceTree = "<group>"; };
 		RCAP000002 /* CLI+Recap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Recap.swift"; sourceTree = "<group>"; };
+		FADE00000000000000000004 /* CLI+HookSettingsIO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+HookSettingsIO.swift"; sourceTree = "<group>"; };
+		FADE00000000000000000002 /* CLI+AgentDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentDetection.swift"; sourceTree = "<group>"; };
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
 		MDRD00000000000000000002 /* MarkdownDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownDocumentView.swift; sourceTree = "<group>"; };
 		MRMD000002 /* MermaidDiagramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MermaidDiagramView.swift; sourceTree = "<group>"; };
@@ -1137,6 +1141,8 @@
 				H1HK0001 /* HookInstallationCoordinator.swift */,
 				RVPN0000000000000000000F /* CLI+Review.swift */,
 				RCAP000002 /* CLI+Recap.swift */,
+				FADE00000000000000000004 /* CLI+HookSettingsIO.swift */,
+				FADE00000000000000000002 /* CLI+AgentDetection.swift */,
 				FE22E2E37BA6C8A7447AD12D /* SocketPathResolution.swift */,
 				5C0A7E41B93D2F6A18E4D057 /* SocketClient.swift */,
 			);
@@ -1781,6 +1787,8 @@
 				B9000031A1B2C3D4E5F60719 /* CLI+Markdown.swift in Sources */,
 				RVPN00000000000000000010 /* CLI+Review.swift in Sources */,
 				RCAP000001 /* CLI+Recap.swift in Sources */,
+				FADE00000000000000000003 /* CLI+HookSettingsIO.swift in Sources */,
+				FADE00000000000000000001 /* CLI+AgentDetection.swift in Sources */,
 				B9000035A1B2C3D4E5F60719 /* CLI+Browser.swift in Sources */,
 				A51DE0700000000000000001 /* CLI+Aside.swift in Sources */,
 					B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */,

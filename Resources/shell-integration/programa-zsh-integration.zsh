@@ -74,6 +74,58 @@ _programa_relay_rpc() {
     return 0
 }
 
+# Shell-state reports run in preexec/precmd, so they must never make the prompt or the
+# command wait on a CLI process. Send them straight over the Unix socket with zsh/net/socket:
+# the server answers off-main in well under a millisecond, and waiting for that reply (capped
+# at 0.25 s) is what keeps a `prompt` report from overtaking the `running` report before it.
+# Returns 1 when the module is missing, the connect fails, the reply is not ok (password mode
+# answers auth_required), or a background fallback report is still in flight.
+typeset -g _PROGRAMA_DIRECT_SOCKET=""
+_programa_socket_rpc_direct() {
+    local frame="$1" fd reply="" done_ticket=""
+    [[ "$_PROGRAMA_DIRECT_SOCKET" == off ]] && return 1
+    if (( _PROGRAMA_SHELL_STATE_SEQ > 0 )); then
+        { read -r done_ticket < "$_PROGRAMA_SHELL_STATE_FILE" } 2>/dev/null
+        [[ "$done_ticket" == "$_PROGRAMA_SHELL_STATE_SEQ" ]] || return 1
+    fi
+    if [[ -z "$_PROGRAMA_DIRECT_SOCKET" ]]; then
+        if zmodload zsh/net/socket 2>/dev/null; then
+            _PROGRAMA_DIRECT_SOCKET=on
+        else
+            _PROGRAMA_DIRECT_SOCKET=off
+            return 1
+        fi
+    fi
+    zsocket "$PROGRAMA_SOCKET_PATH" 2>/dev/null || return 1
+    fd=$REPLY
+    print -r -u $fd -- "$frame" 2>/dev/null
+    read -r -t 0.25 -u $fd reply 2>/dev/null
+    exec {fd}>&-
+    [[ "$reply" == *'"auth_required"'* ]] && _PROGRAMA_DIRECT_SOCKET=off
+    [[ "$reply" == *'"ok":true'* ]]
+}
+
+# Fallback for _programa_socket_rpc_direct: the CLI in the background with the next ticket,
+# waiting (at most 2 s) until the previous ticket is done, so the prompt never waits and
+# reports still arrive in order. Same runner as the bash and fish integrations.
+typeset -g _PROGRAMA_SHELL_STATE_SEQ=0
+typeset -g _PROGRAMA_SHELL_STATE_FILE="${TMPDIR:-$HOME}/.programa-shell-state.$$"
+typeset -g _PROGRAMA_SHELL_STATE_RUNNER='ticket=$1 file=$2; shift 2; i=0
+while [ "$ticket" -gt 1 ] && [ $i -lt 200 ]; do
+    done_ticket=; { read -r done_ticket < "$file"; } 2>/dev/null
+    [ "$done_ticket" = "$((ticket - 1))" ] && break
+    sleep 0.01; i=$((i + 1))
+done
+PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC=1 "$@" >/dev/null 2>&1
+printf "%s\n" "$ticket" > "$file"'
+_programa_relay_rpc_ordered_bg() {
+    local method="$1" params="$2" relay_cli=""
+    relay_cli="$(_programa_relay_cli_path)" || return 1
+    (( ++_PROGRAMA_SHELL_STATE_SEQ == 1 )) && print -r -- 0 >| "$_PROGRAMA_SHELL_STATE_FILE"
+    /bin/sh -c "$_PROGRAMA_SHELL_STATE_RUNNER" programa-shell-state \
+        "$_PROGRAMA_SHELL_STATE_SEQ" "$_PROGRAMA_SHELL_STATE_FILE" "$relay_cli" rpc "$method" "$params" >/dev/null 2>&1 &!
+}
+
 _programa_relay_workspace_id() {
     if [[ -n "$PROGRAMA_WORKSPACE_ID" ]]; then
         print -r -- "$PROGRAMA_WORKSPACE_ID"
@@ -466,11 +518,14 @@ _programa_report_shell_activity_state() {
     [[ -n "$PROGRAMA_TAB_ID" ]] || return 0
     [[ -n "$PROGRAMA_PANEL_ID" ]] || return 0
     [[ "$_PROGRAMA_SHELL_ACTIVITY_LAST" == "$state" ]] && return 0
-    local workspace_id="" state_json params
-    workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
-    state_json="$(_programa_json_escape "$state")"
+    # Inline (no command substitution) so this hot path forks nothing on the direct route.
+    local workspace_id="${PROGRAMA_WORKSPACE_ID:-$PROGRAMA_TAB_ID}" state_json="$state" params
+    state_json="${state_json//\\/\\\\}"
+    state_json="${state_json//\"/\\\"}"
     params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"state\":\"$state_json\"}"
-    _programa_relay_rpc "surface.report_shell_state" "$params" || return 0
+    _programa_socket_rpc_direct "{\"id\":1,\"method\":\"surface.report_shell_state\",\"params\":$params}" \
+        || _programa_relay_rpc_ordered_bg "surface.report_shell_state" "$params" \
+        || return 0
     _PROGRAMA_SHELL_ACTIVITY_LAST="$state"
 }
 
