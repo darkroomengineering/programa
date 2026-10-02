@@ -58,6 +58,7 @@ programa list-workspaces          # workspaces in the current window
 programa list-panes               # panes in the current workspace
 programa list-pane-surfaces       # surfaces (tabs) in the focused pane; add --pane <id> for another
 programa identify                 # your own window/workspace/surface IDs as JSON
+programa list-ports              # listening TCP ports per workspace, plus processes left running
 ```
 
 All of the above default to your own window/workspace via the env vars when you don't pass `--workspace`/`--window`.

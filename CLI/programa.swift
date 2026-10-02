@@ -1435,6 +1435,7 @@ struct ProgramaCLI {
 
             ]
         descriptors += self.treeDescriptors()
+        descriptors += self.portsDescriptors()
         descriptors += [
 
             CommandDescriptor(

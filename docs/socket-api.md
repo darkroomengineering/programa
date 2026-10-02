@@ -843,6 +843,34 @@ have not finished yet; a finished helper does not hold it at failed or completed
 helpers are counted in `helper_outcomes`, for example
 `{"failed": 1, "completed": 2, "cancelled": 0}`.
 
+## `ports.list` / `ports.stop`
+
+The ports hub in the sidebar footer and the `programa list-ports` / `programa stop-port` commands run on these two methods. Both run on the main actor, because they read the hub store and workspace list as one snapshot, and neither activates the app or changes focus.
+
+### `ports.list`
+
+Params: none. Returns the TCP ports that processes started from Programa terminals (and tracked agents) are listening on, plus processes left running after their panel closed.
+
+```json
+{
+  "workspaces": [
+    {"id": "<uuid>", "ref": "workspace:1", "title": "api",
+     "ports": [{"port": 3000, "pid": 4242, "command": "node",
+                "surface_id": "<uuid or null for agent-owned>", "surface_ref": "surface:3"}]}
+  ],
+  "left_running": [
+    {"pid": 4300, "command": "node", "ports": [5173],
+     "workspace_title": "web", "closed_at": "2026-10-02T09:15:00Z"}
+  ]
+}
+```
+
+A process counts as left running when it still listens about 5 seconds after its panel or workspace closed and its pid still belongs to the same program.
+
+### `ports.stop`
+
+Params: `pid` (integer, required). Sends SIGTERM, then SIGKILL if the process is still alive 3 seconds later, and returns `{"pid": <pid>, "signaled": true}` as soon as SIGTERM is sent. Only pids that `ports.list` reports can be stopped: any other pid, a pid that exited, and a pid that now belongs to a different program return `not_found`; `pid <= 1` and Programa's own pid return `invalid_params`; a failed `kill` returns `internal_error`.
+
 ## Browser cookies (`browser.cookies.get`, `browser.cookies.clear`)
 
 Both methods act on the current page's site by default. `all_domains: true` widens them to every

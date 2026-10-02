@@ -29,6 +29,12 @@ final class PortScanner: @unchecked Sendable {
     var onPortsUpdated: (@MainActor (_ workspaceId: UUID, _ panelId: UUID, _ ports: [Int]) -> Void)?
     /// Callback delivers workspace-scoped ports owned by tracked agents.
     var onAgentPortsUpdated: (@MainActor (_ workspaceId: UUID, _ ports: [Int]) -> Void)?
+    /// Same scan results as `onPortsUpdated`, with the owning process of each port.
+    var onPanelProcessesUpdated: (@MainActor (
+        _ workspaceId: UUID, _ panelId: UUID, _ processes: [ListeningProcess]
+    ) -> Void)?
+    /// Same scan results as `onAgentPortsUpdated`, with the owning process of each port.
+    var onAgentProcessesUpdated: (@MainActor (_ workspaceId: UUID, _ processes: [ListeningProcess]) -> Void)?
     /// Provider returns tracked agent root PIDs for the given workspaces.
     var agentPIDsProvider: (@MainActor (_ workspaceIds: Set<UUID>) -> [UUID: Set<Int>])?
 
@@ -288,6 +294,7 @@ final class PortScanner: @unchecked Sendable {
             let panelResults = panelSnapshot.map { ($0.key, [Int]()) }
             deliverResults(
                 panelResults,
+                panelProcesses: panelSnapshot.map { ($0.key, [ListeningProcess]()) },
                 workspaceIds: workspaceIds,
                 agentPortsByWorkspace: [:],
                 agentRevisions: agentRevisions,
@@ -296,9 +303,10 @@ final class PortScanner: @unchecked Sendable {
             return
         }
 
-        // 2. lsof -nP -a -p <all_pids> -iTCP -sTCP:LISTEN -F pn
+        // 2. lsof -nP -a -p <all_pids> -iTCP -sTCP:LISTEN -F pcn
         let pidsCsv = allPids.sorted().map(String.init).joined(separator: ",")
-        guard let pidToPorts = runLsof(pidsCsv: pidsCsv) else { return }
+        guard let listeners = runLsof(pidsCsv: pidsCsv) else { return }
+        let pidToPorts = listeners.mapValues(\.ports)
 
         // 3. Join: PID→TTY + PID→ports → TTY→ports
         var portsByTTY: [String: Set<Int>] = [:]
@@ -315,6 +323,19 @@ final class PortScanner: @unchecked Sendable {
             }
         }
 
+        var processesByTTY: [String: [ListeningProcess]] = [:]
+        for (pid, listener) in listeners {
+            guard let tty = pidToTTY[pid] else { continue }
+            processesByTTY[tty, default: []].append(listener.process(pid: pid))
+        }
+        let panelProcesses = panelSnapshot.map { key, tty in
+            (key, (processesByTTY[tty] ?? []).sorted { $0.pid < $1.pid })
+        }
+        let agentProcessesByWorkspace = Self.agentProcesses(
+            listeners: listeners,
+            agentPidToWorkspaces: agentPidToWorkspaces
+        )
+
         // 4. Map to per-panel port lists.
         var results: [(PanelKey, [Int])] = []
         for (key, tty) in panelSnapshot {
@@ -324,8 +345,10 @@ final class PortScanner: @unchecked Sendable {
 
         deliverResults(
             results,
+            panelProcesses: panelProcesses,
             workspaceIds: workspaceIds,
             agentPortsByWorkspace: agentPortsByWorkspace,
+            agentProcessesByWorkspace: agentProcessesByWorkspace,
             agentRevisions: agentRevisions,
             applyPanelResults: generation == burstGeneration
         )
@@ -498,40 +521,51 @@ final class PortScanner: @unchecked Sendable {
         }
 
         let pidsCsv = agentPidToWorkspaces.keys.sorted().map(String.init).joined(separator: ",")
-        guard let pidToPorts = runLsof(pidsCsv: pidsCsv) else { return }
+        guard let listeners = runLsof(pidsCsv: pidsCsv) else { return }
         var agentPortsByWorkspace: [UUID: Set<Int>] = [:]
-        for (pid, ports) in pidToPorts {
+        for (pid, listener) in listeners {
             guard let workspaceIdsForPid = agentPidToWorkspaces[pid] else { continue }
             for targetWorkspaceId in workspaceIdsForPid {
-                agentPortsByWorkspace[targetWorkspaceId, default: []].formUnion(ports)
+                agentPortsByWorkspace[targetWorkspaceId, default: []].formUnion(listener.ports)
             }
         }
 
         deliverAgentResults(
             workspaceIds: workspaceIds,
             agentPortsByWorkspace: agentPortsByWorkspace,
+            agentProcessesByWorkspace: Self.agentProcesses(
+                listeners: listeners,
+                agentPidToWorkspaces: agentPidToWorkspaces
+            ),
             agentRevisions: agentRevisions
         )
     }
 
     private func deliverResults(
         _ panelResults: [(PanelKey, [Int])],
+        panelProcesses: [(PanelKey, [ListeningProcess])] = [],
         workspaceIds: Set<UUID>,
         agentPortsByWorkspace: [UUID: Set<Int>],
+        agentProcessesByWorkspace: [UUID: [ListeningProcess]] = [:],
         agentRevisions: [UUID: UInt64],
         applyPanelResults: Bool
     ) {
         let panelCallback = applyPanelResults ? onPortsUpdated : nil
-        if let panelCallback {
+        let processCallback = applyPanelResults ? onPanelProcessesUpdated : nil
+        if panelCallback != nil || processCallback != nil {
             Task { @MainActor in
                 for (key, ports) in panelResults {
-                    panelCallback(key.workspaceId, key.panelId, ports)
+                    panelCallback?(key.workspaceId, key.panelId, ports)
+                }
+                for (key, processes) in panelProcesses {
+                    processCallback?(key.workspaceId, key.panelId, processes)
                 }
             }
         }
         deliverAgentResults(
             workspaceIds: workspaceIds,
             agentPortsByWorkspace: agentPortsByWorkspace,
+            agentProcessesByWorkspace: agentProcessesByWorkspace,
             agentRevisions: agentRevisions
         )
     }
@@ -539,9 +573,12 @@ final class PortScanner: @unchecked Sendable {
     private func deliverAgentResults(
         workspaceIds: Set<UUID>,
         agentPortsByWorkspace: [UUID: Set<Int>],
+        agentProcessesByWorkspace: [UUID: [ListeningProcess]] = [:],
         agentRevisions: [UUID: UInt64]
     ) {
-        guard let agentCallback = onAgentPortsUpdated else { return }
+        let agentCallback = onAgentPortsUpdated
+        let processCallback = onAgentProcessesUpdated
+        guard agentCallback != nil || processCallback != nil else { return }
         Task { [weak self] in
             guard let self else { return }
             let validatedResults = await self.validatedAgentResults(
@@ -559,7 +596,8 @@ final class PortScanner: @unchecked Sendable {
                         workspaceId: result.workspaceId,
                         expected: result.revision
                     ) else { continue }
-                    agentCallback(result.workspaceId, result.ports)
+                    agentCallback?(result.workspaceId, result.ports)
+                    processCallback?(result.workspaceId, agentProcessesByWorkspace[result.workspaceId] ?? [])
                 }
             }
             agentResultsApplyCompletedHook?(validatedResults.map { ($0.workspaceId, $0.ports) })
@@ -709,18 +747,19 @@ final class PortScanner: @unchecked Sendable {
     }
 
     /// Nil when any `lsof` chunk failed to finish: a partial answer would drop ports.
-    private func runLsof(pidsCsv: String) -> [Int: Set<Int>]? {
+    private func runLsof(pidsCsv: String) -> [Int: LsofListener]? {
         let pids = pidsCsv.split(separator: ",").compactMap { Int($0) }
         guard pids.count > Self.lsofMaximumPIDsPerInvocation else {
             return runLsofChunk(pidsCsv: pidsCsv)
         }
 
-        var result: [Int: Set<Int>] = [:]
+        var result: [Int: LsofListener] = [:]
         for chunk in Self.lsofPIDChunks(pids) {
             let csv = chunk.map(String.init).joined(separator: ",")
             guard let chunkResult = runLsofChunk(pidsCsv: csv) else { return nil }
-            for (pid, ports) in chunkResult {
-                result[pid, default: []].formUnion(ports)
+            for (pid, listener) in chunkResult {
+                result[pid, default: LsofListener(command: listener.command, ports: [])]
+                    .ports.formUnion(listener.ports)
             }
         }
         return result
@@ -753,46 +792,19 @@ final class PortScanner: @unchecked Sendable {
         return chunks
     }
 
-    private func runLsofChunk(pidsCsv: String) -> [Int: Set<Int>]? {
-        if let lsofChunkOverride { return lsofChunkOverride(pidsCsv) }
-        // `lsof -b -w -nP -a -p <pids> -iTCP -sTCP:LISTEN -F pn`. `-b` avoids kernel calls
+    private func runLsofChunk(pidsCsv: String) -> [Int: LsofListener]? {
+        if let lsofChunkOverride {
+            return lsofChunkOverride(pidsCsv).mapValues { LsofListener(command: "", ports: $0) }
+        }
+        // `lsof -b -w -nP +c 0 -a -p <pids> -iTCP -sTCP:LISTEN -F pcn`. `-b` avoids kernel calls
         // that can block (stat/lstat/readlink on a dead mount); `-w` drops the warnings `-b`
-        // would print.
+        // would print; `+c 0` reports the full command name instead of the 9-char default.
         guard let output = runBoundedTool(
             "/usr/sbin/lsof",
-            arguments: ["-b", "-w", "-nP", "-a", "-p", pidsCsv, "-iTCP", "-sTCP:LISTEN", "-Fpn"]
+            arguments: ["-b", "-w", "-nP", "+c", "0", "-a", "-p", pidsCsv, "-iTCP", "-sTCP:LISTEN", "-Fpcn"]
         ) else {
             return nil
         }
-
-        // Parse lsof -F output: lines starting with 'p' = PID, 'n' = name (host:port).
-        var result: [Int: Set<Int>] = [:]
-        var currentPid: Int?
-        for line in output.split(separator: "\n") {
-            guard let first = line.first else { continue }
-            switch first {
-            case "p":
-                currentPid = Int(line.dropFirst())
-            case "n":
-                guard let pid = currentPid else { continue }
-                var name = String(line.dropFirst())
-                // Strip remote endpoint if present.
-                if let arrowIdx = name.range(of: "->") {
-                    name = String(name[..<arrowIdx.lowerBound])
-                }
-                // Port is after the last colon.
-                if let colonIdx = name.lastIndex(of: ":") {
-                    let portStr = name[name.index(after: colonIdx)...]
-                    // Strip anything non-numeric.
-                    let cleaned = portStr.prefix(while: \.isNumber)
-                    if let port = Int(cleaned), port > 0, port <= 65535 {
-                        result[pid, default: []].insert(port)
-                    }
-                }
-            default:
-                break
-            }
-        }
-        return result
+        return Self.parseLsofListen(output)
     }
 }

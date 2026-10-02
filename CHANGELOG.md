@@ -7,6 +7,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- A ports button in the sidebar footer shows what is listening on a port in each workspace, plus dev servers left running after their terminal closed, with Open, Copy URL, Reveal and Stop. `programa list-ports` and `programa stop-port` and the `ports.list` and `ports.stop` socket methods do the same from the command line.
 - New `agent.needs_input` socket method reports a surface as blocked on the user and posts its notification in one call, instead of three separate calls that could fail independently.
 - New `surface.resolve_tty` socket method finds the terminal surface for a tty without changing focus. `agent.spawn` returns the new terminal's `pane_id` and `pane_ref`, and `agent.detection.list` reports manifests it rejected in a `rejected` list.
 - Tab colors and the Tab Color menu in the glass tab bar; pane tabs show their color as a tinted background.
@@ -39,6 +40,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The library-validation and unsigned-executable-memory entitlements.
 
 ### Fixed
+- Port chips in the sidebar now show up again for terminals restored after relaunching Programa. The restored terminals kept their running shell, but port scanning never learned about them.
 - A window closed with the red button no longer comes back on the next launch. Since 0.5.0 a closed window was kept alive for Dock reopen and then saved and restored like a visible one, so every restart opened an extra window of stale workspaces. Closed windows now stay closed across a relaunch and their shells are ended at startup.
 
 ## [0.5.0] - 2026-09-16

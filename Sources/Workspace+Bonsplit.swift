@@ -770,6 +770,12 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         if lastTerminalConfigInheritancePanelId == panelId {
             lastTerminalConfigInheritancePanelId = nil
         }
+        // Terminal closes detach first (undo staging); their listeners are judged when the close finalizes.
+        if isDetaching {
+            PortsHubStore.shared.panelDetached(workspaceId: id, panelId: panelId)
+        } else {
+            PortsHubStore.shared.panelClosed(workspaceId: id, panelId: panelId)
+        }
         PortScanner.shared.unregisterPanel(workspaceId: id, panelId: panelId)
         // Detach preserves the panel UUID and the live panel object for
         // reattach in another window (DetachedSurfaceTransfer) -- browser

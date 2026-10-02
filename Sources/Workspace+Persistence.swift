@@ -656,6 +656,13 @@ extension Workspace {
             return nil
         }
         applySessionPanelMetadata(snapshot, toPanelId: panelId)
+        // A revived shell reported its tty to the previous app instance and never
+        // reports it again, so the port scanner must learn it here. Fresh-spawn
+        // fallbacks skip this: their snapshot tty may now belong to another terminal.
+        if let ttyName = surfaceTTYNames[panelId] {
+            PortScanner.shared.registerTTY(workspaceId: id, panelId: panelId, ttyName: ttyName)
+            PortScanner.shared.kick(workspaceId: id, panelId: panelId)
+        }
         return panelId
     }
 

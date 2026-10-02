@@ -51,6 +51,7 @@ private struct SidebarFooterButtons: View {
     var body: some View {
         HStack(spacing: 0) {
             SidebarHelpMenuButton(onSendFeedback: onSendFeedback)
+            SidebarPortsButton()
             if showProviderUsage {
                 SidebarUsageButton()
             }
@@ -366,7 +367,7 @@ private struct SidebarHelpMenuButton: View {
 
 }
 
-private struct ArrowlessPopoverAnchor<PopoverContent: View>: NSViewRepresentable {
+struct ArrowlessPopoverAnchor<PopoverContent: View>: NSViewRepresentable {
     @Binding var isPresented: Bool
     let preferredEdge: NSRectEdge
     let detachedGap: CGFloat
@@ -570,7 +571,7 @@ enum SidebarHelpPopoverSizingTestDriver {
 }
 #endif
 
-private struct SidebarFooterIconButtonStyle: ButtonStyle {
+struct SidebarFooterIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         SidebarFooterIconButtonStyleBody(configuration: configuration)
     }

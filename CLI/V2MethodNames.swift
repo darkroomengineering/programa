@@ -153,6 +153,8 @@ enum V2MethodNames {
     static let paneResize = "pane.resize"
     static let paneSurfaces = "pane.surfaces"
     static let paneSwap = "pane.swap"
+    static let portsList = "ports.list"
+    static let portsStop = "ports.stop"
     static let reviewCommentAdd = "review.comment.add"
     static let reviewCommentList = "review.comment.list"
     static let reviewCommentRemove = "review.comment.remove"
