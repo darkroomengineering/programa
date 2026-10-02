@@ -5100,6 +5100,53 @@
       },
       "threading": "main"
     },
+    "ports.list": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Listening TCP ports across all workspaces, plus processes left running after their panel closed. (list).",
+      "errors": [
+        "unavailable"
+      ],
+      "focus_intent": false,
+      "handler": "v2PortsList",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
+    "ports.stop": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Stop a listening process owned by a workspace or left running: SIGTERM, then SIGKILL after 3 seconds. (stop).",
+      "errors": [
+        "internal_error",
+        "invalid_params",
+        "not_found"
+      ],
+      "focus_intent": false,
+      "handler": "v2PortsStop",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "pid": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pid"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
     "review.comment.add": {
       "auth_required": true,
       "debug_only": false,

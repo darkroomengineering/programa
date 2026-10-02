@@ -119,6 +119,8 @@ enum V2CommandCatalog {
         "pane.resize",
         "pane.surfaces",
         "pane.swap",
+        "ports.list",
+        "ports.stop",
         "review.comment.add",
         "review.comment.list",
         "review.comment.remove",

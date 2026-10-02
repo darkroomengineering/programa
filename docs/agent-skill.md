@@ -28,7 +28,7 @@ The first thing the skill does is check `PROGRAMA_SURFACE_ID` and `PROGRAMA_SOCK
 
 ## What the skill covers
 
-- **Inspecting your surroundings** — `programa tree` (the hierarchy, with `◀ active`/`◀ here` markers), plus `list-workspaces` / `list-panes` / `list-pane-surfaces` / `identify` for narrower queries.
+- **Inspecting your surroundings** — `programa tree` (the hierarchy, with `◀ active`/`◀ here` markers), plus `list-workspaces` / `list-panes` / `list-pane-surfaces` / `identify` / `list-ports` for narrower queries.
 - **Splitting and running without stealing focus** — `new-split` / `new-pane` / `new-surface` create UI without moving the user's cursor; `send` / `send-key` / `send-panel` / `send-key-panel` run commands in another pane the same way. Only `focus-pane`, `focus-window`, `focus-panel`, `select-workspace`, and the `next/previous/last-window` triad actually move focus — see the socket focus policy in the root `CLAUDE.md`.
 - **Reading a sibling pane** — `read-screen` (alias `capture-pane`), with `--scrollback`/`--lines` for history beyond the visible viewport.
 - **Spawning and coordinating a helper agent** — split, `send` a command like `claude ...` into the new surface, then read its output and answer it the same way you'd talk to any other pane. `set-status` and `notify` report progress through the sidebar instead of a pane the user isn't looking at.

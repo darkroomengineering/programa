@@ -1254,6 +1254,7 @@ class TerminalController {
         )
 
         // Wire batched port scanner results back to workspace state.
+        _ = PortsHubStore.shared  // subscribes itself to the scanner's process callbacks
         PortScanner.shared.onPortsUpdated = { [weak self] workspaceId, panelId, ports in
             guard let self, let tabManager = self.tabManager else { return }
             guard let workspace = tabManager.tabs.first(where: { $0.id == workspaceId }) else { return }
@@ -2100,6 +2101,10 @@ class TerminalController {
             return v2Result(id: id, self.v2SurfaceReportTTY(params: params))
         case "surface.ports_kick":
             return v2Result(id: id, self.v2SurfacePortsKick(params: params))
+        case "ports.list":
+            return v2Result(id: id, self.v2PortsList(params: params))
+        case "ports.stop":
+            return v2Result(id: id, self.v2PortsStop(params: params))
         case "surface.clear_history":
             return v2Result(id: id, self.v2SurfaceClearHistory(params: params))
         case "surface.trigger_flash":

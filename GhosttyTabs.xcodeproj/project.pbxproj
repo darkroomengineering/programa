@@ -107,6 +107,10 @@
 			A5001534 /* BrowserWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001533 /* BrowserWindowPortal.swift */; };
 			A5FF0008 /* HostedViewPortalRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0018 /* HostedViewPortalRegistry.swift */; };
 		A5001540 /* PortScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001541 /* PortScanner.swift */; };
+		7B3F9A10C2D4E5F6A7B80002 /* ListeningProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80001 /* ListeningProcess.swift */; };
+		7B3F9A10C2D4E5F6A7B80004 /* PortsHubStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80003 /* PortsHubStore.swift */; };
+		7B3F9A10C2D4E5F6A7B80006 /* PortsHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80005 /* PortsHubView.swift */; };
+		7B3F9A10C2D4E5F6A7B80008 /* TerminalController+Ports.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80007 /* TerminalController+Ports.swift */; };
 		A5001542 /* TerminalPasteboardPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001544 /* TerminalPasteboardPlanner.swift */; };
 			A5001006 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5001016 /* GhosttyKit.xcframework */; };
 		A5001007 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001019 /* TerminalController.swift */; };
@@ -270,6 +274,7 @@
 		A51DE0700000000000000001 /* CLI+Aside.swift in Sources */ = {isa = PBXBuildFile; fileRef = A51DE0700000000000000002 /* CLI+Aside.swift */; };
 		B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */; };
 		B9000039A1B2C3D4E5F60719 /* CLI+Tree.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */; };
+		7B3F9A10C2D4E5F6A7B8000A /* CLI+Ports.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */; };
 		B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */; };
 		B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */; };
 		B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */; };
@@ -345,6 +350,7 @@
 					CA39C0304FE351A21C372429 /* SidebarWidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0171AF1F49F7547191CEE5 /* SidebarWidthPolicyTests.swift */; };
 					8C4BBF2DEF6DF93F395A9EE7 /* TerminalControllerSocketSecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */; };
 					PRTS000002 /* PortScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PRTS000001 /* PortScannerTests.swift */; };
+		7B3F9A10C2D4E5F6A7B8000C /* PortsHubTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B8000B /* PortsHubTests.swift */; };
 					C1A2B3C4D5E6F70800000004 /* TerminalControllerShellStateDedupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */; };
 					2BB56A710BB1FC50367E5BCF /* TabManagerSessionSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */; };
 					7C135SB00000000000000004 /* GhosttyScrollPreciseBoostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C135SB00000000000000003 /* GhosttyScrollPreciseBoostTests.swift */; };
@@ -534,6 +540,10 @@
 			A5001533 /* BrowserWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserWindowPortal.swift; sourceTree = "<group>"; };
 			A5FF0018 /* HostedViewPortalRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedViewPortalRegistry.swift; sourceTree = "<group>"; };
 		A5001541 /* PortScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortScanner.swift; sourceTree = "<group>"; };
+		7B3F9A10C2D4E5F6A7B80001 /* ListeningProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningProcess.swift; sourceTree = "<group>"; };
+		7B3F9A10C2D4E5F6A7B80003 /* PortsHubStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortsHubStore.swift; sourceTree = "<group>"; };
+		7B3F9A10C2D4E5F6A7B80005 /* PortsHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortsHubView.swift; sourceTree = "<group>"; };
+		7B3F9A10C2D4E5F6A7B80007 /* TerminalController+Ports.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Ports.swift"; sourceTree = "<group>"; };
 		A5001544 /* TerminalPasteboardPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPasteboardPlanner.swift; sourceTree = "<group>"; };
 			A5001016 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GhosttyKit.xcframework; sourceTree = "<group>"; };
 		A5001017 /* ghostty.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ghostty.h; sourceTree = "<group>"; };
@@ -700,6 +710,7 @@
 		A51DE0700000000000000002 /* CLI+Aside.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Aside.swift"; sourceTree = "<group>"; };
 		B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Themes.swift"; sourceTree = "<group>"; };
 		B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Tree.swift"; sourceTree = "<group>"; };
+		7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Ports.swift"; sourceTree = "<group>"; };
 		B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+TmuxCompat.swift"; sourceTree = "<group>"; };
 		B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentWrappers.swift"; sourceTree = "<group>"; };
 		B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Hooks.swift"; sourceTree = "<group>"; };
@@ -768,6 +779,7 @@
 				EE0171AF1F49F7547191CEE5 /* SidebarWidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarWidthPolicyTests.swift; sourceTree = "<group>"; };
 				491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalControllerSocketSecurityTests.swift; sourceTree = "<group>"; };
 				PRTS000001 /* PortScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortScannerTests.swift; sourceTree = "<group>"; };
+		7B3F9A10C2D4E5F6A7B8000B /* PortsHubTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortsHubTests.swift; sourceTree = "<group>"; };
 				C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalControllerShellStateDedupTests.swift; sourceTree = "<group>"; };
 				10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManagerSessionSnapshotTests.swift; sourceTree = "<group>"; };
 				7C135SB00000000000000003 /* GhosttyScrollPreciseBoostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyScrollPreciseBoostTests.swift; sourceTree = "<group>"; };
@@ -1040,6 +1052,10 @@
 				NRTC0010 /* TerminalController+Subscriptions.swift */,
 				NRTC0022 /* TerminalController+AgentPrompt.swift */,
 				A5001541 /* PortScanner.swift */,
+				7B3F9A10C2D4E5F6A7B80001 /* ListeningProcess.swift */,
+				7B3F9A10C2D4E5F6A7B80003 /* PortsHubStore.swift */,
+				7B3F9A10C2D4E5F6A7B80005 /* PortsHubView.swift */,
+				7B3F9A10C2D4E5F6A7B80007 /* TerminalController+Ports.swift */,
 				A5001544 /* TerminalPasteboardPlanner.swift */,
 				A5001225 /* SocketControlSettings.swift */,
 				D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */,
@@ -1142,6 +1158,7 @@
 				A51DE0700000000000000002 /* CLI+Aside.swift */,
 				B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */,
 				B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */,
+				7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */,
 				B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */,
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
 				B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */,
@@ -1305,6 +1322,7 @@
 					EE0171AF1F49F7547191CEE5 /* SidebarWidthPolicyTests.swift */,
 					491751CE2321474474F27DCF /* TerminalControllerSocketSecurityTests.swift */,
 					PRTS000001 /* PortScannerTests.swift */,
+					7B3F9A10C2D4E5F6A7B8000B /* PortsHubTests.swift */,
 					C1A2B3C4D5E6F70800000003 /* TerminalControllerShellStateDedupTests.swift */,
 					10D684CFFB8CDEF89CE2D9E1 /* TabManagerSessionSnapshotTests.swift */,
 					7C135SB00000000000000003 /* GhosttyScrollPreciseBoostTests.swift */,
@@ -1610,6 +1628,10 @@
 				NRTC0020 /* TerminalController+Subscriptions.swift in Sources */,
 				NRTC0023 /* TerminalController+AgentPrompt.swift in Sources */,
 				A5001540 /* PortScanner.swift in Sources */,
+				7B3F9A10C2D4E5F6A7B80002 /* ListeningProcess.swift in Sources */,
+				7B3F9A10C2D4E5F6A7B80004 /* PortsHubStore.swift in Sources */,
+				7B3F9A10C2D4E5F6A7B80006 /* PortsHubView.swift in Sources */,
+				7B3F9A10C2D4E5F6A7B80008 /* TerminalController+Ports.swift in Sources */,
 				A5001542 /* TerminalPasteboardPlanner.swift in Sources */,
 				A5001226 /* SocketControlSettings.swift in Sources */,
 				A5001093 /* AppDelegate.swift in Sources */,
@@ -1780,6 +1802,7 @@
 					CA39C0304FE351A21C372429 /* SidebarWidthPolicyTests.swift in Sources */,
 					8C4BBF2DEF6DF93F395A9EE7 /* TerminalControllerSocketSecurityTests.swift in Sources */,
 					PRTS000002 /* PortScannerTests.swift in Sources */,
+					7B3F9A10C2D4E5F6A7B8000C /* PortsHubTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000004 /* TerminalControllerShellStateDedupTests.swift in Sources */,
 					2BB56A710BB1FC50367E5BCF /* TabManagerSessionSnapshotTests.swift in Sources */,
 					7C135SB00000000000000004 /* GhosttyScrollPreciseBoostTests.swift in Sources */,
@@ -1810,6 +1833,7 @@
 					B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */,
 					THTM0003 /* TerminalThemeStore.swift in Sources */,
 				B9000039A1B2C3D4E5F60719 /* CLI+Tree.swift in Sources */,
+				7B3F9A10C2D4E5F6A7B8000A /* CLI+Ports.swift in Sources */,
 				B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */,
 				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,
 				B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */,

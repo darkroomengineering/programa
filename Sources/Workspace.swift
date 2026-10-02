@@ -684,6 +684,7 @@ final class Workspace: Identifiable, ObservableObject {
             guard case .pending = state else { return }
             state = .finalized
             panel.close()
+            PortsHubStore.shared.detachedPanelFinalized(panelId: panelId)
             TerminalController.shared.v2BrowserPermanentlyRemoveSurfaceState(surfaceId: panelId)
             AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: sourceWorkspaceId, surfaceId: panelId)
             if agentPresence != nil {
@@ -1305,10 +1306,12 @@ final class Workspace: Identifiable, ObservableObject {
         let panelEntries = Array(panels)
         for (panelId, panel) in panelEntries {
             panelSubscriptions.removeValue(forKey: panelId)
+            PortsHubStore.shared.panelClosed(workspaceId: id, panelId: panelId)
             PortScanner.shared.unregisterPanel(workspaceId: id, panelId: panelId)
             TerminalController.shared.v2BrowserPermanentlyRemoveSurfaceState(surfaceId: panelId)
             panel.close()
         }
+        PortsHubStore.shared.workspaceClosed(workspaceId: id)
         panels.removeAll(keepingCapacity: false)
         surfaceIdToPanelId.removeAll(keepingCapacity: false)
         panelSubscriptions.removeAll(keepingCapacity: false)
