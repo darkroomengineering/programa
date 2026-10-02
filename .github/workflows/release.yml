@@ -499,7 +499,10 @@ jobs:
       - name: Upload macOS release payload
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: programa-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          name: programa-macos-${{ github.run_id }}
+          # One name per run, not per attempt: "Re-run failed jobs" keeps a passed
+          # build job from an earlier attempt, and assemble-release must still find it.
+          overwrite: true
           path: ${{ runner.temp }}/programa-macos-payload/
           if-no-files-found: error
           # The payload carries the dSYMs; keep them well past the default 90-day repo
@@ -643,7 +646,10 @@ jobs:
       - name: Upload Windows release payload
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: programa-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          name: programa-windows-${{ github.run_id }}
+          # One name per run, not per attempt: "Re-run failed jobs" keeps a passed
+          # build job from an earlier attempt, and assemble-release must still find it.
+          overwrite: true
           path: ${{ runner.temp }}/programa-windows-payload/
           if-no-files-found: error
 
@@ -707,14 +713,14 @@ jobs:
       - name: Download macOS payload
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: programa-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          name: programa-macos-${{ github.run_id }}
           path: incoming/macos
 
       - name: Download Windows payload
         if: needs.build-windows.result == 'success'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: programa-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          name: programa-windows-${{ github.run_id }}
           path: incoming/windows
 
       - name: Note skipped Windows payload
