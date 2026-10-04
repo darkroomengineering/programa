@@ -1079,6 +1079,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         launchServicesRegistrationQueue.async(execute: work)
     }
     private var didHandleExplicitOpenIntentAtStartup = false
+    var pendingIncomingWebURLs: [URL] = []
     private let appLifecycleCoordinator = AppLifecycleCoordinator()
     var isTerminatingApp: Bool { appLifecycleCoordinator.isTerminating }
 #if DEBUG
@@ -1172,6 +1173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        openIncomingWebURLs(urls.filter(Self.isIncomingWebURL))
         let directories = externalOpenDirectories(from: urls)
         guard !directories.isEmpty else { return }
 
@@ -2759,6 +2761,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         attemptStartupSessionRestoreIfNeeded(primaryWindow: window)
+        flushPendingIncomingWebURLs()
         if !isTerminatingApp {
             saveSessionSnapshot(includeScrollback: false)
         }

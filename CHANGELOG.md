@@ -7,6 +7,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- Programa can be set as the default web browser. Links clicked in other apps open as a browser tab in the focused pane of the active window, including a link that launches Programa. Links Programa sends to an external browser skip Programa itself and go to the next installed browser.
 - A ports button in the sidebar footer shows what is listening on a port in each workspace, plus dev servers left running after their terminal closed, with Open, Copy URL, Reveal and Stop. `programa list-ports` and `programa stop-port` and the `ports.list` and `ports.stop` socket methods do the same from the command line.
 - New `agent.needs_input` socket method reports a surface as blocked on the user and posts its notification in one call, instead of three separate calls that could fail independently.
 - New `surface.resolve_tty` socket method finds the terminal surface for a tty without changing focus. `agent.spawn` returns the new terminal's `pane_id` and `pane_ref`, and `agent.detection.list` reports manifests it rejected in a `rejected` list.
