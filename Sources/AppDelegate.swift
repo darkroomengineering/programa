@@ -1045,7 +1045,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var lastCascadePoint = NSPoint.zero
     private var startupSessionSnapshot: AppSessionSnapshot?
     private var didPrepareStartupSessionSnapshot = false
-    private var didAttemptStartupSessionRestore = false
+    private(set) var didAttemptStartupSessionRestore = false
     /// Session ids whose shells `endShellsOfHiddenWindows` ended (or tried to) this launch.
     /// `reconcileOrphanedEscrowedSessions` skips them: their WAL directory removal is
     /// asynchronous, and a session the holder refused to hand over must not be revived either.

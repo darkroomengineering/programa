@@ -5,7 +5,8 @@ import Bonsplit
 /// picks it from "Open With"). Each link opens as a browser tab in the focused pane
 /// of the active window. Links that arrive before any main window exists (a cold
 /// launch from a link click) wait until the first window registers, so session
-/// restore still runs and the link lands on top of the restored workspaces.
+/// restore still runs and the link lands on top of the restored workspaces. A link
+/// that arrives after the user closed every window opens a new one.
 extension AppDelegate {
     static func isIncomingWebURL(_ url: URL) -> Bool {
         let scheme = url.scheme?.lowercased()
@@ -16,6 +17,11 @@ extension AppDelegate {
         guard !urls.isEmpty else { return }
         guard tabManager?.window != nil else {
             pendingIncomingWebURLs.append(contentsOf: urls)
+            // Past startup restore with no main window means the user closed them all;
+            // nothing else will register one, so open a window for the links to land in.
+            if didAttemptStartupSessionRestore {
+                _ = createMainWindow()
+            }
             return
         }
         urls.forEach(openIncomingWebURL)

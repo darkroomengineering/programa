@@ -344,19 +344,28 @@ enum BrowserLinkOpenSettings {
     }
 
     private static func systemDefaultBrowserIsSelf(for url: URL, workspace: NSWorkspace) -> Bool {
-        guard let ownBundleIdentifier = Bundle.main.bundleIdentifier,
-              let defaultAppURL = workspace.urlForApplication(toOpen: url) else { return false }
-        return Bundle(url: defaultAppURL)?.bundleIdentifier == ownBundleIdentifier
+        guard let defaultAppURL = workspace.urlForApplication(toOpen: url),
+              let defaultBundleIdentifier = Bundle(url: defaultAppURL)?.bundleIdentifier else { return false }
+        return isProgramaBundleIdentifier(defaultBundleIdentifier)
+    }
+
+    /// Release, staging, Debug and every tagged dev build share this prefix. Another
+    /// Programa build is never a useful "external" browser: the link would land in a
+    /// second embedded browser instead of leaving Programa.
+    static func isProgramaBundleIdentifier(_ bundleIdentifier: String) -> Bool {
+        let base = "com.darkroom.programa"
+        return bundleIdentifier == base
+            || bundleIdentifier.hasPrefix(base + ".")
+            || bundleIdentifier == Bundle.main.bundleIdentifier
     }
 
     static func installedBrowsers(workspace: NSWorkspace = .shared) -> [(bundleIdentifier: String, name: String)] {
         guard let exampleURL = URL(string: "https://example.com") else { return [] }
-        let ownBundleIdentifier = Bundle.main.bundleIdentifier
         var seen = Set<String>()
         var results: [(bundleIdentifier: String, name: String)] = []
         for appURL in workspace.urlsForApplications(toOpen: exampleURL) {
             guard let bundleIdentifier = Bundle(url: appURL)?.bundleIdentifier else { continue }
-            if bundleIdentifier == ownBundleIdentifier { continue }
+            if isProgramaBundleIdentifier(bundleIdentifier) { continue }
             guard !seen.contains(bundleIdentifier) else { continue }
             seen.insert(bundleIdentifier)
             var name = FileManager.default.displayName(atPath: appURL.path)
