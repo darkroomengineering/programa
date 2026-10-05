@@ -342,7 +342,7 @@ extension TerminalController {
             }
 
             if waitForExit {
-                // Only terminals have a child process; a browser exit wait would never resolve.
+                // Only terminals have a child process.
                 guard panel is TerminalPanel else {
                     setupError = .err(code: "invalid_params", message: "exit waits need a terminal surface", data: ["surface_id": surfaceId.uuidString])
                     return

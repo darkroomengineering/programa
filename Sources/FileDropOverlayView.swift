@@ -3,7 +3,6 @@
 
 import AppKit
 import Bonsplit
-import WebKit
 
 
 /// Transparent NSView installed on the window's theme frame (above the NSHostingView) to
@@ -20,12 +19,6 @@ final class FileDropOverlayView: NSView {
     private var isForwardingMouseEvent = false
     private weak var forwardedMouseDragTarget: NSView?
     private var forwardedMouseDragButton: ForwardedMouseDragButton?
-    /// The WKWebView currently receiving forwarded drag events, so we can
-    /// synthesize draggingExited/draggingEntered as the cursor moves.
-    private weak var activeDragWebView: WKWebView?
-    /// The WKWebView that accepted prepareForDragOperation so conclude can be
-    /// delivered to the same browser target after the drop completes.
-    private weak var preparedDragWebView: WKWebView?
     private var lastHitTestLogSignature: String?
     private var lastDragRouteLogSignatureByPhase: [String: String] = [:]
 
@@ -178,27 +171,12 @@ final class FileDropOverlayView: NSView {
     override func otherMouseDragged(with event: NSEvent) { forwardEvent(event) }
     override func scrollWheel(with event: NSEvent) { forwardEvent(event) }
 
-    // MARK: NSDraggingDestination – accept file drops over terminal and browser views.
-    //
-    // AppKit sends draggingEntered once when the drag enters this overlay, then
-    // draggingUpdated as the cursor moves within it. We track which WKWebView (if
-    // any) is under the cursor and synthesize enter/exit calls so the browser's
-    // HTML5 drag events (dragenter, dragleave, drop) fire correctly.
-
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
         return updateDragTarget(sender, phase: "entered")
     }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
         return updateDragTarget(sender, phase: "updated")
-    }
-
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
-        preparedDragWebView = nil
-        if let prev = activeDragWebView {
-            prev.draggingExited(sender)
-            activeDragWebView = nil
-        }
     }
 
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
@@ -208,7 +186,6 @@ final class FileDropOverlayView: NSView {
             pasteboardTypes: types,
             hasLocalDraggingSource: hasLocalDraggingSource
         )
-        let webView = shouldCapture ? (activeDragWebView ?? webViewUnderPoint(sender.draggingLocation)) : nil
         let terminal = terminalUnderPoint(sender.draggingLocation)
         let hasTerminalTarget = terminal != nil
 #if DEBUG
@@ -221,14 +198,8 @@ final class FileDropOverlayView: NSView {
         )
 #endif
         guard shouldCapture else {
-            preparedDragWebView = nil
             return false
         }
-        if let webView {
-            preparedDragWebView = webView
-            return webView.prepareForDragOperation(sender)
-        }
-        preparedDragWebView = nil
         return hasTerminalTarget
     }
 
@@ -239,9 +210,6 @@ final class FileDropOverlayView: NSView {
             pasteboardTypes: types,
             hasLocalDraggingSource: hasLocalDraggingSource
         )
-        let webView = shouldCapture
-            ? (preparedDragWebView ?? activeDragWebView ?? webViewUnderPoint(sender.draggingLocation))
-            : nil
         let terminal = terminalUnderPoint(sender.draggingLocation)
         let hasTerminalTarget = terminal != nil
 #if DEBUG
@@ -254,28 +222,10 @@ final class FileDropOverlayView: NSView {
         )
 #endif
         guard shouldCapture else {
-            preparedDragWebView = nil
-            activeDragWebView = nil
             return false
         }
-        if let webView {
-            preparedDragWebView = webView
-            return webView.performDragOperation(sender)
-        }
-        preparedDragWebView = nil
-        activeDragWebView = nil
         guard let terminal else { return false }
         return terminal.performDragOperation(sender)
-    }
-
-    override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) {
-        defer {
-            preparedDragWebView = nil
-            activeDragWebView = nil
-        }
-        guard let sender else { return }
-        let webView = preparedDragWebView ?? activeDragWebView ?? webViewUnderPoint(sender.draggingLocation)
-        webView?.concludeDragOperation(sender)
     }
 
     private func updateDragTarget(_ sender: any NSDraggingInfo, phase: String) -> NSDragOperation {
@@ -286,21 +236,6 @@ final class FileDropOverlayView: NSView {
             pasteboardTypes: types,
             hasLocalDraggingSource: hasLocalDraggingSource
         )
-        let webView = shouldCapture ? webViewUnderPoint(loc) : nil
-
-        if let prev = activeDragWebView, prev !== webView {
-            prev.draggingExited(sender)
-            activeDragWebView = nil
-        }
-
-        if let webView {
-            if activeDragWebView !== webView {
-                activeDragWebView = webView
-                return webView.draggingEntered(sender)
-            }
-            return webView.draggingUpdated(sender)
-        }
-
         let hasTerminalTarget = terminalUnderPoint(loc) != nil
 #if DEBUG
         logDragRouteDecision(
@@ -318,27 +253,6 @@ final class FileDropOverlayView: NSView {
     private func debugPasteboardTypes(_ types: [NSPasteboard.PasteboardType]?) -> String {
         guard let types, !types.isEmpty else { return "-" }
         return types.map(\.rawValue).joined(separator: ",")
-    }
-
-    /// Hit-tests the window to find a WKWebView (browser panel) under the cursor.
-    func webViewUnderPoint(_ windowPoint: NSPoint) -> WKWebView? {
-        if let window,
-           let portalWebView = BrowserWindowPortalRegistry.webViewAtWindowPoint(windowPoint, in: window) {
-            return portalWebView
-        }
-
-        guard let window, let contentView = window.contentView else { return nil }
-        isHidden = true
-        defer { isHidden = false }
-        let point = contentView.convert(windowPoint, from: nil)
-        let hitView = contentView.hitTest(point)
-
-        var current: NSView? = hitView
-        while let view = current {
-            if let webView = view as? WKWebView { return webView }
-            current = view.superview
-        }
-        return nil
     }
 
     private func debugTopHitViewForCurrentEvent() -> String {

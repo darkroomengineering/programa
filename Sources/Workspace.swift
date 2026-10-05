@@ -19,7 +19,6 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var isPinned: Bool = false
     @Published var customColor: String?  // hex string, e.g. "#C0392B"
     @Published var currentDirectory: String
-    private(set) var preferredBrowserProfileID: UUID?
 
     /// Runtime link to the parent workspace for sidebar nesting. Session persistence rebuilds
     /// this UUID from `worktreeFolderId` because workspace instance IDs change on restore.
@@ -54,7 +53,7 @@ final class Workspace: Identifiable, ObservableObject {
     /// Mapping from bonsplit TabID to our Panel instances
     @Published var panels: [UUID: any Panel] = [:]
 
-    /// Subscriptions for panel updates (e.g., browser title changes)
+    /// Subscriptions for panel updates
     var panelSubscriptions: [UUID: AnyCancellable] = [:]
 
     /// When true, suppresses auto-creation in didSplitPane (programmatic splits handle their own panels)
@@ -77,8 +76,6 @@ final class Workspace: Identifiable, ObservableObject {
     /// a panel is explicitly re-zoomed by the user.
     var terminalInheritanceFontPointsByPanelId: [UUID: Float] = [:]
 
-    /// Callback used by TabManager to capture recently closed browser panels for Cmd+Shift+T restore.
-    var onClosedBrowserPanel: ((ClosedBrowserPanelRestoreSnapshot) -> Void)?
     weak var owningTabManager: TabManager?
 
 
@@ -259,7 +256,6 @@ final class Workspace: Identifiable, ObservableObject {
 
     enum SurfaceKind {
         static let terminal = "terminal"
-        static let browser = "browser"
         static let markdown = "markdown"
         static let review = "review"
     }
@@ -524,7 +520,6 @@ final class Workspace: Identifiable, ObservableObject {
     /// Panel IDs that were in a pane when a pane-close operation was approved.
     /// Bonsplit pane-close does not emit per-tab didClose callbacks.
     var pendingPaneClosePanelIds: [UUID: [UUID]] = [:]
-    var pendingClosedBrowserRestoreSnapshots: [TabID: ClosedBrowserPanelRestoreSnapshot] = [:]
     var isApplyingTabSelection = false
     struct PendingTabSelectionRequest {
         let tabId: TabID
@@ -548,8 +543,6 @@ final class Workspace: Identifiable, ObservableObject {
     var layoutFollowUpTimeoutWorkItem: DispatchWorkItem?
     var layoutFollowUpReason: String?
     var layoutFollowUpTerminalFocusPanelId: UUID?
-    var layoutFollowUpBrowserPanelId: UUID?
-    var layoutFollowUpBrowserExitFocusPanelId: UUID?
     var layoutFollowUpNeedsGeometryPass = false
     var layoutFollowUpAttemptScheduled = false
     var layoutFollowUpAttemptVersion: Int = 0
@@ -685,7 +678,6 @@ final class Workspace: Identifiable, ObservableObject {
             state = .finalized
             panel.close()
             PortsHubStore.shared.detachedPanelFinalized(panelId: panelId)
-            TerminalController.shared.v2BrowserPermanentlyRemoveSurfaceState(surfaceId: panelId)
             AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: sourceWorkspaceId, surfaceId: panelId)
             if agentPresence != nil {
                 AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
@@ -748,69 +740,8 @@ final class Workspace: Identifiable, ObservableObject {
     }
 
 
-    func installBrowserPanelSubscription(_ browserPanel: BrowserPanel) {
-        let subscription = Publishers.CombineLatest3(
-            browserPanel.$pageTitle.removeDuplicates(),
-            browserPanel.$isLoading.removeDuplicates(),
-            browserPanel.$faviconPNGData.removeDuplicates(by: { $0 == $1 })
-        )
-        .receive(on: DispatchQueue.main)
-        .sink { [weak self, weak browserPanel] _, isLoading, favicon in
-            guard let self = self,
-                  let browserPanel = browserPanel,
-                  let tabId = self.surfaceIdFromPanelId(browserPanel.id) else { return }
-            guard let existing = self.bonsplitController.tab(tabId) else { return }
 
-            let nextTitle = browserPanel.displayTitle
-            if self.panelTitles[browserPanel.id] != nextTitle {
-                self.panelTitles[browserPanel.id] = nextTitle
-            }
-            let resolvedTitle = self.resolvedPanelTitle(panelId: browserPanel.id, fallback: nextTitle)
-            let titleUpdate: String? = existing.title == resolvedTitle ? nil : resolvedTitle
-            let faviconUpdate: Data?? = existing.iconImageData == favicon ? nil : .some(favicon)
-            let loadingUpdate: Bool? = existing.isLoading == isLoading ? nil : isLoading
 
-            guard titleUpdate != nil || faviconUpdate != nil || loadingUpdate != nil else { return }
-            self.bonsplitController.updateTab(
-                tabId,
-                title: titleUpdate,
-                iconImageData: faviconUpdate,
-                hasCustomTitle: self.panelCustomTitles[browserPanel.id] != nil,
-                isLoading: loadingUpdate
-            )
-        }
-        panelSubscriptions[browserPanel.id] = subscription
-        setPreferredBrowserProfileID(browserPanel.profileID)
-    }
-
-    func setPreferredBrowserProfileID(_ profileID: UUID?) {
-        guard let profileID else {
-            preferredBrowserProfileID = nil
-            return
-        }
-        guard BrowserProfileStore.shared.profileDefinition(id: profileID) != nil else { return }
-        preferredBrowserProfileID = profileID
-    }
-
-    func resolvedNewBrowserProfileID(
-        preferredProfileID: UUID? = nil,
-        sourcePanelId: UUID? = nil
-    ) -> UUID {
-        if let preferredProfileID,
-           BrowserProfileStore.shared.profileDefinition(id: preferredProfileID) != nil {
-            return preferredProfileID
-        }
-        if let sourcePanelId,
-           let sourceBrowserPanel = browserPanel(for: sourcePanelId),
-           BrowserProfileStore.shared.profileDefinition(id: sourceBrowserPanel.profileID) != nil {
-            return sourceBrowserPanel.profileID
-        }
-        if let preferredBrowserProfileID,
-           BrowserProfileStore.shared.profileDefinition(id: preferredBrowserProfileID) != nil {
-            return preferredBrowserProfileID
-        }
-        return BrowserProfileStore.shared.effectiveLastUsedProfileID
-    }
 
     func installMarkdownPanelSubscription(_ markdownPanel: MarkdownPanel) {
         let subscription = markdownPanel.$displayTitle
@@ -916,9 +847,6 @@ final class Workspace: Identifiable, ObservableObject {
         panels[panelId] as? TerminalPanel
     }
 
-    func browserPanel(for panelId: UUID) -> BrowserPanel? {
-        panels[panelId] as? BrowserPanel
-    }
 
     func markdownPanel(for panelId: UUID) -> MarkdownPanel? {
         panels[panelId] as? MarkdownPanel
@@ -932,8 +860,6 @@ final class Workspace: Identifiable, ObservableObject {
         switch panel.panelType {
         case .terminal:
             return SurfaceKind.terminal
-        case .browser:
-            return SurfaceKind.browser
         case .markdown:
             return SurfaceKind.markdown
         case .review:
@@ -1308,7 +1234,6 @@ final class Workspace: Identifiable, ObservableObject {
             panelSubscriptions.removeValue(forKey: panelId)
             PortsHubStore.shared.panelClosed(workspaceId: id, panelId: panelId)
             PortScanner.shared.unregisterPanel(workspaceId: id, panelId: panelId)
-            TerminalController.shared.v2BrowserPermanentlyRemoveSurfaceState(surfaceId: panelId)
             panel.close()
         }
         PortsHubStore.shared.workspaceClosed(workspaceId: id)
@@ -1407,289 +1332,18 @@ final class Workspace: Identifiable, ObservableObject {
         return bonsplitController.tabs(inPane: paneId).firstIndex(where: { $0.id == tabId })
     }
 
-    /// Returns the nearest right-side sibling pane for browser placement.
-    /// The search is local to the source pane's ancestry in the split tree:
-    /// use the closest horizontal ancestor where the source is in the first (left) branch.
-    func preferredBrowserTargetPane(fromPanelId panelId: UUID) -> PaneID? {
-        guard let sourcePane = paneId(forPanelId: panelId) else { return nil }
-        let sourcePaneId = sourcePane.id.uuidString
-        let tree = bonsplitController.treeSnapshot()
-        guard let path = browserPathToPane(targetPaneId: sourcePaneId, node: tree) else { return nil }
 
-        let layout = bonsplitController.layoutSnapshot()
-        let paneFrameById = Dictionary(uniqueKeysWithValues: layout.panes.map { ($0.paneId, $0.frame) })
-        let sourceFrame = paneFrameById[sourcePaneId]
-        let sourceCenterY = sourceFrame.map { $0.y + ($0.height * 0.5) } ?? 0
-        let sourceRightX = sourceFrame.map { $0.x + $0.width } ?? 0
 
-        for crumb in path {
-            guard crumb.split.orientation == "horizontal", crumb.branch == .first else { continue }
-            var candidateNodes: [ExternalPaneNode] = []
-            browserCollectPaneNodes(node: crumb.split.second, into: &candidateNodes)
-            if candidateNodes.isEmpty { continue }
 
-            let sorted = candidateNodes.sorted { lhs, rhs in
-                let lhsDy = abs((lhs.frame.y + (lhs.frame.height * 0.5)) - sourceCenterY)
-                let rhsDy = abs((rhs.frame.y + (rhs.frame.height * 0.5)) - sourceCenterY)
-                if lhsDy != rhsDy { return lhsDy < rhsDy }
 
-                let lhsDx = abs(lhs.frame.x - sourceRightX)
-                let rhsDx = abs(rhs.frame.x - sourceRightX)
-                if lhsDx != rhsDx { return lhsDx < rhsDx }
 
-                if lhs.frame.x != rhs.frame.x { return lhs.frame.x < rhs.frame.x }
-                return lhs.id < rhs.id
-            }
 
-            for candidate in sorted {
-                guard let candidateUUID = UUID(uuidString: candidate.id),
-                      candidateUUID != sourcePane.id,
-                      let pane = bonsplitController.allPaneIds.first(where: { $0.id == candidateUUID }) else {
-                    continue
-                }
-                return pane
-            }
-        }
 
-        return nil
-    }
 
-    /// Returns the top-right pane in the current split tree.
-    /// When a workspace is already split, sidebar PR opens should reuse an existing pane
-    /// instead of creating additional right splits.
-    func topRightBrowserReusePane() -> PaneID? {
-        let paneIds = bonsplitController.allPaneIds
-        guard paneIds.count > 1 else { return nil }
 
-        let paneById = Dictionary(uniqueKeysWithValues: paneIds.map { ($0.id.uuidString, $0) })
-        var paneBounds: [String: CGRect] = [:]
-        browserCollectNormalizedPaneBounds(
-            node: bonsplitController.treeSnapshot(),
-            availableRect: CGRect(x: 0, y: 0, width: 1, height: 1),
-            into: &paneBounds
-        )
 
-        guard !paneBounds.isEmpty else {
-            return paneIds.sorted { $0.id.uuidString < $1.id.uuidString }.first
-        }
 
-        let epsilon = 0.000_1
-        let rightMostX = paneBounds.values.map(\.maxX).max() ?? 0
 
-        let sortedCandidates = paneBounds
-            .filter { _, rect in abs(rect.maxX - rightMostX) <= epsilon }
-            .sorted { lhs, rhs in
-                if abs(lhs.value.minY - rhs.value.minY) > epsilon {
-                    return lhs.value.minY < rhs.value.minY
-                }
-                if abs(lhs.value.minX - rhs.value.minX) > epsilon {
-                    return lhs.value.minX > rhs.value.minX
-                }
-                return lhs.key < rhs.key
-            }
-
-        for candidate in sortedCandidates {
-            if let pane = paneById[candidate.key] {
-                return pane
-            }
-        }
-
-        return paneIds.sorted { $0.id.uuidString < $1.id.uuidString }.first
-    }
-
-    enum BrowserPaneBranch {
-        case first
-        case second
-    }
-
-    struct BrowserPaneBreadcrumb {
-        let split: ExternalSplitNode
-        let branch: BrowserPaneBranch
-    }
-
-    func browserPathToPane(targetPaneId: String, node: ExternalTreeNode) -> [BrowserPaneBreadcrumb]? {
-        switch node {
-        case .pane(let paneNode):
-            return paneNode.id == targetPaneId ? [] : nil
-        case .split(let splitNode):
-            if var path = browserPathToPane(targetPaneId: targetPaneId, node: splitNode.first) {
-                path.append(BrowserPaneBreadcrumb(split: splitNode, branch: .first))
-                return path
-            }
-            if var path = browserPathToPane(targetPaneId: targetPaneId, node: splitNode.second) {
-                path.append(BrowserPaneBreadcrumb(split: splitNode, branch: .second))
-                return path
-            }
-            return nil
-        }
-    }
-
-    func browserCollectPaneNodes(node: ExternalTreeNode, into output: inout [ExternalPaneNode]) {
-        switch node {
-        case .pane(let paneNode):
-            output.append(paneNode)
-        case .split(let splitNode):
-            browserCollectPaneNodes(node: splitNode.first, into: &output)
-            browserCollectPaneNodes(node: splitNode.second, into: &output)
-        }
-    }
-
-    func browserCollectNormalizedPaneBounds(
-        node: ExternalTreeNode,
-        availableRect: CGRect,
-        into output: inout [String: CGRect]
-    ) {
-        switch node {
-        case .pane(let paneNode):
-            output[paneNode.id] = availableRect
-        case .split(let splitNode):
-            let divider = min(max(splitNode.dividerPosition, 0), 1)
-            let firstRect: CGRect
-            let secondRect: CGRect
-
-            if splitNode.orientation.lowercased() == "vertical" {
-                // Stacked split: first = top, second = bottom
-                firstRect = CGRect(
-                    x: availableRect.minX,
-                    y: availableRect.minY,
-                    width: availableRect.width,
-                    height: availableRect.height * divider
-                )
-                secondRect = CGRect(
-                    x: availableRect.minX,
-                    y: availableRect.minY + (availableRect.height * divider),
-                    width: availableRect.width,
-                    height: availableRect.height * (1 - divider)
-                )
-            } else {
-                // Side-by-side split: first = left, second = right
-                firstRect = CGRect(
-                    x: availableRect.minX,
-                    y: availableRect.minY,
-                    width: availableRect.width * divider,
-                    height: availableRect.height
-                )
-                secondRect = CGRect(
-                    x: availableRect.minX + (availableRect.width * divider),
-                    y: availableRect.minY,
-                    width: availableRect.width * (1 - divider),
-                    height: availableRect.height
-                )
-            }
-
-            browserCollectNormalizedPaneBounds(node: splitNode.first, availableRect: firstRect, into: &output)
-            browserCollectNormalizedPaneBounds(node: splitNode.second, availableRect: secondRect, into: &output)
-        }
-    }
-
-    struct BrowserCloseFallbackPlan {
-        let orientation: SplitOrientation
-        let insertFirst: Bool
-        let anchorPaneId: UUID?
-    }
-
-    func stageClosedBrowserRestoreSnapshotIfNeeded(for tab: Bonsplit.Tab, inPane pane: PaneID) {
-        guard let panelId = panelIdFromSurfaceId(tab.id),
-              let browserPanel = browserPanel(for: panelId),
-              let tabIndex = bonsplitController.tabs(inPane: pane).firstIndex(where: { $0.id == tab.id }) else {
-            pendingClosedBrowserRestoreSnapshots.removeValue(forKey: tab.id)
-            return
-        }
-
-        let fallbackPlan = browserCloseFallbackPlan(
-            forPaneId: pane.id.uuidString,
-            in: bonsplitController.treeSnapshot()
-        )
-        let resolvedURL = browserPanel.currentURL
-            ?? browserPanel.preferredURLStringForOmnibar().flatMap(URL.init(string:))
-
-        pendingClosedBrowserRestoreSnapshots[tab.id] = ClosedBrowserPanelRestoreSnapshot(
-            workspaceId: id,
-            url: resolvedURL,
-            profileID: browserPanel.profileID,
-            originalPaneId: pane.id,
-            originalTabIndex: tabIndex,
-            fallbackSplitOrientation: fallbackPlan?.orientation,
-            fallbackSplitInsertFirst: fallbackPlan?.insertFirst ?? false,
-            fallbackAnchorPaneId: fallbackPlan?.anchorPaneId
-        )
-    }
-
-    func clearStagedClosedBrowserRestoreSnapshot(for tabId: TabID) {
-        pendingClosedBrowserRestoreSnapshots.removeValue(forKey: tabId)
-    }
-
-    func browserCloseFallbackPlan(
-        forPaneId targetPaneId: String,
-        in node: ExternalTreeNode
-    ) -> BrowserCloseFallbackPlan? {
-        switch node {
-        case .pane:
-            return nil
-        case .split(let splitNode):
-            if case .pane(let firstPane) = splitNode.first, firstPane.id == targetPaneId {
-                return BrowserCloseFallbackPlan(
-                    orientation: splitNode.orientation.lowercased() == "vertical" ? .vertical : .horizontal,
-                    insertFirst: true,
-                    anchorPaneId: browserNearestPaneId(
-                        in: splitNode.second,
-                        targetCenter: browserPaneCenter(firstPane)
-                    )
-                )
-            }
-
-            if case .pane(let secondPane) = splitNode.second, secondPane.id == targetPaneId {
-                return BrowserCloseFallbackPlan(
-                    orientation: splitNode.orientation.lowercased() == "vertical" ? .vertical : .horizontal,
-                    insertFirst: false,
-                    anchorPaneId: browserNearestPaneId(
-                        in: splitNode.first,
-                        targetCenter: browserPaneCenter(secondPane)
-                    )
-                )
-            }
-
-            if let nested = browserCloseFallbackPlan(forPaneId: targetPaneId, in: splitNode.first) {
-                return nested
-            }
-            return browserCloseFallbackPlan(forPaneId: targetPaneId, in: splitNode.second)
-        }
-    }
-
-    func browserPaneCenter(_ pane: ExternalPaneNode) -> (x: Double, y: Double) {
-        (
-            x: pane.frame.x + (pane.frame.width * 0.5),
-            y: pane.frame.y + (pane.frame.height * 0.5)
-        )
-    }
-
-    func browserNearestPaneId(
-        in node: ExternalTreeNode,
-        targetCenter: (x: Double, y: Double)?
-    ) -> UUID? {
-        var panes: [ExternalPaneNode] = []
-        browserCollectPaneNodes(node: node, into: &panes)
-        guard !panes.isEmpty else { return nil }
-
-        let bestPane: ExternalPaneNode?
-        if let targetCenter {
-            bestPane = panes.min { lhs, rhs in
-                let lhsCenter = browserPaneCenter(lhs)
-                let rhsCenter = browserPaneCenter(rhs)
-                let lhsDistance = pow(lhsCenter.x - targetCenter.x, 2) + pow(lhsCenter.y - targetCenter.y, 2)
-                let rhsDistance = pow(rhsCenter.x - targetCenter.x, 2) + pow(rhsCenter.y - targetCenter.y, 2)
-                if lhsDistance != rhsDistance {
-                    return lhsDistance < rhsDistance
-                }
-                return lhs.id < rhs.id
-            }
-        } else {
-            bestPane = panes.first
-        }
-
-        guard let bestPane else { return nil }
-        return UUID(uuidString: bestPane.id)
-    }
 
     @discardableResult
     func moveSurface(panelId: UUID, toPane paneId: PaneID, atIndex index: Int? = nil, focus: Bool = true) -> Bool {
@@ -1924,17 +1578,10 @@ final class Workspace: Identifiable, ObservableObject {
     /// Reinstalls per-panel-kind workspace binding and lifecycle subscriptions when a panel is
     /// attached to this workspace via a detach/attach transfer (drag between workspaces, split
     /// moves, `AppDelegate.moveSurface`). Centralizing this keeps every panel kind in sync:
-    /// previously only `TerminalPanel`/`BrowserPanel` were handled here, so `MarkdownPanel` never
-    /// got its `workspaceId` updated and `ReviewPanel` never got its `$panelAgentPresence`
-    /// subscription reinstalled after a move (losing auto-refresh-on-idle). See
-    /// docs/audits/codebase-audit-2026-09-11.md M13.
     private func reattachPanelToWorkspace(_ panel: any Panel) {
         switch panel {
         case let terminalPanel as TerminalPanel:
             terminalPanel.updateWorkspaceId(id)
-        case let browserPanel as BrowserPanel:
-            browserPanel.reattachToWorkspace(id)
-            installBrowserPanelSubscription(browserPanel)
         case let markdownPanel as MarkdownPanel:
             markdownPanel.updateWorkspaceId(id)
             installMarkdownPanelSubscription(markdownPanel)
@@ -2001,50 +1648,24 @@ final class Workspace: Identifiable, ObservableObject {
 
     @discardableResult
     func clearSplitZoom(reason: String = "workspace.clearSplitZoom") -> Bool {
-        // Capture the zoomed pane's browser panel (if any) before clearing zoom,
-        // so we can prime its portal host replacement afterward.
-        let zoomedBrowser: (paneId: PaneID, panel: BrowserPanel)? = {
-            guard let zoomedPaneId = bonsplitController.zoomedPaneId,
-                  let tabId = bonsplitController.selectedTab(inPane: zoomedPaneId)?.id,
-                  let panelId = panelIdFromSurfaceId(tabId),
-                  let browser = browserPanel(for: panelId) else { return nil }
-            return (zoomedPaneId, browser)
-        }()
 
         guard bonsplitController.clearPaneZoom() else { return false }
-        if let zoomedBrowser {
-            zoomedBrowser.panel.preparePortalHostReplacementForNextDistinctClaim(
-                inPane: zoomedBrowser.paneId,
-                reason: reason
-            )
-        }
         reconcileTerminalPortalVisibilityForCurrentRenderedLayout()
-        reconcileBrowserPortalVisibilityForCurrentRenderedLayout(reason: reason)
         beginEventDrivenLayoutFollowUp(reason: reason, includeGeometry: true)
         return true
     }
 
     @discardableResult
     func toggleSplitZoom(panelId: UUID) -> Bool {
-        let wasSplitZoomed = bonsplitController.isSplitZoomed
         guard let paneId = paneId(forPanelId: panelId) else { return false }
         guard bonsplitController.togglePaneZoom(inPane: paneId) else { return false }
         focusPanel(panelId)
         if !bonsplitController.isSplitZoomed {
             // Un-zooming: use centralized reconciliation
             reconcileTerminalPortalVisibilityForCurrentRenderedLayout()
-            reconcileBrowserPortalVisibilityForCurrentRenderedLayout(reason: "workspace.toggleSplitZoom")
-        }
-        if let browserPanel = browserPanel(for: panelId) {
-            browserPanel.preparePortalHostReplacementForNextDistinctClaim(
-                inPane: paneId,
-                reason: "workspace.toggleSplitZoom"
-            )
         }
         beginEventDrivenLayoutFollowUp(
             reason: "workspace.toggleSplitZoom",
-            browserPanelId: browserPanel(for: panelId) != nil ? panelId : nil,
-            browserExitFocusPanelId: (wasSplitZoomed && !bonsplitController.isSplitZoomed) ? panelId : nil,
             includeGeometry: true
         )
         return true
@@ -2149,30 +1770,7 @@ final class Workspace: Identifiable, ObservableObject {
         _ = reorderSurface(panelId: newPanel.id, toIndex: targetIndex)
     }
 
-    func createBrowserToRight(of anchorTabId: TabID, inPane paneId: PaneID, url: URL? = nil) {
-        let targetIndex = insertionIndexToRight(of: anchorTabId, inPane: paneId)
-        let preferredProfileID = panelIdFromSurfaceId(anchorTabId).flatMap { browserPanel(for: $0)?.profileID }
-        guard let newPanel = newBrowserSurface(
-            inPane: paneId,
-            url: url,
-            focus: true,
-            preferredProfileID: preferredProfileID
-        ) else { return }
-        _ = reorderSurface(panelId: newPanel.id, toIndex: targetIndex)
-    }
 
-    func duplicateBrowserToRight(anchorTabId: TabID, inPane paneId: PaneID) {
-        guard let panelId = panelIdFromSurfaceId(anchorTabId),
-              let browser = browserPanel(for: panelId) else { return }
-        let targetIndex = insertionIndexToRight(of: anchorTabId, inPane: paneId)
-        guard let newPanel = newBrowserSurface(
-            inPane: paneId,
-            url: browser.currentURL,
-            focus: true,
-            preferredProfileID: browser.profileID
-        ) else { return }
-        _ = reorderSurface(panelId: newPanel.id, toIndex: targetIndex)
-    }
 
     func promptRenamePanel(tabId: TabID) {
         guard let panelId = panelIdFromSurfaceId(tabId),

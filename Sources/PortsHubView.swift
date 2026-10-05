@@ -11,21 +11,9 @@ enum PortsHubActions {
         URL(string: "http://localhost:\(port)")
     }
 
-    /// Opens like the sidebar port chips: in a Programa browser split of the owning
-    /// workspace when there is one, otherwise in the default browser.
     static func open(port: Int, workspaceId: UUID?) {
         guard let url = url(forPort: port) else { return }
-        if let workspaceId,
-           let tabManager = AppDelegate.shared?.tabManagerFor(tabId: workspaceId),
-           tabManager.openBrowser(
-               inWorkspace: workspaceId,
-               url: url,
-               preferSplitRight: true,
-               insertAtEnd: true
-           ) != nil {
-            return
-        }
-        BrowserLinkOpenSettings.openExternally(url)
+        ExternalOpenPolicy.open(url)
     }
 
     static func copyURL(port: Int) {

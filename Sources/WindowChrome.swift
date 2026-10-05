@@ -179,7 +179,7 @@ enum WindowGlassEffect {
         return (NSColor(hex: hex) ?? .black).withAlphaComponent(opacity)
     }
 
-    /// Corner radius of the elevated content card (terminal/browser panes).
+    /// Corner radius of the elevated content card.
     /// Concentric with the window corner at the card inset, same rule as
     /// `sidebarPanelCornerRadius` -- a fixed smaller value makes the card's
     /// curve visibly diverge from the window's inside the corner gap.
@@ -311,8 +311,8 @@ enum WindowGlassEffect {
     }
 }
 
-/// AppKit-backed Liquid Glass host for compact in-window surfaces such as browser chrome and
-/// find controls. The complete SwiftUI subtree is installed as `NSGlassEffectView.contentView`
+/// AppKit-backed Liquid Glass host for compact in-window surfaces such as find controls.
+/// The complete SwiftUI subtree is installed as `NSGlassEffectView.contentView`
 /// so controls participate in AppKit's glass interaction and hit-testing contract.
 struct ProgramaNativeGlassContentHost<Content: View>: NSViewRepresentable {
     let content: Content

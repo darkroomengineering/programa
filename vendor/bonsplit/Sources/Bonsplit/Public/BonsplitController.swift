@@ -93,7 +93,7 @@ public final class BonsplitController {
     ///   - title: The tab title
     ///   - icon: Optional SF Symbol name for the tab icon
     ///   - iconImageData: Optional image data (PNG recommended) for the tab icon. When present, takes precedence over `icon`.
-    ///   - kind: Consumer-defined tab kind identifier (e.g. "terminal", "browser")
+    ///   - kind: Consumer-defined tab kind identifier (e.g. "terminal", "markdown")
     ///   - hasCustomTitle: Whether the tab title came from a custom user override
     ///   - isDirty: Whether the tab shows a dirty indicator
     ///   - showsNotificationBadge: Whether the tab shows an "unread/activity" badge

@@ -95,20 +95,6 @@ enum QuitWarningSettings {
     }
 }
 
-enum AgentBrowserSplitSettings {
-    static let key = "openBrowserWithAgentSplits"
-    static let defaultValue = false
-    private static let flag = UserDefaultsFlag(key: key, defaultValue: defaultValue)
-
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        flag.isEnabled(defaults: defaults)
-    }
-
-    static func setEnabled(_ isEnabled: Bool, defaults: UserDefaults = .standard) {
-        flag.setEnabled(isEnabled, defaults: defaults)
-    }
-}
-
 enum ScrollbackPersistenceSettings {
     static let persistScrollbackKey = "sessionPersistScrollback"
     static let defaultPersistScrollback = true
@@ -307,7 +293,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case general
     case appearance
     case automation
-    case browser
     case shortcuts
 
     var id: String { rawValue }
@@ -317,7 +302,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: String(localized: "settings.tab.general", defaultValue: "General")
         case .appearance: String(localized: "settings.tab.appearance", defaultValue: "Appearance")
         case .automation: String(localized: "settings.tab.automation", defaultValue: "Automation")
-        case .browser: String(localized: "settings.tab.browser", defaultValue: "Browser")
         case .shortcuts: String(localized: "settings.tab.shortcuts", defaultValue: "Shortcuts")
         }
     }
@@ -326,7 +310,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     /// still lands on the right content now that it is not all one scroll.
     static func owning(_ target: SettingsNavigationTarget) -> SettingsTab {
         switch target {
-        case .browser: .browser
         case .keyboardShortcuts: .shortcuts
         }
     }

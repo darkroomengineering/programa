@@ -17,9 +17,6 @@ extension Workspace {
             newTerminal: KeyboardShortcutSettings.Action.newSurface.tooltip(
                 String(localized: "workspace.splitButton.newTerminal", defaultValue: "New Terminal")
             ),
-            newBrowser: KeyboardShortcutSettings.Action.openBrowser.tooltip(
-                String(localized: "workspace.splitButton.newBrowser", defaultValue: "New Browser")
-            ),
             splitRight: KeyboardShortcutSettings.Action.splitRight.tooltip(
                 String(localized: "tabBar.splitRight", defaultValue: "Split Right")
             ),

@@ -410,7 +410,16 @@ final class ProgramaSettingsFileStore {
             parseCustomCommandsSection(customCommandsSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
         if let browserSection = root["browser"] as? [String: Any] {
-            parseBrowserSection(browserSection, sourcePath: sourcePath, snapshot: &snapshot)
+            if let values = jsonStringArray(browserSection["externalAppOpenAllowlist"]) {
+                let normalized = values
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                snapshot.managedUserDefaults[ExternalOpenPolicy.allowlistKey] = .string(
+                    normalized.joined(separator: "\n")
+                )
+            } else if browserSection.keys.contains("externalAppOpenAllowlist") {
+                logInvalid("browser.externalAppOpenAllowlist", sourcePath: sourcePath)
+            }
         }
         if let shortcutsSection = root["shortcuts"] {
             parseShortcutsSection(shortcutsSection, sourcePath: sourcePath, snapshot: &snapshot)
@@ -736,9 +745,6 @@ final class ProgramaSettingsFileStore {
         if let value = jsonBool(section["claudeCodeIntegration"]) {
             snapshot.managedUserDefaults[ClaudeCodeIntegrationSettings.hooksEnabledKey] = .bool(value)
         }
-        if let value = jsonBool(section["openBrowserWithAgentSplits"]) {
-            snapshot.managedUserDefaults[AgentBrowserSplitSettings.key] = .bool(value)
-        }
         if let raw = jsonString(section["claudeBinaryPath"]) {
             snapshot.managedUserDefaults[ClaudeCodeIntegrationSettings.customClaudePathKey] = .string(raw)
         }
@@ -781,117 +787,6 @@ final class ProgramaSettingsFileStore {
             snapshot.managedCustomSettings.trustedDirectories = normalized
         } else if section.keys.contains("trustedDirectories") {
             logInvalid("customCommands.trustedDirectories", sourcePath: sourcePath)
-        }
-    }
-
-    private func parseBrowserSection(
-        _ section: [String: Any],
-        sourcePath: String,
-        snapshot: inout ResolvedSettingsSnapshot
-    ) {
-        if let raw = jsonString(section["defaultSearchEngine"]) {
-            if let engine = BrowserSearchEngine(rawValue: raw) {
-                snapshot.managedUserDefaults[BrowserSearchSettings.searchEngineKey] = .string(engine.rawValue)
-            } else {
-                logInvalid("browser.defaultSearchEngine", sourcePath: sourcePath)
-            }
-        }
-        if let value = jsonBool(section["showSearchSuggestions"]) {
-            snapshot.managedUserDefaults[BrowserSearchSettings.searchSuggestionsEnabledKey] = .bool(value)
-        }
-        if let raw = jsonString(section["theme"]) {
-            if let mode = BrowserThemeMode(rawValue: raw) {
-                snapshot.managedUserDefaults[BrowserThemeSettings.modeKey] = .string(mode.rawValue)
-            } else {
-                logInvalid("browser.theme", sourcePath: sourcePath)
-            }
-        }
-        if let value = jsonBool(section["openTerminalLinksInProgramaBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowserKey] = .bool(value)
-        }
-        if let value = jsonBool(section["interceptTerminalOpenCommandInProgramaBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.interceptTerminalOpenCommandInProgramaBrowserKey] = .bool(value)
-        }
-        if let values = jsonStringArray(section["hostsToOpenInEmbeddedBrowser"]) {
-            let normalized = values
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.browserHostWhitelistKey] = .string(normalized.joined(separator: "\n"))
-        } else if section.keys.contains("hostsToOpenInEmbeddedBrowser") {
-            logInvalid("browser.hostsToOpenInEmbeddedBrowser", sourcePath: sourcePath)
-        }
-        if let values = jsonStringArray(section["urlsToAlwaysOpenExternally"]) {
-            let normalized = values
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.browserExternalOpenPatternsKey] = .string(
-                normalized.joined(separator: "\n")
-            )
-        } else if section.keys.contains("urlsToAlwaysOpenExternally") {
-            logInvalid("browser.urlsToAlwaysOpenExternally", sourcePath: sourcePath)
-        }
-        if let values = jsonStringArray(section["externalAppOpenAllowlist"]) {
-            let normalized = values
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            snapshot.managedUserDefaults[ExternalOpenPolicy.allowlistKey] = .string(
-                normalized.joined(separator: "\n")
-            )
-        } else if section.keys.contains("externalAppOpenAllowlist") {
-            logInvalid("browser.externalAppOpenAllowlist", sourcePath: sourcePath)
-        }
-        if let raw = section["externalBrowser"] {
-            if let value = jsonString(raw) {
-                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                snapshot.managedUserDefaults[BrowserLinkOpenSettings.externalBrowserBundleIdentifierKey] = .string(trimmed)
-            } else {
-                logInvalid("browser.externalBrowser", sourcePath: sourcePath)
-            }
-        }
-        if let values = jsonStringArray(section["insecureHttpHostsAllowedInEmbeddedBrowser"]) {
-            let normalized = values
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            snapshot.managedUserDefaults[BrowserInsecureHTTPSettings.allowlistKey] = .string(
-                normalized.joined(separator: "\n")
-            )
-        } else if section.keys.contains("insecureHttpHostsAllowedInEmbeddedBrowser") {
-            logInvalid("browser.insecureHttpHostsAllowedInEmbeddedBrowser", sourcePath: sourcePath)
-        }
-        if let proxyRaw = section["proxy"] {
-            guard let proxyDict = proxyRaw as? [String: Any] else {
-                logInvalid("browser.proxy", sourcePath: sourcePath)
-                return
-            }
-            guard let host = jsonString(proxyDict["host"]) else {
-                logInvalid("browser.proxy.host", sourcePath: sourcePath)
-                return
-            }
-            let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedHost.isEmpty else {
-                logInvalid("browser.proxy.host", sourcePath: sourcePath)
-                return
-            }
-            guard let port = jsonInt(proxyDict["port"]), port >= 1 && port <= 65535 else {
-                logInvalid("browser.proxy.port", sourcePath: sourcePath)
-                return
-            }
-            let typeRaw: String
-            if let raw = jsonString(proxyDict["type"]) {
-                guard BrowserUserProxySettings.ProxyType(rawValue: raw) != nil else {
-                    logInvalid("browser.proxy.type", sourcePath: sourcePath)
-                    return
-                }
-                typeRaw = raw
-            } else if proxyDict.keys.contains("type") {
-                logInvalid("browser.proxy.type", sourcePath: sourcePath)
-                return
-            } else {
-                typeRaw = BrowserUserProxySettings.ProxyType.socks5.rawValue
-            }
-            snapshot.managedUserDefaults[BrowserUserProxySettings.hostKey] = .string(trimmedHost)
-            snapshot.managedUserDefaults[BrowserUserProxySettings.portKey] = .int(port)
-            snapshot.managedUserDefaults[BrowserUserProxySettings.typeKey] = .string(typeRaw)
         }
     }
 
@@ -1666,7 +1561,6 @@ final class ProgramaSettingsFileStore {
                     "socketControlMode": SocketControlSettings.defaultMode.rawValue,
                     "socketPassword": "",
                     "claudeCodeIntegration": ClaudeCodeIntegrationSettings.defaultHooksEnabled,
-                    "openBrowserWithAgentSplits": AgentBrowserSplitSettings.defaultValue,
                     "claudeBinaryPath": "",
                     "portBase": 9100,
                     "portRange": 10,
@@ -1679,16 +1573,7 @@ final class ProgramaSettingsFileStore {
             ],
             [
                 "browser": [
-                    "defaultSearchEngine": BrowserSearchSettings.defaultSearchEngine.rawValue,
-                    "showSearchSuggestions": BrowserSearchSettings.defaultSearchSuggestionsEnabled,
-                    "theme": BrowserThemeSettings.defaultMode.rawValue,
-                    "openTerminalLinksInProgramaBrowser": BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser,
-                    "interceptTerminalOpenCommandInProgramaBrowser": BrowserLinkOpenSettings.defaultInterceptTerminalOpenCommandInProgramaBrowser,
-                    "hostsToOpenInEmbeddedBrowser": [String](),
-                    "urlsToAlwaysOpenExternally": [String](),
-                    "externalBrowser": BrowserLinkOpenSettings.defaultExternalBrowserBundleIdentifier,
                     "externalAppOpenAllowlist": [String](),
-                    "insecureHttpHostsAllowedInEmbeddedBrowser": BrowserInsecureHTTPSettings.defaultAllowlistPatterns,
                 ],
             ],
             [

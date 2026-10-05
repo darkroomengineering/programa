@@ -208,14 +208,6 @@ struct TabItemView: View, Equatable {
         settings.notificationBadgeColorHex
     }
 
-    private var openSidebarPullRequestLinksInProgramaBrowser: Bool {
-        settings.openPullRequestLinksInProgramaBrowser
-    }
-
-    private var openSidebarPortLinksInProgramaBrowser: Bool {
-        settings.openPortLinksInProgramaBrowser
-    }
-
     private var titleFontWeight: Font.Weight {
         .semibold
     }
@@ -1498,35 +1490,13 @@ struct TabItemView: View, Equatable {
 
     private func openPullRequestLink(_ url: URL) {
         updateSelection()
-        if openSidebarPullRequestLinksInProgramaBrowser {
-            if tabManager.openBrowser(
-                inWorkspace: tab.id,
-                url: url,
-                preferSplitRight: true,
-                insertAtEnd: true
-            ) == nil {
-                BrowserLinkOpenSettings.openExternally(url)
-            }
-            return
-        }
-        BrowserLinkOpenSettings.openExternally(url)
+        ExternalOpenPolicy.open(url)
     }
 
     private func openPortLink(_ port: Int) {
         guard let url = URL(string: "http://localhost:\(port)") else { return }
         updateSelection()
-        if openSidebarPortLinksInProgramaBrowser {
-            if tabManager.openBrowser(
-                inWorkspace: tab.id,
-                url: url,
-                preferSplitRight: true,
-                insertAtEnd: true
-            ) == nil {
-                BrowserLinkOpenSettings.openExternally(url)
-            }
-            return
-        }
-        BrowserLinkOpenSettings.openExternally(url)
+        ExternalOpenPolicy.open(url)
     }
 
     private func pullRequestStatusLabel(
@@ -2113,7 +2083,7 @@ private struct SidebarMetadataEntryRow: View {
             if let url = entry.url {
                 Button {
                     onFocus()
-                    BrowserLinkOpenSettings.openExternally(url)
+                    ExternalOpenPolicy.open(url)
                 } label: {
                     rowContent(underlined: true)
                 }

@@ -388,10 +388,6 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
                 guard let pane, let bonsplitController else { return }
                 bonsplitController.requestNewTab(kind: "terminal", inPane: pane.id)
             },
-            onNewBrowserTab: { [weak pane, weak bonsplitController] in
-                guard let pane, let bonsplitController else { return }
-                bonsplitController.requestNewTab(kind: "browser", inPane: pane.id)
-            },
             onSplitRight: { [weak pane, weak splitController, weak bonsplitController] in
                 guard let pane, let splitController, let bonsplitController else { return }
                 splitController.splitPane(pane.id, orientation: .horizontal)
@@ -465,15 +461,7 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
         items.append(contentsOf: [
             .separator,
             .action(title: localized("New Terminal Tab to Right"), action: .newTerminalToRight, isEnabled: true),
-            .action(title: localized("New Browser Tab to Right"), action: .newBrowserToRight, isEnabled: true),
         ])
-        if tab.kind == "browser" {
-            items.append(contentsOf: [
-                .separator,
-                .action(title: localized("Reload Tab"), action: .reload, isEnabled: true),
-                .action(title: localized("Duplicate Tab"), action: .duplicate, isEnabled: true),
-            ])
-        }
         items.append(.separator)
         if hasSplits {
             items.append(.action(
@@ -651,7 +639,7 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
                     if let selectedTab = pane.selectedTab ?? pane.tabs.first {
                         contentBuilder(selectedTab, pane.id)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            // When the content is an NSViewRepresentable (e.g. WKWebView), it can
+                            // When the content is an NSViewRepresentable , it can
                             // sit above SwiftUI overlays and swallow drop events. During tab drags,
                             // disable hit testing for the content so our dropZonesLayer reliably
                             // receives the drag/drop interaction.

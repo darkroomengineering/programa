@@ -7,7 +7,7 @@ enum SearchTextFieldFocusSelection: Equatable {
     case caretAtEnd
 }
 
-/// Shared AppKit owner for terminal and browser find fields.
+/// AppKit owner for terminal find fields.
 /// SwiftUI owns the surrounding controls while this host owns responder and IME behavior.
 struct SearchTextFieldHost: NSViewRepresentable {
     @Binding var text: String

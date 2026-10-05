@@ -4,7 +4,6 @@ enum ProgramaGlassSurface: String, CaseIterable, Sendable {
     case window
     case sidebar
     case tabBar
-    case browserToolbar
     case overlays
 
     var environmentKey: String {
@@ -15,8 +14,6 @@ enum ProgramaGlassSurface: String, CaseIterable, Sendable {
             return "PROGRAMA_TEST_FORCE_SIDEBAR_GLASS"
         case .tabBar:
             return "PROGRAMA_TEST_FORCE_TAB_BAR_GLASS"
-        case .browserToolbar:
-            return "PROGRAMA_TEST_FORCE_BROWSER_TOOLBAR_GLASS"
         case .overlays:
             return "PROGRAMA_TEST_FORCE_OVERLAY_GLASS"
         }
@@ -27,7 +24,6 @@ enum ProgramaGlassSurface: String, CaseIterable, Sendable {
         case "window": self = .window
         case "sidebar": self = .sidebar
         case "tabbar", "tab-bar", "tab_bar": self = .tabBar
-        case "browsertoolbar", "browser-toolbar", "browser_toolbar": self = .browserToolbar
         case "overlay", "overlays": self = .overlays
         default: return nil
         }
@@ -37,7 +33,6 @@ enum ProgramaGlassSurface: String, CaseIterable, Sendable {
 enum ProgramaGlassSettings {
     static let windowEnabledKey = "bgGlassEnabled"
     static let tabBarEnabledKey = "tabBarLiquidGlassEnabled"
-    static let browserToolbarEnabledKey = "browserToolbarLiquidGlassEnabled"
     static let overlaysEnabledKey = "overlayLiquidGlassEnabled"
 
     /// Environment is snapshotted once. The perf harness launches a fresh process for each
@@ -211,7 +206,6 @@ enum ProgramaGlassSettings {
         [
             windowEnabledKey: nativeGlassAvailable,
             tabBarEnabledKey: nativeGlassAvailable,
-            browserToolbarEnabledKey: false,
             overlaysEnabledKey: nativeGlassAvailable,
         ]
     }
@@ -250,8 +244,6 @@ enum ProgramaGlassSettings {
             )
         case .tabBar:
             defaults.set(enabled, forKey: tabBarEnabledKey)
-        case .browserToolbar:
-            defaults.set(enabled, forKey: browserToolbarEnabledKey)
         case .overlays:
             defaults.set(enabled, forKey: overlaysEnabledKey)
         }

@@ -348,45 +348,8 @@ extension Workspace {
         surfaceListeningPorts.removeAll()
         listeningPorts.removeAll()
         metadataBlocks.removeAll()
-        resetBrowserPanelsForContextChange(reason: reason)
     }
 
-    func resetBrowserPanelsForContextChange(reason: String) {
-        let browserPanels = panels.values.compactMap { $0 as? BrowserPanel }
-        guard !browserPanels.isEmpty else { return }
-
-#if DEBUG
-        dlog(
-            "workspace.contextReset.browserPanels workspace=\(id.uuidString.prefix(5)) " +
-            "reason=\(reason) count=\(browserPanels.count)"
-        )
-#endif
-
-        for browserPanel in browserPanels {
-            browserPanel.resetForWorkspaceContextChange(reason: reason)
-            let nextTitle = browserPanel.displayTitle
-            _ = updatePanelTitle(panelId: browserPanel.id, title: nextTitle)
-
-            guard let tabId = surfaceIdFromPanelId(browserPanel.id),
-                  let existing = bonsplitController.tab(tabId) else {
-                continue
-            }
-
-            let faviconUpdate: Data?? = existing.iconImageData == nil ? nil : .some(nil)
-            let loadingUpdate: Bool? = existing.isLoading ? false : nil
-
-            guard faviconUpdate != nil || loadingUpdate != nil else {
-                continue
-            }
-
-            bonsplitController.updateTab(
-                tabId,
-                iconImageData: faviconUpdate,
-                hasCustomTitle: panelCustomTitles[browserPanel.id] != nil,
-                isLoading: loadingUpdate
-            )
-        }
-    }
 
     @discardableResult
     func updatePanelTitle(panelId: UUID, title: String) -> Bool {

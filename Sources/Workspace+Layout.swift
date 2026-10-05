@@ -9,7 +9,6 @@ import CryptoKit
 import Darwin
 import Network
 import CoreText
-import WebKit
 
 @MainActor
 private final class PendingTerminalInputState {
@@ -99,17 +98,6 @@ extension Workspace {
                 )
             }
 
-            if let browserPanel = browserPanel(for: panelId) {
-                return ProgramaSurfaceDefinition(
-                    type: .browser,
-                    name: customTitle,
-                    command: nil,
-                    cwd: nil,
-                    env: nil,
-                    url: browserPanel.webView.url?.absoluteString,
-                    focus: nil
-                )
-            }
 
             // Markdown panels have no `ProgramaSurfaceType` counterpart yet (v1 cut).
             return nil
@@ -260,13 +248,6 @@ extension Workspace {
                 sendInputWhenReady(ProgramaConfigExecutor.sanitizeForExecution(command) + "\n", to: terminal)
             }
 
-        case .browser:
-            let url = surface.url.flatMap { URL(string: $0) }
-            if let panel = newBrowserSurface(inPane: paneId, url: url, focus: false) {
-                _ = closePanel(panelId, force: true)
-                if let name = surface.name { setPanelCustomTitle(panelId: panel.id, title: name) }
-                if surface.focus == true { focusPanelId = panel.id }
-            }
         }
     }
 
@@ -292,12 +273,6 @@ extension Workspace {
                 }
             }
 
-        case .browser:
-            let url = surface.url.flatMap { URL(string: $0) }
-            if let panel = newBrowserSurface(inPane: paneId, url: url, focus: false) {
-                if let name = surface.name { setPanelCustomTitle(panelId: panel.id, title: name) }
-                if surface.focus == true { focusPanelId = panel.id }
-            }
         }
     }
 

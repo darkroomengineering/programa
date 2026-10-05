@@ -3,7 +3,6 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 import Bonsplit
-import WebKit
 
 extension TerminalController {
     // MARK: - V2 Pane Methods
@@ -170,9 +169,9 @@ extension TerminalController {
                 return v2InvalidParam("direction (left|right|up|down)")
             }
 
-            let panelType = v2PanelType(params, "type") ?? .terminal
-            let urlStr = v2String(params, "url")
-            let url = urlStr.flatMap { URL(string: $0) }
+            if params["type"] != nil && v2PanelType(params, "type") == nil {
+                return v2InvalidParam("type")
+            }
 
             let orientation = direction.orientation
             let insertFirst = direction.insertFirst
@@ -190,22 +189,12 @@ extension TerminalController {
             }
 
             let newPanelId: UUID?
-            if panelType == .browser {
-                newPanelId = ws.newBrowserSplit(
-                    from: focusedPanelId,
-                    orientation: orientation,
-                    insertFirst: insertFirst,
-                    url: url,
-                    focus: v2FocusAllowed()
-                )?.id
-            } else {
-                newPanelId = ws.newTerminalSplit(
-                    from: focusedPanelId,
-                    orientation: orientation,
-                    insertFirst: insertFirst,
-                    focus: v2FocusAllowed()
-                )?.id
-            }
+            newPanelId = ws.newTerminalSplit(
+                from: focusedPanelId,
+                orientation: orientation,
+                insertFirst: insertFirst,
+                focus: v2FocusAllowed()
+            )?.id
 
             guard let newPanelId else {
                 return .err(code: "internal_error", message: "Failed to create pane", data: nil)
@@ -221,7 +210,7 @@ extension TerminalController {
                 "pane_ref": v2Ref(kind: .pane, uuid: paneUUID),
                 "surface_id": newPanelId.uuidString,
                 "surface_ref": v2Ref(kind: .surface, uuid: newPanelId),
-                "type": panelType.rawValue
+                "type": PanelType.terminal.rawValue
             ])
         }
     }

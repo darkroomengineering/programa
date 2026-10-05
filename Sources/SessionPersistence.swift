@@ -33,8 +33,6 @@ enum SessionPersistencePolicy {
     static let maxTotalPanelsPerSnapshot: Int = 8_192
     static let maxMetadataStringBytes: Int = 64 * 1024
     static let maxPathStringBytes: Int = 16 * 1024
-    static let maxURLStringBytes: Int = 64 * 1024
-    static let maxBrowserHistoryEntriesPerDirection: Int = 2_048
     static let maxLogEntriesPerWorkspace: Int = 500
     static let maxReviewCommentsPerPanel: Int = 2_048
 
@@ -264,15 +262,6 @@ struct SessionTerminalPanelSnapshot: Codable, Sendable {
     var scrollback: String?
 }
 
-struct SessionBrowserPanelSnapshot: Codable, Sendable {
-    var urlString: String?
-    var profileID: UUID?
-    var shouldRenderWebView: Bool
-    var pageZoom: Double
-    var developerToolsVisible: Bool
-    var backHistoryURLStrings: [String]?
-    var forwardHistoryURLStrings: [String]?
-}
 
 struct SessionMarkdownPanelSnapshot: Codable, Sendable {
     var filePath: String
@@ -303,7 +292,6 @@ struct SessionPanelSnapshot: Codable, Sendable {
     var listeningPorts: [Int]
     var ttyName: String?
     var terminal: SessionTerminalPanelSnapshot?
-    var browser: SessionBrowserPanelSnapshot?
     var markdown: SessionMarkdownPanelSnapshot?
     var review: SessionReviewPanelSnapshot?
 }
@@ -1014,16 +1002,6 @@ enum SessionPersistenceStore {
             }
         }
 
-        if let browser = panel.browser {
-            guard isValidString(
-                browser.urlString,
-                maxBytes: SessionPersistencePolicy.maxURLStringBytes
-            ),
-            isValidURLHistory(browser.backHistoryURLStrings),
-            isValidURLHistory(browser.forwardHistoryURLStrings) else {
-                return false
-            }
-        }
 
         if let markdown = panel.markdown,
            !isValidString(
@@ -1064,13 +1042,6 @@ enum SessionPersistenceStore {
             )
     }
 
-    private static func isValidURLHistory(_ values: [String]?) -> Bool {
-        guard let values else { return true }
-        return values.count <= SessionPersistencePolicy.maxBrowserHistoryEntriesPerDirection
-            && values.allSatisfy {
-                $0.utf8.count <= SessionPersistencePolicy.maxURLStringBytes
-            }
-    }
 
     private static func isValidString(
         _ value: String?,

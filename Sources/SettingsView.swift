@@ -54,25 +54,12 @@ struct SettingsView: View {
     private var programaPortBase = ProgramaPortRangePolicy.defaultBase
     @AppStorage(ProgramaPortRangePolicy.rangeDefaultsKey)
     private var programaPortRange = ProgramaPortRangePolicy.defaultRange
-    @AppStorage(BrowserSearchSettings.searchEngineKey) private var browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
-    @AppStorage(BrowserSearchSettings.searchSuggestionsEnabledKey) private var browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled
-    @AppStorage(BrowserThemeSettings.modeKey) private var browserThemeMode = BrowserThemeSettings.defaultMode.rawValue
-    @AppStorage(BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowserKey) private var openTerminalLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser
-    @AppStorage(BrowserLinkOpenSettings.interceptTerminalOpenCommandInProgramaBrowserKey)
-    private var interceptTerminalOpenCommandInProgramaBrowser = BrowserLinkOpenSettings.initialInterceptTerminalOpenCommandInProgramaBrowserValue()
-    @AppStorage(BrowserLinkOpenSettings.browserHostWhitelistKey) private var browserHostWhitelist = BrowserLinkOpenSettings.defaultBrowserHostWhitelist
-    @AppStorage(BrowserLinkOpenSettings.browserExternalOpenPatternsKey)
-    private var browserExternalOpenPatterns = BrowserLinkOpenSettings.defaultBrowserExternalOpenPatterns
-    @AppStorage(BrowserLinkOpenSettings.externalBrowserBundleIdentifierKey)
-    private var externalBrowserBundleIdentifier = BrowserLinkOpenSettings.defaultExternalBrowserBundleIdentifier
-    @AppStorage(BrowserInsecureHTTPSettings.allowlistKey) private var browserInsecureHTTPAllowlist = BrowserInsecureHTTPSettings.defaultAllowlistText
     @AppStorage(NotificationSoundSettings.key) private var notificationSound = NotificationSoundSettings.defaultValue
     @AppStorage(NotificationSoundSettings.customCommandKey) private var notificationCustomCommand = NotificationSoundSettings.defaultCustomCommand
     @AppStorage(MenuBarExtraSettings.showInMenuBarKey) private var showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
     @AppStorage(LongCommandNotificationSettings.thresholdSecondsKey)
     private var longCommandThresholdSeconds = LongCommandNotificationSettings.defaultThresholdSeconds
     @AppStorage(QuitWarningSettings.warnBeforeQuitKey) private var warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
-    @AppStorage(AgentBrowserSplitSettings.key) private var openBrowserWithAgentSplits = AgentBrowserSplitSettings.defaultValue
     @AppStorage(ScrollbackPersistenceSettings.persistScrollbackKey) private var sessionPersistScrollback = ScrollbackPersistenceSettings.defaultPersistScrollback
     @AppStorage(ScrollbackPersistenceSettings.failureKey) private var scrollbackPersistenceFailure: String?
     @AppStorage(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey)
@@ -102,16 +89,12 @@ struct SettingsView: View {
     @State private var shortcutResetToken = UUID()
     @State private var topBlurOpacity: Double = 0
     @State private var topBlurBaselineOffset: CGFloat?
-    @State private var showClearBrowserHistoryConfirmation = false
     @State private var showOpenAccessConfirmation = false
     @State private var pendingOpenAccessMode: SocketControlMode?
-    @State private var browserHistoryEntryCount: Int = 0
-    @State private var browserInsecureHTTPAllowlistDraft = BrowserInsecureHTTPSettings.defaultAllowlistText
     @State private var socketPasswordDraft = ""
     @State private var socketPasswordStatusMessage: String?
     @State private var socketPasswordStatusIsError = false
     @State private var trustedDirectoriesDraft: String = ProgramaDirectoryTrust.shared.allTrustedPaths.joined(separator: "\n")
-    @State private var installedExternalBrowsers: [(bundleIdentifier: String, name: String)] = []
 
     private var selectedWorkspacePlacement: NewWorkspacePlacement {
         NewWorkspacePlacement(rawValue: newWorkspacePlacement) ?? WorkspacePlacementSettings.defaultPlacement
@@ -163,19 +146,6 @@ struct SettingsView: View {
         SocketControlSettings.migrateMode(socketControlMode)
     }
 
-    private var selectedBrowserThemeMode: BrowserThemeMode {
-        BrowserThemeSettings.mode(for: browserThemeMode)
-    }
-
-    private var browserThemeModeSelection: Binding<String> {
-        Binding(
-            get: { browserThemeMode },
-            set: { newValue in
-                browserThemeMode = BrowserThemeSettings.mode(for: newValue).rawValue
-            }
-        )
-    }
-
     private var socketModeSelection: Binding<String> {
         Binding(
             get: { socketControlMode },
@@ -209,21 +179,6 @@ struct SettingsView: View {
 
     private var hasSocketPasswordConfigured: Bool {
         SocketControlPasswordStore.hasConfiguredPassword()
-    }
-
-    private var browserHistorySubtitle: String {
-        switch browserHistoryEntryCount {
-        case 0:
-            return String(localized: "settings.browser.history.subtitleEmpty", defaultValue: "No saved pages yet.")
-        case 1:
-            return String(localized: "settings.browser.history.subtitleOne", defaultValue: "1 saved page appears in omnibar suggestions.")
-        default:
-            return String(localized: "settings.browser.history.subtitleMany", defaultValue: "\(browserHistoryEntryCount) saved pages appear in omnibar suggestions.")
-        }
-    }
-
-    private var browserInsecureHTTPAllowlistHasUnsavedChanges: Bool {
-        browserInsecureHTTPAllowlistDraft != browserInsecureHTTPAllowlist
     }
 
     /// Commits the textarea when it loses focus or Settings closes, never per keystroke: each
@@ -374,10 +329,6 @@ struct SettingsView: View {
                         agentsSection
                         portsSection
                         customCommandsSection
-                    case .browser:
-                        browsingSection
-                        browserLinksSection
-                        browserDataSection
                     case .shortcuts:
                         keyboardShortcutsSection
                     }
@@ -477,20 +428,7 @@ struct SettingsView: View {
         )
         .toggleStyle(.switch)
         .onAppear {
-            BrowserHistoryStore.shared.loadIfNeeded()
             notificationStore.refreshAuthorizationStatus()
-            browserThemeMode = BrowserThemeSettings.mode(defaults: .standard).rawValue
-            browserHistoryEntryCount = BrowserHistoryStore.shared.entries.count
-            browserInsecureHTTPAllowlistDraft = browserInsecureHTTPAllowlist
-        }
-        .onChange(of: browserInsecureHTTPAllowlist) { oldValue, newValue in
-            // Keep draft in sync with external changes unless the user has local unsaved edits.
-            if browserInsecureHTTPAllowlistDraft == oldValue {
-                browserInsecureHTTPAllowlistDraft = newValue
-            }
-        }
-        .onReceive(BrowserHistoryStore.shared.$entries) { entries in
-            browserHistoryEntryCount = entries.count
         }
         .onReceive(NotificationCenter.default.publisher(for: SettingsNavigationRequest.notificationName)) { notification in
             guard let target = SettingsNavigationRequest.target(from: notification) else { return }
@@ -502,18 +440,6 @@ struct SettingsView: View {
                     proxy.scrollTo(target, anchor: .top)
                 }
             }
-        }
-        .confirmationDialog(
-            String(localized: "settings.browser.history.clearDialog.title", defaultValue: "Clear browser history?"),
-            isPresented: $showClearBrowserHistoryConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(String(localized: "settings.browser.history.clearDialog.confirm", defaultValue: "Clear History"), role: .destructive) {
-                BrowserHistoryStore.shared.clearHistory()
-            }
-            Button(String(localized: "settings.browser.history.clearDialog.cancel", defaultValue: "Cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "settings.browser.history.clearDialog.message", defaultValue: "This removes visited-page suggestions from the browser omnibar."))
         }
         .confirmationDialog(
             String(localized: "settings.automation.openAccess.dialog.title", defaultValue: "Enable full open access?"),
@@ -641,7 +567,7 @@ struct SettingsView: View {
             SettingsCardRow(
                 String(localized: "settings.app.commandPaletteSearchAllSurfaces", defaultValue: "Command Palette Searches All Surfaces"),
                 subtitle: commandPaletteSearchAllSurfaces
-                    ? String(localized: "settings.app.commandPaletteSearchAllSurfaces.subtitleOn", defaultValue: "Cmd+P also matches terminal, browser, and markdown surfaces across workspaces.")
+                    ? String(localized: "settings.app.commandPaletteSearchAllSurfaces.subtitleOn", defaultValue: "Cmd+P also matches terminal and markdown surfaces across workspaces.")
                     : String(localized: "settings.app.commandPaletteSearchAllSurfaces.subtitleOff", defaultValue: "Cmd+P matches workspace rows only.")
             ) {
                 Toggle("", isOn: $commandPaletteSearchAllSurfaces)
@@ -1061,20 +987,6 @@ struct SettingsView: View {
 
             SettingsCardNote(String(localized: "settings.automation.claudeCode.note", defaultValue: "When enabled, Programa wraps the claude command to inject session tracking and notification hooks. Disable if you prefer to manage Claude Code hooks yourself."))
 
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                String(localized: "settings.agents.browserSplit", defaultValue: "Open a browser beside new agents"),
-                subtitle: openBrowserWithAgentSplits
-                    ? String(localized: "settings.agents.browserSplit.subtitleOn", defaultValue: "New agent workspaces get a browser split next to the terminal.")
-                    : String(localized: "settings.agents.browserSplit.subtitleOff", defaultValue: "New agent workspaces open with a terminal only.")
-            ) {
-                Toggle("", isOn: $openBrowserWithAgentSplits)
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .accessibilityIdentifier("SettingsAgentBrowserSplitToggle")
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(AgentBrowserSplitSettings.key))
         }
 
         SettingsCard {
@@ -1220,233 +1132,6 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var browsingSection: some View {
-        SettingsSectionHeader(title: String(localized: "settings.section.browsing", defaultValue: "Browsing"))
-            .id(SettingsNavigationTarget.browser)
-            .accessibilityIdentifier("SettingsBrowserSection")
-        SettingsCard {
-            SettingsPickerRow(
-                String(localized: "settings.browser.searchEngine", defaultValue: "Default Search Engine"),
-                subtitle: String(localized: "settings.browser.searchEngine.subtitle", defaultValue: "Used by the browser address bar when input is not a URL."),
-                controlWidth: pickerColumnWidth,
-                selection: $browserSearchEngine
-            ) {
-                ForEach(BrowserSearchEngine.allCases) { engine in
-                    Text(engine.displayName).tag(engine.rawValue)
-                }
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserSearchSettings.searchEngineKey))
-
-            SettingsCardDivider()
-
-            SettingsCardRow(String(localized: "settings.browser.searchSuggestions", defaultValue: "Show Search Suggestions")) {
-                Toggle("", isOn: $browserSearchSuggestionsEnabled)
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserSearchSettings.searchSuggestionsEnabledKey))
-
-            SettingsCardDivider()
-
-            SettingsPickerRow(
-                String(localized: "settings.browser.theme", defaultValue: "Browser Theme"),
-                subtitle: selectedBrowserThemeMode == .system
-                    ? String(localized: "settings.browser.theme.subtitleSystem", defaultValue: "System follows app and macOS appearance.")
-                    : String(localized: "settings.browser.theme.subtitleForced", defaultValue: "\(selectedBrowserThemeMode.displayName) forces that color scheme for compatible pages."),
-                controlWidth: pickerColumnWidth,
-                selection: browserThemeModeSelection
-            ) {
-                ForEach(BrowserThemeMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode.rawValue)
-                }
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserThemeSettings.modeKey))
-        }
-
-    }
-
-    @ViewBuilder
-    private var browserLinksSection: some View {
-        SettingsSectionHeader(title: String(localized: "settings.section.browserLinks", defaultValue: "Link Handling"))
-        SettingsCard {
-            SettingsCardRow(
-                String(localized: "settings.browser.openTerminalLinks", defaultValue: "Open Terminal Links in Programa Browser"),
-                subtitle: String(localized: "settings.browser.openTerminalLinks.subtitle", defaultValue: "When off, links clicked in terminal output open in your default browser.")
-            ) {
-                Toggle("", isOn: $openTerminalLinksInProgramaBrowser)
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.openTerminalLinksInProgramaBrowserKey))
-
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                String(localized: "settings.browser.interceptOpen", defaultValue: "Intercept open http(s) in Terminal"),
-                subtitle: String(localized: "settings.browser.interceptOpen.subtitle", defaultValue: "When off, `open https://...` and `open http://...` always use your default browser.")
-            ) {
-                Toggle("", isOn: $interceptTerminalOpenCommandInProgramaBrowser)
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.interceptTerminalOpenCommandInProgramaBrowserKey))
-
-            SettingsCardDivider()
-
-            SettingsPickerRow(
-                String(localized: "settings.browser.externalBrowser", defaultValue: "Open External Links With"),
-                subtitle: String(localized: "settings.browser.externalBrowser.subtitle", defaultValue: "Used for terminal links and browser links that open outside Programa."),
-                controlWidth: pickerColumnWidth,
-                selection: $externalBrowserBundleIdentifier
-            ) {
-                Text(String(localized: "settings.browser.externalBrowser.systemDefault", defaultValue: "System Default")).tag("")
-                ForEach(installedExternalBrowsers, id: \.bundleIdentifier) { browser in
-                    Text(browser.name).tag(browser.bundleIdentifier)
-                }
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.externalBrowserBundleIdentifierKey))
-            .onAppear {
-                installedExternalBrowsers = BrowserLinkOpenSettings.installedBrowsers()
-            }
-
-            if openTerminalLinksInProgramaBrowser || interceptTerminalOpenCommandInProgramaBrowser {
-                SettingsCardDivider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    SettingsCardRow(
-                        String(localized: "settings.browser.hostWhitelist", defaultValue: "Hosts to Open in Embedded Browser"),
-                        subtitle: String(localized: "settings.browser.hostWhitelist.subtitle", defaultValue: "Applies to terminal link clicks and intercepted `open https://...` calls. Only these hosts open in Programa. Others open in your default browser. One host or wildcard per line (for example: example.com, *.internal.example). Leave empty to open all hosts in Programa.")
-                    ) {
-                        EmptyView()
-                    }
-
-                    TextEditor(text: $browserHostWhitelist)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 60, maxHeight: 120)
-                        .scrollContentBackground(.hidden)
-                        .padding(6)
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .cornerRadius(6)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-                        )
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                }
-                .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.browserHostWhitelistKey))
-
-                SettingsCardDivider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    SettingsCardRow(
-                        String(localized: "settings.browser.externalPatterns", defaultValue: "URLs to Always Open Externally"),
-                        subtitle: String(localized: "settings.browser.externalPatterns.subtitle", defaultValue: "Applies to terminal link clicks and intercepted `open https://...` calls. One rule per line. Plain text matches any URL substring, or prefix with `re:` for regex (for example: openai.com/usage, re:^https?://[^/]*\\.example\\.com/(billing|usage)).")
-                    ) {
-                        EmptyView()
-                    }
-
-                    TextEditor(text: $browserExternalOpenPatterns)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 60, maxHeight: 120)
-                        .scrollContentBackground(.hidden)
-                        .padding(6)
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .cornerRadius(6)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-                        )
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                }
-                .managedBySettingsFile(settingsFileStatus.isManaged(BrowserLinkOpenSettings.browserExternalOpenPatternsKey))
-            }
-
-            SettingsCardDivider()
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "settings.browser.httpAllowlist", defaultValue: "HTTP Hosts Allowed in Embedded Browser"))
-                    .font(.system(size: 13, weight: .semibold))
-
-                Text(String(localized: "settings.browser.httpAllowlist.description", defaultValue: "Controls which HTTP (non-HTTPS) hosts can open in Programa without a warning prompt. Defaults include localhost, 127.0.0.1, ::1, 0.0.0.0, and *.localtest.me."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                TextEditor(text: $browserInsecureHTTPAllowlistDraft)
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .frame(minHeight: 86)
-                    .padding(6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color(nsColor: .textBackgroundColor))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-                    )
-                    .accessibilityIdentifier("SettingsBrowserHTTPAllowlistField")
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .center, spacing: 10) {
-                        Text(String(localized: "settings.browser.httpAllowlist.hint", defaultValue: "One host or wildcard per line (for example: localhost, 127.0.0.1, ::1, 0.0.0.0, *.localtest.me)."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer(minLength: 0)
-
-                        Button(String(localized: "settings.browser.httpAllowlist.save", defaultValue: "Save")) {
-                            saveBrowserInsecureHTTPAllowlist()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(!browserInsecureHTTPAllowlistHasUnsavedChanges)
-                        .accessibilityIdentifier("SettingsBrowserHTTPAllowlistSaveButton")
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(localized: "settings.browser.httpAllowlist.hint", defaultValue: "One host or wildcard per line (for example: localhost, 127.0.0.1, ::1, 0.0.0.0, *.localtest.me)."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        HStack {
-                            Spacer(minLength: 0)
-                            Button(String(localized: "settings.browser.httpAllowlist.save", defaultValue: "Save")) {
-                                saveBrowserInsecureHTTPAllowlist()
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(!browserInsecureHTTPAllowlistHasUnsavedChanges)
-                            .accessibilityIdentifier("SettingsBrowserHTTPAllowlistSaveButton")
-                        }
-                    }
-                }
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(BrowserInsecureHTTPSettings.allowlistKey))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-        }
-
-    }
-
-    @ViewBuilder
-    private var browserDataSection: some View {
-        SettingsSectionHeader(title: String(localized: "settings.section.browserData", defaultValue: "Data"))
-        SettingsCard {
-            SettingsCardRow(String(localized: "settings.browser.history", defaultValue: "Browsing History"), subtitle: browserHistorySubtitle) {
-                Button(String(localized: "settings.browser.history.clearButton", defaultValue: "Clear History…")) {
-                    showClearBrowserHistoryConfirmation = true
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(browserHistoryEntryCount == 0)
-            }
-        }
-
-    }
-
-    @ViewBuilder
     private var keyboardShortcutsSection: some View {
         SettingsSectionHeader(title: String(localized: "settings.section.keyboardShortcuts", defaultValue: "Keyboard Shortcuts"))
             .id(SettingsNavigationTarget.keyboardShortcuts)
@@ -1531,21 +1216,10 @@ struct SettingsView: View {
         customClaudePath = ""
         agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
         preferredEditorCommand = ""
-        browserSearchEngine = BrowserSearchSettings.defaultSearchEngine.rawValue
-        browserSearchSuggestionsEnabled = BrowserSearchSettings.defaultSearchSuggestionsEnabled
-        browserThemeMode = BrowserThemeSettings.defaultMode.rawValue
-        openTerminalLinksInProgramaBrowser = BrowserLinkOpenSettings.defaultOpenTerminalLinksInProgramaBrowser
-        interceptTerminalOpenCommandInProgramaBrowser = BrowserLinkOpenSettings.defaultInterceptTerminalOpenCommandInProgramaBrowser
-        browserHostWhitelist = BrowserLinkOpenSettings.defaultBrowserHostWhitelist
-        browserExternalOpenPatterns = BrowserLinkOpenSettings.defaultBrowserExternalOpenPatterns
-        externalBrowserBundleIdentifier = BrowserLinkOpenSettings.defaultExternalBrowserBundleIdentifier
-        browserInsecureHTTPAllowlist = BrowserInsecureHTTPSettings.defaultAllowlistText
-        browserInsecureHTTPAllowlistDraft = BrowserInsecureHTTPSettings.defaultAllowlistText
         notificationSound = NotificationSoundSettings.defaultValue
         notificationCustomCommand = NotificationSoundSettings.defaultCustomCommand
         showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
         warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
-        openBrowserWithAgentSplits = AgentBrowserSplitSettings.defaultValue
         ScrollbackPersistenceSettings.setEnabled(ScrollbackPersistenceSettings.defaultPersistScrollback)
         commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
         ShortcutHintDebugSettings.resetVisibilityDefaults()
@@ -1575,9 +1249,6 @@ struct SettingsView: View {
         shortcutResetToken = UUID()
     }
 
-    private func saveBrowserInsecureHTTPAllowlist() {
-        browserInsecureHTTPAllowlist = browserInsecureHTTPAllowlistDraft
-    }
 
 }
 

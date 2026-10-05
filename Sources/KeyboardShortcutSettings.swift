@@ -46,7 +46,6 @@ enum KeyboardShortcutSettings {
         case closeTab
         case closeOtherTabsInPane
         case closeWorkspace
-        case reopenClosedBrowserPanel
         case newSurface
         case toggleTerminalCopyMode
 
@@ -58,25 +57,13 @@ enum KeyboardShortcutSettings {
         case splitRight
         case splitDown
         case toggleSplitZoom
-        case splitBrowserRight
-        case splitBrowserDown
 
         // Panels
-        case openBrowser
-        case focusBrowserAddressBar
-        case browserBack
-        case browserForward
-        case browserReload
-        case browserZoomIn
-        case browserZoomOut
-        case browserZoomReset
         case find
         case findNext
         case findPrevious
         case hideFind
         case useSelectionForFind
-        case toggleBrowserDeveloperTools
-        case showBrowserJavaScriptConsole
         case openReview
         case openAgentOverview
 
@@ -112,7 +99,6 @@ enum KeyboardShortcutSettings {
             case .closeTab: return String(localized: "menu.file.closeTab", defaultValue: "Close Tab")
             case .closeOtherTabsInPane: return String(localized: "menu.file.closeOtherTabs", defaultValue: "Close Other Tabs in Pane")
             case .closeWorkspace: return String(localized: "shortcut.closeWorkspace.label", defaultValue: "Close Workspace")
-            case .reopenClosedBrowserPanel: return String(localized: "menu.file.reopenClosedBrowserPanel", defaultValue: "Reopen Closed Panel")
             case .newSurface: return String(localized: "shortcut.newSurface.label", defaultValue: "New Surface")
             case .toggleTerminalCopyMode: return String(localized: "shortcut.toggleTerminalCopyMode.label", defaultValue: "Toggle Terminal Copy Mode")
             case .focusLeft: return String(localized: "shortcut.focusPaneLeft.label", defaultValue: "Focus Pane Left")
@@ -122,23 +108,11 @@ enum KeyboardShortcutSettings {
             case .splitRight: return String(localized: "shortcut.splitRight.label", defaultValue: "Split Right")
             case .splitDown: return String(localized: "shortcut.splitDown.label", defaultValue: "Split Down")
             case .toggleSplitZoom: return String(localized: "shortcut.togglePaneZoom.label", defaultValue: "Toggle Pane Zoom")
-            case .splitBrowserRight: return String(localized: "shortcut.splitBrowserRight.label", defaultValue: "Split Browser Right")
-            case .splitBrowserDown: return String(localized: "shortcut.splitBrowserDown.label", defaultValue: "Split Browser Down")
-            case .openBrowser: return String(localized: "shortcut.openBrowser.label", defaultValue: "Open Browser")
-            case .focusBrowserAddressBar: return String(localized: "command.browserFocusAddressBar.title", defaultValue: "Focus Address Bar")
-            case .browserBack: return String(localized: "menu.view.back", defaultValue: "Back")
-            case .browserForward: return String(localized: "menu.view.forward", defaultValue: "Forward")
-            case .browserReload: return String(localized: "menu.view.reloadPage", defaultValue: "Reload Page")
-            case .browserZoomIn: return String(localized: "menu.view.zoomIn", defaultValue: "Zoom In")
-            case .browserZoomOut: return String(localized: "menu.view.zoomOut", defaultValue: "Zoom Out")
-            case .browserZoomReset: return String(localized: "menu.view.actualSize", defaultValue: "Actual Size")
             case .find: return String(localized: "menu.find.find", defaultValue: "Find…")
             case .findNext: return String(localized: "menu.find.findNext", defaultValue: "Find Next")
             case .findPrevious: return String(localized: "menu.find.findPrevious", defaultValue: "Find Previous")
             case .hideFind: return String(localized: "menu.find.hideFindBar", defaultValue: "Hide Find Bar")
             case .useSelectionForFind: return String(localized: "menu.find.useSelectionForFind", defaultValue: "Use Selection for Find")
-            case .toggleBrowserDeveloperTools: return String(localized: "shortcut.toggleBrowserDevTools.label", defaultValue: "Toggle Browser Developer Tools")
-            case .showBrowserJavaScriptConsole: return String(localized: "shortcut.showBrowserJSConsole.label", defaultValue: "Show Browser JavaScript Console")
             case .openReview: return String(localized: "shortcut.openReview.label", defaultValue: "Open Review Panel")
             case .openAgentOverview: return String(localized: "contextMenu.openAgentOverview", defaultValue: "Open Agent Overview")
             }
@@ -196,8 +170,6 @@ enum KeyboardShortcutSettings {
                 return StoredShortcut(key: "t", command: true, shift: false, option: true, control: false)
             case .closeWorkspace:
                 return StoredShortcut(key: "w", command: true, shift: true, option: false, control: false)
-            case .reopenClosedBrowserPanel:
-                return StoredShortcut(key: "t", command: true, shift: true, option: false, control: false)
             case .focusLeft:
                 return StoredShortcut(key: "←", command: true, shift: false, option: true, control: false)
             case .focusRight:
@@ -212,10 +184,6 @@ enum KeyboardShortcutSettings {
                 return StoredShortcut(key: "d", command: true, shift: true, option: false, control: false)
             case .toggleSplitZoom:
                 return StoredShortcut(key: "\r", command: true, shift: true, option: false, control: false)
-            case .splitBrowserRight:
-                return StoredShortcut(key: "d", command: true, shift: false, option: true, control: false)
-            case .splitBrowserDown:
-                return StoredShortcut(key: "d", command: true, shift: true, option: true, control: false)
             case .nextSurface:
                 return StoredShortcut(key: "]", command: true, shift: true, option: false, control: false)
             case .prevSurface:
@@ -228,22 +196,6 @@ enum KeyboardShortcutSettings {
                 return StoredShortcut(key: "m", command: true, shift: true, option: false, control: false)
             case .selectWorkspaceByNumber:
                 return StoredShortcut(key: "1", command: true, shift: false, option: false, control: false)
-            case .openBrowser:
-                return StoredShortcut(key: "l", command: true, shift: true, option: false, control: false)
-            case .focusBrowserAddressBar:
-                return StoredShortcut(key: "l", command: true, shift: false, option: false, control: false)
-            case .browserBack:
-                return StoredShortcut(key: "[", command: true, shift: false, option: false, control: false)
-            case .browserForward:
-                return StoredShortcut(key: "]", command: true, shift: false, option: false, control: false)
-            case .browserReload:
-                return StoredShortcut(key: "r", command: true, shift: false, option: false, control: false)
-            case .browserZoomIn:
-                return StoredShortcut(key: "=", command: true, shift: false, option: false, control: false)
-            case .browserZoomOut:
-                return StoredShortcut(key: "-", command: true, shift: false, option: false, control: false)
-            case .browserZoomReset:
-                return StoredShortcut(key: "0", command: true, shift: false, option: false, control: false)
             case .find:
                 return StoredShortcut(key: "f", command: true, shift: false, option: false, control: false)
             case .findNext:
@@ -254,12 +206,6 @@ enum KeyboardShortcutSettings {
                 return StoredShortcut(key: "f", command: true, shift: true, option: false, control: false)
             case .useSelectionForFind:
                 return StoredShortcut(key: "e", command: true, shift: false, option: false, control: false)
-            case .toggleBrowserDeveloperTools:
-                // Safari default: Show Web Inspector.
-                return StoredShortcut(key: "i", command: true, shift: false, option: true, control: false)
-            case .showBrowserJavaScriptConsole:
-                // Safari default: Show JavaScript Console.
-                return StoredShortcut(key: "c", command: true, shift: false, option: true, control: false)
             case .openReview, .openAgentOverview:
                 // Shipped without a default binding: Cmd+Shift+R (the plan's suggested default)
                 // is already taken by `.renameWorkspace` (see docs/keyboard-shortcuts.md), and no
@@ -419,8 +365,6 @@ enum KeyboardShortcutSettings {
     static func splitRightShortcut() -> StoredShortcut { shortcut(for: .splitRight) }
     static func splitDownShortcut() -> StoredShortcut { shortcut(for: .splitDown) }
     static func toggleSplitZoomShortcut() -> StoredShortcut { shortcut(for: .toggleSplitZoom) }
-    static func splitBrowserRightShortcut() -> StoredShortcut { shortcut(for: .splitBrowserRight) }
-    static func splitBrowserDownShortcut() -> StoredShortcut { shortcut(for: .splitBrowserDown) }
 
     static func nextSurfaceShortcut() -> StoredShortcut { shortcut(for: .nextSurface) }
     static func prevSurfaceShortcut() -> StoredShortcut { shortcut(for: .prevSurface) }
@@ -428,9 +372,6 @@ enum KeyboardShortcutSettings {
     static func newSurfaceShortcut() -> StoredShortcut { shortcut(for: .newSurface) }
     static func selectWorkspaceByNumberShortcut() -> StoredShortcut { shortcut(for: .selectWorkspaceByNumber) }
 
-    static func openBrowserShortcut() -> StoredShortcut { shortcut(for: .openBrowser) }
-    static func toggleBrowserDeveloperToolsShortcut() -> StoredShortcut { shortcut(for: .toggleBrowserDeveloperTools) }
-    static func showBrowserJavaScriptConsoleShortcut() -> StoredShortcut { shortcut(for: .showBrowserJavaScriptConsole) }
 }
 
 struct ShortcutStroke: Equatable {

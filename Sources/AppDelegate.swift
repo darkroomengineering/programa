@@ -4,7 +4,6 @@ import Bonsplit
 import CoreGraphics
 import CoreServices
 import UserNotifications
-import WebKit
 import Combine
 import ObjectiveC.runtime
 import Darwin
@@ -116,7 +115,7 @@ private final class MainWindowToolbarDelegate: NSObject, NSToolbarDelegate {
 }
 
 func isCommandPaletteFocusStealingTerminalOrBrowserResponder(_ responder: NSResponder) -> Bool {
-    if responder is GhosttyNSView || responder is WKWebView {
+    if responder is GhosttyNSView {
         return true
     }
 
@@ -136,12 +135,12 @@ func isCommandPaletteFocusStealingTerminalOrBrowserResponder(_ responder: NSResp
 }
 
 func isCommandPaletteFocusStealingTerminalOrBrowserView(_ view: NSView) -> Bool {
-    if view is GhosttyNSView || view is GhosttySurfaceScrollView || view is WKWebView {
+    if view is GhosttyNSView || view is GhosttySurfaceScrollView {
         return true
     }
     var current: NSView? = view.superview
     while let candidate = current {
-        if candidate is GhosttyNSView || candidate is GhosttySurfaceScrollView || candidate is WKWebView {
+        if candidate is GhosttyNSView || candidate is GhosttySurfaceScrollView {
             return true
         }
         current = candidate.superview
@@ -171,100 +170,6 @@ private extension NSScreen {
         }
         return CFUUIDCreateString(nil, cfuuid) as String?
     }
-}
-
-func browserOmnibarSelectionDeltaForCommandNavigation(
-    hasFocusedAddressBar: Bool,
-    flags: NSEvent.ModifierFlags,
-    chars: String
-) -> Int? {
-    guard hasFocusedAddressBar else { return nil }
-    let normalizedFlags = browserOmnibarNormalizedModifierFlags(flags)
-    let isCommandOrControlOnly = normalizedFlags == [.command] || normalizedFlags == [.control]
-    guard isCommandOrControlOnly else { return nil }
-    if chars == "n" { return 1 }
-    if chars == "p" { return -1 }
-    return nil
-}
-
-func browserOmnibarSelectionDeltaForArrowNavigation(
-    hasFocusedAddressBar: Bool,
-    flags: NSEvent.ModifierFlags,
-    keyCode: UInt16
-) -> Int? {
-    guard hasFocusedAddressBar else { return nil }
-    let normalizedFlags = browserOmnibarNormalizedModifierFlags(flags)
-    guard normalizedFlags == [] else { return nil }
-    switch keyCode {
-    case 125: return 1
-    case 126: return -1
-    default: return nil
-    }
-}
-
-func browserOmnibarNormalizedModifierFlags(_ flags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
-    flags
-        .intersection(.deviceIndependentFlagsMask)
-        .subtracting([.numericPad, .function, .capsLock])
-}
-
-func browserOmnibarShouldSubmitOnReturn(flags: NSEvent.ModifierFlags) -> Bool {
-    let normalizedFlags = browserOmnibarNormalizedModifierFlags(flags)
-    return normalizedFlags == [] || normalizedFlags == [.shift]
-}
-
-func browserResponderHasMarkedText(_ responder: NSResponder?) -> Bool {
-    guard let responder else { return false }
-
-    // During IME composition, Return/Enter belongs to the text system so the
-    // candidate list can commit or confirm the marked text.
-    if let textInputClient = responder as? NSTextInputClient {
-        if textInputClient.hasMarkedText() { return true }
-    }
-
-    if let textField = responder as? NSTextField,
-       let editor = textField.currentEditor() as? NSTextView {
-        if editor.hasMarkedText() { return true }
-    }
-
-    // WKWebView clears marked text before performKeyEquivalent fires, so the
-    // synchronous hasMarkedText() check above can return false even though an IME
-    // composition just ended on the same Enter keystroke. Check the JS bridge's
-    // composition timestamp to detect this race condition (#2626).
-    if let webView = responder.programaEnclosingProgramaWebView {
-        if webView.webViewIsComposing { return true }
-        let age = ProcessInfo.processInfo.systemUptime - webView.recentCompositionEndTimestamp
-        if age >= 0 && age < 0.15 { return true }
-    }
-
-    return false
-}
-
-private extension NSResponder {
-    /// Walk the responder chain to find the enclosing ProgramaWebView.
-    var programaEnclosingProgramaWebView: ProgramaWebView? {
-        var current: NSResponder? = self
-        while let responder = current {
-            if let webView = responder as? ProgramaWebView { return webView }
-            current = responder.nextResponder
-        }
-        return nil
-    }
-}
-
-func shouldDispatchBrowserReturnViaFirstResponderKeyDown(
-    keyCode: UInt16,
-    firstResponderIsBrowser: Bool,
-    firstResponderHasMarkedText: Bool = false,
-    flags: NSEvent.ModifierFlags
-) -> Bool {
-    guard firstResponderIsBrowser else { return false }
-    guard !firstResponderHasMarkedText else { return false }
-    guard keyCode == 36 || keyCode == 76 else { return false }
-    // Keep browser Return forwarding narrow: only plain/Shift Return should be
-    // treated as submit-intent. Command-modified Return is reserved for app shortcuts
-    // like Toggle Pane Zoom (Cmd+Shift+Enter).
-    return browserOmnibarShouldSubmitOnReturn(flags: flags)
 }
 
 func shouldToggleMainWindowFullScreenForCommandControlFShortcut(
@@ -344,7 +249,6 @@ func shouldConsumeShortcutWhileCommandPaletteVisible(
     guard isCommandPaletteVisible else { return false }
 
     // Escape dismisses the palette, and must not leak through to the
-    // underlying terminal or browser content.
     if normalizedFlags.isEmpty, keyCode == 53 {
         return true
     }
@@ -551,115 +455,6 @@ func shouldRouteCommandEquivalentDirectlyToMainMenu(_ event: NSEvent) -> Bool {
     return true
 }
 
-private enum BrowserFindCommandEquivalent {
-    case find
-    case findNext
-    case findPrevious
-    case hideFind
-    case useSelection
-
-    var keepsProgramaBrowserFindBarOwnershipWhenVisible: Bool {
-        switch self {
-        case .find, .findNext, .findPrevious, .hideFind:
-            return true
-        case .useSelection:
-            return false
-        }
-    }
-}
-
-private func programaIsLikelyWebInspectorResponder(_ responder: NSResponder?) -> Bool {
-    guard let responder else { return false }
-    let responderType = String(describing: type(of: responder))
-    if responderType.contains("WKInspector") {
-        return true
-    }
-    guard let view = responder as? NSView else { return false }
-    var node: NSView? = view
-    var hops = 0
-    while let current = node, hops < 64 {
-        if String(describing: type(of: current)).contains("WKInspector") {
-            return true
-        }
-        node = current.superview
-        hops += 1
-    }
-    return false
-}
-
-private func browserFindCommandEquivalent(for event: NSEvent) -> BrowserFindCommandEquivalent? {
-    let flags = event.modifierFlags
-        .intersection(.deviceIndependentFlagsMask)
-        .subtracting([.numericPad, .function, .capsLock])
-
-    let normalizedChars = KeyboardLayout.normalizedCharacters(for: event).lowercased()
-    let hasSingleASCIIShortcutChar =
-        normalizedChars.count == 1 && normalizedChars.allSatisfy(\.isASCII)
-    let producedAnyASCIIShortcutChar = normalizedChars.contains(where: \.isASCII)
-    func matches(_ chars: String, keyCode: UInt16) -> Bool {
-        if hasSingleASCIIShortcutChar {
-            return normalizedChars == chars
-        }
-        if !producedAnyASCIIShortcutChar {
-            return event.keyCode == keyCode
-        }
-        return false
-    }
-
-    switch flags {
-    case [.command]:
-        if matches("e", keyCode: 14) { // kVK_ANSI_E
-            return .useSelection
-        }
-        if matches("f", keyCode: 3) { // kVK_ANSI_F
-            return .find
-        }
-        if matches("g", keyCode: 5) { // kVK_ANSI_G
-            return .findNext
-        }
-        return nil
-    case [.command, .shift]:
-        if matches("f", keyCode: 3) { // kVK_ANSI_F
-            return .hideFind
-        }
-        if matches("g", keyCode: 5) { // kVK_ANSI_G
-            return .findPrevious
-        }
-        return nil
-    default:
-        return nil
-    }
-}
-
-/// For browser content, let the page try the Find command family before programa's menu fallback.
-/// This preserves native web-app shortcuts like VS Code's Cmd+F while still allowing programa's
-/// browser find overlay to keep owning its visible Find UI shortcuts.
-func shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
-    _ event: NSEvent,
-    responder: NSResponder? = nil,
-    owningWebView: ProgramaWebView? = nil
-) -> Bool {
-    guard let shortcut = browserFindCommandEquivalent(for: event) else {
-        return false
-    }
-
-    if programaIsLikelyWebInspectorResponder(responder) {
-        return false
-    }
-
-    if shortcut.keepsProgramaBrowserFindBarOwnershipWhenVisible,
-       let owningWebView {
-        let browserFindBarIsVisible = MainActor.assumeIsolated {
-            AppDelegate.shared?.browserFindBarIsVisible(for: owningWebView) == true
-        }
-        if browserFindBarIsVisible {
-            return false
-        }
-    }
-
-    return true
-}
-
 func programaOwningGhosttyView(for responder: NSResponder?) -> GhosttyNSView? {
     guard let responder else { return nil }
     if let ghosttyView = responder as? GhosttyNSView {
@@ -729,56 +524,6 @@ private func programaOwningGhosttyView(for view: NSView) -> GhosttyNSView? {
 
     return nil
 }
-
-#if DEBUG
-func browserZoomShortcutTraceCandidate(
-    flags: NSEvent.ModifierFlags,
-    chars: String,
-    keyCode: UInt16,
-    literalChars: String? = nil
-) -> Bool {
-    let normalizedFlags = flags
-        .intersection(.deviceIndependentFlagsMask)
-        .subtracting([.numericPad, .function])
-    guard normalizedFlags.contains(.command) else { return false }
-
-    let keys = browserZoomShortcutKeyCandidates(
-        chars: chars,
-        literalChars: literalChars,
-        keyCode: keyCode
-    )
-    if keys.contains("=") || keys.contains("+") || keys.contains("-") || keys.contains("_") || keys.contains("0") {
-        return true
-    }
-    switch keyCode {
-    case 24, 27, 29, 69, 78, 82: // ANSI and keypad zoom keys
-        return true
-    default:
-        return false
-    }
-}
-
-func browserZoomShortcutTraceFlagsString(_ flags: NSEvent.ModifierFlags) -> String {
-    let normalizedFlags = flags
-        .intersection(.deviceIndependentFlagsMask)
-        .subtracting([.numericPad, .function])
-    var parts: [String] = []
-    if normalizedFlags.contains(.command) { parts.append("Cmd") }
-    if normalizedFlags.contains(.shift) { parts.append("Shift") }
-    if normalizedFlags.contains(.option) { parts.append("Opt") }
-    if normalizedFlags.contains(.control) { parts.append("Ctrl") }
-    return parts.isEmpty ? "none" : parts.joined(separator: "+")
-}
-
-func browserZoomShortcutTraceActionString(_ action: BrowserZoomShortcutAction?) -> String {
-    guard let action else { return "none" }
-    switch action {
-    case .zoomIn: return "zoomIn"
-    case .zoomOut: return "zoomOut"
-    case .reset: return "reset"
-    }
-}
-#endif
 
 func shouldSuppressWindowMoveForFolderDrag(hitView: NSView?) -> Bool {
     var candidate = hitView
@@ -917,13 +662,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     var ghosttyGotoSplitRightShortcut: StoredShortcut?
     var ghosttyGotoSplitUpShortcut: StoredShortcut?
     var ghosttyGotoSplitDownShortcut: StoredShortcut?
-    private var browserAddressBarFocusedPanelId: UUID?
-    private var browserOmnibarRepeatStartWorkItem: DispatchWorkItem?
-    private var browserOmnibarRepeatTickWorkItem: DispatchWorkItem?
-    private var browserOmnibarRepeatKeyCode: UInt16?
-    private var browserOmnibarRepeatDelta: Int = 0
-    private var browserAddressBarFocusObserver: NSObjectProtocol?
-    private var browserAddressBarBlurObserver: NSObjectProtocol?
     private let updateController = UpdateController()
     private lazy var titlebarAccessoryController = UpdateTitlebarAccessoryController(viewModel: updateViewModel)
     private var menuBarExtraController: MenuBarExtraController?
@@ -976,12 +714,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     var jumpUnreadFocusExpectation: (tabId: UUID, surfaceId: UUID)?
     var jumpUnreadFocusObserver: NSObjectProtocol?
     var didSetupTerminalCmdClickUITest = false
-    var didSetupGotoSplitUITest = false
     var didSetupBonsplitTabDragUITest = false
     var terminalCmdClickUITestPoller: DispatchSourceTimer?
     var bonsplitTabDragUITestRecorder: DispatchSourceTimer?
-    var gotoSplitUITestRecorder: DispatchSourceTimer?
-    var gotoSplitUITestObservers: [NSObjectProtocol] = []
     var didSetupMultiWindowNotificationsUITest = false
     var didSetupDisplayResolutionUITestDiagnostics = false
     var displayResolutionUITestObservers: [NSObjectProtocol] = []
@@ -1079,7 +814,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         launchServicesRegistrationQueue.async(execute: work)
     }
     private var didHandleExplicitOpenIntentAtStartup = false
-    var pendingIncomingWebURLs: [URL] = []
     private let appLifecycleCoordinator = AppLifecycleCoordinator()
     var isTerminatingApp: Bool { appLifecycleCoordinator.isTerminating }
 #if DEBUG
@@ -1173,7 +907,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        openIncomingWebURLs(urls.filter(Self.isIncomingWebURL))
         let directories = externalOpenDirectories(from: urls)
         guard !directories.isEmpty else { return }
 
@@ -1196,12 +929,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             name: ProgramaThemeNotifications.reloadConfig,
             object: nil,
             suspensionBehavior: .deliverImmediately
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleDesignModeDidCapture(_:)),
-            name: .designModeDidCapture,
-            object: nil
         )
 
 #if DEBUG
@@ -1244,7 +971,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         refreshGhosttyGotoSplitShortcuts()
         installGhosttyConfigObserver()
         installWindowResponderSwizzles()
-        installBrowserAddressBarFocusObservers()
         installShortcutMonitor()
         installShortcutDefaultsObserver()
         RendererRealizationController.shared.start()
@@ -1598,7 +1324,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false, cleanShutdown: true)
         sessionAutosave.stopSessionAutosaveTimer()
         TerminalController.shared.stop()
-        BrowserProfileStore.shared.flushPendingSaves()
         notificationStore?.clearAll()
         enableSuddenTerminationIfNeeded()
     }
@@ -1644,7 +1369,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #if DEBUG
         setupJumpUnreadUITestIfNeeded()
         setupTerminalCmdClickUITestIfNeeded()
-        setupGotoSplitUITestIfNeeded()
         setupBonsplitTabDragUITestIfNeeded()
         setupMultiWindowNotificationsUITestIfNeeded()
         setupDisplayResolutionUITestDiagnosticsIfNeeded()
@@ -2761,7 +2485,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         attemptStartupSessionRestoreIfNeeded(primaryWindow: window)
-        flushPendingIncomingWebURLs()
         if !isTerminatingApp {
             saveSessionSnapshot(includeScrollback: false)
         }
@@ -4633,7 +4356,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             initialTerminalInput: "claude\n",
             select: true
         )
-        context.tabManager.openCompanionBrowserSplitIfEnabled(for: workspace)
         return workspace.id
     }
 
@@ -4816,7 +4538,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private func shortcutEventHasAddressableWindow(_ event: NSEvent?) -> Bool {
         guard let event else { return false }
         // NSEvent.windowNumber can be 0 for responder-chain events that are not
-        // actually bound to an NSWindow (notably some WebKit key paths).
         return event.window != nil || event.windowNumber > 0
     }
 
@@ -5404,39 +5125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
 
-    @objc private func handleDesignModeDidCapture(_ notification: Notification) {
-        guard let workspaceId = notification.userInfo?[DesignModeNotificationKey.workspaceId] as? UUID,
-              let returnPanelId = notification.userInfo?[DesignModeNotificationKey.returnPanelId] as? UUID,
-              let payload = notification.userInfo?[DesignModeNotificationKey.payload] as? DesignModePickPayload else {
-            return
-        }
-        let screenshotData = notification.userInfo?[DesignModeNotificationKey.screenshotData] as? Data
 
-        guard let manager = tabManagerFor(tabId: workspaceId),
-              let workspace = manager.tabs.first(where: { $0.id == workspaceId }),
-              let returnTerminalPanel = workspace.terminalPanel(for: returnPanelId) else {
-            return
-        }
-
-        var screenshotPath: String?
-        if let screenshotData {
-            screenshotPath = DesignModeFileWriter.write(
-                screenshotData,
-                selector: payload.selector,
-                workingDirectory: returnTerminalPanel.requestedWorkingDirectory
-            )
-        }
-
-        let content = DesignModeTextComposer.compose(payload: payload, screenshotPath: screenshotPath)
-        manager.focusTab(workspaceId, surfaceId: returnPanelId, suppressFlash: true)
-        sendTextWhenReady(content, to: workspace, preferredPanelId: returnPanelId, afterSend: { [weak workspace] terminalPanel in
-            // Submit only inside a pane the agent-detection state already knows hosts an agent;
-            // a plain shell must never receive an implicit Return.
-            // A blocked agent is waiting on a permission or y/n prompt; never answer that with a capture.
-            guard let workspace, workspace.canAutoSubmitToAgent(panelId: returnPanelId) else { return }
-            terminalPanel.sendInput("\r")
-        })
-    }
 
     static func resolveTerminalPanelForTextSend(in tab: Workspace, preferredPanelId: UUID? = nil) -> TerminalPanel? {
         if let preferredPanelId {
@@ -5721,11 +5410,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 if shortcutMonitorTraceEnabled {
                     let frType = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
                     dlog(
-                        "monitor.keyDown: \(NSWindow.keyDescription(event)) fr=\(frType) addrBarId=\(self.browserAddressBarFocusedPanelId?.uuidString.prefix(8) ?? "nil") \(self.debugShortcutRouteSnapshot(event: event))"
+                        "monitor.keyDown: \(NSWindow.keyDescription(event)) fr=\(frType) \(self.debugShortcutRouteSnapshot(event: event))"
                     )
-                }
-                if let probeKind = self.developerToolsShortcutProbeKind(event: event) {
-                    self.logDeveloperToolsShortcutSnapshot(phase: "monitor.pre.\(probeKind)", event: event)
                 }
                 preludeMs = (ProcessInfo.processInfo.systemUptime - preludeStart) * 1000.0
                 let shortcutTimingStart = ProgramaTypingTiming.start()
@@ -5767,7 +5453,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 }
                 return event // Pass through
             }
-            self.handleBrowserOmnibarSelectionRepeatLifecycleEvent(event)
             if self.clearEscapeSuppressionForKeyUp(event: event, consumeIfSuppressed: true) {
                 return nil
             }
@@ -6041,13 +5726,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     //   2. Palette (highest real precedence while interactive): Escape-key routing
     //      (palette dismiss / terminal-IME bypass / suppressed-escape grace window),
     //      palette selection-navigation (arrow keys),
-    //      palette interactive Return/dismiss handling, stale browser-address-bar-focus
     //      clear, palette "effective" actions (open palette / go-to-workspace + their
     //      chord arming), shouldConsumeShortcutWhileCommandPaletteVisible catch-all.
-    //   3. Browser/terminal pre-checks: terminal IME marked-text passthrough, notifications
     //      popover escape/typing consumption, shortcut-routing-context sync guard, Ctrl+D
-    //      terminal-focus reconcile bypass, browser omnibar Cmd/Ctrl+N/P and arrow-key
-    //      selection, empty-flags fast-path passthrough, browser-address-bar Emacs-nav
     //      bypass.
     //   4. App-shortcut (lowest precedence, only reached once nothing above claimed the
     //      event): the flat table of ~55 `matchConfiguredShortcut`/digit/directional/tab
@@ -6119,7 +5800,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // When a non-Latin input source is active (Korean, Chinese, Japanese, etc.),
         // charactersIgnoringModifiers returns non-ASCII characters that never match
         // Latin shortcut keys. Normalize via KeyboardLayout so downstream comparisons
-        // (Cmd+1-9, Ctrl+1-9, omnibar N/P, command palette, etc.) work correctly.
         let chars = KeyboardLayout.normalizedCharacters(for: event)
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let hasControl = flags.contains(.control)
@@ -6386,29 +6066,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
         }
 
-        // Guard against stale browserAddressBarFocusedPanelId after focus transitions
-        // (e.g., split that doesn't properly blur the address bar). If the first responder
-        // is a terminal surface, the address bar can't be focused.
-        if browserAddressBarFocusedPanelId != nil,
-           programaOwningGhosttyView(for: NSApp.keyWindow?.firstResponder) != nil {
-#if DEBUG
-            let stalePanelToken = browserAddressBarFocusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-            let firstResponderType = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-            dlog(
-                "browser.focus.addressBar.staleClear panel=\(stalePanelToken) " +
-                "reason=terminal_first_responder fr=\(firstResponderType)"
-            )
-#endif
-            browserAddressBarFocusedPanelId = nil
-            stopBrowserOmnibarSelectionRepeat()
-        }
-
-        // Keep Cmd+P/Cmd+N inside the focused browser omnibar for Chrome-like
-        // suggestion navigation, and avoid opening command palette switcher.
-        // Scope the omnibar check to the shortcut's routed window context so a
-        // focused omnibar in another window does not suppress Cmd+P here.
-        let hasFocusedAddressBarInShortcutContext = focusedBrowserAddressBarPanelIdForShortcutEvent(event) != nil
-
         if commandPaletteEffectiveInTargetWindow {
             if matchConfiguredShortcut(event: event, action: .commandPalette) {
                 let targetWindow = commandPaletteTargetWindow ?? event.window ?? NSApp.keyWindow ?? NSApp.mainWindow
@@ -6416,8 +6073,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 return true
             }
 
-            if !hasFocusedAddressBarInShortcutContext,
-               matchConfiguredShortcut(event: event, action: .goToWorkspace) {
+            if matchConfiguredShortcut(event: event, action: .goToWorkspace) {
                 let targetWindow = commandPaletteTargetWindow ?? event.window ?? NSApp.keyWindow ?? NSApp.mainWindow
                 requestCommandPaletteSwitcher(preferredWindow: targetWindow, source: "shortcut.goToWorkspace")
                 return true
@@ -6429,7 +6085,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
 
             if activeConfiguredShortcutChordPrefixForCurrentEvent == nil,
-               !hasFocusedAddressBarInShortcutContext,
                armConfiguredShortcutChordIfNeeded(event: event, actions: [.goToWorkspace]) {
                 return true
             }
@@ -6493,44 +6148,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return false
         }
 
-        // Chrome-like omnibar navigation while holding Cmd+N / Ctrl+N / Cmd+P / Ctrl+P.
-        if let delta = commandOmnibarSelectionDelta(flags: flags, chars: chars) {
-            dispatchBrowserOmnibarSelectionMove(delta: delta)
-            startBrowserOmnibarSelectionRepeatIfNeeded(keyCode: event.keyCode, delta: delta)
-            return true
-        }
-
-        if let delta = browserOmnibarSelectionDeltaForArrowNavigation(
-            hasFocusedAddressBar: browserAddressBarFocusedPanelId != nil,
-            flags: event.modifierFlags,
-            keyCode: event.keyCode
-        ) {
-            dispatchBrowserOmnibarSelectionMove(delta: delta)
-            return true
-        }
-
         // Fast path for normal typing and terminal navigation keys (for example Up-arrow
-        // history): after command-palette/notification handling and browser omnibar
-        // arrow navigation above, plain key events have no app-level shortcut behavior.
+        // history): plain key events have no app-level shortcut behavior.
         if normalizedFlags.isEmpty && activeConfiguredShortcutChordPrefixForCurrentEvent == nil {
-            return false
-        }
-
-        // Let omnibar-local Emacs navigation (Cmd/Ctrl+N/P) win while the browser
-        // address bar is focused. Without this, app-level Cmd+N can steal focus.
-        if shouldBypassAppShortcutForFocusedBrowserAddressBar(flags: flags, chars: chars) {
             return false
         }
 
         return handleConfiguredAppShortcutActions(
             event: event,
             commandPaletteTargetWindow: commandPaletteTargetWindow,
-            hasFocusedAddressBarInShortcutContext: hasFocusedAddressBarInShortcutContext
         )
     }
 
-    // App-level shortcuts, the lowest-precedence phase of handleCustomShortcut(event:): only
-    // reached once the palette and browser/terminal pre-checks have declined the event.
+    // App-level shortcuts are the lowest-precedence phase of handleCustomShortcut(event:).
     // Precedence is two ordered arrays of KeyboardShortcutSettings.Action, split by the two
     // hardcoded Ctrl+Tab checks. handleConfiguredShortcutAction is an exhaustive switch, so the
     // compiler forces every new action to be handled, even if only to opt out.
@@ -6541,20 +6171,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         .prevSidebarTab, .renameWorkspace, .editWorkspaceDescription, .closeOtherTabsInPane, .closeTab,
         .closeWorkspace, .closeWindow, .renameTab, .selectWorkspaceByNumber, .selectSurfaceByNumber,
         .focusLeft, .focusRight, .focusUp, .focusDown, .toggleSplitZoom, .splitRight, .splitDown,
-        .splitBrowserRight, .splitBrowserDown,
     ]
 
     private static let appShortcutPrecedenceOrderAfterLegacyTabNavigation: [KeyboardShortcutSettings.Action] = [
-        .newSurface, .openBrowser, .openReview, .openAgentOverview, .focusBrowserAddressBar, .browserBack, .browserForward, .browserReload,
-        .toggleBrowserDeveloperTools, .showBrowserJavaScriptConsole, .browserZoomIn,
-        .browserZoomOut, .browserZoomReset, .find, .findNext, .findPrevious, .hideFind, .useSelectionForFind,
-        .reopenClosedBrowserPanel,
+        .newSurface, .openReview, .openAgentOverview,
+        .find, .findNext, .findPrevious, .hideFind, .useSelectionForFind,
     ]
 
     private func handleConfiguredAppShortcutActions(
         event: NSEvent,
         commandPaletteTargetWindow: NSWindow?,
-        hasFocusedAddressBarInShortcutContext: Bool
     ) -> Bool {
         if activeConfiguredShortcutChordPrefixForCurrentEvent == nil,
            !eventModifiersCanTriggerAppShortcut(event) {
@@ -6571,8 +6197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 action,
                 event: event,
                 commandPaletteTargetWindow: commandPaletteTargetWindow,
-                hasFocusedAddressBarInShortcutContext: hasFocusedAddressBarInShortcutContext
-            ) {
+                ) {
                 return result
             }
         }
@@ -6593,8 +6218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 action,
                 event: event,
                 commandPaletteTargetWindow: commandPaletteTargetWindow,
-                hasFocusedAddressBarInShortcutContext: hasFocusedAddressBarInShortcutContext
-            ) {
+                ) {
                 return result
             }
         }
@@ -6619,8 +6243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     // Exhaustive dispatch for a single KeyboardShortcutSettings.Action: returns nil when this
-    // action's configured shortcut doesn't match the event (or, for .focusBrowserAddressBar,
-    // when it matches but none of its sub-branches handled it -- see that case below), in which
+    // action's configured shortcut doesn't match the event, in which
     // case the caller continues to the next action in precedence order. Returns non-nil the
     // moment an action's shortcut matches and terminally handles (or declines) the event, exactly
     // mirroring the early-return behavior of the original if-chain.
@@ -6628,7 +6251,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         _ action: KeyboardShortcutSettings.Action,
         event: NSEvent,
         commandPaletteTargetWindow: NSWindow?,
-        hasFocusedAddressBarInShortcutContext: Bool
     ) -> Bool? {
         switch action {
         case .commandPalette:
@@ -6637,8 +6259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return handleGoToWorkspaceShortcutAction(
                 event: event,
                 commandPaletteTargetWindow: commandPaletteTargetWindow,
-                hasFocusedAddressBarInShortcutContext: hasFocusedAddressBarInShortcutContext
-            )
+                )
         case .quit:
             return handleQuitShortcutAction(event: event)
         case .openSettings:
@@ -6707,32 +6328,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return handleSplitRightShortcutAction(event: event)
         case .splitDown:
             return handleSplitDownShortcutAction(event: event)
-        case .splitBrowserRight:
-            return handleSplitBrowserRightShortcutAction(event: event)
-        case .splitBrowserDown:
-            return handleSplitBrowserDownShortcutAction(event: event)
         case .newSurface:
             return handleNewSurfaceShortcutAction(event: event)
-        case .openBrowser:
-            return handleOpenBrowserShortcutAction(event: event)
-        case .focusBrowserAddressBar:
-            return handleFocusBrowserAddressBarShortcutAction(event: event)
-        case .browserBack:
-            return handleBrowserBackShortcutAction(event: event)
-        case .browserForward:
-            return handleBrowserForwardShortcutAction(event: event)
-        case .browserReload:
-            return handleBrowserReloadShortcutAction(event: event)
-        case .toggleBrowserDeveloperTools:
-            return handleToggleBrowserDeveloperToolsShortcutAction(event: event)
-        case .showBrowserJavaScriptConsole:
-            return handleShowBrowserJavaScriptConsoleShortcutAction(event: event)
-        case .browserZoomIn:
-            return handleBrowserZoomInShortcutAction(event: event)
-        case .browserZoomOut:
-            return handleBrowserZoomOutShortcutAction(event: event)
-        case .browserZoomReset:
-            return handleBrowserZoomResetShortcutAction(event: event)
         case .find:
             return handleFindShortcutAction(event: event)
         case .findNext:
@@ -6743,8 +6340,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return handleHideFindShortcutAction(event: event)
         case .useSelectionForFind:
             return handleUseSelectionForFindShortcutAction(event: event)
-        case .reopenClosedBrowserPanel:
-            return handleReopenClosedBrowserPanelShortcutAction(event: event)
         case .openReview:
             return handleOpenReviewShortcutAction(event: event)
         case .openAgentOverview:
@@ -6773,10 +6368,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private func handleGoToWorkspaceShortcutAction(
         event: NSEvent,
         commandPaletteTargetWindow: NSWindow?,
-        hasFocusedAddressBarInShortcutContext: Bool
     ) -> Bool? {
-        guard !hasFocusedAddressBarInShortcutContext,
-              matchConfiguredShortcut(event: event, action: .goToWorkspace) else { return nil }
+        guard matchConfiguredShortcut(event: event, action: .goToWorkspace) else { return nil }
         let targetWindow = commandPaletteTargetWindow ?? event.window ?? NSApp.keyWindow ?? NSApp.mainWindow
         requestCommandPaletteSwitcher(preferredWindow: targetWindow, source: "shortcut.goToWorkspace")
         return true
@@ -6862,7 +6455,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     // New Window: Cmd+Shift+N
     // Handled here instead of relying on SwiftUI's CommandGroup menu item because
-    // after a browser panel has been shown, SwiftUI's menu dispatch can silently
     // consume the key equivalent without firing the action closure.
     private func handleNewWindowShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .newWindow) else { return nil }
@@ -7004,23 +6596,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     // Cmd+W must close the focused panel even if first-responder momentarily lags on a
-    // browser NSTextView during split focus transitions.
     private func handleCloseTabShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .closeTab) else { return nil }
         let targetWindow = resolvedShortcutEventWindow(event) ?? NSApp.keyWindow ?? NSApp.mainWindow
         let routedManager = preferredMainWindowContextForShortcutRouting(event: event)?.tabManager ?? tabManager
-        // Browser popup windows primarily intercept Cmd+W in BrowserPopupPanel.
-        // This AppDelegate path is a fallback for cases where AppKit routes the
-        // event through the global shortcut handler first.
-        if let targetWindow = [targetWindow, NSApp.keyWindow]
-            .compactMap({ $0 })
-            .first(where: { $0.identifier?.rawValue == "programa.browser-popup" }) {
-#if DEBUG
-            dlog("shortcut.cmdW route=browserPopup")
-#endif
-            targetWindow.performClose(nil)
-            return true
-        } else if let targetWindow,
+        if let targetWindow,
            programaWindowShouldOwnCloseShortcut(targetWindow) {
             targetWindow.performClose(nil)
         } else {
@@ -7067,10 +6647,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func handleRenameTabShortcutAction(event: NSEvent, commandPaletteTargetWindow: NSWindow?) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .renameTab) else { return nil }
-        // Keep Cmd+R browser reload behavior when a browser panel is focused.
-        if tabManager?.focusedBrowserPanel != nil {
-            return false
-        }
         let targetWindow = commandPaletteTargetWindow ?? event.window ?? NSApp.keyWindow ?? NSApp.mainWindow
         requestCommandPaletteRenameTab(preferredWindow: targetWindow, source: "shortcut.renameTab")
         return true
@@ -7214,29 +6790,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         handleSplitShortcutAction(event: event, action: .splitDown, direction: .down, debugActionName: "splitDown")
     }
 
-    // Browser split actions. Shared by splitBrowserRight/splitBrowserDown -- they differ only by
     // SplitDirection and the debug-log action name.
-    private func handleBrowserSplitShortcutAction(
-        event: NSEvent,
-        action: KeyboardShortcutSettings.Action,
-        direction: SplitDirection,
-        debugActionName: String
-    ) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: action) else { return nil }
-#if DEBUG
-        dlog("shortcut.action name=\(debugActionName) \(debugShortcutRouteSnapshot(event: event))")
-#endif
-        _ = performBrowserSplitShortcut(direction: direction)
-        return true
-    }
 
-    private func handleSplitBrowserRightShortcutAction(event: NSEvent) -> Bool? {
-        handleBrowserSplitShortcutAction(event: event, action: .splitBrowserRight, direction: .right, debugActionName: "splitBrowserRight")
-    }
 
-    private func handleSplitBrowserDownShortcutAction(event: NSEvent) -> Bool? {
-        handleBrowserSplitShortcutAction(event: event, action: .splitBrowserDown, direction: .down, debugActionName: "splitBrowserDown")
-    }
+
+
+
 
     // New surface: Cmd+T
     private func handleNewSurfaceShortcutAction(event: NSEvent) -> Bool? {
@@ -7245,153 +6804,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return true
     }
 
-    // Open browser: Cmd+Shift+L
-    private func handleOpenBrowserShortcutAction(event: NSEvent) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: .openBrowser) else { return nil }
-        _ = openBrowserAndFocusAddressBar(insertAtEnd: true)
-        return true
-    }
 
-    private func handleFocusBrowserAddressBarShortcutAction(event: NSEvent) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: .focusBrowserAddressBar) else { return nil }
-        if let focusedPanel = tabManager?.focusedBrowserPanel {
-            focusBrowserAddressBar(in: focusedPanel)
-            return true
-        }
 
-        if let browserAddressBarFocusedPanelId,
-           focusBrowserAddressBar(panelId: browserAddressBarFocusedPanelId) {
-            return true
-        }
 
-        if openBrowserAndFocusAddressBar(insertAtEnd: true) != nil {
-            return true
-        }
 
-        // Matched but none of the branches above handled it -- fall through to the next action in
-        // precedence order, exactly like the original if-chain (which had no trailing `return`
-        // statement in this specific case and so fell out of the enclosing `if` block).
-        return nil
-    }
 
-    private func handleBrowserBackShortcutAction(event: NSEvent) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: .browserBack) else { return nil }
-        guard let focusedBrowserPanel = tabManager?.focusedBrowserPanel else {
-            return false
-        }
-        focusedBrowserPanel.goBack()
-        return true
-    }
 
-    private func handleBrowserForwardShortcutAction(event: NSEvent) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: .browserForward) else { return nil }
-        guard let focusedBrowserPanel = tabManager?.focusedBrowserPanel else {
-            return false
-        }
-        focusedBrowserPanel.goForward()
-        return true
-    }
 
-    private func handleBrowserReloadShortcutAction(event: NSEvent) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: .browserReload) else { return nil }
-        guard let focusedBrowserPanel = tabManager?.focusedBrowserPanel else {
-            return false
-        }
-        focusedBrowserPanel.reload()
-        return true
-    }
+
+
 
     // Safari defaults:
     // - Option+Command+I => Show/Toggle Web Inspector
     // - Option+Command+C => Show JavaScript Console
-    private func handleToggleBrowserDeveloperToolsShortcutAction(event: NSEvent) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: .toggleBrowserDeveloperTools) else { return nil }
-#if DEBUG
-        logDeveloperToolsShortcutSnapshot(phase: "toggle.pre", event: event)
-#endif
-        let didHandle = tabManager?.toggleDeveloperToolsFocusedBrowser() ?? false
-#if DEBUG
-        logDeveloperToolsShortcutSnapshot(phase: "toggle.post", event: event, didHandle: didHandle)
-        DispatchQueue.main.async { [weak self] in
-            self?.logDeveloperToolsShortcutSnapshot(phase: "toggle.tick", didHandle: didHandle)
-        }
-#endif
-        if !didHandle { NSSound.beep() }
-        return true
-    }
 
-    private func handleShowBrowserJavaScriptConsoleShortcutAction(event: NSEvent) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: .showBrowserJavaScriptConsole) else { return nil }
-#if DEBUG
-        logDeveloperToolsShortcutSnapshot(phase: "console.pre", event: event)
-#endif
-        let didHandle = tabManager?.showJavaScriptConsoleFocusedBrowser() ?? false
-#if DEBUG
-        logDeveloperToolsShortcutSnapshot(phase: "console.post", event: event, didHandle: didHandle)
-        DispatchQueue.main.async { [weak self] in
-            self?.logDeveloperToolsShortcutSnapshot(phase: "console.tick", didHandle: didHandle)
-        }
-#endif
-        if !didHandle { NSSound.beep() }
-        return true
-    }
 
-    // Browser zoom actions. Shared by browserZoomIn/Out/Reset -- they differ only by which
+
+
     // TabManager zoom method to invoke.
-    private func handleBrowserZoomShortcutAction(
-        event: NSEvent,
-        action: KeyboardShortcutSettings.Action,
-        zoom: (TabManager) -> Bool
-    ) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: action) else { return nil }
-        guard let tabManager else { return false }
-        return zoom(tabManager)
-    }
 
-    private func handleBrowserZoomInShortcutAction(event: NSEvent) -> Bool? {
-        handleBrowserZoomShortcutAction(event: event, action: .browserZoomIn) { $0.zoomInFocusedBrowser() }
-    }
 
-    private func handleBrowserZoomOutShortcutAction(event: NSEvent) -> Bool? {
-        handleBrowserZoomShortcutAction(event: event, action: .browserZoomOut) { $0.zoomOutFocusedBrowser() }
-    }
 
-    private func handleBrowserZoomResetShortcutAction(event: NSEvent) -> Bool? {
-        handleBrowserZoomShortcutAction(event: event, action: .browserZoomReset) { $0.resetZoomFocusedBrowser() }
-    }
+
+
+
+
 
     private func handleFindShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .find) else { return nil }
-        guard !shouldLetFocusedBrowserOwnFindShortcut(event) else {
-            return false
-        }
         tabManager?.startSearch()
         return true
     }
 
     private func handleFindNextShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .findNext) else { return nil }
-        guard !shouldLetFocusedBrowserOwnFindShortcut(event) else {
-            return false
-        }
         tabManager?.findNext()
         return true
     }
 
     private func handleFindPreviousShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .findPrevious) else { return nil }
-        guard !shouldLetFocusedBrowserOwnFindShortcut(event) else {
-            return false
-        }
         tabManager?.findPrevious()
         return true
     }
 
     private func handleHideFindShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .hideFind) else { return nil }
-        guard !shouldLetFocusedBrowserOwnFindShortcut(event) else {
-            return false
-        }
         tabManager?.hideFind()
         return true
     }
@@ -7402,11 +6860,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return true
     }
 
-    private func handleReopenClosedBrowserPanelShortcutAction(event: NSEvent) -> Bool? {
-        guard matchConfiguredShortcut(event: event, action: .reopenClosedBrowserPanel) else { return nil }
-        _ = tabManager?.reopenMostRecentlyClosedBrowserPanel()
-        return true
-    }
+
 
     private func shouldSuppressSplitShortcutForTransientTerminalFocusState(direction: SplitDirection) -> Bool {
         guard let tabManager,
@@ -7452,454 +6906,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
 #if DEBUG
-    private func logBrowserZoomShortcutTrace(
-        stage: String,
-        event: NSEvent,
-        flags: NSEvent.ModifierFlags,
-        chars: String,
-        action: BrowserZoomShortcutAction? = nil,
-        handled: Bool? = nil
-    ) {
-        guard browserZoomShortcutTraceCandidate(
-            flags: flags,
-            chars: chars,
-            keyCode: event.keyCode,
-            literalChars: event.characters
-        ) else {
-            return
-        }
 
-        let keyWindow = NSApp.keyWindow
-        let firstResponderType = keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let panel = tabManager?.focusedBrowserPanel
-        let panelToken = panel.map { String($0.id.uuidString.prefix(8)) } ?? "nil"
-        let panelZoom = panel?.webView.pageZoom ?? -1
-        var line =
-            "zoom.shortcut stage=\(stage) event=\(NSWindow.keyDescription(event)) " +
-            "chars='\(chars)' flags=\(browserZoomShortcutTraceFlagsString(flags)) " +
-            "action=\(browserZoomShortcutTraceActionString(action)) keyWin=\(keyWindow?.windowNumber ?? -1) " +
-            "fr=\(firstResponderType) panel=\(panelToken) zoom=\(String(format: "%.3f", panelZoom)) " +
-            "addrBarId=\(browserAddressBarFocusedPanelId?.uuidString.prefix(8) ?? "nil")"
-        if let handled {
-            line += " handled=\(handled ? 1 : 0)"
-        }
-        dlog(line)
-    }
 
-    private func browserFocusStateSnapshot() -> String {
-        let selected = tabManager?.selectedTabId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        let focused = tabManager?.selectedWorkspace?.focusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        let addressBar = browserAddressBarFocusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        let keyWindow = NSApp.keyWindow?.windowNumber ?? -1
-        let firstResponderType = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        return "selected=\(selected) focused=\(focused) addr=\(addressBar) keyWin=\(keyWindow) fr=\(firstResponderType)"
-    }
 
-    private func redactedDebugURL(_ url: URL?) -> String {
-        guard let url else { return "nil" }
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return "<invalid>"
-        }
-        components.user = nil
-        components.password = nil
-        components.query = nil
-        components.fragment = nil
-        return components.string ?? "<redacted>"
-    }
+
+
 #endif
 
-    @discardableResult
-    private func focusBrowserAddressBar(panelId: UUID) -> Bool {
-        guard let tabManager,
-              let workspace = tabManager.selectedWorkspace,
-              let panel = workspace.browserPanel(for: panelId) else {
-#if DEBUG
-            dlog(
-                "browser.focus.addressBar.route panel=\(panelId.uuidString.prefix(5)) " +
-                "result=miss \(browserFocusStateSnapshot())"
-            )
-#endif
-            return false
-        }
-#if DEBUG
-        dlog(
-            "browser.focus.addressBar.route panel=\(panel.id.uuidString.prefix(5)) " +
-            "workspace=\(workspace.id.uuidString.prefix(5)) result=hit \(browserFocusStateSnapshot())"
-        )
-#endif
-        workspace.focusPanel(panel.id)
-#if DEBUG
-        let focusedAfter = workspace.focusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        dlog(
-            "browser.focus.addressBar.route panel=\(panel.id.uuidString.prefix(5)) " +
-            "workspace=\(workspace.id.uuidString.prefix(5)) focusedAfter=\(focusedAfter)"
-        )
-#endif
-        focusBrowserAddressBar(in: panel)
-        return true
-    }
 
-    @discardableResult
-    func openBrowserAndFocusAddressBar(url: URL? = nil, insertAtEnd: Bool = false) -> UUID? {
-        let preferredProfileID =
-            tabManager?.focusedBrowserPanel?.profileID
-            ?? tabManager?.selectedWorkspace?.preferredBrowserProfileID
-        guard let panelId = tabManager?.openBrowser(
-            url: url,
-            preferredProfileID: preferredProfileID,
-            insertAtEnd: insertAtEnd
-        ) else {
-#if DEBUG
-            dlog(
-                "browser.focus.openAndFocus result=open_failed insertAtEnd=\(insertAtEnd ? 1 : 0) " +
-                "url=\(redactedDebugURL(url)) \(browserFocusStateSnapshot())"
-            )
-#endif
-            return nil
-        }
-#if DEBUG
-        dlog(
-            "browser.focus.openAndFocus result=open_ok panel=\(panelId.uuidString.prefix(5)) " +
-            "insertAtEnd=\(insertAtEnd ? 1 : 0) url=\(redactedDebugURL(url))"
-        )
-#endif
-#if DEBUG
-        let didFocus = focusBrowserAddressBar(panelId: panelId)
-        dlog(
-            "browser.focus.openAndFocus result=focus_request panel=\(panelId.uuidString.prefix(5)) " +
-            "focused=\(didFocus ? 1 : 0) \(browserFocusStateSnapshot())"
-        )
-#else
-        _ = focusBrowserAddressBar(panelId: panelId)
-#endif
-        return panelId
-    }
 
-    private func focusBrowserAddressBar(in panel: BrowserPanel) {
-#if DEBUG
-        let requestId = panel.requestAddressBarFocus()
-        dlog(
-            "browser.focus.addressBar.request panel=\(panel.id.uuidString.prefix(5)) " +
-            "request=\(requestId.uuidString.prefix(8)) \(browserFocusStateSnapshot())"
-        )
-#else
-        _ = panel.requestAddressBarFocus()
-#endif
-        browserAddressBarFocusedPanelId = panel.id
-#if DEBUG
-        dlog(
-            "browser.focus.addressBar.sticky panel=\(panel.id.uuidString.prefix(5)) " +
-            "request=\(requestId.uuidString.prefix(8)) \(browserFocusStateSnapshot())"
-        )
-#endif
-        NotificationCenter.default.post(name: .browserFocusAddressBar, object: panel.id)
-#if DEBUG
-        dlog(
-            "browser.focus.addressBar.notify panel=\(panel.id.uuidString.prefix(5)) " +
-            "request=\(requestId.uuidString.prefix(8))"
-        )
-#endif
-    }
 
-    func focusedBrowserAddressBarPanelId() -> UUID? {
-        browserAddressBarFocusedPanelId
-    }
 
-    private func focusedBrowserAddressBarPanelIdForShortcutEvent(_ event: NSEvent) -> UUID? {
-        guard let panelId = browserAddressBarFocusedPanelId else { return nil }
 
-        guard let context = preferredMainWindowContextForShortcutRouting(event: event) else {
-#if DEBUG
-            dlog(
-                "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-                "accepted=0 reason=no_context event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return nil
-        }
 
-        guard let workspace = context.tabManager.selectedWorkspace else {
-#if DEBUG
-            dlog(
-                "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-                "accepted=0 reason=no_workspace event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return nil
-        }
 
-        guard workspace.browserPanel(for: panelId) != nil else {
-#if DEBUG
-            dlog(
-                "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-                "accepted=0 reason=panel_not_in_workspace workspace=\(workspace.id.uuidString.prefix(5)) " +
-                "event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return nil
-        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #if DEBUG
-        dlog(
-            "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-            "accepted=1 workspace=\(workspace.id.uuidString.prefix(5)) event=\(NSWindow.keyDescription(event))"
-        )
-#endif
-        return panelId
-    }
 
-    @discardableResult
-    func requestBrowserAddressBarFocus(panelId: UUID) -> Bool {
-        focusBrowserAddressBar(panelId: panelId)
-    }
 
-    private func shouldBypassAppShortcutForFocusedBrowserAddressBar(
-        flags: NSEvent.ModifierFlags,
-        chars: String
-    ) -> Bool {
-        guard browserAddressBarFocusedPanelId != nil else { return false }
-        let normalizedFlags = browserOmnibarNormalizedModifierFlags(flags)
-        let isCommandOrControlOnly = normalizedFlags == [.command] || normalizedFlags == [.control]
-        guard isCommandOrControlOnly else { return false }
-        let shouldBypass = chars == "n" || chars == "p"
-#if DEBUG
-        if shouldBypass {
-            let panelToken = browserAddressBarFocusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-            dlog(
-                "browser.focus.addressBar.shortcutBypass panel=\(panelToken) " +
-                "chars=\(chars) flags=\(normalizedFlags.rawValue)"
-            )
-        }
-#endif
-        return shouldBypass
-    }
 
-    private func commandOmnibarSelectionDelta(
-        flags: NSEvent.ModifierFlags,
-        chars: String
-    ) -> Int? {
-        browserOmnibarSelectionDeltaForCommandNavigation(
-            hasFocusedAddressBar: browserAddressBarFocusedPanelId != nil,
-            flags: flags,
-            chars: chars
-        )
-    }
-
-    private func dispatchBrowserOmnibarSelectionMove(delta: Int) {
-        guard delta != 0 else { return }
-        guard let panelId = browserAddressBarFocusedPanelId else { return }
-#if DEBUG
-        dlog(
-            "browser.focus.omnibar.selectionMove panel=\(panelId.uuidString.prefix(5)) " +
-            "delta=\(delta) repeatKey=\(browserOmnibarRepeatKeyCode.map(String.init) ?? "nil")"
-        )
-#endif
-        NotificationCenter.default.post(
-            name: .browserMoveOmnibarSelection,
-            object: panelId,
-            userInfo: ["delta": delta]
-        )
-    }
-
-    private func startBrowserOmnibarSelectionRepeatIfNeeded(keyCode: UInt16, delta: Int) {
-        guard delta != 0 else { return }
-        guard browserAddressBarFocusedPanelId != nil else {
-#if DEBUG
-            dlog(
-                "browser.focus.omnibar.repeat.start key=\(keyCode) delta=\(delta) " +
-                "result=skip_no_focused_address_bar"
-            )
-#endif
-            return
-        }
-
-        if browserOmnibarRepeatKeyCode == keyCode, browserOmnibarRepeatDelta == delta {
-#if DEBUG
-            let panelToken = browserAddressBarFocusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-            dlog(
-                "browser.focus.omnibar.repeat.start panel=\(panelToken) " +
-                "key=\(keyCode) delta=\(delta) result=reuse"
-            )
-#endif
-            return
-        }
-
-        stopBrowserOmnibarSelectionRepeat()
-        browserOmnibarRepeatKeyCode = keyCode
-        browserOmnibarRepeatDelta = delta
-#if DEBUG
-        let panelToken = browserAddressBarFocusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        dlog(
-            "browser.focus.omnibar.repeat.start panel=\(panelToken) " +
-            "key=\(keyCode) delta=\(delta) result=armed"
-        )
 #endif
 
-        let start = DispatchWorkItem { [weak self] in
-            self?.scheduleBrowserOmnibarSelectionRepeatTick()
-        }
-        browserOmnibarRepeatStartWorkItem = start
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: start)
-    }
 
-    private func scheduleBrowserOmnibarSelectionRepeatTick() {
-        browserOmnibarRepeatStartWorkItem = nil
-        guard browserAddressBarFocusedPanelId != nil else {
-#if DEBUG
-            dlog("browser.focus.omnibar.repeat.tick result=stop_no_focused_address_bar")
-#endif
-            stopBrowserOmnibarSelectionRepeat()
-            return
-        }
-        guard browserOmnibarRepeatKeyCode != nil else { return }
-
-#if DEBUG
-        let panelToken = browserAddressBarFocusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        dlog(
-            "browser.focus.omnibar.repeat.tick panel=\(panelToken) " +
-            "delta=\(browserOmnibarRepeatDelta)"
-        )
-#endif
-        dispatchBrowserOmnibarSelectionMove(delta: browserOmnibarRepeatDelta)
-
-        let tick = DispatchWorkItem { [weak self] in
-            self?.scheduleBrowserOmnibarSelectionRepeatTick()
-        }
-        browserOmnibarRepeatTickWorkItem = tick
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.055, execute: tick)
-    }
-
-    private func stopBrowserOmnibarSelectionRepeat() {
-#if DEBUG
-        let previousKeyCode = browserOmnibarRepeatKeyCode
-        let previousDelta = browserOmnibarRepeatDelta
-#endif
-        browserOmnibarRepeatStartWorkItem?.cancel()
-        browserOmnibarRepeatTickWorkItem?.cancel()
-        browserOmnibarRepeatStartWorkItem = nil
-        browserOmnibarRepeatTickWorkItem = nil
-        browserOmnibarRepeatKeyCode = nil
-        browserOmnibarRepeatDelta = 0
-#if DEBUG
-        if previousKeyCode != nil || previousDelta != 0 {
-            dlog(
-                "browser.focus.omnibar.repeat.stop key=\(previousKeyCode.map(String.init) ?? "nil") " +
-                "delta=\(previousDelta)"
-            )
-        }
-#endif
-    }
-
-    private func handleBrowserOmnibarSelectionRepeatLifecycleEvent(_ event: NSEvent) {
-        guard browserOmnibarRepeatKeyCode != nil else { return }
-
-        switch event.type {
-        case .keyUp:
-            if event.keyCode == browserOmnibarRepeatKeyCode {
-#if DEBUG
-                dlog(
-                    "browser.focus.omnibar.repeat.lifecycle event=keyUp key=\(event.keyCode) " +
-                    "action=stop"
-                )
-#endif
-                stopBrowserOmnibarSelectionRepeat()
-            }
-        case .flagsChanged:
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if !flags.contains(.command) {
-#if DEBUG
-                dlog(
-                    "browser.focus.omnibar.repeat.lifecycle event=flagsChanged " +
-                    "flags=\(flags.rawValue) action=stop"
-                )
-#endif
-                stopBrowserOmnibarSelectionRepeat()
-            }
-        default:
-            break
-        }
-    }
-
-    private func isLikelyWebInspectorResponder(_ responder: NSResponder?) -> Bool {
-        programaIsLikelyWebInspectorResponder(responder)
-    }
-
-#if DEBUG
-    private func developerToolsShortcutProbeKind(event: NSEvent) -> String? {
-        if matchShortcut(event: event, shortcut: KeyboardShortcutSettings.shortcut(for: .toggleBrowserDeveloperTools)) {
-            return "toggle.configured"
-        }
-        if matchShortcut(event: event, shortcut: KeyboardShortcutSettings.shortcut(for: .showBrowserJavaScriptConsole)) {
-            return "console.configured"
-        }
-
-        let chars = (event.charactersIgnoringModifiers ?? "").lowercased()
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if flags == [.command, .option] {
-            if chars == "i" || event.keyCode == 34 {
-                return "toggle.literal"
-            }
-            if chars == "c" || event.keyCode == 8 {
-                return "console.literal"
-            }
-        }
-        return nil
-    }
-
-    private func logDeveloperToolsShortcutSnapshot(
-        phase: String,
-        event: NSEvent? = nil,
-        didHandle: Bool? = nil
-    ) {
-        let keyWindow = NSApp.keyWindow
-        let firstResponder = keyWindow?.firstResponder
-        let firstResponderType = firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let firstResponderPtr = firstResponder.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-        let eventDescription = event.map(NSWindow.keyDescription) ?? "none"
-        if let browser = tabManager?.focusedBrowserPanel {
-            var line =
-                "browser.devtools shortcut=\(phase) panel=\(browser.id.uuidString.prefix(5)) " +
-                "\(browser.debugDeveloperToolsStateSummary()) \(browser.debugDeveloperToolsGeometrySummary()) " +
-                "keyWin=\(keyWindow?.windowNumber ?? -1) fr=\(firstResponderType)@\(firstResponderPtr) event=\(eventDescription)"
-            if let didHandle {
-                line += " handled=\(didHandle ? 1 : 0)"
-            }
-            dlog(line)
-            return
-        }
-        var line =
-            "browser.devtools shortcut=\(phase) panel=nil keyWin=\(keyWindow?.windowNumber ?? -1) " +
-            "fr=\(firstResponderType)@\(firstResponderPtr) event=\(eventDescription)"
-        if let didHandle {
-            line += " handled=\(didHandle ? 1 : 0)"
-        }
-        dlog(line)
-    }
-#endif
-
-    private func prepareFocusedBrowserDevToolsForSplit(directionLabel: String) {
-        guard let browser = tabManager?.focusedBrowserPanel else { return }
-        guard browser.shouldPreserveWebViewAttachmentDuringTransientHide() else { return }
-        guard let keyWindow = NSApp.keyWindow else { return }
-        guard isLikelyWebInspectorResponder(keyWindow.firstResponder) else { return }
-
-        let beforeResponder = keyWindow.firstResponder
-        let movedToWebView = keyWindow.makeFirstResponder(browser.webView)
-        let movedToNil = movedToWebView ? false : keyWindow.makeFirstResponder(nil)
-
-        #if DEBUG
-        let beforeType = beforeResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let beforePtr = beforeResponder.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-        let afterResponder = keyWindow.firstResponder
-        let afterType = afterResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let afterPtr = afterResponder.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-        dlog(
-            "split.shortcut inspector.preflight dir=\(directionLabel) panel=\(browser.id.uuidString.prefix(5)) " +
-            "before=\(beforeType)@\(beforePtr) after=\(afterType)@\(afterPtr) " +
-            "moveWeb=\(movedToWebView ? 1 : 0) moveNil=\(movedToNil ? 1 : 0) \(browser.debugDeveloperToolsStateSummary())"
-        )
-        #endif
-    }
 
     @discardableResult
     func performSplitShortcut(direction: SplitDirection, preferredWindow: NSWindow? = nil) -> Bool {
@@ -7930,16 +6978,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return -1
         }()
         let splitContext = "keyWin=\(keyWindow?.windowNumber ?? -1) mainWin=\(NSApp.mainWindow?.windowNumber ?? -1) fr=\(firstResponderType)@\(firstResponderPtr) frWin=\(firstResponderWindow)"
-        if let browser = tabManager?.focusedBrowserPanel {
-            let webWindow = browser.webView.window?.windowNumber ?? -1
-            let webSuperview = browser.webView.superview.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-            dlog("split.shortcut dir=\(directionLabel) pre panel=\(browser.id.uuidString.prefix(5)) \(browser.debugDeveloperToolsStateSummary()) webWin=\(webWindow) webSuper=\(webSuperview) \(splitContext)")
-        } else {
             dlog("split.shortcut dir=\(directionLabel) pre panel=nil \(splitContext)")
-        }
         #endif
 
-        prepareFocusedBrowserDevToolsForSplit(directionLabel: directionLabel)
         let didCreateSplit: Bool = {
             if let terminalContext {
                 return terminalContext.tabManager.createSplit(
@@ -7966,65 +7007,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 return -1
             }()
             let splitContext = "keyWin=\(keyWindow?.windowNumber ?? -1) mainWin=\(NSApp.mainWindow?.windowNumber ?? -1) fr=\(firstResponderType)@\(firstResponderPtr) frWin=\(firstResponderWindow)"
-            if let browser = self?.tabManager?.focusedBrowserPanel {
-                let webWindow = browser.webView.window?.windowNumber ?? -1
-                let webSuperview = browser.webView.superview.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-                dlog("split.shortcut dir=\(directionLabel) post panel=\(browser.id.uuidString.prefix(5)) \(browser.debugDeveloperToolsStateSummary()) webWin=\(webWindow) webSuper=\(webSuperview) \(splitContext)")
-            } else {
                 dlog("split.shortcut dir=\(directionLabel) post panel=nil \(splitContext)")
-            }
         }
         recordGotoSplitSplitIfNeeded(direction: direction)
 #endif
         return didCreateSplit
     }
 
-    @discardableResult
-    func performBrowserSplitShortcut(direction: SplitDirection) -> Bool {
-        _ = synchronizeActiveMainWindowContext(preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow)
 
-        #if DEBUG
-        let directionLabel: String
-        switch direction {
-        case .left: directionLabel = "left"
-        case .right: directionLabel = "right"
-        case .up: directionLabel = "up"
-        case .down: directionLabel = "down"
-        }
-        let selectedTabBefore = tabManager?.selectedTabId?.uuidString.prefix(5) ?? "nil"
-        let focusedPanelBefore = tabManager?.selectedWorkspace?.focusedPanelId?.uuidString.prefix(5) ?? "nil"
-        dlog(
-            "split.browser.shortcut pre dir=\(directionLabel) " +
-            "tab=\(selectedTabBefore) focusedPanel=\(focusedPanelBefore)"
-        )
-        #endif
 
-        guard let panelId = tabManager?.createBrowserSplit(direction: direction) else {
-            #if DEBUG
-            dlog("split.browser.shortcut failed dir=\(directionLabel)")
-            #endif
-            return false
-        }
 
-        #if DEBUG
-        let selectedTabAfter = tabManager?.selectedTabId?.uuidString.prefix(5) ?? "nil"
-        let focusedPanelAfter = tabManager?.selectedWorkspace?.focusedPanelId?.uuidString.prefix(5) ?? "nil"
-        dlog(
-            "split.browser.shortcut post dir=\(directionLabel) " +
-            "created=\(panelId.uuidString.prefix(5)) tab=\(selectedTabAfter) focusedPanel=\(focusedPanelAfter)"
-        )
-        #endif
-
-        _ = focusBrowserAddressBar(panelId: panelId)
-        return true
-    }
-
-    /// Allow AppKit-backed browser surfaces (WKWebView) to route non-menu shortcuts
-    /// through the same app-level shortcut handler used by the local key monitor.
-    @discardableResult
-    func handleBrowserSurfaceKeyEquivalent(_ event: NSEvent) -> Bool {
-        handleCustomShortcut(event: event)
-    }
 
     @discardableResult
     func requestRenameWorkspaceViaCommandPalette(preferredWindow: NSWindow? = nil) -> Bool {
@@ -8065,7 +7057,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if event.type == .keyDown {
             return handleCustomShortcut(event: event)
         }
-        handleBrowserOmnibarSelectionRepeatLifecycleEvent(event)
         return clearEscapeSuppressionForKeyUp(event: event, consumeIfSuppressed: true)
     }
 
@@ -8685,104 +7676,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
     }
 
-    private func installBrowserAddressBarFocusObservers() {
-        guard browserAddressBarFocusObserver == nil, browserAddressBarBlurObserver == nil else { return }
 
-        browserAddressBarFocusObserver = NotificationCenter.default.addObserver(
-            forName: .browserDidFocusAddressBar,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                guard let panelId = notification.object as? UUID else { return }
-                self.browserPanel(for: panelId)?.beginSuppressWebViewFocusForAddressBar()
-                self.browserAddressBarFocusedPanelId = panelId
-                self.stopBrowserOmnibarSelectionRepeat()
-#if DEBUG
-                dlog("addressBar FOCUS panelId=\(panelId.uuidString.prefix(8))")
-#endif
-            }
-        }
 
-        browserAddressBarBlurObserver = NotificationCenter.default.addObserver(
-            forName: .browserDidBlurAddressBar,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                guard let panelId = notification.object as? UUID else { return }
-                self.browserPanel(for: panelId)?.endSuppressWebViewFocusForAddressBar()
-                if self.browserAddressBarFocusedPanelId == panelId {
-                    self.browserAddressBarFocusedPanelId = nil
-                    self.stopBrowserOmnibarSelectionRepeat()
-#if DEBUG
-                    dlog("addressBar BLUR panelId=\(panelId.uuidString.prefix(8))")
-#endif
-                }
-            }
-        }
-    }
 
-    private func browserPanel(for panelId: UUID) -> BrowserPanel? {
-        return tabManager?.selectedWorkspace?.browserPanel(for: panelId)
-    }
 
-    fileprivate func browserFindBarIsVisible(for webView: ProgramaWebView) -> Bool {
-        browserPanelOwning(webView)?.searchState != nil
-    }
 
-    private func shouldLetFocusedBrowserOwnFindShortcut(_ event: NSEvent) -> Bool {
-        let shortcutWindow = resolvedShortcutEventWindow(event) ?? NSApp.keyWindow ?? NSApp.mainWindow
-        let shortcutResponder = shortcutWindow?.firstResponder
-        let owningWebView = tabManager?.focusedBrowserPanel?.webView as? ProgramaWebView
-        guard let owningWebView else { return false }
-        return shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
-            event,
-            responder: shortcutResponder,
-            owningWebView: owningWebView
-        )
-    }
 
-    private func browserPanelOwning(_ webView: ProgramaWebView) -> BrowserPanel? {
-        var candidateManagers: [TabManager] = []
-        var seenManagers = Set<ObjectIdentifier>()
 
-        func appendCandidate(_ manager: TabManager?) {
-            guard let manager else { return }
-            let identifier = ObjectIdentifier(manager)
-            guard seenManagers.insert(identifier).inserted else { return }
-            candidateManagers.append(manager)
-        }
 
-        if let window = webView.window,
-           let context = contextForMainWindow(window) {
-            appendCandidate(context.tabManager)
-        }
-        appendCandidate(tabManager)
-        for context in mainWindowContexts.values {
-            appendCandidate(context.tabManager)
-        }
 
-        for manager in candidateManagers {
-            if let panel = browserPanelOwning(webView, in: manager) {
-                return panel
-            }
-        }
-        return nil
-    }
 
-    private func browserPanelOwning(_ webView: ProgramaWebView, in manager: TabManager) -> BrowserPanel? {
-        for workspace in manager.tabs {
-            if let panel = workspace.panels.values
-                .compactMap({ $0 as? BrowserPanel })
-                .first(where: { $0.webView === webView }) {
-                return panel
-            }
-        }
-        return nil
-    }
+
 
     private func setActiveMainWindow(_ window: NSWindow) {
         guard let context = contextForMainTerminalWindow(window) else { return }
@@ -8825,25 +7729,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             for tab in removed.tabManager.tabs {
                 store.clearNotifications(forTabId: tab.id)
             }
-        }
-
-        // `browserAddressBarFocusedPanelId` is a single app-wide pointer, not scoped to
-        // any particular window, and nothing else proactively invalidates it when its
-        // owning panel goes away. A stale non-nil value here makes
-        // `commandOmnibarSelectionDelta` report `hasFocusedAddressBar = true` for every
-        // window afterward, silently hijacking Cmd+N/Cmd+P/Ctrl+N/Ctrl+P in *other*
-        // windows as omnibar-suggestion navigation instead of their normal shortcut
-        // action. Check across all *remaining* live windows -- rather than just this
-        // window's (possibly already-torn-down) tab list -- since teardown order
-        // between this window's own workspace/panel cleanup and this notification
-        // handler is not guaranteed, and checking only `removed.tabManager` can miss a
-        // panel that was already removed from it by the time this runs.
-        if let focusedPanelId = browserAddressBarFocusedPanelId,
-           !mainWindowContexts.values.contains(where: { context in
-               context.tabManager.tabs.contains(where: { $0.panels[focusedPanelId] != nil })
-           }) {
-            browserAddressBarFocusedPanelId = nil
-            stopBrowserOmnibarSelectionRepeat()
         }
 
         if tabManager === removed.tabManager {
@@ -9363,7 +8248,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 ContentView.makeViewHierarchyTransparent(contentView)
             }
         } else {
-            // Browser-focused workspaces may not have an active terminal panel to refresh
             // the NSWindow background. Keep opaque theme changes applied here as well.
             if window.backgroundColor != currentThemeBackground {
                 window.backgroundColor = currentThemeBackground

@@ -3,7 +3,6 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 import Bonsplit
-import WebKit
 
 private struct SystemIdentifyInput: Sendable {
     let windowId: UUID?
@@ -134,7 +133,6 @@ extension TerminalController {
                 "tab_id": v2OrNull(surfaceId?.uuidString),
                 "tab_ref": v2TabRef(uuid: surfaceId),
                 "surface_type": v2OrNull(surfaceId.flatMap { workspace.panels[$0]?.panelType.rawValue }),
-                "is_browser_surface": v2OrNull(surfaceId.flatMap { workspace.panels[$0]?.panelType == .browser })
             ]
         } else {
             focused = [
@@ -163,7 +161,6 @@ extension TerminalController {
                     payload["tab_id"] = callerSurfaceId.uuidString
                     payload["tab_ref"] = v2TabRef(uuid: callerSurfaceId)
                     payload["surface_type"] = v2OrNull(workspace.panels[callerSurfaceId]?.panelType.rawValue)
-                    payload["is_browser_surface"] = v2OrNull(workspace.panels[callerSurfaceId]?.panelType == .browser)
                     payload["pane_id"] = v2OrNull(paneId?.uuidString)
                     payload["pane_ref"] = v2Ref(kind: .pane, uuid: paneId)
                 } else {
@@ -172,7 +169,6 @@ extension TerminalController {
                     payload["tab_id"] = NSNull()
                     payload["tab_ref"] = NSNull()
                     payload["surface_type"] = NSNull()
-                    payload["is_browser_surface"] = NSNull()
                     payload["pane_id"] = NSNull()
                     payload["pane_ref"] = NSNull()
                 }
@@ -333,11 +329,6 @@ extension TerminalController {
                 item["pull_request"] = NSNull()
             }
 
-            if panel.panelType == .browser, let browserPanel = panel as? BrowserPanel {
-                item["url"] = browserPanel.currentURL?.absoluteString ?? ""
-            } else {
-                item["url"] = NSNull()
-            }
             if let paneUUID {
                 surfacesByPane[paneUUID, default: []].append(item)
             }

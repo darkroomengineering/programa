@@ -314,8 +314,8 @@ struct ProgramaPaneDefinition: Codable, Sendable, Equatable {
         let declaredCount = list.count ?? 0
         var decoded: [ProgramaSurfaceDefinition] = []
         while !list.isAtEnd {
-            // Layouts written for the removed built-in browser still name `browser` surfaces.
-            // Skip them so the rest of the file keeps loading; any other bad type still fails.
+            // Skip retired surface types so the rest of the file keeps loading;
+            // any other bad type still fails.
             let probe = try list.superDecoder()
             if let type = try? probe.container(keyedBy: SurfaceTypeKey.self)
                 .decode(String.self, forKey: .type),
@@ -351,7 +351,6 @@ struct ProgramaSurfaceDefinition: Codable, Sendable, Equatable {
 
 enum ProgramaSurfaceType: String, Codable, Sendable, Equatable {
     case terminal
-    case browser
 
     /// Surface types that older config files may still name and that layouts skip.
     static let retiredRawValues: Set<String> = ["browser"]

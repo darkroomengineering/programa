@@ -3,7 +3,6 @@ import SwiftUI
 import Bonsplit
 import CoreServices
 import UserNotifications
-import WebKit
 import Combine
 import ObjectiveC.runtime
 import Darwin
@@ -17,9 +16,7 @@ var programaFirstResponderGuardHitViewOverride: NSView?
 private var programaFirstResponderGuardCurrentEventContext: NSEvent?
 private var programaFirstResponderGuardHitViewContext: NSView?
 private var programaFirstResponderGuardContextWindowNumber: Int?
-private var programaBrowserReturnForwardingDepth = 0
 private var programaWindowFirstResponderBypassDepth = 0
-private var programaFieldEditorOwningWebViewAssociationKey: UInt8 = 0
 
 @discardableResult
 func programaWithWindowFirstResponderBypass<T>(_ body: () -> T) -> T {
@@ -32,14 +29,6 @@ func programaWithWindowFirstResponderBypass<T>(_ body: () -> T) -> T {
 
 func programaIsWindowFirstResponderBypassActive() -> Bool {
     programaWindowFirstResponderBypassDepth > 0
-}
-
-private final class ProgramaFieldEditorOwningWebViewBox: NSObject {
-    weak var webView: ProgramaWebView?
-
-    init(webView: ProgramaWebView?) {
-        self.webView = webView
-    }
 }
 
 #if DEBUG
@@ -89,12 +78,6 @@ extension NSWindow {
             return false
         }
 
-        let currentEvent = Self.programaCurrentEvent(for: self)
-        let responderWebView = responder.flatMap {
-            Self.programaOwningWebView(for: $0, in: self, event: currentEvent)
-        }
-        var pointerInitiatedWebFocus = false
-
         if AppDelegate.shared?.shouldBlockFirstResponderChangeWhileCommandPaletteVisible(
             window: self,
             responder: responder
@@ -108,70 +91,7 @@ extension NSWindow {
             return false
         }
 
-        if let responder,
-           let webView = responderWebView,
-           !webView.allowsFirstResponderAcquisitionEffective {
-            let pointerInitiatedFocus = Self.programaShouldAllowPointerInitiatedWebViewFocus(
-                window: self,
-                webView: webView,
-                event: currentEvent
-            )
-            if pointerInitiatedFocus {
-                pointerInitiatedWebFocus = true
-#if DEBUG
-                dlog(
-                    "focus.guard allowPointerFirstResponder responder=\(String(describing: type(of: responder))) " +
-                    "window=\(ObjectIdentifier(self)) " +
-                    "web=\(ObjectIdentifier(webView)) " +
-                    "policy=\(webView.allowsFirstResponderAcquisition ? 1 : 0) " +
-                    "pointerDepth=\(webView.debugPointerFocusAllowanceDepth) " +
-                    "eventType=\(currentEvent.map { String(describing: $0.type) } ?? "nil")"
-                )
-#endif
-            } else {
-#if DEBUG
-                dlog(
-                    "focus.guard blockedFirstResponder responder=\(String(describing: type(of: responder))) " +
-                    "window=\(ObjectIdentifier(self)) " +
-                    "web=\(ObjectIdentifier(webView)) " +
-                    "policy=\(webView.allowsFirstResponderAcquisition ? 1 : 0) " +
-                    "pointerDepth=\(webView.debugPointerFocusAllowanceDepth) " +
-                    "eventType=\(currentEvent.map { String(describing: $0.type) } ?? "nil")"
-                )
-#endif
-                return false
-            }
-        }
-#if DEBUG
-        if let responder,
-           let webView = responderWebView {
-            dlog(
-                "focus.guard allowFirstResponder responder=\(String(describing: type(of: responder))) " +
-                "window=\(ObjectIdentifier(self)) " +
-                "web=\(ObjectIdentifier(webView)) " +
-                "policy=\(webView.allowsFirstResponderAcquisition ? 1 : 0) " +
-                "pointerDepth=\(webView.debugPointerFocusAllowanceDepth)"
-            )
-        }
-#endif
-        let result: Bool
-        if pointerInitiatedWebFocus, let webView = responderWebView {
-            // `NSWindow.makeFirstResponder` may run before `ProgramaWebView.mouseDown(with:)`.
-            // Preserve pointer intent during this synchronous responder change.
-            result = webView.withPointerFocusAllowance {
-                programa_makeFirstResponder(responder)
-            }
-        } else {
-            result = programa_makeFirstResponder(responder)
-        }
-        if result {
-            if let fieldEditor = responder as? NSTextView, fieldEditor.isFieldEditor {
-                Self.programaTrackFieldEditor(fieldEditor, owningWebView: responderWebView)
-            } else if let fieldEditor = self.firstResponder as? NSTextView, fieldEditor.isFieldEditor {
-                Self.programaTrackFieldEditor(fieldEditor, owningWebView: responderWebView)
-            }
-        }
-        return result
+        return programa_makeFirstResponder(responder)
     }
 
     @objc func programa_sendEvent(_ event: NSEvent) {
@@ -182,17 +102,6 @@ extension NSWindow {
         var focusRepairMs: Double = 0
         var folderGuardMs: Double = 0
         var originalDispatchMs: Double = 0
-        let typingTimingExtra: String? = {
-            guard event.type == .keyDown else { return nil }
-            let responderWebView = self.firstResponder.flatMap {
-                Self.programaOwningWebView(for: $0, in: self, event: event)
-            }
-            let hitWebView = Self.programaHitViewForEventDispatch(in: self, event: event).flatMap {
-                Self.programaOwningWebView(for: $0)
-            }
-            let firstResponderType = self.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-            return "browser=\((responderWebView != nil || hitWebView != nil) ? 1 : 0) firstResponder=\(firstResponderType)"
-        }()
         if event.type == .keyDown {
             ProgramaTypingTiming.logEventDelay(path: "window.sendEvent", event: event)
         }
@@ -217,13 +126,13 @@ extension NSWindow {
                         ("folderGuardMs", folderGuardMs),
                         ("originalDispatchMs", originalDispatchMs),
                     ],
-                    extra: typingTimingExtra
+                    extra: nil
                 )
                 ProgramaTypingTiming.logDuration(
                     path: "window.sendEvent",
                     startedAt: typingTimingStart,
                     event: event,
-                    extra: typingTimingExtra
+                    extra: nil
                 )
             }
         }
@@ -368,7 +277,6 @@ extension NSWindow {
 
         // When the terminal surface is the first responder, prevent SwiftUI's
         // hosting view from consuming key events via performKeyEquivalent.
-        // After a browser panel (WKWebView) has been in the responder chain,
         // SwiftUI's internal focus system can get into a broken state where it
         // intercepts key events in the content view hierarchy, returns true
         // (claiming consumption), but never actually fires the action closure.
@@ -382,10 +290,6 @@ extension NSWindow {
         // (handleCustomShortcut) already handles app-level shortcuts, and anything
         // remaining should be menu items.
         let firstResponderGhosttyView = programaOwningGhosttyView(for: self.firstResponder)
-        let firstResponderWebView = self.firstResponder.flatMap {
-            Self.programaOwningWebView(for: $0, in: self, event: event)
-        }
-        let firstResponderHasMarkedText = browserResponderHasMarkedText(self.firstResponder)
         if let ghosttyView = firstResponderGhosttyView {
             // If the IME is composing and the key has no Cmd modifier, don't intercept —
             // let it flow through normal AppKit event dispatch so the input method can
@@ -405,8 +309,7 @@ extension NSWindow {
             }
 
             // Preserve Ghostty's terminal font-size shortcuts (Cmd +/−/0) when
-            // the terminal is focused. Otherwise our browser menu shortcuts can
-            // consume the event even when no browser panel is focused.
+            // the terminal is focused.
             if shouldRouteTerminalFontZoomShortcutToGhostty(
                 firstResponderIsGhostty: true,
                 flags: event.modifierFlags,
@@ -422,61 +325,6 @@ extension NSWindow {
             }
         }
 
-        // Web forms rely on Return/Enter flowing through keyDown. If the original
-        // NSWindow.performKeyEquivalent consumes Enter first, submission never reaches
-        // WebKit. Route Return/Enter directly to the current first responder and
-        // mark handled to avoid the AppKit alert sound path.
-        if shouldDispatchBrowserReturnViaFirstResponderKeyDown(
-            keyCode: event.keyCode,
-            firstResponderIsBrowser: firstResponderWebView != nil,
-            firstResponderHasMarkedText: firstResponderHasMarkedText,
-            flags: event.modifierFlags
-        ) {
-            // Forwarding keyDown can re-enter performKeyEquivalent in WebKit/AppKit internals.
-            // On re-entry, fall back to normal dispatch to avoid an infinite loop.
-            if programaBrowserReturnForwardingDepth > 0 {
-#if DEBUG
-                dlog("  → browser Return/Enter reentry; using normal dispatch")
-#endif
-                return false
-            }
-            programaBrowserReturnForwardingDepth += 1
-            defer { programaBrowserReturnForwardingDepth = max(0, programaBrowserReturnForwardingDepth - 1) }
-#if DEBUG
-            dlog("  → browser Return/Enter routed to firstResponder.keyDown")
-#endif
-            self.firstResponder?.keyDown(with: event)
-            return true
-        }
-
-        if let firstResponderWebView,
-           shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
-               event,
-               responder: self.firstResponder,
-               owningWebView: firstResponderWebView
-           ) {
-            let result = firstResponderWebView.performKeyEquivalent(with: event)
-#if DEBUG
-            if result {
-                dlog("  → browser find command resolved before window menu path")
-            } else {
-                dlog("  → browser find command preflight left unclaimed; suppressing replay")
-            }
-#endif
-            // The focused web view has already received this Find-family shortcut once.
-            // Do not fall through into the original NSWindow.performKeyEquivalent path,
-            // or WebKit can observe the same key equivalent a second time before AppKit
-            // reaches keyDown/menu fallback.
-            return true
-        }
-
-        if AppDelegate.shared?.handleBrowserSurfaceKeyEquivalent(event) == true {
-#if DEBUG
-            dlog("  → consumed by handleBrowserSurfaceKeyEquivalent")
-#endif
-            return true
-        }
-
         // When the terminal is focused, skip the full NSWindow.performKeyEquivalent
         // (which walks the SwiftUI content view hierarchy) and dispatch Command-key
         // events directly to the main menu. This avoids the broken SwiftUI focus path.
@@ -484,19 +332,6 @@ extension NSWindow {
            shouldRouteCommandEquivalentDirectlyToMainMenu(event),
            let mainMenu = NSApp.mainMenu {
             let consumedByMenu = mainMenu.performKeyEquivalent(with: event)
-#if DEBUG
-            if browserZoomShortcutTraceCandidate(
-                flags: event.modifierFlags,
-                chars: event.charactersIgnoringModifiers ?? "",
-                keyCode: event.keyCode,
-                literalChars: event.characters
-            ) {
-                dlog(
-                    "zoom.shortcut stage=window.mainMenuBypass event=\(Self.keyDescription(event)) " +
-                    "consumed=\(consumedByMenu ? 1 : 0) fr=GhosttyNSView"
-                )
-            }
-#endif
             if !consumedByMenu {
                 // Fall through to the original performKeyEquivalent path below.
             } else {
@@ -524,124 +359,6 @@ extension NSWindow {
         let chars = event.charactersIgnoringModifiers ?? "?"
         parts.append("'\(chars)'(\(event.keyCode))")
         return parts.joined(separator: "+")
-    }
-
-    private static func programaOwningWebView(for responder: NSResponder) -> ProgramaWebView? {
-        if let webView = responder as? ProgramaWebView {
-            return webView
-        }
-
-        if let view = responder as? NSView,
-           let webView = programaOwningWebView(for: view) {
-            return webView
-        }
-
-        // NSTextView.delegate is unsafe-unretained in AppKit. Reading it here while
-        // a responder chain is tearing down can trap with "unowned reference".
-        var current = responder.nextResponder
-        while let next = current {
-            if let webView = next as? ProgramaWebView {
-                return webView
-            }
-            if let view = next as? NSView,
-               let webView = programaOwningWebView(for: view) {
-                return webView
-            }
-            current = next.nextResponder
-        }
-
-        return nil
-    }
-
-    private static func programaOwningWebView(
-        for responder: NSResponder,
-        in window: NSWindow,
-        event: NSEvent?
-    ) -> ProgramaWebView? {
-        // Browser find runs in the portal slot alongside the hosted WKWebView.
-        // Treat its native field editor chain as browser chrome, not as web content,
-        // so Cmd+F can move first responder into the find field while web focus is suppressed.
-        if BrowserWindowPortalRegistry.searchOverlayPanelId(for: responder, in: window) != nil {
-            return nil
-        }
-
-        if let webView = programaOwningWebView(for: responder) {
-            return webView
-        }
-
-        guard let textView = responder as? NSTextView, textView.isFieldEditor else {
-            return nil
-        }
-
-        if let event,
-           let hitWebView = programaPointerHitWebView(in: window, event: event) {
-            programaTrackFieldEditor(textView, owningWebView: hitWebView)
-            return hitWebView
-        }
-
-        return programaTrackedOwningWebView(for: textView)
-    }
-
-    private static func programaOwningWebView(for view: NSView) -> ProgramaWebView? {
-        if let webView = view as? ProgramaWebView {
-            return webView
-        }
-
-        var current: NSView? = view.superview
-        while let candidate = current {
-            if let webView = candidate as? ProgramaWebView {
-                return webView
-            }
-            if String(describing: type(of: candidate)).contains("WindowBrowserSlotView"),
-               let portalWebView = programaUniqueBrowserWebView(in: candidate) {
-                // Portal-hosted browser chrome (for example the Cmd+F overlay) is a
-                // sibling of the hosted WKWebView inside WindowBrowserSlotView, not a
-                // descendant of it. Allow native text-entry controls in that slot to
-                // acquire first responder directly, but keep generic sibling views
-                // associated with the hosted web view so blocked browser focus policy
-                // still protects inspector/overlay chrome from stray focus changes.
-                if view === portalWebView || view.isDescendant(of: portalWebView) {
-                    return portalWebView
-                }
-                if programaAllowsPortalSlotTextEntryFocus(view) {
-                    return nil
-                }
-                return portalWebView
-            }
-            current = candidate.superview
-        }
-
-        return nil
-    }
-
-    private static func programaAllowsPortalSlotTextEntryFocus(_ view: NSView) -> Bool {
-        var current: NSView? = view
-        while let candidate = current {
-            if let textField = candidate as? NSTextField {
-                return textField.isEditable || textField.acceptsFirstResponder
-            }
-            if let textView = candidate as? NSTextView {
-                return textView.isEditable || textView.isSelectable || textView.isFieldEditor
-            }
-            current = candidate.superview
-        }
-        return false
-    }
-
-    private static func programaUniqueBrowserWebView(in root: NSView) -> ProgramaWebView? {
-        var stack: [NSView] = [root]
-        var found: ProgramaWebView?
-        while let current = stack.popLast() {
-            if let webView = current as? ProgramaWebView {
-                if found == nil {
-                    found = webView
-                } else if found !== webView {
-                    return nil
-                }
-            }
-            stack.append(contentsOf: current.subviews)
-        }
-        return found
     }
 
     private static func programaCurrentEvent(for window: NSWindow) -> NSEvent? {
@@ -696,7 +413,7 @@ extension NSWindow {
     /// gap ring where the padding-ring mount's own frame doesn't extend.
     ///
     /// Deliberately NOT "walk up and see if we ever pass through contentView":
-    /// portal-hosted content (GhosttyNSView terminal surfaces, browser WKWebViews)
+    /// portal-hosted content (GhosttyNSView terminal surfaces)
     /// is mounted as a theme-frame sibling outside contentView's subtree by design
     /// (see WindowTerminalHostView / the terminal find layering contract in
     /// CLAUDE.md), so that walk classified live terminal content as dead chrome --
@@ -761,38 +478,6 @@ extension NSWindow {
         return programaTopHitViewForEvent(in: window, event: event)
     }
 
-    private static func programaTrackFieldEditor(_ fieldEditor: NSTextView, owningWebView webView: ProgramaWebView?) {
-        if let webView {
-            objc_setAssociatedObject(
-                fieldEditor,
-                &programaFieldEditorOwningWebViewAssociationKey,
-                ProgramaFieldEditorOwningWebViewBox(webView: webView),
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            )
-        } else {
-            objc_setAssociatedObject(
-                fieldEditor,
-                &programaFieldEditorOwningWebViewAssociationKey,
-                nil,
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            )
-        }
-    }
-
-    private static func programaTrackedOwningWebView(for fieldEditor: NSTextView) -> ProgramaWebView? {
-        guard let box = objc_getAssociatedObject(
-            fieldEditor,
-            &programaFieldEditorOwningWebViewAssociationKey
-        ) as? ProgramaFieldEditorOwningWebViewBox else {
-            return nil
-        }
-        guard let webView = box.webView else {
-            programaTrackFieldEditor(fieldEditor, owningWebView: nil)
-            return nil
-        }
-        return webView
-    }
-
     private static func programaIsPointerDownEvent(_ event: NSEvent) -> Bool {
         switch event.type {
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
@@ -802,37 +487,6 @@ extension NSWindow {
         }
     }
 
-    private static func programaPointerHitWebView(in window: NSWindow, event: NSEvent) -> ProgramaWebView? {
-        guard programaIsPointerDownEvent(event) else { return nil }
-        if event.windowNumber != 0, event.windowNumber != window.windowNumber {
-            return nil
-        }
-        if let eventWindow = event.window, eventWindow !== window {
-            return nil
-        }
-        if let portalWebView = BrowserWindowPortalRegistry.webViewAtWindowPoint(
-            event.locationInWindow,
-            in: window
-        ) as? ProgramaWebView {
-            return portalWebView
-        }
-        guard let hitView = programaHitViewForCurrentEvent(in: window, event: event) else {
-            return nil
-        }
-        return programaOwningWebView(for: hitView)
-    }
-
-    private static func programaShouldAllowPointerInitiatedWebViewFocus(
-        window: NSWindow,
-        webView: ProgramaWebView,
-        event: NSEvent?
-    ) -> Bool {
-        guard let event,
-              let hitWebView = programaPointerHitWebView(in: window, event: event) else {
-            return false
-        }
-        return hitWebView === webView
-    }
 
 }
 

@@ -3,7 +3,6 @@ import SwiftUI
 import Bonsplit
 import CoreServices
 import UserNotifications
-import WebKit
 import Combine
 import ObjectiveC.runtime
 import Darwin

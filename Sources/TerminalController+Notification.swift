@@ -3,7 +3,6 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 import Bonsplit
-import WebKit
 
 extension TerminalController {
     // MARK: - V2 Notification Methods

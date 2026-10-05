@@ -23,9 +23,7 @@ struct MarkdownPanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(backgroundColor)
         .overlay {
-            // Single-transaction keyframe sequence (PhaseAnimator, macOS 14+): see
-            // BrowserPanelView's identical overlay for why this replaced a chained
-            // asyncAfter+withAnimation sequence (SwiftUI could coalesce/interrupt it).
+            // One transaction keeps SwiftUI from coalescing or interrupting the sequence.
             PhaseAnimator(FocusFlashPattern.values.indices, trigger: panel.focusFlashToken) { phaseIndex in
                 RoundedRectangle(cornerRadius: FocusFlashPattern.ringCornerRadius)
                     .stroke(programaAccentColor().opacity(FocusFlashPattern.values[phaseIndex]), lineWidth: 3)
@@ -256,9 +254,7 @@ final class MarkdownSearchTextView: NSScrollView {
 
 // MARK: - MarkdownSearchOverlay
 
-/// Find bar overlay for MarkdownPanelView. Mirrors BrowserSearchOverlay's visual style
-/// and drag-to-corner behaviour, but uses a SwiftUI TextField since markdown panels
-/// have no webview focus concerns.
+/// Find bar overlay for MarkdownPanelView with drag-to-corner behaviour.
 struct MarkdownSearchOverlay: View {
     let panelId: UUID
     @ObservedObject var searchState: MarkdownSearchState
@@ -397,7 +393,7 @@ struct MarkdownSearchOverlay: View {
         }
     }
 
-    // MARK: - Corner drag helpers (mirrors BrowserSearchOverlay)
+    // MARK: - Corner drag helpers
 
     enum Corner {
         case topLeft, topRight, bottomLeft, bottomRight
