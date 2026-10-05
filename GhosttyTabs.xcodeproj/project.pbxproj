@@ -110,6 +110,7 @@
 		7B3F9A10C2D4E5F6A7B80002 /* ListeningProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80001 /* ListeningProcess.swift */; };
 		7B3F9A10C2D4E5F6A7B80004 /* PortsHubStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80003 /* PortsHubStore.swift */; };
 		7B3F9A10C2D4E5F6A7B80006 /* PortsHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80005 /* PortsHubView.swift */; };
+		8C4E1B20D3F5A6E7B8C90002 /* AppDelegate+IncomingWebURLs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C4E1B20D3F5A6E7B8C90001 /* AppDelegate+IncomingWebURLs.swift */; };
 		7B3F9A10C2D4E5F6A7B80008 /* TerminalController+Ports.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80007 /* TerminalController+Ports.swift */; };
 		A5001542 /* TerminalPasteboardPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001544 /* TerminalPasteboardPlanner.swift */; };
 			A5001006 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5001016 /* GhosttyKit.xcframework */; };
@@ -543,6 +544,7 @@
 		7B3F9A10C2D4E5F6A7B80001 /* ListeningProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningProcess.swift; sourceTree = "<group>"; };
 		7B3F9A10C2D4E5F6A7B80003 /* PortsHubStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortsHubStore.swift; sourceTree = "<group>"; };
 		7B3F9A10C2D4E5F6A7B80005 /* PortsHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortsHubView.swift; sourceTree = "<group>"; };
+		8C4E1B20D3F5A6E7B8C90001 /* AppDelegate+IncomingWebURLs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+IncomingWebURLs.swift"; sourceTree = "<group>"; };
 		7B3F9A10C2D4E5F6A7B80007 /* TerminalController+Ports.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Ports.swift"; sourceTree = "<group>"; };
 		A5001544 /* TerminalPasteboardPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPasteboardPlanner.swift; sourceTree = "<group>"; };
 			A5001016 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GhosttyKit.xcframework; sourceTree = "<group>"; };
@@ -1055,6 +1057,7 @@
 				7B3F9A10C2D4E5F6A7B80001 /* ListeningProcess.swift */,
 				7B3F9A10C2D4E5F6A7B80003 /* PortsHubStore.swift */,
 				7B3F9A10C2D4E5F6A7B80005 /* PortsHubView.swift */,
+				8C4E1B20D3F5A6E7B8C90001 /* AppDelegate+IncomingWebURLs.swift */,
 				7B3F9A10C2D4E5F6A7B80007 /* TerminalController+Ports.swift */,
 				A5001544 /* TerminalPasteboardPlanner.swift */,
 				A5001225 /* SocketControlSettings.swift */,
@@ -1631,6 +1634,7 @@
 				7B3F9A10C2D4E5F6A7B80002 /* ListeningProcess.swift in Sources */,
 				7B3F9A10C2D4E5F6A7B80004 /* PortsHubStore.swift in Sources */,
 				7B3F9A10C2D4E5F6A7B80006 /* PortsHubView.swift in Sources */,
+				8C4E1B20D3F5A6E7B8C90002 /* AppDelegate+IncomingWebURLs.swift in Sources */,
 				7B3F9A10C2D4E5F6A7B80008 /* TerminalController+Ports.swift in Sources */,
 				A5001542 /* TerminalPasteboardPlanner.swift in Sources */,
 				A5001226 /* SocketControlSettings.swift in Sources */,

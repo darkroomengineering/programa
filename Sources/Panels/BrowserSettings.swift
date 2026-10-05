@@ -316,7 +316,8 @@ enum BrowserLinkOpenSettings {
         let isWebLink = scheme == "http" || scheme == "https"
         let bundleIdentifier = externalBrowserBundleIdentifier(defaults: defaults)
         if isWebLink,
-           let appURL = externalBrowserApplicationURL(bundleIdentifier: bundleIdentifier, workspace: workspace) {
+           let appURL = externalBrowserApplicationURL(bundleIdentifier: bundleIdentifier, workspace: workspace)
+            ?? browserOtherThanSelfWhenSelfIsDefault(for: url, workspace: workspace) {
             let configuration = NSWorkspace.OpenConfiguration()
             workspace.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
                 if let error {
@@ -325,17 +326,46 @@ enum BrowserLinkOpenSettings {
             }
             return true
         }
+        if isWebLink, systemDefaultBrowserIsSelf(for: url, workspace: workspace) {
+            // No other browser is installed. Handing the link to the system default would
+            // send it straight back into Programa, so report that nothing was opened.
+            return false
+        }
         return workspace.open(url)
+    }
+
+    /// When Programa is the system default browser, `NSWorkspace.open` on a web link
+    /// routes back into Programa. Links meant to leave Programa then go to the first
+    /// other installed browser instead.
+    static func browserOtherThanSelfWhenSelfIsDefault(for url: URL, workspace: NSWorkspace = .shared) -> URL? {
+        guard systemDefaultBrowserIsSelf(for: url, workspace: workspace),
+              let other = installedBrowsers(workspace: workspace).first else { return nil }
+        return externalBrowserApplicationURL(bundleIdentifier: other.bundleIdentifier, workspace: workspace)
+    }
+
+    private static func systemDefaultBrowserIsSelf(for url: URL, workspace: NSWorkspace) -> Bool {
+        guard let defaultAppURL = workspace.urlForApplication(toOpen: url),
+              let defaultBundleIdentifier = Bundle(url: defaultAppURL)?.bundleIdentifier else { return false }
+        return isProgramaBundleIdentifier(defaultBundleIdentifier)
+    }
+
+    /// Release, staging, Debug and every tagged dev build share this prefix. Another
+    /// Programa build is never a useful "external" browser: the link would land in a
+    /// second embedded browser instead of leaving Programa.
+    static func isProgramaBundleIdentifier(_ bundleIdentifier: String) -> Bool {
+        let base = "com.darkroom.programa"
+        return bundleIdentifier == base
+            || bundleIdentifier.hasPrefix(base + ".")
+            || bundleIdentifier == Bundle.main.bundleIdentifier
     }
 
     static func installedBrowsers(workspace: NSWorkspace = .shared) -> [(bundleIdentifier: String, name: String)] {
         guard let exampleURL = URL(string: "https://example.com") else { return [] }
-        let ownBundleIdentifier = Bundle.main.bundleIdentifier
         var seen = Set<String>()
         var results: [(bundleIdentifier: String, name: String)] = []
         for appURL in workspace.urlsForApplications(toOpen: exampleURL) {
             guard let bundleIdentifier = Bundle(url: appURL)?.bundleIdentifier else { continue }
-            if bundleIdentifier == ownBundleIdentifier { continue }
+            if isProgramaBundleIdentifier(bundleIdentifier) { continue }
             guard !seen.contains(bundleIdentifier) else { continue }
             seen.insert(bundleIdentifier)
             var name = FileManager.default.displayName(atPath: appURL.path)

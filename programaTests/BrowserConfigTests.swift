@@ -4593,12 +4593,81 @@ final class BrowserLinkOpenSettingsTests: XCTestCase {
         XCTAssertEqual(workspace.openedURLs, [mailto])
         XCTAssertTrue(workspace.openedWithApplicationURLs.isEmpty)
     }
+
+    // With Programa as the system default browser, a system open would route the link
+    // straight back into Programa; it must go to another installed browser instead.
+    func testOpenExternallyUsesAnotherBrowserWhenProgramaIsSystemDefault() throws {
+        let workspace = BrowserExternalOpenRecordingWorkspace()
+        let safariURL = URL(fileURLWithPath: "/Applications/Safari.app")
+        workspace.defaultApplicationForURLOverride = Bundle.main.bundleURL
+        workspace.applicationsForURLOverride = [Bundle.main.bundleURL, safariURL]
+        workspace.applicationURLOverride = safariURL
+        let url = try XCTUnwrap(URL(string: "https://example.com"))
+
+        XCTAssertTrue(BrowserLinkOpenSettings.openExternally(url, defaults: defaults, workspace: workspace))
+
+        XCTAssertTrue(workspace.openedURLs.isEmpty)
+        XCTAssertEqual(workspace.openedWithApplicationURLs.map(\.0), [url])
+        XCTAssertEqual(workspace.openedWithApplicationURLs.map(\.1), [safariURL])
+    }
+
+    func testOpenExternallySkipsOtherProgramaBuildsWhenProgramaIsSystemDefault() throws {
+        // A tagged dev build sorts ahead of Safari by name; it must not be picked as the
+        // "other" browser, or the link lands in a second embedded browser.
+        let appsDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BrowserConfigTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: appsDir) }
+        let devBuildURL = appsDir.appendingPathComponent("Programa DEV other.app", isDirectory: true)
+        let contentsURL = devBuildURL.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
+        let plist: [String: Any] = [
+            "CFBundleIdentifier": "com.darkroom.programa.debug.other",
+            "CFBundleName": "Programa DEV other",
+            "CFBundlePackageType": "APPL",
+        ]
+        try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+            .write(to: contentsURL.appendingPathComponent("Info.plist"))
+
+        let workspace = BrowserExternalOpenRecordingWorkspace()
+        let safariURL = URL(fileURLWithPath: "/Applications/Safari.app")
+        workspace.defaultApplicationForURLOverride = Bundle.main.bundleURL
+        workspace.applicationsForURLOverride = [Bundle.main.bundleURL, devBuildURL, safariURL]
+        workspace.applicationURLOverride = safariURL
+        let url = try XCTUnwrap(URL(string: "https://example.com"))
+
+        XCTAssertFalse(BrowserLinkOpenSettings.installedBrowsers(workspace: workspace)
+            .contains { $0.bundleIdentifier == "com.darkroom.programa.debug.other" })
+        XCTAssertTrue(BrowserLinkOpenSettings.openExternally(url, defaults: defaults, workspace: workspace))
+        XCTAssertEqual(workspace.openedWithApplicationURLs.map(\.1), [safariURL])
+    }
+
+    func testOpenExternallyOpensNothingWhenProgramaIsTheOnlyBrowser() throws {
+        let workspace = BrowserExternalOpenRecordingWorkspace()
+        workspace.defaultApplicationForURLOverride = Bundle.main.bundleURL
+        workspace.applicationsForURLOverride = [Bundle.main.bundleURL]
+        let url = try XCTUnwrap(URL(string: "https://example.com"))
+
+        XCTAssertFalse(BrowserLinkOpenSettings.openExternally(url, defaults: defaults, workspace: workspace))
+
+        XCTAssertTrue(workspace.openedURLs.isEmpty)
+        XCTAssertTrue(workspace.openedWithApplicationURLs.isEmpty)
+    }
 }
 
 private final class BrowserExternalOpenRecordingWorkspace: NSWorkspace {
     var openedURLs: [URL] = []
     var openedWithApplicationURLs: [(URL, URL)] = []
     var applicationURLOverride: URL?
+    var defaultApplicationForURLOverride: URL?
+    var applicationsForURLOverride: [URL]?
+
+    override func urlForApplication(toOpen url: URL) -> URL? {
+        defaultApplicationForURLOverride ?? super.urlForApplication(toOpen: url)
+    }
+
+    override func urlsForApplications(toOpen url: URL) -> [URL] {
+        applicationsForURLOverride ?? super.urlsForApplications(toOpen: url)
+    }
 
     override func open(_ url: URL) -> Bool {
         openedURLs.append(url)
