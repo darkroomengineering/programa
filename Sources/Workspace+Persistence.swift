@@ -482,8 +482,10 @@ extension Workspace {
         }
 
         let selectedPanelId: UUID? = {
-            if let selectedOldId = snapshot.selectedPanelId {
-                return oldToNewPanelIds[selectedOldId]
+            // The selected panel can be missing when its snapshot did not decode.
+            if let selectedOldId = snapshot.selectedPanelId,
+               let selectedNewId = oldToNewPanelIds[selectedOldId] {
+                return selectedNewId
             }
             return createdPanelIds.first
         }()

@@ -164,6 +164,39 @@ final class ProgramaConfigDecodingTests: XCTestCase {
         }
     }
 
+    func testDecodeSkipsRetiredBrowserSurfaces() throws {
+        let json = """
+        {
+          "commands": [{
+            "name": "layout",
+            "workspace": {
+              "layout": {
+                "direction": "horizontal",
+                "children": [
+                  { "pane": { "surfaces": [
+                    { "type": "browser", "url": "https://example.com" },
+                    { "type": "terminal", "name": "shell" }
+                  ] } },
+                  { "pane": { "surfaces": [{ "type": "browser" }] } }
+                ]
+              }
+            }
+          }]
+        }
+        """
+        let config = try decode(json)
+        guard case .split(let split) = config.commands[0].workspace!.layout! else {
+            return XCTFail("Expected split node")
+        }
+        guard case .pane(let mixed) = split.children[0],
+              case .pane(let browserOnly) = split.children[1] else {
+            return XCTFail("Expected two pane children")
+        }
+        XCTAssertEqual(mixed.surfaces.map(\.type), [.terminal])
+        XCTAssertEqual(mixed.surfaces.first?.name, "shell")
+        XCTAssertEqual(browserOnly.surfaces.map(\.type), [.terminal])
+    }
+
     func testDecodeSplitNode() throws {
         let json = """
         {

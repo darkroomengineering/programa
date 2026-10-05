@@ -598,6 +598,39 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertNil(decoded.cleanShutdown)
     }
 
+    func testSnapshotDropsPanelWithUnknownTypeAndKeepsTheRest() throws {
+        let keptID = UUID()
+        let droppedID = UUID()
+        var snapshot = makeOwnershipSnapshot(keptID)
+        snapshot.windows[0].tabManager.workspaces[0].panels.append(SessionPanelSnapshot(
+            id: droppedID, type: .terminal, isPinned: false, isManuallyUnread: false, listeningPorts: []
+        ))
+        snapshot.windows[0].tabManager.workspaces[0].layout = .pane(SessionPaneLayoutSnapshot(
+            panelIds: [keptID, droppedID], selectedPanelId: droppedID
+        ))
+
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as? [String: Any]
+        )
+        var windows = try XCTUnwrap(json["windows"] as? [[String: Any]])
+        var tabManager = try XCTUnwrap(windows[0]["tabManager"] as? [String: Any])
+        var workspaces = try XCTUnwrap(tabManager["workspaces"] as? [[String: Any]])
+        var panels = try XCTUnwrap(workspaces[0]["panels"] as? [[String: Any]])
+        panels[1]["type"] = "not-a-real-panel-type"
+        workspaces[0]["panels"] = panels
+        tabManager["workspaces"] = workspaces
+        windows[0]["tabManager"] = tabManager
+        json["windows"] = windows
+
+        let decoded = try JSONDecoder().decode(
+            AppSessionSnapshot.self,
+            from: JSONSerialization.data(withJSONObject: json)
+        )
+        let workspace = try XCTUnwrap(decoded.windows.first?.tabManager.workspaces.first)
+        XCTAssertEqual(workspace.panels.map(\.id), [keptID])
+        XCTAssertEqual(workspace.panels.first?.type, .terminal)
+    }
+
     func testAppSessionSnapshotRoundTripsCleanShutdownFlag() throws {
         var snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
         snapshot.cleanShutdown = true
