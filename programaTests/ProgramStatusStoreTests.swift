@@ -232,4 +232,17 @@ final class ProgramStatusStoreTests: XCTestCase {
         workspace.updatePanelAgentState(panelId: a, state: .blocked, source: .hooks)
         XCTAssertEqual(SidebarAgentIndicator.make(for: workspace)?.tint, .blocked)
     }
+
+    func testSidebarTitleStripsLeadingSpinnerGlyphOnly() {
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("◐ CPU usage monitoring"), "CPU usage monitoring")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("✳ Claude Code"), "Claude Code")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("⠋ Build"), "Build")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("🚀 Deploy"), "🚀 Deploy")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("~/Developer"), "~/Developer")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("main"), "main")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("◐"), "◐")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("◐ "), "◐ ")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("© Example"), "© Example")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("™ Product"), "™ Product")
+    }
 }
