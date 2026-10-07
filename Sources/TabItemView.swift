@@ -66,14 +66,24 @@ struct SidebarRowMetrics: Equatable {
 }
 
 enum SidebarTitle {
-    /// Drops one leading status glyph plus its following space, e.g. the spinner Claude Code
-    /// puts in its terminal title ("◐ Fix tests", "✳ Claude Code", "⠋ Build"). Only a text
-    /// symbol counts: letters, digits, punctuation and emoji presented as emoji stay, so
-    /// "🚀 Deploy" is left alone.
+    /// Spinner frames agents put at the start of their terminal title: braille spinners,
+    /// quarter-circle spinners, and Claude Code's star frames. An explicit set, so ordinary
+    /// symbols such as "©" or "™" are never stripped.
+    private static func isStatusGlyph(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x2801...0x28FF, 0x25D0...0x25D3, 0x25F4...0x25F7,
+             0x00B7, 0x2722, 0x2733, 0x2736, 0x273B, 0x273D:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Drops one leading spinner glyph plus its following space ("◐ Fix tests" becomes
+    /// "Fix tests"). A title made of the glyph alone is left as is.
     static func strippingLeadingStatusGlyph(_ title: String) -> String {
         guard let first = title.unicodeScalars.first,
-              first.properties.generalCategory == .otherSymbol,
-              !first.properties.isEmojiPresentation,
+              isStatusGlyph(first),
               let firstCharacter = title.first,
               firstCharacter.unicodeScalars.count == 1 || firstCharacter.unicodeScalars.dropFirst().allSatisfy({ $0.value == 0xFE0E }),
               title.dropFirst().first == " " else {
@@ -295,10 +305,12 @@ struct TabItemView: View, Equatable {
         SidebarAgentIndicator.make(for: tab)
     }
 
-    /// Program-set titles lose a leading spinner glyph (the agent badge already shows that
-    /// state); a title the user typed is shown exactly as written.
+    /// Program-set titles lose a leading spinner glyph only while the agent badge shows that
+    /// state; without a badge the glyph is the row's only activity sign. A title the user
+    /// typed is shown exactly as written.
     private var sidebarDisplayTitle: String {
-        tab.customTitle == nil ? SidebarTitle.strippingLeadingStatusGlyph(tab.title) : tab.title
+        guard tab.customTitle == nil, agentIndicator != nil else { return tab.title }
+        return SidebarTitle.strippingLeadingStatusGlyph(tab.title)
     }
 
     /// Status entry keys/values that used to duplicate agent state in the metadata rows.

@@ -242,5 +242,7 @@ final class ProgramStatusStoreTests: XCTestCase {
         XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("main"), "main")
         XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("◐"), "◐")
         XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("◐ "), "◐ ")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("© Example"), "© Example")
+        XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("™ Product"), "™ Product")
     }
 }
