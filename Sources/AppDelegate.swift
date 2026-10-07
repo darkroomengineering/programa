@@ -6141,6 +6141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private static let appShortcutPrecedenceOrderAfterLegacyTabNavigation: [KeyboardShortcutSettings.Action] = [
         .newSurface, .openReview, .openAgentOverview,
         .find, .findNext, .findPrevious, .hideFind, .useSelectionForFind,
+        .reopenClosedTerminal,
     ]
 
     private func handleConfiguredAppShortcutActions(
@@ -6305,6 +6306,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return handleHideFindShortcutAction(event: event)
         case .useSelectionForFind:
             return handleUseSelectionForFindShortcutAction(event: event)
+        case .reopenClosedTerminal:
+            guard matchConfiguredShortcut(event: event, action: .reopenClosedTerminal) else { return nil }
+            _ = tabManager?.closedTerminalUndoStore.restoreMostRecent()
+            return true
         case .openReview:
             return handleOpenReviewShortcutAction(event: event)
         case .openAgentOverview:

@@ -17408,6 +17408,23 @@
           }
         }
       }
+    },
+    "menu.file.reopenClosedTerminal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen Closed Terminal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閉じたターミナルを再度開く"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

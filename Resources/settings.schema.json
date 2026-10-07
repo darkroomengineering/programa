@@ -390,6 +390,7 @@
               "closeTab",
               "closeOtherTabsInPane",
               "closeWorkspace",
+              "reopenClosedTerminal",
               "newSurface",
               "toggleTerminalCopyMode",
               "focusLeft",

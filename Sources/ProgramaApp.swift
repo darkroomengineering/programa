@@ -574,6 +574,9 @@ struct programaApp: App {
                     workspaceCommandMenuContent(manager: activeTabManager)
                 }
 
+                splitCommandButton(title: String(localized: "menu.file.reopenClosedTerminal", defaultValue: "Reopen Closed Terminal"), shortcut: menuShortcut(for: .reopenClosedTerminal)) {
+                    _ = activeTabManager.closedTerminalUndoStore.restoreMostRecent()
+                }
             }
 
             // Find

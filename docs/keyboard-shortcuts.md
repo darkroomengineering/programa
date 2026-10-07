@@ -37,6 +37,7 @@ for defaults and [Windows testing](windows-testing.md) for validation status.
 | ⌃ ⇧ Tab | Previous surface |
 | ⌃ 1–8 | Jump to surface 1–8 |
 | ⌃ 9 | Jump to last surface |
+| ⌘ ⇧ T | Reopen a terminal closed in the last 5 seconds |
 | ⌘ W | Close tab (action `closeTab`) |
 | ⌥ ⌘ T | Close other tabs in the pane |
 
@@ -175,6 +176,7 @@ apply to digits 1 to 9.
 | `closeTab` | Close Tab | ⌘W | "cmd+w" |
 | `closeOtherTabsInPane` | Close Other Tabs in Pane | ⌥⌘T | "cmd+opt+t" |
 | `closeWorkspace` | Close Workspace | ⇧⌘W | "cmd+shift+w" |
+| `reopenClosedTerminal` | Reopen Closed Terminal | ⇧⌘T | "cmd+shift+t" |
 | `newSurface` | New Surface | ⌘T | "cmd+t" |
 | `toggleTerminalCopyMode` | Toggle Terminal Copy Mode | ⇧⌘M | "cmd+shift+m" |
 | `focusLeft` | Focus Pane Left | ⌥⌘← | "cmd+opt+left" |
