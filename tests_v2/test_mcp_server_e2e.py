@@ -307,7 +307,7 @@ def _assert_tools_list_matches_exact_catalog(mcp: ProgramaMcpClient) -> None:
         focus_names == EXPECTED_FOCUS_TOOL_NAMES,
         f"focus_-prefixed tool set drifted -- expected {sorted(EXPECTED_FOCUS_TOOL_NAMES)}, got {sorted(focus_names)}",
     )
-    _must(len(focus_names) == 13, f"expected exactly 13 focus_-prefixed tools, got {len(focus_names)}")
+    _must(len(focus_names) == len(EXPECTED_FOCUS_TOOL_NAMES), f"expected exactly {len(EXPECTED_FOCUS_TOOL_NAMES)} focus_-prefixed tools, got {len(focus_names)}")
 
     _must(all("." not in name for name in actual_names), f"tool names must never contain '.': {[n for n in actual_names if '.' in n]}")
 
