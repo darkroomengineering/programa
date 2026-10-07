@@ -1270,7 +1270,7 @@ extension ProgramaCLI {
         return raw
     }
 
-    private func parseClaudeHookInput(rawInput: String) -> ClaudeHookParsedInput {
+    func parseClaudeHookInput(rawInput: String) -> ClaudeHookParsedInput {
         let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let data = trimmed.data(using: .utf8),
@@ -1559,7 +1559,7 @@ extension ProgramaCLI {
         return nil
     }
 
-    private func summarizeClaudeHookNotification(parsedInput: ClaudeHookParsedInput) -> (subtitle: String, body: String) {
+    func summarizeClaudeHookNotification(parsedInput: ClaudeHookParsedInput) -> (subtitle: String, body: String) {
         guard let object = parsedInput.object else {
             if let fallback = parsedInput.rawFallback, !fallback.isEmpty {
                 return classifyClaudeNotification(signal: fallback, message: fallback)
@@ -3121,7 +3121,7 @@ extension ProgramaCLI {
         return result.reversed()
     }
 
-    private func summarizeCodexHookNotification(parsedInput: ClaudeHookParsedInput) -> (subtitle: String, body: String) {
+    func summarizeCodexHookNotification(parsedInput: ClaudeHookParsedInput) -> (subtitle: String, body: String) {
         guard let object = parsedInput.object else {
             if let fallback = parsedInput.rawFallback, !fallback.isEmpty {
                 return classifyCodexNotification(signal: fallback, message: fallback)

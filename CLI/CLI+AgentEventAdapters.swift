@@ -50,6 +50,11 @@ extension ProgramaCLI {
         sessionId: String? = nil,
         pid: Int? = nil
     ) {
+        switch eventType {
+        case "turn.started", "item.started": emitProgramStatus(state: "working", app: provider)
+        case "turn.completed": emitProgramStatus(state: "done", app: provider)
+        default: break
+        }
         reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: state, provider: provider, sessionId: sessionId, pid: pid)
         reportAgentEvent(client: client, provider: provider, eventType: eventType, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: sessionId, pid: pid)
     }
@@ -96,6 +101,7 @@ extension ProgramaCLI {
         surfaceId: String,
         sessionId: String? = nil
     ) {
+        emitProgramStatus(state: "clear")
         reportAgentEvent(client: client, provider: provider, eventType: eventType, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: sessionId)
         clearAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId)
     }
@@ -138,6 +144,7 @@ extension ProgramaCLI {
         sessionId: String?,
         pid: Int?
     ) {
+        emitProgramStatusForNotification(app: provider, classifiedSubtitle: classifiedSubtitle, body: body)
         if agentStateForClassifiedNotificationSubtitle(classifiedSubtitle) == .blocked {
             reportAgentNeedsInput(
                 client: client,
