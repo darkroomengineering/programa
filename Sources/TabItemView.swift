@@ -65,6 +65,25 @@ struct SidebarRowMetrics: Equatable {
     }
 }
 
+enum SidebarTitle {
+    /// Drops one leading status glyph plus its following space, e.g. the spinner Claude Code
+    /// puts in its terminal title ("◐ Fix tests", "✳ Claude Code", "⠋ Build"). Only a text
+    /// symbol counts: letters, digits, punctuation and emoji presented as emoji stay, so
+    /// "🚀 Deploy" is left alone.
+    static func strippingLeadingStatusGlyph(_ title: String) -> String {
+        guard let first = title.unicodeScalars.first,
+              first.properties.generalCategory == .otherSymbol,
+              !first.properties.isEmojiPresentation,
+              let firstCharacter = title.first,
+              firstCharacter.unicodeScalars.count == 1 || firstCharacter.unicodeScalars.dropFirst().allSatisfy({ $0.value == 0xFE0E }),
+              title.dropFirst().first == " " else {
+            return title
+        }
+        let rest = title.dropFirst(2)
+        return rest.isEmpty ? title : String(rest)
+    }
+}
+
 private enum SidebarWorktreeCreationResult: Sendable {
     case success(path: String, branch: String)
     case branchCheckedOut(path: String)
@@ -276,6 +295,12 @@ struct TabItemView: View, Equatable {
         SidebarAgentIndicator.make(for: tab)
     }
 
+    /// Program-set titles lose a leading spinner glyph (the agent badge already shows that
+    /// state); a title the user typed is shown exactly as written.
+    private var sidebarDisplayTitle: String {
+        tab.customTitle == nil ? SidebarTitle.strippingLeadingStatusGlyph(tab.title) : tab.title
+    }
+
     /// Status entry keys/values that used to duplicate agent state in the metadata rows.
     /// Filtered out at render time so older CLI builds that still send them don't double up
     /// with the badge above.
@@ -434,7 +459,7 @@ struct TabItemView: View, Equatable {
                 }
                 .frame(minWidth: SidebarRowMetrics.leadingIconSlotWidth, alignment: .center)
 
-                Text(tab.title)
+                Text(sidebarDisplayTitle)
                     .font(.system(size: rowMetrics.titleFontSize, weight: titleFontWeight))
                     .foregroundColor(activePrimaryTextColor)
                     .lineLimit(1)
@@ -456,6 +481,9 @@ struct TabItemView: View, Equatable {
                             .opacity(agentIndicator.isStale ? 0.55 : 1)
                             .lineLimit(1)
                     }
+                    // The badge keeps its full width; the title truncates first.
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(2)
                     .safeHelp(agentIndicator.label)
                     .accessibilityLabel(Text(agentIndicator.label))
                 }
