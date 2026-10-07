@@ -13,12 +13,14 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Current fork changes
 
-The pinned fork head is `bccfc8333fecf707dd918d46e3849fc8ed72cca0` on fork `main`. It is built on
+The pinned fork head is `9d8aeccac` on the fork branch `osc7501-program-status`, which is
+fork `main`'s `bccfc8333fecf707dd918d46e3849fc8ed72cca0` plus the OSC 7501 patch group. Never
+delete that branch: the pin and its xcframework release point at it. It is built on
 `ghostty-org/ghostty` `main` at `c8634f3fce12f8189ed058e018195eb693f8562b` and Zig 0.16.0, and
-carries the ten patch groups below: display-link restart, resize stale-frame mitigation, OSC 99
+carries the eleven patch groups below: display-link restart, resize stale-frame mitigation, OSC 99
 notifications, theme picker hooks, color scheme mode 2031, keyboard copy mode selection API,
-layer-background flag, occluded-surface throttle, offscreen renderer realization, and session
-introspection and revival APIs (which include the PTY tee).
+layer-background flag, occluded-surface throttle, offscreen renderer realization, session
+introspection and revival APIs (which include the PTY tee), and OSC 7501 program status.
 
 Prebuilt framework for the pinned head:
 
@@ -159,6 +161,33 @@ tend to conflict together during rebases.
   - Restores read-only child PID, PTY path, and PTY master-fd accessors used by Programa's durable session machinery.
   - Restores surface revival through an existing PTY master fd and running child PID without taking ownership of or signaling that process.
   - Programa uses the fork's `ghostty_surface_set_pty_tee_cb` callback for its session WAL. That callback runs before VT parsing. There is no separate output-tap API.
+
+### 11) OSC 7501 program status
+
+- Commits: `79173c0da` (backport of upstream `bae2c3cdb`, ghostty-org/ghostty#14560),
+  `9d8aeccac` (apprt action)
+- Files:
+  - `include/ghostty.h`, `include/ghostty/vt/osc.h`
+  - `src/terminal/osc.zig`, `src/terminal/osc/parsers.zig`,
+    `src/terminal/osc/parsers/program_status.zig`, `src/terminal/osc/kitty_metadata.zig`
+  - `src/terminal/stream.zig`, `src/terminal/stream_readonly.zig`, `src/terminal/stream_terminal.zig`
+  - `src/termio/stream_handler.zig`, `src/apprt/surface.zig`, `src/apprt/action.zig`,
+    `src/Surface.zig`, `src/apprt/gtk/class/application.zig`
+- Summary:
+  - Parses OSC 7501 (Program Status Protocol) and forwards each validated report body to the
+    embedder as `GHOSTTY_ACTION_PROGRAM_STATUS`. Programa keeps the records.
+  - Sends `RESET_ALL` on a full reset (RIS) and `PROMPT` on OSC 133;A, both only after the
+    terminal has seen a report.
+  - Answers the support query `OSC 7501 ; ?` with the same bytes and terminator.
+- Conflict notes:
+  - The backport takes only the parser and stream action. Upstream's libghostty-vt C API
+    (`c/terminal.zig`, `vt/terminal.h`) and `stream_terminal.zig` effect were left out because the
+    pinned tree lacks the effects they build on. `stream_terminal.zig` and `stream_readonly.zig`
+    ignore `.program_status`.
+  - `Parser.nextSlice` is a byte loop over `next`; upstream's version appends to the capture in
+    bulk. Take upstream's on the next sync.
+  - `GHOSTTY_OSC_COMMAND_PROGRAM_STATUS` is 26 here and 28 upstream, because the pin lacks the
+    Kitty desktop notification and unknown-OSC commands. Take upstream's value on the next sync.
 
 ## Upstreamed fork changes
 
