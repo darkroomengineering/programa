@@ -2541,22 +2541,16 @@ enum SessionEscrowHolder {
         var lastWALSyncAt = Date.distantPast
         var hasUnsynchronizedWrites = false
 
-        // ghostty runs its own event loop against this fd with O_NONBLOCK
-        // set, and that flag lives on the shared open file description --
-        // not the fd number -- so the dup we escrowed inherited it too.
-        // The holder owns this fd exclusively once the app is dead (ghostty
-        // is gone), so it's safe and correct to clear O_NONBLOCK here and
-        // let read() block until data or real EOF, instead of busy-looping
-        // or (worse) treating an EAGAIN as end-of-stream and closing the
-        // last reference to the master -- which is exactly what delivers
-        // SIGHUP to the child. Best-effort: if fcntl somehow fails, the
-        // read loop below still never treats EAGAIN as EOF, just retries.
-        let currentFlags = fcntl(session.fd, F_GETFL, 0)
-        if currentFlags >= 0 {
-            _ = fcntl(session.fd, F_SETFL, currentFlags & ~O_NONBLOCK)
-        }
+        // Never change this fd's flags. O_NONBLOCK lives on the open file
+        // description shared with ghostty's copy of the master, and a drain
+        // can start while the app is still alive (a connection EOF after a
+        // failed send). Clearing it there leaves ghostty's pty reader in a
+        // blocking read() that its quit pipe cannot interrupt, so closing
+        // that terminal hangs the main thread in ghostty_surface_free. The
+        // loop below polls before every read and treats EAGAIN as "keep
+        // waiting", so it works with the fd left non-blocking.
         #if DEBUG
-        dlog("session.escrow.holder.drain.start session=\(session.sessionId.prefix(8)) fd=\(session.fd) walPath=\(paths?.walURL.path ?? "nil") startSize=\(currentSize) clearedNonblock=\(currentFlags >= 0)")
+        dlog("session.escrow.holder.drain.start session=\(session.sessionId.prefix(8)) fd=\(session.fd) walPath=\(paths?.walURL.path ?? "nil") startSize=\(currentSize)")
         #endif
 
         var buffer = [UInt8](repeating: 0, count: SessionEscrowPolicy.drainReadBufferSize)
@@ -2613,11 +2607,10 @@ enum SessionEscrowHolder {
             }
             if n < 0 {
                 let readErrno = errno
-                // EAGAIN/EWOULDBLOCK means "no data right now", not EOF --
-                // this should no longer occur now that O_NONBLOCK is
-                // cleared above, but if that fcntl silently failed for any
-                // reason, treat it as "keep waiting", never as a reason to
-                // close the fd. EINTR is a plain retry. Anything else (EIO
+                // EAGAIN/EWOULDBLOCK means "no data right now", not EOF (the
+                // fd stays non-blocking, and another reader may have taken
+                // the bytes poll reported), so keep waiting and never close
+                // the fd for it. EINTR is a plain retry. Anything else (EIO
                 // once the slave side is gone) ends the session.
                 if readErrno == EAGAIN || readErrno == EWOULDBLOCK || readErrno == EINTR {
                     continue readLoop
