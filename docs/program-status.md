@@ -47,8 +47,9 @@ are not displayed.
   icon. A blocked or working surface in the same workspace outranks them.
 - Notifications: when the root record enters `blocked`, `done` or `error` on a surface you are
   not looking at, Programa posts one notification, at most one per 10 seconds per surface. The
-  notification title is the Programa tab title; the program's `title` becomes the subtitle and
-  `msg` the body. Workspaces with a hook-managed agent are skipped, since the hooks notify.
+  notification title is the Programa tab title and the body names the state. The program's
+  `title` and `msg` stay out of it, because `notification.list` returns notification text over
+  the socket and the spec forbids revealing record contents back to programs. Workspaces with a hook-managed agent are skipped, since the hooks notify.
   There is no setting for this.
 - Socket: `surface.list` and `system.tree` return `program_status`, and `surface.wait` accepts
   `program_state`. Record text and child ids are never returned. See `docs/socket-api.md`.

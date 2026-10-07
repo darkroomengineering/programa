@@ -66,7 +66,10 @@ struct ProgramStatusReport: Equatable, Sendable {
         var values: [Substring: Substring] = [:]
         for pair in text.split(separator: ":", omittingEmptySubsequences: true) {
             guard let eq = pair.firstIndex(of: "=") else { continue }
-            values[pair[pair.startIndex..<eq]] = pair[pair.index(after: eq)...]
+            // Ghostty's parser trims ASCII whitespace from keys and values; match it so both
+            // sides agree on which record a report addresses.
+            values[trimASCIIWhitespace(pair[pair.startIndex..<eq])] =
+                trimASCIIWhitespace(pair[pair.index(after: eq)...])
         }
 
         let id = values["id"].map(String.init) ?? ""
@@ -120,6 +123,13 @@ struct ProgramStatusReport: Equatable, Sendable {
                 return false
             }
         }
+    }
+
+    private static func trimASCIIWhitespace(_ value: Substring) -> Substring {
+        let isSpace: (Character) -> Bool = { " \t\n\r\u{0B}\u{0C}".contains($0) }
+        guard let start = value.firstIndex(where: { !isSpace($0) }),
+              let end = value.lastIndex(where: { !isSpace($0) }) else { return "" }
+        return value[start...end]
     }
 
     private static func parseProgress(_ value: Substring) -> Int? {

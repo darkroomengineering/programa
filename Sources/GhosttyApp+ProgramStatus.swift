@@ -77,7 +77,10 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
         case .report(let report) where report.state != nil:
             for index in events.indices.reversed() {
                 guard case .report(let queued) = events[index], queued.state != nil else { break }
+                // Only a same-state update (progress, text) may replace a queued report; a state
+                // change must reach waiters and notifications even inside one burst.
                 if queued.id == report.id {
+                    guard queued.state == report.state else { break }
                     events[index] = event
                     return
                 }
@@ -99,9 +102,17 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
               let workspace = manager.tabs.first(where: { $0.id == key.tabId }),
               let panel = workspace.panels[key.surfaceId] as? TerminalPanel else { return }
 
-        let rootBefore = panel.programStatus.root
+        var lastRootState = panel.programStatus.root?.state
+        var transitions: [ProgramStatusRecord?] = []
         var projectRoot = false
         for event in events {
+            defer {
+                let root = panel.programStatus.root
+                if root?.state != lastRootState {
+                    transitions.append(root)
+                    lastRootState = root?.state
+                }
+            }
             switch event {
             case .report(let report):
                 if case .applied(let rootTouched) = panel.programStatus.apply(report) {
@@ -127,7 +138,6 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             }
         }
         guard projectRoot else { return }
-        let rootAfter = panel.programStatus.root
 
         // Only a change to the root record projects. Re-projecting on every event would let a
         // resting `done` record overwrite a hook agent that legitimately took over the surface.
@@ -143,16 +153,19 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             manager.clearSurfaceAgentState(tabId: key.tabId, surfaceId: key.surfaceId, source: .program)
         }
 
-        guard rootBefore?.state != rootAfter?.state else { return }
-        ProgramStateWaitRegistry.shared.notify(surfaceId: key.surfaceId, newState: rootAfter?.state)
-        if let rootAfter {
-            postNotificationIfNeeded(for: rootAfter, manager: manager, workspace: workspace, surfaceId: key.surfaceId)
+        for root in transitions {
+            ProgramStateWaitRegistry.shared.notify(surfaceId: key.surfaceId, newState: root?.state)
+            if let root {
+                postNotificationIfNeeded(for: root, manager: manager, workspace: workspace, surfaceId: key.surfaceId)
+            }
         }
     }
 
     /// Notifies when the root record enters blocked, done or error on a surface the user is not
     /// looking at. The hook-managed path already posts for the same moment, so it is skipped.
-    /// Title is Programa's tab title; the program's own text only reaches subtitle and body.
+    /// Title is Programa's tab title and the body is Programa's own wording: `notification.list`
+    /// returns notification text over the socket, and the spec forbids revealing a record's
+    /// `msg` or `title` back to programs.
     @MainActor
     private func postNotificationIfNeeded(
         for root: ProgramStatusRecord,
@@ -166,12 +179,12 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             && manager.focusedSurfaceId(for: workspace.id) == surfaceId
         guard !(isFocused && AppFocusState.isAppFocused()) else { return }
 
-        let body = root.msg ?? Self.defaultNotificationBody(for: root)
+        let body = Self.defaultNotificationBody(for: root)
         TerminalNotificationStore.shared.addNotification(
             tabId: workspace.id,
             surfaceId: surfaceId,
             title: manager.titleForTab(workspace.id) ?? "Terminal",
-            subtitle: root.title ?? "",
+            subtitle: "",
             body: body,
             cooldownKey: "program-status-\(surfaceId.uuidString)",
             cooldownInterval: 10

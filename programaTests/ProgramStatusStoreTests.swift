@@ -94,6 +94,14 @@ final class ProgramStatusStoreTests: XCTestCase {
         XCTAssertEqual(parsed.id, "a")
     }
 
+    /// Ghostty trims keys and values; a clear with a padded `id` must still target that record
+    /// rather than falling through to clear-all.
+    func testKeysAndValuesAreTrimmedLikeGhostty() throws {
+        let parsed = try XCTUnwrap(parse(nil, " id = build "))
+        XCTAssertEqual(parsed.id, "build")
+        XCTAssertEqual(try XCTUnwrap(parse(.working, "progress= 40 ")).progress, 40)
+    }
+
     // MARK: Store
 
     func testApplyUpsertsRootAndProjectsLegacyState() throws {
