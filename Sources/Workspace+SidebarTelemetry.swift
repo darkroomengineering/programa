@@ -252,14 +252,25 @@ extension Workspace {
     ///   (never reported) or already `.inferred`. If it's `.hooks`, the write is silently
     ///   dropped — belt-and-suspenders: the screen-manifest engine's Phase A should already skip
     ///   sampling a hooks-owned surface, but this is the authoritative guard regardless.
+    /// - `source == .program` (OSC 7501) always writes, and `programState` carries the root
+    ///   record's finer state. While the current presence is `.program`, `.hooks`/`.inferred`
+    ///   writes are dropped if its state is active (working/blocked), and, if it is resting
+    ///   (idle/done/error), accepted only when they report an active state. Accepting only active
+    ///   claims keeps a hook `idle` from overwriting a program `done` badge.
     func updatePanelAgentState(
         panelId: UUID,
         state: AgentActivityState,
         source: AgentStateSource = .hooks,
         sessionKey: AgentSessionKey? = nil,
+        programState: ProgramStatusState? = nil,
         at now: Date = Date()
     ) {
         let current = panelAgentPresence[panelId]
+
+        if source != .program, let current, current.source == .program,
+           current.state != .idle || state == .idle {
+            return
+        }
 
         if source == .inferred, let current, current.source == .hooks {
             // Hooks always win: dropped write must not move lastEventAt either, so a
@@ -273,13 +284,14 @@ extension Workspace {
         // keeps the key an earlier report established, so the liveness sweep never loses
         // the pid it needs to clear this surface when the process dies.
         let resolvedSessionKey: AgentSessionKey?
-        if source == .inferred {
+        if source != .hooks {
             resolvedSessionKey = nil
         } else {
             resolvedSessionKey = sessionKey ?? current?.sessionKey
         }
 
-        guard current?.state != state || current?.source != source || current?.sessionKey != resolvedSessionKey else {
+        guard current?.state != state || current?.source != source || current?.sessionKey != resolvedSessionKey
+                || current?.programState != programState else {
             // Same state from the same writer: only the liveness clock moves. Without this a
             // long-running agent that keeps reporting `working` would read as stale at the
             // threshold. No wait-registry or socket fan-out, since nothing observable changed.
@@ -291,14 +303,23 @@ extension Workspace {
             state: state,
             source: source,
             lastEventAt: now,
-            sessionKey: resolvedSessionKey
+            sessionKey: resolvedSessionKey,
+            programState: programState
         )
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
         // AgentStateWaitRegistry's doc comment in TerminalController+SurfaceWait.swift for why
         // this is the single safe place to fire from.
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: state, source: source)
-        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: state, source: source)
+        SocketEventBroadcaster.shared.publishAgentState(
+            workspaceId: id,
+            surfaceId: panelId,
+            state: state,
+            source: source,
+            programStatus: source == .program
+                ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
+                : nil
+        )
 #if DEBUG
         dlog(
             "surface.agentState workspace=\(id.uuidString.prefix(5)) " +
@@ -307,8 +328,12 @@ extension Workspace {
 #endif
     }
 
-    func clearPanelAgentState(panelId: UUID) {
-        guard panelAgentPresence[panelId] != nil else { return }
+    /// Clears a surface's agent presence. A `.program` clear removes only program-owned presence;
+    /// a hooks/inferred clear is ignored while the presence is program-owned. `force` removes the
+    /// presence whoever owns it (permanent panel close).
+    func clearPanelAgentState(panelId: UUID, source: AgentStateSource = .hooks, force: Bool = false) {
+        guard let current = panelAgentPresence[panelId] else { return }
+        if !force, (source == .program) != (current.source == .program) { return }
         panelAgentPresence.removeValue(forKey: panelId)
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
         SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: nil, source: nil)
@@ -339,6 +364,11 @@ extension Workspace {
         // it out here too -- otherwise a surface.wait `agent_state` (or a subscribed client)
         // watching a surface whose state got wiped by a sidebar reset would hang until timeout
         // instead of observing the transition to "no state".
+        for (panelId, panel) in panels {
+            if (panel as? TerminalPanel)?.programStatus.resetAll() == true {
+                ProgramStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil)
+            }
+        }
         let clearedAgentSurfaceIds = Array(panelAgentPresence.keys)
         panelAgentPresence.removeAll()
         for surfaceId in clearedAgentSurfaceIds {

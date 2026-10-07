@@ -351,7 +351,7 @@ until a condition is met, instead of the caller polling `surface.read_text` in a
 request, one response — no subscription/unsubscribe pair to manage. CLI: `programa
 wait-surface`.
 
-Request params (exactly one of `pattern` / `exit` / `agent_state` is required):
+Request params (exactly one of `pattern` / `exit` / `agent_state` / `program_state` is required):
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -359,6 +359,7 @@ Request params (exactly one of `pattern` / `exit` / `agent_state` is required):
 | `pattern` | string | one of `pattern`/`exit`/`agent_state` | Regex (ICU/`NSRegularExpression` syntax) matched against the surface's current text (screen + scrollback) on every check. |
 | `exit` | bool | one of `pattern`/`exit`/`agent_state` | Wait for the surface's child process to exit. |
 | `agent_state` | string | one of `pattern`/`exit`/`agent_state` | Wait for the surface's #164 agent activity state to reach `idle`, `working`, `blocked`, or transition at all (`any_change`). |
+| `program_state` | string | one of the conditions | Wait for the surface's OSC 7501 root record to reach `idle`, `working`, `done`, `blocked`, `error`, `cleared` (no root record), or transition at all (`any_change`). See `docs/program-status.md`. |
 | `timeout_ms` | int | no | Default `30000`, at most `3600000` (one hour). Also accepts `timeout` (same units) for convenience. |
 | `lines` | int | no | Caps how many trailing lines of scrollback `pattern` rereads per check (default `2000`); does not apply to `exit`/`agent_state`. |
 
@@ -390,8 +391,11 @@ Response (`ok: true`):
   lifecycle hook — Claude Code/Codex/OpenCode) or `"inferred"` (the screen-manifest detection
   engine pattern-matching the terminal buffer for agents with no installed hooks). `null` iff
   `state` is `null`. Hooks always win: a surface's source only ever reads `"inferred"` if no
-  hook has ever reported for it. Manifest schema/authoring guidance for the `"inferred"` tier:
+  hook has ever reported for it. `"program"` means the program in the terminal reported its own
+  status with OSC 7501 (`docs/program-status.md`); `surface.report_agent_state` rejects
+  `source: "program"` with `invalid_params`. Manifest schema/authoring guidance for the `"inferred"` tier:
   `docs/agent-detection-manifests.md`.
+- `program_state` is only present for `program_state` waits and is the root record's state at resolution (`null` when the surface has no root record). A surface with no root record satisfies only `cleared`, never `idle`.
 - Timeout: `{"ok": false, "error": {"code": "timeout", "message": "...", "data": {"timeout_ms": N}}}`.
 - If the target surface does not exist when the call arrives, the response is `not_found`.
 - If the surface closes while the wait is in flight, the wait resolves at once with
@@ -436,6 +440,21 @@ does for child-exit) at a fixed ~100ms interval on the connection's own thread; 
 (`Workspace.updatePanelAgentState`/`clearPanelAgentState`, always called from
 `TerminalController+Telemetry.swift`'s `v2SurfaceReportAgentState`/`v2SurfaceClearAgentState` via
 `DispatchQueue.main.async`).
+
+### `program_status` on `surface.list` and `system.tree`
+
+Every terminal surface entry carries `program_status`: the surface's OSC 7501 root record, or
+`null` when it has none. `agent_state` keeps its three values; `program_status.state` is how a
+client tells `done` and `error` from `idle`.
+
+```json
+"program_status": {"state": "done", "kind": null, "progress": null, "app": "claude-code", "has_message": true, "updated_at": 1759800000.0}
+```
+
+Record text is never on the wire. The object has no `msg`, no `title` and no child ids, because
+any process in a Programa terminal can read the socket and the protocol forbids revealing record
+contents back to programs. `has_message` says whether a message exists. `app` is the identifier
+the program chose, limited to 1-32 characters of `A-Za-z0-9_.+-`.
 
 ## `surface.resolve_tty`
 
@@ -619,6 +638,7 @@ request they're a response to) — each is its own single-line JSON object with 
 - `agent_state.source` is the same additive `"hooks" | "inferred" | null` sibling documented
   under `surface.wait`'s `agent_state` condition above (screen-manifest detection,
   docs/plans/screen-manifest-detection.md) — `null` iff `state` is `null`.
+- `agent_state.program_status` is present only when `source` is `"program"`, with the same object `surface.list` returns. Frames fire when the presence changes, so a `done` to `error` change is delivered although both read `agent_state: "idle"`.
 - `output.text` is the *newly appended* tail since the last tick for that surface, capped at
   4000 characters — never the full buffer, and never per-byte (see Backpressure below).
 - `workspace_lifecycle.kind` is `created`, `closed`, or `renamed`. `renamed` fires only from the

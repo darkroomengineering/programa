@@ -228,7 +228,7 @@ struct CLICommandDispatcher {
     } catch {
         // An agent hook must never fail because programa is not reachable (app quit,
         // restarting, or the socket missing): it acks like a handled event and exits 0.
-        guard let ack = cli.failOpenHookAck(command: command) else { throw error }
+        guard let ack = cli.failOpenHookAckEmittingProgramStatus(command: command, commandArgs: commandArgs) else { throw error }
         print(ack)
         return
     }

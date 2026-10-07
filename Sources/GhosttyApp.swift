@@ -2147,6 +2147,17 @@ class GhosttyApp {
                 }
             }
             return true
+        case GHOSTTY_ACTION_PROGRAM_STATUS:
+            // OSC 7501 program status. `data` is only valid during this callback, so copy it
+            // before the dispatcher queues the event for main.
+            guard let tabId = callbackTabId,
+                  let surfaceId = callbackSurfaceId else { return true }
+            let status = action.action.program_status
+            let body = status.data.map { Data(bytes: $0, count: Int(status.len)) } ?? Data()
+            ProgramStatusDispatcher.handle(
+                tabId: tabId, surfaceId: surfaceId, event: status.event, state: status.state, body: body
+            )
+            return true
         case GHOSTTY_ACTION_COMMAND_FINISHED:
             // OSC 133 semantic prompt tracking. Plumbing-only: stores exit code + duration on
             // `Workspace.lastCommand`; no UI reads this yet.

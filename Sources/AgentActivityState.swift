@@ -51,6 +51,18 @@ enum AgentActivityState: String, Codable, CaseIterable, Sendable {
 enum AgentStateSource: String, Codable, CaseIterable, Sendable {
     case hooks
     case inferred
+    /// OSC 7501 program status reported by the program itself. Outranks hooks while the root
+    /// record is active (see `Workspace.updatePanelAgentState`).
+    case program
+
+    /// Authority order: program 2, hooks 1, inferred 0.
+    var rank: Int {
+        switch self {
+        case .program: return 2
+        case .hooks: return 1
+        case .inferred: return 0
+        }
+    }
 }
 
 /// Identifies the process/session behind a reported `AgentPresence`, when known. Hook reports
@@ -73,6 +85,9 @@ struct AgentPresence: Equatable, Sendable {
     var source: AgentStateSource
     var lastEventAt: Date
     var sessionKey: AgentSessionKey?
+    /// The root record's state when `source == .program`; `state` holds its legacy projection
+    /// (done and error both read as `.idle`). Nil for every other source.
+    var programState: ProgramStatusState?
     /// Set by the watchdog sweep once `isStale` first turns true, and reset by every write.
     /// Staleness itself is computed from `lastEventAt`; this stored flag only makes the
     /// transition a real value change, so the `removeDuplicates` sidebar publisher fires.
@@ -85,8 +100,24 @@ struct AgentPresence: Equatable, Sendable {
 
     /// True when this presence is non-idle and hasn't been refreshed within `threshold`.
     /// Staleness never clears presence on its own; it only dims/suffixes the indicator.
+    /// Program presence is never stale: OSC 7501 has no heartbeat, so a long build that reported
+    /// `working` once is still working.
     func isStale(now: Date, threshold: TimeInterval = AgentPresence.staleThreshold) -> Bool {
-        state != .idle && now.timeIntervalSince(lastEventAt) > threshold
+        source != .program && state != .idle && now.timeIntervalSince(lastEventAt) > threshold
+    }
+}
+
+extension AgentPresence {
+    /// Worst-first ordering for the sidebar badge: blocked > working > error > done > idle.
+    /// Error and done rank inside the idle tier, so a blocked or working sibling still wins.
+    fileprivate var indicatorSeverity: Int {
+        let tierBonus: Int
+        switch programState {
+        case .error: tierBonus = 2
+        case .done: tierBonus = 1
+        default: tierBonus = 0
+        }
+        return state.severity * 10 + (state == .idle ? tierBonus : 0)
     }
 }
 
@@ -98,6 +129,8 @@ struct SidebarAgentIndicator: Equatable {
         case blocked
         case working
         case idle
+        case done
+        case error
     }
 
     let systemImage: String
@@ -113,8 +146,8 @@ struct SidebarAgentIndicator: Equatable {
     static func make(for workspace: Workspace, now: Date = Date()) -> SidebarAgentIndicator? {
         let winner = workspace.panelAgentPresence.values.reduce(nil as AgentPresence?) { partial, presence in
             guard let partial else { return presence }
-            if presence.state.severity != partial.state.severity {
-                return presence.state.severity > partial.state.severity ? presence : partial
+            if presence.indicatorSeverity != partial.indicatorSeverity {
+                return presence.indicatorSeverity > partial.indicatorSeverity ? presence : partial
             }
             // Equal severity: the freshest report wins, so dictionary order never decides the
             // stale flag.
@@ -141,6 +174,20 @@ struct SidebarAgentIndicator: Equatable {
                     : String(localized: "sidebar.agentIndicator.working", defaultValue: "Working"),
                 tint: .working,
                 isStale: isStale
+            )
+        case .idle where winner.programState == .done:
+            return SidebarAgentIndicator(
+                systemImage: "checkmark.circle.fill",
+                label: String(localized: "sidebar.agentIndicator.done", defaultValue: "Done"),
+                tint: .done,
+                isStale: false
+            )
+        case .idle where winner.programState == .error:
+            return SidebarAgentIndicator(
+                systemImage: "xmark.octagon.fill",
+                label: String(localized: "sidebar.agentIndicator.error", defaultValue: "Error"),
+                tint: .error,
+                isStale: false
             )
         case .idle:
             return SidebarAgentIndicator(

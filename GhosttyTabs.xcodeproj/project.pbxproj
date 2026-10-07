@@ -24,6 +24,9 @@
 			NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */; };
 			NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */; };
 			AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */; };
+			7501A0000000000000000003 /* GhosttyApp+ProgramStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000004 /* GhosttyApp+ProgramStatus.swift */; };
+			7501A0000000000000000001 /* ProgramStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000002 /* ProgramStatus.swift */; };
+			7501A0000000000000000007 /* TerminalController+SurfaceWaitProgram.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000008 /* TerminalController+SurfaceWaitProgram.swift */; };
 			C7A3000001 /* AgentEventNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000002 /* AgentEventNormalizer.swift */; };
 			AGSV0001A1B2C3D4E5F60719 /* AgentSupervision.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */; };
 			AGSV0003A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGSV0004A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift */; };
@@ -240,6 +243,7 @@
 		B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */; };
 		B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */; };
 		C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000006 /* CLI+AgentEventAdapters.swift */; };
+		7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */; };
 		H1HC0002 /* CLI+HookCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HC0001 /* CLI+HookCommands.swift */; };
 		H1CL0002 /* CLICommandDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1CL0001 /* CLICommandDispatcher.swift */; };
 		H1HK0002 /* HookInstallationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HK0001 /* HookInstallationCoordinator.swift */; };
@@ -299,6 +303,7 @@
 					B6BF3DC98DB1495E57900199 /* TabManagerUnitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */; };
 					DCC935C5F55C1DCB33E25521 /* WorkspacePullRequestSidebarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A7DC53B9CA33BE2A421711 /* WorkspacePullRequestSidebarTests.swift */; };
 				08F8EF4F188B4E255A7C813B /* AgentActivityStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B7B486518E6CD0E6F36894B /* AgentActivityStateTests.swift */; };
+			7501A0000000000000000005 /* ProgramStatusStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000006 /* ProgramStatusStoreTests.swift */; };
 				C7A3000003 /* AgentEventNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000004 /* AgentEventNormalizerTests.swift */; };
 					0F2C25F9170130F8DC09DD1B /* WorkspaceManualUnreadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D301919B10F22B8708E8883 /* WorkspaceManualUnreadTests.swift */; };
 					CA39C0304FE351A21C372429 /* SidebarWidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0171AF1F49F7547191CEE5 /* SidebarWidthPolicyTests.swift */; };
@@ -411,6 +416,9 @@
 			NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Surfaces.swift"; sourceTree = "<group>"; };
 			NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+SidebarTelemetry.swift"; sourceTree = "<group>"; };
 			AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AgentActivityState.swift"; sourceTree = "<group>"; };
+			7501A0000000000000000002 /* ProgramStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramStatus.swift; sourceTree = "<group>"; };
+			7501A0000000000000000008 /* TerminalController+SurfaceWaitProgram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SurfaceWaitProgram.swift"; sourceTree = "<group>"; };
+			7501A0000000000000000004 /* GhosttyApp+ProgramStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyApp+ProgramStatus.swift"; sourceTree = "<group>"; };
 			C7A3000002 /* AgentEventNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizer.swift; sourceTree = "<group>"; };
 			AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSupervision.swift; sourceTree = "<group>"; };
 			AGSV0004A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+AgentSupervision.swift"; sourceTree = "<group>"; };
@@ -628,6 +636,7 @@
 		B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentWrappers.swift"; sourceTree = "<group>"; };
 		B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Hooks.swift"; sourceTree = "<group>"; };
 		C7A3000006 /* CLI+AgentEventAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentEventAdapters.swift"; sourceTree = "<group>"; };
+		7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+ProgramStatusEmitter.swift"; sourceTree = "<group>"; };
 		H1HC0001 /* CLI+HookCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+HookCommands.swift"; sourceTree = "<group>"; };
 		H1CL0001 /* CLICommandDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLICommandDispatcher.swift; sourceTree = "<group>"; };
 		H1HK0001 /* HookInstallationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstallationCoordinator.swift; sourceTree = "<group>"; };
@@ -681,6 +690,7 @@
 				42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManagerUnitTests.swift; sourceTree = "<group>"; };
 				14A7DC53B9CA33BE2A421711 /* WorkspacePullRequestSidebarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspacePullRequestSidebarTests.swift; sourceTree = "<group>"; };
 				8B7B486518E6CD0E6F36894B /* AgentActivityStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityStateTests.swift; sourceTree = "<group>"; };
+			7501A0000000000000000006 /* ProgramStatusStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramStatusStoreTests.swift; sourceTree = "<group>"; };
 				C7A3000004 /* AgentEventNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEventNormalizerTests.swift; sourceTree = "<group>"; };
 				1D301919B10F22B8708E8883 /* WorkspaceManualUnreadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceManualUnreadTests.swift; sourceTree = "<group>"; };
 				EE0171AF1F49F7547191CEE5 /* SidebarWidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarWidthPolicyTests.swift; sourceTree = "<group>"; };
@@ -853,6 +863,9 @@
 					NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */,
 					NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */,
 					AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */,
+					7501A0000000000000000002 /* ProgramStatus.swift */,
+					7501A0000000000000000008 /* TerminalController+SurfaceWaitProgram.swift */,
+					7501A0000000000000000004 /* GhosttyApp+ProgramStatus.swift */,
 					C7A3000002 /* AgentEventNormalizer.swift */,
 					AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */,
 					AGOV0002A1B2C3D4E5F60719 /* AgentOverviewWindow.swift */,
@@ -1031,6 +1044,7 @@
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
 				B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */,
 				C7A3000006 /* CLI+AgentEventAdapters.swift */,
+				7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */,
 				H1HC0001 /* CLI+HookCommands.swift */,
 				H1CL0001 /* CLICommandDispatcher.swift */,
 				C7A10001 /* V2MethodNames.swift */,
@@ -1176,6 +1190,7 @@
 					42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */,
 					14A7DC53B9CA33BE2A421711 /* WorkspacePullRequestSidebarTests.swift */,
 					8B7B486518E6CD0E6F36894B /* AgentActivityStateTests.swift */,
+					7501A0000000000000000006 /* ProgramStatusStoreTests.swift */,
 					C7A3000004 /* AgentEventNormalizerTests.swift */,
 					AMDT000010 /* AgentManifestTests.swift */,
 					CQTT000002 /* ClaudeQuotaSnapshotParserTests.swift */,
@@ -1380,6 +1395,9 @@
 					NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */,
 					NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */,
 					AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */,
+					7501A0000000000000000001 /* ProgramStatus.swift in Sources */,
+					7501A0000000000000000007 /* TerminalController+SurfaceWaitProgram.swift in Sources */,
+					7501A0000000000000000003 /* GhosttyApp+ProgramStatus.swift in Sources */,
 					C7A3000001 /* AgentEventNormalizer.swift in Sources */,
 					AGSV0001A1B2C3D4E5F60719 /* AgentSupervision.swift in Sources */,
 					AGOV0001A1B2C3D4E5F60719 /* AgentOverviewWindow.swift in Sources */,
@@ -1614,6 +1632,7 @@
 					B6BF3DC98DB1495E57900199 /* TabManagerUnitTests.swift in Sources */,
 					DCC935C5F55C1DCB33E25521 /* WorkspacePullRequestSidebarTests.swift in Sources */,
 					08F8EF4F188B4E255A7C813B /* AgentActivityStateTests.swift in Sources */,
+					7501A0000000000000000005 /* ProgramStatusStoreTests.swift in Sources */,
 					C7A3000003 /* AgentEventNormalizerTests.swift in Sources */,
 					AMDT000009 /* AgentManifestTests.swift in Sources */,
 					CQTT000001 /* ClaudeQuotaSnapshotParserTests.swift in Sources */,
@@ -1656,6 +1675,7 @@
 				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,
 				B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */,
 				C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */,
+				7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */,
 				H1HC0002 /* CLI+HookCommands.swift in Sources */,
 				H1CL0002 /* CLICommandDispatcher.swift in Sources */,
 				C7A10002 /* V2MethodNames.swift in Sources */,

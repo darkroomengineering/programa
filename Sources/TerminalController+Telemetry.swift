@@ -294,7 +294,8 @@ extension TerminalController {
         // response now echoes.
         let source: AgentStateSource
         if let rawSource = v2RawString(params, "source") {
-            guard let parsedSource = AgentStateSource(rawValue: rawSource.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) else {
+            guard let parsedSource = AgentStateSource(rawValue: rawSource.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()),
+                  parsedSource != .program else {
                 return .err(code: "invalid_params", message: "Invalid source — use: hooks, inferred", data: nil)
             }
             source = parsedSource

@@ -7,6 +7,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- Programs can report their status to Programa with the OSC 7501 Program Status Protocol. The sidebar shows working, blocked, done and error, an unfocused terminal gets a notification when a program finishes, fails or needs input, and `surface.list`, `system.tree` and `surface.wait` (`program_state`) expose it without ever returning the message text. Programa's own agent hooks emit it too, and it outranks hook and screen-detected state. See `docs/program-status.md`.
 - Programa can be set as the default web browser. Links clicked in other apps open as a browser tab in the focused pane of the active window, including a link that launches Programa. Links Programa sends to an external browser skip Programa itself and go to the next installed browser.
 - A ports button in the sidebar footer shows what is listening on a port in each workspace, plus dev servers left running after their terminal closed, with Open, Copy URL, Reveal and Stop. `programa list-ports` and `programa stop-port` and the `ports.list` and `ports.stop` socket methods do the same from the command line.
 - New `agent.needs_input` socket method reports a surface as blocked on the user and posts its notification in one call, instead of three separate calls that could fail independently.

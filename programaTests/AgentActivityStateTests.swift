@@ -558,4 +558,80 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertEqual(freshIndicator?.tint, .blocked)
         XCTAssertFalse(freshIndicator?.isStale ?? true)
     }
+
+    // MARK: - OSC 7501 program authority (docs/plans/osc7501-program-status.md D7)
+
+    func testProgramActiveBlocksHooksAndInferredWrites() {
+        let workspace = Workspace(title: "Test")
+        let panel = UUID()
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working)
+        workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .hooks)
+        workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .hooks)
+        workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .inferred)
+        XCTAssertEqual(workspace.panelAgentStates[panel], .working)
+        XCTAssertEqual(workspace.panelAgentStateSources[panel], .program)
+        XCTAssertEqual(workspace.panelAgentPresence[panel]?.programState, .working)
+    }
+
+    func testRestingProgramAcceptsOnlyActiveHookClaims() {
+        let workspace = Workspace(title: "Test")
+        let panel = UUID()
+        workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .program, programState: .done)
+        workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .hooks)
+        XCTAssertEqual(workspace.panelAgentStateSources[panel], .program)
+        XCTAssertEqual(workspace.panelAgentPresence[panel]?.programState, .done)
+
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .hooks)
+        XCTAssertEqual(workspace.panelAgentStates[panel], .working)
+        XCTAssertEqual(workspace.panelAgentStateSources[panel], .hooks)
+        XCTAssertNil(workspace.panelAgentPresence[panel]?.programState)
+    }
+
+    func testProgramWriteAlwaysAppliesOverHooks() {
+        let workspace = Workspace(title: "Test")
+        let panel = UUID()
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .hooks)
+        workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .program, programState: .blocked)
+        XCTAssertEqual(workspace.panelAgentStates[panel], .blocked)
+        XCTAssertEqual(workspace.panelAgentStateSources[panel], .program)
+    }
+
+    func testHooksClearIgnoredWhileProgramOwnedAndProgramClearOnlyRemovesProgram() {
+        let workspace = Workspace(title: "Test")
+        let panel = UUID()
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working)
+        workspace.clearPanelAgentState(panelId: panel)
+        XCTAssertNotNil(workspace.panelAgentPresence[panel])
+
+        workspace.clearPanelAgentState(panelId: panel, source: .program)
+        XCTAssertNil(workspace.panelAgentPresence[panel])
+
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .hooks)
+        workspace.clearPanelAgentState(panelId: panel, source: .program)
+        XCTAssertNotNil(workspace.panelAgentPresence[panel])
+
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working)
+        workspace.clearPanelAgentState(panelId: panel, force: true)
+        XCTAssertNil(workspace.panelAgentPresence[panel])
+    }
+
+    func testDoneToErrorFiresPresenceChangeDespiteSameLegacyState() {
+        let workspace = Workspace(title: "Test")
+        let panel = UUID()
+        workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .program, programState: .done)
+        let before = workspace.panelAgentPresence[panel]
+        workspace.updatePanelAgentState(
+            panelId: panel, state: .idle, source: .program, programState: .error, at: Date().addingTimeInterval(1)
+        )
+        XCTAssertEqual(workspace.panelAgentPresence[panel]?.programState, .error)
+        XCTAssertNotEqual(workspace.panelAgentPresence[panel], before)
+    }
+
+    func testProgramPresenceIsNeverStale() {
+        let workspace = Workspace(title: "Test")
+        let panel = UUID()
+        let longAgo = Date().addingTimeInterval(-3600)
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working, at: longAgo)
+        XCTAssertEqual(workspace.panelAgentPresence[panel]?.isStale(now: Date()), false)
+    }
 }

@@ -311,6 +311,7 @@ extension TerminalController {
                 "branch": v2OrNull(workspace.panelGitBranches[panel.id]?.branch ?? workspace.gitBranch?.branch ?? workspace.worktreeBranch),
                 "agent_state": v2OrNull(workspace.panelAgentStates[panel.id]?.rawValue),
                 "agent_state_source": v2OrNull(workspace.panelAgentStateSources[panel.id]?.rawValue),
+                "program_status": workspace.programStatusWire(panelId: panel.id),
                 "helpers": workspaceHelpers
                     .filter { $0.surfaceId == panel.id }
                     .map { $0.payload() },

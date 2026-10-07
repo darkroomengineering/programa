@@ -237,14 +237,26 @@ extension TerminalController {
         let patternRaw = v2RawString(params, "pattern").flatMap { $0.isEmpty ? nil : $0 }
         let waitForExit = v2Bool(params, "exit") ?? false
         let agentStateRaw = v2String(params, "agent_state")
+        let programStateRaw = v2String(params, "program_state")
 
-        let conditionsProvided = [patternRaw != nil, waitForExit, agentStateRaw != nil].filter { $0 }.count
+        let conditionsProvided = [patternRaw != nil, waitForExit, agentStateRaw != nil, programStateRaw != nil]
+            .filter { $0 }.count
         guard conditionsProvided == 1 else {
             return .err(
                 code: "invalid_params",
-                message: "Provide exactly one of 'pattern' (regex string), 'exit' (true), or 'agent_state' (idle|working|blocked|any_change)",
+                message: "Provide exactly one of 'pattern' (regex string), 'exit' (true), 'agent_state' (idle|working|blocked|any_change), or 'program_state' (idle|working|done|blocked|error|cleared|any_change)",
                 data: nil
             )
+        }
+        if let programStateRaw {
+            guard let condition = ProgramStateWaitCondition(rawValue: programStateRaw) else {
+                return .err(
+                    code: "invalid_params",
+                    message: "Invalid program_state -- use: idle, working, done, blocked, error, cleared, any_change",
+                    data: nil
+                )
+            }
+            return v2SurfaceWaitProgramState(params: params, condition: condition, timeoutMs: timeoutMs, deadline: deadline)
         }
 
         var agentStateCondition: AgentStateWaitCondition?
