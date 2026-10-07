@@ -13,6 +13,9 @@ final class TerminalPanel: Panel, ObservableObject {
     /// The underlying terminal surface
     let surface: TerminalSurface
 
+    /// OSC 7501 program status records for this terminal. Not persisted.
+    let programStatus = ProgramStatusStore()
+
     /// The workspace ID this panel belongs to
     private(set) var workspaceId: UUID
 

@@ -201,7 +201,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                         for (panelId, panel) in workspace.panels {
                             guard let terminalPanel = panel as? TerminalPanel else { continue }
                             guard !alreadyCandidates.contains(panelId) else { continue }
-                            guard workspace.panelAgentStateSources[panelId] != .hooks else { continue }
+                            guard (workspace.panelAgentStateSources[panelId]?.rank ?? AgentStateSource.inferred.rank) < AgentStateSource.hooks.rank else { continue }
                             // Viewport only: a full-scrollback read on every tick costs main-thread
                             // time proportional to history size, and detection needs only the tail.
                             guard let text = TerminalController.shared.readTerminalText(
@@ -254,7 +254,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                         surfaceGone = true
                         return
                     }
-                    guard ws.panelAgentStateSources[surfaceId] != .hooks else {
+                    guard (ws.panelAgentStateSources[surfaceId]?.rank ?? AgentStateSource.inferred.rank) < AgentStateSource.hooks.rank else {
                         hooksOwned = true
                         return
                     }
