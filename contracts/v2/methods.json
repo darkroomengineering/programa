@@ -3817,6 +3817,9 @@
           "pattern": {
             "type": "string"
           },
+          "program_state": {
+            "type": "string"
+          },
           "surface_id": {
             "format": "surface:N",
             "type": "string"

@@ -144,7 +144,8 @@ extension TerminalController {
                     "index_in_pane": v2OrNull(indexInPaneByPanelId[panel.id]),
                     "selected_in_pane": v2OrNull(selectedInPaneByPanelId[panel.id]),
                     "agent_state": v2OrNull(ws.panelAgentStates[panel.id]?.rawValue),
-                    "agent_state_source": v2OrNull(ws.panelAgentStateSources[panel.id]?.rawValue)
+                    "agent_state_source": v2OrNull(ws.panelAgentStateSources[panel.id]?.rawValue),
+                    "program_status": ws.programStatusWire(panelId: panel.id)
                 ]
                 return item
             }
