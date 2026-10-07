@@ -3970,7 +3970,7 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         let nextTransfer = try XCTUnwrap(destination.detachSurface(panelId: terminalPanel.id))
         XCTAssertFalse(nextTransfer === transfer, "A later detach must have a new pending lifecycle owner")
         nextTransfer.finalizePermanently()
-        XCTAssertEqual(terminalPanel.surface.portalBindingStateLabel(), "closing")
+        XCTAssertEqual(terminalPanel.surface.portalBindingStateLabel(), "closed")
     }
 
 
