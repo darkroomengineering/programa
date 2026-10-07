@@ -20,7 +20,7 @@ enum ShortcutRouting {
         layoutCharacterProvider: (UInt16, NSEvent.ModifierFlags) -> String?
     ) -> Bool {
         // Some keys can include extra flags (e.g. .function) depending on the responder chain.
-        // Strip those for consistent matching across first responders (terminal, WebKit, etc).
+        // Strip those for consistent matching across first responders.
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             .subtracting([.numericPad, .function, .capsLock])
         guard flags == stroke.modifierFlags else { return false }
@@ -83,7 +83,7 @@ enum ShortcutRouting {
         // event chars carry no usable Latin key identity. Always allow keyCode fallback as a
         // safety net — even when the layout-based translation resolved a character, the
         // physical key code is the definitive identifier for the intended shortcut.
-        // For empty-character events (synthetic/browser key equivalents), preserve the original
+        // For empty-character events (synthetic key equivalents), preserve the original
         // behavior: only fall back when the layout translation also failed.
         let allowANSIKeyCodeFallback = flags.contains(.control)
             || (flags.contains(.command)

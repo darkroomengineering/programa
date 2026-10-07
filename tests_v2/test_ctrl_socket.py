@@ -298,7 +298,7 @@ def run_tests():
                 return 1
 
             # Ensure we start from a focused terminal surface (tests can be run
-            # after other scripts that leave focus in a browser panel).
+            # after other scripts that leave focus in a non-terminal panel).
             try:
                 client.new_workspace()
                 time.sleep(0.6)

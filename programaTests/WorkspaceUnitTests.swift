@@ -11,7 +11,7 @@ import Combine
 @MainActor
 final class ProgramaLayoutFileIdentityTests: XCTestCase {
     private let layout = ProgramaLayoutNode.pane(ProgramaPaneDefinition(surfaces: [
-        ProgramaSurfaceDefinition(type: .terminal, name: nil, command: nil, cwd: nil, env: nil, url: nil, focus: nil)
+        ProgramaSurfaceDefinition(type: .terminal, name: nil, command: nil, cwd: nil, env: nil, focus: nil)
     ]))
 
     func testCopiedAndRenamedLayoutsUseDistinctFilenameIdentities() throws {
@@ -62,14 +62,6 @@ final class ProgramaLayoutFileIdentityTests: XCTestCase {
 @testable import Programa
 #endif
 
-@MainActor
-func makeTemporaryBrowserProfile(named prefix: String) throws -> BrowserProfileDefinition {
-    try XCTUnwrap(
-        BrowserProfileStore.shared.createProfile(
-            named: "\(prefix)-\(UUID().uuidString)"
-        )
-    )
-}
 
 final class SidebarSelectedWorkspaceColorTests: XCTestCase {
     func testLightModeUsesConfiguredSelectedWorkspaceBackgroundColor() {
@@ -1519,53 +1511,6 @@ final class TerminalThemeSettingsTests: XCTestCase {
         XCTAssertEqual(reloadRequestCount, 2)
     }
 
-    func testSettingsFileMapsExternalBrowserToManagedDefaults() throws {
-        let defaults = UserDefaults.standard
-        let previousValue = defaults.string(forKey: BrowserLinkOpenSettings.externalBrowserBundleIdentifierKey)
-        defer {
-            restoreDefaultsValue(
-                previousValue,
-                key: BrowserLinkOpenSettings.externalBrowserBundleIdentifierKey,
-                defaults: defaults
-            )
-        }
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-
-        let settingsURL = directoryURL.appendingPathComponent("settings.json", isDirectory: false)
-        let configURL = directoryURL.appendingPathComponent("config.ghostty", isDirectory: false)
-        let themeStore = TerminalThemeStore(
-            fileManager: .default,
-            managedConfigURL: configURL,
-            configSearchURLs: [configURL]
-        )
-        try writeSettingsFile(
-            """
-            {
-              "browser": {
-                "externalBrowser": "com.apple.Safari"
-              }
-            }
-            """,
-            to: settingsURL
-        )
-
-        _ = ProgramaSettingsFileStore(
-            primaryPath: settingsURL.path,
-            fallbackPath: nil,
-            fileManager: .default,
-            notificationCenter: .default,
-            terminalThemeStore: themeStore,
-            terminalThemeReloadHandler: {},
-            startWatching: false
-        )
-
-        XCTAssertEqual(
-            defaults.string(forKey: BrowserLinkOpenSettings.externalBrowserBundleIdentifierKey),
-            "com.apple.Safari"
-        )
-    }
 
     private func restoreDefaultsValue(_ value: Any?, key: String, defaults: UserDefaults) {
         if let value {
@@ -3371,23 +3316,23 @@ final class WorkspaceTerminalConfigInheritanceSelectionTests: XCTestCase {
         )
     }
 
-    func testFallsBackToAnotherTerminalInPaneWhenSelectedTabIsBrowser() {
+    func testFallsBackToAnotherTerminalInPaneWhenSelectedTabIsMarkdown() {
         let manager = TabManager()
         guard let workspace = manager.selectedWorkspace,
               let terminalPanelId = workspace.focusedPanelId,
               let paneId = workspace.paneId(forPanelId: terminalPanelId),
-              let browserPanel = workspace.newBrowserSurface(inPane: paneId, focus: true) else {
-            XCTFail("Expected workspace browser setup to succeed")
+              let markdownPanel = workspace.newMarkdownSurface(inPane: paneId, filePath: "/tmp/inheritance.md", focus: true) else {
+            XCTFail("Expected workspace markdown setup to succeed")
             return
         }
 
-        XCTAssertEqual(workspace.focusedPanelId, browserPanel.id)
+        XCTAssertEqual(workspace.focusedPanelId, markdownPanel.id)
 
         let sourcePanel = workspace.terminalPanelForConfigInheritance(inPane: paneId)
         XCTAssertEqual(
             sourcePanel?.id,
             terminalPanelId,
-            "Expected inheritance to fall back to a terminal in the pane when browser is selected"
+            "Expected inheritance to fall back to a terminal in the pane when markdown is selected"
         )
     }
 
@@ -3403,7 +3348,7 @@ final class WorkspaceTerminalConfigInheritanceSelectionTests: XCTestCase {
         XCTAssertEqual(sourcePanel?.id, terminalPanelId)
     }
 
-    func testPrefersLastFocusedTerminalWhenBrowserFocusedInDifferentPane() {
+    func testPrefersLastFocusedTerminalWhenMarkdownFocusedInDifferentPane() {
         let manager = TabManager()
         guard let workspace = manager.selectedWorkspace,
               let leftTerminalPanelId = workspace.focusedPanelId,
@@ -3414,14 +3359,14 @@ final class WorkspaceTerminalConfigInheritanceSelectionTests: XCTestCase {
         }
 
         workspace.focusPanel(leftTerminalPanelId)
-        _ = workspace.newBrowserSurface(inPane: rightPaneId, focus: true)
+        _ = workspace.newMarkdownSurface(inPane: rightPaneId, filePath: "/tmp/inheritance.md", focus: true)
         XCTAssertNotEqual(workspace.focusedPanelId, leftTerminalPanelId)
 
         let sourcePanel = workspace.terminalPanelForConfigInheritance(inPane: rightPaneId)
         XCTAssertEqual(
             sourcePanel?.id,
             leftTerminalPanelId,
-            "Expected inheritance to prefer last focused terminal when browser is focused in another pane"
+            "Expected inheritance to prefer last focused terminal when markdown is focused in another pane"
         )
     }
 }
@@ -3526,130 +3471,6 @@ final class WorkspaceAttentionFlashTests: XCTestCase {
             workspace.tmuxWorkspaceFlashToken,
             flashTokenBeforeNavigation,
             "Expected navigation flash to be suppressed while another pane owns notification attention"
-        )
-    }
-}
-
-
-@MainActor
-final class WorkspaceBrowserProfileSelectionTests: XCTestCase {
-    private final class RejectingCreateTabDelegate: BonsplitDelegate {
-        func splitTabBar(_ controller: BonsplitController, shouldCreateTab tab: Bonsplit.Tab, inPane pane: PaneID) -> Bool {
-            false
-        }
-    }
-
-    private final class RejectingSplitPaneDelegate: BonsplitDelegate {
-        func splitTabBar(_ controller: BonsplitController, shouldSplitPane pane: PaneID, orientation: SplitOrientation) -> Bool {
-            false
-        }
-    }
-
-    func testNewBrowserSurfacePrefersSelectedBrowserProfileInTargetPane() throws {
-        let workspace = Workspace()
-        let profileA = try makeTemporaryBrowserProfile(named: "Alpha")
-        let profileB = try makeTemporaryBrowserProfile(named: "Beta")
-        let paneId = try XCTUnwrap(workspace.bonsplitController.focusedPaneId)
-        let browserA = try XCTUnwrap(
-            workspace.newBrowserSurface(
-                inPane: paneId,
-                focus: true,
-                preferredProfileID: profileA.id
-            )
-        )
-        _ = try XCTUnwrap(
-            workspace.newBrowserSplit(
-                from: browserA.id,
-                orientation: .horizontal,
-                preferredProfileID: profileB.id,
-                focus: true
-            )
-        )
-
-        XCTAssertEqual(
-            workspace.preferredBrowserProfileID,
-            profileB.id,
-            "Expected workspace preference to drift to the most recently created browser profile"
-        )
-
-        let leftSurfaceId = try XCTUnwrap(workspace.surfaceIdFromPanelId(browserA.id))
-        workspace.bonsplitController.focusPane(paneId)
-        workspace.bonsplitController.selectTab(leftSurfaceId)
-
-        let created = try XCTUnwrap(
-            workspace.newBrowserSurface(
-                inPane: paneId,
-                focus: false
-            )
-        )
-
-        XCTAssertEqual(
-            created.profileID,
-            profileA.id,
-            "Expected new browser creation to inherit the selected browser profile from the target pane"
-        )
-    }
-
-    func testNewBrowserSurfaceFailureDoesNotMutatePreferredProfile() throws {
-        let workspace = Workspace()
-        let preferredProfile = try makeTemporaryBrowserProfile(named: "Preferred")
-        let unexpectedProfile = try makeTemporaryBrowserProfile(named: "Unexpected")
-
-        let paneId = try XCTUnwrap(workspace.bonsplitController.focusedPaneId)
-        _ = try XCTUnwrap(
-            workspace.newBrowserSurface(
-                inPane: paneId,
-                focus: false,
-                preferredProfileID: preferredProfile.id
-            )
-        )
-        XCTAssertEqual(workspace.preferredBrowserProfileID, preferredProfile.id)
-
-        let rejectingDelegate = RejectingCreateTabDelegate()
-        workspace.bonsplitController.delegate = rejectingDelegate
-        let created = workspace.newBrowserSurface(
-            inPane: paneId,
-            focus: false,
-            preferredProfileID: unexpectedProfile.id
-        )
-
-        XCTAssertNil(created)
-        XCTAssertEqual(
-            workspace.preferredBrowserProfileID,
-            preferredProfile.id,
-            "Expected a failed browser creation to leave the workspace preferred profile unchanged"
-        )
-    }
-
-    func testNewBrowserSplitFailureDoesNotMutatePreferredProfile() throws {
-        let workspace = Workspace()
-        let preferredProfile = try makeTemporaryBrowserProfile(named: "Preferred")
-        let unexpectedProfile = try makeTemporaryBrowserProfile(named: "Unexpected")
-
-        let paneId = try XCTUnwrap(workspace.bonsplitController.focusedPaneId)
-        let browser = try XCTUnwrap(
-            workspace.newBrowserSurface(
-                inPane: paneId,
-                focus: true,
-                preferredProfileID: preferredProfile.id
-            )
-        )
-        XCTAssertEqual(workspace.preferredBrowserProfileID, preferredProfile.id)
-
-        let rejectingDelegate = RejectingSplitPaneDelegate()
-        workspace.bonsplitController.delegate = rejectingDelegate
-        let created = workspace.newBrowserSplit(
-            from: browser.id,
-            orientation: .horizontal,
-            preferredProfileID: unexpectedProfile.id,
-            focus: false
-        )
-
-        XCTAssertNil(created)
-        XCTAssertEqual(
-            workspace.preferredBrowserProfileID,
-            preferredProfile.id,
-            "Expected a failed browser split to leave the workspace preferred profile unchanged"
         )
     }
 }
@@ -3965,31 +3786,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         assertPanelAndTabTitle("live-process", workspace: restored, panelId: restoredPanelId)
     }
 
-    func testBrowserSplitWithFocusFalsePreservesOriginalFocusedPanel() {
-        let workspace = Workspace()
-        guard let originalFocusedPanelId = workspace.focusedPanelId else {
-            XCTFail("Expected initial focused panel")
-            return
-        }
-
-        guard let browserSplitPanel = workspace.newBrowserSplit(
-            from: originalFocusedPanelId,
-            orientation: .horizontal,
-            focus: false
-        ) else {
-            XCTFail("Expected browser split panel to be created")
-            return
-        }
-
-        drainMainQueue()
-
-        XCTAssertNotEqual(browserSplitPanel.id, originalFocusedPanelId)
-        XCTAssertEqual(
-            workspace.focusedPanelId,
-            originalFocusedPanelId,
-            "Expected non-focus browser split to preserve pre-split focus"
-        )
-    }
 
     func testTerminalSplitWithFocusFalsePreservesOriginalFocusedPanel() {
         let workspace = Workspace()
@@ -4137,199 +3933,9 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         XCTAssertFalse(attachedTab.hasCustomTitle)
     }
 
-    func testLocalBrowserTransferInvalidatesRestoreWithoutReplacingWebViewOrDataStore() throws {
-        let source = Workspace()
-        let destination = Workspace()
-        let sourcePanelId = try XCTUnwrap(source.focusedPanelId)
-        let browserPanel = try XCTUnwrap(
-            source.newBrowserSplit(
-                from: sourcePanelId,
-                orientation: .horizontal,
-                focus: false
-            )
-        )
-        var activeLease: TerminalController.V2BrowserStateRestoreLeaseCoordinator.Lease?
-        defer {
-            if let activeLease {
-                browserPanel.endBrowserStateRestore(activeLease)
-            }
-            source.teardownAllPanels()
-            destination.teardownAllPanels()
-        }
 
-        let originalWebView = browserPanel.webView
-        let originalDataStore = originalWebView.configuration.websiteDataStore
-        let detachLease = try XCTUnwrap(browserPanel.beginBrowserStateRestore())
-        activeLease = detachLease
 
-        let detached = try XCTUnwrap(source.detachSurface(panelId: browserPanel.id))
-        XCTAssertTrue(browserPanel.webView === originalWebView)
-        XCTAssertTrue(browserPanel.webView.configuration.websiteDataStore === originalDataStore)
-        XCTAssertFalse(
-            browserPanel.isBrowserStateRestoreLeaseValid(detachLease),
-            "Detaching must invalidate an in-flight restore even when the browser objects survive"
-        )
-        browserPanel.endBrowserStateRestore(detachLease)
-        activeLease = nil
 
-        let reattachLease = try XCTUnwrap(browserPanel.beginBrowserStateRestore())
-        activeLease = reattachLease
-        let destinationPane = try XCTUnwrap(destination.bonsplitController.allPaneIds.first)
-        XCTAssertEqual(
-            destination.attachDetachedSurface(detached, inPane: destinationPane, focus: false),
-            browserPanel.id
-        )
-        XCTAssertTrue(browserPanel.webView === originalWebView)
-        XCTAssertTrue(browserPanel.webView.configuration.websiteDataStore === originalDataStore)
-        XCTAssertFalse(
-            browserPanel.isBrowserStateRestoreLeaseValid(reattachLease),
-            "Reattaching must defensively invalidate a restore when the local profile keeps the same data store"
-        )
-        browserPanel.endBrowserStateRestore(reattachLease)
-        activeLease = nil
-    }
-
-    func testBrowserElementRefSurvivesDetachAndAttachThenExpiresOnPermanentTeardown() throws {
-        let source = Workspace()
-        let destination = Workspace()
-        var transferredSurfaceId: UUID?
-        defer {
-            source.teardownAllPanels()
-            destination.teardownAllPanels()
-            if let transferredSurfaceId {
-                TerminalController.shared.v2BrowserPermanentlyRemoveSurfaceState(surfaceId: transferredSurfaceId)
-            }
-        }
-
-        let sourcePanelId = try XCTUnwrap(source.focusedPanelId)
-        let browserPanel = try XCTUnwrap(
-            source.newBrowserSplit(
-                from: sourcePanelId,
-                orientation: .horizontal,
-                focus: false
-            )
-        )
-        transferredSurfaceId = browserPanel.id
-        let ref: String
-        switch TerminalController.shared.browserRPCState.allocateElementRefs(
-            surfaceId: browserPanel.id,
-            selectors: ["#survives-workspace-transfer"]
-        ) {
-        case .allocated(let refs):
-            ref = try XCTUnwrap(refs.first)
-        case .resourceExhausted:
-            XCTFail("A new browser panel must accept its first element ref")
-            return
-        }
-        XCTAssertEqual(
-            TerminalController.shared.v2BrowserResolveSelector(ref, surfaceId: browserPanel.id),
-            "#survives-workspace-transfer"
-        )
-
-        let detached = try XCTUnwrap(source.detachSurface(panelId: browserPanel.id))
-        XCTAssertNil(source.panels[browserPanel.id])
-        XCTAssertEqual(
-            TerminalController.shared.v2BrowserResolveSelector(ref, surfaceId: browserPanel.id),
-            "#survives-workspace-transfer",
-            "Detaching for transfer must preserve browser automation state"
-        )
-
-        let destinationPane = try XCTUnwrap(destination.bonsplitController.allPaneIds.first)
-        XCTAssertEqual(
-            destination.attachDetachedSurface(detached, inPane: destinationPane, focus: false),
-            browserPanel.id
-        )
-        XCTAssertTrue(destination.panels[browserPanel.id] is BrowserPanel)
-        XCTAssertEqual(
-            TerminalController.shared.v2BrowserResolveSelector(ref, surfaceId: browserPanel.id),
-            "#survives-workspace-transfer",
-            "Attaching the same browser panel must preserve its existing ref identity"
-        )
-
-        destination.teardownAllPanels()
-        switch TerminalController.shared.v2BrowserSelectorResolutionError(ref, surfaceId: browserPanel.id) {
-        case .err(let code, _, _):
-            XCTAssertEqual(code, "not_found", "Permanent workspace teardown must remove the transferred browser ref")
-        case .ok:
-            XCTFail("A permanently closed browser panel ref must not remain resolvable")
-        }
-    }
-
-    func testDetachedBrowserResolutionRollsBackAfterInvalidPrimaryWithoutLosingState() throws {
-        let source = Workspace()
-        let destination = Workspace()
-        defer {
-            source.teardownAllPanels()
-            destination.teardownAllPanels()
-        }
-        let sourcePanelId = try XCTUnwrap(source.focusedPanelId)
-        let browserPanel = try XCTUnwrap(source.newBrowserSplit(from: sourcePanelId, orientation: .horizontal, focus: false))
-        let sourceRollbackPane = try XCTUnwrap(source.bonsplitController.allPaneIds.first)
-        let transfer = try XCTUnwrap(source.detachSurface(panelId: browserPanel.id))
-        let ref: String
-        switch TerminalController.shared.browserRPCState.allocateElementRefs(surfaceId: browserPanel.id, selectors: ["#rollback-ref"]) {
-        case .allocated(let refs): ref = try XCTUnwrap(refs.first)
-        case .resourceExhausted: return XCTFail("Expected a fresh browser ref")
-        }
-
-        let result = transfer.resolve(
-            primary: Workspace.DetachedSurfaceAttachmentTarget(
-                workspace: destination,
-                paneId: PaneID(),
-                index: nil,
-                focus: false
-            ),
-            rollback: Workspace.DetachedSurfaceAttachmentTarget(
-                workspace: source,
-                paneId: sourceRollbackPane,
-                index: nil,
-                focus: false
-            )
-        )
-
-        guard case .attachedRollback(let panelId) = result else {
-            return XCTFail("Expected invalid primary attachment to use the valid source rollback")
-        }
-        XCTAssertEqual(panelId, browserPanel.id)
-        XCTAssertTrue((source.panels[browserPanel.id] as? BrowserPanel) === browserPanel)
-        XCTAssertNil(destination.panels[browserPanel.id])
-        XCTAssertEqual(TerminalController.shared.v2BrowserResolveSelector(ref, surfaceId: browserPanel.id), "#rollback-ref")
-    }
-
-    func testDetachedBrowserResolutionFinalizesWhenPrimaryAndRollbackAreInvalid() throws {
-        let source = Workspace()
-        let destination = Workspace()
-        defer {
-            source.teardownAllPanels()
-            destination.teardownAllPanels()
-        }
-        let sourcePanelId = try XCTUnwrap(source.focusedPanelId)
-        let browserPanel = try XCTUnwrap(source.newBrowserSplit(from: sourcePanelId, orientation: .horizontal, focus: false))
-        let transfer = try XCTUnwrap(source.detachSurface(panelId: browserPanel.id))
-        let ref: String
-        switch TerminalController.shared.browserRPCState.allocateElementRefs(surfaceId: browserPanel.id, selectors: ["#finalized-ref"]) {
-        case .allocated(let refs): ref = try XCTUnwrap(refs.first)
-        case .resourceExhausted: return XCTFail("Expected a fresh browser ref")
-        }
-
-        let result = transfer.resolve(
-            primary: Workspace.DetachedSurfaceAttachmentTarget(workspace: destination, paneId: PaneID(), index: nil, focus: false),
-            rollback: Workspace.DetachedSurfaceAttachmentTarget(workspace: source, paneId: PaneID(), index: nil, focus: false)
-        )
-
-        guard case .finalized = result else {
-            return XCTFail("A transfer with no valid attachment owner must finalize")
-        }
-        XCTAssertNil(source.panels[browserPanel.id])
-        XCTAssertNil(destination.panels[browserPanel.id])
-        XCTAssertNil(browserPanel.webView.navigationDelegate, "Finalization must close and disable the detached browser panel")
-        switch TerminalController.shared.v2BrowserSelectorResolutionError(ref, surfaceId: browserPanel.id) {
-        case .err(let code, _, _): XCTAssertEqual(code, "not_found")
-        case .ok: XCTFail("Finalization must permanently remove browser ref state")
-        }
-        transfer.finalizePermanently()
-        XCTAssertNil(browserPanel.webView.navigationDelegate, "Repeated finalization must remain idempotent")
-    }
 
     func testAttachedTransferIgnoresStaleFinalizeAndNextDetachHasIndependentOwnership() throws {
         let source = Workspace()
@@ -4339,14 +3945,9 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
             destination.teardownAllPanels()
         }
         let sourcePanelId = try XCTUnwrap(source.focusedPanelId)
-        let browserPanel = try XCTUnwrap(source.newBrowserSplit(from: sourcePanelId, orientation: .horizontal, focus: false))
-        let transfer = try XCTUnwrap(source.detachSurface(panelId: browserPanel.id))
+        let terminalPanel = try XCTUnwrap(source.newTerminalSplit(from: sourcePanelId, orientation: .horizontal, focus: false))
+        let transfer = try XCTUnwrap(source.detachSurface(panelId: terminalPanel.id))
         let destinationPane = try XCTUnwrap(destination.bonsplitController.allPaneIds.first)
-        let ref: String
-        switch TerminalController.shared.browserRPCState.allocateElementRefs(surfaceId: browserPanel.id, selectors: ["#attached-ref"]) {
-        case .allocated(let refs): ref = try XCTUnwrap(refs.first)
-        case .resourceExhausted: return XCTFail("Expected a fresh browser ref")
-        }
 
         let result = transfer.resolve(
             primary: Workspace.DetachedSurfaceAttachmentTarget(
@@ -4360,104 +3961,19 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         guard case .attachedPrimary(let panelId) = result else {
             return XCTFail("Expected the valid primary destination to own the panel")
         }
-        XCTAssertEqual(panelId, browserPanel.id)
+        XCTAssertEqual(panelId, terminalPanel.id)
 
         transfer.finalizePermanently()
-        XCTAssertTrue((destination.panels[browserPanel.id] as? BrowserPanel) === browserPanel)
-        XCTAssertNotNil(browserPanel.webView.navigationDelegate)
-        XCTAssertEqual(TerminalController.shared.v2BrowserResolveSelector(ref, surfaceId: browserPanel.id), "#attached-ref")
+        XCTAssertTrue((destination.panels[terminalPanel.id] as? TerminalPanel) === terminalPanel)
+        XCTAssertEqual(terminalPanel.surface.portalBindingStateLabel(), "live")
 
-        let nextTransfer = try XCTUnwrap(destination.detachSurface(panelId: browserPanel.id))
+        let nextTransfer = try XCTUnwrap(destination.detachSurface(panelId: terminalPanel.id))
         XCTAssertFalse(nextTransfer === transfer, "A later detach must have a new pending lifecycle owner")
         nextTransfer.finalizePermanently()
-        switch TerminalController.shared.v2BrowserSelectorResolutionError(ref, surfaceId: browserPanel.id) {
-        case .err(let code, _, _): XCTAssertEqual(code, "not_found")
-        case .ok: XCTFail("Finalizing the new pending transfer must remove its browser ref")
-        }
+        XCTAssertEqual(terminalPanel.surface.portalBindingStateLabel(), "closing")
     }
 
-    func testBrowserSplitWithFocusFalseRecoversFromDelayedStaleSelection() {
-        let workspace = Workspace()
-        guard let originalFocusedPanelId = workspace.focusedPanelId else {
-            XCTFail("Expected initial focused panel")
-            return
-        }
-        guard let originalPaneId = workspace.paneId(forPanelId: originalFocusedPanelId) else {
-            XCTFail("Expected focused pane for initial panel")
-            return
-        }
 
-        guard let browserSplitPanel = workspace.newBrowserSplit(
-            from: originalFocusedPanelId,
-            orientation: .horizontal,
-            focus: false
-        ) else {
-            XCTFail("Expected browser split panel to be created")
-            return
-        }
-        guard let splitPaneId = workspace.paneId(forPanelId: browserSplitPanel.id),
-              let splitTabId = workspace.surfaceIdFromPanelId(browserSplitPanel.id),
-              let splitTab = workspace.bonsplitController
-              .tabs(inPane: splitPaneId)
-              .first(where: { $0.id == splitTabId }) else {
-            XCTFail("Expected split pane/tab mapping")
-            return
-        }
-
-        // Simulate one delayed stale split-selection callback from bonsplit.
-        DispatchQueue.main.async {
-            workspace.splitTabBar(workspace.bonsplitController, didSelectTab: splitTab, inPane: splitPaneId)
-        }
-
-        drainMainQueue()
-        drainMainQueue()
-        drainMainQueue()
-
-        XCTAssertEqual(
-            workspace.focusedPanelId,
-            originalFocusedPanelId,
-            "Expected non-focus split to reassert the pre-split focused panel"
-        )
-        XCTAssertEqual(
-            workspace.bonsplitController.focusedPaneId,
-            originalPaneId,
-            "Expected focused pane to converge back to the pre-split pane"
-        )
-        XCTAssertEqual(
-            workspace.bonsplitController.selectedTab(inPane: originalPaneId)?.id,
-            workspace.surfaceIdFromPanelId(originalFocusedPanelId),
-            "Expected selected tab to converge back to the pre-split focused panel"
-        )
-    }
-
-    func testBrowserSplitWithFocusFalseAllowsSubsequentExplicitFocusOnSplitPanel() {
-        let workspace = Workspace()
-        guard let originalFocusedPanelId = workspace.focusedPanelId else {
-            XCTFail("Expected initial focused panel")
-            return
-        }
-
-        guard let browserSplitPanel = workspace.newBrowserSplit(
-            from: originalFocusedPanelId,
-            orientation: .horizontal,
-            focus: false
-        ) else {
-            XCTFail("Expected browser split panel to be created")
-            return
-        }
-
-        workspace.focusPanel(browserSplitPanel.id)
-
-        drainMainQueue()
-        drainMainQueue()
-        drainMainQueue()
-
-        XCTAssertEqual(
-            workspace.focusedPanelId,
-            browserSplitPanel.id,
-            "Expected explicit focus intent to keep the split panel focused"
-        )
-    }
 
     func testNewTerminalSurfaceWithFocusFalsePreservesFocusedPanel() {
         let workspace = Workspace()
@@ -4489,35 +4005,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         )
     }
 
-    func testNewBrowserSurfaceWithFocusFalsePreservesFocusedPanel() {
-        let workspace = Workspace()
-        guard let originalFocusedPanelId = workspace.focusedPanelId,
-              let originalPaneId = workspace.paneId(forPanelId: originalFocusedPanelId) else {
-            XCTFail("Expected initial focused panel and pane")
-            return
-        }
-
-        guard let newPanel = workspace.newBrowserSurface(inPane: originalPaneId, focus: false) else {
-            XCTFail("Expected browser surface to be created")
-            return
-        }
-
-        drainMainQueue()
-        drainMainQueue()
-        drainMainQueue()
-
-        XCTAssertNotEqual(newPanel.id, originalFocusedPanelId)
-        XCTAssertEqual(
-            workspace.focusedPanelId,
-            originalFocusedPanelId,
-            "Expected non-focus browser surface creation to preserve the existing focused panel"
-        )
-        XCTAssertEqual(
-            workspace.bonsplitController.selectedTab(inPane: originalPaneId)?.id,
-            workspace.surfaceIdFromPanelId(originalFocusedPanelId),
-            "Expected selected tab to stay on the original focused panel"
-        )
-    }
 
     func testClosingFocusedSplitRestoresBranchForRemainingFocusedPanel() {
         let workspace = Workspace()
@@ -5291,7 +4778,7 @@ final class FocusTransitionCoordinatorTests: XCTestCase {
     func testStaleWorkspaceCompletionCannotOverrideNewestOwner() {
         let coordinator = FocusTransitionCoordinator()
         let firstOwner = makeOwner(intent: .terminal(.surface))
-        let newestOwner = makeOwner(intent: .browser(.addressBar))
+        let newestOwner = makeOwner(intent: .terminal(.surface))
 
         let staleRequest = coordinator.beginTransition(
             to: firstOwner,
@@ -5358,7 +4845,6 @@ final class SessionPanelSnapshotTabColorTests: XCTestCase {
             listeningPorts: [],
             ttyName: nil,
             terminal: SessionTerminalPanelSnapshot(workingDirectory: nil, scrollback: nil),
-            browser: nil,
             markdown: nil,
             review: nil
         )

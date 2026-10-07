@@ -65,15 +65,6 @@ final class WindowCloseGateTests: XCTestCase {
 // MARK: - SHEL-06 / SHEL-07: external open policy
 
 final class ExternalOpenPolicySHELTests: XCTestCase {
-    func testNativeGestureWindowAcceptsOnlyRecentPastTimestamps() {
-        XCTAssertTrue(ExternalOpenPolicy.isRecentNativeGesture([99.5], now: 100))
-        XCTAssertTrue(ExternalOpenPolicy.isRecentNativeGesture([nil, 99.5], now: 100))
-        XCTAssertFalse(ExternalOpenPolicy.isRecentNativeGesture([nil], now: 100))
-        XCTAssertFalse(ExternalOpenPolicy.isRecentNativeGesture([], now: 100))
-        XCTAssertFalse(ExternalOpenPolicy.isRecentNativeGesture([98], now: 100), "Stale gesture must not unlock a remembered approval")
-        XCTAssertFalse(ExternalOpenPolicy.isRecentNativeGesture([101], now: 100), "A timestamp in the future is not a past gesture")
-    }
-
     func testRememberedApprovalIsIgnoredWithoutANativeGesture() throws {
         let url = try XCTUnwrap(URL(string: "ssh://x"))
         let allow = [ExternalOpenPolicy.allowlistKey(bundleIdentifier: "com.apple.Terminal", scheme: "ssh")]
@@ -122,64 +113,10 @@ final class ExternalOpenPolicySHELTests: XCTestCase {
     }
 }
 
-// MARK: - SHEL-11: omnibar input resolution
 
-final class BrowserNavigableURLResolutionSHELTests: XCTestCase {
-    func testHostPortAndSchemeLessInputsResolveToTheRightScheme() {
-        XCTAssertEqual(resolveBrowserNavigableURL("example.com:8080")?.absoluteString, "http://example.com:8080")
-        XCTAssertEqual(resolveBrowserNavigableURL("foo.local:3000")?.absoluteString, "http://foo.local:3000")
-        XCTAssertEqual(resolveBrowserNavigableURL("my-nas:8080")?.absoluteString, "http://my-nas:8080")
-        XCTAssertEqual(resolveBrowserNavigableURL("localhostile.com")?.absoluteString, "https://localhostile.com", "Only exact loopback hosts get http")
-    }
-
-    func testFilePathAndAboutBlankPassThrough() {
-        let file = resolveBrowserNavigableURL("/tmp/a.html")
-        XCTAssertEqual(file?.isFileURL, true)
-        XCTAssertEqual(file?.path, "/tmp/a.html")
-        XCTAssertEqual(resolveBrowserNavigableURL("about:blank")?.absoluteString, "about:blank")
-    }
-
-    func testNonWebSchemesAreRejected() {
-        XCTAssertNil(resolveBrowserNavigableURL("mailto:x@y.z"))
-    }
-}
 
 // MARK: - SHEL-12: design mode payload bounds
 
-final class DesignModePayloadBoundsTests: XCTestCase {
-    func testHTMLHasNoLineBreaks() {
-        let payload = DesignModePickPayload(
-            html: "a\nb\r",
-            css: [:],
-            selector: "div",
-            rect: DesignModePickRect(x: 0, y: 0, width: 1, height: 1),
-            url: "https://example.com"
-        )
-        XCTAssertFalse(payload.html.contains("\n"))
-        XCTAssertFalse(payload.html.contains("\r"))
-    }
-
-    func testCSSKeysAreCapped() {
-        var css: [String: String] = [:]
-        for index in 0..<100 { css["prop-\(index)"] = "v" }
-        let payload = DesignModePickPayload(
-            html: "x",
-            css: css,
-            selector: "div",
-            rect: DesignModePickRect(x: 0, y: 0, width: 1, height: 1),
-            url: "u"
-        )
-        XCTAssertEqual(payload.css.count, DesignModePickPayload.cssKeyLimit)
-        XCTAssertEqual(DesignModePickPayload.cssKeyLimit, 64)
-    }
-
-    func testComposedTextIsByteBoundedOnACharacterBoundary() {
-        let capped = DesignModeTextComposer.capped(String(repeating: "é", count: 20_000))
-        XCTAssertLessThanOrEqual(capped.utf8.count, 16_384)
-        XCTAssertTrue(capped.hasSuffix(DesignModePickPayload.truncationMarker))
-        XCTAssertNotNil(String(data: Data(capped.utf8), encoding: .utf8))
-    }
-}
 
 // MARK: - SHEL-15: notification reorder keeps children under their parent
 

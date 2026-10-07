@@ -3,7 +3,6 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 import Bonsplit
-import WebKit
 
 extension TerminalController {
     // MARK: - V2 Workspace Methods
@@ -706,8 +705,7 @@ extension TerminalController {
             let supportedActions = [
                 "rename", "clear_name",
                 "close_left", "close_right", "close_others",
-                "new_terminal_right", "new_browser_right",
-                "reload", "duplicate",
+                "new_terminal_right",
                 "pin", "unpin", "mark_read", "mark_unread"
             ]
 
@@ -829,39 +827,6 @@ extension TerminalController {
                 workspace.markPanelUnread(surfaceId)
                 finish()
 
-            case "reload", "reload_tab":
-                guard let browserPanel = workspace.browserPanel(for: surfaceId) else {
-                    result = .err(code: "invalid_state", message: "Reload is only available for browser tabs", data: nil)
-                    return result
-                }
-                browserPanel.reload()
-                finish()
-
-            case "duplicate", "duplicate_tab":
-                guard let anchorTabId = workspace.surfaceIdFromPanelId(surfaceId),
-                      let paneId = workspace.paneId(forPanelId: surfaceId),
-                      let browserPanel = workspace.browserPanel(for: surfaceId) else {
-                    result = .err(code: "invalid_state", message: "Duplicate is only available for browser tabs", data: nil)
-                    return result
-                }
-
-                let targetIndex = insertionIndexToRight(anchorTabId: anchorTabId, inPane: paneId)
-                guard let newPanel = workspace.newBrowserSurface(
-                    inPane: paneId,
-                    url: browserPanel.currentURL,
-                    focus: v2FocusAllowed()
-                ) else {
-                    result = .err(code: "internal_error", message: "Failed to duplicate tab", data: nil)
-                    return result
-                }
-                _ = workspace.reorderSurface(panelId: newPanel.id, toIndex: targetIndex)
-                finish([
-                    "created_surface_id": newPanel.id.uuidString,
-                    "created_surface_ref": v2Ref(kind: .surface, uuid: newPanel.id),
-                    "created_tab_id": newPanel.id.uuidString,
-                    "created_tab_ref": v2TabRef(uuid: newPanel.id)
-                ])
-
             case "new_terminal_right", "new_terminal_to_right", "new_terminal_tab_to_right":
                 guard let anchorTabId = workspace.surfaceIdFromPanelId(surfaceId),
                       let paneId = workspace.paneId(forPanelId: surfaceId) else {
@@ -871,33 +836,6 @@ extension TerminalController {
 
                 let targetIndex = insertionIndexToRight(anchorTabId: anchorTabId, inPane: paneId)
                 guard let newPanel = workspace.newTerminalSurface(inPane: paneId, focus: v2FocusAllowed()) else {
-                    result = .err(code: "internal_error", message: "Failed to create tab", data: nil)
-                    return result
-                }
-                _ = workspace.reorderSurface(panelId: newPanel.id, toIndex: targetIndex)
-                finish([
-                    "created_surface_id": newPanel.id.uuidString,
-                    "created_surface_ref": v2Ref(kind: .surface, uuid: newPanel.id),
-                    "created_tab_id": newPanel.id.uuidString,
-                    "created_tab_ref": v2TabRef(uuid: newPanel.id)
-                ])
-
-            case "new_browser_right", "new_browser_to_right", "new_browser_tab_to_right":
-                guard let anchorTabId = workspace.surfaceIdFromPanelId(surfaceId),
-                      let paneId = workspace.paneId(forPanelId: surfaceId) else {
-                    result = .err(code: "not_found", message: "Tab pane not found", data: nil)
-                    return result
-                }
-
-                let urlRaw = v2String(params, "url")
-                let url = urlRaw.flatMap { URL(string: $0) }
-                if urlRaw != nil && url == nil {
-                    result = .err(code: "invalid_params", message: "Invalid URL", data: ["url": v2OrNull(urlRaw)])
-                    return result
-                }
-
-                let targetIndex = insertionIndexToRight(anchorTabId: anchorTabId, inPane: paneId)
-                guard let newPanel = workspace.newBrowserSurface(inPane: paneId, url: url, focus: v2FocusAllowed()) else {
                     result = .err(code: "internal_error", message: "Failed to create tab", data: nil)
                     return result
                 }

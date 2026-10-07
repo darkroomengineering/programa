@@ -38,7 +38,7 @@ extension TabManager {
     func restoreSessionSnapshot(_ snapshot: SessionTabManagerSnapshot) {
         let previousTabs = tabs
         for tab in previousTabs {
-            unwireClosedBrowserTracking(for: tab)
+            unwireTerminalCloseTracking(for: tab)
         }
         let existingProbeKeys = Set(workspaceGitProbeGenerationByKey.keys)
             .union(workspaceGitProbeTimersByKey.keys)
@@ -59,7 +59,6 @@ extension TabManager {
         workspaceCycleCooldownTask = nil
         isWorkspaceCycleHot = false
         selectionSideEffectsGeneration &+= 1
-        recentlyClosedBrowsers = RecentlyClosedBrowserStack(capacity: 20)
 
         // Build the new workspace list locally to avoid intermediate @Published
         // emissions (empty tabs, nil selectedTabId) that can leave SwiftUI's
@@ -77,7 +76,7 @@ extension TabManager {
             )
             workspace.owningTabManager = self
             workspace.restoreSessionSnapshot(workspaceSnapshot)
-            wireClosedBrowserTracking(for: workspace)
+            wireTerminalCloseTracking(for: workspace)
             newTabs.append(workspace)
         }
 
@@ -86,7 +85,7 @@ extension TabManager {
             Self.nextPortOrdinal += 1
             let fallback = Workspace(title: "Terminal 1", portOrdinal: ordinal)
             fallback.owningTabManager = self
-            wireClosedBrowserTracking(for: fallback)
+            wireTerminalCloseTracking(for: fallback)
             newTabs.append(fallback)
         }
 

@@ -279,11 +279,6 @@
           "default": true,
           "description": "Enable Programa integration hooks for Claude Code."
         },
-        "openBrowserWithAgentSplits": {
-          "type": "boolean",
-          "default": false,
-          "description": "Open a browser split beside the terminal when a new agent workspace is created."
-        },
         "claudeBinaryPath": {
           "type": "string",
           "default": "",
@@ -323,58 +318,10 @@
     },
     "browser": {
       "title": "browser",
-      "description": "Embedded browser settings from Settings > Browser.",
+      "description": "Settings for links that open in other apps.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "defaultSearchEngine": {
-          "type": "string",
-          "enum": ["google", "duckduckgo", "bing", "kagi", "startpage"],
-          "default": "google",
-          "description": "Default search engine for non-URL queries."
-        },
-        "showSearchSuggestions": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show omnibar search suggestions."
-        },
-        "theme": {
-          "type": "string",
-          "enum": ["system", "light", "dark"],
-          "default": "system",
-          "description": "Embedded browser theme."
-        },
-        "openTerminalLinksInProgramaBrowser": {
-          "type": "boolean",
-          "default": true,
-          "description": "Open clicked terminal links in the embedded browser."
-        },
-        "interceptTerminalOpenCommandInProgramaBrowser": {
-          "type": "boolean",
-          "default": true,
-          "description": "Intercept terminal open http(s) commands and route them through the embedded browser."
-        },
-        "hostsToOpenInEmbeddedBrowser": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "Allowlist of hosts that should stay inside the embedded browser."
-        },
-        "urlsToAlwaysOpenExternally": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "Rules that always open matching URLs in the system browser."
-        },
-        "externalBrowser": {
-          "type": "string",
-          "default": "",
-          "description": "Bundle identifier of the browser used for http(s) links that open outside Programa, for example com.apple.Safari. Empty uses the macOS default browser."
-        },
         "externalAppOpenAllowlist": {
           "type": "array",
           "items": {
@@ -382,36 +329,6 @@
           },
           "default": [],
           "description": "Entries for which you chose Always allow in the external app open prompt, each written as bundleId|scheme, for example com.tinyspeck.slackmacgap|slack. Links with that scheme that open that app skip the prompt. Bare bundle identifiers are ignored."
-        },
-        "insecureHttpHostsAllowedInEmbeddedBrowser": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": ["localhost", "127.0.0.1", "::1", "0.0.0.0", "*.localtest.me"],
-          "description": "HTTP hosts allowed in the embedded browser without a warning prompt."
-        },
-        "proxy": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "Route the embedded browser through a proxy. Requires host and port; type defaults to socks5.",
-          "properties": {
-            "host": {
-              "type": "string",
-              "description": "Proxy host name or IP address."
-            },
-            "port": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 65535,
-              "description": "Proxy port number (1–65535)."
-            },
-            "type": {
-              "type": "string",
-              "enum": ["socks5", "httpConnect"],
-              "description": "Proxy protocol type. \"socks5\" uses SOCKSv5; \"httpConnect\" uses HTTP CONNECT tunneling. Defaults to \"socks5\"."
-            }
-          }
         }
       }
     },
@@ -473,7 +390,7 @@
               "closeTab",
               "closeOtherTabsInPane",
               "closeWorkspace",
-              "reopenClosedBrowserPanel",
+              "reopenClosedTerminal",
               "newSurface",
               "toggleTerminalCopyMode",
               "focusLeft",
@@ -483,23 +400,11 @@
               "splitRight",
               "splitDown",
               "toggleSplitZoom",
-              "splitBrowserRight",
-              "splitBrowserDown",
-              "openBrowser",
-              "focusBrowserAddressBar",
-              "browserBack",
-              "browserForward",
-              "browserReload",
-              "browserZoomIn",
-              "browserZoomOut",
-              "browserZoomReset",
               "find",
               "findNext",
               "findPrevious",
               "hideFind",
               "useSelectionForFind",
-              "toggleBrowserDeveloperTools",
-              "showBrowserJavaScriptConsole",
               "openReview",
               "openAgentOverview"
             ]

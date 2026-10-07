@@ -3,7 +3,6 @@ import AppKit
 import Carbon.HIToolbox
 @preconcurrency import Foundation
 import Bonsplit
-import WebKit
 
 #if DEBUG
 @MainActor
@@ -338,46 +337,7 @@ extension TerminalController {
         }
     }
 
-    nonisolated func v2DebugBrowserAddressBarFocused(params: [String: Any]) -> V2CallResult {
-        let requestedSurfaceId = v2UUID(params, "surface_id") ?? v2UUID(params, "panel_id")
-        return v2MainSync {
-            let focusedSurfaceId = AppDelegate.shared?.focusedBrowserAddressBarPanelId()
-            var payload: [String: Any] = [
-                "focused_surface_id": v2OrNull(focusedSurfaceId?.uuidString),
-                "focused_surface_ref": v2Ref(kind: .surface, uuid: focusedSurfaceId),
-                "focused_panel_id": v2OrNull(focusedSurfaceId?.uuidString),
-                "focused_panel_ref": v2Ref(kind: .surface, uuid: focusedSurfaceId),
-                "focused": focusedSurfaceId != nil
-            ]
 
-            if let requestedSurfaceId {
-                payload["surface_id"] = requestedSurfaceId.uuidString
-                payload["surface_ref"] = v2Ref(kind: .surface, uuid: requestedSurfaceId)
-                payload["panel_id"] = requestedSurfaceId.uuidString
-                payload["panel_ref"] = v2Ref(kind: .surface, uuid: requestedSurfaceId)
-                payload["focused"] = (focusedSurfaceId == requestedSurfaceId)
-            }
-
-            return .ok(payload)
-        }
-    }
-
-    nonisolated func v2DebugBrowserFavicon(params: [String: Any]) -> V2CallResult {
-        return v2MainSync {
-            v2BrowserWithPanel(params: params) { _, ws, surfaceId, browserPanel in
-                let pngData = browserPanel.faviconPNGData
-                return .ok([
-                    "workspace_id": ws.id.uuidString,
-                    "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
-                    "surface_id": surfaceId.uuidString,
-                    "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
-                    "has_favicon": pngData != nil,
-                    "png_base64": pngData?.base64EncodedString() ?? "",
-                    "current_url": v2OrNull(browserPanel.currentURL?.absoluteString)
-                ])
-            }
-        }
-    }
 
     nonisolated func v2DebugSidebarVisible(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
@@ -1289,8 +1249,20 @@ extension TerminalController {
         guard !trimmedLabel.isEmpty else {
             return outputDirectory.appendingPathComponent("\(captureID).png")
         }
-        let safeLabel = DesignModeTextComposer.filenameSafeSelector(trimmedLabel)
+        let safeLabel = filenameSafeSelector(trimmedLabel)
         return outputDirectory.appendingPathComponent("\(safeLabel)_\(captureID).png")
+    }
+
+    private static nonisolated func filenameSafeSelector(_ selector: String) -> String {
+        var result = String(selector.unicodeScalars.map { scalar -> Character in
+            CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : "-"
+        })
+        while result.contains("--") {
+            result = result.replacingOccurrences(of: "--", with: "-")
+        }
+        result = result.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        if result.isEmpty { result = "element" }
+        return String(result.prefix(60))
     }
 
     private nonisolated func panelSnapshotReset(_ args: String) -> String {
@@ -1629,21 +1601,6 @@ extension TerminalController {
 	                    )
 	                }
 
-                if let bp = panel as? BrowserPanel {
-                    let viewRect = windowFrame(for: bp.webView).map { PixelRect(from: $0) }
-                    let splitViews = splitViewInfos(for: bp.webView)
-		                    return LayoutDebugSelectedPanel(
-	                        paneId: paneIdStr,
-	                        paneFrame: paneFrame,
-	                        selectedTabId: selectedTabId,
-	                        panelId: panelId.uuidString,
-	                        panelType: bp.panelType.rawValue,
-	                        inWindow: bp.webView.window != nil,
-	                        hidden: isHiddenOrAncestorHidden(bp.webView),
-	                        viewFrame: viewRect,
-	                        splitViews: splitViews
-	                    )
-	                }
 
 	                return LayoutDebugSelectedPanel(
 	                    paneId: paneIdStr,
@@ -1841,6 +1798,47 @@ extension TerminalController {
     }
 
 #if DEBUG
+    func v2AwaitCallback<T>(
+        timeout: TimeInterval,
+        start: (@escaping (T) -> Void) -> Void
+    ) -> T? {
+        if Thread.isMainThread {
+            // Each nested wait polls its own flag, so another client's completion cannot end it.
+            var resolved = false
+            var result: T?
+            start { value in
+                guard !resolved else { return }
+                resolved = true
+                result = value
+            }
+            let deadline = Date().addingTimeInterval(timeout)
+            while !resolved && Date() < deadline {
+                CFRunLoopRunInMode(.defaultMode, 0.05, true)
+            }
+            guard resolved else {
+                resolved = true  // a callback arriving after the deadline is dropped
+                return nil
+            }
+            return result
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        let lock = NSLock()
+        var result: T?
+        start { value in
+            lock.lock()
+            result = value
+            lock.unlock()
+            semaphore.signal()
+        }
+        guard semaphore.wait(timeout: .now() + timeout) == .success else {
+            return nil
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        return result
+    }
+
     private func resolveTerminalSurface(from arg: String, tabManager: TabManager, waitUpTo timeout: TimeInterval = 0.6) -> ghostty_surface_t? {
         guard let terminalPanel = resolveTerminalPanel(from: arg, tabManager: tabManager) else { return nil }
         return waitForTerminalSurface(terminalPanel, waitUpTo: timeout)
@@ -1914,7 +1912,6 @@ extension TerminalController {
         }
     }
 
-    // MARK: - Browser Panel Commands
 
     // MARK: - Bonsplit Pane Commands
 

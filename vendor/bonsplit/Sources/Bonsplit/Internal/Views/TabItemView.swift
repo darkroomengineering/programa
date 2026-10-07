@@ -726,13 +726,6 @@ private struct TabContextMenuHostView: NSViewRepresentable {
             menu.addItem(.separator())
 
             add("New Terminal Tab to Right", .newTerminalToRight)
-            add("New Browser Tab to Right", .newBrowserToRight)
-
-            if state.isBrowser {
-                menu.addItem(.separator())
-                add("Reload Tab", .reload)
-                add("Duplicate Tab", .duplicate)
-            }
 
             menu.addItem(.separator())
 

@@ -2,15 +2,12 @@ import AppKit
 import Carbon.HIToolbox
 @preconcurrency import Foundation
 import Bonsplit
-import WebKit
 
 extension Notification.Name {
     static let socketListenerDidStart = Notification.Name("programa.socketListenerDidStart")
     static let terminalSurfaceDidBecomeReady = Notification.Name("programa.terminalSurfaceDidBecomeReady")
     static let terminalSurfaceHostedViewDidMoveToWindow = Notification.Name("programa.terminalSurfaceHostedViewDidMoveToWindow")
     static let mainWindowContextsDidChange = Notification.Name("programa.mainWindowContextsDidChange")
-    static let browserDownloadEventDidArrive = Notification.Name("programa.browserDownloadEventDidArrive")
-    static let designModeDidCapture = Notification.Name("programa.designModeDidCapture")
 }
 
 /// Unix socket-based controller for programmatic terminal control
@@ -169,9 +166,6 @@ class TerminalController {
         "surface.focus",
         "pane.focus",
         "pane.last",
-        "browser.focus_webview",
-        "browser.focus",
-        "browser.tab.switch",
         "debug.command_palette.toggle",
         "debug.notification.focus",
         "debug.app.activate"
@@ -264,147 +258,9 @@ class TerminalController {
     // and the lock that serializes their mutation.
     private nonisolated let v2HandleRefStore = V2HandleRefStore()
 
-    struct V2BrowserElementRefEntry {
-        let surfaceId: UUID
-        let selector: String
-        /// The surface's navigation generation (see `v2BrowserNavigationGenerationBySurface`)
-        /// at the moment this ref was allocated. Resolving the ref against a surface whose
-        /// generation has since advanced (i.e. it navigated) is a stale-ref error rather than
-        /// silently re-resolving the selector against the new page's DOM.
-        let navigationGeneration: UInt64
-    }
-
-    struct V2BrowserElementRefCapacity {
-        let limit: Int
-        let requestedUnique: Int
-        let remaining: Int
-        let selectorByteLimit: Int
-        let byteLimit: Int
-        let requestedBytes: Int
-        let remainingBytes: Int
-    }
-
-    enum V2BrowserElementRefAllocation {
-        case allocated([String])
-        case resourceExhausted(V2BrowserElementRefCapacity)
-    }
-
-    struct V2BrowserSnapshotContent {
-        let title: String
-        let url: String
-        let entries: [[String: Any]]
-        let text: String
-        let html: String
-        let metadata: [String: Any]
-    }
-
-    final class V2BrowserUndefinedSentinel {}
-
-    enum V2BrowserDownloadEventWaitOutcome {
-        case event([String: Any], droppedEvents: Int)
-        case timedOut
-        case cancelled
-        case busy
-    }
-
-    struct V2BrowserDownloadEventWaiter {
-        let surfaceId: UUID
-        let id: UUID
-        let finish: (V2BrowserDownloadEventWaitOutcome) -> Void
-    }
-
-    static let v2BrowserEvalEnvelopeTypeKey = "__programa_t"
-    static let v2BrowserEvalEnvelopeValueKey = "__programa_v"
-    static let v2BrowserEvalEnvelopeTypeUndefined = "undefined"
-    static let v2BrowserEvalEnvelopeTypeValue = "value"
-    static let v2BrowserElementRefLimit = 4_096
-    static let v2BrowserElementRefSelectorByteLimit = 16_384
-    static let v2BrowserElementRefByteLimit = 4_194_304
-    static let v2BrowserDownloadEventQueueLimit = 256
-    static let v2BrowserSnapshotNodeVisitLimit = 4_096
-    static let v2BrowserSnapshotEntryLimit = 256
-    static let v2BrowserSnapshotMaxDepth = 64
-    static let v2BrowserSnapshotNameByteLimit = 1_024
-    static let v2BrowserSnapshotRoleByteLimit = 64
-    static let v2BrowserSnapshotEntryByteLimit = 262_144
-    static let v2BrowserSnapshotTitleByteLimit = 1_024
-    static let v2BrowserSnapshotURLByteLimit = 16_384
-    static let v2BrowserSnapshotTextCharacterLimit = 262_144
-    static let v2BrowserSnapshotHTMLCharacterLimit = 1_048_576
-
-    let browserRPCState = BrowserRPCState()
-    private let browserRPCDispatcher = BrowserRPCDispatcher()
-    var v2BrowserNextElementOrdinal: Int {
-        get { browserRPCState.nextElementOrdinal }
-        set { browserRPCState.nextElementOrdinal = newValue }
-    }
-    var v2BrowserElementRefs: [String: V2BrowserElementRefEntry] {
-        get { Self.v2AssertBrowserRPCStateOnMain(); return browserRPCState.elementRefs }
-        set { Self.v2AssertBrowserRPCStateOnMain(); browserRPCState.elementRefs = newValue }
-    }
-    var v2BrowserElementRefTokensBySurface: [UUID: Set<String>] {
-        get { browserRPCState.elementRefTokensBySurface }
-        set { browserRPCState.elementRefTokensBySurface = newValue }
-    }
-    var v2BrowserElementRefBySelectorBySurface: [UUID: [String: String]] {
-        get { browserRPCState.elementRefBySelectorBySurface }
-        set { browserRPCState.elementRefBySelectorBySurface = newValue }
-    }
-    var v2BrowserElementRefBytesBySurface: [UUID: Int] {
-        get { browserRPCState.elementRefBytesBySurface }
-        set { browserRPCState.elementRefBytesBySurface = newValue }
-    }
-    var v2BrowserFrameSelectorBySurface: [UUID: String] {
-        get { Self.v2AssertBrowserRPCStateOnMain(); return browserRPCState.frameSelectorBySurface }
-        set { Self.v2AssertBrowserRPCStateOnMain(); browserRPCState.frameSelectorBySurface = newValue }
-    }
-    /// Bumped on every committed main-frame navigation of a browser surface. Element refs
-    /// (`v2BrowserElementRefs`) capture the generation at allocation time so a ref from a
-    /// previous page can be rejected instead of silently re-resolving against the new DOM
-    /// (M6a). Main-thread only, same discipline as the other v2Browser state above.
-    var v2BrowserNavigationGenerationBySurface: [UUID: UInt64] {
-        get { Self.v2AssertBrowserRPCStateOnMain(); return browserRPCState.navigationGenerationBySurface }
-        set { Self.v2AssertBrowserRPCStateOnMain(); browserRPCState.navigationGenerationBySurface = newValue }
-    }
-    var v2BrowserInitScriptsBySurface: [UUID: [String]] {
-        get { browserRPCState.initScriptsBySurface }
-        set { browserRPCState.initScriptsBySurface = newValue }
-    }
-    var v2BrowserInitStylesBySurface: [UUID: [String]] {
-        get { browserRPCState.initStylesBySurface }
-        set { browserRPCState.initStylesBySurface = newValue }
-    }
-    var v2BrowserDownloadEventsBySurface: [UUID: [[String: Any]]] {
-        get { browserRPCState.downloadEventsBySurface }
-        set { browserRPCState.downloadEventsBySurface = newValue }
-    }
-    var v2BrowserDownloadDroppedEventCountBySurface: [UUID: Int] {
-        get { browserRPCState.downloadDroppedEventCountBySurface }
-        set { browserRPCState.downloadDroppedEventCountBySurface = newValue }
-    }
-    // SHORTCUT: one process-wide event-mode download waiter avoids nested CFRunLoop waits.
-    // ceiling: concurrent browser.download.wait event calls return busy.
-    // upgrade: move socket command waiting to async continuations, then use per-surface waiter queues.
-    var v2BrowserPendingDownloadEventWaiter: V2BrowserDownloadEventWaiter? {
-        get { browserRPCState.pendingDownloadEventWaiter }
-        set { browserRPCState.pendingDownloadEventWaiter = newValue }
-    }
-    var v2BrowserUndefinedSentinel: V2BrowserUndefinedSentinel { browserRPCState.undefinedSentinel }
-    private var browserDownloadObserver: NSObjectProtocol?
     private var socketControlPasswordObserver: NSObjectProtocol?
 
     private init() {
-        browserDownloadObserver = NotificationCenter.default.addObserver(
-            forName: .browserDownloadEventDidArrive,
-            object: nil,
-            queue: .main
-        ) { [weak self] note in
-            guard let surfaceId = note.userInfo?["surfaceId"] as? UUID,
-                  let event = note.userInfo?["event"] as? [String: Any] else { return }
-            MainActor.assumeIsolated {
-                self?.browserRPCState.enqueueDownloadEvent(surfaceId: surfaceId, event: event)
-            }
-        }
 
         socketControlPasswordObserver = NotificationCenter.default.addObserver(
             forName: SocketControlPasswordStore.didChangeNotification,
@@ -1938,7 +1794,7 @@ class TerminalController {
         }
 
         return withSocketCommandPolicy(commandKey: method, isV2: true) {
-            if let result = browserRPCDispatcher.dispatch(method: method, params: params, controller: self) ?? AgentRPCDispatcher.dispatch(method: method, params: params, controller: self) {
+            if let result = AgentRPCDispatcher.dispatch(method: method, params: params, controller: self) {
                 return v2Result(id: id, result)
             }
             switch method {
@@ -2242,10 +2098,6 @@ class TerminalController {
             return v2Result(id: id, self.v2DebugCommandPaletteRenameInputDeleteBackward(params: params))
         case "debug.command_palette.rename_input.selection":
             return v2Result(id: id, self.v2DebugCommandPaletteRenameInputSelection(params: params))
-        case "debug.browser.address_bar_focused":
-            return v2Result(id: id, self.v2DebugBrowserAddressBarFocused(params: params))
-        case "debug.browser.favicon":
-            return v2Result(id: id, self.v2DebugBrowserFavicon(params: params))
         case "debug.sidebar.visible":
             return v2Result(id: id, self.v2DebugSidebarVisible(params: params))
         case "debug.terminal.is_focused":
@@ -2705,7 +2557,7 @@ class TerminalController {
     //
     // v2ResolveWorkspace, the terminal-text-snapshot helpers below, orderedPanels, and
     // parseSplitDirection stay here rather than in TerminalController+Surface.swift because they
-    // are called from Workspace/Pane/Notification/BrowserAutomation handlers as well as from
+    // are called from Workspace/Pane/Notification handlers as well as from
     // AppDelegate+UITestCmdClick.swift, GhosttyTerminalView+Mouse.swift, and Workspace.swift.
 
     func v2ResolveWorkspace(params: [String: Any], tabManager: TabManager) -> Workspace? {
@@ -2991,9 +2843,6 @@ class TerminalController {
     }
 
     deinit {
-        if let browserDownloadObserver {
-            NotificationCenter.default.removeObserver(browserDownloadObserver)
-        }
         if let socketControlPasswordObserver {
             NotificationCenter.default.removeObserver(socketControlPasswordObserver)
         }

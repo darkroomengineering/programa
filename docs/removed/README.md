@@ -8,6 +8,7 @@ Reductive pass of 2026-09-02, base commit 903027ccef. Core kept: the Ghostty ter
 |---|---|---|
 | SSH remote workspaces and the Go daemon | [ssh-remote-workspaces.md](ssh-remote-workspaces.md) | 25,600 |
 | Mobile bridge, iOS companion, vendored iroh packages | [mobile-bridge-and-ios.md](mobile-bridge-and-ios.md) | 67,000 |
+| Built-in browser and its automation API | [built-in-browser.md](built-in-browser.md) | LINES |
 | Browser data import wizard | [browser-data-import.md](browser-data-import.md) | 3,800 |
 | Browser extensions | [browser-extensions.md](browser-extensions.md) | 950 |
 | Browser React Grab overlay | [browser-react-grab.md](browser-react-grab.md) | 470 |

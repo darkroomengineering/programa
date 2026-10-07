@@ -218,12 +218,6 @@ extension ProgramaCLI {
         let surfacePayload = try client.sendV2(method: V2MethodNames.surfaceList, params: ["workspace_id": workspaceHandle])
         let panes = panePayload["panes"] as? [[String: Any]] ?? []
         let surfaces = surfacePayload["surfaces"] as? [[String: Any]] ?? []
-        let browserURLsByHandle = fetchTreeBrowserURLs(
-            workspaceHandle: workspaceHandle,
-            surfaces: surfaces,
-            client: client
-        )
-
         var surfacesByPane: [String: [[String: Any]]] = [:]
         for surface in surfaces {
             var surfaceNode = surface
@@ -231,15 +225,6 @@ extension ProgramaCLI {
                 surfaceNode["selected"] = (surfaceNode["selected_in_pane"] as? Bool) == true
             }
             surfaceNode["active"] = treeItemMatchesHandle(surfaceNode, handle: activePath.surfaceHandle)
-
-            let surfaceType = ((surfaceNode["type"] as? String) ?? "").lowercased()
-            if surfaceType == "browser",
-               let url = treeBrowserURL(surface: surfaceNode, urlsByHandle: browserURLsByHandle),
-               !url.isEmpty {
-                surfaceNode["url"] = url
-            } else {
-                surfaceNode["url"] = NSNull()
-            }
 
             guard let paneHandle = treeRelatedHandle(surfaceNode, refKey: "pane_ref", idKey: "pane_id") else {
                 continue
@@ -371,71 +356,6 @@ extension ProgramaCLI {
         }
     }
 
-    private func fetchTreeBrowserURLs(
-        workspaceHandle: String,
-        surfaces: [[String: Any]],
-        client: SocketClient
-    ) -> [String: String] {
-        let hasBrowserSurfaces = surfaces.contains {
-            (($0["type"] as? String) ?? "").lowercased() == "browser"
-        }
-        guard hasBrowserSurfaces else { return [:] }
-
-        if let payload = try? client.sendV2(
-            method: V2MethodNames.browserTabList,
-            params: ["workspace_id": workspaceHandle]
-        ) {
-            let tabs = payload["tabs"] as? [[String: Any]] ?? []
-            var urlByHandle: [String: String] = [:]
-            for tab in tabs {
-                guard let url = tab["url"] as? String, !url.isEmpty else { continue }
-                if let id = tab["id"] as? String, !id.isEmpty {
-                    urlByHandle[id] = url
-                }
-                if let ref = tab["ref"] as? String, !ref.isEmpty {
-                    urlByHandle[ref] = url
-                }
-            }
-            return urlByHandle
-        }
-
-        // Fallback for older servers that may not support browser.tab.list.
-        var fallbackURLs: [String: String] = [:]
-        for surface in surfaces {
-            guard ((surface["type"] as? String) ?? "").lowercased() == "browser" else { continue }
-            guard let surfaceHandle = treeItemHandle(surface) else { continue }
-            guard let payload = try? client.sendV2(
-                method: V2MethodNames.browserUrlGet,
-                params: ["workspace_id": workspaceHandle, "surface_id": surfaceHandle]
-            ),
-            let url = payload["url"] as? String,
-            !url.isEmpty else {
-                continue
-            }
-            fallbackURLs[surfaceHandle] = url
-            if let id = surface["id"] as? String, !id.isEmpty {
-                fallbackURLs[id] = url
-            }
-            if let ref = surface["ref"] as? String, !ref.isEmpty {
-                fallbackURLs[ref] = url
-            }
-        }
-        return fallbackURLs
-    }
-
-    private func treeBrowserURL(surface: [String: Any], urlsByHandle: [String: String]) -> String? {
-        if let id = surface["id"] as? String, let url = urlsByHandle[id] {
-            return url
-        }
-        if let ref = surface["ref"] as? String, let url = urlsByHandle[ref] {
-            return url
-        }
-        if let handle = treeItemHandle(surface), let url = urlsByHandle[handle] {
-            return url
-        }
-        return nil
-    }
-
     private func treeItemMatchesHandle(_ item: [String: Any], handle: String?) -> Bool {
         guard let handle = handle?.trimmingCharacters(in: .whitespacesAndNewlines), !handle.isEmpty else {
             return false
@@ -534,11 +454,6 @@ extension ProgramaCLI {
         if let tty = surface["tty"] as? String, !tty.isEmpty {
             parts.append("tty=\(tty)")
         }
-        if surfaceType.lowercased() == "browser",
-           let url = surface["url"] as? String,
-           !url.isEmpty {
-            parts.append(url)
-        }
         return parts.joined(separator: " ")
     }
 
@@ -565,7 +480,6 @@ extension ProgramaCLI {
               - workspace [selected]
               - pane [focused]
               - surface [selected]
-              Browser surfaces also include their current URL.
 
             Example:
               programa tree

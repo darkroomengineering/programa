@@ -71,7 +71,6 @@ public final class BonsplitPaneChromeDescriptor {
     public let validatedDropIndex: (Int) -> Int?
     public let onDropTab: (Int) -> Bool
     public let onNewTab: () -> Void
-    public let onNewBrowserTab: () -> Void
     public let onSplitRight: () -> Void
     public let onSplitDown: () -> Void
 
@@ -92,7 +91,6 @@ public final class BonsplitPaneChromeDescriptor {
         validatedDropIndex: @escaping (Int) -> Int?,
         onDropTab: @escaping (Int) -> Bool,
         onNewTab: @escaping () -> Void,
-        onNewBrowserTab: @escaping () -> Void,
         onSplitRight: @escaping () -> Void,
         onSplitDown: @escaping () -> Void
     ) {
@@ -112,7 +110,6 @@ public final class BonsplitPaneChromeDescriptor {
         self.validatedDropIndex = validatedDropIndex
         self.onDropTab = onDropTab
         self.onNewTab = onNewTab
-        self.onNewBrowserTab = onNewBrowserTab
         self.onSplitRight = onSplitRight
         self.onSplitDown = onSplitDown
     }

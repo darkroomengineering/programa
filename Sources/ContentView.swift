@@ -5,7 +5,6 @@ import ImageIO
 import SwiftUI
 import ObjectiveC
 import UniformTypeIdentifiers
-import WebKit
 
 struct ContentView: View {
     @ObservedObject var updateViewModel: UpdateViewModel
@@ -191,8 +190,6 @@ struct ContentView: View {
         switch panel {
         case let terminal as TerminalPanel:
             targetView = terminal.hostedView
-        case let browser as BrowserPanel:
-            targetView = browser.webView
         default:
             targetView = nil
         }
@@ -365,7 +362,6 @@ struct ContentView: View {
 
         static let hasFocusedPanel = "panel.hasFocus"
         static let panelName = "panel.name"
-        static let panelIsBrowser = "panel.isBrowser"
         static let panelIsTerminal = "panel.isTerminal"
         static let panelHasCustomName = "panel.hasCustomName"
         static let panelShouldPin = "panel.shouldPin"
@@ -519,8 +515,7 @@ struct ContentView: View {
                     )
                     // Keep the retiring workspace visible during handoff, but never input-active.
                     // Allowing both selected+retiring workspaces to be input-active lets the
-                    // old workspace steal first responder (notably with WKWebView), which can
-                    // delay handoff completion and make browser returns feel laggy.
+                    // old workspace steal first responder, which can delay handoff completion.
                     let isInputActive = isSelectedWorkspace
                     let portalPriority = isSelectedWorkspace ? 2 : (isRetiringWorkspace ? 1 : 0)
                     WorkspaceContentView(
@@ -820,7 +815,7 @@ struct ContentView: View {
                 .background(Color.clear)
 
         let step1 = attachWorkspaceLifecycleHandlers(to: baseLayout)
-        let step2 = attachTerminalAndBrowserFocusHandlers(to: step1)
+        let step2 = attachTerminalFocusHandlers(to: step1)
         let step3 = attachCommandPaletteFocusAndTabsHandlers(to: step2)
         let step4 = attachCommandPaletteRequestHandlers(to: step3)
         let step5 = attachOverlayWindowAccessor(to: step4)
@@ -956,7 +951,7 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func attachTerminalAndBrowserFocusHandlers(to view: some View) -> some View {
+    private func attachTerminalFocusHandlers(to view: some View) -> some View {
         view
             .onReceive(NotificationCenter.default.publisher(for: .ghosttyDidSetTitle)) { notification in
                 guard let tabId = notification.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
@@ -984,25 +979,6 @@ struct ContentView: View {
                 guard let tabId = notification.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
                       tabId == tabManager.selectedTabId else { return }
                 completeWorkspaceHandoffIfNeeded(focusedTabId: tabId, reason: "first_responder")
-                attemptCommandPaletteFocusRestoreIfNeeded()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .browserDidBecomeFirstResponderWebView)) { notification in
-                guard let webView = notification.object as? WKWebView,
-                      let selectedTabId = tabManager.selectedTabId,
-                      let selectedWorkspace = tabManager.selectedWorkspace,
-                      let focusedPanelId = selectedWorkspace.focusedPanelId,
-                      let focusedBrowser = selectedWorkspace.browserPanel(for: focusedPanelId),
-                      focusedBrowser.webView === webView else { return }
-                completeWorkspaceHandoffIfNeeded(focusedTabId: selectedTabId, reason: "browser_first_responder")
-                attemptCommandPaletteFocusRestoreIfNeeded()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .browserDidFocusAddressBar)) { notification in
-                guard let panelId = notification.object as? UUID,
-                      let selectedTabId = tabManager.selectedTabId,
-                      let selectedWorkspace = tabManager.selectedWorkspace,
-                      selectedWorkspace.focusedPanelId == panelId,
-                      selectedWorkspace.browserPanel(for: panelId) != nil else { return }
-                completeWorkspaceHandoffIfNeeded(focusedTabId: selectedTabId, reason: "browser_address_bar")
                 attemptCommandPaletteFocusRestoreIfNeeded()
             }
             .onReceive(NotificationCenter.default.publisher(
@@ -1711,10 +1687,6 @@ struct ContentView: View {
 
     private func canCompleteWorkspaceHandoffImmediately(for workspaceId: UUID) -> Bool {
         guard let workspace = tabManager.tabs.first(where: { $0.id == workspaceId }) else { return true }
-        if let focusedPanelId = workspace.focusedPanelId,
-           workspace.browserPanel(for: focusedPanelId) != nil {
-            return true
-        }
         return workspace.hasLoadedTerminalSurface()
     }
 
@@ -1726,11 +1698,10 @@ struct ContentView: View {
         // Hide portal-hosted views for the retiring workspace BEFORE clearing
         // retiringWorkspaceId. Once cleared, reconcileMountedWorkspaceIds unmounts
         // the workspace — but dismantleNSView intentionally doesn't hide portal views
-        // during transient rebuilds. Hiding here prevents stale terminal/browser
+        // during transient rebuilds. Hiding here prevents stale terminal
         // portals from covering the newly selected workspace.
         if let retiring, let workspace = tabManager.tabs.first(where: { $0.id == retiring }) {
             workspace.hideAllTerminalPortalViews()
-            workspace.hideAllBrowserPortalViews()
         }
 
         retiringWorkspaceId = nil
@@ -3308,8 +3279,6 @@ struct ContentView: View {
         workspaceId: UUID
     ) {
         // Switcher commands dismiss the palette after action dispatch.
-        // Defer focus mutation one turn so browser omnibar autofocus can run
-        // without being blocked by the palette-visibility guard.
         DispatchQueue.main.async {
             _ = AppDelegate.shared?.focusMainWindow(windowId: windowId)
             tabManager.focusTab(workspaceId, suppressFlash: true)
@@ -3384,11 +3353,6 @@ struct ContentView: View {
         func panelSubtitle(_ context: CommandPaletteContextSnapshot) -> String {
             let name = context.string(CommandPaletteContextKeys.panelName) ?? String(localized: "commandPalette.subtitle.tabFallback", defaultValue: "Tab")
             return String(localized: "commandPalette.subtitle.tabWithName", defaultValue: "Tab • \(name)")
-        }
-
-        func browserPanelSubtitle(_ context: CommandPaletteContextSnapshot) -> String {
-            let name = context.string(CommandPaletteContextKeys.panelName) ?? String(localized: "commandPalette.subtitle.tabFallback", defaultValue: "Tab")
-            return String(localized: "commandPalette.subtitle.browserWithName", defaultValue: "Browser • \(name)")
         }
 
         func terminalPanelSubtitle(_ context: CommandPaletteContextSnapshot) -> String {
@@ -3474,14 +3438,6 @@ struct ContentView: View {
         )
         contributions.append(
             CommandPaletteCommandContribution(
-                commandId: "palette.newBrowserTab",
-                title: constant(String(localized: "command.newBrowserTab.title", defaultValue: "New Tab (Browser)")),
-                subtitle: constant(String(localized: "command.newBrowserTab.subtitle", defaultValue: "Tab")),
-                keywords: ["new", "browser", "tab", "web"]
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
                 commandId: "palette.closeTab",
                 title: constant(String(localized: "command.closeTab.title", defaultValue: "Close Tab")),
                 subtitle: constant(String(localized: "command.closeTab.subtitle", defaultValue: "Tab")),
@@ -3510,14 +3466,6 @@ struct ContentView: View {
                 title: constant(String(localized: "command.toggleFullScreen.title", defaultValue: "Toggle Full Screen")),
                 subtitle: constant(String(localized: "command.toggleFullScreen.subtitle", defaultValue: "Window")),
                 keywords: ["fullscreen", "full", "screen", "window", "toggle"]
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.reopenClosedBrowserTab",
-                title: constant(String(localized: "command.reopenClosedBrowserTab.title", defaultValue: "Reopen Closed Browser Tab")),
-                subtitle: constant(String(localized: "command.reopenClosedBrowserTab.subtitle", defaultValue: "Browser")),
-                keywords: ["reopen", "closed", "browser"]
             )
         )
         contributions.append(
@@ -3841,141 +3789,6 @@ struct ContentView: View {
                 }
             )
         )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserBack",
-                title: constant(String(localized: "command.browserBack.title", defaultValue: "Back")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "back", "history"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserForward",
-                title: constant(String(localized: "command.browserForward.title", defaultValue: "Forward")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "forward", "history"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserReload",
-                title: constant(String(localized: "command.browserReload.title", defaultValue: "Reload Page")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "reload", "refresh"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserOpenDefault",
-                title: constant(String(localized: "command.browserOpenDefault.title", defaultValue: "Open Current Page in Default Browser")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["open", "default", "external", "browser"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserFocusAddressBar",
-                title: constant(String(localized: "command.browserFocusAddressBar.title", defaultValue: "Focus Address Bar")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "address", "omnibar", "url"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserToggleDevTools",
-                title: constant(String(localized: "command.browserToggleDevTools.title", defaultValue: "Toggle Developer Tools")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "devtools", "inspector"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserConsole",
-                title: constant(String(localized: "command.browserConsole.title", defaultValue: "Show JavaScript Console")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "console", "javascript"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserDesignMode",
-                title: constant(String(localized: "command.browserDesignMode.title", defaultValue: "Toggle Design Mode")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "design", "mode", "inspect", "element", "screenshot", "html", "css"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserZoomIn",
-                title: constant(String(localized: "command.browserZoomIn.title", defaultValue: "Zoom In")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "zoom", "in"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserZoomOut",
-                title: constant(String(localized: "command.browserZoomOut.title", defaultValue: "Zoom Out")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "zoom", "out"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserZoomReset",
-                title: constant(String(localized: "command.browserZoomReset.title", defaultValue: "Actual Size")),
-                subtitle: browserPanelSubtitle,
-                keywords: ["browser", "zoom", "reset", "actual size"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserClearHistory",
-                title: constant(String(localized: "command.browserClearHistory.title", defaultValue: "Clear Browser History")),
-                subtitle: constant(String(localized: "command.browserClearHistory.subtitle", defaultValue: "Browser")),
-                keywords: ["browser", "history", "clear"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserSplitRight",
-                title: constant(String(localized: "command.browserSplitRight.title", defaultValue: "Split Browser Right")),
-                subtitle: constant(String(localized: "command.browserSplitRight.subtitle", defaultValue: "Browser Layout")),
-                keywords: ["browser", "split", "right"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserSplitDown",
-                title: constant(String(localized: "command.browserSplitDown.title", defaultValue: "Split Browser Down")),
-                subtitle: constant(String(localized: "command.browserSplitDown.subtitle", defaultValue: "Browser Layout")),
-                keywords: ["browser", "split", "down"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.browserDuplicateRight",
-                title: constant(String(localized: "command.browserDuplicateRight.title", defaultValue: "Duplicate Browser to the Right")),
-                subtitle: constant(String(localized: "command.browserDuplicateRight.subtitle", defaultValue: "Browser Layout")),
-                keywords: ["browser", "duplicate", "clone", "split"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsBrowser) }
-            )
-        )
 
         for target in TerminalDirectoryOpenTarget.commandPaletteShortcutTargets {
             contributions.append(
@@ -4050,24 +3863,6 @@ struct ContentView: View {
                 title: constant(String(localized: "command.terminalSplitDown.title", defaultValue: "Split Down")),
                 subtitle: constant(String(localized: "command.terminalSplitDown.subtitle", defaultValue: "Terminal Layout")),
                 keywords: ["terminal", "split", "down"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.terminalSplitBrowserRight",
-                title: constant(String(localized: "command.terminalSplitBrowserRight.title", defaultValue: "Split Browser Right")),
-                subtitle: constant(String(localized: "command.terminalSplitBrowserRight.subtitle", defaultValue: "Terminal Layout")),
-                keywords: ["terminal", "split", "browser", "right"],
-                when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.terminalSplitBrowserDown",
-                title: constant(String(localized: "command.terminalSplitBrowserDown.title", defaultValue: "Split Browser Down")),
-                subtitle: constant(String(localized: "command.terminalSplitBrowserDown.subtitle", defaultValue: "Terminal Layout")),
-                keywords: ["terminal", "split", "browser", "down"],
                 when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
             )
         )
@@ -4211,13 +4006,6 @@ struct ContentView: View {
         registry.register(commandId: "palette.newTerminalTab") {
             tabManager.newSurface()
         }
-        registry.register(commandId: "palette.newBrowserTab") {
-            // Let command-palette dismissal complete first so omnibar focus
-            // is not blocked by the palette visibility guard.
-            DispatchQueue.main.async {
-                _ = AppDelegate.shared?.openBrowserAndFocusAddressBar()
-            }
-        }
         registry.register(commandId: "palette.closeTab") {
             tabManager.closeCurrentPanelWithConfirmation()
         }
@@ -4237,9 +4025,6 @@ struct ContentView: View {
                 return
             }
             window.toggleFullScreen(nil)
-        }
-        registry.register(commandId: "palette.reopenClosedBrowserTab") {
-            _ = tabManager.reopenMostRecentlyClosedBrowserPanel()
         }
         registry.register(commandId: "palette.toggleSidebar") {
             sidebarState.toggle()
@@ -4397,74 +4182,12 @@ struct ContentView: View {
         }
         registry.register(commandId: "palette.openWorkspacePullRequests") {
             DispatchQueue.main.async {
-                if !openWorkspacePullRequestsInConfiguredBrowser() {
+                if !openWorkspacePullRequests() {
                     NSSound.beep()
                 }
             }
         }
 
-        registry.register(commandId: "palette.browserBack") {
-            tabManager.focusedBrowserPanel?.goBack()
-        }
-        registry.register(commandId: "palette.browserForward") {
-            tabManager.focusedBrowserPanel?.goForward()
-        }
-        registry.register(commandId: "palette.browserReload") {
-            tabManager.focusedBrowserPanel?.reload()
-        }
-        registry.register(commandId: "palette.browserOpenDefault") {
-            if !openFocusedBrowserInDefaultBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserFocusAddressBar") {
-            if !focusFocusedBrowserAddressBar() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserToggleDevTools") {
-            if !tabManager.toggleDeveloperToolsFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserConsole") {
-            if !tabManager.showJavaScriptConsoleFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserDesignMode") {
-            if !tabManager.toggleDesignModeFromCurrentFocus() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserZoomIn") {
-            if !tabManager.zoomInFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserZoomOut") {
-            if !tabManager.zoomOutFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserZoomReset") {
-            if !tabManager.resetZoomFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserClearHistory") {
-            BrowserHistoryStore.shared.clearHistory()
-        }
-        registry.register(commandId: "palette.browserSplitRight") {
-            _ = tabManager.createBrowserSplit(direction: .right)
-        }
-        registry.register(commandId: "palette.browserSplitDown") {
-            _ = tabManager.createBrowserSplit(direction: .down)
-        }
-        registry.register(commandId: "palette.browserDuplicateRight") {
-            let url = tabManager.focusedBrowserPanel?.preferredURLStringForOmnibar().flatMap(URL.init(string:))
-            _ = tabManager.createBrowserSplit(direction: .right, url: url)
-        }
 
         for target in TerminalDirectoryOpenTarget.commandPaletteShortcutTargets {
             registry.register(commandId: target.commandPaletteCommandId) {
@@ -4493,12 +4216,6 @@ struct ContentView: View {
         }
         registry.register(commandId: "palette.terminalSplitDown") {
             tabManager.createSplit(direction: .down)
-        }
-        registry.register(commandId: "palette.terminalSplitBrowserRight") {
-            _ = tabManager.createBrowserSplit(direction: .right)
-        }
-        registry.register(commandId: "palette.terminalSplitBrowserDown") {
-            _ = tabManager.createBrowserSplit(direction: .down)
         }
         registry.register(commandId: "palette.toggleSplitZoom") {
             if !tabManager.toggleFocusedSplitZoom() {
@@ -4976,11 +4693,6 @@ struct ContentView: View {
             return target
         }
 
-        if let webView = BrowserWindowPortalRegistry.webViewAtWindowPoint(windowPoint, in: window),
-           let target = commandPaletteBrowserFocusTarget(for: webView) {
-            return target
-        }
-
         if let terminalView = TerminalWindowPortalRegistry.terminalViewAtWindowPoint(windowPoint, in: window),
            let workspaceId = terminalView.tabId,
            let panelId = terminalView.terminalSurface?.id,
@@ -5005,48 +4717,6 @@ struct ContentView: View {
                 workspaceId: workspaceId,
                 panelId: panelId,
                 fallbackIntent: .terminal(.surface),
-                in: observedWindow
-            )
-        }
-
-        if let webView = commandPaletteOwningWebView(for: responder),
-           let target = commandPaletteBrowserFocusTarget(for: webView) {
-            return target
-        }
-
-        return nil
-    }
-
-    private func commandPaletteBrowserFocusTarget(for webView: WKWebView) -> CommandPaletteRestoreFocusTarget? {
-        if let selectedWorkspace = tabManager.selectedWorkspace,
-           let target = commandPaletteBrowserFocusTarget(in: selectedWorkspace, for: webView) {
-            return target
-        }
-
-        let selectedWorkspaceId = tabManager.selectedTabId
-        for workspace in tabManager.tabs where workspace.id != selectedWorkspaceId {
-            if let target = commandPaletteBrowserFocusTarget(in: workspace, for: webView) {
-                return target
-            }
-        }
-
-        return nil
-    }
-
-    private func commandPaletteBrowserFocusTarget(
-        in workspace: Workspace,
-        for webView: WKWebView
-    ) -> CommandPaletteRestoreFocusTarget? {
-        for (panelId, panel) in workspace.panels {
-            guard let browserPanel = panel as? BrowserPanel,
-                  browserPanel.webView === webView else {
-                continue
-            }
-
-            return makeCommandPaletteRestoreFocusTarget(
-                workspaceId: workspace.id,
-                panelId: panelId,
-                fallbackIntent: .browser(.webView),
                 in: observedWindow
             )
         }
@@ -5125,12 +4795,6 @@ struct ContentView: View {
             return "terminal.surface"
         case .terminal(.findField):
             return "terminal.findField"
-        case .browser(.webView):
-            return "browser.webView"
-        case .browser(.addressBar):
-            return "browser.addressBar"
-        case .browser(.findField):
-            return "browser.findField"
         }
     }
 
@@ -5492,34 +5156,14 @@ struct ContentView: View {
         dismissCommandPalette()
     }
 
-    private func focusFocusedBrowserAddressBar() -> Bool {
-        guard let panel = tabManager.focusedBrowserPanel else { return false }
-        _ = panel.requestAddressBarFocus()
-        NotificationCenter.default.post(name: .browserFocusAddressBar, object: panel.id)
-        return true
-    }
-
-    private func openFocusedBrowserInDefaultBrowser() -> Bool {
-        guard let panel = tabManager.focusedBrowserPanel,
-              let rawURL = panel.preferredURLStringForOmnibar(),
-              let url = URL(string: rawURL),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
-            return false
-        }
-        return NSWorkspace.shared.open(url)
-    }
-
-    private func openWorkspacePullRequestsInConfiguredBrowser() -> Bool {
+    private func openWorkspacePullRequests() -> Bool {
         guard let workspace = tabManager.selectedWorkspace else { return false }
         let pullRequests = workspace.sidebarPullRequestsInDisplayOrder()
         guard !pullRequests.isEmpty else { return false }
 
         var openedCount = 0
         for pullRequest in pullRequests {
-            if tabManager.openBrowser(url: pullRequest.url, insertAtEnd: true) != nil {
-                openedCount += 1
-            } else if NSWorkspace.shared.open(pullRequest.url) {
+            if ExternalOpenPolicy.open(pullRequest.url) {
                 openedCount += 1
             }
         }

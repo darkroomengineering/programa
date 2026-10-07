@@ -86,14 +86,14 @@ def main() -> int:
                 "new_surface should preserve the focused surface for v1 callers",
             )
 
-            open_browser_response = _send_v1("open_browser")
+            extra_surface_response = _send_v1("new_surface")
             time.sleep(0.2)
-            browser_surface_id = _created_surface_id(open_browser_response)
-            _must(browser_surface_id in _surface_ids(client, created_workspace), "open_browser should create a browser surface")
-            _must(client.current_workspace() == baseline_workspace, "open_browser should not retarget workspace selection")
+            extra_surface_id = _created_surface_id(extra_surface_response)
+            _must(extra_surface_id in _surface_ids(client, created_workspace), "new_surface should create an additional terminal surface")
+            _must(client.current_workspace() == baseline_workspace, "new_surface should not retarget workspace selection")
             _must(
                 _focused_surface_id(client, created_workspace) == baseline_focused_surface,
-                "open_browser should preserve the focused surface for v1 callers",
+                "new_surface should preserve the focused surface for v1 callers",
             )
 
             new_pane_response = _send_v1("new_pane --direction=right")

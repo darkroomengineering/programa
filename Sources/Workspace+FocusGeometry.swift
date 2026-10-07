@@ -220,10 +220,6 @@ extension Workspace {
             )
         }
 
-        if reassertAppKitFocus,
-           let browserPanel = panels[panelId] as? BrowserPanel {
-            maybeAutoFocusBrowserAddressBarOnPanelFocus(browserPanel, trigger: trigger)
-        }
 
         if trigger == .terminalFirstResponder,
            panels[panelId] is TerminalPanel {
@@ -234,18 +230,6 @@ extension Workspace {
         }
     }
 
-    func maybeAutoFocusBrowserAddressBarOnPanelFocus(
-        _ browserPanel: BrowserPanel,
-        trigger: FocusPanelTrigger
-    ) {
-        guard trigger == .standard else { return }
-        guard !isCommandPaletteVisibleForWorkspaceWindow() else { return }
-        guard !browserPanel.shouldSuppressOmnibarAutofocus() else { return }
-        guard browserPanel.isShowingNewTabPage || browserPanel.preferredURLStringForOmnibar() == nil else { return }
-
-        _ = browserPanel.requestAddressBarFocus()
-        NotificationCenter.default.post(name: .browserFocusAddressBar, object: browserPanel.id)
-    }
 
     func isCommandPaletteVisibleForWorkspaceWindow() -> Bool {
         guard let app = AppDelegate.shared else {
@@ -324,8 +308,7 @@ extension Workspace {
     }
 
     /// Hide all terminal portal views for this workspace.
-    /// Called before the workspace is unmounted to prevent portal-hosted terminal
-    /// views from covering browser panes in the newly selected workspace.
+    /// Called before the workspace is unmounted to hide its portal-hosted terminal views.
     func hideAllTerminalPortalViews() {
         for panel in panels.values {
             guard let terminal = panel as? TerminalPanel else { continue }
@@ -334,12 +317,6 @@ extension Workspace {
         }
     }
 
-    func hideAllBrowserPortalViews() {
-        for panel in panels.values {
-            guard let browser = panel as? BrowserPanel else { continue }
-            browser.hideBrowserPortalView(source: "workspaceRetire")
-        }
-    }
 
     func reconcileFocusState() {
         guard !isReconcilingFocusState else { return }
@@ -414,18 +391,10 @@ extension Workspace {
 
     func beginEventDrivenLayoutFollowUp(
         reason: String,
-        browserPanelId: UUID? = nil,
-        browserExitFocusPanelId: UUID? = nil,
         terminalFocusPanelId: UUID? = nil,
         includeGeometry: Bool = false
     ) {
         layoutFollowUpReason = reason
-        if let browserPanelId {
-            layoutFollowUpBrowserPanelId = browserPanelId
-        }
-        if let browserExitFocusPanelId {
-            layoutFollowUpBrowserExitFocusPanelId = browserExitFocusPanelId
-        }
         if let terminalFocusPanelId {
             layoutFollowUpTerminalFocusPanelId = terminalFocusPanelId
         }
@@ -489,21 +458,7 @@ extension Workspace {
             enqueueAttempt()
         })
         layoutFollowUpObservers.append(NotificationCenter.default.addObserver(
-            forName: .browserPortalRegistryDidChange,
-            object: nil,
-            queue: .main
-        ) { _ in
-            enqueueAttempt()
-        })
-        layoutFollowUpObservers.append(NotificationCenter.default.addObserver(
             forName: .ghosttyDidBecomeFirstResponderSurface,
-            object: nil,
-            queue: .main
-        ) { _ in
-            enqueueAttempt()
-        })
-        layoutFollowUpObservers.append(NotificationCenter.default.addObserver(
-            forName: .browserDidBecomeFirstResponderWebView,
             object: nil,
             queue: .main
         ) { _ in
@@ -534,8 +489,6 @@ extension Workspace {
         layoutFollowUpPanelsCancellable = nil
         layoutFollowUpReason = nil
         layoutFollowUpTerminalFocusPanelId = nil
-        layoutFollowUpBrowserPanelId = nil
-        layoutFollowUpBrowserExitFocusPanelId = nil
         layoutFollowUpNeedsGeometryPass = false
         layoutFollowUpAttemptVersion &+= 1
         layoutFollowUpAttemptScheduled = false
@@ -571,33 +524,8 @@ extension Workspace {
         }
     }
 
-    func browserPortalAnchorReady(for browserPanel: BrowserPanel) -> Bool {
-        let anchorView = browserPanel.portalAnchorView
-        return
-            anchorView.window != nil &&
-            anchorView.superview != nil &&
-            anchorView.bounds.width > 1 &&
-            anchorView.bounds.height > 1
-    }
 
-    func browserPortalReady(for browserPanel: BrowserPanel) -> Bool {
-        browserPortalAnchorReady(for: browserPanel) &&
-            browserPanel.webView.window != nil &&
-            browserPanel.webView.superview != nil &&
-            BrowserWindowPortalRegistry.isWebView(browserPanel.webView, boundTo: browserPanel.portalAnchorView)
-    }
 
-    func browserSplitZoomExitFocusNeedsFollowUp(panelId: UUID) -> Bool {
-        guard let browserPanel = browserPanel(for: panelId),
-              let paneId = paneId(forPanelId: panelId),
-              let tabId = surfaceIdFromPanelId(panelId) else {
-            return false
-        }
-        let selectionConverged =
-            bonsplitController.focusedPaneId == paneId &&
-            bonsplitController.selectedTab(inPane: paneId)?.id == tabId
-        return !selectionConverged || !browserPortalAnchorReady(for: browserPanel)
-    }
 
     func terminalFocusNeedsFollowUp() -> Bool {
         guard let panelId = layoutFollowUpTerminalFocusPanelId,
@@ -607,13 +535,6 @@ extension Workspace {
         return focusedPanelId != panelId || !terminalPanel.hostedView.isSurfaceViewFirstResponder()
     }
 
-    func browserPanelNeedsFollowUp() -> Bool {
-        guard let panelId = layoutFollowUpBrowserPanelId,
-              let browserPanel = browserPanel(for: panelId) else {
-            return false
-        }
-        return !browserPortalReady(for: browserPanel)
-    }
 
     func attemptEventDrivenLayoutFollowUp() {
         guard layoutFollowUpTimeoutWorkItem != nil, !isAttemptingLayoutFollowUp else { return }
@@ -624,10 +545,7 @@ extension Workspace {
 
         let geometryPendingBefore = layoutFollowUpNeedsGeometryPass
         let terminalPortalPendingBefore = terminalPortalVisibilityNeedsFollowUp()
-        let browserVisibilityPendingBefore = browserPortalVisibilityNeedsFollowUp()
         let terminalFocusPendingBefore = terminalFocusNeedsFollowUp()
-        let browserPanelPendingBefore = browserPanelNeedsFollowUp()
-        let browserExitPendingBefore = layoutFollowUpBrowserExitFocusPanelId != nil
 
         if layoutFollowUpNeedsGeometryPass {
             layoutFollowUpNeedsGeometryPass = reconcileTerminalGeometryPass()
@@ -648,56 +566,14 @@ extension Workspace {
         reconcileTerminalPortalVisibilityForCurrentRenderedLayout()
         let terminalPortalPending = terminalPortalVisibilityNeedsFollowUp()
 
-        let reason = layoutFollowUpReason ?? "workspace.layout"
-        reconcileBrowserPortalVisibilityForCurrentRenderedLayout(reason: reason)
-        let browserVisibilityPending = browserPortalVisibilityNeedsFollowUp()
 
-        if let browserPanelId = layoutFollowUpBrowserPanelId {
-            if let browserPanel = browserPanel(for: browserPanelId) {
-                let anchorReady = browserPortalAnchorReady(for: browserPanel)
-                let wasReady = browserPortalReady(for: browserPanel)
-                if anchorReady && !wasReady {
-                    BrowserWindowPortalRegistry.synchronizeForAnchor(browserPanel.portalAnchorView)
-                }
-                let isReady = browserPortalReady(for: browserPanel)
-                if isReady,
-                   (!wasReady || BrowserWindowPortalRegistry.debugSnapshot(for: browserPanel.webView)?.containerHidden == true) {
-                    BrowserWindowPortalRegistry.refresh(
-                        webView: browserPanel.webView,
-                        reason: reason
-                    )
-                }
-                if isReady {
-                    layoutFollowUpBrowserPanelId = nil
-                }
-            } else {
-                layoutFollowUpBrowserPanelId = nil
-            }
-        }
 
-        if let browserExitFocusPanelId = layoutFollowUpBrowserExitFocusPanelId {
-            if browserSplitZoomExitFocusNeedsFollowUp(panelId: browserExitFocusPanelId) {
-                if browserPanel(for: browserExitFocusPanelId) != nil {
-                    focusPanel(browserExitFocusPanelId)
-                    scheduleFocusReconcile()
-                } else {
-                    layoutFollowUpBrowserExitFocusPanelId = nil
-                }
-            } else {
-                layoutFollowUpBrowserExitFocusPanelId = nil
-            }
-        }
 
         let terminalFocusPending = terminalFocusNeedsFollowUp()
-        let browserPanelPending = browserPanelNeedsFollowUp()
-        let browserExitPending = layoutFollowUpBrowserExitFocusPanelId != nil
         let needsMoreWork =
             layoutFollowUpNeedsGeometryPass ||
             terminalPortalPending ||
-            browserVisibilityPending ||
-            terminalFocusPending ||
-            browserPanelPending ||
-            browserExitPending
+            terminalFocusPending
 
         if !needsMoreWork {
             clearLayoutFollowUp()
@@ -707,10 +583,7 @@ extension Workspace {
         let didMakeProgress =
             (geometryPendingBefore && !layoutFollowUpNeedsGeometryPass) ||
             (terminalPortalPendingBefore && !terminalPortalPending) ||
-            (browserVisibilityPendingBefore && !browserVisibilityPending) ||
-            (terminalFocusPendingBefore && !terminalFocusPending) ||
-            (browserPanelPendingBefore && !browserPanelPending) ||
-            (browserExitPendingBefore && !browserExitPending)
+            (terminalFocusPendingBefore && !terminalFocusPending)
 
         if didMakeProgress {
             layoutFollowUpStalledAttemptCount = 0
@@ -836,89 +709,7 @@ extension Workspace {
         return false
     }
 
-    @discardableResult
-    func reconcileBrowserPortalVisibilityForCurrentRenderedLayout(reason: String) -> Bool {
-        let visiblePanelIds = renderedVisiblePanelIdsForCurrentLayout()
-        var didChange = false
 
-        for panel in panels.values {
-            guard let browserPanel = panel as? BrowserPanel else { continue }
-            let shouldBeVisible = visiblePanelIds.contains(browserPanel.id)
-            let anchorView = browserPanel.portalAnchorView
-            let snapshot = BrowserWindowPortalRegistry.debugSnapshot(for: browserPanel.webView)
-            if shouldBeVisible {
-                if snapshot?.visibleInUI == false {
-                    BrowserWindowPortalRegistry.updateEntryVisibility(
-                        for: browserPanel.webView,
-                        visibleInUI: true,
-                        zPriority: 2
-                    )
-                    didChange = true
-                }
-                let anchorReady = browserPortalAnchorReady(for: browserPanel)
-                let portalReady = browserPortalReady(for: browserPanel)
-                if anchorReady && !portalReady {
-                    BrowserWindowPortalRegistry.synchronizeForAnchor(anchorView)
-                    if browserPortalReady(for: browserPanel) {
-                        BrowserWindowPortalRegistry.refresh(
-                            webView: browserPanel.webView,
-                            reason: reason
-                        )
-                        didChange = true
-                    }
-                } else if anchorReady && snapshot?.containerHidden == true {
-                    BrowserWindowPortalRegistry.refresh(
-                        webView: browserPanel.webView,
-                        reason: reason
-                    )
-                    didChange = true
-                }
-            } else {
-                let portalNeedsHide =
-                    snapshot?.visibleInUI == true ||
-                    snapshot?.containerHidden == false
-                if portalNeedsHide {
-                    if snapshot?.visibleInUI == true {
-                        BrowserWindowPortalRegistry.updateEntryVisibility(
-                            for: browserPanel.webView,
-                            visibleInUI: false,
-                            zPriority: 0
-                        )
-                    }
-                    BrowserWindowPortalRegistry.hide(
-                        webView: browserPanel.webView,
-                        source: reason
-                    )
-                    didChange = true
-                }
-            }
-        }
-
-        return didChange
-    }
-
-    func browserPortalVisibilityNeedsFollowUp() -> Bool {
-        let visiblePanelIds = renderedVisiblePanelIdsForCurrentLayout()
-
-        for panel in panels.values {
-            guard let browserPanel = panel as? BrowserPanel else { continue }
-            guard visiblePanelIds.contains(browserPanel.id) else { continue }
-            let anchorView = browserPanel.portalAnchorView
-            let anchorReady =
-                anchorView.window != nil &&
-                anchorView.superview != nil &&
-                anchorView.bounds.width > 1 &&
-                anchorView.bounds.height > 1
-            if !anchorReady ||
-                browserPanel.webView.window == nil ||
-                browserPanel.webView.superview == nil ||
-                !BrowserWindowPortalRegistry.isWebView(browserPanel.webView, boundTo: anchorView) {
-                return true
-            }
-        }
-
-        return false
-    }
 
     func scheduleMovedTerminalRefresh(panelId: UUID) {
         guard terminalPanel(for: panelId) != nil else { return }

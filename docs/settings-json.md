@@ -71,7 +71,6 @@ Socket control and automation settings from Settings > Automation.
 | `socketControlMode` | string | `"programaOnly"` | Socket control mode. Legacy aliases are accepted and normalized. One of: `off`, `programaOnly`, `cmuxOnly` (legacy alias of `programaOnly`), `automation`, `password`, `allowAll`, `openAccess`, `fullOpenAccess`, `notifications`, `full`. |
 | `socketPassword` | object |  | Password for password-mode socket access. Use null or an empty string to clear it. |
 | `claudeCodeIntegration` | boolean | `true` | Enable Programa integration hooks for Claude Code. |
-| `openBrowserWithAgentSplits` | boolean | `false` | Open a browser split beside the terminal when a new agent workspace is created. |
 | `claudeBinaryPath` | string |  | Custom path to the claude binary. |
 | `portBase` | integer | `9100` | Starting value for workspace PROGRAMA_PORT assignments. The complete range must fit within 1-65535. |
 | `portRange` | integer | `10` | Number of ports reserved per workspace. The complete range must fit within 1-65535. |
@@ -86,21 +85,11 @@ Custom command trust settings from Settings > Custom Commands.
 
 ## `browser`
 
-Embedded browser settings from Settings > Browser.
+Settings for links that open in other apps.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
-| `defaultSearchEngine` | string | `"google"` | Default search engine for non-URL queries. One of: `google`, `duckduckgo`, `bing`, `kagi`, `startpage`. |
-| `showSearchSuggestions` | boolean | `true` | Show omnibar search suggestions. |
-| `theme` | string | `"system"` | Embedded browser theme. One of: `system`, `light`, `dark`. |
-| `openTerminalLinksInProgramaBrowser` | boolean | `true` | Open clicked terminal links in the embedded browser. |
-| `interceptTerminalOpenCommandInProgramaBrowser` | boolean | `true` | Intercept terminal open http(s) commands and route them through the embedded browser. |
-| `hostsToOpenInEmbeddedBrowser` | array | `[]` | Allowlist of hosts that should stay inside the embedded browser. |
-| `urlsToAlwaysOpenExternally` | array | `[]` | Rules that always open matching URLs in the system browser. |
-| `externalBrowser` | string | `""` | Bundle identifier of the browser that opens http(s) links leaving Programa, for example `com.apple.Safari`. Empty uses the macOS default browser. Other URL schemes (`mailto:`, `slack://`, `file:`) keep their registered handlers. |
 | `externalAppOpenAllowlist` | array | `[]` | Entries for which you chose Always allow in the external app open prompt, each written as `bundleId\|scheme`, for example `com.tinyspeck.slackmacgap\|slack`. Links with that scheme that open that app skip the prompt. Bare bundle identifiers are ignored. |
-| `insecureHttpHostsAllowedInEmbeddedBrowser` | array | `["localhost", "127.0.0.1", "::1", "0.0.0.0", "*.localtest.me"]` | HTTP hosts allowed in the embedded browser without a warning prompt. |
-| `proxy` | object |  | Route the embedded browser through a proxy. Requires host and port; type defaults to socks5. |
 
 ## `worktrees`
 

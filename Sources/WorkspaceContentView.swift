@@ -394,7 +394,7 @@ struct WorkspaceContentView: View {
         .internalOnlyTabDrag()
         // Split zoom swaps Bonsplit between the full split tree and a single pane view.
         // Recreate the Bonsplit subtree on zoom enter/exit so stale pre-zoom pane chrome
-        // cannot remain stacked above portal-hosted browser content.
+        // cannot remain stacked above portal-hosted content.
         .id(splitZoomRenderIdentity)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -843,22 +843,9 @@ struct EmptyPanelView: View {
         _ = workspace.newTerminalSurface(inPane: paneId)
     }
 
-    private func createBrowser() {
-        #if DEBUG
-        dlog("emptyPane.newBrowser pane=\(paneId.id.uuidString.prefix(5))")
-        #endif
-        focusPane()
-        _ = workspace.newBrowserSurface(inPane: paneId)
-    }
-
     private var newSurfaceShortcut: StoredShortcut {
         let _ = keyboardShortcutSettingsObserver.revision
         return KeyboardShortcutSettings.shortcut(for: .newSurface)
-    }
-
-    private var openBrowserShortcut: StoredShortcut {
-        let _ = keyboardShortcutSettingsObserver.revision
-        return KeyboardShortcutSettings.shortcut(for: .openBrowser)
     }
 
     @ViewBuilder
@@ -906,12 +893,6 @@ struct EmptyPanelView: View {
                     action: createTerminal
                 )
 
-                emptyPaneActionButton(
-                    title: String(localized: "workspace.emptyPanel.browser", defaultValue: "Browser"),
-                    systemImage: "globe",
-                    shortcut: openBrowserShortcut,
-                    action: createBrowser
-                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

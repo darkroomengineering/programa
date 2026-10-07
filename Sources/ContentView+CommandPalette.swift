@@ -539,8 +539,6 @@ extension ContentView {
         switch panelType {
         case .terminal:
             return String(localized: "commandPalette.kind.terminal", defaultValue: "Terminal")
-        case .browser:
-            return String(localized: "commandPalette.kind.browser", defaultValue: "Browser")
         case .markdown:
             return String(localized: "commandPalette.kind.markdown", defaultValue: "Markdown")
         case .review:
@@ -551,8 +549,6 @@ extension ContentView {
         switch panelType {
         case .terminal:
             return ["terminal", "shell", "console"]
-        case .browser:
-            return ["browser", "web", "page"]
         case .markdown:
             return ["markdown", "note", "preview"]
         case .review:
@@ -582,11 +578,6 @@ extension ContentView {
         for contribution: CommandPaletteCommandContribution,
         context: CommandPaletteContextSnapshot
     ) -> String? {
-        // Preserve browser reload semantics for Cmd+R when a browser tab is focused.
-        if contribution.commandId == "palette.renameTab",
-           context.bool(CommandPaletteContextKeys.panelIsBrowser) {
-            return nil
-        }
         if let action = commandPaletteShortcutAction(for: contribution.commandId) {
             return KeyboardShortcutSettings.shortcut(for: action).displayString
         }
@@ -604,8 +595,6 @@ extension ContentView {
             return .openFolder
         case "palette.newTerminalTab":
             return .newSurface
-        case "palette.newBrowserTab":
-            return .openBrowser
         case "palette.closeWindow":
             return .closeWindow
         case "palette.toggleSidebar":
@@ -628,14 +617,6 @@ extension ContentView {
             return .nextSurface
         case "palette.previousTabInPane":
             return .prevSurface
-        case "palette.browserToggleDevTools":
-            return .toggleBrowserDeveloperTools
-        case "palette.browserConsole":
-            return .showBrowserJavaScriptConsole
-        case "palette.browserSplitRight", "palette.terminalSplitBrowserRight":
-            return .splitBrowserRight
-        case "palette.browserSplitDown", "palette.terminalSplitBrowserDown":
-            return .splitBrowserDown
         case "palette.terminalSplitRight":
             return .splitRight
         case "palette.terminalSplitDown":
@@ -656,24 +637,8 @@ extension ContentView {
             return .closeTab
         case "palette.closeWorkspace":
             return .closeWorkspace
-        case "palette.reopenClosedBrowserTab":
-            return .reopenClosedBrowserPanel
         case "palette.openSettings":
             return .openSettings
-        case "palette.browserBack":
-            return .browserBack
-        case "palette.browserForward":
-            return .browserForward
-        case "palette.browserReload":
-            return .browserReload
-        case "palette.browserFocusAddressBar":
-            return .focusBrowserAddressBar
-        case "palette.browserZoomIn":
-            return .browserZoomIn
-        case "palette.browserZoomOut":
-            return .browserZoomOut
-        case "palette.browserZoomReset":
-            return .browserZoomReset
         case "palette.terminalUseSelectionForFind":
             return .useSelectionForFind
         case "palette.toggleFullScreen":
@@ -736,7 +701,6 @@ extension ContentView {
                 CommandPaletteContextKeys.panelName,
                 panelDisplayName(workspace: workspace, panelId: panelId, fallback: panelContext.panel.displayTitle)
             )
-            snapshot.setBool(CommandPaletteContextKeys.panelIsBrowser, panelContext.panel.panelType == .browser)
             snapshot.setBool(CommandPaletteContextKeys.panelIsTerminal, panelIsTerminal)
             snapshot.setBool(CommandPaletteContextKeys.panelHasCustomName, workspace.panelCustomTitles[panelId] != nil)
             snapshot.setBool(CommandPaletteContextKeys.panelShouldPin, !workspace.isPanelPinned(panelId))
@@ -928,13 +892,6 @@ extension ContentView {
             return mainWindow === observedWindow
         }
         return false
-    }
-    static func shouldRestoreBrowserAddressBarAfterCommandPaletteDismiss(
-        focusedPanelIsBrowser: Bool,
-        focusedBrowserAddressBarPanelId: UUID?,
-        focusedPanelId: UUID?
-    ) -> Bool {
-        focusedPanelIsBrowser && focusedBrowserAddressBarPanelId == focusedPanelId
     }
     nonisolated static func commandPaletteHistoryBoost(
         for commandId: String,

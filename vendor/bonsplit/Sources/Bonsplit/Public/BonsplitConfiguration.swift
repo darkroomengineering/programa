@@ -104,7 +104,6 @@ public struct BonsplitConfiguration: Sendable {
 extension BonsplitConfiguration {
     public struct SplitButtonTooltips: Sendable, Equatable {
         public var newTerminal: String
-        public var newBrowser: String
         public var splitRight: String
         public var splitDown: String
 
@@ -112,12 +111,10 @@ extension BonsplitConfiguration {
 
         public init(
             newTerminal: String = "New Terminal",
-            newBrowser: String = "New Browser",
             splitRight: String = "Split Right",
             splitDown: String = "Split Down"
         ) {
             self.newTerminal = newTerminal
-            self.newBrowser = newBrowser
             self.splitRight = splitRight
             self.splitDown = splitDown
         }

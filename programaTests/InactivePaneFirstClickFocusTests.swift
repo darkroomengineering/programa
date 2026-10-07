@@ -33,11 +33,6 @@ final class InactivePaneFirstClickFocusTests: XCTestCase {
         XCTAssertFalse(view.acceptsFirstMouse(for: nil))
     }
 
-    func testBrowserViewRejectsFirstMouse() {
-        let view = ProgramaWebView(frame: .zero, configuration: WKWebViewConfiguration())
-
-        XCTAssertFalse(view.acceptsFirstMouse(for: nil))
-    }
 
     func testMarkdownPointerObserverRejectsFirstMouse() {
         let view = MarkdownPanelPointerObserverView(frame: .zero)
@@ -52,9 +47,6 @@ final class InactivePaneFirstClickFocusTests: XCTestCase {
         UserDefaults.standard.set(true, forKey: removedSettingsKey)
 
         XCTAssertFalse(GhosttyNSView(frame: .zero).acceptsFirstMouse(for: nil))
-        XCTAssertFalse(
-            ProgramaWebView(frame: .zero, configuration: WKWebViewConfiguration()).acceptsFirstMouse(for: nil)
-        )
         XCTAssertFalse(MarkdownPanelPointerObserverView(frame: .zero).acceptsFirstMouse(for: nil))
     }
 

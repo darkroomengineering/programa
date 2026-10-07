@@ -2557,8 +2557,6 @@ final class GhosttySurfaceScrollView: NSView {
         var current: NSView? = view
         while let v = current {
             if v is NSHostingView<SurfaceSearchOverlay> { return true }
-            let typeName = String(describing: type(of: v))
-            if typeName.contains("BrowserSearchOverlay") { return true }
             current = v.superview
         }
         return false

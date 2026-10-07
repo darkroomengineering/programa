@@ -398,7 +398,6 @@ extension TerminalController {
                         if let initialCommand, let terminal = workspace.focusedTerminalPanel {
                             terminal.sendInput(initialCommand + "\n")
                         }
-                        tabManager.openCompanionBrowserSplitIfEnabled(for: workspace)
                         var result = payload
                         result["agent_id"] = agentId.uuidString
                         result["surface_id"] = v2OrNull(surfaceId?.uuidString)
@@ -472,7 +471,6 @@ extension TerminalController {
                 workspace.agentParentWorkspaceId = parentWorkspaceId
                 tabManager.canonicalizeHierarchyOrderIfNeeded()
                 let surfaceId = workspace.focusedTerminalPanel?.id
-                tabManager.openCompanionBrowserSplitIfEnabled(for: workspace)
 
                 do {
                     let record = try AgentSupervisionRegistry.shared.update(

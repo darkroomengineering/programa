@@ -6,7 +6,7 @@ surface="${2:-}"
 run_count="${3:-3}"
 
 if [[ ! -d "$app_path" || "$run_count" != "3" ]]; then
-  echo "usage: $0 <Programa DEV.app> <window|sidebar|tabBar|browserToolbar|overlays> [3]" >&2
+  echo "usage: $0 <Programa DEV.app> <window|sidebar|tabBar|overlays> [3]" >&2
   exit 2
 fi
 
@@ -14,7 +14,6 @@ case "$surface" in
   window) override_key="PROGRAMA_TEST_FORCE_WINDOW_GLASS" ;;
   sidebar) override_key="PROGRAMA_TEST_FORCE_SIDEBAR_GLASS" ;;
   tabBar) override_key="PROGRAMA_TEST_FORCE_TAB_BAR_GLASS" ;;
-  browserToolbar) override_key="PROGRAMA_TEST_FORCE_BROWSER_TOOLBAR_GLASS" ;;
   overlays) override_key="PROGRAMA_TEST_FORCE_OVERLAY_GLASS" ;;
   *) echo "Unknown glass surface: $surface" >&2; exit 2 ;;
 esac

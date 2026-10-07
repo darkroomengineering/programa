@@ -26,22 +26,6 @@ extension TabManager {
         return newSplit(tabId: tabId, surfaceId: surfaceId, direction: direction, focus: focus)
     }
 
-    /// Create a new browser split from the currently focused panel.
-    @discardableResult
-    func createBrowserSplit(direction: SplitDirection, url: URL? = nil) -> UUID? {
-        guard let selectedTabId,
-              let tab = workspace(withId: selectedTabId),
-              let focusedPanelId = tab.focusedPanelId else { return nil }
-        tab.clearSplitZoom()
-        return newBrowserSplit(
-            tabId: selectedTabId,
-            fromPanelId: focusedPanelId,
-            orientation: direction.orientation,
-            insertFirst: direction.insertFirst,
-            url: url
-        )
-    }
-
     /// Refresh Bonsplit right-side action button tooltips for all workspaces.
     func refreshSplitButtonTooltips() {
         for workspace in tabs {

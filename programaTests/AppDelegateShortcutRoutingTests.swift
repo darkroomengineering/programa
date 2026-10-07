@@ -1783,20 +1783,16 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         XCTAssertTrue(appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false))
     }
 
-    func testClosingMainWindowTearsDownEveryOwnedWorkspaceAndBrowserElementRef() throws {
+    func testClosingMainWindowTearsDownEveryOwnedWorkspace() throws {
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")
             return
         }
 
         let windowId = appDelegate.createMainWindow()
-        var surfaceIds: [UUID] = []
         defer {
             if appDelegate.tabManagerFor(windowId: windowId) != nil {
                 closeWindow(withId: windowId)
-            }
-            for surfaceId in surfaceIds {
-                TerminalController.shared.v2BrowserPermanentlyRemoveSurfaceState(surfaceId: surfaceId)
             }
         }
 
@@ -1806,36 +1802,11 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         let workspaces = [firstWorkspace, secondWorkspace]
         XCTAssertEqual(manager.tabs.count, 2)
 
-        var refs: [(surfaceId: UUID, ref: String)] = []
-        for (index, workspace) in workspaces.enumerated() {
-            let surfaceId = try XCTUnwrap(workspace.panels.keys.first)
-            surfaceIds.append(surfaceId)
-            switch TerminalController.shared.browserRPCState.allocateElementRefs(
-                surfaceId: surfaceId,
-                selectors: ["#window-owned-workspace-\(index)"]
-            ) {
-            case .allocated(let allocated):
-                let ref = try XCTUnwrap(allocated.first)
-                refs.append((surfaceId, ref))
-                XCTAssertNotNil(TerminalController.shared.v2BrowserResolveSelector(ref, surfaceId: surfaceId))
-            case .resourceExhausted:
-                XCTFail("A fresh workspace surface must accept its first browser element ref")
-            }
-        }
-
         closeWindow(withId: windowId)
 
         XCTAssertNil(appDelegate.tabManagerFor(windowId: windowId), "The real window close path must unregister its context")
         for workspace in workspaces {
             XCTAssertTrue(workspace.panels.isEmpty, "Closing a window must tear down every workspace it still owns")
-        }
-        for (surfaceId, ref) in refs {
-            switch TerminalController.shared.v2BrowserSelectorResolutionError(ref, surfaceId: surfaceId) {
-            case .err(let code, _, _):
-                XCTAssertEqual(code, "not_found", "Whole-window teardown must permanently remove every owned surface ref")
-            case .ok:
-                XCTFail("A ref from a closed window must not remain resolvable")
-            }
         }
     }
 
@@ -2559,7 +2530,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             return
         }
 
-        XCTAssertTrue(appDelegate.handleBrowserSurfaceKeyEquivalent(event))
+        XCTAssertTrue(appDelegate.debugHandleCustomShortcut(event: event))
         wait(for: [switcherExpectation], timeout: 0.15)
     }
 
@@ -2609,7 +2580,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             return
         }
 
-        _ = appDelegate.handleBrowserSurfaceKeyEquivalent(event)
+        _ = appDelegate.debugHandleCustomShortcut(event: event)
         wait(for: [switcherExpectation], timeout: 0.15)
     }
 
@@ -2661,7 +2632,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             return
         }
 
-        XCTAssertTrue(appDelegate.handleBrowserSurfaceKeyEquivalent(event))
+        XCTAssertTrue(appDelegate.debugHandleCustomShortcut(event: event))
         wait(for: [switcherExpectation], timeout: 0.15)
     }
 
@@ -2911,47 +2882,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         XCTAssertEqual(observedPaletteWindow?.windowNumber, window.windowNumber)
     }
 
-    func testCmdFFocusedBrowserKeepsWebContentFirstRouting() {
-        guard let appDelegate = AppDelegate.shared else {
-            XCTFail("Expected AppDelegate.shared")
-            return
-        }
-
-        let windowId = appDelegate.createMainWindow()
-        defer { closeWindow(withId: windowId) }
-
-        guard let window = window(withId: windowId),
-              let manager = appDelegate.tabManagerFor(windowId: windowId),
-              let workspace = manager.selectedWorkspace,
-              manager.openBrowser(inWorkspace: workspace.id) != nil else {
-            XCTFail("Expected focused browser panel")
-            return
-        }
-
-        XCTAssertNotNil(manager.focusedBrowserPanel)
-        XCTAssertNil(manager.focusedBrowserPanel?.searchState)
-
-        guard let event = makeKeyDownEvent(
-            key: "f",
-            modifiers: [.command],
-            keyCode: 3,
-            windowNumber: window.windowNumber
-        ) else {
-            XCTFail("Failed to construct Cmd+F event")
-            return
-        }
-
-#if DEBUG
-        XCTAssertFalse(
-            appDelegate.debugHandleCustomShortcut(event: event),
-            "Cmd+F should fall through so browser web content gets first chance"
-        )
-#else
-        XCTFail("debugHandleCustomShortcut is only available in DEBUG")
-#endif
-
-        XCTAssertNil(manager.focusedBrowserPanel?.searchState)
-    }
 
     func testCmdPhysicalWWithDvorakCharactersDoesNotTriggerClosePanelShortcut() {
         guard let appDelegate = AppDelegate.shared else {
@@ -4735,109 +4665,10 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
     // MARK: - Non-Latin keyboard layout shortcut tests
 
-    func testBrowserFirstFindShortcutRoutingRecognizesFindCommandFamily() {
-        let cases: [(name: String, modifiers: NSEvent.ModifierFlags, chars: String, keyCode: UInt16)] = [
-            ("cmd-f", [.command], "f", 3),
-            ("cmd-g", [.command], "g", 5),
-            ("cmd-shift-g", [.command, .shift], "g", 5),
-            ("cmd-shift-f", [.command, .shift], "f", 3),
-            ("cmd-e", [.command], "e", 14),
-        ]
 
-        for testCase in cases {
-            let event = makeKeyEvent(
-                modifierFlags: testCase.modifiers,
-                characters: testCase.chars,
-                charactersIgnoringModifiers: testCase.chars,
-                keyCode: testCase.keyCode
-            )
-            XCTAssertTrue(
-                shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(event),
-                "Expected browser-first routing for \(testCase.name)"
-            )
-        }
-    }
 
-    func testBrowserFirstFindShortcutRoutingFallsBackToKeyCodeForNonLatinInput() {
-        let event = makeKeyEvent(
-            modifierFlags: [.command],
-            characters: "",
-            charactersIgnoringModifiers: "а", // Cyrillic a from a non-Latin input source
-            keyCode: 3 // kVK_ANSI_F
-        )
 
-        XCTAssertTrue(
-            shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(event),
-            "Expected browser-first routing to keep Cmd+F eligible under non-Latin input"
-        )
-    }
 
-    func testBrowserFirstFindShortcutRoutingDoesNotUseANSIPositionsForMismatchedASCIICharacters() {
-        let cases: [(name: String, modifiers: NSEvent.ModifierFlags, chars: String, keyCode: UInt16)] = [
-            ("cmd-u-on-ansi-f", [.command], "u", 3),
-            ("cmd-o-on-ansi-g", [.command], "o", 5),
-            ("cmd-period-on-ansi-e", [.command], ".", 14),
-            ("cmd-shift-u-on-ansi-f", [.command, .shift], "u", 3),
-            ("cmd-shift-o-on-ansi-g", [.command, .shift], "o", 5),
-        ]
-
-        for testCase in cases {
-            let event = makeKeyEvent(
-                modifierFlags: testCase.modifiers,
-                characters: testCase.chars,
-                charactersIgnoringModifiers: testCase.chars,
-                keyCode: testCase.keyCode
-            )
-
-            XCTAssertFalse(
-                shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(event),
-                "Did not expect browser-first routing for mismatched ASCII shortcut \(testCase.name)"
-            )
-        }
-    }
-
-    func testBrowserFirstFindShortcutRoutingExcludesWebInspectorResponders() {
-        let inspectorContainer = FakeWKInspectorContainerView(frame: .zero)
-        let inspectorChild = NSView(frame: .zero)
-        inspectorContainer.addSubview(inspectorChild)
-
-        let event = makeKeyEvent(
-            modifierFlags: [.command],
-            characters: "f",
-            charactersIgnoringModifiers: "f",
-            keyCode: 3
-        )
-
-        XCTAssertFalse(
-            shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
-                event,
-                responder: inspectorChild
-            ),
-            "Did not expect browser-first routing while a Web Inspector responder is focused"
-        )
-    }
-
-    func testBrowserFirstFindShortcutRoutingExcludesNonFindCommands() {
-        let cases: [(name: String, modifiers: NSEvent.ModifierFlags, chars: String, keyCode: UInt16)] = [
-            ("cmd-n", [.command], "n", 45),
-            ("cmd-w", [.command], "w", 13),
-            ("cmd-l", [.command], "l", 37),
-            ("cmd-option-f", [.command, .option], "f", 3),
-        ]
-
-        for testCase in cases {
-            let event = makeKeyEvent(
-                modifierFlags: testCase.modifiers,
-                characters: testCase.chars,
-                charactersIgnoringModifiers: testCase.chars,
-                keyCode: testCase.keyCode
-            )
-            XCTAssertFalse(
-                shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(event),
-                "Did not expect browser-first routing for \(testCase.name)"
-            )
-        }
-    }
 
     func testCmdTWorksWithRussianKeyboardLayout() {
         guard let appDelegate = AppDelegate.shared else {

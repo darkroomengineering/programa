@@ -8,7 +8,7 @@ public struct Tab: Identifiable, Hashable, Sendable {
     public let icon: String?
     /// Optional image data (PNG recommended) for the tab icon. When present, this takes precedence over `icon`.
     public let iconImageData: Data?
-    /// Consumer-defined tab kind identifier (for example, "terminal" or "browser").
+    /// Consumer-defined tab kind identifier (for example, "terminal" or "markdown").
     public let kind: String?
     public let isDirty: Bool
     /// Whether the tab should show an "unread/activity" badge (library consumer-defined meaning).

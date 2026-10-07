@@ -44,7 +44,6 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
     ])
     private let newTabCluster = GlassIconClusterView(symbols: [
         (name: "terminal", tooltip: String(localized: "tabBar.newTerminalTab", defaultValue: "New Terminal Tab")),
-        (name: "globe", tooltip: String(localized: "tabBar.newBrowserTab", defaultValue: "New Browser Tab")),
     ])
 
     private init(window: NSWindow) {
@@ -129,7 +128,7 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
         let strip = hostView.convert(anchor.bounds, from: anchor)
         let y = strip.midY - barHeight / 2
 
-        newTabCluster.setActions([active.onNewTab, active.onNewBrowserTab])
+        newTabCluster.setActions([active.onNewTab])
         newTabCluster.isHidden = false
         ensureAboveBars(newTabCluster)
         let newTabX = strip.maxX - gap - newTabCluster.preferredWidth
@@ -362,10 +361,8 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
             for paneID in descriptors.keys { synchronize(paneID) }
         } else if let portalIndex = container.subviews.firstIndex(of: hostView) {
             // Pane chrome must float above every content portal in this container —
-            // the browser portal installs `.above` the terminal host too, so ordering
-            // against the terminal host alone can leave pills under browser content.
             let topContentIndex = container.subviews.enumerated()
-                .filter { $0.element is WindowTerminalHostView || $0.element is WindowBrowserHostView }
+                .filter { $0.element is WindowTerminalHostView }
                 .map(\.offset)
                 .max()
             if let topContentIndex, portalIndex < topContentIndex {

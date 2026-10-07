@@ -6,7 +6,6 @@ import SwiftUI
 /// Type of panel content
 public enum PanelType: String, Codable, Sendable {
     case terminal
-    case browser
     case markdown
     case review
 }
@@ -16,16 +15,9 @@ public enum TerminalPanelFocusIntent: Equatable {
     case findField
 }
 
-public enum BrowserPanelFocusIntent: Equatable {
-    case webView
-    case addressBar
-    case findField
-}
-
 public enum PanelFocusIntent: Equatable {
     case panel
     case terminal(TerminalPanelFocusIntent)
-    case browser(BrowserPanelFocusIntent)
 }
 
 @MainActor
@@ -272,7 +264,7 @@ enum FocusFlashPattern {
 
     /// SwiftUI `Animation` to use when a `PhaseAnimator` transitions *into* `values[index]`
     /// from `values[index - 1]`. Drives the single-transaction double-flash used by
-    /// `BrowserPanelView`/`MarkdownPanelView` so the whole [0,1,0,1,0] sequence plays as one
+    /// `MarkdownPanelView` so the whole [0,1,0,1,0] sequence plays as one
     /// atomic animator run per `focusFlashToken` change, instead of four chained
     /// `asyncAfter` + `withAnimation` steps that SwiftUI can coalesce/interrupt.
     static func phaseAnimation(at index: Int) -> Animation? {
@@ -287,7 +279,7 @@ enum FocusFlashPattern {
     }
 }
 
-/// Protocol for all panel types (terminal, browser, etc.)
+/// Protocol for all panel types
 @MainActor
 public protocol Panel: AnyObject, Identifiable, ObservableObject where ID == UUID {
     /// Unique identifier for this panel

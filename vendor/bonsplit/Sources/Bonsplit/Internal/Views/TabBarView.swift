@@ -35,7 +35,6 @@ enum TabBarStyling {
 struct TabContextMenuState {
     let isPinned: Bool
     let isUnread: Bool
-    let isBrowser: Bool
     let isTerminal: Bool
     let hasCustomTitle: Bool
     let canCloseToLeft: Bool
@@ -287,7 +286,7 @@ struct TabBarView: View {
             onSelect: {
                 // Tab selection must be instant. Animating this transaction causes the pane
                 // content (often swapped via opacity) to crossfade, which is undesirable for
-                // terminal/browser surfaces.
+                // terminal surfaces.
 #if DEBUG
                 dlog("tab.select pane=\(pane.id.id.uuidString.prefix(5)) tab=\(tab.id.uuidString.prefix(5)) title=\"\(tab.title)\"")
 #endif
@@ -363,7 +362,6 @@ struct TabBarView: View {
         return TabContextMenuState(
             isPinned: tab.isPinned,
             isUnread: tab.showsNotificationBadge,
-            isBrowser: tab.kind == "browser",
             isTerminal: tab.kind == "terminal",
             hasCustomTitle: tab.hasCustomTitle,
             canCloseToLeft: canCloseToLeft,
@@ -491,7 +489,7 @@ struct TabBarView: View {
 
     // MARK: - Split Buttons Gutter Drag Zone
 
-    /// Fixed-width gutter reserved behind the split-action icon cluster (terminal/browser/
+    /// Fixed-width gutter reserved behind the split-action icon cluster (terminal/
     /// split buttons), matching the 114pt previously consumed by trailing padding. Kept as a
     /// real drag-capturing view so window drag works there.
     @ViewBuilder
@@ -516,15 +514,6 @@ struct TabBarView: View {
     private var splitButtons: some View {
         let tooltips = controller.configuration.appearance.splitButtonTooltips
         HStack(spacing: 4) {
-            Button {
-                controller.requestNewTab(kind: "browser", inPane: pane.id)
-            } label: {
-                Image(systemName: "globe")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(SplitActionButtonStyle(appearance: appearance))
-            .safeHelp(tooltips.newBrowser)
-
             Button {
                 controller.requestNewTab(kind: "terminal", inPane: pane.id)
             } label: {

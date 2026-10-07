@@ -33,8 +33,6 @@ enum SessionPersistencePolicy {
     static let maxTotalPanelsPerSnapshot: Int = 8_192
     static let maxMetadataStringBytes: Int = 64 * 1024
     static let maxPathStringBytes: Int = 16 * 1024
-    static let maxURLStringBytes: Int = 64 * 1024
-    static let maxBrowserHistoryEntriesPerDirection: Int = 2_048
     static let maxLogEntriesPerWorkspace: Int = 500
     static let maxReviewCommentsPerPanel: Int = 2_048
 
@@ -264,15 +262,6 @@ struct SessionTerminalPanelSnapshot: Codable, Sendable {
     var scrollback: String?
 }
 
-struct SessionBrowserPanelSnapshot: Codable, Sendable {
-    var urlString: String?
-    var profileID: UUID?
-    var shouldRenderWebView: Bool
-    var pageZoom: Double
-    var developerToolsVisible: Bool
-    var backHistoryURLStrings: [String]?
-    var forwardHistoryURLStrings: [String]?
-}
 
 struct SessionMarkdownPanelSnapshot: Codable, Sendable {
     var filePath: String
@@ -303,7 +292,6 @@ struct SessionPanelSnapshot: Codable, Sendable {
     var listeningPorts: [Int]
     var ttyName: String?
     var terminal: SessionTerminalPanelSnapshot?
-    var browser: SessionBrowserPanelSnapshot?
     var markdown: SessionMarkdownPanelSnapshot?
     var review: SessionReviewPanelSnapshot?
 }
@@ -379,6 +367,40 @@ indirect enum SessionWorkspaceLayoutSnapshot: Codable, Sendable {
     }
 }
 
+/// Decodes an array one element at a time and drops the elements that fail, so a panel
+/// whose type this build no longer has (a snapshot written by an older build) costs only
+/// that panel instead of failing the whole session decode. Restore already skips layout
+/// references to panels that are missing.
+@propertyWrapper
+struct DroppingUndecodableElements<Element: Codable & Sendable>: Codable, Sendable {
+    var wrappedValue: [Element]
+
+    init(wrappedValue: [Element]) {
+        self.wrappedValue = wrappedValue
+    }
+
+    private struct Skipped: Decodable {
+        init(from decoder: Decoder) throws {}
+    }
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var elements: [Element] = []
+        while !container.isAtEnd {
+            if let element = try? container.decode(Element.self) {
+                elements.append(element)
+            } else if (try? container.decode(Skipped.self)) == nil {
+                break
+            }
+        }
+        wrappedValue = elements
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try wrappedValue.encode(to: encoder)
+    }
+}
+
 struct SessionWorkspaceSnapshot: Codable, Sendable {
     var processTitle: String
     var customTitle: String?
@@ -388,7 +410,7 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var currentDirectory: String
     var focusedPanelId: UUID?
     var layout: SessionWorkspaceLayoutSnapshot
-    var panels: [SessionPanelSnapshot]
+    @DroppingUndecodableElements var panels: [SessionPanelSnapshot]
     var statusEntries: [SessionStatusEntrySnapshot]
     var logEntries: [SessionLogEntrySnapshot]
     var progress: SessionProgressSnapshot?
@@ -980,16 +1002,6 @@ enum SessionPersistenceStore {
             }
         }
 
-        if let browser = panel.browser {
-            guard isValidString(
-                browser.urlString,
-                maxBytes: SessionPersistencePolicy.maxURLStringBytes
-            ),
-            isValidURLHistory(browser.backHistoryURLStrings),
-            isValidURLHistory(browser.forwardHistoryURLStrings) else {
-                return false
-            }
-        }
 
         if let markdown = panel.markdown,
            !isValidString(
@@ -1030,13 +1042,6 @@ enum SessionPersistenceStore {
             )
     }
 
-    private static func isValidURLHistory(_ values: [String]?) -> Bool {
-        guard let values else { return true }
-        return values.count <= SessionPersistencePolicy.maxBrowserHistoryEntriesPerDirection
-            && values.allSatisfy {
-                $0.utf8.count <= SessionPersistencePolicy.maxURLStringBytes
-            }
-    }
 
     private static func isValidString(
         _ value: String?,

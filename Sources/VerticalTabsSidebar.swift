@@ -62,8 +62,6 @@ struct SidebarTabItemSettingsSnapshot: Equatable {
     let showsGitBranch: Bool
     let usesVerticalBranchLayout: Bool
     let showsGitBranchIcon: Bool
-    let openPullRequestLinksInProgramaBrowser: Bool
-    let openPortLinksInProgramaBrowser: Bool
     let showsNotificationMessage: Bool
     let activeTabIndicatorStyle: SidebarActiveTabIndicatorStyle
     let selectionColorHex: String?
@@ -89,8 +87,6 @@ struct SidebarTabItemSettingsSnapshot: Equatable {
         showsGitBranch = Self.bool(defaults: defaults, key: "sidebarShowGitBranch", defaultValue: true)
         usesVerticalBranchLayout = true
         showsGitBranchIcon = Self.bool(defaults: defaults, key: "sidebarShowGitBranchIcon", defaultValue: false)
-        openPullRequestLinksInProgramaBrowser = true
-        openPortLinksInProgramaBrowser = true
         showsNotificationMessage = true
         visibleAuxiliaryDetails = SidebarWorkspaceAuxiliaryDetailVisibility(
             showsMetadata: true,

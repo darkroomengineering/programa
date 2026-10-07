@@ -55,28 +55,10 @@ MCP_PROTOCOL_VERSION = "2025-11-25"
 # Hardcoded and asserted for exact equality against the LIVE `tools/list` response below -- this
 # is what makes a silently dropped/renamed tool fail the build instead of "some tools present".
 EXPECTED_TOOL_NAMES = {
-    # agent_* (WorkspaceTools.swift): pre-existing tools that were missing from this set before
-    # the browser_* tranche below was added -- the catalog already had 102 tools, not 96, before
-    # browser.* was exposed. See the browser_* PR description for the discrepancy.
     "agent_spawn", "agent_task_start", "agent_task_update", "agent_task_finish", "agent_task_finish_session",
     "agent_task_list",
     "focus_pane", "focus_pane_last", "focus_review_open", "focus_surface", "focus_window",
     "focus_workspace_last", "focus_workspace_next", "focus_workspace_previous", "focus_workspace_select", "focus_worktree_open",
-    "focus_browser_webview", "focus_browser_element", "focus_browser_tab_switch",
-    "browser_open_split", "browser_navigate", "browser_back", "browser_forward", "browser_reload",
-    "browser_url_get", "browser_is_webview_focused", "browser_snapshot", "browser_eval", "browser_wait",
-    "browser_click", "browser_dblclick", "browser_hover", "browser_type", "browser_fill",
-    "browser_press", "browser_keydown", "browser_keyup", "browser_check", "browser_uncheck",
-    "browser_select", "browser_scroll", "browser_scroll_into_view", "browser_screenshot", "browser_get_text",
-    "browser_get_html", "browser_get_value", "browser_get_attr", "browser_get_title", "browser_get_count",
-    "browser_get_box", "browser_get_styles", "browser_is_visible", "browser_is_enabled", "browser_is_checked",
-    "browser_find_role", "browser_find_text", "browser_find_label", "browser_find_placeholder", "browser_find_alt",
-    "browser_find_title", "browser_find_testid", "browser_find_first", "browser_find_last", "browser_find_nth",
-    "browser_frame_select", "browser_frame_main", "browser_dialog_accept", "browser_dialog_dismiss", "browser_download_wait",
-    "browser_cookies_get", "browser_cookies_set", "browser_cookies_clear", "browser_storage_get", "browser_storage_set",
-    "browser_storage_clear", "browser_tab_new", "browser_tab_list", "browser_tab_close", "browser_console_list",
-    "browser_console_clear", "browser_errors_list", "browser_highlight", "browser_state_save", "browser_state_load",
-    "browser_addinitscript", "browser_addscript", "browser_addstyle", "browser_design_mode_toggle",
     "layout_apply", "layout_list", "layout_save", "notification_clear", "notification_create",
     "notification_create_for_surface", "notification_create_for_target", "notification_list", "pane_break", "pane_create",
     "pane_join", "pane_list", "pane_resize", "pane_surfaces", "pane_swap",
@@ -395,42 +377,6 @@ def _assert_non_focus_tool_preserves_selected_workspace(
     )
 
 
-def _assert_browser_tool_flow(
-    mcp: ProgramaMcpClient, workspace_id: str, source_surface_id: str, selected_workspace_id: str
-) -> None:
-    """Exercises the basic browser_* tool flow end-to-end against the real embedded WKWebView:
-    open a split browser surface at a data: URL, read its title back, then close the tab. The
-    target workspace is NOT the selected one, so this also checks the flow never moves the
-    app's selection (the negative-space focus policy applied to browser tools)."""
-    title = f"programa-mcp-browser-{os.getpid()}"
-    data_url = f"data:text/html,<title>{title}</title>"
-
-    open_result = mcp.call_tool_structured(
-        "browser_open_split", {"surface_id": source_surface_id, "url": data_url, "workspace_id": workspace_id}
-    )
-    browser_surface_id = open_result.get("surface_id")
-    _must(bool(browser_surface_id), f"browser_open_split did not return a surface_id: {open_result}")
-
-    deadline = time.time() + 10.0
-    got_title: Optional[str] = None
-    while time.time() < deadline:
-        title_result = mcp.call_tool_structured("browser_get_title", {"surface_id": browser_surface_id})
-        got_title = title_result.get("title")
-        if got_title == title:
-            break
-        time.sleep(0.3)
-    _must(got_title == title, f"browser_get_title expected {title!r} after browser_open_split, got {got_title!r}")
-
-    mcp.call_tool("browser_tab_close", {"surface_id": browser_surface_id, "workspace_id": workspace_id})
-
-    after = _current_workspace_id(mcp)
-    _must(
-        after == selected_workspace_id,
-        f"browser_* flow on a different workspace must not change workspace_current "
-        f"-- expected it to stay {selected_workspace_id}, got {after}",
-    )
-
-
 def _assert_resource_read_exposes_sibling_pane_text(mcp: ProgramaMcpClient, surface_id: str, marker: str) -> None:
     uri = f"programa://surface/{surface_id}/text"
 
@@ -503,11 +449,9 @@ def main() -> int:
                 mcp.call_tool("surface_send_text", {"surface_id": other_surface_id, "text": f"echo {marker}\n"})
                 _assert_resource_read_exposes_sibling_pane_text(mcp, other_surface_id, marker)
 
-                _assert_browser_tool_flow(mcp, ws_other, other_surface_id, ws_selected)
 
         print("PASS: programa-mcp end-to-end (initialize, tools/list catalog, system_ping, "
-              "workspace_list count, focus policy positive+negative space, sibling-pane resource read, "
-              "browser_* tool flow)")
+              "workspace_list count, focus policy positive+negative space, sibling-pane resource read)")
         return 0
     finally:
         if created_workspace_ids:

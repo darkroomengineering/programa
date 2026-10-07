@@ -3,9 +3,107 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 import Bonsplit
-import WebKit
 
 extension TerminalController {
+    func v2MarkdownOpen(params: [String: Any]) -> V2CallResult {
+        guard let tabManager = v2ResolveTabManager(params: params) else {
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        }
+        guard let rawPath = v2String(params, "path") else {
+            return .err(code: "invalid_params", message: "Missing 'path' parameter", data: nil)
+        }
+
+        // Resolve the path (expand ~ and standardize)
+        let expandedPath = NSString(string: rawPath).expandingTildeInPath
+        let filePath = NSString(string: expandedPath).standardizingPath
+
+        // Reject paths that aren't absolute after resolution
+        guard filePath.hasPrefix("/") else {
+            return .err(code: "invalid_params", message: "Path must be absolute: \(filePath)", data: ["path": filePath])
+        }
+
+        // Validate the file exists and is a regular file (not a directory)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: filePath, isDirectory: &isDir) else {
+            return .err(code: "not_found", message: "File not found: \(filePath)", data: ["path": filePath])
+        }
+        guard !isDir.boolValue else {
+            return .err(code: "invalid_params", message: "Path is a directory, not a file: \(filePath)", data: ["path": filePath])
+        }
+        // Devices and FIFOs (/dev/zero, a named pipe) would block or never end the read.
+        let resolvedURL = URL(fileURLWithPath: filePath).resolvingSymlinksInPath()
+        guard (try? resolvedURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
+            return .err(code: "invalid_params", message: "Path is not a regular file: \(filePath)", data: ["path": filePath])
+        }
+        guard FileManager.default.isReadableFile(atPath: filePath) else {
+            return .err(code: "permission_denied", message: "File not readable: \(filePath)", data: ["path": filePath])
+        }
+
+        var result: V2CallResult = .err(code: "internal_error", message: "Failed to create markdown panel", data: nil)
+        v2MainSync {
+            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
+                result = .err(code: "not_found", message: "Workspace not found", data: nil)
+                return
+            }
+            v2MaybeFocusWindow(for: tabManager)
+            v2MaybeSelectWorkspace(tabManager, workspace: ws)
+
+            let sourceSurfaceId = v2UUID(params, "surface_id") ?? ws.focusedPanelId
+            guard let sourceSurfaceId else {
+                result = .err(code: "not_found", message: "No focused surface to split", data: nil)
+                return
+            }
+            guard ws.panels[sourceSurfaceId] != nil else {
+                result = .err(code: "not_found", message: "Source surface not found", data: ["surface_id": sourceSurfaceId.uuidString])
+                return
+            }
+
+            let sourcePaneUUID = ws.paneId(forPanelId: sourceSurfaceId)?.id
+
+            let directionStr = v2String(params, "direction") ?? "right"
+            guard let direction = parseSplitDirection(directionStr) else {
+                result = .err(code: "invalid_params", message: "Invalid direction '\(directionStr)' (left|right|up|down)", data: nil)
+                return
+            }
+            let orientation: SplitOrientation = direction.isHorizontal ? .horizontal : .vertical
+            let insertFirst = (direction == .left || direction == .up)
+
+            let createdPanel = ws.newMarkdownSplit(
+                from: sourceSurfaceId,
+                orientation: orientation,
+                insertFirst: insertFirst,
+                filePath: filePath,
+                focus: v2FocusAllowed()
+            )
+
+            guard let markdownPanelId = createdPanel?.id else {
+                result = .err(code: "internal_error", message: "Failed to create markdown panel", data: nil)
+                return
+            }
+
+            let targetPaneUUID = ws.paneId(forPanelId: markdownPanelId)?.id
+            let windowId = v2ResolveWindowId(tabManager: tabManager)
+            result = .ok([
+                "window_id": v2OrNull(windowId?.uuidString),
+                "window_ref": v2Ref(kind: .window, uuid: windowId),
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+                "pane_id": v2OrNull(targetPaneUUID?.uuidString),
+                "pane_ref": v2Ref(kind: .pane, uuid: targetPaneUUID),
+                "surface_id": markdownPanelId.uuidString,
+                "surface_ref": v2Ref(kind: .surface, uuid: markdownPanelId),
+                "source_surface_id": sourceSurfaceId.uuidString,
+                "source_surface_ref": v2Ref(kind: .surface, uuid: sourceSurfaceId),
+                "source_pane_id": v2OrNull(sourcePaneUUID?.uuidString),
+                "source_pane_ref": v2Ref(kind: .pane, uuid: sourcePaneUUID),
+                "target_pane_id": v2OrNull(targetPaneUUID?.uuidString),
+                "target_pane_ref": v2Ref(kind: .pane, uuid: targetPaneUUID),
+                "path": filePath
+            ])
+        }
+        return result
+    }
+
     nonisolated func v2SurfaceList(params: [String: Any]) -> V2CallResult {
         v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {
@@ -48,9 +146,6 @@ extension TerminalController {
                     "agent_state": v2OrNull(ws.panelAgentStates[panel.id]?.rawValue),
                     "agent_state_source": v2OrNull(ws.panelAgentStateSources[panel.id]?.rawValue)
                 ]
-                if let browserPanel = panel as? BrowserPanel {
-                    item["developer_tools_visible"] = browserPanel.isDeveloperToolsVisible()
-                }
                 return item
             }
 
@@ -181,9 +276,9 @@ extension TerminalController {
                 return .err(code: "unavailable", message: "TabManager not available", data: nil)
             }
 
-            let panelType = v2PanelType(params, "type") ?? .terminal
-            let urlStr = v2String(params, "url")
-            let url = urlStr.flatMap { URL(string: $0) }
+            if params["type"] != nil && v2PanelType(params, "type") == nil {
+                return v2InvalidParam("type")
+            }
 
             guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
                 return .err(code: "not_found", message: "Workspace not found", data: nil)
@@ -204,15 +299,11 @@ extension TerminalController {
             }
 
             let newPanelId: UUID?
-            if panelType == .browser {
-                newPanelId = ws.newBrowserSurface(inPane: paneId, url: url, focus: v2FocusAllowed())?.id
-            } else {
-                let terminalPanel = ws.newTerminalSurface(inPane: paneId, focus: v2FocusAllowed())
-                // A terminal created without focus is never attached to a visible view, so start
-                // its shell explicitly or it would sit idle until the user selects it.
-                terminalPanel?.surface.requestBackgroundSurfaceStartIfNeeded()
-                newPanelId = terminalPanel?.id
-            }
+            let terminalPanel = ws.newTerminalSurface(inPane: paneId, focus: v2FocusAllowed())
+            // A terminal created without focus is never attached to a visible view, so start
+            // its shell explicitly or it would sit idle until the user selects it.
+            terminalPanel?.surface.requestBackgroundSurfaceStartIfNeeded()
+            newPanelId = terminalPanel?.id
 
             guard let newPanelId else {
                 return .err(code: "internal_error", message: "Failed to create surface", data: nil)
@@ -228,7 +319,7 @@ extension TerminalController {
                 "pane_ref": v2Ref(kind: .pane, uuid: paneId.id),
                 "surface_id": newPanelId.uuidString,
                 "surface_ref": v2Ref(kind: .surface, uuid: newPanelId),
-                "type": panelType.rawValue
+                "type": PanelType.terminal.rawValue
             ])
         }
     }
@@ -554,8 +645,6 @@ extension TerminalController {
                 var inWindow: Any = NSNull()
                 if let tp = panel as? TerminalPanel {
                     inWindow = tp.surface.isViewInWindow
-                } else if let bp = panel as? BrowserPanel {
-                    inWindow = bp.webView.window != nil
                 }
                 return [
                     "index": index,

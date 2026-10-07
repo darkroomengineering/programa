@@ -126,15 +126,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
     }
 
-    /// Hide browser portals for tabs that are no longer selected in the given pane.
-    private func hideBrowserPortalsForDeselectedTabs(inPane pane: PaneID, selectedTabId: TabID) {
-        for tab in bonsplitController.tabs(inPane: pane) {
-            guard tab.id != selectedTabId else { continue }
-            guard let panelId = panelIdFromSurfaceId(tab.id),
-                  let browserPanel = panels[panelId] as? BrowserPanel else { continue }
-            browserPanel.hideBrowserPortalView(source: "tabDeselected")
-        }
-    }
 
     private func applyTabSelectionNow(
         tabId: TabID,
@@ -215,12 +206,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             p.unfocus()
         }
 
-        // Explicitly hide browser portals for deselected tabs in this pane.
-        // Bonsplit's keepAllAlive mode hides non-selected tabs via SwiftUI .opacity(0),
-        // but portal-hosted WKWebViews render at the window level in AppKit and are not
-        // affected by SwiftUI opacity. Without an explicit hide, the deselected browser's
-        // portal layer can remain visible above the newly selected tab.
-        hideBrowserPortalsForDeselectedTabs(inPane: focusedPane, selectedTabId: selectedTabId)
 
         if let focusWindow = activationWindow(for: panel) {
             yieldForeignOwnedFocusIfNeeded(
@@ -235,14 +220,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             focusIntent: activationIntent,
             reassertAppKitFocus: reassertAppKitFocus
         )
-        let focusIntentAllowsBrowserOmnibarAutofocus =
-            shouldTreatCurrentEventAsExplicitFocusIntent() ||
-            TerminalController.socketCommandAllowsInAppFocusMutations()
-        if let browserPanel = panel as? BrowserPanel,
-           shouldAllowBrowserOmnibarAutofocus(for: activationIntent),
-           previousFocusedPanelId != panelId || focusIntentAllowsBrowserOmnibarAutofocus {
-            maybeAutoFocusBrowserAddressBarOnPanelFocus(browserPanel, trigger: .standard)
-        }
         if let terminalPanel = panel as? TerminalPanel {
             rememberTerminalConfigInheritanceSource(terminalPanel)
         }
@@ -339,12 +316,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             return
         }
 
-        if let browserPanel = panel as? BrowserPanel {
-            guard reassertAppKitFocus,
-                  shouldFocusBrowserWebView(for: focusIntent) else { return }
-            browserPanel.focus()
-            return
-        }
 
         if reassertAppKitFocus {
             panel.focus()
@@ -354,9 +325,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     private func activationWindow(for panel: any Panel) -> NSWindow? {
         if let terminalPanel = panel as? TerminalPanel {
             return terminalPanel.hostedView.window ?? NSApp.keyWindow ?? NSApp.mainWindow
-        }
-        if let browserPanel = panel as? BrowserPanel {
-            return browserPanel.webView.window ?? browserPanel.portalAnchorView.window ?? NSApp.keyWindow ?? NSApp.mainWindow
         }
         return NSApp.keyWindow ?? NSApp.mainWindow
     }
@@ -391,29 +359,13 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
     }
 
-    private func shouldFocusBrowserWebView(for intent: PanelFocusIntent) -> Bool {
-        switch intent {
-        case .browser(.addressBar), .browser(.findField):
-            return false
-        default:
-            return true
-        }
-    }
 
-    private func shouldAllowBrowserOmnibarAutofocus(for intent: PanelFocusIntent) -> Bool {
-        switch intent {
-        case .browser(.webView), .panel:
-            return true
-        default:
-            return false
-        }
-    }
 
     private func shouldRestoreFocusIntentAfterActivation(_ intent: PanelFocusIntent) -> Bool {
         switch intent {
-        case .browser(.addressBar), .browser(.findField), .terminal(.findField):
+        case .terminal(.findField):
             return true
-        case .panel, .browser(.webView), .terminal(.surface):
+        case .panel, .terminal(.surface):
             return false
         }
     }
@@ -493,20 +445,17 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         let explicitUserClose = explicitUserCloseTabIds.remove(tab.id) != nil
 
         if forceCloseTabIds.contains(tab.id) {
-            stageClosedBrowserRestoreSnapshotIfNeeded(for: tab, inPane: pane)
             recordPostCloseSelection()
             return true
         }
 
         if let panelId = panelIdFromSurfaceId(tab.id),
            pinnedPanelIds.contains(panelId) {
-            clearStagedClosedBrowserRestoreSnapshot(for: tab.id)
             NSSound.beep()
             return false
         }
 
         if explicitUserClose && shouldCloseWorkspaceOnLastSurface(for: tab.id) {
-            clearStagedClosedBrowserRestoreSnapshot(for: tab.id)
             owningTabManager?.closeWorkspaceWithConfirmation(self)
             return false
         }
@@ -514,7 +463,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         // Check if the panel needs close confirmation
         guard let panelId = panelIdFromSurfaceId(tab.id),
               let terminalPanel = terminalPanel(for: panelId) else {
-            stageClosedBrowserRestoreSnapshotIfNeeded(for: tab, inPane: pane)
             recordPostCloseSelection()
             return true
         }
@@ -523,7 +471,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         // Show an app-level confirmation, then re-attempt the close with forceCloseTabIds to bypass
         // this gating on the second pass.
         if panelNeedsConfirmClose(panelId: panelId, fallbackNeedsConfirmClose: terminalPanel.needsConfirmClose()) {
-            clearStagedClosedBrowserRestoreSnapshot(for: tab.id)
             if pendingCloseConfirmTabIds.contains(tab.id) {
                 return false
             }
@@ -550,7 +497,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             return false
         }
 
-        clearStagedClosedBrowserRestoreSnapshot(for: tab.id)
         recordPostCloseSelection()
         markTerminalCloseForUndoStagingIfEligible(tabId: tab.id, panelId: panelId, paneId: pane)
         return true
@@ -559,7 +505,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     func splitTabBar(_ controller: BonsplitController, didCloseTab tabId: TabID, fromPane pane: PaneID) {
         forceCloseTabIds.remove(tabId)
         let selectTabId = postCloseSelectTabId.removeValue(forKey: tabId)
-        let closedBrowserRestoreSnapshot = pendingClosedBrowserRestoreSnapshots.removeValue(forKey: tabId)
         let undoStageOriginalIndex = pendingUndoStageOriginalIndex.removeValue(forKey: tabId)
         let isUndoStaging = undoStageOriginalIndex != nil
         let isDetaching = detachingTabIds.remove(tabId) != nil || isDetachingCloseTransaction || isUndoStaging
@@ -583,8 +528,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         let panel = panels[panelId]
 
         if isDetaching, let panel {
-            let browserPanel = panel as? BrowserPanel
-            browserPanel?.invalidateBrowserStateRestoreForWorkspaceTransfer()
             let cachedTitle = panelTitles[panelId]
             let transferFallbackTitle = cachedTitle ?? panel.displayTitle
             pendingDetachedSurfaces[tabId] = DetachedSurfaceTransfer(
@@ -592,9 +535,9 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                 panel: panel,
                 title: panelCustomTitles[panelId] ?? transferFallbackTitle,
                 icon: panel.displayIcon,
-                iconImageData: browserPanel?.faviconPNGData,
+                iconImageData: nil,
                 kind: surfaceKind(for: panel),
-                isLoading: browserPanel?.isLoading ?? false,
+                isLoading: false,
                 isPinned: pinnedPanelIds.contains(panelId),
                 customColorHex: panelColorHexes[panelId],
                 directory: panelDirectories[panelId],
@@ -614,9 +557,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                 }
             }
         } else {
-            if let closedBrowserRestoreSnapshot {
-                onClosedBrowserPanel?(closedBrowserRestoreSnapshot)
-            }
             panel?.close()
         }
 
@@ -778,8 +718,8 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
         PortScanner.shared.unregisterPanel(workspaceId: id, panelId: panelId)
         // Detach preserves the panel UUID and the live panel object for
-        // reattach in another window (DetachedSurfaceTransfer) -- browser
-        // automation state, notifications and agent presence must survive
+        // reattach in another window (DetachedSurfaceTransfer). Notifications
+        // and agent presence must survive
         // the trip, so they are only pruned on permanent close. The transfer
         // carries the presence and re-keys the notifications on attach.
         if isDetaching {
@@ -787,7 +727,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         } else {
             AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: id, surfaceId: panelId)
             clearPanelAgentState(panelId: panelId)
-            TerminalController.shared.v2BrowserPermanentlyRemoveSurfaceState(surfaceId: panelId)
         }
         if progressSourcePanelId == panelId {
             progress = nil
@@ -846,7 +785,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             guard let panelId = self.panelIdFromSurfaceId(tabId),
                   let panel = self.panels[panelId] else { return "placeholder" }
             if panel is TerminalPanel { return "terminal" }
-            if panel is BrowserPanel { return "browser" }
             return String(describing: type(of: panel))
         }
         let paneKindSummary: (PaneID) -> String = { paneId in
@@ -866,20 +804,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             "originalKinds=[\(paneKindSummary(originalPane))] newKinds=[\(paneKindSummary(newPane))]"
         )
 #endif
-        let rearmBrowserPortalHostReplacement: (PaneID, String) -> Void = { paneId, reason in
-            for tab in controller.tabs(inPane: paneId) {
-                guard let panelId = self.panelIdFromSurfaceId(tab.id),
-                      let browserPanel = self.browserPanel(for: panelId) else {
-                    continue
-                }
-                browserPanel.preparePortalHostReplacementForNextDistinctClaim(
-                    inPane: paneId,
-                    reason: reason
-                )
-            }
-        }
-        rearmBrowserPortalHostReplacement(originalPane, "workspace.didSplit.original")
-        rearmBrowserPortalHostReplacement(newPane, "workspace.didSplit.new")
 
         // Only auto-create a terminal if the split came from bonsplit UI.
         // Programmatic splits via newTerminalSplit() set isProgrammaticSplit and handle their own panels.
@@ -973,8 +897,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
 
         // Mirror Cmd+D behavior: split buttons should always seed a terminal in the new pane.
-        // When the focused source is a browser, inherit terminal config from nearby terminals
-        // (or fall back to defaults) instead of leaving an empty selector pane.
         let sourceTabId = controller.selectedTab(inPane: originalPane)?.id
         let sourcePanelId = sourceTabId.flatMap { panelIdFromSurfaceId($0) }
 
@@ -1040,8 +962,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         switch kind {
         case "terminal":
             _ = newTerminalSurface(inPane: pane)
-        case "browser":
-            _ = newBrowserSurface(inPane: pane)
         default:
             _ = newTerminalSurface(inPane: pane)
         }
@@ -1072,14 +992,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             moveSurface(panelId: panelId, toPane: targetPane)
         case .newTerminalToRight:
             createTerminalToRight(of: tab.id, inPane: pane)
-        case .newBrowserToRight:
-            createBrowserToRight(of: tab.id, inPane: pane)
-        case .reload:
-            guard let panelId = panelIdFromSurfaceId(tab.id),
-                  let browser = browserPanel(for: panelId) else { return }
-            browser.reload()
-        case .duplicate:
-            duplicateBrowserToRight(anchorTabId: tab.id, inPane: pane)
         case .togglePin:
             guard let panelId = panelIdFromSurfaceId(tab.id) else { return }
             let shouldPin = !pinnedPanelIds.contains(panelId)

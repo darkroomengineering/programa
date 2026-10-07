@@ -1,5 +1,5 @@
 // Extracted from Workspace.swift (nuclear-review #98): surface creation/adoption/config
-// inheritance members (terminal/browser/markdown split + surface creation).
+// inheritance members (terminal/markdown split + surface creation).
 
 import Foundation
 import SwiftUI
@@ -236,7 +236,7 @@ extension Workspace {
         }
 
         guard let paneId = sourcePaneId else { return nil }
-        // Veto at the pane cap before constructing a panel (a BrowserPanel builds a WKWebView).
+        // Veto at the pane cap before constructing a panel.
         guard canAddSplitPane else { return nil }
         let inheritedConfig = inheritedTerminalConfig(preferredPanelId: panelId, inPane: paneId)
 
@@ -417,170 +417,7 @@ extension Workspace {
         return newPanel
     }
 
-    /// Create a new browser panel split
-    @discardableResult
-    func newBrowserSplit(
-        from panelId: UUID,
-        orientation: SplitOrientation,
-        insertFirst: Bool = false,
-        url: URL? = nil,
-        preferredProfileID: UUID? = nil,
-        focus: Bool = true
-    ) -> BrowserPanel? {
-        // Find the pane containing the source panel
-        guard let sourceTabId = surfaceIdFromPanelId(panelId) else { return nil }
-        var sourcePaneId: PaneID?
-        for paneId in bonsplitController.allPaneIds {
-            let tabs = bonsplitController.tabs(inPane: paneId)
-            if tabs.contains(where: { $0.id == sourceTabId }) {
-                sourcePaneId = paneId
-                break
-            }
-        }
 
-        guard let paneId = sourcePaneId else { return nil }
-        // Veto at the pane cap before constructing a panel (a BrowserPanel builds a WKWebView).
-        guard canAddSplitPane else { return nil }
-
-        // Create browser panel
-        let browserPanel = BrowserPanel(
-            workspaceId: id,
-            profileID: resolvedNewBrowserProfileID(
-                preferredProfileID: preferredProfileID,
-                sourcePanelId: panelId
-            ),
-            initialURL: url
-        )
-        panels[browserPanel.id] = browserPanel
-        panelTitles[browserPanel.id] = browserPanel.displayTitle
-
-        // Pre-generate the bonsplit tab ID so the mapping exists before the split lands.
-        let newTab = Bonsplit.Tab(
-            title: browserPanel.displayTitle,
-            icon: browserPanel.displayIcon,
-            kind: SurfaceKind.browser,
-            isDirty: browserPanel.isDirty,
-            isLoading: browserPanel.isLoading,
-            isPinned: false
-        )
-        surfaceIdToPanelId[newTab.id] = browserPanel.id
-        let previousFocusedPanelId = focusedPanelId
-
-        // Create the split with the browser tab already present.
-        // Mark this split as programmatic so didSplitPane doesn't auto-create a terminal.
-        isProgrammaticSplit = true
-        defer { isProgrammaticSplit = false }
-        guard bonsplitController.splitPane(paneId, orientation: orientation, withTab: newTab, insertFirst: insertFirst) != nil else {
-            surfaceIdToPanelId.removeValue(forKey: newTab.id)
-            panels.removeValue(forKey: browserPanel.id)
-            panelTitles.removeValue(forKey: browserPanel.id)
-            browserPanel.close()
-            return nil
-        }
-        setPreferredBrowserProfileID(browserPanel.profileID)
-
-        // See newTerminalSplit: suppress old view's becomeFirstResponder during reparenting.
-        let previousHostedView = focusedTerminalPanel?.hostedView
-        if focus {
-            previousHostedView?.suppressReparentFocus()
-            focusPanel(browserPanel.id)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                previousHostedView?.clearSuppressReparentFocus()
-            }
-        } else {
-            preserveFocusAfterNonFocusSplit(
-                preferredPanelId: previousFocusedPanelId,
-                splitPanelId: browserPanel.id,
-                previousHostedView: previousHostedView
-            )
-        }
-
-        installBrowserPanelSubscription(browserPanel)
-
-        return browserPanel
-    }
-
-    /// Create a new browser surface in the specified pane.
-    /// - Parameter focus: nil = focus only if the target pane is already focused (default UI behavior),
-    ///                    true = force focus/selection of the new surface,
-    ///                    false = never focus (used for internal placeholder repair paths).
-    @discardableResult
-    func newBrowserSurface(
-        inPane paneId: PaneID,
-        url: URL? = nil,
-        focus: Bool? = nil,
-        insertAtEnd: Bool = false,
-        preferredProfileID: UUID? = nil,
-        bypassInsecureHTTPHostOnce: String? = nil,
-        selectInPane: Bool = true
-    ) -> BrowserPanel? {
-        // `selectInPane: false` keeps the pane's selected tab (and therefore focus) unchanged.
-        let shouldFocusNewTab = selectInPane && (focus ?? (bonsplitController.focusedPaneId == paneId))
-        let previousSelectedTabId = selectInPane ? nil : bonsplitController.selectedTab(inPane: paneId)?.id
-        let sourcePanelId = effectiveSelectedPanelId(inPane: paneId)
-        let previousFocusedPanelId = focusedPanelId
-        let previousHostedView = focusedTerminalPanel?.hostedView
-
-        let browserPanel = BrowserPanel(
-            workspaceId: id,
-            profileID: resolvedNewBrowserProfileID(
-                preferredProfileID: preferredProfileID,
-                sourcePanelId: sourcePanelId
-            ),
-            initialURL: url,
-            bypassInsecureHTTPHostOnce: bypassInsecureHTTPHostOnce
-        )
-        panels[browserPanel.id] = browserPanel
-        panelTitles[browserPanel.id] = browserPanel.displayTitle
-
-        guard let newTabId = bonsplitController.createTab(
-            title: browserPanel.displayTitle,
-            icon: browserPanel.displayIcon,
-            kind: SurfaceKind.browser,
-            isDirty: browserPanel.isDirty,
-            isLoading: browserPanel.isLoading,
-            isPinned: false,
-            inPane: paneId
-        ) else {
-            panels.removeValue(forKey: browserPanel.id)
-            panelTitles.removeValue(forKey: browserPanel.id)
-            browserPanel.close()
-            return nil
-        }
-
-        surfaceIdToPanelId[newTabId] = browserPanel.id
-        setPreferredBrowserProfileID(browserPanel.profileID)
-
-        // Keyboard/browser-open paths want "new tab at end" regardless of global new-tab placement.
-        // `reorderTab`'s toIndex is an insertion index into the pre-move array (0...count), so the
-        // "end" position is `count`, not `count - 1` (which is the last tab's *current* index and
-        // is treated as a same-position no-op once the moved tab's own removal is accounted for).
-        if insertAtEnd {
-            let targetIndex = bonsplitController.tabs(inPane: paneId).count
-            _ = bonsplitController.reorderTab(newTabId, toIndex: targetIndex, selectMovedTab: selectInPane)
-        }
-        if let previousSelectedTabId {
-            restorePaneSelectionWithoutFocus(previousSelectedTabId)
-        }
-
-        // Match terminal behavior: enforce deterministic selection + focus.
-        if shouldFocusNewTab {
-            bonsplitController.focusPane(paneId)
-            bonsplitController.selectTab(newTabId)
-            browserPanel.focus()
-            applyTabSelection(tabId: newTabId, inPane: paneId)
-        } else {
-            preserveFocusAfterNonFocusSplit(
-                preferredPanelId: previousFocusedPanelId,
-                splitPanelId: browserPanel.id,
-                previousHostedView: previousHostedView
-            )
-        }
-
-        installBrowserPanelSubscription(browserPanel)
-
-        return browserPanel
-    }
 
     func newMarkdownSplit(
         from panelId: UUID,
@@ -600,7 +437,7 @@ extension Workspace {
         }
 
         guard let paneId = sourcePaneId else { return nil }
-        // Veto at the pane cap before constructing a panel (a BrowserPanel builds a WKWebView).
+        // Veto at the pane cap before constructing a panel.
         guard canAddSplitPane else { return nil }
 
         let markdownPanel = MarkdownPanel(workspaceId: id, filePath: filePath)
@@ -666,7 +503,7 @@ extension Workspace {
         }
 
         guard let paneId = sourcePaneId else { return nil }
-        // Veto at the pane cap before constructing a panel (a BrowserPanel builds a WKWebView).
+        // Veto at the pane cap before constructing a panel.
         guard canAddSplitPane else { return nil }
 
         guard let directory = normalizedSidebarDirectory(panelDirectories[panelId] ?? currentDirectory) else {

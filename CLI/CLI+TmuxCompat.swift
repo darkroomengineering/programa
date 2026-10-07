@@ -763,7 +763,7 @@ extension ProgramaCLI {
         client: SocketClient
     ) throws {
         let horizontal = directions.contains { $0 == "left" || $0 == "right" }
-        // Panes without a live terminal (a browser tab, a closed surface) report no cell size;
+        // Panes without a live terminal (a markdown panel or closed surface) report no cell size;
         // use a typical terminal cell so a resize still moves the border.
         let reported = (pane[horizontal ? "cell_width" : "cell_height"] as? NSNumber)?.doubleValue ?? 0
         let cellSize = reported > 0 ? reported : (horizontal ? 8 : 16)

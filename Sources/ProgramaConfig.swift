@@ -300,13 +300,34 @@ enum ProgramaSplitDirection: String, Codable, Sendable, Equatable {
 struct ProgramaPaneDefinition: Codable, Sendable, Equatable {
     var surfaces: [ProgramaSurfaceDefinition]
 
+    private enum SurfaceTypeKey: String, CodingKey {
+        case type
+    }
+
     init(surfaces: [ProgramaSurfaceDefinition]) {
         self.surfaces = surfaces
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        surfaces = try container.decode([ProgramaSurfaceDefinition].self, forKey: .surfaces)
+        var list = try container.nestedUnkeyedContainer(forKey: .surfaces)
+        let declaredCount = list.count ?? 0
+        var decoded: [ProgramaSurfaceDefinition] = []
+        while !list.isAtEnd {
+            // Skip retired surface types so the rest of the file keeps loading;
+            // any other bad type still fails.
+            let probe = try list.superDecoder()
+            if let type = try? probe.container(keyedBy: SurfaceTypeKey.self)
+                .decode(String.self, forKey: .type),
+               ProgramaSurfaceType.retiredRawValues.contains(type) {
+                continue
+            }
+            decoded.append(try ProgramaSurfaceDefinition(from: probe))
+        }
+        // A pane that held only retired surfaces keeps its place in the split as a terminal.
+        surfaces = decoded.isEmpty && declaredCount > 0
+            ? [ProgramaSurfaceDefinition(type: .terminal)]
+            : decoded
         if surfaces.isEmpty {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(
@@ -324,13 +345,14 @@ struct ProgramaSurfaceDefinition: Codable, Sendable, Equatable {
     var command: String?
     var cwd: String?
     var env: [String: String]?
-    var url: String?
     var focus: Bool?
 }
 
 enum ProgramaSurfaceType: String, Codable, Sendable, Equatable {
     case terminal
-    case browser
+
+    /// Surface types that older config files may still name and that layouts skip.
+    static let retiredRawValues: Set<String> = ["browser"]
 }
 
 @MainActor

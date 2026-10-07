@@ -59,115 +59,6 @@ final class SplitShortcutTransientFocusGuardTests: XCTestCase {
     }
 }
 
-final class DesignModeShortcutRouteTests: XCTestCase {
-    func testFocusedBrowserRoutesDirectlyWithoutPasteback() {
-        let browserId = UUID()
-        let terminalId = UUID()
-
-        let route = resolveDesignModeShortcutRoute(
-            panels: [
-                DesignModeShortcutPanelSnapshot(id: terminalId, panelType: .terminal, isFocused: false),
-                DesignModeShortcutPanelSnapshot(id: browserId, panelType: .browser, isFocused: true),
-            ]
-        )
-
-        XCTAssertEqual(
-            route,
-            DesignModeShortcutRoute(browserPanelId: browserId, returnTerminalPanelId: nil)
-        )
-    }
-
-    func testFocusedTerminalRoutesToOnlyBrowserAndRemembersPastebackTarget() {
-        let browserId = UUID()
-        let terminalId = UUID()
-
-        let route = resolveDesignModeShortcutRoute(
-            panels: [
-                DesignModeShortcutPanelSnapshot(id: terminalId, panelType: .terminal, isFocused: true),
-                DesignModeShortcutPanelSnapshot(id: browserId, panelType: .browser, isFocused: false),
-            ]
-        )
-
-        XCTAssertEqual(
-            route,
-            DesignModeShortcutRoute(browserPanelId: browserId, returnTerminalPanelId: terminalId)
-        )
-    }
-
-    func testFocusedTerminalDoesNotRouteWhenMultipleBrowsersExist() {
-        let route = resolveDesignModeShortcutRoute(
-            panels: [
-                DesignModeShortcutPanelSnapshot(id: UUID(), panelType: .terminal, isFocused: true),
-                DesignModeShortcutPanelSnapshot(id: UUID(), panelType: .browser, isFocused: false),
-                DesignModeShortcutPanelSnapshot(id: UUID(), panelType: .browser, isFocused: false),
-            ]
-        )
-
-        XCTAssertNil(route)
-    }
-
-    func testFocusedTerminalDoesNotRouteWithoutBrowser() {
-        let route = resolveDesignModeShortcutRoute(
-            panels: [
-                DesignModeShortcutPanelSnapshot(id: UUID(), panelType: .terminal, isFocused: true),
-            ]
-        )
-
-        XCTAssertNil(route)
-    }
-}
-
-
-@MainActor
-final class DesignModePastebackTargetTests: XCTestCase {
-    func testPrefersExplicitTerminalTargetWhenBrowserPanelIsFocused() {
-        let workspace = Workspace(title: "Tests")
-        guard let terminalId = workspace.focusedPanelId else {
-            XCTFail("Expected initial terminal panel")
-            return
-        }
-        guard let browserPanel = workspace.newBrowserSplit(
-            from: terminalId,
-            orientation: .horizontal
-        ) else {
-            XCTFail("Expected browser split panel")
-            return
-        }
-
-        workspace.focusPanel(browserPanel.id)
-
-        XCTAssertEqual(workspace.focusedPanelId, browserPanel.id)
-        XCTAssertEqual(
-            AppDelegate.resolveTerminalPanelForTextSend(
-                in: workspace,
-                preferredPanelId: terminalId
-            )?.id,
-            terminalId
-        )
-    }
-
-    func testDoesNotFallbackWhenPreferredTerminalTargetIsMissing() {
-        let workspace = Workspace(title: "Tests")
-        guard let terminalId = workspace.focusedPanelId,
-              let browserPanel = workspace.newBrowserSplit(
-                from: terminalId,
-                orientation: .horizontal
-              ) else {
-            XCTFail("Expected initial workspace split")
-            return
-        }
-
-        workspace.focusPanel(browserPanel.id)
-
-        XCTAssertNil(
-            AppDelegate.resolveTerminalPanelForTextSend(
-                in: workspace,
-                preferredPanelId: UUID()
-            )
-        )
-    }
-
-}
 
 
 final class FullScreenShortcutTests: XCTestCase {
@@ -551,7 +442,7 @@ final class CommandPaletteFocusStealerClassificationTests: XCTestCase {
     func testTreatsGhosttySurfaceViewAsFocusStealer() {
         let surfaceView = GhosttyNSView(frame: NSRect(x: 0, y: 0, width: 120, height: 80))
 
-        XCTAssertTrue(isCommandPaletteFocusStealingTerminalOrBrowserResponder(surfaceView))
+        XCTAssertTrue(isCommandPaletteFocusStealingTerminalResponder(surfaceView))
     }
 
     func testTreatsTextFieldInsideTerminalHostedViewAsFocusStealer() {
@@ -562,7 +453,7 @@ final class CommandPaletteFocusStealerClassificationTests: XCTestCase {
         hostedView.addSubview(textField)
 
         XCTAssertTrue(
-            isCommandPaletteFocusStealingTerminalOrBrowserResponder(textField),
+            isCommandPaletteFocusStealingTerminalResponder(textField),
             "Terminal-owned overlay text inputs should not be allowed to reclaim focus from the command palette"
         )
     }
@@ -570,7 +461,7 @@ final class CommandPaletteFocusStealerClassificationTests: XCTestCase {
     func testDoesNotTreatUnrelatedTextFieldAsFocusStealer() {
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
 
-        XCTAssertFalse(isCommandPaletteFocusStealingTerminalOrBrowserResponder(textField))
+        XCTAssertFalse(isCommandPaletteFocusStealingTerminalResponder(textField))
     }
 
     func testTreatsTextViewInsideTerminalHostedViewAsFocusStealerWhenDelegateIsNotAView() {
@@ -583,7 +474,7 @@ final class CommandPaletteFocusStealerClassificationTests: XCTestCase {
         hostedView.addSubview(textView)
 
         XCTAssertTrue(
-            isCommandPaletteFocusStealingTerminalOrBrowserResponder(textView),
+            isCommandPaletteFocusStealingTerminalResponder(textView),
             "NSTextView responders should still be blocked via the NSView hierarchy walk when the delegate is not a view"
         )
     }
@@ -598,46 +489,13 @@ final class CommandPaletteFocusStealerClassificationTests: XCTestCase {
         hostedView.addSubview(textView)
 
         XCTAssertTrue(
-            isCommandPaletteFocusStealingTerminalOrBrowserResponder(textView),
+            isCommandPaletteFocusStealingTerminalResponder(textView),
             "NSTextView responders should still be blocked via the NSView hierarchy walk when the delegate view is unrelated"
         )
     }
 }
 
 
-final class CommandPaletteRestoreFocusStateMachineTests: XCTestCase {
-    func testRestoresBrowserAddressBarWhenPaletteOpenedFromFocusedAddressBar() {
-        let panelId = UUID()
-        XCTAssertTrue(
-            ContentView.shouldRestoreBrowserAddressBarAfterCommandPaletteDismiss(
-                focusedPanelIsBrowser: true,
-                focusedBrowserAddressBarPanelId: panelId,
-                focusedPanelId: panelId
-            )
-        )
-    }
-
-    func testDoesNotRestoreBrowserAddressBarWhenFocusedPanelIsNotBrowser() {
-        let panelId = UUID()
-        XCTAssertFalse(
-            ContentView.shouldRestoreBrowserAddressBarAfterCommandPaletteDismiss(
-                focusedPanelIsBrowser: false,
-                focusedBrowserAddressBarPanelId: panelId,
-                focusedPanelId: panelId
-            )
-        )
-    }
-
-    func testDoesNotRestoreBrowserAddressBarWhenAnotherPanelHadAddressBarFocus() {
-        XCTAssertFalse(
-            ContentView.shouldRestoreBrowserAddressBarAfterCommandPaletteDismiss(
-                focusedPanelIsBrowser: true,
-                focusedBrowserAddressBarPanelId: UUID(),
-                focusedPanelId: UUID()
-            )
-        )
-    }
-}
 
 
 final class CommandPaletteSelectionScrollBehaviorTests: XCTestCase {

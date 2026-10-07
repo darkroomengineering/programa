@@ -118,7 +118,7 @@ extension ContentView {
         }
 
         // Use live global pointer location instead of per-event coordinates.
-        // Overlapping tracking areas (notably WKWebView) can deliver stale/jittery
+        // Overlapping tracking areas can deliver stale/jittery
         // event locations during cursor updates, which causes visible cursor flicker.
         let pointInWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
         let pointInContent = contentView.convert(pointInWindow, from: nil)

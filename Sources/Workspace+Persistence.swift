@@ -288,7 +288,6 @@ extension Workspace {
         let ttyName = surfaceTTYNames[panelId]
 
         let terminalSnapshot: SessionTerminalPanelSnapshot?
-        let browserSnapshot: SessionBrowserPanelSnapshot?
         let markdownSnapshot: SessionMarkdownPanelSnapshot?
         let reviewSnapshot: SessionReviewPanelSnapshot?
         switch panel.panelType {
@@ -313,34 +312,16 @@ extension Workspace {
                 workingDirectory: panelDirectories[panelId],
                 scrollback: resolvedScrollback
             )
-            browserSnapshot = nil
-            markdownSnapshot = nil
-            reviewSnapshot = nil
-        case .browser:
-            guard let browserPanel = panel as? BrowserPanel else { return nil }
-            terminalSnapshot = nil
-            let historySnapshot = browserPanel.sessionNavigationHistorySnapshot()
-            browserSnapshot = SessionBrowserPanelSnapshot(
-                urlString: browserPanel.preferredURLStringForOmnibar(),
-                profileID: browserPanel.profileID,
-                shouldRenderWebView: browserPanel.shouldRenderWebView,
-                pageZoom: Double(browserPanel.currentPageZoomFactor()),
-                developerToolsVisible: browserPanel.isDeveloperToolsVisible(),
-                backHistoryURLStrings: historySnapshot.backHistoryURLStrings,
-                forwardHistoryURLStrings: historySnapshot.forwardHistoryURLStrings
-            )
             markdownSnapshot = nil
             reviewSnapshot = nil
         case .markdown:
             guard let markdownPanel = panel as? MarkdownPanel else { return nil }
             terminalSnapshot = nil
-            browserSnapshot = nil
             markdownSnapshot = SessionMarkdownPanelSnapshot(filePath: markdownPanel.filePath)
             reviewSnapshot = nil
         case .review:
             guard let reviewPanel = panel as? ReviewPanel else { return nil }
             terminalSnapshot = nil
-            browserSnapshot = nil
             markdownSnapshot = nil
             reviewSnapshot = SessionReviewPanelSnapshot(
                 sourceSurfaceId: reviewPanel.sourceSurfaceId,
@@ -363,7 +344,6 @@ extension Workspace {
             listeningPorts: listeningPorts,
             ttyName: ttyName,
             terminal: terminalSnapshot,
-            browser: browserSnapshot,
             markdown: markdownSnapshot,
             review: reviewSnapshot
         )
@@ -482,8 +462,10 @@ extension Workspace {
         }
 
         let selectedPanelId: UUID? = {
-            if let selectedOldId = snapshot.selectedPanelId {
-                return oldToNewPanelIds[selectedOldId]
+            // The selected panel can be missing when its snapshot did not decode.
+            if let selectedOldId = snapshot.selectedPanelId,
+               let selectedNewId = oldToNewPanelIds[selectedOldId] {
+                return selectedNewId
             }
             return createdPanelIds.first
         }()
@@ -559,17 +541,6 @@ extension Workspace {
             // WAL directory going forward, so the old one is dead weight.
             SessionWALStore.shared.discardOrphanedSession(sessionId: snapshot.id.uuidString)
             return terminalPanel.id
-        case .browser:
-            guard let browserPanel = newBrowserSurface(
-                inPane: paneId,
-                url: nil,
-                focus: false,
-                preferredProfileID: snapshot.browser?.profileID
-            ) else {
-                return nil
-            }
-            applySessionPanelMetadata(snapshot, toPanelId: browserPanel.id)
-            return browserPanel.id
         case .markdown:
             guard let filePath = snapshot.markdown?.filePath,
                   let markdownPanel = newMarkdownSurface(
@@ -813,22 +784,6 @@ extension Workspace {
             surfaceTTYNames.removeValue(forKey: panelId)
         }
 
-        if let browserSnapshot = snapshot.browser,
-           let browserPanel = browserPanel(for: panelId) {
-            let pageZoom = CGFloat(max(0.25, min(5.0, browserSnapshot.pageZoom)))
-            if pageZoom.isFinite {
-                _ = browserPanel.setPageZoomFactor(pageZoom)
-            }
-
-            browserPanel.restoreSessionSnapshot(browserSnapshot)
-
-            if browserSnapshot.developerToolsVisible {
-                _ = browserPanel.showDeveloperTools()
-                browserPanel.requestDeveloperToolsRefreshAfterNextAttach(reason: "session_restore")
-            } else {
-                _ = browserPanel.hideDeveloperTools()
-            }
-        }
     }
 
     private func applySessionDividerPositions(

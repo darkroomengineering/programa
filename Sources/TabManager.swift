@@ -576,29 +576,6 @@ final class NotificationBurstCoalescer {
     }
 }
 
-struct RecentlyClosedBrowserStack {
-    private(set) var entries: [ClosedBrowserPanelRestoreSnapshot] = []
-    let capacity: Int
-
-    init(capacity: Int) {
-        self.capacity = max(1, capacity)
-    }
-
-    var isEmpty: Bool {
-        entries.isEmpty
-    }
-
-    mutating func push(_ snapshot: ClosedBrowserPanelRestoreSnapshot) {
-        entries.append(snapshot)
-        if entries.count > capacity {
-            entries.removeFirst(entries.count - capacity)
-        }
-    }
-
-    mutating func pop() -> ClosedBrowserPanelRestoreSnapshot? {
-        entries.popLast()
-    }
-}
 
 @MainActor
 class TabManager: ObservableObject {
@@ -754,7 +731,6 @@ class TabManager: ObservableObject {
     }
     var pendingPanelTitleUpdates: [PanelTitleUpdateKey: String] = [:]
     private let panelTitleUpdateCoalescer = NotificationBurstCoalescer(delay: 1.0 / 30.0)
-    var recentlyClosedBrowsers = RecentlyClosedBrowserStack(capacity: 20)
     /// Issue #140: closing a terminal stages it here for a 5s undo window (Cmd+Shift+T) instead
     /// of tearing it down immediately. Owned by TabManager -- the single reachable instance from
     /// every reopen call site (AppDelegate shortcut dispatch, ProgramaApp menu command,
@@ -905,13 +881,8 @@ class TabManager: ObservableObject {
         }
     }
 
-    /// Wires both the browser-restore stack and the terminal close-undo callback for `workspace`.
-    /// Kept as one pair of functions (rather than a second wire/unwire call site to remember) so
-    /// every workspace-lifecycle call site that manages one automatically manages the other.
-    func wireClosedBrowserTracking(for workspace: Workspace) {
-        workspace.onClosedBrowserPanel = { [weak self] snapshot in
-            self?.recentlyClosedBrowsers.push(snapshot)
-        }
+    /// Wires the terminal close-undo callback for `workspace`.
+    func wireTerminalCloseTracking(for workspace: Workspace) {
         workspace.onTerminalCloseStagedForUndo = { [weak self, weak workspace] transfer, paneId, index in
             guard let self, let workspace else {
                 transfer.finalizePermanently()
@@ -926,8 +897,7 @@ class TabManager: ObservableObject {
         }
     }
 
-    func unwireClosedBrowserTracking(for workspace: Workspace) {
-        workspace.onClosedBrowserPanel = nil
+    func unwireTerminalCloseTracking(for workspace: Workspace) {
         workspace.onTerminalCloseStagedForUndo = nil
     }
 
@@ -1060,7 +1030,6 @@ class TabManager: ObservableObject {
 
     var isFindVisible: Bool {
         selectedTerminalPanel?.searchState != nil
-            || focusedBrowserPanel?.searchState != nil
             || focusedMarkdownPanel?.searchState != nil
     }
 
@@ -1084,7 +1053,6 @@ class TabManager: ObservableObject {
             return
         }
 
-        focusedBrowserPanel?.startFind()
     }
 
     func searchSelection() {
@@ -1108,7 +1076,6 @@ class TabManager: ObservableObject {
             return
         }
 
-        focusedBrowserPanel?.findNext()
     }
 
     func findPrevious() {
@@ -1122,7 +1089,6 @@ class TabManager: ObservableObject {
             return
         }
 
-        focusedBrowserPanel?.findPrevious()
     }
 
     @discardableResult
@@ -1142,7 +1108,6 @@ class TabManager: ObservableObject {
             return
         }
 
-        focusedBrowserPanel?.hideFind()
     }
 
     func makeWorkspaceForCreation(
@@ -1266,7 +1231,7 @@ class TabManager: ObservableObject {
             if title != nil {
                 newWorkspace.setCustomTitle(title)
             }
-            wireClosedBrowserTracking(for: newWorkspace)
+            wireTerminalCloseTracking(for: newWorkspace)
             if eagerLoadTerminal && !select {
                 requestBackgroundWorkspaceLoad(for: newWorkspace.id)
             }
@@ -2326,7 +2291,7 @@ class TabManager: ObservableObject {
         closedTerminalUndoStore.expireAll()
         for workspace in tabs {
             workspace.teardownAllPanels()
-            unwireClosedBrowserTracking(for: workspace)
+            unwireTerminalCloseTracking(for: workspace)
             workspace.owningTabManager = nil
         }
 
@@ -2353,7 +2318,7 @@ class TabManager: ObservableObject {
 
         AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: workspace.id)
         workspace.teardownAllPanels()
-        unwireClosedBrowserTracking(for: workspace)
+        unwireTerminalCloseTracking(for: workspace)
         workspace.owningTabManager = nil
 
         if let index = tabs.firstIndex(where: { $0.id == workspace.id }) {
@@ -2383,7 +2348,7 @@ class TabManager: ObservableObject {
         sidebarSelectedWorkspaceIds.remove(tabId)
 
         let removed = tabs.remove(at: index)
-        unwireClosedBrowserTracking(for: removed)
+        unwireTerminalCloseTracking(for: removed)
         removed.owningTabManager = nil
         lastFocusedPanelByTab.removeValue(forKey: removed.id)
 
@@ -2404,7 +2369,7 @@ class TabManager: ObservableObject {
     /// Attach an existing workspace to this window.
     func attachWorkspace(_ workspace: Workspace, at index: Int? = nil, select: Bool = true) {
         workspace.owningTabManager = self
-        wireClosedBrowserTracking(for: workspace)
+        wireTerminalCloseTracking(for: workspace)
         let insertIndex: Int = {
             guard let index else { return tabs.count }
             return max(0, min(index, tabs.count))
@@ -2735,7 +2700,6 @@ class TabManager: ObservableObject {
         let panelKind: String = {
             guard let panel = tab.panels[panelId] else { return "missing" }
             if panel is TerminalPanel { return "terminal" }
-            if panel is BrowserPanel { return "browser" }
             return String(describing: type(of: panel))
         }()
         let closesWorkspaceOnLastSurfaceShortcut = shouldCloseWorkspaceOnLastSurfaceShortcut(tab, panelId: panelId)
@@ -2900,12 +2864,6 @@ class TabManager: ObservableObject {
         workspace(withId: tabId)?.focusedPanelId
     }
 
-    /// Returns the focused panel if it's a BrowserPanel, nil otherwise
-    var focusedBrowserPanel: BrowserPanel? {
-        guard let tab = selectedWorkspace,
-              let panelId = tab.focusedPanelId else { return nil }
-        return tab.panels[panelId] as? BrowserPanel
-    }
 
     /// Returns the focused panel if it's a MarkdownPanel, nil otherwise
     var focusedMarkdownPanel: MarkdownPanel? {
@@ -2914,36 +2872,11 @@ class TabManager: ObservableObject {
         return tab.panels[panelId] as? MarkdownPanel
     }
 
-    @discardableResult
-    func zoomInFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.zoomIn() ?? false
-    }
 
-    @discardableResult
-    func zoomOutFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.zoomOut() ?? false
-    }
 
-    @discardableResult
-    func resetZoomFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.resetZoom() ?? false
-    }
 
-    @discardableResult
-    func toggleDeveloperToolsFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.toggleDeveloperTools() ?? false
-    }
 
-    @discardableResult
-    func showJavaScriptConsoleFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.showDeveloperToolsConsole() ?? false
-    }
 
-    @discardableResult
-    func toggleDesignModeFromCurrentFocus() -> Bool {
-        guard let workspace = selectedWorkspace else { return false }
-        return activateDesignModeRoute(in: workspace)
-    }
 
     /// Backwards compatibility: returns the focused surface ID
     func focusedSurfaceId(for tabId: UUID) -> UUID? {
@@ -3020,7 +2953,7 @@ class TabManager: ObservableObject {
         }
 
         // Route workspace reactivation through the normal focus machinery so panel-local
-        // activation intents like browser find-field focus are restored on return.
+        // activation intents like terminal find-field focus are restored on return.
         tab.focusPanel(panelId)
     }
 
@@ -3675,13 +3608,5 @@ extension Notification.Name {
     static let ghosttyDidFocusTab = Notification.Name("ghosttyDidFocusTab")
     static let ghosttyDidFocusSurface = Notification.Name("ghosttyDidFocusSurface")
     static let ghosttyDidBecomeFirstResponderSurface = Notification.Name("ghosttyDidBecomeFirstResponderSurface")
-    static let browserDidBecomeFirstResponderWebView = Notification.Name("browserDidBecomeFirstResponderWebView")
-    static let browserFocusAddressBar = Notification.Name("browserFocusAddressBar")
-    static let browserMoveOmnibarSelection = Notification.Name("browserMoveOmnibarSelection")
-    static let browserDidExitAddressBar = Notification.Name("browserDidExitAddressBar")
-    static let browserDidFocusAddressBar = Notification.Name("browserDidFocusAddressBar")
-    static let browserDidBlurAddressBar = Notification.Name("browserDidBlurAddressBar")
-    static let webViewDidReceiveClick = Notification.Name("webViewDidReceiveClick")
     static let terminalPortalVisibilityDidChange = Notification.Name("programa.terminalPortalVisibilityDidChange")
-    static let browserPortalRegistryDidChange = Notification.Name("programa.browserPortalRegistryDidChange")
 }

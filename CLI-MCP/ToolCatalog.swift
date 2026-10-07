@@ -141,7 +141,7 @@ enum ToolCatalog {
         case .string(let stringValue):
             return stringValue
         case .data(let mimeType, let data):
-            // The SDK decodes any `data:` URL string argument (e.g. a browser URL) as `.data`,
+            // The SDK decodes any `data:` URL string argument (e.g. a resource URL) as `.data`,
             // so re-encode it as a data URL; bare base64 would drop the scheme and MIME type.
             return data.dataURLEncoded(mimeType: mimeType)
         case .array(let array):
@@ -163,10 +163,6 @@ enum ToolCatalog {
     /// The full, ordered tool catalog. `ListTools` and `CallTool` are both driven off this one
     /// table (see `register(on:)`), so they cannot drift apart.
     ///
-    /// `browser.*` is exposed via `BrowserTools.swift` plus the three
-    /// focus-stealing browser methods in `FocusTools.swift` (`browser.focus_webview`,
-    /// `browser.focus`, `browser.tab.switch`).
-    ///
     /// Deliberately excludes (so a future reader doesn't mistake these for oversights):
     /// - `debug.*`: DEBUG-build-only test-harness hooks that can simulate keystrokes and
     ///   activate the app.
@@ -187,7 +183,6 @@ enum ToolCatalog {
         + NotificationTools.tools
         + ReviewTools.tools
         + FocusTools.tools
-        + BrowserTools.tools
 
     /// Installs both the `ListTools` and `CallTool` method handlers, dispatching every call
     /// through `MCPSocketBridge` by tool name. Both handlers close over the same `all` table

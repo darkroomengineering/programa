@@ -7,8 +7,6 @@ Callers branch on the error code, so each case pins the code:
   - notification.create_for_surface, closed surface -> not_found
   - surface.focus, unknown id -> not_found, selection unchanged; malformed id -> invalid_params
   - markdown.open /dev/zero (device, would never finish reading) -> invalid_params
-  - browser.state.load with a relative path -> invalid_params
-  - browser.open_split with an unparseable URL -> invalid_params
 """
 
 import os
@@ -82,13 +80,6 @@ def main() -> int:
             # 9. device file
             _expect_code(c, "invalid_params", "markdown.open", {"path": "/dev/zero"})
 
-            # 10. relative path
-            _expect_code(c, "invalid_params", "browser.state.load", {"path": "relative/state.json"})
-
-            # 11. unparseable URL (unterminated IPv6 literal)
-            before = len(c.list_surfaces())
-            _expect_code(c, "invalid_params", "browser.open_split", {"url": "http://[::1"})
-            _must(len(c.list_surfaces()) == before, "failed browser.open_split must not create a surface")
         finally:
             if created_window:
                 try:

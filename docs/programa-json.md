@@ -119,7 +119,7 @@ A **pane** holds one or more surfaces (tabs):
   "pane": {
     "surfaces": [
       { "type": "terminal", "name": "server", "command": "npm run dev", "cwd": "app", "env": { "PORT": "3000" } },
-      { "type": "browser", "url": "http://localhost:3000", "focus": true }
+      { "type": "terminal", "name": "shell", "focus": true }
     ]
   }
 }
@@ -142,12 +142,11 @@ A **split** divides space between exactly two children:
 | `direction` | split | `"horizontal" \| "vertical"` | `horizontal` puts the two children side by side, `vertical` stacks them. |
 | `split` | split | number? | Position of the divider between 0 and 1, clamped to 0.1 to 0.9. Default `0.5`. |
 | `children` | split | array | Required, exactly two nodes (panes or splits). |
-| `surfaces[].type` | surface | `"terminal" \| "browser"` | Required. |
+| `surfaces[].type` | surface | `"terminal"` | Required. Older files may name `"browser"`; those surfaces are skipped, and a pane left with none opens one terminal. |
 | `surfaces[].name` | surface | string? | Custom tab title. |
-| `surfaces[].command` | surface | string? | Terminal only. Typed into the terminal with a trailing newline once it is ready. |
-| `surfaces[].cwd` | surface | string? | Terminal only. Absolute, `~`-relative, or relative to the workspace's directory. Empty or `.` means the workspace directory. |
-| `surfaces[].env` | surface | object? | Terminal only. Extra environment variables, string to string. |
-| `surfaces[].url` | surface | string? | Browser only. Page to open. |
+| `surfaces[].command` | surface | string? | Typed into the terminal with a trailing newline once it is ready. |
+| `surfaces[].cwd` | surface | string? | Absolute, `~`-relative, or relative to the workspace's directory. Empty or `.` means the workspace directory. |
+| `surfaces[].env` | surface | object? | Extra environment variables, string to string. |
 | `surfaces[].focus` | surface | bool? | `true` focuses this surface after the layout is applied. The last one wins. |
 
 A workspace's `color` must be a 6-digit hex value (`#RRGGBB`); anything else fails to load.
@@ -173,7 +172,7 @@ The file wraps the layout in an envelope:
 
 The file name is the layout's name; if you copy or rename a file, its `name` field is ignored.
 A saved layout records geometry, each terminal's directory (relative to the workspace directory
-where possible), each browser's URL and custom tab titles. It does not record running commands,
+where possible) and custom tab titles. It does not record running commands,
 environment variables or focus, and markdown panels are skipped. You can add `command`, `env` and
 `focus` by hand. The `layout.save`, `layout.apply` and `layout.list` socket methods work on the
 same files; see [socket-api.md](socket-api.md).

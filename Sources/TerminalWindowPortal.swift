@@ -204,7 +204,6 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
         guard let window else { return false }
         guard let (container, reference) = installedTargetIfStillValid(for: window) ?? installationTarget(for: window)
         else { return false }
-        let browserHost = preferredBrowserHost(in: container)
 
         if hostView.superview !== container ||
             installedContainerView !== container ||
@@ -213,11 +212,7 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
             installConstraints.removeAll()
 
             hostView.removeFromSuperview()
-            if let browserHost {
-                container.addSubview(hostView, positioned: .below, relativeTo: browserHost)
-            } else {
-                container.addSubview(hostView, positioned: .above, relativeTo: reference)
-            }
+            container.addSubview(hostView, positioned: .above, relativeTo: reference)
 
             installConstraints = [
                 hostView.leadingAnchor.constraint(equalTo: reference.leadingAnchor),
@@ -228,10 +223,6 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
             NSLayoutConstraint.activate(installConstraints)
             installedContainerView = container
             installedReferenceView = reference
-        } else if let browserHost {
-            if !Self.isView(browserHost, above: hostView, in: container) {
-                container.addSubview(hostView, positioned: .below, relativeTo: browserHost)
-            }
         } else if !Self.isView(hostView, above: reference, in: container) {
             container.addSubview(hostView, positioned: .above, relativeTo: reference)
         }
@@ -278,10 +269,6 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
 
         guard let themeFrame = contentView.superview else { return nil }
         return (themeFrame, contentView)
-    }
-
-    private func preferredBrowserHost(in container: NSView) -> WindowBrowserHostView? {
-        container.subviews.last(where: { $0 is WindowBrowserHostView }) as? WindowBrowserHostView
     }
 
 #if DEBUG
@@ -1001,7 +988,7 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
     // Base-class debugHostedSubviewCount() counts raw hostView.subviews, which for
     // Terminal also includes the permanently-attached dividerOverlayView (not a
     // hosted terminal view). Override so debug tooling reports only actual hosted
-    // terminal subviews, matching the Browser portal (which has no such overlay).
+    // terminal subviews.
     override func debugHostedSubviewCount() -> Int {
         hostView.subviews.filter { $0 is GhosttySurfaceScrollView }.count
     }

@@ -52,7 +52,7 @@ public protocol BonsplitDelegate: AnyObject {
     // MARK: - New Tab Request
 
     /// Called when the user clicks a "new tab" action in the tab bar.
-    /// The `kind` string identifies the type of tab (e.g. "terminal", "browser").
+    /// The `kind` string identifies the type of tab (e.g. "terminal", "markdown").
     func splitTabBar(_ controller: BonsplitController, didRequestNewTab kind: String, inPane pane: PaneID)
 
     /// Called when the user triggers an action from a tab's context menu.

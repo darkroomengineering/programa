@@ -718,12 +718,11 @@ func programaResolveVisibleLinePath(
 }
 
 enum TerminalOpenURLTarget: Equatable {
-    case embeddedBrowser(URL)
     case external(URL)
 
     var url: URL {
         switch self {
-        case let .embeddedBrowser(url), let .external(url):
+        case let .external(url):
             return url
         }
     }
@@ -823,35 +822,14 @@ func resolveTerminalOpenURLTarget(_ rawValue: String) -> TerminalOpenURLTarget? 
 
     if let parsed = URL(string: trimmed),
        let scheme = parsed.scheme?.lowercased() {
-        if scheme == "http" || scheme == "https" {
-            guard BrowserInsecureHTTPSettings.normalizeHost(parsed.host ?? "") != nil else {
-                #if DEBUG
-                dlog("link.resolve result=external(invalidHost) url=\(parsed)")
-                #endif
-                return .external(parsed)
-            }
-            #if DEBUG
-            dlog("link.resolve result=embeddedBrowser url=\(parsed)")
-            #endif
-            return .embeddedBrowser(parsed)
-        }
         #if DEBUG
         dlog("link.resolve result=external(scheme=\(scheme)) url=\(parsed)")
         #endif
         return .external(parsed)
     }
 
-    if let webURL = resolveBrowserNavigableURL(trimmed) {
-        guard BrowserInsecureHTTPSettings.normalizeHost(webURL.host ?? "") != nil else {
-            #if DEBUG
-            dlog("link.resolve result=external(bareHost-invalidHost) url=\(webURL)")
-            #endif
-            return .external(webURL)
-        }
-        #if DEBUG
-        dlog("link.resolve result=embeddedBrowser(bareHost) url=\(webURL)")
-        #endif
-        return .embeddedBrowser(webURL)
+    if let webURL = resolveTerminalNavigableURL(trimmed) {
+        return .external(webURL)
     }
 
     guard let fallback = URL(string: trimmed) else {
@@ -864,6 +842,61 @@ func resolveTerminalOpenURLTarget(_ rawValue: String) -> TerminalOpenURLTarget? 
     dlog("link.resolve result=external(fallback) url=\(fallback)")
     #endif
     return .external(fallback)
+}
+
+func resolveTerminalNavigableURL(_ input: String) -> URL? {
+    let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    guard !trimmed.contains(" ") else { return nil }
+
+    let lower = trimmed.lowercased()
+    if lower == "about:blank" {
+        return URL(string: "about:blank")
+    }
+    if trimmed.hasPrefix("/") {
+        return URL(fileURLWithPath: trimmed)
+    }
+    // host:port must be matched before generic URL parsing, which reads the host as a
+    // scheme ("my-nas:8080", "example.com:8080", "localhost:3777").
+    if trimmed.range(of: #"^[^/?#:\s]+:\d{1,5}([/?#].*)?$"#, options: .regularExpression) != nil {
+        return URL(string: "http://\(trimmed)")
+    }
+    if terminalInputIsLoopbackHost(lower) {
+        return URL(string: "http://\(trimmed)")
+    }
+
+    if let url = URL(string: trimmed), let scheme = url.scheme?.lowercased() {
+        if scheme == "http" || scheme == "https" {
+            return url
+        }
+        if scheme == "file", url.isFileURL, url.path.hasPrefix("/") {
+            return url
+        }
+        return nil
+    }
+
+    if trimmed.contains(":") || trimmed.contains("/") {
+        return URL(string: "https://\(trimmed)")
+    }
+
+    if trimmed.contains(".") {
+        return URL(string: "https://\(trimmed)")
+    }
+
+    return nil
+}
+
+/// Exact loopback host match on the input's host part ("localhostile.com" is not loopback).
+private func terminalInputIsLoopbackHost(_ lowercasedInput: String) -> Bool {
+    let hostEnd = lowercasedInput.firstIndex(where: { "/?#".contains($0) }) ?? lowercasedInput.endIndex
+    let hostAndPort = lowercasedInput[..<hostEnd]
+    let host: Substring
+    if hostAndPort.hasPrefix("["), let close = hostAndPort.firstIndex(of: "]") {
+        host = hostAndPort[...close]
+    } else {
+        host = hostAndPort.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first ?? hostAndPort
+    }
+    return host == "localhost" || host == "127.0.0.1" || host == "[::1]"
 }
 
 struct GhosttyScrollbar {
@@ -897,5 +930,4 @@ extension Notification.Name {
     static let ghosttySearchFocus = Notification.Name("ghosttySearchFocus")
     static let ghosttyConfigDidReload = Notification.Name("ghosttyConfigDidReload")
     static let ghosttyDefaultBackgroundDidChange = Notification.Name("ghosttyDefaultBackgroundDidChange")
-    static let browserSearchFocus = Notification.Name("browserSearchFocus")
 }

@@ -299,40 +299,15 @@ final class ConfigFixSweepCONFTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(started), 2.0)
     }
 
-    // MARK: - CONF-11: dialog discloses cwd and refused browser URLs
+    // MARK: - CONF-11: dialog discloses cwd
 
-    private static let browserWorkspaceJSON = """
-    {"commands":[{"name":"x","workspace":{"name":"dev","cwd":"/tmp/x","layout":{"direction":"horizontal","children":[
-    {"pane":{"surfaces":[{"type":"browser","url":"file:///etc/passwd"}]}},
-    {"pane":{"surfaces":[{"type":"browser","url":"https://example.com"}]}}]}}}]}
-    """
-
-    func testConfirmationDescribesCwdAndMarksRefusedBrowserURL() throws {
-        let command = try XCTUnwrap(decodeConfig(Self.browserWorkspaceJSON).commands.first)
-
+    func testConfirmationDescribesCwd() throws {
+        let json = """
+        {"commands":[{"name":"x","workspace":{"name":"dev","cwd":"/tmp/x","layout":{"pane":{"surfaces":[{"type":"terminal"}]}}}}]}
+        """
+        let command = try XCTUnwrap(decodeConfig(json).commands.first)
         let text = ProgramaConfigExecutor.describeForConfirmation(command)
-
         XCTAssertTrue(text.contains("/tmp/x"), text)
-        let lines = text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-        XCTAssertTrue(lines.contains("url=https://example.com"), text)
-        let fileLine = try XCTUnwrap(lines.first { $0.contains("file:///etc/passwd") }, text)
-        XCTAssertNotEqual(fileLine, "url=file:///etc/passwd", "a refused URL must say it is not opened")
-        XCTAssertTrue(fileLine.hasPrefix("url=file:///etc/passwd"), fileLine)
-    }
-
-    func testLayoutRefusingNonHTTPBrowserURLsClearsFileKeepsHTTPS() throws {
-        let command = try XCTUnwrap(decodeConfig(Self.browserWorkspaceJSON).commands.first)
-        let layout = try XCTUnwrap(command.workspace?.layout)
-
-        let filtered = ProgramaConfigExecutor.layoutRefusingNonHTTPBrowserURLs(layout)
-
-        guard case let .split(split) = filtered,
-              case let .pane(first) = split.children[0],
-              case let .pane(second) = split.children[1] else {
-            return XCTFail("layout shape changed")
-        }
-        XCTAssertNil(first.surfaces[0].url)
-        XCTAssertEqual(second.surfaces[0].url, "https://example.com")
     }
 
     // MARK: - CONF-12: control characters cannot hide in a command

@@ -201,10 +201,6 @@ struct MCPSocketBridge {
         switch method {
         case V2MethodNames.surfaceWait:
             timeoutMs = timeoutInteger(params["timeout_ms"]) ?? timeoutInteger(params["timeout"]) ?? 30_000
-        case V2MethodNames.browserWait:
-            timeoutMs = timeoutInteger(params["timeout_ms"]) ?? 5_000
-        case V2MethodNames.browserDownloadWait:
-            timeoutMs = timeoutInteger(params["timeout_ms"]) ?? timeoutInteger(params["timeout"]) ?? 10_000
         default:
             return defaultResponseTimeoutSeconds
         }

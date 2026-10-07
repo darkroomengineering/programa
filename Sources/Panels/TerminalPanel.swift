@@ -149,7 +149,7 @@ final class TerminalPanel: Panel, ObservableObject {
     func unfocus() {
         surface.setFocus(false)
         // Cancel any pending focus work items so an inactive terminal can't steal first responder
-        // back from another surface (notably WKWebView) during rapid focus changes in tests.
+        // back from another surface during rapid focus changes in tests.
         //
         // Also flip the hosted view's active state immediately: SwiftUI focus propagation can lag
         // by a runloop tick, and `requestFocus` retries that are already executing can otherwise
@@ -160,7 +160,7 @@ final class TerminalPanel: Panel, ObservableObject {
     func close() {
         // The surface will be cleaned up by its deinit
         // Detach from the window portal on real close so stale hosted views
-        // cannot remain above browser panes after split close.
+        // cannot remain above other panes after split close.
         surface.beginPortalCloseLifecycle(reason: "panel.close")
 #if DEBUG
         let frame = String(format: "%.1fx%.1f", hostedView.frame.width, hostedView.frame.height)

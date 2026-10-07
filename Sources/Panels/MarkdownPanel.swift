@@ -106,7 +106,7 @@ final class MarkdownPanel: Panel, ObservableObject {
     }
 
     /// Called when the panel is re-attached to a different workspace (detach/move transfer).
-    /// Mirrors `TerminalPanel.updateWorkspaceId` / `BrowserPanel.reattachToWorkspace` /
+    /// Mirrors `TerminalPanel.updateWorkspaceId` /
     /// `ReviewPanel.updateWorkspaceId`.
     func updateWorkspaceId(_ newWorkspaceId: UUID) {
         workspaceId = newWorkspaceId

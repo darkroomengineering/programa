@@ -1,35 +1,10 @@
-# Two browsers for agents: Programa's panel and Aside
+# Aside: the browser for agents
 
-Coding agents need a browser for two different jobs, and Programa treats them as two
-different tools:
-
-| Job | Use | Why |
-| --- | --- | --- |
-| Local previews, smoke tests, screenshots the agent reads back, DOM inspection, console and error logs | **Programa's embedded browser** | It lives next to the agent's pane, has its own per-workspace profile, never moves the user's focus, and every action is a socket method (`browser.*`) that the CLI and `programa-mcp` both expose. |
-| Logged-in sites, private dashboards, CI logs, anything that depends on your real browsing profile and memory | **Aside** ([aside.com](https://aside.com)), a Chromium-based agent browser | Aside owns the sessions and cookies. Programa registers it with Claude Code and Codex so the agent can hand that work off instead of driving a Chrome extension. |
-
-Neither replaces the other. Programa's panel is WKWebView, so it has no Chrome DevTools
-Protocol and does not share cookies with Aside. Aside has the logins but is not a pane in
-your workspace.
-
-## Programa's browser from an agent
-
-From a shell inside a Programa pane, the `programa browser` CLI covers the whole surface:
-
-```bash
-programa browser open-split https://localhost:3000          # new browser split beside this pane
-programa browser --surface surface:7 snapshot --interactive # accessibility tree of interactive elements
-programa browser --surface surface:7 click "button.submit" --snapshot-after
-programa browser --surface surface:7 screenshot --out /tmp/after.png
-programa browser --surface surface:7 tab close
-```
-
-Over MCP, the same methods are the `browser_*` tools in `programa-mcp` (`browser_open_split`,
-`browser_navigate`, `browser_snapshot`, `browser_get_text`, `browser_screenshot`,
-`browser_console_list`, and so on). Playwright-shaped tools for network routing, viewport
-emulation and raw input injection do not exist: WKWebView has no DevTools Protocol to drive them. Only the three `focus_browser_*` tools move focus;
-everything else leaves the user where they are. See [mcp-server.md](mcp-server.md) for the
-full list and the setup.
+Programa does not embed a browser. When a coding agent in a Programa pane needs one, for
+local previews, smoke tests, screenshots, logged-in sites, private dashboards or CI logs, use
+**Aside** ([aside.com](https://aside.com)), a Chromium-based agent browser. Aside owns the
+sessions and cookies, and Programa registers it with Claude Code and Codex so the agent can
+hand browser work to it instead of driving a Chrome extension.
 
 ## Aside from an agent
 
@@ -65,11 +40,9 @@ it at `~/.local/bin/aside`, then `~/.aside/cli/Aside CLI.app/Contents/MacOS/asid
 
 ## Sending links to Aside
 
-Terminal links open in Programa's panel when the host is local or allowlisted, and in an
-external browser otherwise. `Settings > Browser > Open External Links With` picks that
-external browser; choose Aside there and every cmd-click that leaves Programa lands in the
-browser that has your logins and agent memory. The same setting is `browser.externalBrowser`
-in `~/.config/programa/settings.json` (a bundle identifier; empty means the macOS default).
+Cmd-clicked terminal links and `open https://...` leave Programa for the macOS default
+browser. Make Aside the default browser in System Settings > Desktop & Dock and those links
+land in the browser that has your logins and agent memory.
 
 ## Aside driving Programa
 

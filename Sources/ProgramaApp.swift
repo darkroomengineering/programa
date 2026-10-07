@@ -82,15 +82,10 @@ struct programaApp: App {
     @AppStorage(DevBuildBannerDebugSettings.sidebarBannerVisibleKey)
     private var showSidebarDevBuildBanner = DevBuildBannerDebugSettings.defaultShowSidebarBanner
     @AppStorage(SocketControlSettings.appStorageKey) private var socketControlMode = SocketControlSettings.defaultMode.rawValue
-    @AppStorage(BrowserToolbarAccessorySpacingDebugSettings.key) private var browserToolbarAccessorySpacingRaw = BrowserToolbarAccessorySpacingDebugSettings.defaultSpacing
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     private var tabManager: TabManager {
         primaryTabManagerStore.manager
-    }
-
-    private var browserToolbarAccessorySpacing: Int {
-        BrowserToolbarAccessorySpacingDebugSettings.resolved(browserToolbarAccessorySpacingRaw)
     }
 
     init() {
@@ -425,22 +420,6 @@ struct programaApp: App {
                     Button(String(localized: "debug.menu.background", defaultValue: "Background Debug…")) {
                         BackgroundDebugWindowController.shared.show()
                     }
-                    Button(
-                        String(
-                            localized: "debug.menu.browserProfilePopoverDebug",
-                            defaultValue: "Browser Profile Popover Debug…"
-                        )
-                    ) {
-                        BrowserProfilePopoverDebugWindowController.shared.show()
-                    }
-                    Button(
-                        String(
-                            localized: "debug.menu.browserToolbarGlass",
-                            defaultValue: "Browser Toolbar Glass Debug…"
-                        )
-                    ) {
-                        BrowserToolbarGlassDebugWindowController.shared.show()
-                    }
                     Button(String(localized: "debug.menu.windowControls", defaultValue: "Debug Window Controls…")) {
                         DebugWindowControlsWindowController.shared.show()
                     }
@@ -467,29 +446,6 @@ struct programaApp: App {
                     }
                     Button(String(localized: "debug.menu.openAllWindows", defaultValue: "Open All Debug Windows")) {
                         openAllDebugWindows()
-                    }
-                }
-
-                Menu(
-                    String(
-                        localized: "debug.menu.browserToolbarButtonSpacing",
-                        defaultValue: "Browser Toolbar Button Spacing"
-                    )
-                ) {
-                    ForEach(BrowserToolbarAccessorySpacingDebugSettings.supportedValues, id: \.self) { spacing in
-                        Button {
-                            browserToolbarAccessorySpacingRaw = spacing
-                        } label: {
-                            if browserToolbarAccessorySpacing == spacing {
-                                Label {
-                                    Text(verbatim: "\(spacing)")
-                                } icon: {
-                                    Image(systemName: "checkmark")
-                                }
-                            } else {
-                                Text(verbatim: "\(spacing)")
-                            }
-                        }
                     }
                 }
 
@@ -618,8 +574,8 @@ struct programaApp: App {
                     workspaceCommandMenuContent(manager: activeTabManager)
                 }
 
-                splitCommandButton(title: String(localized: "menu.file.reopenClosedBrowserPanel", defaultValue: "Reopen Closed Panel"), shortcut: menuShortcut(for: .reopenClosedBrowserPanel)) {
-                    _ = activeTabManager.reopenMostRecentlyClosedBrowserPanel()
+                splitCommandButton(title: String(localized: "menu.file.reopenClosedTerminal", defaultValue: "Reopen Closed Terminal"), shortcut: menuShortcut(for: .reopenClosedTerminal)) {
+                    _ = activeTabManager.closedTerminalUndoStore.restoreMostRecent()
                 }
             }
 
@@ -675,48 +631,6 @@ struct programaApp: App {
                     activeTabManager.selectPreviousSurface()
                 }
 
-                splitCommandButton(title: String(localized: "menu.view.back", defaultValue: "Back"), shortcut: menuShortcut(for: .browserBack)) {
-                    activeTabManager.focusedBrowserPanel?.goBack()
-                }
-
-                splitCommandButton(title: String(localized: "menu.view.forward", defaultValue: "Forward"), shortcut: menuShortcut(for: .browserForward)) {
-                    activeTabManager.focusedBrowserPanel?.goForward()
-                }
-
-                splitCommandButton(title: String(localized: "menu.view.reloadPage", defaultValue: "Reload Page"), shortcut: menuShortcut(for: .browserReload)) {
-                    activeTabManager.focusedBrowserPanel?.reload()
-                }
-
-                splitCommandButton(title: String(localized: "menu.view.toggleDevTools", defaultValue: "Toggle Developer Tools"), shortcut: menuShortcut(for: .toggleBrowserDeveloperTools)) {
-                    let manager = activeTabManager
-                    if !manager.toggleDeveloperToolsFocusedBrowser() {
-                        NSSound.beep()
-                    }
-                }
-
-                splitCommandButton(title: String(localized: "menu.view.showJSConsole", defaultValue: "Show JavaScript Console"), shortcut: menuShortcut(for: .showBrowserJavaScriptConsole)) {
-                    let manager = activeTabManager
-                    if !manager.showJavaScriptConsoleFocusedBrowser() {
-                        NSSound.beep()
-                    }
-                }
-
-                splitCommandButton(title: String(localized: "menu.view.zoomIn", defaultValue: "Zoom In"), shortcut: menuShortcut(for: .browserZoomIn)) {
-                    _ = activeTabManager.zoomInFocusedBrowser()
-                }
-
-                splitCommandButton(title: String(localized: "menu.view.zoomOut", defaultValue: "Zoom Out"), shortcut: menuShortcut(for: .browserZoomOut)) {
-                    _ = activeTabManager.zoomOutFocusedBrowser()
-                }
-
-                splitCommandButton(title: String(localized: "menu.view.actualSize", defaultValue: "Actual Size"), shortcut: menuShortcut(for: .browserZoomReset)) {
-                    _ = activeTabManager.resetZoomFocusedBrowser()
-                }
-
-                Button(String(localized: "menu.view.clearBrowserHistory", defaultValue: "Clear Browser History")) {
-                    BrowserHistoryStore.shared.clearHistory()
-                }
-
                 splitCommandButton(title: String(localized: "menu.view.nextWorkspace", defaultValue: "Next Workspace"), shortcut: menuShortcut(for: .nextSidebarTab)) {
                     activeTabManager.selectNextTab()
                 }
@@ -746,14 +660,6 @@ struct programaApp: App {
 
                 splitCommandButton(title: String(localized: "menu.view.splitDown", defaultValue: "Split Down"), shortcut: menuShortcut(for: .splitDown)) {
                     performSplitFromMenu(direction: .down)
-                }
-
-                splitCommandButton(title: String(localized: "menu.view.splitBrowserRight", defaultValue: "Split Browser Right"), shortcut: menuShortcut(for: .splitBrowserRight)) {
-                    performBrowserSplitFromMenu(direction: .right)
-                }
-
-                splitCommandButton(title: String(localized: "menu.view.splitBrowserDown", defaultValue: "Split Browser Down"), shortcut: menuShortcut(for: .splitBrowserDown)) {
-                    performBrowserSplitFromMenu(direction: .down)
                 }
 
                 Divider()
@@ -870,13 +776,6 @@ struct programaApp: App {
             return
         }
         tabManager.createSplit(direction: direction)
-    }
-
-    private func performBrowserSplitFromMenu(direction: SplitDirection) {
-        if AppDelegate.shared?.performBrowserSplitShortcut(direction: direction) == true {
-            return
-        }
-        _ = tabManager.createBrowserSplit(direction: direction)
     }
 
     private func selectedWorkspaceIndex(in manager: TabManager, workspaceId: UUID) -> Int? {
@@ -1107,8 +1006,6 @@ struct programaApp: App {
 
 #if DEBUG
     private func openAllDebugWindows() {
-        BrowserProfilePopoverDebugWindowController.shared.show()
-        BrowserToolbarGlassDebugWindowController.shared.show()
         SettingsAboutTitlebarDebugWindowController.shared.show()
         SidebarDebugWindowController.shared.show()
         BackgroundDebugWindowController.shared.show()
@@ -1124,7 +1021,6 @@ private let programaAuxiliaryWindowIdentifiers: Set<String> = [
     "programa.settings",
     "programa.about",
     "programa.licenses",
-    "programa.browser-popup",
     "programa.settingsAboutTitlebarDebug",
     "programa.debugWindowControls",
     "programa.sidebarDebug",
@@ -1687,7 +1583,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 }
 
 enum SettingsNavigationTarget: String {
-    case browser
     case keyboardShortcuts
 }
 

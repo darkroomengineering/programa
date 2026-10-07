@@ -137,36 +137,7 @@ struct ProgramaConfigExecutor {
         }
     }
 
-    /// Whether a config-sourced browser surface may load `rawURL`: only absolute http(s)
-    /// URLs. `file:`, `javascript:`, custom app schemes and the like are refused.
-    static func isAllowedConfigBrowserURL(_ rawURL: String) -> Bool {
-        guard let url = URL(string: rawURL),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https",
-              let host = url.host, !host.isEmpty else {
-            return false
-        }
-        return true
-    }
 
-    /// The layout with every browser surface URL that `isAllowedConfigBrowserURL` refuses
-    /// removed, so such a surface opens blank instead of loading it.
-    static func layoutRefusingNonHTTPBrowserURLs(_ node: ProgramaLayoutNode) -> ProgramaLayoutNode {
-        switch node {
-        case var .pane(pane):
-            pane.surfaces = pane.surfaces.map { surface in
-                var surface = surface
-                if surface.type == .browser, let url = surface.url, !isAllowedConfigBrowserURL(url) {
-                    surface.url = nil
-                }
-                return surface
-            }
-            return .pane(pane)
-        case var .split(split):
-            split.children = split.children.map(layoutRefusingNonHTTPBrowserURLs)
-            return .split(split)
-        }
-    }
 
     /// The security decision, isolated from the UI so it can be tested directly.
     ///
@@ -355,19 +326,6 @@ struct ProgramaConfigExecutor {
     private static func describeSurface(_ surface: ProgramaSurfaceDefinition) -> String? {
         var parts: [String] = []
 
-        if surface.type == .browser, let url = surface.url, !url.isEmpty {
-            if isAllowedConfigBrowserURL(url) {
-                parts.append("url=" + sanitizeForDisplay(url))
-            } else {
-                parts.append(String(
-                    format: String(
-                        localized: "conf.programaConfig.urlRefused",
-                        defaultValue: "url=%@ (not opened: only http and https URLs load)"
-                    ),
-                    sanitizeForDisplay(url)
-                ))
-            }
-        }
 
         if let command = surface.command, !command.isEmpty {
             parts.append(sanitizeForDisplay(command))
@@ -639,6 +597,6 @@ struct ProgramaConfigExecutor {
         }
 
         guard let layout = wsDef.layout else { return }
-        newWorkspace.applyCustomLayout(layoutRefusingNonHTTPBrowserURLs(layout), baseCwd: resolvedCwd)
+        newWorkspace.applyCustomLayout(layout, baseCwd: resolvedCwd)
     }
 }

@@ -57,14 +57,13 @@ SHARD_COUNT="${PROGRAMA_UNIT_TEST_SHARD_COUNT:-1}"
 # reduced. If a NEW class starts failing here, prefer adding the class over
 # adding its methods.
 QUARANTINED_ON_COMPAT=(
-  "programaTests/BrowserWindowPortalLifecycleTests"
   "programaTests/CLINotifyProcessIntegrationTests"
   "programaTests/GhosttySurfaceOverlayTests"
   "programaTests/NotificationDockBadgeTests"
   "programaTests/TerminalControllerSocketSecurityTests"
   "programaTests/TerminalNotificationDirectInteractionTests"
   "programaTests/TerminalWindowPortalLifecycleTests"
-  # DIFFERENT IN KIND from the seven above, and weaker justification -- read this
+  # DIFFERENT IN KIND from the six above, and weaker justification -- read this
   # before treating the whole list as one thing.
   #
   # The others time out. This one CRASHES the test host:

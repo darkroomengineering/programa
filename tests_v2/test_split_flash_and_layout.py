@@ -177,17 +177,6 @@ def main() -> int:
             )
         _assert_selected_panels_healthy(drag_after)
 
-        # Browser split should also avoid EmptyPanelView flashes.
-        c.reset_empty_panel_count()
-        _browser_id = c.open_browser("https://example.com")
-        time.sleep(0.4)
-        flashes = c.empty_panel_count()
-        if flashes != 0:
-            raise ProgramaClientError(f"EmptyPanelView appeared during browser split (count={flashes})")
-
-        after_browser = c.layout_debug()
-        _assert_selected_panels_healthy(after_browser)
-
         c.close_workspace(test_workspace)
         time.sleep(0.1)
 
