@@ -311,7 +311,15 @@ extension Workspace {
         // AgentStateWaitRegistry's doc comment in TerminalController+SurfaceWait.swift for why
         // this is the single safe place to fire from.
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: state, source: source)
-        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: state, source: source)
+        SocketEventBroadcaster.shared.publishAgentState(
+            workspaceId: id,
+            surfaceId: panelId,
+            state: state,
+            source: source,
+            programStatus: source == .program
+                ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
+                : nil
+        )
 #if DEBUG
         dlog(
             "surface.agentState workspace=\(id.uuidString.prefix(5)) " +
@@ -356,8 +364,10 @@ extension Workspace {
         // it out here too -- otherwise a surface.wait `agent_state` (or a subscribed client)
         // watching a surface whose state got wiped by a sidebar reset would hang until timeout
         // instead of observing the transition to "no state".
-        for panel in panels.values {
-            (panel as? TerminalPanel)?.programStatus.resetAll()
+        for (panelId, panel) in panels {
+            if (panel as? TerminalPanel)?.programStatus.resetAll() == true {
+                ProgramStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil)
+            }
         }
         let clearedAgentSurfaceIds = Array(panelAgentPresence.keys)
         panelAgentPresence.removeAll()

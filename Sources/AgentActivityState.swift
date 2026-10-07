@@ -107,6 +107,20 @@ struct AgentPresence: Equatable, Sendable {
     }
 }
 
+extension AgentPresence {
+    /// Worst-first ordering for the sidebar badge: blocked > working > error > done > idle.
+    /// Error and done rank inside the idle tier, so a blocked or working sibling still wins.
+    fileprivate var indicatorSeverity: Int {
+        let tierBonus: Int
+        switch programState {
+        case .error: tierBonus = 2
+        case .done: tierBonus = 1
+        default: tierBonus = 0
+        }
+        return state.severity * 10 + (state == .idle ? tierBonus : 0)
+    }
+}
+
 /// The single derived glyph/label/tint for a workspace's aggregate agent state, replacing the
 /// three independent renderings that used to read `panelAgentStates`, `statusEntries["claude_code"]`,
 /// and the notification subtitle separately. `TabItemView` is the only consumer.
@@ -115,6 +129,8 @@ struct SidebarAgentIndicator: Equatable {
         case blocked
         case working
         case idle
+        case done
+        case error
     }
 
     let systemImage: String
@@ -130,8 +146,8 @@ struct SidebarAgentIndicator: Equatable {
     static func make(for workspace: Workspace, now: Date = Date()) -> SidebarAgentIndicator? {
         let winner = workspace.panelAgentPresence.values.reduce(nil as AgentPresence?) { partial, presence in
             guard let partial else { return presence }
-            if presence.state.severity != partial.state.severity {
-                return presence.state.severity > partial.state.severity ? presence : partial
+            if presence.indicatorSeverity != partial.indicatorSeverity {
+                return presence.indicatorSeverity > partial.indicatorSeverity ? presence : partial
             }
             // Equal severity: the freshest report wins, so dictionary order never decides the
             // stale flag.
@@ -158,6 +174,20 @@ struct SidebarAgentIndicator: Equatable {
                     : String(localized: "sidebar.agentIndicator.working", defaultValue: "Working"),
                 tint: .working,
                 isStale: isStale
+            )
+        case .idle where winner.programState == .done:
+            return SidebarAgentIndicator(
+                systemImage: "checkmark.circle.fill",
+                label: String(localized: "sidebar.agentIndicator.done", defaultValue: "Done"),
+                tint: .done,
+                isStale: false
+            )
+        case .idle where winner.programState == .error:
+            return SidebarAgentIndicator(
+                systemImage: "xmark.octagon.fill",
+                label: String(localized: "sidebar.agentIndicator.error", defaultValue: "Error"),
+                tint: .error,
+                isStale: false
             )
         case .idle:
             return SidebarAgentIndicator(

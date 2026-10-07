@@ -287,6 +287,8 @@ struct TabItemView: View, Equatable {
         case .blocked: return .red
         case .working: return programaAccentColor()
         case .idle: return activeSecondaryColor(0.6)
+        case .done: return .green
+        case .error: return .red
         }
     }
 

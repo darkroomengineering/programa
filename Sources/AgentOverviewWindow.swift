@@ -30,7 +30,11 @@ enum AgentOverviewFriendlyState: Equatable, Sendable {
     }
 
     static func from(presence: AgentPresence?) -> Self {
-        from(activityState: presence?.state)
+        switch presence?.programState {
+        case .done: return .done
+        case .error: return .failed
+        default: return from(activityState: presence?.state)
+        }
     }
 
     var label: String {

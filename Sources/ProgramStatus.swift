@@ -239,3 +239,26 @@ final class ProgramStatusStore {
         return nil
     }
 }
+
+extension ProgramStatusRecord {
+    /// The socket representation of a record. It never carries `msg`, `title` or child ids:
+    /// any process in a Programa terminal can reach the socket, and the protocol forbids
+    /// revealing record text back to programs.
+    var wirePayload: [String: Any] {
+        [
+            "state": state.rawValue,
+            "kind": kind?.rawValue ?? NSNull(),
+            "progress": progress ?? NSNull(),
+            "app": app ?? NSNull(),
+            "has_message": msg != nil,
+            "updated_at": updatedAt.timeIntervalSince1970,
+        ]
+    }
+}
+
+extension Workspace {
+    /// `program_status` for `surface.list` and `system.tree`: the root record, or null.
+    func programStatusWire(panelId: UUID) -> Any {
+        (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload ?? NSNull()
+    }
+}

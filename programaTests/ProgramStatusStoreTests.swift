@@ -190,4 +190,38 @@ final class ProgramStatusStoreTests: XCTestCase {
         XCTAssertEqual(store.record(id: "a/b")?.app, "make")
         XCTAssertEqual(store.record(id: "a")?.app, "npm")
     }
+
+    // MARK: Wire, wait condition, sidebar
+
+    func testWirePayloadCarriesNoTextOrChildIds() throws {
+        let store = ProgramStatusStore()
+        store.apply(try XCTUnwrap(parse(.done, "app=cargo:title=\(b64("Secret title")):msg=\(b64("Secret msg"))")))
+        store.apply(try report(.working, id: "child"))
+        let payload = try XCTUnwrap(store.root?.wirePayload)
+        XCTAssertEqual(Set(payload.keys), ["state", "kind", "progress", "app", "has_message", "updated_at"])
+        XCTAssertEqual(payload["state"] as? String, "done")
+        XCTAssertEqual(payload["has_message"] as? Bool, true)
+        XCTAssertEqual(payload["app"] as? String, "cargo")
+    }
+
+    func testProgramStateWaitConditions() {
+        XCTAssertTrue(ProgramStateWaitCondition.cleared.isSatisfied(by: nil))
+        XCTAssertFalse(ProgramStateWaitCondition.cleared.isSatisfied(by: .done))
+        XCTAssertTrue(ProgramStateWaitCondition.done.isSatisfied(by: .done))
+        XCTAssertFalse(ProgramStateWaitCondition.idle.isSatisfied(by: nil))
+        XCTAssertFalse(ProgramStateWaitCondition.anyChange.isSatisfied(by: .working))
+        XCTAssertTrue(ProgramStateWaitCondition.anyChange.firesOn(transitionTo: nil))
+    }
+
+    func testSidebarIndicatorShowsDoneAndErrorButBlockedSiblingWins() {
+        let workspace = Workspace(title: "Test")
+        let a = UUID()
+        let b = UUID()
+        workspace.updatePanelAgentState(panelId: a, state: .idle, source: .program, programState: .done)
+        XCTAssertEqual(SidebarAgentIndicator.make(for: workspace)?.tint, .done)
+        workspace.updatePanelAgentState(panelId: b, state: .idle, source: .program, programState: .error)
+        XCTAssertEqual(SidebarAgentIndicator.make(for: workspace)?.tint, .error)
+        workspace.updatePanelAgentState(panelId: a, state: .blocked, source: .hooks)
+        XCTAssertEqual(SidebarAgentIndicator.make(for: workspace)?.tint, .blocked)
+    }
 }

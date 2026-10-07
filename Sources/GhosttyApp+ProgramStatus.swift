@@ -99,6 +99,7 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
               let workspace = manager.tabs.first(where: { $0.id == key.tabId }),
               let panel = workspace.panels[key.surfaceId] as? TerminalPanel else { return }
 
+        let rootBefore = panel.programStatus.root
         var projectRoot = false
         for event in events {
             switch event {
@@ -126,6 +127,7 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             }
         }
         guard projectRoot else { return }
+        let rootAfter = panel.programStatus.root
 
         // Only a change to the root record projects. Re-projecting on every event would let a
         // resting `done` record overwrite a hook agent that legitimately took over the surface.
@@ -139,6 +141,60 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             )
         } else {
             manager.clearSurfaceAgentState(tabId: key.tabId, surfaceId: key.surfaceId, source: .program)
+        }
+
+        guard rootBefore?.state != rootAfter?.state else { return }
+        ProgramStateWaitRegistry.shared.notify(surfaceId: key.surfaceId, newState: rootAfter?.state)
+        if let rootAfter {
+            postNotificationIfNeeded(for: rootAfter, manager: manager, workspace: workspace, surfaceId: key.surfaceId)
+        }
+    }
+
+    /// Notifies when the root record enters blocked, done or error on a surface the user is not
+    /// looking at. The hook-managed path already posts for the same moment, so it is skipped.
+    /// Title is Programa's tab title; the program's own text only reaches subtitle and body.
+    @MainActor
+    private func postNotificationIfNeeded(
+        for root: ProgramStatusRecord,
+        manager: TabManager,
+        workspace: Workspace,
+        surfaceId: UUID
+    ) {
+        guard root.state == .blocked || root.state == .done || root.state == .error else { return }
+        guard !workspace.hasHookManagedAgent else { return }
+        let isFocused = manager.selectedTabId == workspace.id
+            && manager.focusedSurfaceId(for: workspace.id) == surfaceId
+        guard !(isFocused && AppFocusState.isAppFocused()) else { return }
+
+        let body = root.msg ?? Self.defaultNotificationBody(for: root)
+        TerminalNotificationStore.shared.addNotification(
+            tabId: workspace.id,
+            surfaceId: surfaceId,
+            title: manager.titleForTab(workspace.id) ?? "Terminal",
+            subtitle: root.title ?? "",
+            body: body,
+            cooldownKey: "program-status-\(surfaceId.uuidString)",
+            cooldownInterval: 10
+        )
+    }
+
+    private static func defaultNotificationBody(for root: ProgramStatusRecord) -> String {
+        switch root.state {
+        case .blocked:
+            switch root.kind {
+            case .permission:
+                return String(localized: "notification.programStatus.blockedPermission", defaultValue: "Needs your permission")
+            case .question:
+                return String(localized: "notification.programStatus.blockedQuestion", defaultValue: "Has a question for you")
+            case .auth:
+                return String(localized: "notification.programStatus.blockedAuth", defaultValue: "Needs you to sign in")
+            case nil:
+                return String(localized: "notification.programStatus.blocked", defaultValue: "Needs your input")
+            }
+        case .error:
+            return String(localized: "notification.programStatus.error", defaultValue: "Failed")
+        default:
+            return String(localized: "notification.programStatus.done", defaultValue: "Finished")
         }
     }
 }
