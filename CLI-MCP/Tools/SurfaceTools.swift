@@ -10,8 +10,7 @@ enum SurfaceTools {
     private static let tabActionValues = [
         "rename", "clear_name",
         "close_left", "close_right", "close_others",
-        "new_terminal_right", "new_browser_right",
-        "reload", "duplicate",
+        "new_terminal_right",
         "pin", "unpin", "mark_read", "mark_unread",
     ]
 
@@ -22,7 +21,6 @@ enum SurfaceTools {
                 "surface_id": ProgramaToolSchema.string("Surface (tab) UUID or short ref to act on. Also accepts tab_id as an alias. Defaults to the workspace's focused tab if omitted."),
                 "tab_id": ProgramaToolSchema.string("Alias for surface_id."),
                 "title": ProgramaToolSchema.string("New title, required when action is rename."),
-                "url": ProgramaToolSchema.string("URL to open, used when action is new_browser_right (optional; opens a blank browser tab if omitted)."),
                 "window_id": ProgramaToolSchema.windowIdProperty,
                 "workspace_id": ProgramaToolSchema.workspaceIdProperty,
             ],
@@ -34,7 +32,7 @@ enum SurfaceTools {
         ProgramaTool(
             name: "surface_list",
             socketMethod: V2MethodNames.surfaceList,
-            description: "Lists every surface (terminal or browser pane content) in a workspace, in display order, with type/title/pane/agent-state.",
+            description: "Lists every surface (pane content) in a workspace, in display order, with type/title/pane/agent-state.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "window_id": ProgramaToolSchema.windowIdProperty,
                 "workspace_id": ProgramaToolSchema.workspaceIdProperty,
@@ -69,10 +67,9 @@ enum SurfaceTools {
         ProgramaTool(
             name: "surface_create",
             socketMethod: V2MethodNames.surfaceCreate,
-            description: "Creates a new surface (terminal or browser tab) in an existing pane.",
+            description: "Creates a new surface (terminal tab) in an existing pane.",
             inputSchema: ProgramaToolSchema.object(properties: [
-                "type": ProgramaToolSchema.stringEnum("Surface type to create. Defaults to terminal.", ["terminal", "browser"]),
-                "url": ProgramaToolSchema.string("Initial URL, used only when type is browser."),
+                "type": ProgramaToolSchema.stringEnum("Surface type to create. Defaults to terminal.", ["terminal"]),
                 "pane_id": ProgramaToolSchema.string("Pane UUID or short ref to create the surface in. Defaults to the workspace's focused pane."),
                 "window_id": ProgramaToolSchema.windowIdProperty,
                 "workspace_id": ProgramaToolSchema.workspaceIdProperty,
@@ -124,13 +121,13 @@ enum SurfaceTools {
         ProgramaTool(
             name: "surface_action",
             socketMethod: V2MethodNames.surfaceAction,
-            description: "Runs one of a fixed set of tab-level actions on a surface (rename, close siblings, duplicate, reload, pin, mark read/unread, open a new tab beside it).",
+            description: "Runs one of a fixed set of tab-level actions on a surface (rename, close siblings, pin, mark read/unread, open a new tab beside it).",
             inputSchema: tabActionSchema()
         ),
         ProgramaTool(
             name: "tab_action",
             socketMethod: V2MethodNames.tabAction,
-            description: "Alias of surface_action -- runs the same fixed set of tab-level actions on a surface (rename, close siblings, duplicate, reload, pin, mark read/unread, open a new tab beside it).",
+            description: "Alias of surface_action -- runs the same fixed set of tab-level actions on a surface (rename, close siblings, pin, mark read/unread, open a new tab beside it).",
             inputSchema: tabActionSchema()
         ),
         ProgramaTool(

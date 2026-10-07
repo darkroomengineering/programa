@@ -23,7 +23,7 @@ for defaults and [Windows testing](windows-testing.md) for validation status.
 | ⌘ ⇧ R | Rename workspace |
 | ⌘ B | Toggle sidebar |
 | ⌘ O | Open folder |
-| ⌘ R | Rename tab (browser panes use ⌘ R for reload) |
+| ⌘ R | Rename tab |
 | ⌘ ⇧ E | Edit workspace description |
 
 ## Surfaces
@@ -37,7 +37,6 @@ for defaults and [Windows testing](windows-testing.md) for validation status.
 | ⌃ ⇧ Tab | Previous surface |
 | ⌃ 1–8 | Jump to surface 1–8 |
 | ⌃ 9 | Jump to last surface |
-| ⌘ ⇧ T | Reopen closed panel |
 | ⌘ W | Close tab (action `closeTab`) |
 | ⌥ ⌘ T | Close other tabs in the pane |
 
@@ -48,27 +47,8 @@ for defaults and [Windows testing](windows-testing.md) for validation status.
 | ⌘ D | Split right |
 | ⌘ ⇧ D | Split down |
 | ⌘ ⇧ ↩ | Toggle pane zoom |
-| ⌥ ⌘ D | Split browser right |
-| ⌥ ⇧ ⌘ D | Split browser down |
 | ⌥ ⌘ ← → ↑ ↓ | Focus pane directionally |
 | ⌘ ⇧ H | Flash focused panel |
-
-## Browser
-
-Browser developer-tool shortcuts follow Safari defaults.
-
-| Shortcut | Action |
-|----------|--------|
-| ⌘ ⇧ L | Open browser in split |
-| ⌘ L | Focus address bar |
-| ⌘ [ | Back |
-| ⌘ ] | Forward |
-| ⌘ R | Reload page (in a browser pane; elsewhere ⌘ R renames the tab) |
-| ⌘ = | Zoom in |
-| ⌘ - | Zoom out |
-| ⌘ 0 | Actual size |
-| ⌥ ⌘ I | Toggle Developer Tools (Safari default) |
-| ⌥ ⌘ C | Show JavaScript Console (Safari default) |
 
 ## Notifications
 
@@ -195,7 +175,6 @@ apply to digits 1 to 9.
 | `closeTab` | Close Tab | ⌘W | "cmd+w" |
 | `closeOtherTabsInPane` | Close Other Tabs in Pane | ⌥⌘T | "cmd+opt+t" |
 | `closeWorkspace` | Close Workspace | ⇧⌘W | "cmd+shift+w" |
-| `reopenClosedBrowserPanel` | Reopen Closed Panel | ⇧⌘T | "cmd+shift+t" |
 | `newSurface` | New Surface | ⌘T | "cmd+t" |
 | `toggleTerminalCopyMode` | Toggle Terminal Copy Mode | ⇧⌘M | "cmd+shift+m" |
 | `focusLeft` | Focus Pane Left | ⌥⌘← | "cmd+opt+left" |
@@ -205,22 +184,10 @@ apply to digits 1 to 9.
 | `splitRight` | Split Right | ⌘D | "cmd+d" |
 | `splitDown` | Split Down | ⇧⌘D | "cmd+shift+d" |
 | `toggleSplitZoom` | Toggle Pane Zoom | ⇧⌘↩ | "cmd+shift+return" |
-| `splitBrowserRight` | Split Browser Right | ⌥⌘D | "cmd+opt+d" |
-| `splitBrowserDown` | Split Browser Down | ⌥⇧⌘D | "cmd+shift+opt+d" |
-| `openBrowser` | Open Browser | ⇧⌘L | "cmd+shift+l" |
-| `focusBrowserAddressBar` | Focus Address Bar | ⌘L | "cmd+l" |
-| `browserBack` | Back | ⌘[ | "cmd+[" |
-| `browserForward` | Forward | ⌘] | "cmd+]" |
-| `browserReload` | Reload Page | ⌘R | "cmd+r" |
-| `browserZoomIn` | Zoom In | ⌘= | "cmd+=" |
-| `browserZoomOut` | Zoom Out | ⌘- | "cmd+-" |
-| `browserZoomReset` | Actual Size | ⌘0 | "cmd+0" |
 | `find` | Find… | ⌘F | "cmd+f" |
 | `findNext` | Find Next | ⌘G | "cmd+g" |
 | `findPrevious` | Find Previous | ⌥⌘G | "cmd+opt+g" |
 | `hideFind` | Hide Find Bar | ⇧⌘F | "cmd+shift+f" |
 | `useSelectionForFind` | Use Selection for Find | ⌘E | "cmd+e" |
-| `toggleBrowserDeveloperTools` | Toggle Browser Developer Tools | ⌥⌘I | "cmd+opt+i" |
-| `showBrowserJavaScriptConsole` | Show Browser JavaScript Console | ⌥⌘C | "cmd+opt+c" |
 | `openReview` | Open Review Panel | (unbound) | (none) |
 | `openAgentOverview` | Open Agent Overview | (unbound) | (none) |

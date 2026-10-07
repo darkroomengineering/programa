@@ -7,15 +7,7 @@ import Combine
 import ObjectiveC.runtime
 import Darwin
 
-#if DEBUG
-// Widened from `private` to `internal`: AppDelegate.setWindowFirstResponderGuardTesting(...)
-// / .clearWindowFirstResponderGuardTesting() (in AppDelegate.swift) write these directly. Refs #95.
-var programaFirstResponderGuardCurrentEventOverride: NSEvent?
-var programaFirstResponderGuardHitViewOverride: NSView?
-#endif
-private var programaFirstResponderGuardCurrentEventContext: NSEvent?
 private var programaFirstResponderGuardHitViewContext: NSView?
-private var programaFirstResponderGuardContextWindowNumber: Int?
 private var programaWindowFirstResponderBypassDepth = 0
 
 @discardableResult
@@ -138,20 +130,13 @@ extension NSWindow {
         }
         let contextSetupStart = event.type == .keyDown ? ProcessInfo.processInfo.systemUptime : 0
 #endif
-        let previousContextEvent = programaFirstResponderGuardCurrentEventContext
         let previousContextHitView = programaFirstResponderGuardHitViewContext
-        let previousContextWindowNumber = programaFirstResponderGuardContextWindowNumber
-        programaFirstResponderGuardCurrentEventContext = event
-        // PERF (#183): this context is a cache for `programaHitViewForCurrentEvent`, whose only
-        // reader is `programaPointerHitWebView` -- and that bails on `programaIsPointerDownEvent`
-        // before ever reading it. Filling it for a keyDown therefore ran a full recursive AppKit
-        // hit-test, on every keystroke, for a value nothing could observe. Compute it only for the
-        // events that can actually consume it. When it is nil, `programaHitViewForCurrentEvent`
-        // already falls through to computing the hit view on demand, so no reader loses anything.
+        // PERF (#183): the only reader of this context is the leftMouseDown titlebar drag below.
+        // A full recursive AppKit hit-test runs to fill it, so never compute it for keyboard
+        // events: doing so cost a hit-test on every keystroke for a value nothing reads.
         programaFirstResponderGuardHitViewContext = Self.programaIsPointerDownEvent(event)
             ? Self.programaHitViewForEventDispatch(in: self, event: event)
             : nil
-        programaFirstResponderGuardContextWindowNumber = self.windowNumber
 #if DEBUG
         if event.type == .keyDown {
             contextSetupMs = (ProcessInfo.processInfo.systemUptime - contextSetupStart) * 1000.0
@@ -171,9 +156,7 @@ extension NSWindow {
         let folderGuardStart = event.type == .keyDown ? ProcessInfo.processInfo.systemUptime : 0
 #endif
         defer {
-            programaFirstResponderGuardCurrentEventContext = previousContextEvent
             programaFirstResponderGuardHitViewContext = previousContextHitView
-            programaFirstResponderGuardContextWindowNumber = previousContextWindowNumber
         }
 
         // The card's dead top-edge sliver (the padding-ring WindowDragHandleView
@@ -361,18 +344,6 @@ extension NSWindow {
         return parts.joined(separator: "+")
     }
 
-    private static func programaCurrentEvent(for window: NSWindow) -> NSEvent? {
-#if DEBUG
-        if let override = programaFirstResponderGuardCurrentEventOverride {
-            return override
-        }
-#endif
-        if programaFirstResponderGuardContextWindowNumber == window.windowNumber {
-            return programaFirstResponderGuardCurrentEventContext
-        }
-        return NSApp.currentEvent
-    }
-
     private static func programaHitViewInThemeFrame(in window: NSWindow, event: NSEvent) -> NSView? {
         guard let contentView = window.contentView,
               let themeFrame = contentView.superview else {
@@ -463,19 +434,6 @@ extension NSWindow {
         if programaIsControlOrControlDescendant(hitView) { return false }
         if programaIsWithinTitlebarControlsAccessory(hitView, in: window) { return false }
         return true
-    }
-
-    private static func programaHitViewForCurrentEvent(in window: NSWindow, event: NSEvent) -> NSView? {
-#if DEBUG
-        if let override = programaFirstResponderGuardHitViewOverride {
-            return override
-        }
-#endif
-        if programaFirstResponderGuardContextWindowNumber == window.windowNumber,
-           let contextHitView = programaFirstResponderGuardHitViewContext {
-            return contextHitView
-        }
-        return programaTopHitViewForEvent(in: window, event: event)
     }
 
     private static func programaIsPointerDownEvent(_ event: NSEvent) -> Bool {

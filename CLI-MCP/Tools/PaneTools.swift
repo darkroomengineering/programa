@@ -32,8 +32,7 @@ enum PaneTools {
             inputSchema: ProgramaToolSchema.object(
                 properties: [
                     "direction": ProgramaToolSchema.stringEnum("Direction to split in.", ["left", "right", "up", "down"]),
-                    "type": ProgramaToolSchema.stringEnum("Surface type to create in the new pane. Defaults to terminal.", ["terminal", "browser"]),
-                    "url": ProgramaToolSchema.string("Initial URL, used only when type is browser."),
+                    "type": ProgramaToolSchema.stringEnum("Surface type to create in the new pane. Defaults to terminal.", ["terminal"]),
                     "window_id": ProgramaToolSchema.windowIdProperty,
                     "workspace_id": ProgramaToolSchema.workspaceIdProperty,
                 ],

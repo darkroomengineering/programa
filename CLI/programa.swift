@@ -1155,10 +1155,9 @@ struct ProgramaCLI {
 
                 Subcommands:
                   save <name> [--force]
-                      Capture the current workspace's pane/split layout, cwds, and browser URLs
+                      Capture the current workspace's pane/split layout and cwds
                       into ~/.config/programa/layouts/<name>.json. Does NOT capture what
-                      command is currently running in each pane -- only geometry, cwd, and
-                      browser URL are saved.
+                      command is currently running in each pane -- only geometry and cwd are saved.
 
                   apply <name> [--workspace <id|ref>] [--cwd <dir>]
                       Apply a saved layout. If --workspace is omitted, creates a new (unfocused)
@@ -1472,32 +1471,29 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["new-pane"],
-                helpLines: ["new-pane [--type <terminal|browser>] [--direction <left|right|up|down>] [--workspace <id|ref>] [--url <url>]"],
+                helpLines: ["new-pane [--type <terminal>] [--direction <left|right|up|down>] [--workspace <id|ref>]"],
                 detailedUsage: """
                 Usage: programa new-pane [flags]
 
                 Create a new pane in the workspace.
 
                 Flags:
-                  --type <terminal|browser>           Pane type (default: terminal)
+                  --type <terminal>           Pane type (default: terminal)
                   --direction <left|right|up|down>    Split direction (default: right)
                   --workspace <id|ref>                Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-                  --url <url>                         URL for browser panes
 
                 Example:
                   programa new-pane
-                  programa new-pane --type browser --direction down --url https://example.com
+                  programa new-pane --direction down
                 """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     let type = self.optionValue(ctx.commandArgs, name: "--type")
                     let direction = self.optionValue(ctx.commandArgs, name: "--direction") ?? "right"
-                    let url = self.optionValue(ctx.commandArgs, name: "--url")
                     var params: [String: Any] = ["direction": direction]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
                     if let type { params["type"] = type }
-                    if let url { params["url"] = url }
                     let payload = try ctx.client.sendV2(method: V2MethodNames.paneCreate, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["surface", "pane", "workspace"]))
                 }
@@ -1505,34 +1501,31 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["new-surface"],
-                helpLines: ["new-surface [--type <terminal|browser>] [--pane <id|ref>] [--workspace <id|ref>] [--url <url>]"],
+                helpLines: ["new-surface [--type <terminal>] [--pane <id|ref>] [--workspace <id|ref>]"],
                 detailedUsage: """
                 Usage: programa new-surface [flags]
 
                 Create a new surface (tab) in a pane.
 
                 Flags:
-                  --type <terminal|browser>   Surface type (default: terminal)
+                  --type <terminal>   Surface type (default: terminal)
                   --pane <id|ref>             Target pane
                   --workspace <id|ref>        Target workspace (default: $PROGRAMA_WORKSPACE_ID)
-                  --url <url>                 URL for browser surfaces
 
                 Example:
                   programa new-surface
-                  programa new-surface --type browser --pane pane:1 --url https://example.com
+                  programa new-surface --pane pane:1
                 """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
                     let type = self.optionValue(ctx.commandArgs, name: "--type")
                     let paneRaw = self.optionValue(ctx.commandArgs, name: "--pane")
-                    let url = self.optionValue(ctx.commandArgs, name: "--url")
                     var params: [String: Any] = [:]
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
                     let paneId = try self.normalizePaneHandle(paneRaw, client: ctx.client, workspaceHandle: wsId)
                     if let paneId { params["pane_id"] = paneId }
                     if let type { params["type"] = type }
-                    if let url { params["url"] = url }
                     let payload = try ctx.client.sendV2(method: V2MethodNames.surfaceCreate, params: params)
                     self.printV2Payload(payload, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: self.v2OKSummary(payload, idFormat: ctx.idFormat, kinds: ["surface", "pane", "workspace"]))
                 }
@@ -1634,7 +1627,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["tab-action"],
-                helpLines: ["tab-action --action <name> [--tab <id|ref>] [--surface <id|ref>] [--workspace <id|ref>] [--title <text>] [--url <url>]"],
+                helpLines: ["tab-action --action <name> [--tab <id|ref>] [--surface <id|ref>] [--workspace <id|ref>] [--title <text>]"],
                 detailedUsage: """
                 Usage: programa tab-action --action <name> [flags]
 
@@ -1643,7 +1636,7 @@ struct ProgramaCLI {
                 Actions:
                   rename | clear-name
                   close-left | close-right | close-others
-                  new-terminal-right | new-browser-right
+                  new-terminal-right
                   reload | duplicate
                   pin | unpin
                   mark-unread
@@ -1654,7 +1647,6 @@ struct ProgramaCLI {
                   --surface <id|ref>     Alias for --tab (backward compatibility)
                   --workspace <id|ref>   Workspace context (default: current/$PROGRAMA_WORKSPACE_ID)
                   --title <text>               Title for rename (or pass trailing title text)
-                  --url <url>                  Optional URL for new-browser-right
 
                 Example:
                   programa tab-action --tab tab:3 --action pin
@@ -3201,114 +3193,6 @@ struct ProgramaCLI {
             ),
 
             CommandDescriptor(names: [], helpLines: [""], execute: nil),
-
-            CommandDescriptor(
-                names: ["browser"],
-                helpLines: [
-                    "browser [--surface <id|ref> | <surface>] <subcommand> ...",
-                    "browser open [url]                   (create browser split in caller's workspace; if surface supplied, behaves like navigate)",
-                    "browser open-split [url]",
-                    "browser goto|navigate <url> [--snapshot-after]",
-                    "browser back|forward|reload [--snapshot-after]",
-                    "browser url|get-url",
-                    "browser snapshot [--interactive|-i] [--cursor] [--compact] [--max-depth <n>] [--selector <css>]",
-                    "browser eval <script>",
-                    "browser wait [--selector <css>] [--text <text>] [--url-contains <text>] [--load-state <interactive|complete>] [--function <js>] [--timeout-ms <ms>]",
-                    "browser click|dblclick|hover|focus|check|uncheck|scroll-into-view <selector> [--snapshot-after]",
-                    "browser type <selector> <text> [--snapshot-after]",
-                    "browser fill <selector> [text] [--snapshot-after]   (empty text clears input)",
-                    "browser press|keydown|keyup <key> [--snapshot-after]",
-                    "browser select <selector> <value> [--snapshot-after]",
-                    "browser scroll [--selector <css>] [--dx <n>] [--dy <n>] [--snapshot-after]",
-                    "browser screenshot [--out <path>] [--json]",
-                    "browser get <url|title|text|html|value|attr|count|box|styles> [...]",
-                    "browser is <visible|enabled|checked> <selector>",
-                    "browser find <role|text|label|placeholder|alt|title|testid|first|last|nth> ...",
-                    "browser frame <selector|main>",
-                    "browser dialog <accept|dismiss> [text]",
-                    "browser download [wait] [--path <path>] [--timeout-ms <ms>]",
-                    "browser cookies <get|set|clear> [...]",
-                    "browser storage <local|session> <get|set|clear> [...]",
-                    "browser tab <new|list|switch|close|<index>> [...]",
-                    "browser console <list|clear>",
-                    "browser errors <list|clear>",
-                    "browser highlight <selector>",
-                    "browser state <save|load> <path> [--all-domains]",
-                    "browser addinitscript <script>",
-                    "browser addscript <script>",
-                    "browser addstyle <css>",
-                    "browser identify [--surface <id|ref>]",
-                ],
-                execute: { ctx in
-                    try self.runBrowserCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-
-            // Legacy aliases shimmed onto the v2 browser command surface.
-            // Undocumented in the old help text; kept that way here too.
-            CommandDescriptor(
-                names: ["open-browser"],
-                helpLines: [],
-                execute: { ctx in
-                    try self.runBrowserCommand(commandArgs: ["open"] + ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-            CommandDescriptor(
-                names: ["navigate"],
-                helpLines: [],
-                execute: { ctx in
-                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
-                    try self.runBrowserCommand(commandArgs: ["navigate"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-            CommandDescriptor(
-                names: ["browser-back"],
-                helpLines: [],
-                execute: { ctx in
-                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
-                    try self.runBrowserCommand(commandArgs: ["back"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-            CommandDescriptor(
-                names: ["browser-forward"],
-                helpLines: [],
-                execute: { ctx in
-                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
-                    try self.runBrowserCommand(commandArgs: ["forward"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-            CommandDescriptor(
-                names: ["browser-reload"],
-                helpLines: [],
-                execute: { ctx in
-                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
-                    try self.runBrowserCommand(commandArgs: ["reload"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-            CommandDescriptor(
-                names: ["get-url"],
-                helpLines: [],
-                execute: { ctx in
-                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
-                    try self.runBrowserCommand(commandArgs: ["get-url"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-            CommandDescriptor(
-                names: ["focus-webview"],
-                helpLines: [],
-                execute: { ctx in
-                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
-                    try self.runBrowserCommand(commandArgs: ["focus-webview"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
-            CommandDescriptor(
-                names: ["is-webview-focused"],
-                helpLines: [],
-                execute: { ctx in
-                    let bridged = self.replaceToken(ctx.commandArgs, from: "--panel", to: "--surface")
-                    try self.runBrowserCommand(commandArgs: ["is-webview-focused"] + bridged, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
-                }
-            ),
 
             CommandDescriptor(
                 names: ["help"],
@@ -4914,9 +4798,7 @@ struct ProgramaCLI {
         let (surfaceOpt, rem2) = parseOption(rem1, name: "--surface")
         let (actionOpt, rem3) = parseOption(rem2, name: "--action")
         let (titleOpt, rem4) = parseOption(rem3, name: "--title")
-        let (urlOpt, rem5) = parseOption(rem4, name: "--url")
-
-        var positional = rem5
+        var positional = rem4
         let actionRaw: String
         if let actionOpt {
             actionRaw = actionOpt
@@ -4966,9 +4848,6 @@ struct ProgramaCLI {
         }
         if let title, !title.isEmpty {
             params["title"] = title
-        }
-        if let urlOpt, !urlOpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            params["url"] = urlOpt.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         let payload = try client.sendV2(method: V2MethodNames.tabAction, params: params)
@@ -5096,7 +4975,6 @@ struct ProgramaCLI {
         if let text = tmuxCompatSubcommandUsage(command) { return text }
         if let text = treeSubcommandUsage(command) { return text }
         if let text = hooksSubcommandUsage(command) { return text }
-        if let text = browserSubcommandUsage(command) { return text }
         if let text = markdownSubcommandUsage(command) { return text }
         if let text = reviewSubcommandUsage(command) { return text }
         if let text = recapSubcommandUsage(command) { return text }
@@ -5364,18 +5242,18 @@ struct ProgramaCLI {
             }
 
         case "new-pane":
-            let parsed = try parse(values: ["type", "direction", "workspace", "url"])
-            if let type = parsed.options["type"], !["terminal", "browser"].contains(type.lowercased()) {
-                throw CLIError(message: "new-pane: --type must be terminal or browser")
+            let parsed = try parse(values: ["type", "direction", "workspace"])
+            if let type = parsed.options["type"], type.lowercased() != "terminal" {
+                throw CLIError(message: "new-pane: --type must be terminal")
             }
             if let direction = parsed.options["direction"], !["left", "right", "up", "down"].contains(direction.lowercased()) {
                 throw CLIError(message: "new-pane: invalid direction")
             }
 
         case "new-surface":
-            let parsed = try parse(values: ["type", "pane", "workspace", "url"])
-            if let type = parsed.options["type"], !["terminal", "browser"].contains(type.lowercased()) {
-                throw CLIError(message: "new-surface: --type must be terminal or browser")
+            let parsed = try parse(values: ["type", "pane", "workspace"])
+            if let type = parsed.options["type"], type.lowercased() != "terminal" {
+                throw CLIError(message: "new-surface: --type must be terminal")
             }
 
         case "move-surface":
@@ -5414,7 +5292,7 @@ struct ProgramaCLI {
             }
 
         case "tab-action":
-            let parsed = try parse(values: ["action", "tab", "surface", "workspace", "title", "url"], maxPositionals: nil)
+            let parsed = try parse(values: ["action", "tab", "surface", "workspace", "title"], maxPositionals: nil)
             guard parsed.options["action"] != nil || !parsed.positional.isEmpty else {
                 throw CLIError(message: "tab-action requires --action <name>")
             }
@@ -5669,10 +5547,7 @@ struct ProgramaCLI {
 
         // These commands own nested or foreign grammars. Their handlers do
         // full parsing; flags must remain byte-for-byte passthrough here.
-        case "__tmux-compat",
-             "browser", "open-browser",
-             "navigate", "browser-back", "browser-forward", "browser-reload", "get-url",
-             "focus-webview", "is-webview-focused":
+        case "__tmux-compat":
             return
 
         // Local commands are registered for unified lookup/help, but do not
@@ -6127,7 +6002,6 @@ struct ProgramaCLI {
           \(bold)\u{2318}\u{21E7}D\(reset)\(subdued)                 Split down\(reset)
           \(bold)\u{2318}\u{21E7}P\(reset)\(subdued)                 Command palette\(reset)
           \(bold)\u{2318}\u{21E7}R\(reset)\(subdued)                 Rename workspace\(reset)
-          \(bold)\u{2318}\u{21E7}L\(reset)\(subdued)                 New browser\(reset)
           \(bold)\u{2318}\u{21E7}U\(reset)\(subdued)                 Jump to latest unread\(reset)
         """
 

@@ -100,9 +100,6 @@ disruptive before you read its description:
 | `focus_pane_last` | `pane.last` |
 | `focus_review_open` | `review.open` |
 | `focus_worktree_open` | `worktree.open` |
-| `focus_browser_webview` | `browser.focus_webview` |
-| `focus_browser_element` | `browser.focus` |
-| `focus_browser_tab_switch` | `browser.tab.switch` |
 
 Every other tool leaves your focus alone. This is enforced by the app, not by the server:
 the socket layer only permits focus changes for the methods in `focusIntentV2Methods`
@@ -131,18 +128,6 @@ different window.
 
 Resources are read on demand. There are no push notifications when a pane's output
 changes, so poll if you need to follow along.
-
-## Browser tools
-
-Typical flow: `browser_open_split` (or `browser_tab_new`) to open a tab, `browser_navigate`
-to load a URL, then `browser_snapshot`, `browser_get_text`, or `browser_screenshot` to read
-the page, `browser_click`/`browser_fill`/`browser_press` and friends to interact with it, and
-`browser_tab_close` when you are done.
-
-Reads and interactions never move your focus -- opening or interacting with a browser tab
-never raises the Programa window or steals keyboard focus, the same guarantee the rest of
-the tool table gives you. Only the three `focus_browser_*` tools (see "The `focus_` prefix"
-above) can do that.
 
 ## What is not exposed
 

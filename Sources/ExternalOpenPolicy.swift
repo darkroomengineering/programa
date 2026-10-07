@@ -166,11 +166,17 @@ enum ExternalOpenPolicy {
             // Prefer a sheet on the key window (no app activation). Without any window the alert
             // runs modally instead of refusing: a refusal would return false, and callers such as
             // the terminal link handler treat false as "let another opener handle it".
-            if let sheetWindow = window ?? NSApp.keyWindow ?? NSApp.mainWindow {
-                alert.beginSheetModal(for: sheetWindow, completionHandler: handleResponse)
-            } else {
-                // Deferred so a caller holding a lock (ghostty's link callback) returns before the modal loop starts.
-                DispatchQueue.main.async { handleResponse(alert.runModal()) }
+            //
+            // Both branches are deferred. ghostty's link callback calls in with its renderer lock
+            // held, and beginSheetModal is not safe there even though it returns immediately: it
+            // makes the sheet key synchronously, the terminal view resigns first responder, and
+            // ghostty_surface_set_focus waits forever on that same lock.
+            DispatchQueue.main.async {
+                if let sheetWindow = window ?? NSApp.keyWindow ?? NSApp.mainWindow {
+                    alert.beginSheetModal(for: sheetWindow, completionHandler: handleResponse)
+                } else {
+                    handleResponse(alert.runModal())
+                }
             }
             return true
         }

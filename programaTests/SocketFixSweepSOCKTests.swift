@@ -12,30 +12,8 @@ import Darwin
 final class SocketFixSweepPureRuleTests: XCTestCase {
     // SOCK-09: a JS timeout in the isolated world already burned the caller's budget, and the
     // script may have side effects, so it must never be replayed in the page world.
-    func testPageWorldRetryNeverReplaysATimeout() {
-        XCTAssertFalse(TerminalController.v2BrowserShouldRetryInPageWorld(
-            isolatedError: TerminalController.v2JavaScriptTimeoutMessage, allowsRetry: true))
-        XCTAssertFalse(TerminalController.v2BrowserShouldRetryInPageWorld(isolatedError: "x", allowsRetry: false))
-        XCTAssertTrue(TerminalController.v2BrowserShouldRetryInPageWorld(isolatedError: "x", allowsRetry: true))
-    }
 
     // SOCK-12: the cookie domain filter is a host-suffix match, not a substring match.
-    func testCookieDomainFilterMatchesHostSuffixOnly() {
-        let cases: [(cookie: String, filter: String, expected: Bool)] = [
-            (".a.example.com", "example.com", true),
-            ("example.com", "example.com", true),
-            ("notexample.com", "example.com", false),
-            ("example.com", "com", true),
-            ("", "x", false),
-        ]
-        for c in cases {
-            XCTAssertEqual(
-                TerminalController.v2BrowserCookieDomainMatches(c.cookie, filter: c.filter),
-                c.expected,
-                "cookie domain \(c.cookie.debugDescription) vs filter \(c.filter.debugDescription)"
-            )
-        }
-    }
 
     // SOCK-14: CRLF is a single Return key press; a lone LF is still its own key.
     func testSocketKeyChunksTreatCRLFAsOneReturn() {

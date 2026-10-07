@@ -240,7 +240,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
                     "direction": "vertical",
                     "children": [
                       { "pane": { "surfaces": [{ "type": "terminal" }] } },
-                      { "pane": { "surfaces": [{ "type": "browser", "url": "http://localhost:3000" }] } }
+                      { "pane": { "surfaces": [{ "type": "terminal", "name": "inner-shell" }] } }
                     ]
                   }
                 ]
@@ -255,9 +255,9 @@ final class ProgramaConfigDecodingTests: XCTestCase {
             XCTAssertEqual(outer.direction, .horizontal)
             if case .split(let inner) = outer.children[1] {
                 XCTAssertEqual(inner.direction, .vertical)
-                if case .pane(let browserPane) = inner.children[1] {
-                    XCTAssertEqual(browserPane.surfaces[0].type, .browser)
-                    XCTAssertEqual(browserPane.surfaces[0].url, "http://localhost:3000")
+                if case .pane(let terminalPane) = inner.children[1] {
+                    XCTAssertEqual(terminalPane.surfaces[0].type, .terminal)
+                    XCTAssertEqual(terminalPane.surfaces[0].name, "inner-shell")
                 } else {
                     XCTFail("Expected pane node for inner second child")
                 }
@@ -303,40 +303,11 @@ final class ProgramaConfigDecodingTests: XCTestCase {
             XCTAssertEqual(s.cwd, "./backend")
             XCTAssertEqual(s.env, ["NODE_ENV": "development", "PORT": "3000"])
             XCTAssertEqual(s.focus, true)
-            XCTAssertNil(s.url)
         } else {
             XCTFail("Expected pane node")
         }
     }
 
-    func testDecodeBrowserSurface() throws {
-        let json = """
-        {
-          "commands": [{
-            "name": "test",
-            "workspace": {
-              "layout": {
-                "pane": {
-                  "surfaces": [{
-                    "type": "browser",
-                    "name": "Preview",
-                    "url": "http://localhost:8080"
-                  }]
-                }
-              }
-            }
-          }]
-        }
-        """
-        let config = try decode(json)
-        if case .pane(let pane) = config.commands[0].workspace!.layout! {
-            let s = pane.surfaces[0]
-            XCTAssertEqual(s.type, .browser)
-            XCTAssertEqual(s.url, "http://localhost:8080")
-        } else {
-            XCTFail("Expected pane node")
-        }
-    }
 
     func testDecodeMultipleSurfacesInPane() throws {
         let json = """
@@ -349,7 +320,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
                   "surfaces": [
                     { "type": "terminal", "name": "shell1" },
                     { "type": "terminal", "name": "shell2" },
-                    { "type": "browser", "name": "web" }
+                    { "type": "terminal", "name": "shell3" }
                   ]
                 }
               }
@@ -360,7 +331,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
         let config = try decode(json)
         if case .pane(let pane) = config.commands[0].workspace!.layout! {
             XCTAssertEqual(pane.surfaces.count, 3)
-            XCTAssertEqual(pane.surfaces.map(\.name), ["shell1", "shell2", "web"])
+            XCTAssertEqual(pane.surfaces.map(\.name), ["shell1", "shell2", "shell3"])
         } else {
             XCTFail("Expected pane node")
         }
@@ -978,7 +949,7 @@ final class ProgramaLayoutEncodingTests: XCTestCase {
             split: 0.7,
             children: [
                 .pane(ProgramaPaneDefinition(surfaces: [ProgramaSurfaceDefinition(type: .terminal)])),
-                .pane(ProgramaPaneDefinition(surfaces: [ProgramaSurfaceDefinition(type: .browser, url: "http://localhost")]))
+                .pane(ProgramaPaneDefinition(surfaces: [ProgramaSurfaceDefinition(type: .terminal, name: "second")]))
             ]
         ))
         let data = try JSONEncoder().encode(original)

@@ -60,7 +60,6 @@ on:
           - window
           - sidebar
           - tabBar
-          - browserToolbar
           - overlays
         default: window
 
@@ -1386,20 +1385,6 @@ jobs:
           done
           echo "ERROR: Display resolution UI regression exhausted both attempts without a passing test run" >&2
           exit 1
-
-      - name: Run browser find focus UI regression
-        if: github.event_name != 'workflow_dispatch'
-        run: |
-          set -euo pipefail
-          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
-          xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
-            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
-            -disableAutomaticPackageResolution \
-            -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
-            -destination "platform=macOS" \
-            -maximum-test-execution-time-allowance 180 \
-            -only-testing:programaUITests/BrowserPaneNavigationKeybindUITests/testCmdFFocusesBrowserFindFieldAfterCmdDCmdLNavigation \
-            test-without-building
 
       # Close confirmations guard against losing running processes; they run
       # on every main push so a regression shows up one merge later at most.

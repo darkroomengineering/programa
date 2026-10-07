@@ -93,7 +93,6 @@ extension Workspace {
                     command: nil,
                     cwd: Self.relativizedCwd(absoluteCwd, baseCwd: baseCwd),
                     env: nil,
-                    url: nil,
                     focus: nil
                 )
             }

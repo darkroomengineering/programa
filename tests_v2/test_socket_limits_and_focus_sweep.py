@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Socket commands must not steal focus and must report the pane cap as a typed error (SOCK-30).
 
-  1. pane.list's focused pane is unchanged after surface.split, tab.action duplicate and
-     browser.open_split (socket commands never move focus unless they are focus commands).
+  1. pane.list's focused pane is unchanged after surface.split
+     (socket commands never move focus unless they are focus commands).
   4. A split past the cap returns limit_reached with data.max_panes == 4 (surface.split, pane.create).
-  5. browser.tab.close with an out-of-range index errors and the focused tab survives.
 """
 
 import os
@@ -56,25 +55,6 @@ def main() -> int:
             time.sleep(0.3)
             _must(_focused_pane(c) == focused, "surface.split moved the focused pane")
 
-            # 5. browser tab close with a bad index (done while a browser tab exists)
-            browser_id = c.open_browser("about:blank")
-            time.sleep(0.5)
-            _must(_focused_pane(c) == focused, "browser.open_split moved the focused pane")
-
-            # duplicate only applies to browser tabs
-            c._call("tab.action", {"action": "duplicate", "surface_id": browser_id})
-            time.sleep(0.3)
-            _must(_focused_pane(c) == focused, "tab.action duplicate moved the focused pane")
-            surfaces_before = [s[1] for s in c.list_surfaces()]
-            try:
-                c._call("browser.tab.close", {"index": 99})
-            except ProgramaClientError:
-                pass
-            else:
-                raise ProgramaClientError("browser.tab.close --index 99 unexpectedly succeeded")
-            _must([s[1] for s in c.list_surfaces()] == surfaces_before, "failed browser.tab.close removed a surface")
-            _must(browser_id in surfaces_before, "browser tab missing after failed close")
-
             # 4. pane cap, on a fresh workspace so the count is exact
             ws2 = c.new_workspace()
             c.select_workspace(ws2)
@@ -94,7 +74,7 @@ def main() -> int:
                 except Exception:
                     pass
 
-    print("PASS: focus preserved, pane cap typed, bad browser tab index rejected")
+    print("PASS: focus preserved, pane cap typed")
     return 0
 
 

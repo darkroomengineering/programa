@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: PROGRAMA_SOCKET_PATH=/tmp/programa-debug-<tag>.sock $0 <window|sidebar|tabBar|browserToolbar|overlays> [output-directory]" >&2
+  echo "usage: PROGRAMA_SOCKET_PATH=/tmp/programa-debug-<tag>.sock $0 <window|sidebar|tabBar|overlays> [output-directory]" >&2
 }
 
 surface="${1:-}"
@@ -10,7 +10,7 @@ output_dir="${2:-/tmp/programa-glass-memory}"
 socket_path="${PROGRAMA_SOCKET_PATH:-}"
 
 case "$surface" in
-  window|sidebar|tabBar|browserToolbar|overlays) ;;
+  window|sidebar|tabBar|overlays) ;;
   *) usage; exit 2 ;;
 esac
 
@@ -46,7 +46,7 @@ capture() {
   jq -r '"  total footprint: \(.["total footprint"]) B"' "$prefix.json"
 }
 
-for candidate in window sidebar tabBar browserToolbar overlays; do
+for candidate in window sidebar tabBar overlays; do
   set_surface "$candidate" false
 done
 sleep 2

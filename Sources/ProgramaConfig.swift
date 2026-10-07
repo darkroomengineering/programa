@@ -345,7 +345,6 @@ struct ProgramaSurfaceDefinition: Codable, Sendable, Equatable {
     var command: String?
     var cwd: String?
     var env: [String: String]?
-    var url: String?
     var focus: Bool?
 }
 

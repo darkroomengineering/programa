@@ -32,7 +32,6 @@ See [Windows support](#windows-preview) and the
 - **Diff review panel.** Split a review panel beside an agent's terminal, comment on the diff, and send the comments straight into the agent's input. It refreshes itself when the agent goes idle.
 - **Git worktrees as workspaces.** `programa worktree create <branch>` checks out a worktree and opens it as its own workspace, badged under its parent repo.
 - **Race agents against each other.** `programa race "<prompt>"` fans one prompt across N agents (Claude Code, OpenCode, or Codex), each in its own isolated worktree/workspace, so you can compare approaches and merge the one you like.
-- **In-app browser.** Split a scriptable browser next to your terminal; agents can snapshot the page, click, fill forms, and evaluate JS against your dev server.
 - **Native and fast.** Swift/AppKit with libghostty rendering, no Electron. Reads your existing `~/.config/ghostty/config` for themes, fonts, and colors.
 
 More: named layouts (`programa layout save/apply`), a markdown viewer panel, instant agent splits (⌘D / ⌘⇧D, ⌘⇧C for Claude Code), the command palette (⌘⇧P), and a CLI plus Unix-socket JSON-RPC API scriptable end to end.
@@ -56,7 +55,7 @@ app bundle and asks for an administrator password only if that folder is not
 writable. Without it, call `/Applications/Programa.app/Contents/Resources/bin/programa`
 directly.
 
-On macOS, relaunch restores layout, directories, scrollback, and browser state.
+On macOS, relaunch restores layout, directories, and scrollback.
 Terminal processes survive Programa quitting or crashing, and the app
 reattaches to them live on the next launch.
 
@@ -88,7 +87,6 @@ Programa keeps what tmux is good at and adds what agents need:
 | Which agent needs me | no | working, blocked, or idle per workspace; a ring on the pane, a lit tab, ⌘⇧U to the latest unread |
 | Git branch, PR, ports, working directory per session | no | in the sidebar, always |
 | Review an agent's diff and send comments back to it | no | built-in review panel |
-| Browser the agent can drive | no | split a scriptable browser next to the terminal |
 | Scriptable from outside | tmux commands | a CLI, a Unix-socket JSON-RPC API with a published contract, and an MCP server |
 | Rendering | your terminal | native Metal via libghostty on macOS, WinUI on Windows, no Electron |
 | Works over SSH to a remote box | yes | not today; a headless core is in progress so a remote machine can host sessions |
@@ -106,7 +104,7 @@ Programa keeps what tmux is good at and adds what agents need:
 
 Things cmux has that Programa removed on purpose, to stay lean: SSH remote workspaces and an iOS companion. Both are documented under `docs/removed/`, with the reasons and what a future version should do differently.
 
-Programa is a terminal, a browser, notifications, workspaces, and a CLI to control all of it: primitives you compose yourself rather than a prescribed workflow. What you build with them is yours.
+Programa is a terminal, notifications, workspaces, and a CLI to control all of it: primitives you compose yourself rather than a prescribed workflow. What you build with them is yours.
 
 ## Shortcuts
 
@@ -120,7 +118,7 @@ Choose separate light and dark Ghostty themes in `Settings → Appearance → Te
 
 Agents running inside programa (Claude Code, Codex, OpenCode) can drive the app itself, splitting panes, reading a sibling pane's output, spawning and coordinating a helper agent, all without stealing your focus. `programa claude/codex/opencode install-integration` installs [`SKILL.md`](SKILL.md) alongside the existing hooks; see [docs/agent-skill.md](docs/agent-skill.md) for the full walkthrough.
 
-The same control surface is also available over MCP, for agents that speak it natively. Point your client at `Programa.app/Contents/Resources/bin/programa-mcp`; see [docs/mcp-server.md](docs/mcp-server.md). The MCP server also exposes programa's embedded browser as `browser_*` tools, and `programa aside install-mcp` registers the [Aside](https://aside.com) browser with Claude Code and Codex for logged-in sites; see [docs/aside-browser.md](docs/aside-browser.md).
+The same control surface is also available over MCP, for agents that speak it natively. Point your client at `Programa.app/Contents/Resources/bin/programa-mcp`; see [docs/mcp-server.md](docs/mcp-server.md). `programa aside install-mcp` registers the [Aside](https://aside.com) browser with Claude Code and Codex for logged-in sites; see [docs/aside-browser.md](docs/aside-browser.md).
 
 ## Community
 

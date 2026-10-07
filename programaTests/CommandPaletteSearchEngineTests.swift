@@ -61,9 +61,9 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                 subtitle = "Notifications"
                 keywords = ["notifications", "inbox", "unread", "alerts"]
             default:
-                title = "Split Browser Right \(index)"
+                title = "Split Terminal Right \(index)"
                 subtitle = "Layout"
-                keywords = ["split", "browser", "right", "layout", "web"]
+                keywords = ["split", "terminal", "right", "layout", "shell"]
             }
 
             return FixtureEntry(
@@ -802,7 +802,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                                 ContentView.CommandPaletteSwitcherFingerprintSurface(
                                     id: surfaceID,
                                     displayName: "Terminal",
-                                    kindLabel: "Browser",
+                                    kindLabel: "Markdown",
                                     metadata: CommandPaletteSwitcherSearchMetadata(
                                         directories: ["/tmp/search-alpha"],
                                         branches: ["feature/a"],

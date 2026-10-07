@@ -933,7 +933,6 @@ final class WindowTransparencyDecisionTests: XCTestCase {
         XCTAssertEqual(fallbackDefaults[ProgramaGlassSettings.windowEnabledKey] as? Bool, false)
         XCTAssertEqual(nativeDefaults[ProgramaGlassSettings.tabBarEnabledKey] as? Bool, true)
         XCTAssertEqual(fallbackDefaults[ProgramaGlassSettings.tabBarEnabledKey] as? Bool, false)
-        XCTAssertEqual(nativeDefaults[ProgramaGlassSettings.browserToolbarEnabledKey] as? Bool, false)
         XCTAssertEqual(nativeDefaults[ProgramaGlassSettings.overlaysEnabledKey] as? Bool, true)
         XCTAssertEqual(fallbackDefaults[ProgramaGlassSettings.overlaysEnabledKey] as? Bool, false)
     }
@@ -1141,25 +1140,6 @@ final class GhosttyTerminalStartupEnvironmentTests: XCTestCase {
         XCTAssertEqual(merged["COLORTERM"], TerminalSurface.managedColorTerm)
         XCTAssertEqual(merged["TERM_PROGRAM"], TerminalSurface.managedTerminalProgram)
     }
-}
-
-@MainActor
-final class BrowserPanelPopupContextTests: XCTestCase {
-    func testFloatingPopupInheritsOpenerBrowserContext() throws {
-        let panel = BrowserPanel(workspaceId: UUID())
-        let popupWebView = try XCTUnwrap(
-            panel.createFloatingPopup(
-                configuration: WKWebViewConfiguration(),
-                windowFeatures: WKWindowFeatures()
-            )
-        )
-        defer { popupWebView.window?.close() }
-
-        XCTAssertTrue(
-            popupWebView.configuration.websiteDataStore === panel.webView.configuration.websiteDataStore
-        )
-    }
-
 }
 
 final class TitlebarDoubleClickPreferenceTests: XCTestCase {
@@ -1454,44 +1434,6 @@ final class GhosttyDefaultBackgroundNotificationDispatcherTests: XCTestCase {
     }
 }
 
-final class RecentlyClosedBrowserStackTests: XCTestCase {
-    func testPopReturnsEntriesInLIFOOrder() {
-        var stack = RecentlyClosedBrowserStack(capacity: 20)
-        stack.push(makeSnapshot(index: 1))
-        stack.push(makeSnapshot(index: 2))
-        stack.push(makeSnapshot(index: 3))
-
-        XCTAssertEqual(stack.pop()?.originalTabIndex, 3)
-        XCTAssertEqual(stack.pop()?.originalTabIndex, 2)
-        XCTAssertEqual(stack.pop()?.originalTabIndex, 1)
-        XCTAssertNil(stack.pop())
-    }
-
-    func testPushDropsOldestEntriesWhenCapacityExceeded() {
-        var stack = RecentlyClosedBrowserStack(capacity: 3)
-        for index in 1...5 {
-            stack.push(makeSnapshot(index: index))
-        }
-
-        XCTAssertEqual(stack.pop()?.originalTabIndex, 5)
-        XCTAssertEqual(stack.pop()?.originalTabIndex, 4)
-        XCTAssertEqual(stack.pop()?.originalTabIndex, 3)
-        XCTAssertNil(stack.pop())
-    }
-
-    private func makeSnapshot(index: Int) -> ClosedBrowserPanelRestoreSnapshot {
-        ClosedBrowserPanelRestoreSnapshot(
-            workspaceId: UUID(),
-            url: URL(string: "https://example.com/\(index)"),
-            profileID: nil,
-            originalPaneId: UUID(),
-            originalTabIndex: index,
-            fallbackSplitOrientation: .horizontal,
-            fallbackSplitInsertFirst: false,
-            fallbackAnchorPaneId: UUID()
-        )
-    }
-}
 
 final class SocketControlSettingsTests: XCTestCase {
     func testMigrateModeSupportsExpandedSocketModes() {

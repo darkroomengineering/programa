@@ -58,7 +58,6 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 |---|---|
 | `PROGRAMA_PANE_ID` | Default pane target for the tmux-compatible commands when they are given none. |
 | `PROGRAMA_COMMIT` | Commit hash the CLI and the About box show when the build has no embedded value. |
-| `PROGRAMA_RESPECT_EXTERNAL_OPEN_RULES` | Truthy value makes `programa browser open` apply the `browser.urlsToAlwaysOpenExternally` rules. The `open` wrapper sets it. |
 | `PROGRAMA_CLI_TTY_NAME`, `PROGRAMA_TTY_NAME` | Terminal device name that the agent hooks report for the surface. They fall back to `TTY` and `SSH_TTY`. |
 | `PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC` | CLI | Seconds the CLI waits for a socket response (default 15). The legacy name `CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC` is still read. |
 | `PROGRAMA_CLAUDE_HOOK_STATE_PATH` | Overrides where the Claude, Codex and OpenCode hooks keep their session state file. |
@@ -68,7 +67,6 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_ORIGINAL_NODE_OPTIONS`, `PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT` | The caller's `NODE_OPTIONS`, saved so the wrappers can restore it. |
 | `PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN`, `PROGRAMA_CLAUDE_TEAMS_TERM` | `programa` binary and `TERM` for the Claude teams wrapper. |
 | `PROGRAMA_OMO_PROGRAMA_BIN`, `PROGRAMA_OMO_TERM`, `PROGRAMA_OMX_PROGRAMA_BIN`, `PROGRAMA_OMX_TERM`, `PROGRAMA_OMC_PROGRAMA_BIN`, `PROGRAMA_OMC_TERM` | The same pair for the OpenCode, Codex and Claude agent wrappers. |
-| `PROGRAMA_OPEN_WRAPPER_SYSTEM_OPEN`, `PROGRAMA_OPEN_WRAPPER_DEFAULTS`, `PROGRAMA_OPEN_WRAPPER_PYTHON3` | Paths the `open` wrapper uses for `/usr/bin/open`, `defaults` and `python3`. They exist so tests can substitute fakes. |
 | `PROGRAMA_THEME_PICKER_CONFIG`, `_BUNDLE_ID`, `_TARGET`, `_COLOR_SCHEME`, `_INITIAL_LIGHT`, `_INITIAL_DARK` | Set by `programa themes` for Ghostty's `+list-themes` helper so it edits Programa's managed theme override. |
 
 ## Set for the notification command
@@ -93,7 +91,7 @@ When `notifications.command` runs, Programa sets `PROGRAMA_NOTIFICATION_TITLE`,
 | `PROGRAMA_DEV_MUTATE_WORKSPACE_SELECTION_DURING_CREATION` | `1` or `true` changes the selection while a workspace is created, to exercise a race in tests. |
 | `PROGRAMA_RUNTIME_DEBUG_BASE_URL`, `PROGRAMA_RUNTIME_DEBUG_TOKEN`, `PROGRAMA_RUNTIME_DEBUG_SESSION_ID` | All three together point the app at a runtime debug collector. Without all three the feature is off. |
 | `PROGRAMA_SESSION_ESCROW_HOLDER_SOCKET` | Socket path handed to the session escrow holder process, so it stays out of the process command line. |
-| `PROGRAMA_TEST_FORCE_WINDOW_GLASS`, `_TAB_BAR_GLASS`, `_SIDEBAR_GLASS`, `_OVERLAY_GLASS`, `_BROWSER_TOOLBAR_GLASS` | Force a glass surface on or off for `scripts/run-glass-perf-gate.sh`. |
+| `PROGRAMA_TEST_FORCE_WINDOW_GLASS`, `_TAB_BAR_GLASS`, `_SIDEBAR_GLASS`, `_OVERLAY_GLASS` | Force a glass surface on or off for `scripts/run-glass-perf-gate.sh`. |
 | `PROGRAMA_UI_TEST_*` | Launch switches that the XCUITest suites in `programaUITests/` pass to the app. The app reads them only under test; `grep PROGRAMA_UI_TEST_ Sources` lists the names. |
 
 ## `programad`

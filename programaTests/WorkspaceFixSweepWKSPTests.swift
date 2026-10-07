@@ -179,18 +179,6 @@ final class WorkspaceFixSweepWKSPTests: XCTestCase {
         return workspace
     }
 
-    func testBrowserSplitAtPaneCapIsVetoedWithoutCreatingAPanel() throws {
-        let workspace = try makeFourPaneWorkspace()
-        defer { workspace.teardownAllPanels() }
-        XCTAssertFalse(workspace.canAddSplitPane)
-        let panelCount = workspace.panels.count
-        let source = try XCTUnwrap(workspace.focusedPanelId)
-
-        XCTAssertNil(workspace.newBrowserSplit(from: source, orientation: .vertical))
-
-        XCTAssertEqual(workspace.panels.count, panelCount)
-        XCTAssertEqual(workspace.bonsplitController.allPaneIds.count, SplitPolicy.maxPanesPerWorkspace)
-    }
 
     // MARK: 19 background tab creation leaves selection and focus alone
 
@@ -218,19 +206,4 @@ final class WorkspaceFixSweepWKSPTests: XCTestCase {
         XCTAssertTrue(workspace.bonsplitController.tabs(inPane: fixture.backgroundPane).contains { $0.id == newTab })
     }
 
-    func testNewBrowserSurfaceAtEndWithoutSelectKeepsSelectionAndFocus() throws {
-        let fixture = try twoPaneFixture()
-        defer { fixture.workspace.teardownAllPanels() }
-        let workspace = fixture.workspace
-
-        let panel = try XCTUnwrap(workspace.newBrowserSurface(
-            inPane: fixture.backgroundPane, insertAtEnd: true, selectInPane: false
-        ))
-
-        XCTAssertEqual(workspace.bonsplitController.selectedTab(inPane: fixture.backgroundPane)?.id, fixture.selectedTab)
-        XCTAssertEqual(workspace.bonsplitController.focusedPaneId, fixture.focusedPane)
-        let tabs = workspace.bonsplitController.tabs(inPane: fixture.backgroundPane)
-        let newTab = try XCTUnwrap(workspace.surfaceIdFromPanelId(panel.id))
-        XCTAssertEqual(tabs.last?.id, newTab)
-    }
 }

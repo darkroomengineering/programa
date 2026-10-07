@@ -3,7 +3,7 @@ import XCTest
 @MainActor
 final class LayoutAndSelectorBoundaryTests: XCTestCase {
     private let layout = ProgramaLayoutNode.pane(ProgramaPaneDefinition(surfaces: [
-        ProgramaSurfaceDefinition(type: .terminal, name: "Applied", command: nil, cwd: nil, env: nil, url: nil, focus: nil)
+        ProgramaSurfaceDefinition(type: .terminal, name: "Applied", command: nil, cwd: nil, env: nil, focus: nil)
     ]))
 
     private func withFixture(_ body: (TabManager, UUID, ProgramaLayoutStore) throws -> Void) throws {

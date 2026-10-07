@@ -52,7 +52,7 @@ def ensure_focused_terminal(client: ProgramaClient) -> None:
     """
     Make sure the currently selected workspace has a focused terminal surface.
 
-    Developer sessions (and some prior tests) may leave the browser focused,
+    Developer sessions (and some prior tests) may leave a non-terminal panel focused,
     causing send/send_key to fail with "No focused terminal".
     """
     # Start from a clean workspace so indices are predictable.

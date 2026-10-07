@@ -926,47 +926,7 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(object["height"]), 704.5, accuracy: 0.001)
     }
 
-    func testSessionBrowserPanelSnapshotHistoryRoundTrip() throws {
-        let profileID = try XCTUnwrap(UUID(uuidString: "8F03A658-5A84-428B-AD03-5A6D04692F64"))
-        let source = SessionBrowserPanelSnapshot(
-            urlString: "https://example.com/current",
-            profileID: profileID,
-            shouldRenderWebView: true,
-            pageZoom: 1.2,
-            developerToolsVisible: true,
-            backHistoryURLStrings: [
-                "https://example.com/a",
-                "https://example.com/b"
-            ],
-            forwardHistoryURLStrings: [
-                "https://example.com/d"
-            ]
-        )
 
-        let data = try JSONEncoder().encode(source)
-        let decoded = try JSONDecoder().decode(SessionBrowserPanelSnapshot.self, from: data)
-        XCTAssertEqual(decoded.urlString, source.urlString)
-        XCTAssertEqual(decoded.profileID, source.profileID)
-        XCTAssertEqual(decoded.backHistoryURLStrings, source.backHistoryURLStrings)
-        XCTAssertEqual(decoded.forwardHistoryURLStrings, source.forwardHistoryURLStrings)
-    }
-
-    func testSessionBrowserPanelSnapshotHistoryDecodesWhenKeysAreMissing() throws {
-        let json = """
-        {
-          "urlString": "https://example.com/current",
-          "shouldRenderWebView": true,
-          "pageZoom": 1.0,
-          "developerToolsVisible": false
-        }
-        """.data(using: .utf8)!
-
-        let decoded = try JSONDecoder().decode(SessionBrowserPanelSnapshot.self, from: json)
-        XCTAssertEqual(decoded.urlString, "https://example.com/current")
-        XCTAssertNil(decoded.profileID)
-        XCTAssertNil(decoded.backHistoryURLStrings)
-        XCTAssertNil(decoded.forwardHistoryURLStrings)
-    }
 
     func testFreshSpawnScrollbackSeedPreparesText() {
         let prepared = SessionFreshSpawnScrollbackSeed.preparedText(for: "line one\nline two\n")
@@ -2099,7 +2059,7 @@ final class SessionPersistenceTests: XCTestCase {
             id: id, type: .terminal, title: nil, customTitle: nil, directory: nil,
             isPinned: false, isManuallyUnread: false, gitBranch: nil, listeningPorts: [], ttyName: nil,
             terminal: SessionTerminalPanelSnapshot(workingDirectory: nil, scrollback: nil),
-            browser: nil, markdown: nil, review: nil
+            markdown: nil, review: nil
         )]
         return snapshot
     }
@@ -2187,7 +2147,7 @@ final class SessionPersistenceTests: XCTestCase {
         let panel = SessionPanelSnapshot(id: UUID(), type: .terminal, title: "Terminal", customTitle: nil,
             directory: "/tmp", isPinned: false, isManuallyUnread: false, gitBranch: nil, listeningPorts: [],
             ttyName: nil, terminal: SessionTerminalPanelSnapshot(workingDirectory: "/tmp", scrollback: "PRIVATE-TERMINAL-CONTENT"),
-            browser: nil, markdown: nil, review: nil)
+            markdown: nil, review: nil)
         snapshot.windows[0].tabManager.workspaces[0].panels = [panel]
         snapshot.windows[0].tabManager.workspaces[0].focusedPanelId = panel.id
         snapshot.windows[0].tabManager.workspaces[0].layout = .pane(SessionPaneLayoutSnapshot(panelIds: [panel.id], selectedPanelId: panel.id))

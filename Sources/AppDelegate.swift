@@ -114,27 +114,27 @@ private final class MainWindowToolbarDelegate: NSObject, NSToolbarDelegate {
     }
 }
 
-func isCommandPaletteFocusStealingTerminalOrBrowserResponder(_ responder: NSResponder) -> Bool {
+func isCommandPaletteFocusStealingTerminalResponder(_ responder: NSResponder) -> Bool {
     if responder is GhosttyNSView {
         return true
     }
 
     if let textView = responder as? NSTextView, !textView.isFieldEditor {
         if let delegateView = textView.delegate as? NSView,
-           isCommandPaletteFocusStealingTerminalOrBrowserView(delegateView) {
+           isCommandPaletteFocusStealingTerminalView(delegateView) {
             return true
         }
-        return isCommandPaletteFocusStealingTerminalOrBrowserView(textView)
+        return isCommandPaletteFocusStealingTerminalView(textView)
     }
 
     if let view = responder as? NSView {
-        return isCommandPaletteFocusStealingTerminalOrBrowserView(view)
+        return isCommandPaletteFocusStealingTerminalView(view)
     }
 
     return false
 }
 
-func isCommandPaletteFocusStealingTerminalOrBrowserView(_ view: NSView) -> Bool {
+func isCommandPaletteFocusStealingTerminalView(_ view: NSView) -> Bool {
     if view is GhosttyNSView || view is GhosttySurfaceScrollView {
         return true
     }
@@ -3287,7 +3287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     private func isFocusStealingResponderWhileCommandPaletteVisible(_ responder: NSResponder) -> Bool {
-        isCommandPaletteFocusStealingTerminalOrBrowserResponder(responder)
+        isCommandPaletteFocusStealingTerminalResponder(responder)
     }
 
     private func isInsideCommandPaletteOverlay(_ view: NSView) -> Bool {
@@ -5124,30 +5124,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         pasteboard.setString(payload, forType: .string)
     }
 
-
-
-
-    static func resolveTerminalPanelForTextSend(in tab: Workspace, preferredPanelId: UUID? = nil) -> TerminalPanel? {
-        if let preferredPanelId {
-            return tab.terminalPanel(for: preferredPanelId)
-        }
-        return tab.focusedTerminalPanel
-    }
-
     /// Sends `text` to a terminal in `tab` once its surface exists. `afterSend` runs right after
     /// the text is written. When the surface is still not ready after 3 seconds the text is
     /// dropped and the user is told through an app notification.
     func sendTextWhenReady(
         _ text: String,
         to tab: Workspace,
-        preferredPanelId: UUID? = nil,
         beforeSend: (() -> Void)? = nil,
         afterSend: ((TerminalPanel) -> Void)? = nil
     ) {
-        if let terminalPanel = Self.resolveTerminalPanelForTextSend(
-            in: tab,
-            preferredPanelId: preferredPanelId
-        ),
+        if let terminalPanel = tab.focusedTerminalPanel,
            terminalPanel.surface.surface != nil {
             beforeSend?()
             terminalPanel.sendText(text)
@@ -5167,10 +5153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         func finishIfReady() {
-            let terminalPanel = Self.resolveTerminalPanelForTextSend(
-                in: tab,
-                preferredPanelId: preferredPanelId
-            )
+            let terminalPanel = tab.focusedTerminalPanel
             guard !resolved,
                   let terminalPanel,
                   terminalPanel.surface.surface != nil else { return }
@@ -5192,12 +5175,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             MainActor.assumeIsolated {
                 guard let workspaceId = note.userInfo?["workspaceId"] as? UUID,
                       workspaceId == tab.id else { return }
-                let surfaceId = note.userInfo?["surfaceId"] as? UUID
-                if let preferredPanelId,
-                   let surfaceId,
-                   surfaceId != preferredPanelId {
-                    return
-                }
                 finishIfReady()
             }
         }
@@ -5371,18 +5348,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         _ = didInstallWindowFirstResponderSwizzle
         _ = didInstallWindowSendEventSwizzle
     }
-
-#if DEBUG
-    static func setWindowFirstResponderGuardTesting(currentEvent: NSEvent?, hitView: NSView?) {
-        programaFirstResponderGuardCurrentEventOverride = currentEvent
-        programaFirstResponderGuardHitViewOverride = hitView
-    }
-
-    static func clearWindowFirstResponderGuardTesting() {
-        programaFirstResponderGuardCurrentEventOverride = nil
-        programaFirstResponderGuardHitViewOverride = nil
-    }
-#endif
 
     private func installWindowResponderSwizzles() {
 #if DEBUG

@@ -390,33 +390,6 @@ def main() -> int:
         check([frame.get("method") for frame in recorder.frames] == ["snapshot.list"],
               f"snapshot JSON listing dispatched unexpected operations: {recorder.frames!r}")
 
-    for operation in ("type", "fill"):
-        for suffix, text, snapshot_after in [
-            (["--selector", "#name", "--text", "hello world"], "hello world", False),
-            (["#name", "--", "--snapshot-after"], "--snapshot-after", False),
-            (["--selector", "#name", "--text", "--json"], "--json", False),
-            (["--selector", "#name", "--text", "--id-format"], "--id-format", False),
-            (["#name", "--", "--json", "--id-format", "--surface", WINDOW_ID],
-             f"--json --id-format --surface {WINDOW_ID}", False),
-            (["--selector", "#name", "--text", "--surface", "--snapshot-after"], "--surface", True),
-        ]:
-            args = ["browser", SURFACE_ID, operation, *suffix]
-            with tempfile.TemporaryDirectory(prefix="pcli-browser-text-", dir="/tmp") as directory:
-                with SocketRecorder(directory) as recorder:
-                    process = run_cli(recorder.path, args)
-                requests = [frame for frame in recorder.frames if frame.get("method") == f"browser.{operation}"]
-                check(len(requests) == 1, f"{args!r} failed to dispatch: {merged_output(process)}")
-                check(not any(frame.get("method") == "browser.snapshot" for frame in recorder.frames),
-                      f"literal input triggered a snapshot operation: {recorder.frames!r}")
-                if requests:
-                    params = requests[0].get("params", {})
-                    check(params.get("selector") == "#name" and params.get("text") == text,
-                          f"browser input changed before transmission: {params!r}")
-                    check(params.get("surface_id") == SURFACE_ID,
-                          f"browser text retargeted the operation: {params!r}")
-                    check(params.get("snapshot_after", False) == snapshot_after,
-                          f"browser action flag was confused with literal text: {params!r}")
-
     if failures:
         print(f"FAIL: {len(failures)} CLI argument grammar assertion(s) failed")
         for failure in failures:

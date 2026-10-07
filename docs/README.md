@@ -17,7 +17,7 @@
 - [mcp-server.md](mcp-server.md): the MCP server and its tools.
 - [agent-skill.md](agent-skill.md): the installable agent skill.
 - [agent-detection-manifests.md](agent-detection-manifests.md): the manifest format for screen-based agent detection.
-- [aside-browser.md](aside-browser.md): Programa's browser panel next to the Aside browser.
+- [aside-browser.md](aside-browser.md): Using the Aside browser from agents in Programa panes.
 
 ## Building, testing and releasing
 

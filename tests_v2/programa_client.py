@@ -554,25 +554,21 @@ class ProgramaClient:
             raise ProgramaClientError(f"Invalid surface: {surface!r}")
         self._call("surface.drag_to_split", {"surface_id": sid, "direction": direction})
 
-    def new_pane(self, direction: str = "right", panel_type: str = "terminal", url: str = None) -> str:
+    def new_pane(self, direction: str = "right", panel_type: str = "terminal") -> str:
         params: Dict[str, Any] = {"direction": direction, "type": panel_type}
-        if url:
-            params["url"] = url
         res = self._call("pane.create", params) or {}
         sid = res.get("surface_id")
         if not sid:
             raise ProgramaClientError(f"pane.create returned no surface_id: {res}")
         return str(sid)
 
-    def new_surface(self, pane: Union[str, int, None] = None, panel_type: str = "terminal", url: str = None) -> str:
+    def new_surface(self, pane: Union[str, int, None] = None, panel_type: str = "terminal") -> str:
         params: Dict[str, Any] = {"type": panel_type}
         if pane is not None:
             pid = self._resolve_pane_id(pane)
             if not pid:
                 raise ProgramaClientError(f"Invalid pane: {pane!r}")
             params["pane_id"] = pid
-        if url:
-            params["url"] = url
         res = self._call("surface.create", params) or {}
         sid = res.get("surface_id")
         if not sid:
@@ -866,60 +862,6 @@ class ProgramaClient:
             sid = self._resolve_surface_id(surface, workspace_id=wsid)
             params["surface_id"] = sid
         self._call("debug.notification.focus", params)
-
-    # ---------------------------------------------------------------------
-    # Browser
-    # ---------------------------------------------------------------------
-
-    def open_browser(self, url: str = None) -> str:
-        params: Dict[str, Any] = {}
-        if url:
-            params["url"] = url
-        res = self._call("browser.open_split", params) or {}
-        sid = res.get("surface_id")
-        if not sid:
-            raise ProgramaClientError(f"browser.open_split returned no surface_id: {res}")
-        return str(sid)
-
-    def navigate(self, panel_id: str, url: str) -> None:
-        sid = self._resolve_surface_id(panel_id)
-        if not sid:
-            raise ProgramaClientError(f"Invalid surface: {panel_id!r}")
-        self._call("browser.navigate", {"surface_id": sid, "url": url})
-
-    def browser_back(self, panel_id: str) -> None:
-        sid = self._resolve_surface_id(panel_id)
-        self._call("browser.back", {"surface_id": sid})
-
-    def browser_forward(self, panel_id: str) -> None:
-        sid = self._resolve_surface_id(panel_id)
-        self._call("browser.forward", {"surface_id": sid})
-
-    def browser_reload(self, panel_id: str) -> None:
-        sid = self._resolve_surface_id(panel_id)
-        self._call("browser.reload", {"surface_id": sid})
-
-    def get_url(self, panel_id: str) -> str:
-        sid = self._resolve_surface_id(panel_id)
-        res = self._call("browser.url.get", {"surface_id": sid}) or {}
-        return str(res.get("url") or "")
-
-    def focus_webview(self, panel_id: str) -> None:
-        sid = self._resolve_surface_id(panel_id)
-        self._call("browser.focus_webview", {"surface_id": sid})
-
-    def is_webview_focused(self, panel_id: str) -> bool:
-        sid = self._resolve_surface_id(panel_id)
-        res = self._call("browser.is_webview_focused", {"surface_id": sid}) or {}
-        return bool(res.get("focused"))
-
-    def wait_for_webview_focus(self, panel_id: str, timeout_s: float = 2.0) -> None:
-        start = time.time()
-        while time.time() - start < timeout_s:
-            if self.is_webview_focused(panel_id):
-                return
-            time.sleep(0.05)
-        raise ProgramaClientError(f"Timed out waiting for webview focus: {panel_id}")
 
     # ---------------------------------------------------------------------
     # Debug / test-only

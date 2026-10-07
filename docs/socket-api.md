@@ -328,16 +328,6 @@ Notifications:
 - reload_config -> `app.reload_config`
 - (no v1 equivalent) -> `app.browsers` (new in v2: lists known browsers with install/running status and the system default; see "Browser Availability" below)
 
-Browser:
-- open_browser -> `browser.open_split`
-- navigate -> `browser.navigate`
-- browser_back -> `browser.back`
-- browser_forward -> `browser.forward`
-- browser_reload -> `browser.reload`
-- get_url -> `browser.url.get`
-- focus_webview -> `browser.focus_webview`
-- is_webview_focused -> `browser.is_webview_focused`
-
 Debug / Test-only:
 - set_shortcut -> `debug.shortcut.set`
 - simulate_shortcut -> `debug.shortcut.simulate`
@@ -407,8 +397,6 @@ Response (`ok: true`):
 - If the surface closes while the wait is in flight, the wait resolves at once with
   `ok: true` and `"outcome": "closed"`, so callers never wait out the full timeout to learn the
   surface is gone.
-- `exit` on a browser surface returns `invalid_params` immediately: a browser has no child
-  process to exit.
 
 ### `agent_state` condition values and the no-state rule
 
@@ -721,7 +709,7 @@ Errors: `not_a_git_repo`.
 ### `layout.save`
 
 `{name, force?}` -> `{"name", "path"}`. Captures the current workspace via
-`Workspace.captureCustomLayout()` (pane/split tree, cwds, browser URLs — not
+`Workspace.captureCustomLayout()` (pane/split tree, cwds — not
 command/env/focus, which have no live "what's running" signal). Errors: `already_exists`
 (unless `force`), `invalid_name`, `no_active_workspace`.
 
@@ -870,13 +858,6 @@ A process counts as left running when it still listens about 5 seconds after its
 ### `ports.stop`
 
 Params: `pid` (integer, required). Sends SIGTERM, then SIGKILL if the process is still alive 3 seconds later, and returns `{"pid": <pid>, "signaled": true}` as soon as SIGTERM is sent. Only pids that `ports.list` reports can be stopped: any other pid, a pid that exited, and a pid that now belongs to a different program return `not_found`; `pid <= 1` and Programa's own pid return `invalid_params`; a failed `kill` returns `internal_error`.
-
-## Browser cookies (`browser.cookies.get`, `browser.cookies.clear`)
-
-Both methods act on the current page's site by default. `all_domains: true` widens them to every
-site. `domain` matches the exact host or a subdomain of it: `example.com` matches
-`a.example.com` but not `notexample.com`. `path` filters by cookie path. `browser.cookies.clear`
-with no filter clears the current site's cookies only.
 
 ## Browser Availability (`app.browsers`, `PROGRAMA_DEFAULT_BROWSER*`)
 

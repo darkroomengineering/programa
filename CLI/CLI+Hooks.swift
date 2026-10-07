@@ -2928,27 +2928,15 @@ extension ProgramaCLI {
 
     ## Browser work
 
-    Two browsers, two jobs. Do not reach for a Chrome extension for either.
-
-    - **Local previews, smoke tests, screenshots you read back, DOM checks, console errors:** use programa's embedded browser. It opens beside your pane, keeps its own profile, and never moves the user's focus:
-
-      ```bash
-      programa browser open-split http://localhost:3000            # prints the new surface id
-      programa browser --surface surface:7 snapshot --interactive  # interactive elements only
-      programa browser --surface surface:7 click "button.submit" --snapshot-after
-      programa browser --surface surface:7 screenshot --out /tmp/after.png
-      programa browser --surface surface:7 tab close
-      ```
-
-      `programa browser --help` lists the rest (wait, fill, eval, cookies, console, errors). Network routing, viewport control, and raw input injection are not available on WKWebView, so there are no commands for them. Over MCP the same calls are the `browser_*` tools of `programa-mcp`.
-
-    - **Logged-in sites, private dashboards, CI logs, anything that needs the user's real browser profile:** use Aside through its MCP server if it is registered (tools from the `aside` server, or `aside-devtools` for raw Chrome DevTools control), or delegate a whole task from the shell:
+    Use an external browser for previews, smoke tests, screenshots, DOM checks, and logged-in sites. Use Aside through its MCP server if registered (tools from the `aside` server, or `aside-devtools` for raw Chrome DevTools control), or delegate a task from the shell:
 
       ```bash
       aside "Open the staging dashboard and tell me whether the last deploy is green"
       ```
 
       `programa aside status` says whether Aside is installed and registered; `programa aside install-mcp` registers it with Claude Code and Codex. Do not run the installer yourself unless the user asks, it edits their agent config.
+
+    Open links in the user's default browser when interactive automation is unnecessary.
 
     ## Reference
 

@@ -1359,130 +1359,8 @@ final class TabManagerSurfaceCreationTests: XCTestCase {
         )
     }
 
-    func testOpenBrowserInsertAtEndPlacesNewBrowserAtPaneEnd() {
-        let manager = TabManager()
-        guard let workspace = manager.selectedWorkspace,
-              let paneId = workspace.bonsplitController.focusedPaneId else {
-            XCTFail("Expected focused workspace and pane")
-            return
-        }
 
-        // Add one extra surface so we verify append-to-end rather than first insert behavior.
-        _ = workspace.newTerminalSurface(inPane: paneId, focus: false)
 
-        guard let browserPanelId = manager.openBrowser(insertAtEnd: true) else {
-            XCTFail("Expected browser panel to be created")
-            return
-        }
-
-        let tabs = workspace.bonsplitController.tabs(inPane: paneId)
-        guard let lastSurfaceId = tabs.last?.id else {
-            XCTFail("Expected at least one surface in pane")
-            return
-        }
-
-        XCTAssertEqual(
-            workspace.panelIdFromSurfaceId(lastSurfaceId),
-            browserPanelId,
-            "Expected Cmd+Shift+B/Cmd+L open path to append browser surface at end"
-        )
-        XCTAssertEqual(workspace.focusedPanelId, browserPanelId, "Expected opened browser surface to be focused")
-    }
-
-    func testOpenBrowserInWorkspaceSplitRightSelectsTargetWorkspaceAndCreatesSplit() {
-        let manager = TabManager()
-        guard let initialWorkspace = manager.selectedWorkspace else {
-            XCTFail("Expected initial selected workspace")
-            return
-        }
-        guard let url = URL(string: "https://example.com/pull/123") else {
-            XCTFail("Expected test URL to be valid")
-            return
-        }
-
-        let targetWorkspace = manager.addWorkspace(select: false)
-        manager.selectWorkspace(initialWorkspace)
-        let initialPaneCount = targetWorkspace.bonsplitController.allPaneIds.count
-        let initialPanelCount = targetWorkspace.panels.count
-
-        guard let browserPanelId = manager.openBrowser(
-            inWorkspace: targetWorkspace.id,
-            url: url,
-            preferSplitRight: true,
-            insertAtEnd: true
-        ) else {
-            XCTFail("Expected browser panel to be created in target workspace")
-            return
-        }
-
-        XCTAssertEqual(manager.selectedTabId, targetWorkspace.id, "Expected target workspace to become selected")
-        XCTAssertEqual(
-            targetWorkspace.bonsplitController.allPaneIds.count,
-            initialPaneCount + 1,
-            "Expected split-right browser open to create a new pane"
-        )
-        XCTAssertEqual(
-            targetWorkspace.panels.count,
-            initialPanelCount + 1,
-            "Expected browser panel count to increase by one"
-        )
-        XCTAssertEqual(
-            targetWorkspace.focusedPanelId,
-            browserPanelId,
-            "Expected created browser panel to be focused in target workspace"
-        )
-        XCTAssertTrue(
-            targetWorkspace.panels[browserPanelId] is BrowserPanel,
-            "Expected created panel to be a browser panel"
-        )
-    }
-
-    func testOpenBrowserInWorkspaceSplitRightReusesTopRightPaneWhenAlreadySplit() {
-        let manager = TabManager()
-        guard let workspace = manager.selectedWorkspace,
-              let leftPanelId = workspace.focusedPanelId,
-              let topRightPanel = workspace.newTerminalSplit(from: leftPanelId, orientation: .horizontal),
-              workspace.newTerminalSplit(from: topRightPanel.id, orientation: .vertical) != nil,
-              let topRightPaneId = workspace.paneId(forPanelId: topRightPanel.id),
-              let url = URL(string: "https://example.com/pull/456") else {
-            XCTFail("Expected split setup to succeed")
-            return
-        }
-
-        let initialPaneCount = workspace.bonsplitController.allPaneIds.count
-
-        guard let browserPanelId = manager.openBrowser(
-            inWorkspace: workspace.id,
-            url: url,
-            preferSplitRight: true,
-            insertAtEnd: true
-        ) else {
-            XCTFail("Expected browser panel to be created")
-            return
-        }
-
-        XCTAssertEqual(
-            workspace.bonsplitController.allPaneIds.count,
-            initialPaneCount,
-            "Expected split-right browser open to reuse existing panes"
-        )
-        XCTAssertEqual(
-            workspace.paneId(forPanelId: browserPanelId),
-            topRightPaneId,
-            "Expected browser to open in the top-right pane when multiple splits already exist"
-        )
-
-        let targetPaneTabs = workspace.bonsplitController.tabs(inPane: topRightPaneId)
-        guard let lastSurfaceId = targetPaneTabs.last?.id else {
-            XCTFail("Expected top-right pane to contain tabs")
-            return
-        }
-        XCTAssertEqual(
-            workspace.panelIdFromSurfaceId(lastSurfaceId),
-            browserPanelId,
-            "Expected browser surface to be appended at end in the reused top-right pane"
-        )
-    }
 }
 
 
@@ -1781,27 +1659,27 @@ final class TabManagerWorkspaceConfigInheritanceSourceTests: XCTestCase {
         XCTAssertEqual(sourcePanel?.id, terminalPanelId)
     }
 
-    func testFallsBackToTerminalWhenBrowserIsFocused() {
+    func testFallsBackToTerminalWhenMarkdownIsFocused() {
         let manager = TabManager()
         guard let workspace = manager.selectedWorkspace,
               let terminalPanelId = workspace.focusedPanelId,
               let paneId = workspace.paneId(forPanelId: terminalPanelId),
-              let browserPanel = workspace.newBrowserSurface(inPane: paneId, focus: true) else {
+              let markdownPanel = workspace.newMarkdownSurface(inPane: paneId, filePath: "/tmp/inheritance.md", focus: true) else {
             XCTFail("Expected selected workspace setup to succeed")
             return
         }
 
-        XCTAssertEqual(workspace.focusedPanelId, browserPanel.id)
+        XCTAssertEqual(workspace.focusedPanelId, markdownPanel.id)
 
         let sourcePanel = manager.terminalPanelForWorkspaceConfigInheritanceSource()
         XCTAssertEqual(
             sourcePanel?.id,
             terminalPanelId,
-            "Expected new workspace inheritance source to resolve to the pane terminal when browser is focused"
+            "Expected new workspace inheritance source to resolve to the pane terminal when markdown is focused"
         )
     }
 
-    func testPrefersLastFocusedTerminalAcrossPanesWhenBrowserIsFocused() {
+    func testPrefersLastFocusedTerminalAcrossPanesWhenMarkdownIsFocused() {
         let manager = TabManager()
         guard let workspace = manager.selectedWorkspace,
               let leftTerminalPanelId = workspace.focusedPanelId,
@@ -1812,7 +1690,7 @@ final class TabManagerWorkspaceConfigInheritanceSourceTests: XCTestCase {
         }
 
         workspace.focusPanel(leftTerminalPanelId)
-        _ = workspace.newBrowserSurface(inPane: rightPaneId, focus: true)
+        _ = workspace.newMarkdownSurface(inPane: rightPaneId, filePath: "/tmp/inheritance.md", focus: true)
         XCTAssertNotEqual(workspace.focusedPanelId, leftTerminalPanelId)
 
         let sourcePanel = manager.terminalPanelForWorkspaceConfigInheritanceSource()
@@ -1970,233 +1848,5 @@ final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
         )
         XCTAssertEqual(workspace.tmuxWorkspaceFlashPanelId, panelId)
         XCTAssertEqual(workspace.tmuxWorkspaceFlashReason, .notificationDismiss)
-    }
-}
-
-@MainActor
-final class TabManagerReopenClosedBrowserFocusTests: XCTestCase {
-    func testReopenFromDifferentWorkspaceFocusesReopenedBrowser() {
-        let manager = TabManager()
-        guard let workspace1 = manager.selectedWorkspace,
-              let closedBrowserId = manager.openBrowser(url: URL(string: "https://example.com/ws-switch")) else {
-            XCTFail("Expected initial workspace and browser panel")
-            return
-        }
-
-        drainMainQueue()
-        XCTAssertTrue(workspace1.closePanel(closedBrowserId, force: true))
-        drainMainQueue()
-
-        let workspace2 = manager.addWorkspace()
-        XCTAssertEqual(manager.selectedTabId, workspace2.id)
-
-        XCTAssertTrue(manager.reopenMostRecentlyClosedBrowserPanel())
-        drainMainQueue()
-
-        XCTAssertEqual(manager.selectedTabId, workspace1.id)
-        XCTAssertTrue(isFocusedPanelBrowser(in: workspace1))
-    }
-
-    func testReopenFallsBackToCurrentWorkspaceAndFocusesBrowserWhenOriginalWorkspaceDeleted() {
-        let manager = TabManager()
-        guard let originalWorkspace = manager.selectedWorkspace,
-              let closedBrowserId = manager.openBrowser(url: URL(string: "https://example.com/deleted-ws")) else {
-            XCTFail("Expected initial workspace and browser panel")
-            return
-        }
-
-        drainMainQueue()
-        XCTAssertTrue(originalWorkspace.closePanel(closedBrowserId, force: true))
-        drainMainQueue()
-
-        let currentWorkspace = manager.addWorkspace()
-        manager.closeWorkspace(originalWorkspace)
-
-        XCTAssertEqual(manager.selectedTabId, currentWorkspace.id)
-        XCTAssertFalse(manager.tabs.contains(where: { $0.id == originalWorkspace.id }))
-
-        XCTAssertTrue(manager.reopenMostRecentlyClosedBrowserPanel())
-        drainMainQueue()
-
-        XCTAssertEqual(manager.selectedTabId, currentWorkspace.id)
-        XCTAssertTrue(isFocusedPanelBrowser(in: currentWorkspace))
-    }
-
-    func testReopenCollapsedSplitFromDifferentWorkspaceFocusesBrowser() {
-        let manager = TabManager()
-        guard let workspace1 = manager.selectedWorkspace,
-              let sourcePanelId = workspace1.focusedPanelId,
-              let splitBrowserId = manager.newBrowserSplit(
-                tabId: workspace1.id,
-                fromPanelId: sourcePanelId,
-                orientation: .horizontal,
-                insertFirst: false,
-                url: URL(string: "https://example.com/collapsed-split")
-              ) else {
-            XCTFail("Expected to create browser split")
-            return
-        }
-
-        drainMainQueue()
-        XCTAssertTrue(workspace1.closePanel(splitBrowserId, force: true))
-        drainMainQueue()
-
-        let workspace2 = manager.addWorkspace()
-        XCTAssertEqual(manager.selectedTabId, workspace2.id)
-
-        XCTAssertTrue(manager.reopenMostRecentlyClosedBrowserPanel())
-        drainMainQueue()
-
-        XCTAssertEqual(manager.selectedTabId, workspace1.id)
-        XCTAssertTrue(isFocusedPanelBrowser(in: workspace1))
-    }
-
-    func testReopenFromDifferentWorkspaceWinsAgainstSingleDeferredStaleFocus() {
-        let manager = TabManager()
-        guard let workspace1 = manager.selectedWorkspace,
-              let preReopenPanelId = workspace1.focusedPanelId,
-              let closedBrowserId = manager.openBrowser(url: URL(string: "https://example.com/stale-focus-cross-ws")) else {
-            XCTFail("Expected initial workspace state and browser panel")
-            return
-        }
-
-        drainMainQueue()
-        XCTAssertTrue(workspace1.closePanel(closedBrowserId, force: true))
-        drainMainQueue()
-
-        let panelIdsBeforeReopen = Set(workspace1.panels.keys)
-        let workspace2 = manager.addWorkspace()
-        XCTAssertEqual(manager.selectedTabId, workspace2.id)
-
-        XCTAssertTrue(manager.reopenMostRecentlyClosedBrowserPanel())
-        guard let reopenedPanelId = singleNewPanelId(in: workspace1, comparedTo: panelIdsBeforeReopen) else {
-            XCTFail("Expected reopened browser panel ID")
-            return
-        }
-
-        // Simulate one delayed stale focus callback from the panel that was focused before reopen.
-        DispatchQueue.main.async {
-            workspace1.focusPanel(preReopenPanelId)
-        }
-
-        drainMainQueue()
-        drainMainQueue()
-        drainMainQueue()
-
-        XCTAssertEqual(manager.selectedTabId, workspace1.id)
-        XCTAssertEqual(workspace1.focusedPanelId, reopenedPanelId)
-        XCTAssertTrue(workspace1.panels[reopenedPanelId] is BrowserPanel)
-    }
-
-    func testReopenInSameWorkspaceWinsAgainstSingleDeferredStaleFocus() {
-        let manager = TabManager()
-        guard let workspace = manager.selectedWorkspace,
-              let preReopenPanelId = workspace.focusedPanelId,
-              let closedBrowserId = manager.openBrowser(url: URL(string: "https://example.com/stale-focus-same-ws")) else {
-            XCTFail("Expected initial workspace state and browser panel")
-            return
-        }
-
-        drainMainQueue()
-        XCTAssertTrue(workspace.closePanel(closedBrowserId, force: true))
-        drainMainQueue()
-
-        let panelIdsBeforeReopen = Set(workspace.panels.keys)
-        XCTAssertTrue(manager.reopenMostRecentlyClosedBrowserPanel())
-        guard let reopenedPanelId = singleNewPanelId(in: workspace, comparedTo: panelIdsBeforeReopen) else {
-            XCTFail("Expected reopened browser panel ID")
-            return
-        }
-
-        // Simulate one delayed stale focus callback from the panel that was focused before reopen.
-        DispatchQueue.main.async {
-            workspace.focusPanel(preReopenPanelId)
-        }
-
-        drainMainQueue()
-        drainMainQueue()
-        drainMainQueue()
-
-        XCTAssertEqual(manager.selectedTabId, workspace.id)
-        XCTAssertEqual(workspace.focusedPanelId, reopenedPanelId)
-        XCTAssertTrue(workspace.panels[reopenedPanelId] is BrowserPanel)
-    }
-
-    func testOpenCompanionBrowserSplitIfEnabledCreatesUnfocusedSplitWhenSettingOn() {
-        let suiteName = "AgentBrowserSplitTests.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-        AgentBrowserSplitSettings.setEnabled(true, defaults: defaults)
-
-        let manager = TabManager()
-        guard let workspace = manager.selectedWorkspace,
-              let terminalPanelId = workspace.focusedTerminalPanel?.id else {
-            XCTFail("Expected initial workspace with a focused terminal panel")
-            return
-        }
-
-        let splitPanelId = manager.openCompanionBrowserSplitIfEnabled(for: workspace, defaults: defaults)
-        drainMainQueue()
-
-        XCTAssertNotNil(splitPanelId)
-        if let splitPanelId {
-            XCTAssertTrue(workspace.panels[splitPanelId] is BrowserPanel)
-        }
-        XCTAssertEqual(workspace.focusedPanelId, terminalPanelId)
-    }
-
-    func testOpenCompanionBrowserSplitIfEnabledReturnsNilWhenSettingOff() {
-        let suiteName = "AgentBrowserSplitTests.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-        AgentBrowserSplitSettings.setEnabled(false, defaults: defaults)
-
-        let manager = TabManager()
-        guard let workspace = manager.selectedWorkspace else {
-            XCTFail("Expected initial workspace")
-            return
-        }
-        let previousPanelIds = Set(workspace.panels.keys)
-
-        let splitPanelId = manager.openCompanionBrowserSplitIfEnabled(for: workspace, defaults: defaults)
-        drainMainQueue()
-
-        XCTAssertNil(splitPanelId)
-        XCTAssertEqual(Set(workspace.panels.keys), previousPanelIds)
-        XCTAssertFalse(workspace.panels.values.contains { $0 is BrowserPanel })
-    }
-
-    private func isFocusedPanelBrowser(in workspace: Workspace) -> Bool {
-        guard let focusedPanelId = workspace.focusedPanelId else { return false }
-        return workspace.panels[focusedPanelId] is BrowserPanel
-    }
-
-    private func singleNewPanelId(in workspace: Workspace, comparedTo previousPanelIds: Set<UUID>) -> UUID? {
-        let newPanelIds = Set(workspace.panels.keys).subtracting(previousPanelIds)
-        guard newPanelIds.count == 1 else { return nil }
-        return newPanelIds.first
-    }
-
-    private func drainMainQueue() {
-        // A single DispatchQueue.main.async block is guaranteed by FIFO ordering to run
-        // after everything already enqueued on the main queue, but a fixed 1s wait isn't
-        // reliable headroom for that turn to actually arrive under a full serial suite
-        // run, where the main queue can carry a real backlog from hundreds of prior
-        // tests' pending async work.
-        let expectation = expectation(description: "drain main queue")
-        DispatchQueue.main.async {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 5.0)
     }
 }

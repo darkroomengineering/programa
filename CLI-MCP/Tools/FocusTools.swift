@@ -6,7 +6,7 @@ import MCP
 /// the tool name alone should warn an agent before it calls one).
 ///
 /// This is the authoritative `focusIntentV2Methods` set (`Sources/TerminalController.swift:157-
-/// 175`) filtered to the 187-method in-scope catalog -- exactly 13 methods. `worktree.create` is
+/// 175`) filtered to the in-scope catalog -- exactly 10 methods. `worktree.create` is
 /// also in `focusIntentV2Methods` but is deliberately NOT here: it only focuses when its
 /// `focus` param is explicitly set to `true` (default `false`, `Sources/TerminalController+
 /// Worktree.swift:43`), and `WorktreeTools.swift`'s `worktree_create` tool omits that param
@@ -69,7 +69,7 @@ enum FocusTools {
         ProgramaTool(
             name: "focus_surface",
             socketMethod: V2MethodNames.surfaceFocus,
-            description: "Focuses a specific surface (terminal or browser pane content), selecting its workspace and bringing its window forward. This tool may raise/activate the Programa window.",
+            description: "Focuses a specific surface (pane content), selecting its workspace and bringing its window forward. This tool may raise/activate the Programa window.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
                     "surface_id": ProgramaToolSchema.string("Surface UUID or short ref to focus."),
@@ -132,47 +132,6 @@ enum FocusTools {
                 ],
                 required: ["repo"]
             )
-        ),
-        ProgramaTool(
-            name: "focus_browser_webview",
-            socketMethod: V2MethodNames.browserFocusWebview,
-            description: "Moves keyboard focus into a browser surface's web view (making first responder), bringing its window forward. This tool may raise/activate the Programa window.",
-            inputSchema: ProgramaToolSchema.object(
-                properties: [
-                    "surface_id": ProgramaToolSchema.string("Browser surface UUID or short ref to focus."),
-                    "window_id": ProgramaToolSchema.windowIdProperty,
-                    "workspace_id": ProgramaToolSchema.workspaceIdProperty,
-                ],
-                required: ["surface_id"]
-            )
-        ),
-        ProgramaTool(
-            name: "focus_browser_element",
-            socketMethod: V2MethodNames.browserFocus,
-            description: "Calls .focus() on the DOM element matched by a selector inside a browser surface's page. It does not select the workspace or raise the window itself, but it runs with focus intent, so the page may end up owning keyboard focus. This tool may raise/activate the Programa window.",
-            inputSchema: ProgramaToolSchema.object(
-                properties: [
-                    "selector": ProgramaToolSchema.string("CSS selector identifying the element to focus. Also accepts sel, element_ref, or ref as aliases."),
-                    "retry_attempts": ProgramaToolSchema.integer("Number of times to retry if the selector doesn't resolve yet. Defaults to 3."),
-                    "surface_id": ProgramaToolSchema.string("Browser surface UUID or short ref to target. Defaults to the workspace's focused browser surface."),
-                    "window_id": ProgramaToolSchema.windowIdProperty,
-                    "workspace_id": ProgramaToolSchema.workspaceIdProperty,
-                ],
-                required: ["selector"]
-            )
-        ),
-        ProgramaTool(
-            name: "focus_browser_tab_switch",
-            socketMethod: V2MethodNames.browserTabSwitch,
-            description: "Switches which browser tab (surface) is focused within a workspace and moves keyboard focus to it. It does not select the workspace or raise the window; pass workspace_id when the target lives in a workspace other than the selected one. This tool may raise/activate the Programa window.",
-            inputSchema: ProgramaToolSchema.object(properties: [
-                "target_surface_id": ProgramaToolSchema.string("Browser surface UUID or short ref to switch to. Also accepts tab_id as an alias."),
-                "tab_id": ProgramaToolSchema.string("Alias for target_surface_id."),
-                "index": ProgramaToolSchema.integer("0-based index into the workspace's browser tabs (in display order), used when target_surface_id/tab_id is omitted."),
-                "surface_id": ProgramaToolSchema.string("Fallback target when target_surface_id/tab_id/index are all omitted."),
-                "window_id": ProgramaToolSchema.windowIdProperty,
-                "workspace_id": ProgramaToolSchema.workspaceIdProperty,
-            ])
         ),
     ]
 }

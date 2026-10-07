@@ -16,7 +16,6 @@ test_cli_new_workspace_command_queue.py
 test_cli_new_workspace_background_metadata.py
 test_surface_list_custom_titles.py
 test_read_screen_capture_pane_parity.py
-test_cli_browser_console_errors_text.py
 test_jsonrpc_strict_param_validation.py
 test_workspace_relative.py
 test_surface_send_unknown_id.py
@@ -45,7 +44,7 @@ test_opencode_install_integration.py
 test_tmux_compat_matrix.py
 test_socket_error_contract_sweep.py
 # Kept out (timing, focus or render dependent): test_socket_limits_and_focus_sweep.py
-# (focus + browser panel), test_browser_wait_function_page_world.py (WebKit load timing),
+# (focus-dependent),
 # test_suspended_subscriber_does_not_block_server.py (kernel socket-buffer behavior, 2000-call flood).
 test_layout_save_targets_workspace_id.py
 test_surface_wait_exit_on_close.py

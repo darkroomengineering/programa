@@ -7,11 +7,9 @@ Comprehensive edge-case testing with before/after screenshots for:
   B. Close operations (the bug surface)
   C. Multi-pane close
   D. Asymmetric / deep nesting
-  E. Browser + terminal mix
   F. Multiple surfaces in a pane (nested tabs)
   G. Rapid stress tests
   H. Workspace interactions
-  I. Browser drag-to-split right
 
 Usage:
     python3 tests/test_visual_screenshots.py
@@ -186,20 +184,6 @@ def _parse_ok_id(response: str) -> Optional[str]:
     return None
 
 
-def wait_url_contains(client: ProgramaClient, panel_id: str, needle: str, timeout: float = 8.0) -> bool:
-    """Poll get_url until it contains `needle`."""
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            url = client.get_url(panel_id).strip()
-        except Exception:
-            url = ""
-        if url and not url.startswith("ERROR") and needle in url:
-            return True
-        time.sleep(0.2)
-    return False
-
-
 def cleanup_workspaces(client: ProgramaClient):
     """Close all but the current workspace."""
     try:
@@ -256,7 +240,6 @@ def verify_views_in_window(client: ProgramaClient, label: str = "", timeout: flo
 
     Polls surface_health until all surfaces report in_window=true,
     or until timeout. Returns None on success, or an error string.
-    Works for both terminal and browser panels.
     """
     start = time.time()
     while time.time() - start < timeout:
@@ -302,7 +285,7 @@ def verify_all_responsive(client: ProgramaClient, label: str = "") -> Optional[s
     if not health:
         return "no surfaces found"
 
-    # Only verify terminal surfaces; browser panels cannot accept send_surface commands.
+    # Only terminal surfaces accept send_surface commands.
     terminal_surfaces = [h for h in health if h.get("type") == "terminal"]
     if not terminal_surfaces:
         return None
@@ -575,91 +558,6 @@ def test_d13_4pane_close_second(client: ProgramaClient) -> StateChange:
     return _close_and_verify(client, change, 1, 3, "d13_before", "d13_after")
 
 
-def test_e14_browser_close_terminal(client: ProgramaClient) -> StateChange:
-    """E14: Split right, open browser right, close terminal (left)."""
-    change = StateChange(
-        name="Browser Mix: Close Terminal (Left)", group="E",
-        description="Split right → browser in right → close left terminal",
-        command="new_pane --direction=right --type=browser; close_surface 0",
-    )
-    try:
-        _ = client.new_pane(direction="right", panel_type="browser", url="https://example.com")
-        time.sleep(1.5)
-    except Exception as e:
-        change.error = f"Failed to create browser pane: {e}"
-        change.passed = False
-        return change
-    # new_pane with browser creates a split (auto-terminal + browser), so we may get 3 surfaces
-    before_count = surface_count(client)
-    if before_count < 2:
-        change.error = f"Browser pane not created, got {before_count} surfaces"
-        change.passed = False
-        return change
-    change.before, change.before_state = capture(client, "e14_before")
-    try:
-        # Find and close the first terminal (index 0)
-        surfaces = client.list_surfaces()
-        client.close_surface(surfaces[0][1])
-        time.sleep(CLOSE_WAIT)
-        change.passed = wait_surface_count(client, before_count - 1)
-        if not change.passed:
-            change.error = f"Expected {before_count - 1} surfaces, got {surface_count(client)}"
-        else:
-            # Verify remaining views (browser + terminal) are in window
-            window_err = verify_views_in_window(client, "e14_after")
-            if window_err:
-                change.error = f"VIEW_DETACHED: {window_err}"
-                change.passed = False
-    except Exception as e:
-        change.error = str(e)
-        change.passed = False
-    change.after, change.after_state = capture(client, "e14_after")
-    return change
-
-
-def test_e15_browser_close_browser(client: ProgramaClient) -> StateChange:
-    """E15: Split right, open browser right, close browser (right)."""
-    change = StateChange(
-        name="Browser Mix: Close Browser (Right)", group="E",
-        description="Split right → browser in right → close right browser",
-        command="new_pane --direction=right --type=browser; close_surface (last)",
-    )
-    try:
-        _ = client.new_pane(direction="right", panel_type="browser", url="https://example.com")
-        time.sleep(1.5)
-    except Exception as e:
-        change.error = f"Failed to create browser pane: {e}"
-        change.passed = False
-        return change
-    before_count = surface_count(client)
-    if before_count < 2:
-        change.error = f"Browser pane not created, got {before_count} surfaces"
-        change.passed = False
-        return change
-    change.before, change.before_state = capture(client, "e15_before")
-    try:
-        surfaces = client.list_surfaces()
-        client.close_surface(surfaces[before_count - 1][1])
-        # Browser close leaves behind an auto-created terminal that may need
-        # extra time for its shell to initialize, so wait longer.
-        time.sleep(2.0)
-        expected = before_count - 1
-        if not wait_surface_count(client, expected, timeout=5.0):
-            change.error = f"Expected {expected} surface(s), got {surface_count(client)}"
-            change.passed = False
-        else:
-            # Verify remaining views are in window
-            window_err = verify_views_in_window(client, "e15_after")
-            if window_err:
-                change.error = f"VIEW_DETACHED: {window_err}"
-                change.passed = False
-    except Exception as e:
-        change.error = str(e)
-        change.passed = False
-    change.after, change.after_state = capture(client, "e15_after")
-    return change
-
-
 def test_f16_nested_tabs_close_first(client: ProgramaClient) -> StateChange:
     """F16: 2 surfaces in same pane, close the first."""
     change = StateChange(
@@ -828,306 +726,6 @@ def test_h20_workspace_switch_back(client: ProgramaClient) -> StateChange:
     return change
 
 
-def _create_browser_surface(client: ProgramaClient, url: Optional[str] = None) -> str:
-    return client.new_surface(panel_type="browser", url=url)
-
-
-def test_i21_browser_drag_split_right_wait_load(client: ProgramaClient) -> StateChange:
-    """I21: Browser tab → navigate → drag-to-split right (wait for load)."""
-    change = StateChange(
-        name="Browser: Navigate Then Drag-To-Split Right (Wait Load)", group="I",
-        description="Create browser tab first, navigate to example.com, then move the tab into a right split.",
-        command="new_surface --type=browser; navigate <browser> https://example.com; drag_surface_to_split <browser> right",
-    )
-    try:
-        browser_id = _create_browser_surface(client)
-        client.navigate(browser_id, "https://example.com")
-        wait_url_contains(client, browser_id, "example.com", timeout=10.0)
-        time.sleep(0.6)
-        change.before, change.before_state = capture(client, "i21_before_drag")
-
-        client.drag_surface_to_split(browser_id, "right")
-        time.sleep(SPLIT_WAIT)
-
-        # Verify we created a split (2 panes), and all views are attached.
-        if pane_count(client) != 2:
-            change.passed = False
-            change.error = f"Expected 2 panes after drag split, got {pane_count(client)}"
-        else:
-            blank_err = verify_all_responsive(client, "i21_after_drag")
-            if blank_err:
-                change.passed = False
-                change.error = f"BLANK: {blank_err}"
-    except Exception as e:
-        change.passed = False
-        change.error = str(e)
-
-    change.after, change.after_state = capture(client, "i21_after_drag")
-    return change
-
-
-def test_i22_browser_drag_split_right_immediate(client: ProgramaClient) -> StateChange:
-    """I22: Browser tab → navigate → drag-to-split right (no wait)."""
-    change = StateChange(
-        name="Browser: Drag-To-Split Right Immediately", group="I",
-        description="Create browser tab first, start navigation, then drag-to-split right immediately (stress reparenting).",
-        command="new_surface --type=browser; navigate <browser> https://example.com; drag_surface_to_split <browser> right",
-    )
-    try:
-        browser_id = _create_browser_surface(client)
-        client.navigate(browser_id, "https://example.com")
-        time.sleep(0.1)
-        change.before, change.before_state = capture(client, "i22_before_drag")
-
-        client.drag_surface_to_split(browser_id, "right")
-        time.sleep(SPLIT_WAIT)
-
-        if pane_count(client) != 2:
-            change.passed = False
-            change.error = f"Expected 2 panes after drag split, got {pane_count(client)}"
-        else:
-            blank_err = verify_all_responsive(client, "i22_after_drag")
-            if blank_err:
-                change.passed = False
-                change.error = f"BLANK: {blank_err}"
-    except Exception as e:
-        change.passed = False
-        change.error = str(e)
-
-    change.after, change.after_state = capture(client, "i22_after_drag")
-    return change
-
-
-def test_i23_browser_drag_split_right_webview_focused(client: ProgramaClient) -> StateChange:
-    """I23: Browser tab (webview focused) → drag-to-split right."""
-    change = StateChange(
-        name="Browser: WebView Focused Then Drag-To-Split Right", group="I",
-        description="Ensure WKWebView is first responder before dragging to split right.",
-        command="new_surface --type=browser; navigate; focus_webview; drag_surface_to_split right",
-    )
-    try:
-        browser_id = _create_browser_surface(client)
-        client.navigate(browser_id, "https://example.com")
-        wait_url_contains(client, browser_id, "example.com", timeout=10.0)
-        time.sleep(0.4)
-
-        client.focus_webview(browser_id)
-        if not client.is_webview_focused(browser_id):
-            raise RuntimeError("expected webview focused")
-
-        change.before, change.before_state = capture(client, "i23_before_drag")
-
-        client.drag_surface_to_split(browser_id, "right")
-        time.sleep(SPLIT_WAIT)
-
-        if pane_count(client) != 2:
-            change.passed = False
-            change.error = f"Expected 2 panes after drag split, got {pane_count(client)}"
-        else:
-            blank_err = verify_all_responsive(client, "i23_after_drag")
-            if blank_err:
-                change.passed = False
-                change.error = f"BLANK: {blank_err}"
-    except Exception as e:
-        change.passed = False
-        change.error = str(e)
-
-    change.after, change.after_state = capture(client, "i23_after_drag")
-    return change
-
-
-def test_i24_browser_drag_split_right_focus_bounce(client: ProgramaClient) -> StateChange:
-    """I24: Browser tab → navigate → focus bounce → drag-to-split right."""
-    change = StateChange(
-        name="Browser: Focus Bounce Then Drag-To-Split Right", group="I",
-        description="Switch focus terminal↔browser before dragging to split right.",
-        command="new_surface --type=browser; navigate; focus_surface 0; focus_surface <browser>; drag_surface_to_split right",
-    )
-    try:
-        browser_id = _create_browser_surface(client)
-        client.navigate(browser_id, "https://example.com")
-        wait_url_contains(client, browser_id, "example.com", timeout=10.0)
-        time.sleep(0.4)
-
-        # Focus bounce
-        surfaces = client.list_surfaces()
-        client.focus_surface(surfaces[0][1])
-        time.sleep(SHORT_WAIT)
-        client.focus_surface(browser_id)
-        time.sleep(SHORT_WAIT)
-
-        change.before, change.before_state = capture(client, "i24_before_drag")
-
-        client.drag_surface_to_split(browser_id, "right")
-        time.sleep(SPLIT_WAIT)
-
-        if pane_count(client) != 2:
-            change.passed = False
-            change.error = f"Expected 2 panes after drag split, got {pane_count(client)}"
-        else:
-            blank_err = verify_all_responsive(client, "i24_after_drag")
-            if blank_err:
-                change.passed = False
-                change.error = f"BLANK: {blank_err}"
-    except Exception as e:
-        change.passed = False
-        change.error = str(e)
-
-    change.after, change.after_state = capture(client, "i24_after_drag")
-    return change
-
-
-def test_i25_browser_drag_split_right_then_switch_panes(client: ProgramaClient) -> StateChange:
-    """I25: Browser drag-to-split right → switch panes → verify webview stays attached."""
-    change = StateChange(
-        name="Browser: Drag-To-Split Right Then Switch Panes", group="I",
-        description="After drag-to-split right, focus each pane and ensure views remain in-window.",
-        command="new_surface --type=browser; navigate; drag_surface_to_split right; focus_pane 0/1",
-    )
-    try:
-        browser_id = _create_browser_surface(client)
-        client.navigate(browser_id, "https://example.com")
-        wait_url_contains(client, browser_id, "example.com", timeout=10.0)
-        time.sleep(0.4)
-        change.before, change.before_state = capture(client, "i25_before_drag")
-
-        client.drag_surface_to_split(browser_id, "right")
-        time.sleep(SPLIT_WAIT)
-
-        if pane_count(client) != 2:
-            change.passed = False
-            change.error = f"Expected 2 panes after drag split, got {pane_count(client)}"
-        else:
-            # Switch panes by ref (stable order from list_panes).
-            panes = client.list_panes()
-            client.focus_pane(panes[0][1])
-            time.sleep(SHORT_WAIT)
-            client.focus_pane(panes[1][1])
-            time.sleep(SHORT_WAIT)
-
-            blank_err = verify_all_responsive(client, "i25_after_drag")
-            if blank_err:
-                change.passed = False
-                change.error = f"BLANK: {blank_err}"
-    except Exception as e:
-        change.passed = False
-        change.error = str(e)
-
-    change.after, change.after_state = capture(client, "i25_after_drag")
-    return change
-
-
-def test_i26_browser_drag_split_right_initial_url(client: ProgramaClient) -> StateChange:
-    """I26: Browser tab (initial URL) → drag-to-split right."""
-    change = StateChange(
-        name="Browser: Initial URL Then Drag-To-Split Right", group="I",
-        description="Create browser tab with initial URL, then drag-to-split right (no explicit navigate).",
-        command="new_surface --type=browser --url=https://example.com; drag_surface_to_split <browser> right",
-    )
-    try:
-        browser_id = _create_browser_surface(client, url="https://example.com")
-        wait_url_contains(client, browser_id, "example.com", timeout=10.0)
-        time.sleep(0.4)
-        change.before, change.before_state = capture(client, "i26_before_drag")
-
-        client.drag_surface_to_split(browser_id, "right")
-        time.sleep(SPLIT_WAIT)
-
-        if pane_count(client) != 2:
-            change.passed = False
-            change.error = f"Expected 2 panes after drag split, got {pane_count(client)}"
-        else:
-            blank_err = verify_all_responsive(client, "i26_after_drag")
-            if blank_err:
-                change.passed = False
-                change.error = f"BLANK: {blank_err}"
-    except Exception as e:
-        change.passed = False
-        change.error = str(e)
-
-    change.after, change.after_state = capture(client, "i26_after_drag")
-    return change
-
-
-def test_i27_browser_drag_split_right_after_reload(client: ProgramaClient) -> StateChange:
-    """I27: Browser tab → navigate → reload → drag-to-split right."""
-    change = StateChange(
-        name="Browser: Reload Then Drag-To-Split Right", group="I",
-        description="Navigate to example.com, call browser_reload, then drag-to-split right.",
-        command="new_surface --type=browser; navigate; browser_reload; drag_surface_to_split right",
-    )
-    try:
-        browser_id = _create_browser_surface(client)
-        client.navigate(browser_id, "https://example.com")
-        wait_url_contains(client, browser_id, "example.com", timeout=10.0)
-        time.sleep(0.4)
-
-        client.browser_reload(browser_id)
-        time.sleep(0.3)
-
-        change.before, change.before_state = capture(client, "i27_before_drag")
-
-        client.drag_surface_to_split(browser_id, "right")
-        time.sleep(SPLIT_WAIT)
-
-        if pane_count(client) != 2:
-            change.passed = False
-            change.error = f"Expected 2 panes after drag split, got {pane_count(client)}"
-        else:
-            blank_err = verify_all_responsive(client, "i27_after_drag")
-            if blank_err:
-                change.passed = False
-                change.error = f"BLANK: {blank_err}"
-    except Exception as e:
-        change.passed = False
-        change.error = str(e)
-
-    change.after, change.after_state = capture(client, "i27_after_drag")
-    return change
-
-
-def test_i28_browser_drag_split_right_double_drag(client: ProgramaClient) -> StateChange:
-    """I28: Browser tab → navigate → drag-to-split right twice (idempotence-ish)."""
-    change = StateChange(
-        name="Browser: Double Drag-To-Split Right", group="I",
-        description="Drag-to-split right, then attempt a second drag-to-split right (stress tree updates).",
-        command="new_surface --type=browser; navigate; drag_surface_to_split right; drag_surface_to_split right",
-    )
-    try:
-        browser_id = _create_browser_surface(client)
-        client.navigate(browser_id, "https://example.com")
-        wait_url_contains(client, browser_id, "example.com", timeout=10.0)
-        time.sleep(0.4)
-        change.before, change.before_state = capture(client, "i28_before_drag")
-
-        client.drag_surface_to_split(browser_id, "right")
-        time.sleep(SPLIT_WAIT)
-        client.drag_surface_to_split(browser_id, "right")
-        time.sleep(SPLIT_WAIT)
-
-        if pane_count(client) < 2:
-            change.passed = False
-            change.error = f"Expected at least 2 panes after double drag, got {pane_count(client)}"
-        else:
-            # Ensure we didn't leave behind any empty panes ("Empty Panel" without tabs).
-            panes = client.list_panes()
-            empty_panes = [pid for _, pid, tab_count, _ in panes if tab_count == 0]
-            if empty_panes:
-                change.passed = False
-                change.error = f"Empty pane(s) after double drag: {empty_panes}"
-                raise RuntimeError(change.error)
-            blank_err = verify_all_responsive(client, "i28_after_drag")
-            if blank_err:
-                change.passed = False
-                change.error = f"BLANK: {blank_err}"
-    except Exception as e:
-        change.passed = False
-        change.error = str(e)
-
-    change.after, change.after_state = capture(client, "i28_after_drag")
-    return change
-
-
 # ---------------------------------------------------------------------------
 # HTML report
 # ---------------------------------------------------------------------------
@@ -1212,11 +810,9 @@ def generate_html_report(changes: list[StateChange]) -> None:
         "B": "Group B — Close Operations",
         "C": "Group C — Multi-Pane Close",
         "D": "Group D — Asymmetric / Deep Nesting",
-        "E": "Group E — Browser + Terminal Mix",
         "F": "Group F — Nested Tabs",
         "G": "Group G — Rapid Stress Tests",
         "H": "Group H — Workspace Interactions",
-        "I": "Group I — Browser Drag-To-Split Right",
     }
 
     current_group = ""
@@ -1356,9 +952,6 @@ def run_visual_tests():
         ("D11", test_d11_nested_close_bottomright),
         ("D12", test_d12_nested_close_top),
         ("D13", test_d13_4pane_close_second),
-        # Group E — browser + terminal mix
-        ("E14", test_e14_browser_close_terminal),
-        ("E15", test_e15_browser_close_browser),
         # Group F — nested tabs
         ("F16", test_f16_nested_tabs_close_first),
         # Group G — rapid stress
@@ -1367,15 +960,6 @@ def run_visual_tests():
         ("G19", test_g19_alternating_close_reverse),
         # Group H — workspace interactions
         ("H20", test_h20_workspace_switch_back),
-        # Group I — browser drag-to-split right
-        ("I21", test_i21_browser_drag_split_right_wait_load),
-        ("I22", test_i22_browser_drag_split_right_immediate),
-        ("I23", test_i23_browser_drag_split_right_webview_focused),
-        ("I24", test_i24_browser_drag_split_right_focus_bounce),
-        ("I25", test_i25_browser_drag_split_right_then_switch_panes),
-        ("I26", test_i26_browser_drag_split_right_initial_url),
-        ("I27", test_i27_browser_drag_split_right_after_reload),
-        ("I28", test_i28_browser_drag_split_right_double_drag),
     ]
 
     print("=" * 60)
