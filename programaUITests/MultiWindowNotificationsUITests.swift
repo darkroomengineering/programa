@@ -391,7 +391,11 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         if waitForFocusChange(from: token, timeout: firstDeadline) {
             return true
         }
-        button.click()
+        // A click that landed closes the popover before the focus record is written, so only
+        // retry while the row is still there.
+        if button.exists {
+            button.click()
+        }
         return waitForFocusChange(from: token, timeout: max(0.0, timeout - firstDeadline))
     }
 
