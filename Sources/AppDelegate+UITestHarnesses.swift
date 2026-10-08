@@ -14,6 +14,7 @@ import Darwin
 private final class SocketListenerUITestObservationState {
     var observer: NSObjectProtocol?
     var timeoutWorkItem: DispatchWorkItem?
+    var retryScheduled = false
 }
 #endif
 
@@ -922,7 +923,21 @@ extension AppDelegate {
                         "socketPathExists": health.socketPathExists ? "1" : "0",
                         "socketFailureSignals": failureSignals,
                     ], at: dataPath)
-                    guard isReady || isTimedOut else { return }
+                    guard isReady || isTimedOut else {
+                        // `.socketListenerDidStart` posts before the accept loop is alive, so both
+                        // early checks can see an unhealthy listener. Re-check until ready or timed out.
+                        guard !observationState.retryScheduled,
+                              observationState.timeoutWorkItem?.isCancelled == false else { return }
+                        observationState.retryScheduled = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            observationState.retryScheduled = false
+                            guard observationState.timeoutWorkItem?.isCancelled == false else { return }
+                            MainActor.assumeIsolated {
+                                publishCurrentState(isTimedOut: false)
+                            }
+                        }
+                        return
+                    }
                     observationState.timeoutWorkItem?.cancel()
                     if let observer = observationState.observer {
                         NotificationCenter.default.removeObserver(observer)

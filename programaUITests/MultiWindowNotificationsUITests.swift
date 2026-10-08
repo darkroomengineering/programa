@@ -248,7 +248,8 @@ final class MultiWindowNotificationsUITests: XCTestCase {
                     !sourceTerminalReady.isEmpty &&
                     sourceTerminalReady != "pending"
             },
-            "Expected multi-window notification setup data, socket readiness, and source terminal focus"
+            "Expected multi-window notification setup data, socket readiness, and source terminal focus. " +
+            "data=\(loadData().map { $0.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ") } ?? "<missing>")"
         )
 
         guard let setup = loadData() else {
