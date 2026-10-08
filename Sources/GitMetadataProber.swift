@@ -294,12 +294,10 @@ enum CanonicalSubprocessRunner {
         guard actionResults.allSatisfy({ $0 == 0 }) else {
             return .failure("could not configure subprocess output pipes")
         }
+        // The _np variant exists in every supported SDK; the non-_np name is
+        // missing from the macOS 15 SDK, so referencing it breaks that build.
         let chdirResult = currentDirectory.withCString { directory in
-            if #available(macOS 26, *) {
-                posix_spawn_file_actions_addchdir(&fileActions, directory)
-            } else {
-                posix_spawn_file_actions_addchdir_np(&fileActions, directory)
-            }
+            posix_spawn_file_actions_addchdir_np(&fileActions, directory)
         }
         guard chdirResult == 0 else {
             return .failure("could not configure subprocess working directory: \(String(cString: strerror(chdirResult)))")
