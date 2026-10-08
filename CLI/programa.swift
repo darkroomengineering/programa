@@ -111,7 +111,7 @@ enum SocketPasswordResolver {
         }
 
         let candidate = URL(fileURLWithPath: socketPath).lastPathComponent
-        let prefixes = ["programa-debug-", "programa-", "cmux-debug-", "cmux-"] // Legacy cmux socket names, still read so older sockets keep resolving a scope.
+        let prefixes = ["programa-debug-", "programa-"]
         for prefix in prefixes {
             guard candidate.hasPrefix(prefix), candidate.hasSuffix(".sock") else { continue }
             let start = candidate.index(candidate.startIndex, offsetBy: prefix.count)

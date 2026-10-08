@@ -265,8 +265,7 @@ Swift source of truth: `Sources/ProgramaSettingsFileStore.swift`,
 
 **`programa.json`** (`docs/programa-json.md`, `Sources/ProgramaConfig.swift`,
 `Sources/ProgramaConfigExecutor.swift`). Command-palette entries, walked up from the focused
-workspace's cwd plus a global `~/.config/programa/programa.json` fallback (legacy names
-`cmux.json`/`~/.config/cmux/cmux.json` still read). Two entry kinds: `commands` (either a
+workspace's cwd plus a global `~/.config/programa/programa.json` fallback. Two entry kinds: `commands` (either a
 `workspace` command — opens/recreates a named workspace with a saved layout — or a `command`
 command — types+submits shell text) and `recipes` (fills a prompt template and types it into the
 focused terminal **without** auto-submitting, so a cloned repo can't fire attacker-chosen text

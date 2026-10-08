@@ -39,13 +39,7 @@ final class ProgramaSettingsFileStore {
 
     static var defaultPrimaryPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let newPath = (home as NSString).appendingPathComponent(".config/programa/settings.json")
-        // Legacy cmux name, still read so existing ~/.config/cmux/settings.json files keep working.
-        let legacyPath = (home as NSString).appendingPathComponent(".config/cmux/settings.json")
-        let fm = FileManager.default
-        if fm.fileExists(atPath: newPath) { return newPath }
-        if fm.fileExists(atPath: legacyPath) { return legacyPath }
-        return newPath
+        return (home as NSString).appendingPathComponent(".config/programa/settings.json")
     }
 
     static var defaultFallbackPath: String? {
@@ -721,7 +715,7 @@ final class ProgramaSettingsFileStore {
     ) {
         if let raw = jsonString(section["socketControlMode"]) {
             let knownModes = Set([
-                "off", "cmuxonly", "programaonly", "automation", "password", "allowall", "openaccess", "fullopenaccess",
+                "off", "programaonly", "automation", "password", "allowall", "openaccess", "fullopenaccess",
                 "notifications", "full",
             ])
             let normalizedRaw = raw.replacingOccurrences(of: "-", with: "").lowercased()
@@ -1788,7 +1782,7 @@ private enum BackupValue: Codable, Equatable {
 }
 
 // JSONCParser (comments + trailing-comma stripping) now lives in Sources/JSONCParser.swift,
-// shared with ProgramaConfigStore's programa.json (and legacy cmux.json) parsing.
+// shared with ProgramaConfigStore's programa.json parsing.
 
 // NOTE (drift, refs #100): unlike ProgramaConfigStore's local/global config watchers, this
 // watcher has no delayed retry/backoff at all — on delete/rename it re-evaluates and

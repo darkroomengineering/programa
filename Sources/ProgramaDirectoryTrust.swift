@@ -248,7 +248,7 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
     /// means "nothing trusted yet".
     ///
     /// A version-2 digest was recorded for whichever config was trusted under that root, which
-    /// in practice is the root's own `programa.json` (or legacy `cmux.json`), so it migrates to
+    /// in practice is the root's own `programa.json`, so it migrates to
     /// that file's key. If the guess is wrong the affected config prompts once as `.changed`.
     /// Entries with no digest migrate to an empty map and prompt once too.
     private static func load(fromStorePath path: String) -> [String: ConfigDigests] {
@@ -283,13 +283,7 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
     }
 
     private static func migratedConfigPath(forRoot root: String) -> String {
-        let programaPath = (root as NSString).appendingPathComponent("programa.json")
-        let legacyPath = (root as NSString).appendingPathComponent("cmux.json")
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: programaPath), fm.fileExists(atPath: legacyPath) {
-            return legacyPath
-        }
-        return programaPath
+        (root as NSString).appendingPathComponent("programa.json")
     }
 
     /// Caller holds `stateLock`; notification is deliberately posted after unlocking so a

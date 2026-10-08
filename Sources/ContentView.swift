@@ -4923,9 +4923,7 @@ struct ContentView: View {
         guard let data = UserDefaults.standard.data(forKey: Self.commandPaletteUsageDefaultsKey) else {
             return [:]
         }
-        let history = (try? JSONDecoder().decode([String: CommandPaletteUsageEntry].self, from: data)) ?? [:]
-        // Legacy cmux name, still read so existing custom-command usage history keeps working.
-        return Dictionary(history.map { ($0.key.replacingOccurrences(of: "cmux.config.", with: "programa.config.", options: .anchored), $0.value) }) { current, _ in current }
+        return (try? JSONDecoder().decode([String: CommandPaletteUsageEntry].self, from: data)) ?? [:]
     }
 
     private func persistCommandPaletteUsageHistory(_ history: [String: CommandPaletteUsageEntry]) {
