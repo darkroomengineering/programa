@@ -17,8 +17,7 @@ import UniformTypeIdentifiers
 // counters exposed to the debug socket, and IOSurface-backed frame sampling used to
 // detect blank-frame regressions without Screen Recording permissions.
 //
-// Split out of GhosttyTerminalView.swift (Nuclear Review #97). Extracted verbatim
-// as a same-type extension (entirely #if DEBUG), so behavior is unchanged.
+// Same-type extension, entirely #if DEBUG.
 
 extension GhosttySurfaceScrollView {
 #if DEBUG

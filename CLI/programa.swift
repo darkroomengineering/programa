@@ -3224,45 +3224,6 @@ struct ProgramaCLI {
         return (cwd as NSString).appendingPathComponent(expanded)
     }
 
-    func sanitizedFilenameComponent(_ raw: String) -> String {
-        let sanitized = raw.replacingOccurrences(
-            of: #"[^\p{L}\p{N}._-]+"#,
-            with: "-",
-            options: .regularExpression
-        )
-        let trimmed = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "-."))
-        return trimmed.isEmpty ? "item" : trimmed
-    }
-
-    func bestEffortPruneTemporaryFiles(
-        in directoryURL: URL,
-        keepingMostRecent maxCount: Int = 50,
-        maxAge: TimeInterval = 24 * 60 * 60
-    ) {
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: directoryURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .creationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return
-        }
-
-        let now = Date()
-        let datedEntries = entries.compactMap { url -> (url: URL, date: Date)? in
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey, .creationDateKey]),
-                  values.isRegularFile == true else {
-                return nil
-            }
-            return (url, values.contentModificationDate ?? values.creationDate ?? .distantPast)
-        }.sorted { $0.date > $1.date }
-
-        for (index, entry) in datedEntries.enumerated() {
-            if index >= maxCount || now.timeIntervalSince(entry.date) > maxAge {
-                try? FileManager.default.removeItem(at: entry.url)
-            }
-        }
-    }
-
     /// Returns true if the argument looks like a filesystem path rather than a CLI command.
     func looksLikePath(_ arg: String) -> Bool {
         if arg == "." || arg == ".." { return true }
@@ -3546,14 +3507,6 @@ struct ProgramaCLI {
         default:
             return nil
         }
-    }
-
-    private func parsePositiveInt(_ raw: String?, label: String) throws -> Int? {
-        guard let raw else { return nil }
-        guard let value = Int(raw) else {
-            throw CLIError(message: "\(label) must be an integer")
-        }
-        return value
     }
 
     func isHandleRef(_ value: String) -> Bool {
@@ -5046,10 +4999,6 @@ struct ProgramaCLI {
         args.contains(name)
     }
 
-    private func replaceToken(_ args: [String], from: String, to: String) -> [String] {
-        args.map { $0 == from ? to : $0 }
-    }
-
     /// Unescape CLI escape sequences for send behavior.
     /// \n and \r → carriage return (Enter), \t → tab.
     private func unescapeSendText(_ text: String) -> String {
@@ -5537,8 +5486,6 @@ struct ProgramaCLI {
             if parsed.options["list"] == nil, parsed.options["unset"] == nil, parsed.positional.count < 2 {
                 throw CLIError(message: "set-hook requires <event> <command>")
             }
-        case "popup", "bind-key", "unbind-key", "copy-mode":
-            throw CLIError(message: "\(command) is not supported yet in programa CLI parity mode")
         case "display-message":
             let parsed = try parse(booleans: ["print"], minPositionals: 1, maxPositionals: nil)
             guard parsed.positional.filter({ $0 != "-p" }).isEmpty == false else {
@@ -6343,19 +6290,6 @@ struct ProgramaCLI {
                               to ~/Library/Application Support/programa/programa.sock and never connects to tagged/debug sockets on its own.
         """
     }
-
-#if DEBUG
-    func debugUsageTextForTesting() -> String {
-        usage()
-    }
-
-    func debugFormatDebugTerminalsPayloadForTesting(
-        _ payload: [String: Any],
-        idFormat: CLIIDFormat = .refs
-    ) -> String {
-        formatDebugTerminalsPayload(payload, idFormat: idFormat)
-    }
-#endif
 }
 
 @main

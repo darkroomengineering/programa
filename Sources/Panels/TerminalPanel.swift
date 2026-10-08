@@ -25,8 +25,6 @@ final class TerminalPanel: Panel, ObservableObject {
     /// Published directory from the terminal
     @Published private(set) var directory: String = ""
 
-    @Published private(set) var tmuxLayoutReport: TmuxPaneLayoutReport?
-
     /// Search state for find functionality
     @Published var searchState: TerminalSurface.SearchState? {
         didSet {
@@ -124,21 +122,9 @@ final class TerminalPanel: Panel, ObservableObject {
         }
     }
 
-    func updateDirectory(_ newDirectory: String) {
-        let trimmed = newDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty && directory != trimmed {
-            directory = trimmed
-        }
-    }
-
     func updateWorkspaceId(_ newWorkspaceId: UUID) {
         workspaceId = newWorkspaceId
         surface.updateWorkspaceId(newWorkspaceId)
-    }
-
-    func updateTmuxLayoutReport(_ report: TmuxPaneLayoutReport?) {
-        guard tmuxLayoutReport != report else { return }
-        tmuxLayoutReport = report
     }
 
     func focus() {
@@ -233,7 +219,7 @@ final class TerminalPanel: Panel, ObservableObject {
                 return
             }
             hostedView.triggerFlash(style: GhosttySurfaceScrollView.flashStyle(for: reason))
-        case .surface, .tmuxActivePane:
+        case .surface:
             hostedView.triggerFlash(style: GhosttySurfaceScrollView.flashStyle(for: reason))
         }
     }

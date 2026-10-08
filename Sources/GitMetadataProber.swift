@@ -496,11 +496,10 @@ extension CanonicalSubprocessRunner {
 // MARK: - GitMetadataProber
 //
 // Stateless git/GitHub CLI probing library: given a working directory, runs `git`/`gh`
-// commands and parses their output into workspace sidebar git/PR metadata. Extracted from
-// TabManager (which owns the stateful scheduling/timers/dedup around these probes) so the
-// probing logic itself has no dependency on TabManager instance state and can be tested and
-// reasoned about independently. A `struct` (not an `enum` namespace) so TabManager can hold
-// a thin owned instance; the API surface is static. The one piece of shared state is the
+// commands and parses their output into workspace sidebar git/PR metadata. TabManager owns
+// the stateful scheduling/timers/dedup around these probes, so the probing logic itself has
+// no dependency on TabManager instance state and can be tested and reasoned about
+// independently. The API surface is static. The one piece of shared state is the
 // process-wide pull-request lookup throttle (`PullRequestLookupThrottle`), which limits the
 // GitHub `gh` calls while the cheap local git probes keep their own cadence.
 struct GitMetadataProber {

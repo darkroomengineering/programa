@@ -1,4 +1,4 @@
-// Command-palette state ownership, extracted from ContentView.swift (nuclear-review #88).
+// Command-palette state ownership.
 //
 // CommandPaletteController owns every @State property that used to live on
 // ContentView and is exclusively used by the command palette (query, mode,

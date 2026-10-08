@@ -208,10 +208,6 @@ enum WorkspaceTabColorSettings {
         return palette(defaults: defaults).filter { !builtInNames.contains($0.name) }
     }
 
-    static func defaultColorHex(named name: String) -> String? {
-        defaultPalette.first(where: { $0.name == name })?.hex
-    }
-
     static func currentColorHex(named name: String, defaults: UserDefaults = .standard) -> String? {
         effectivePaletteMap(defaults: defaults)[name]
     }
@@ -222,13 +218,6 @@ enum WorkspaceTabColorSettings {
 
         var palette = editablePaletteMap(defaults: defaults)
         palette[normalizedName] = normalizedHex
-        persistPaletteMap(palette, defaults: defaults)
-    }
-
-    static func removeColor(named name: String, defaults: UserDefaults = .standard) {
-        guard let normalizedName = normalizedColorName(name) else { return }
-        var palette = editablePaletteMap(defaults: defaults)
-        palette.removeValue(forKey: normalizedName)
         persistPaletteMap(palette, defaults: defaults)
     }
 
@@ -598,10 +587,6 @@ class TabManager: ObservableObject {
         let panelId: UUID
     }
 
-    /// Thin owned instance of the stateless git/GitHub CLI probing library (GitMetadataProber.swift).
-    /// Its API is invoked as static calls (`GitMetadataProber.foo(...)`); this instance exists as
-    /// TabManager's ownership point for that responsibility.
-    let gitMetadataProber = GitMetadataProber()
     let focusTransitionCoordinator = FocusTransitionCoordinator()
 
     /// The window that owns this TabManager. Set by AppDelegate.registerMainWindow().
@@ -1344,20 +1329,6 @@ class TabManager: ObservableObject {
                 }
             }
         }
-    }
-
-    private func scheduleInitialWorkspaceGitMetadataRefresh(
-        workspaceId: UUID,
-        panelId: UUID,
-        directory: String
-    ) {
-        scheduleWorkspaceGitMetadataRefresh(
-            workspaceId: workspaceId,
-            panelId: panelId,
-            directory: directory,
-            delays: Self.initialWorkspaceGitProbeDelays,
-            reason: "initial"
-        )
     }
 
     func scheduleWorkspaceGitMetadataRefresh(
@@ -2387,12 +2358,6 @@ class TabManager: ObservableObject {
     func closeTab(_ tab: Workspace) { closeWorkspace(tab) }
     func closeCurrentTabWithConfirmation() { closeCurrentWorkspaceWithConfirmation() }
 
-    func closeCurrentWorkspace() {
-        guard let selectedId = selectedTabId,
-              let workspace = workspace(withId: selectedId) else { return }
-        closeWorkspace(workspace)
-    }
-
     func closeCurrentPanelWithConfirmation() {
 #if DEBUG
         UITestRecorder.incrementInt("closePanelInvocations")
@@ -2884,10 +2849,6 @@ class TabManager: ObservableObject {
     /// Backwards compatibility: returns the focused surface ID
     func focusedSurfaceId(for tabId: UUID) -> UUID? {
         focusedPanelId(for: tabId)
-    }
-
-    func rememberFocusedSurface(tabId: UUID, surfaceId: UUID) {
-        lastFocusedPanelByTab[tabId] = surfaceId
     }
 
     func applyWindowBackgroundForSelectedTab() {
@@ -3384,11 +3345,6 @@ class TabManager: ObservableObject {
         selectedTabId = tabs[index].id
     }
 
-    func selectLastTab() {
-        guard let lastTab = tabs.last else { return }
-        selectedTabId = lastTab.id
-    }
-
     // MARK: - Surface Navigation
 
     /// Select the next surface in the currently focused pane of the selected workspace
@@ -3468,38 +3424,6 @@ class TabManager: ObservableObject {
             tabHistory.remove(at: targetIndex)
             historyIndex -= 1
             targetIndex -= 1
-        }
-    }
-
-    func navigateForward() {
-        guard historyIndex < tabHistory.count - 1 else { return }
-
-        // Find the next valid tab in history (skip closed tabs)
-        let targetIndex = historyIndex + 1
-        while targetIndex < tabHistory.count {
-            let tabId = tabHistory[targetIndex]
-            if tabs.contains(where: { $0.id == tabId }) {
-                isNavigatingHistory = true
-                historyIndex = targetIndex
-                selectedTabId = tabId
-                isNavigatingHistory = false
-                return
-            }
-            // Remove closed tab from history
-            tabHistory.remove(at: targetIndex)
-            // Don't increment targetIndex since we removed the element
-        }
-    }
-
-    var canNavigateBack: Bool {
-        historyIndex > 0 && tabHistory.prefix(historyIndex).contains { tabId in
-            tabs.contains { $0.id == tabId }
-        }
-    }
-
-    var canNavigateForward: Bool {
-        historyIndex < tabHistory.count - 1 && tabHistory.suffix(from: historyIndex + 1).contains { tabId in
-            tabs.contains { $0.id == tabId }
         }
     }
 

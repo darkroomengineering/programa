@@ -1,6 +1,6 @@
 // surface.wait (#166 task 1): server-owned, event-driven waits on a terminal surface.
 //
-// An agent orchestrating a sibling surface previously had to poll `surface.read_text` in a
+// Without it, an agent orchestrating a sibling surface has to poll `surface.read_text` in a
 // loop and guess when the other side was done -- racy (state can flip between two polls) and
 // wastes tokens. `surface.wait` blocks the calling socket connection (with a timeout) until
 // the surface hits a condition and answers in a single request/response round trip.

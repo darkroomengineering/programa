@@ -170,7 +170,6 @@ enum V2CommandCatalog {
         "debug.terminal.render_stats",
         "debug.terminals",
         "debug.type",
-        "debug.viewtree",
         "debug.window.screenshot",
     ]
 

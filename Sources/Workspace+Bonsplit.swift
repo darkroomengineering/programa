@@ -1,4 +1,4 @@
-// Extracted from Workspace.swift (nuclear-review #98): BonsplitDelegate conformance.
+// BonsplitDelegate conformance.
 
 import Foundation
 import SwiftUI

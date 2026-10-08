@@ -3251,7 +3251,7 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
         // newTerminalSplit's initial selection hand-off to rightPanel schedules its own
         // deferred first-responder/active-state reconciliation for leftPanel (see
         // scheduleAutomaticFirstResponderApply / resignOwnedFirstResponderIfNeeded in
-        // GhosttyTerminalView.swift, reason="setActive"). That work is queued on the main
+        // GhosttySurfaceScrollView.swift, reason="setActive"). That work is queued on the main
         // queue and normally drains almost immediately, well before this test's manual
         // makeFirstResponder override below. Under a full serial suite run the main queue
         // can carry a backlog of unpredictable, varying depth from hundreds of prior

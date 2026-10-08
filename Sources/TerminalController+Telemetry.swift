@@ -1,4 +1,4 @@
-// Extracted from TerminalController.swift (nuclear-review #96): off-main-parse + main.async-mutate telemetry commands (surface.report_*/ports_kick, workspace.set_status/log/progress/sidebar metadata).
+// Off-main-parse + main.async-mutate telemetry commands (surface.report_*/ports_kick, workspace.set_status/log/progress/sidebar metadata).
 import AppKit
 import Carbon.HIToolbox
 import Foundation

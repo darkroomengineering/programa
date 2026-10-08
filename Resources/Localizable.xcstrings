@@ -902,23 +902,6 @@
         }
       }
     },
-    "Browser DevTools Button": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Browser DevTools Button"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ブラウザ開発者ツールボタン"
-          }
-        }
-      }
-    },
     "Button Backdrop Color": {
       "extractionState": "manual",
       "localizations": {
@@ -987,23 +970,6 @@
         }
       }
     },
-    "Copies sidebar, background, menu bar, and browser devtools settings as one payload.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copies sidebar, background, menu bar, and browser devtools settings as one payload."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copies sidebar, background, menu bar, and browser devtools settings as one payload."
-          }
-        }
-      }
-    },
     "Copy": {
       "extractionState": "manual",
       "localizations": {
@@ -1034,23 +1000,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "すべてのデバッグ設定をコピー"
-          }
-        }
-      }
-    },
-    "Copy Button Config": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copy Button Config"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ボタン設定をコピー"
           }
         }
       }
@@ -1765,23 +1714,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "ぼかしをリセット"
-          }
-        }
-      }
-    },
-    "Reset Button": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reset Button"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ボタンをリセット"
           }
         }
       }
@@ -6172,23 +6104,6 @@
         }
       }
     },
-    "common.create": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Create"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "作成"
-          }
-        }
-      }
-    },
     "common.installAndRelaunch": {
       "extractionState": "manual",
       "localizations": {
@@ -6253,23 +6168,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
-          }
-        }
-      }
-    },
-    "common.rename": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rename"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "名前を変更"
           }
         }
       }
@@ -7617,23 +7515,6 @@
         }
       }
     },
-    "dialog.closeWindow.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This will close the current window and all of its workspaces."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "現在のウインドウとそのすべてのワークスペースが閉じられます。"
-          }
-        }
-      }
-    },
     "dialog.closeWindow.title": {
       "extractionState": "manual",
       "localizations": {
@@ -8157,57 +8038,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Programaの通知を有効にする"
-          }
-        }
-      }
-    },
-    "dialog.renameWorkspace.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enter a custom name for this workspace."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このワークスペースのカスタム名を入力してください。"
-          }
-        }
-      }
-    },
-    "dialog.renameWorkspace.placeholder": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Workspace name"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークスペース名"
-          }
-        }
-      }
-    },
-    "dialog.renameWorkspace.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rename Workspace"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークスペースの名前を変更"
           }
         }
       }
@@ -11663,23 +11493,6 @@
         }
       }
     },
-    "settings.sidebarAppearance.matchTerminalBackground.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use the same background color and transparency as the terminal."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ターミナルと同じ背景色と透明度を使用します。"
-          }
-        }
-      }
-    },
     "settings.sidebarAppearance.showClaudeQuota": {
       "extractionState": "manual",
       "localizations": {
@@ -12496,23 +12309,6 @@
         }
       }
     },
-    "shortcuts.help.tooltip": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keyboard Shortcuts"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "キーボードショートカット"
-          }
-        }
-      }
-    },
     "sidebar.activeTabIndicator.leftRail": {
       "extractionState": "manual",
       "localizations": {
@@ -13023,40 +12819,6 @@
         }
       }
     },
-    "sidebar.quota.fiveHour": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "5h"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "5時間"
-          }
-        }
-      }
-    },
-    "sidebar.quota.percent": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@%%"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@%%"
-          }
-        }
-      }
-    },
     "sidebar.quota.resetDays": {
       "extractionState": "manual",
       "localizations": {
@@ -13121,23 +12883,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "現在"
-          }
-        }
-      }
-    },
-    "sidebar.quota.sevenDay": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "7d"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "7日"
           }
         }
       }
@@ -13461,40 +13206,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "クレジット無制限"
-          }
-        }
-      }
-    },
-    "sidebar.usage.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Provider Usage"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "プロバイダーの使用量"
-          }
-        }
-      }
-    },
-    "sidebar.usage.unavailable": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unavailable"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "利用不可"
           }
         }
       }
@@ -15382,23 +15093,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "再起動してアップデートを完了"
-          }
-        }
-      }
-    },
-    "update.viewGitHubCommit": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "View GitHub Commit"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "GitHubのコミットを表示"
           }
         }
       }

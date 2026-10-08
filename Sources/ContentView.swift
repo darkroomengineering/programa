@@ -4322,10 +4322,6 @@ struct ContentView: View {
         syncCommandPaletteSelectionAnchor(resultIDs: commandPaletteController.cachedCommandPaletteResults.map(\.id))
     }
 
-    private func syncCommandPaletteSelectionAnchorFromVisibleResults() {
-        syncCommandPaletteSelectionAnchor(resultIDs: commandPaletteController.commandPaletteVisibleResults.map(\.id))
-    }
-
     private func moveCommandPaletteSelection(by delta: Int) {
         let count = commandPaletteController.commandPaletteVisibleResults.count
         guard count > 0 else {
@@ -4859,8 +4855,7 @@ struct ContentView: View {
 
     private func commandPaletteRenameInputFocusPolicy() -> CommandPaletteInputFocusPolicy {
         // Rename always opens with the existing name selected, so typing replaces
-        // it. This used to be a preference. Other focus policies still use
-        // .caretAtEnd, so only this call site is fixed.
+        // it. Other focus policies still use .caretAtEnd, so only this call site is fixed.
         return CommandPaletteInputFocusPolicy(
             focusTarget: .rename,
             selectionBehavior: .selectAll

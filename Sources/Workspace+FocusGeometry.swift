@@ -1,4 +1,4 @@
-// Extracted from Workspace.swift (nuclear-review #98): focus/geometry reconciliation members
+// Focus/geometry reconciliation members
 // (non-focus-split focus preservation, focusPanel, attention flashes, portal lifecycle, and the
 // event-driven layout follow-up / terminal-geometry / portal-visibility reconciliation pipeline).
 
@@ -230,27 +230,6 @@ extension Workspace {
         }
     }
 
-
-    func isCommandPaletteVisibleForWorkspaceWindow() -> Bool {
-        guard let app = AppDelegate.shared else {
-            return false
-        }
-
-        if let manager = app.tabManagerFor(tabId: id),
-           let windowId = app.windowId(for: manager),
-           let window = app.mainWindow(for: windowId),
-           app.isCommandPaletteVisible(for: window) {
-            return true
-        }
-
-        if let keyWindow = NSApp.keyWindow, app.isCommandPaletteVisible(for: keyWindow) {
-            return true
-        }
-        if let mainWindow = NSApp.mainWindow, app.isCommandPaletteVisible(for: mainWindow) {
-            return true
-        }
-        return false
-    }
 
     func moveFocus(direction: NavigationDirection) {
         // If a pane is zoomed, un-zoom before navigating so the target

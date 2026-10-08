@@ -16,10 +16,8 @@ import UniformTypeIdentifiers
 // Mouse handling for GhosttyNSView: cmd-click path hover, mouse
 // down/dragged/up, scroll wheel, and tracking-area maintenance.
 //
-// Split out of GhosttyTerminalView.swift (Nuclear Review TC5). Moving these
-// methods into a same-type extension adds zero call-site indirection.
-// Method bodies are moved verbatim. deinit and windowDidChangeScreen stay
-// on the primary class declaration (deinit cannot live in an extension).
+// deinit and windowDidChangeScreen stay on the primary class declaration
+// (deinit cannot live in an extension).
 
 extension GhosttyNSView {
     // MARK: - Mouse Handling
@@ -114,24 +112,6 @@ extension GhosttyNSView {
         let point = convert(event.locationInWindow, from: nil)
         let consumed = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, modsFromEvent(event))
         _ = handleCommandClickRelease(at: point, modifierFlags: event.modifierFlags, ghosttyConsumed: consumed)
-    }
-
-    /// Attempt to open the word under the mouse cursor as a file path, resolved
-    /// against the terminal panel's current working directory.
-    private func tryOpenWordAsPath(at point: NSPoint? = nil) {
-        guard let resolution = resolveWordUnderCursorPath(at: point) else { return }
-
-        #if DEBUG
-        dlog("link.wordFallback resolved=\(resolution.path) source=\(resolution.source.rawValue)")
-        #endif
-
-        PreferredEditorSettings.open(URL(fileURLWithPath: resolution.path))
-    }
-
-    /// Check if the word under the mouse cursor resolves to an existing file/directory
-    /// in the terminal panel's CWD. Returns the resolved absolute path, or nil.
-    private func resolveWordUnderCursorAsPath(at point: NSPoint? = nil) -> String? {
-        resolveWordUnderCursorPath(at: point)?.path
     }
 
     private func resolveWordUnderCursorPath(at point: NSPoint? = nil) -> WordPathResolution? {

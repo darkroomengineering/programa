@@ -93,11 +93,6 @@ class UpdateController {
         userDriver.viewModel
     }
 
-    /// True if we're force-installing an update.
-    var isInstalling: Bool {
-        installCancellable != nil
-    }
-
     init() {
         let defaults = UserDefaults.standard
         UpdateSettings.apply(to: defaults)

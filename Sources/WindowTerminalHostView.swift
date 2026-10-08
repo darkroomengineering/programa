@@ -4,7 +4,7 @@ import ObjectiveC
 import Bonsplit
 #endif
 
-// MARK: - Window Terminal Host View (split out, Nuclear Review #97; hitTest() moved byte-for-byte)
+// MARK: - Window Terminal Host View
 
 final class WindowTerminalHostView: NSView {
     private struct DividerRegion {

@@ -1,4 +1,4 @@
-// Extracted from Workspace.swift (nuclear-review #98): session snapshot/restore (sessionSnapshot, restoreSessionSnapshot, and their layout/panel helpers).
+// Session snapshot/restore (sessionSnapshot, restoreSessionSnapshot, and their layout/panel helpers).
 
 import Foundation
 import SwiftUI

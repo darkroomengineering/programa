@@ -1,4 +1,4 @@
-// Extracted from AppDelegate.swift (nuclear-review N3): XCUITest-only instrumentation.
+// XCUITest-only instrumentation.
 import AppKit
 @preconcurrency import Dispatch
 import SwiftUI

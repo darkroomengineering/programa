@@ -9,8 +9,6 @@ import ObjectiveC.runtime
 import Darwin
 import Security
 
-
-
 private enum ProgramaThemeNotifications {
     static let reloadConfig = Notification.Name("com.darkroom.programa.themes.reload-config")
 }
@@ -147,12 +145,6 @@ func isCommandPaletteFocusStealingTerminalView(_ view: NSView) -> Bool {
     }
     return false
 }
-
-
-
-
-
-
 
 private extension NSScreen {
     var programaDisplayID: UInt32? {
@@ -637,7 +629,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     weak var fullscreenControlsViewModel: TitlebarControlsViewModel?
     weak var sidebarSelectionState: SidebarSelectionState?
     var shortcutLayoutCharacterProvider: (UInt16, NSEvent.ModifierFlags) -> String? = KeyboardLayout.character(forKeyCode:modifierFlags:)
-    private var workspaceObserver: NSObjectProtocol?
     private var lifecycleSnapshotObservers: [NSObjectProtocol] = []
     private let themeReloadCoalescer = ThemeReloadCoalescer()
     private var windowKeyObserver: NSObjectProtocol?
@@ -1393,7 +1384,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 #endif
     }
-
 
     private func prepareStartupSessionSnapshotIfNeeded() {
         guard !didPrepareStartupSessionSnapshot else { return }
@@ -5257,9 +5247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
     }
 
-
 #endif
-
 
     func attachUpdateAccessory(to window: NSWindow) {
         titlebarAccessoryController.start()
@@ -5341,12 +5329,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 return
             }
         }
-    }
-
-    static func installWindowResponderSwizzlesForTesting() {
-        _ = didInstallWindowKeyEquivalentSwizzle
-        _ = didInstallWindowFirstResponderSwizzle
-        _ = didInstallWindowSendEventSwizzle
     }
 
     private func installWindowResponderSwizzles() {
@@ -5654,36 +5636,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return true
     }
 
-    func promptRenameSelectedWorkspace() -> Bool {
-        guard let tabManager,
-              let tabId = tabManager.selectedTabId,
-              let tab = tabManager.tabs.first(where: { $0.id == tabId }) else {
-            NSSound.beep()
-            return false
-        }
-
-        let alert = NSAlert()
-        alert.messageText = String(localized: "dialog.renameWorkspace.title", defaultValue: "Rename Workspace")
-        alert.informativeText = String(localized: "dialog.renameWorkspace.message", defaultValue: "Enter a custom name for this workspace.")
-        let input = NSTextField(string: tab.customTitle ?? tab.title)
-        input.placeholderString = String(localized: "dialog.renameWorkspace.placeholder", defaultValue: "Workspace name")
-        input.frame = NSRect(x: 0, y: 0, width: 240, height: 22)
-        alert.accessoryView = input
-        alert.addButton(withTitle: String(localized: "common.rename", defaultValue: "Rename"))
-        alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
-        let alertWindow = alert.window
-        alertWindow.initialFirstResponder = input
-        DispatchQueue.main.async {
-            alertWindow.makeFirstResponder(input)
-            input.selectText(nil)
-        }
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return true }
-        tabManager.setCustomTitle(tabId: tab.id, title: input.stringValue)
-        return true
-    }
-
     // Precedence encoded by this function's evaluation order (each phase is checked
     // strictly after the previous one; the first phase that returns wins). Refs #95.
     //   1. Setup: chord-prefix bookkeeping, Ctrl+D debug probe, close-confirmation-alert
@@ -5697,12 +5649,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     //      bypass.
     //   4. App-shortcut (lowest precedence, only reached once nothing above claimed the
     //      event): the flat table of ~55 `matchConfiguredShortcut`/digit/directional/tab
-    //      checks, extracted verbatim into handleConfiguredAppShortcutActions(event:...).
+    //      checks, in handleConfiguredAppShortcutActions(event:...).
     // Snapshot of whether/how the command palette is claiming keyboard input for a given
-    // shortcut event's routed window. Extracted from the six interdependent booleans that used
-    // to be computed inline at the top of handleCustomShortcut(event:) so the precedence
-    // decisions below can read `commandPaletteState.isEffectiveInTargetWindow` etc. declaratively
-    // instead of re-deriving them. Values and their derivation are unchanged from before.
+    // shortcut event's routed window. The precedence decisions below read
+    // `commandPaletteState.isEffectiveInTargetWindow` etc. declaratively instead of
+    // re-deriving the interdependent booleans.
     private struct CommandPaletteInteractionState {
         let targetWindow: NSWindow?
         let shortcutWindow: NSWindow?
@@ -6760,45 +6711,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         handleSplitShortcutAction(event: event, action: .splitDown, direction: .down, debugActionName: "splitDown")
     }
 
-    // SplitDirection and the debug-log action name.
-
-
-
-
-
-
     // New surface: Cmd+T
     private func handleNewSurfaceShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .newSurface) else { return nil }
         tabManager?.newSurface()
         return true
     }
-
-
-
-
-
-
-
-
-
-
-
-    // Safari defaults:
-    // - Option+Command+I => Show/Toggle Web Inspector
-    // - Option+Command+C => Show JavaScript Console
-
-
-
-
-    // TabManager zoom method to invoke.
-
-
-
-
-
-
-
 
     private func handleFindShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .find) else { return nil }
@@ -6829,8 +6747,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         tabManager?.searchSelection()
         return true
     }
-
-
 
     private func shouldSuppressSplitShortcutForTransientTerminalFocusState(direction: SplitDirection) -> Bool {
         guard let tabManager,
@@ -6874,50 +6790,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
         return true
     }
-
-#if DEBUG
-
-
-
-
-
-#endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#if DEBUG
-
-
-
-#endif
-
-
 
     @discardableResult
     func performSplitShortcut(direction: SplitDirection, preferredWindow: NSWindow? = nil) -> Bool {
@@ -6983,10 +6855,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
         return didCreateSplit
     }
-
-
-
-
 
     @discardableResult
     func requestRenameWorkspaceViaCommandPalette(preferredWindow: NSWindow? = nil) -> Bool {
@@ -7263,10 +7131,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return digit
     }
 
-    // `shouldRequireCharacterMatchForCommandShortcut` and `shortcutCharacterMatches` moved to
-    // `ShortcutRouting` — they were only ever called from `matchShortcutStroke`, which now
-    // forwards to `ShortcutRouting.matchStroke`.
-
     /// Shared with `ShortcutRouting.matchStroke` (via `AppDelegate.normalizedShortcutEventCharacter`)
     /// and with `numberedShortcutDigit` above, so it stays here as `nonisolated static` rather than
     /// moving — it never reads instance state, so isolation is safe to drop explicitly.
@@ -7303,9 +7167,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         default: return lowered
         }
     }
-
-    // `keyCodeForShortcutKey` moved to `ShortcutRouting` — it was only ever called from
-    // `matchShortcutStroke`, which now forwards to `ShortcutRouting.matchStroke`.
 
     /// Shared with `ShortcutRouting.matchStroke` (via `AppDelegate.digitForNumberKeyCode`) and
     /// with `numberedShortcutDigit` above, so it stays here as `nonisolated static` rather than
@@ -7377,7 +7238,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         updateController.validateMenuItem(item)
     }
-
 
     private func configureUserNotifications() {
         let actions = [
@@ -7560,7 +7420,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 #endif
 
-
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -7645,18 +7504,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
 
     private func setActiveMainWindow(_ window: NSWindow) {
         guard let context = contextForMainTerminalWindow(window) else { return }
@@ -8103,9 +7950,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// titlebar, movability, transparency, glass effect, decorations) and registers
     /// it for window-context tracking, then installs the file-drop overlay.
     ///
-    /// Extracted verbatim from `ContentView`'s `WindowAccessor` trailing closure
-    /// (nuclear-review CV2b) so this AppKit window mutation lives with the
-    /// window-context layer instead of the SwiftUI view layer. `ContentView` still
+    /// This AppKit window mutation lives with the window-context layer, not the
+    /// SwiftUI view layer. `ContentView`
     /// owns tracking its own `@State` (`observedWindow`, `isFullScreen`,
     /// `titlebarPadding`) — this method returns the computed titlebar padding so
     /// the caller can decide whether to update that `@State`.

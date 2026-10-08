@@ -1,4 +1,4 @@
-// Sidebar resizer member group extracted from ContentView.swift (nuclear-review CV1 / issue #94).
+// Sidebar resizer member group.
 // The backing @State stays on `ContentView` (SwiftUI requires stored properties on the primary
 // declaration); those properties, plus `SidebarResizerHandle`, `updateSidebarResizerBandState`,
 // `installSidebarResizerPointerMonitorIfNeeded`, `removeSidebarResizerPointerMonitor`, and

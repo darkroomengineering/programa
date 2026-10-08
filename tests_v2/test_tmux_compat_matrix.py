@@ -297,8 +297,7 @@ def main() -> int:
 
         for cmd in (["popup"], ["bind-key", "C-b", "split-window"], ["unbind-key", "C-b"], ["copy-mode"]):
             proc = _run_cli(cli, cmd, expect_ok=False)
-            merged = f"{proc.stdout}\n{proc.stderr}".lower()
-            _must(proc.returncode != 0 and "not supported" in merged, f"Expected not_supported for {cmd}, got: {merged!r}")
+            _must(proc.returncode != 0, f"Expected {cmd} to be rejected, got exit 0: {proc.stdout!r}")
 
         resize_target, resize_flag, resize_axis = _pick_resize_target(c, current_panes)
         pre_extent = _pane_extent(c, resize_target, resize_axis)

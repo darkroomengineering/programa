@@ -1,4 +1,4 @@
-// Extracted from Workspace.swift (nuclear-review #98): surface creation/adoption/config
+// Surface creation/adoption/config
 // inheritance members (terminal/markdown split + surface creation).
 
 import Foundation

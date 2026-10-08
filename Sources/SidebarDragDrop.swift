@@ -1,5 +1,5 @@
-// Sidebar drag-and-drop domain, extracted from ContentView.swift (nuclear-review #94.4).
-// Pure move: DragOverlayRoutingPolicy, drag payload enums, drop delegates,
+// Sidebar drag-and-drop domain.
+// Holds DragOverlayRoutingPolicy, drag payload enums, drop delegates,
 // drop edge/indicator/planner, auto-scroll planner, and drag lifecycle/failsafe
 // types, consolidated from several non-contiguous locations in ContentView.swift.
 //

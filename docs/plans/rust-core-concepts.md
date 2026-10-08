@@ -356,7 +356,7 @@ transitions, enabling DECSET 1004 immediately reports current state).
   skip starves state machines (like the scrollbar dirty/clear split) that live partly inside the
   throttled call.
 - **Portal layering contract** (`CLAUDE.md` pitfalls): `SurfaceSearchOverlay` must mount from
-  `GhosttySurfaceScrollView` (`Sources/GhosttyTerminalView.swift`, the AppKit portal layer), not
+  `GhosttySurfaceScrollView` (`Sources/GhosttySurfaceScrollView.swift`, the AppKit portal layer), not
   from SwiftUI panel containers (`Sources/Panels/TerminalPanelView.swift`) — portal-hosted
   terminal views can sit above SwiftUI during split/workspace churn. Portal registry:
   `Sources/HostedViewPortalRegistry.swift`, `Sources/TerminalWindowPortal.swift`,
@@ -370,7 +370,7 @@ transitions, enabling DECSET 1004 immediately reports current state).
   events; `TabItemView` (`Sources/ContentView.swift`) relies on `Equatable` + `.equatable()` to
   skip SwiftUI body re-evaluation during typing — no new `@EnvironmentObject`/`@ObservedObject`/
   `@Binding` without updating `==`; `TerminalSurface.forceRefresh()`
-  (`Sources/GhosttyTerminalView.swift`) runs on every keystroke and must stay allocation/IO-free.
+  (`Sources/TerminalSurface.swift`) runs on every keystroke and must stay allocation/IO-free.
 - **Socket command threading policy** (`CLAUDE.md`): telemetry hot-path commands
   (`surface.report_*`, `surface.ports_kick`, status/progress/log metadata) must not use
   `DispatchQueue.main.sync`; parse/validate/dedupe off-main, minimal main-thread mutation only.

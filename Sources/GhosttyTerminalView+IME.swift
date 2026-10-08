@@ -18,9 +18,6 @@ import UniformTypeIdentifiers
 // system input methods (Japanese/Chinese/Korean IME, dead-key composition,
 // emoji picker, etc.).
 //
-// Split out of GhosttyTerminalView.swift (Nuclear Review #97). Extracted
-// verbatim as a same-type extension, so call-site behavior is unchanged.
-
 extension GhosttyNSView: NSTextInputClient {
     /// Deliver committed text using typed-input semantics so shells and editors
     /// keep their normal interactive behaviors (autosuggestions, Return

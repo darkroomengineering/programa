@@ -2127,7 +2127,7 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
 
         // Force synchronous native teardown instead of relying on the async
         // `Task { @MainActor in ghostty_surface_free(...) } ` scheduled from
-        // TerminalSurface.deinit (Sources/GhosttyTerminalView.swift ~4828). Left to
+        // TerminalSurface.deinit (Sources/TerminalSurface.swift). Left to
         // run asynchronously, that teardown's completion time is unbounded and can
         // bleed into the next test's tightly-timed RunLoop spins/waitUntil polls,
         // since this test creates a real, window-attached ghostty_surface_t.

@@ -1,4 +1,4 @@
-// Extracted from Workspace.swift (nuclear-review #98): programa.json custom layout application (applyCustomLayout and its tree/pane helpers).
+// programa.json custom layout application (applyCustomLayout and its tree/pane helpers).
 
 @preconcurrency import Foundation
 import SwiftUI

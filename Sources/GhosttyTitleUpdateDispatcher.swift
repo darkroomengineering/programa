@@ -25,9 +25,9 @@ final class GhosttyTitleUpdateDispatcher {
     }
 
     private struct PendingUpdate {
-        // Held strongly for the (short, <=50ms) coalescing window, matching the
-        // pre-fix behavior where `surfaceView` was captured strongly inside the
-        // `DispatchQueue.main.async` closure that posted the notification.
+        // Held strongly for the (short, <=50ms) coalescing window, matching how
+        // `surfaceView` is captured strongly inside the `DispatchQueue.main.async` closure
+        // that posts the notification.
         let surfaceView: AnyObject?
         let tabId: UUID
         let surfaceId: UUID

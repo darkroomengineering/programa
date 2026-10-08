@@ -11,7 +11,7 @@ import Bonsplit
 import IOSurface
 import UniformTypeIdentifiers
 
-// MARK: - Scroll View Wrapper (split out, Nuclear Review #97; verbatim move)
+// MARK: - Scroll View Wrapper
 // Layering contract: SurfaceSearchOverlay stays mounted from this file — see
 // CLAUDE.md "Terminal find layering contract".
 
@@ -147,7 +147,7 @@ final class GhosttySurfaceScrollView: NSView {
     private let documentView: NSView
     // Widened from private to internal (immutable `let`, so this only grants
     // read access): read from the debug-only RenderStats extension
-    // (GhosttyTerminalView+RenderStats.swift, Nuclear Review #97 split).
+    // (GhosttyTerminalView+RenderStats.swift).
     let surfaceView: GhosttyNSView
     private let inactiveOverlayView: GhosttyFlashOverlayView
     private let dropZoneOverlayView: GhosttyFlashOverlayView
@@ -203,7 +203,7 @@ final class GhosttySurfaceScrollView: NSView {
     /// Threshold in points from bottom to consider "at bottom" (allows for minor float drift)
     private static let scrollToBottomThreshold: CGFloat = 5.0
     // private(set): read from the debug-only RenderStats extension
-    // (GhosttyTerminalView+RenderStats.swift, Nuclear Review #97 split), written only here.
+    // (GhosttyTerminalView+RenderStats.swift), written only here.
     private(set) var isActive = true
     private var lastFocusRefreshAt: CFTimeInterval = 0
     private var pendingAutomaticFirstResponderApply = false
@@ -237,7 +237,6 @@ final class GhosttySurfaceScrollView: NSView {
     private static var drawCounts: [UUID: Int] = [:]
     private static var lastDrawTimes: [UUID: CFTimeInterval] = [:]
     private static var presentCounts: [UUID: Int] = [:]
-    private static var dropOverlayShowCounts: [UUID: Int] = [:]
     private static var lastPresentTimes: [UUID: CFTimeInterval] = [:]
     private static var lastContentsKeys: [UUID: String] = [:]
 
@@ -268,7 +267,7 @@ final class GhosttySurfaceScrollView: NSView {
     }
 
     // Widened from private to internal: called from the debug-only RenderStats
-    // extension (GhosttyTerminalView+RenderStats.swift, Nuclear Review #97 split).
+    // extension (GhosttyTerminalView+RenderStats.swift).
     static func contentsKey(for layer: CALayer?) -> String {
         guard let modelLayer = layer else { return "nil" }
         // Prefer the presentation layer to better reflect what the user sees on screen.
@@ -295,7 +294,7 @@ final class GhosttySurfaceScrollView: NSView {
     }
 
     // Widened from private to internal: called from the debug-only RenderStats
-    // extension (GhosttyTerminalView+RenderStats.swift, Nuclear Review #97 split).
+    // extension (GhosttyTerminalView+RenderStats.swift).
     static func updatePresentStats(surfaceId: UUID, layer: CALayer?) -> (count: Int, last: CFTimeInterval, key: String) {
         let key = contentsKey(for: layer)
         if lastContentsKeys[surfaceId] != key {
@@ -304,38 +303,6 @@ final class GhosttySurfaceScrollView: NSView {
             lastContentsKeys[surfaceId] = key
         }
         return (presentCounts[surfaceId, default: 0], lastPresentTimes[surfaceId, default: 0], key)
-    }
-
-    private func recordDropOverlayShowAnimation() {
-        guard let surfaceId = surfaceView.terminalSurface?.id else { return }
-        Self.dropOverlayShowCounts[surfaceId, default: 0] += 1
-    }
-
-    func debugProbeDropOverlayAnimation(useDeferredPath: Bool) -> (before: Int, after: Int, bounds: CGSize) {
-        guard let surfaceId = surfaceView.terminalSurface?.id else {
-            return (0, 0, bounds.size)
-        }
-
-        let before = Self.dropOverlayShowCounts[surfaceId, default: 0]
-
-        // Reset to a hidden baseline so each probe exercises an initial-show transition.
-        dropZoneOverlayAnimationGeneration &+= 1
-        activeDropZone = nil
-        pendingDropZone = nil
-        dropZoneOverlayView.layer?.removeAllAnimations()
-        dropZoneOverlayView.isHidden = true
-        dropZoneOverlayView.alphaValue = 1
-
-        if useDeferredPath {
-            pendingDropZone = .left
-            synchronizeGeometryAndContent()
-        } else {
-            setDropZoneOverlay(zone: .left)
-        }
-
-        let after = Self.dropOverlayShowCounts[surfaceId, default: 0]
-        setDropZoneOverlay(zone: nil)
-        return (before, after, bounds.size)
     }
 
     var debugSurfaceId: UUID? {
@@ -386,13 +353,6 @@ final class GhosttySurfaceScrollView: NSView {
         return terminalSurface.canAcceptPortalBinding(
             expectedSurfaceId: expectedSurfaceId,
             expectedGeneration: expectedGeneration
-        )
-    }
-
-    func releaseOwnedPortalHost(hostId: ObjectIdentifier, reason: String) {
-        surfaceView.terminalSurface?.releasePortalHostIfOwned(
-            hostId: hostId,
-            reason: reason
         )
     }
 
@@ -1490,9 +1450,6 @@ final class GhosttySurfaceScrollView: NSView {
                 dropZoneOverlayView.alphaValue = 0
                 dropZoneOverlayView.isHidden = false
 #if DEBUG
-                recordDropOverlayShowAnimation()
-#endif
-#if DEBUG
                 logDropZoneOverlay(event: "show", zone: zone, frame: targetFrame)
 #endif
 
@@ -1858,13 +1815,6 @@ final class GhosttySurfaceScrollView: NSView {
         )
     }
 
-    func debugNotificationRingState() -> (isHidden: Bool, opacity: Float) {
-        (
-            notificationRingOverlayView.isHidden,
-            notificationRingLayer.opacity
-        )
-    }
-
     struct DebugDropZoneOverlayState {
         let isHidden: Bool
         let frame: CGRect
@@ -1891,10 +1841,6 @@ final class GhosttySurfaceScrollView: NSView {
     }
 
 #endif
-
-    fileprivate var hasActiveDropZoneOverlay: Bool {
-        activeDropZone != nil || pendingDropZone != nil
-    }
 
     /// Handle file/URL drops, forwarding to the terminal as shell-escaped paths.
     func handleDroppedURLs(_ urls: [URL]) -> Bool {
