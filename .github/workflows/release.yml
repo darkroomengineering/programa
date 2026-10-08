@@ -348,17 +348,15 @@ jobs:
         env:
           APPLE_PROVISION_PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
         run: |
-          # REQUIRED now, despite the name of the check below. The app declares
-          # restricted entitlements (CloudKit), and an app carrying those with no
-          # embedded profile is killed by AMFI at launch for every user (POSIX 163)
-          # after signing and notarizing cleanly. This step still tolerates the
-          # secret being absent so the failure is reported by
-          # verify-provision-profile.sh with a full explanation, rather than as a
-          # bare base64 error here — that script is the gate, and it fails the
-          # build. Do not "fix" a red verify step by removing it.
+          # The app declares no restricted (com.apple.developer.*) entitlements
+          # today, so the profile is a safety net. Adding a restricted
+          # entitlement makes it required: without an embedded profile AMFI
+          # kills the app at launch (POSIX 163) even though signing and
+          # notarization pass. verify-provision-profile.sh is the gate for that
+          # case; do not "fix" a red verify step by removing it.
           if [ -z "$APPLE_PROVISION_PROFILE_BASE64" ]; then
             echo "No APPLE_PROVISION_PROFILE_BASE64 secret set; skipping profile embedding."
-            echo "The build will fail verification: this app declares restricted entitlements."
+            echo "verify-provision-profile.sh fails the build if the app declares restricted entitlements."
             echo "PROGRAMA_PROVISION_PROFILE=" >> "$GITHUB_ENV"
             exit 0
           fi

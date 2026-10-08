@@ -66,7 +66,7 @@ repository secret with the same name is ignored by the release job.
 | `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for notarization |
 | `APPLE_TEAM_ID` | Apple team id |
 | `SPARKLE_PRIVATE_KEY` | Signs the appcast and enclosures; the workflow derives the public key embedded in the app from it. The release fails without it |
-| `APPLE_PROVISION_PROFILE_BASE64` | Provisioning profile embedded in the app. Required: the app declares restricted entitlements (CloudKit), and without an embedded profile macOS kills it at launch even though signing and notarization succeed. The profile verification step fails the build when the secret is missing |
+| `APPLE_PROVISION_PROFILE_BASE64` | Provisioning profile embedded in the app. Kept as a safety net: no entitlement in `programa.entitlements` is Apple-restricted now, so the app launches without a profile and an embedded one is harmless. If a restricted `com.apple.developer.*` entitlement is added back, the profile is required, because macOS kills the app at launch without it even though signing and notarization succeed. The workflow step still fails the build when the secret is missing. Candidate for removal once a release is confirmed to launch without it |
 
 ## Milestone version bumps
 
