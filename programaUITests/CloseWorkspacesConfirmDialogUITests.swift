@@ -66,8 +66,8 @@ final class CloseWorkspacesConfirmDialogUITests: XCTestCase {
         let app = XCUIApplication()
         configureLaunch(app)
         app.launchEnvironment["PROGRAMA_UI_TEST_FORCE_CONFIRM_CLOSE_WORKSPACE"] = "1"
-        // Applied by the app once the second workspace exists (re-evaluated on every tab-list change).
-        app.launchEnvironment["PROGRAMA_UI_TEST_SIDEBAR_SELECTED_WORKSPACE_INDICES"] = "0,1"
+        // Applied by the app once the third workspace exists, so later Cmd+N presses cannot reset it.
+        app.launchEnvironment["PROGRAMA_UI_TEST_SIDEBAR_SELECTED_WORKSPACE_INDICES"] = "1,2"
         app.launch()
         XCTAssertTrue(
             ensureForegroundAfterLaunch(app, timeout: 12.0),
@@ -75,10 +75,14 @@ final class CloseWorkspacesConfirmDialogUITests: XCTestCase {
         )
         XCTAssertTrue(waitForWorkspaceCount(1, timeout: 12.0), "Expected initial workspace. count=\(workspaceCount())")
 
+        // Three workspaces so the two selected ones are not all of them; closing every
+        // workspace shows the "Close window?" alert instead.
+        app.typeKey("n", modifierFlags: [.command])
+        XCTAssertTrue(waitForWorkspaceCount(2, timeout: 5.0), "Expected 2 workspaces. count=\(workspaceCount())")
         app.typeKey("n", modifierFlags: [.command])
         XCTAssertTrue(
-            waitForWorkspaceCount(2, timeout: 5.0),
-            "Expected 2 workspaces before running Cmd+Shift+W. count=\(workspaceCount())"
+            waitForWorkspaceCount(3, timeout: 5.0),
+            "Expected 3 workspaces before running Cmd+Shift+W. count=\(workspaceCount())"
         )
 
         app.typeKey("w", modifierFlags: [.command, .shift])
@@ -95,8 +99,8 @@ final class CloseWorkspacesConfirmDialogUITests: XCTestCase {
             "Expected aggregated close-workspaces alert to dismiss after clicking Cancel"
         )
         XCTAssertTrue(
-            waitForWorkspaceCount(2, timeout: 5.0),
-            "Expected both workspaces to remain after cancelling Cmd+Shift+W multi-close. count=\(workspaceCount())"
+            waitForWorkspaceCount(3, timeout: 5.0),
+            "Expected all workspaces to remain after cancelling Cmd+Shift+W multi-close. count=\(workspaceCount())"
         )
     }
 
