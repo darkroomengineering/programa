@@ -664,8 +664,7 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertTrue(contents.contains(#""$schema": "https://raw.githubusercontent.com/darkroomengineering/programa/main/Resources/settings.schema.json""#))
         XCTAssertTrue(contents.contains(#""schemaVersion": 1,"#))
         XCTAssertTrue(contents.contains(#"//   "app" : {"#))
-        XCTAssertTrue(contents.contains(#"//     "colors" : {"#))
-        XCTAssertTrue(contents.contains(##"//       "Red" : "#C0392B""##))
+        XCTAssertFalse(contents.contains(#""workspaceColors""#))
         XCTAssertTrue(contents.contains(#"//   "shortcuts" : {"#))
     }
 
@@ -945,152 +944,9 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         )
     }
 
-    func testSettingsFileRejectsInvalidCombinedAutomationPortInterval() throws {
-        let defaults = UserDefaults.standard
-        let backupsKey = "programa.settingsFile.backups.v1"
-        let baseKey = ProgramaPortRangePolicy.baseDefaultsKey
-        let rangeKey = ProgramaPortRangePolicy.rangeDefaultsKey
-        let previousBase = defaults.object(forKey: baseKey)
-        let previousRange = defaults.object(forKey: rangeKey)
-        let previousBackups = defaults.data(forKey: backupsKey)
-        defer {
-            restoreDefaultsValue(previousBase, key: baseKey, defaults: defaults)
-            restoreDefaultsValue(previousRange, key: rangeKey, defaults: defaults)
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: backupsKey)
-            } else {
-                defaults.removeObject(forKey: backupsKey)
-            }
-        }
-
-        defaults.set(12_000, forKey: baseKey)
-        defaults.set(20, forKey: rangeKey)
-        defaults.removeObject(forKey: backupsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
-        try writeSettingsFile(
-            """
-            {
-              "automation": {
-                "portBase": 65530,
-                "portRange": 10
-              }
-            }
-            """,
-            to: settingsFileURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: settingsFileURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        XCTAssertEqual(defaults.integer(forKey: baseKey), 12_000)
-        XCTAssertEqual(defaults.integer(forKey: rangeKey), 20)
-        XCTAssertNil(defaults.data(forKey: backupsKey))
-    }
-
-    func testSettingsFileAppliesValidAutomationPortIntervalAtomically() throws {
-        let defaults = UserDefaults.standard
-        let backupsKey = "programa.settingsFile.backups.v1"
-        let baseKey = ProgramaPortRangePolicy.baseDefaultsKey
-        let rangeKey = ProgramaPortRangePolicy.rangeDefaultsKey
-        let previousBase = defaults.object(forKey: baseKey)
-        let previousRange = defaults.object(forKey: rangeKey)
-        let previousBackups = defaults.data(forKey: backupsKey)
-        defer {
-            restoreDefaultsValue(previousBase, key: baseKey, defaults: defaults)
-            restoreDefaultsValue(previousRange, key: rangeKey, defaults: defaults)
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: backupsKey)
-            } else {
-                defaults.removeObject(forKey: backupsKey)
-            }
-        }
-
-        defaults.set(12_000, forKey: baseKey)
-        defaults.set(20, forKey: rangeKey)
-        defaults.removeObject(forKey: backupsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
-        try writeSettingsFile(
-            """
-            {
-              "automation": {
-                "portBase": 64000,
-                "portRange": 100
-              }
-            }
-            """,
-            to: settingsFileURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: settingsFileURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        XCTAssertEqual(defaults.integer(forKey: baseKey), 64_000)
-        XCTAssertEqual(defaults.integer(forKey: rangeKey), 100)
-        XCTAssertNotNil(defaults.data(forKey: backupsKey))
-    }
-
-    func testSettingsFileRejectsSingleAutomationPortKeyThatOverflowsWithDefaultCounterpart() throws {
-        let defaults = UserDefaults.standard
-        let backupsKey = "programa.settingsFile.backups.v1"
-        let baseKey = ProgramaPortRangePolicy.baseDefaultsKey
-        let rangeKey = ProgramaPortRangePolicy.rangeDefaultsKey
-        let previousBase = defaults.object(forKey: baseKey)
-        let previousRange = defaults.object(forKey: rangeKey)
-        let previousBackups = defaults.data(forKey: backupsKey)
-        defer {
-            restoreDefaultsValue(previousBase, key: baseKey, defaults: defaults)
-            restoreDefaultsValue(previousRange, key: rangeKey, defaults: defaults)
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: backupsKey)
-            } else {
-                defaults.removeObject(forKey: backupsKey)
-            }
-        }
-
-        defaults.set(12_000, forKey: baseKey)
-        defaults.set(20, forKey: rangeKey)
-        defaults.removeObject(forKey: backupsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
-        try writeSettingsFile(
-            """
-            {
-              "automation": {
-                "portBase": 65530
-              }
-            }
-            """,
-            to: settingsFileURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: settingsFileURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        XCTAssertEqual(defaults.integer(forKey: baseKey), 12_000)
-        XCTAssertEqual(defaults.integer(forKey: rangeKey), 20)
-        XCTAssertNil(defaults.data(forKey: backupsKey))
-    }
-
     func testManagedUserDefaultSettingRestoresBackedUpValueWhenFileSettingIsRemoved() throws {
         let defaults = UserDefaults.standard
-        let managedKey = WorkspaceAutoReorderSettings.key
+        let managedKey = QuitWarningSettings.warnBeforeQuitKey
         let previousValue = defaults.object(forKey: managedKey)
         let previousBackups = defaults.data(forKey: settingsFileBackupsDefaultsKey)
         defer {
@@ -1118,7 +974,7 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
             """
             {
               "app": {
-                "reorderOnNotification": true
+                "warnBeforeQuit": true
               }
             }
             """,
@@ -1144,130 +1000,6 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: settingsFileBackupsDefaultsKey))
     }
 
-    func testSettingsFileStoreAppliesWorkspaceColorDictionaryAndAllowsRemovingDefaults() throws {
-        let defaults = UserDefaults.standard
-        let previousPalette = defaults.dictionary(forKey: WorkspaceTabColorSettings.paletteKey) as? [String: String]
-        let previousLegacyOverrides = defaults.dictionary(forKey: "workspaceTabColor.defaultOverrides") as? [String: String]
-        let previousLegacyCustomColors = defaults.array(forKey: "workspaceTabColor.customColors") as? [String]
-        let previousBackups = defaults.data(forKey: settingsFileBackupsDefaultsKey)
-        defer {
-            WorkspaceTabColorSettings.reset(defaults: defaults)
-            if let previousPalette {
-                defaults.set(previousPalette, forKey: WorkspaceTabColorSettings.paletteKey)
-            }
-            if let previousLegacyOverrides {
-                defaults.set(previousLegacyOverrides, forKey: "workspaceTabColor.defaultOverrides")
-            }
-            if let previousLegacyCustomColors {
-                defaults.set(previousLegacyCustomColors, forKey: "workspaceTabColor.customColors")
-            }
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: settingsFileBackupsDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
-            }
-        }
-
-        WorkspaceTabColorSettings.reset(defaults: defaults)
-        defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-
-        let settingsFileURL = directoryURL.appendingPathComponent("settings.json", isDirectory: false)
-        try writeSettingsFile(
-            """
-            {
-              "workspaceColors": {
-                "colors": {
-                  "Blue": "#2244ff",
-                  "Neon Mint": "#00f5d4"
-                }
-              }
-            }
-            """,
-            to: settingsFileURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: settingsFileURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        let palette = WorkspaceTabColorSettings.palette(defaults: defaults)
-        XCTAssertEqual(palette.map(\.name), ["Blue", "Neon Mint"])
-        XCTAssertEqual(palette.map(\.hex), ["#2244FF", "#00F5D4"])
-    }
-
-    func testManagedWorkspaceColorsRestoreLegacyPaletteWhenFileSettingIsRemoved() throws {
-        let defaults = UserDefaults.standard
-        let previousPalette = defaults.dictionary(forKey: WorkspaceTabColorSettings.paletteKey) as? [String: String]
-        let previousLegacyOverrides = defaults.dictionary(forKey: "workspaceTabColor.defaultOverrides") as? [String: String]
-        let previousLegacyCustomColors = defaults.array(forKey: "workspaceTabColor.customColors") as? [String]
-        let previousBackups = defaults.data(forKey: settingsFileBackupsDefaultsKey)
-        defer {
-            WorkspaceTabColorSettings.reset(defaults: defaults)
-            if let previousPalette {
-                defaults.set(previousPalette, forKey: WorkspaceTabColorSettings.paletteKey)
-            }
-            if let previousLegacyOverrides {
-                defaults.set(previousLegacyOverrides, forKey: "workspaceTabColor.defaultOverrides")
-            }
-            if let previousLegacyCustomColors {
-                defaults.set(previousLegacyCustomColors, forKey: "workspaceTabColor.customColors")
-            }
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: settingsFileBackupsDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
-            }
-        }
-
-        WorkspaceTabColorSettings.reset(defaults: defaults)
-        defaults.set(["Blue": "#010203"], forKey: "workspaceTabColor.defaultOverrides")
-        defaults.set(["#778899"], forKey: "workspaceTabColor.customColors")
-        defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-
-        let managedSettingsURL = directoryURL.appendingPathComponent("managed.json", isDirectory: false)
-        try writeSettingsFile(
-            """
-            {
-              "workspaceColors": {
-                "colors": {
-                  "Neon Mint": "#00F5D4"
-                }
-              }
-            }
-            """,
-            to: managedSettingsURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: managedSettingsURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        XCTAssertEqual(WorkspaceTabColorSettings.palette(defaults: defaults).map(\.name), ["Neon Mint"])
-
-        let missingSettingsURL = directoryURL.appendingPathComponent("missing.json", isDirectory: false)
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: missingSettingsURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        let restored = WorkspaceTabColorSettings.palette(defaults: defaults)
-        XCTAssertEqual(restored.first(where: { $0.name == "Blue" })?.hex, "#010203")
-        XCTAssertEqual(restored.first(where: { $0.name == "Custom 1" })?.hex, "#778899")
-        XCTAssertNil(defaults.data(forKey: settingsFileBackupsDefaultsKey))
-    }
-
-    @MainActor
     func testReloadConfigurationReloadsManagedAppSettingsFromSettingsFile() throws {
         let defaults = UserDefaults.standard
         let managedKey = WorkspacePlacementSettings.placementKey
@@ -2507,44 +2239,6 @@ final class WorkspaceTabColorSettingsTests: XCTestCase {
 }
 
 
-final class WorkspaceAutoReorderSettingsTests: XCTestCase {
-    func testDefaultIsEnabled() {
-        let suiteName = "WorkspaceAutoReorderSettingsTests.Default.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        XCTAssertTrue(WorkspaceAutoReorderSettings.isEnabled(defaults: defaults))
-    }
-
-    func testDisabledWhenSetToFalse() {
-        let suiteName = "WorkspaceAutoReorderSettingsTests.Disabled.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        defaults.set(false, forKey: WorkspaceAutoReorderSettings.key)
-        XCTAssertFalse(WorkspaceAutoReorderSettings.isEnabled(defaults: defaults))
-    }
-
-    func testEnabledWhenSetToTrue() {
-        let suiteName = "WorkspaceAutoReorderSettingsTests.Enabled.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        defaults.set(true, forKey: WorkspaceAutoReorderSettings.key)
-        XCTAssertTrue(WorkspaceAutoReorderSettings.isEnabled(defaults: defaults))
-    }
-}
-
-
 final class WorkspaceReorderTests: XCTestCase {
     @MainActor
     func testRelativeWorkspaceMovesUseIndicesAfterRemovingTheMovingWorkspace() {
@@ -2645,15 +2339,12 @@ final class WorkspaceNotificationReorderTests: XCTestCase {
 
         let originalTabManager = appDelegate.tabManager
         let originalNotificationStore = appDelegate.notificationStore
-        let defaults = UserDefaults.standard
-        let originalAutoReorderSetting = defaults.object(forKey: WorkspaceAutoReorderSettings.key)
         let originalAppFocusOverride = AppFocusState.overrideIsFocused
 
         notificationStore.replaceNotificationsForTesting([])
         notificationStore.configureNotificationDeliveryHandlerForTesting { _, _ in }
         appDelegate.tabManager = manager
         appDelegate.notificationStore = notificationStore
-        defaults.set(true, forKey: WorkspaceAutoReorderSettings.key)
         AppFocusState.overrideIsFocused = false
 
         defer {
@@ -2662,11 +2353,6 @@ final class WorkspaceNotificationReorderTests: XCTestCase {
             appDelegate.tabManager = originalTabManager
             appDelegate.notificationStore = originalNotificationStore
             AppFocusState.overrideIsFocused = originalAppFocusOverride
-            if let originalAutoReorderSetting {
-                defaults.set(originalAutoReorderSetting, forKey: WorkspaceAutoReorderSettings.key)
-            } else {
-                defaults.removeObject(forKey: WorkspaceAutoReorderSettings.key)
-            }
         }
 
         let firstPinned = manager.tabs[0]

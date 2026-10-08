@@ -45,20 +45,10 @@ struct SettingsView: View {
     @AppStorage(SocketControlSettings.appStorageKey) private var socketControlMode = SocketControlSettings.defaultMode.rawValue
     @AppStorage(ClaudeCodeIntegrationSettings.hooksEnabledKey)
     private var claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
-    @AppStorage(ClaudeCodeIntegrationSettings.customClaudePathKey)
-    private var customClaudePath = ""
     @AppStorage(AgentScreenDetectionSettings.enabledKey)
     private var agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
-    @AppStorage(PreferredEditorSettings.key) private var preferredEditorCommand = ""
-    @AppStorage(ProgramaPortRangePolicy.baseDefaultsKey)
-    private var programaPortBase = ProgramaPortRangePolicy.defaultBase
-    @AppStorage(ProgramaPortRangePolicy.rangeDefaultsKey)
-    private var programaPortRange = ProgramaPortRangePolicy.defaultRange
     @AppStorage(NotificationSoundSettings.key) private var notificationSound = NotificationSoundSettings.defaultValue
-    @AppStorage(NotificationSoundSettings.customCommandKey) private var notificationCustomCommand = NotificationSoundSettings.defaultCustomCommand
     @AppStorage(MenuBarExtraSettings.showInMenuBarKey) private var showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
-    @AppStorage(LongCommandNotificationSettings.thresholdSecondsKey)
-    private var longCommandThresholdSeconds = LongCommandNotificationSettings.defaultThresholdSeconds
     @AppStorage(QuitWarningSettings.warnBeforeQuitKey) private var warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
     @AppStorage(ScrollbackPersistenceSettings.persistScrollbackKey) private var sessionPersistScrollback = ScrollbackPersistenceSettings.defaultPersistScrollback
     @AppStorage(ScrollbackPersistenceSettings.failureKey) private var scrollbackPersistenceFailure: String?
@@ -67,13 +57,10 @@ struct SettingsView: View {
     @AppStorage(ShortcutHintDebugSettings.alwaysShowHintsKey)
     private var alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
     @AppStorage(WorkspacePlacementSettings.placementKey) private var newWorkspacePlacement = WorkspacePlacementSettings.defaultPlacement.rawValue
-    @AppStorage(WorkspaceAutoReorderSettings.key) private var workspaceAutoReorder = WorkspaceAutoReorderSettings.defaultValue
     @AppStorage(SidebarActiveTabIndicatorSettings.styleKey)
     private var sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
     @AppStorage("sidebarSelectionColorHex") private var sidebarSelectionColorHex: String?
     @AppStorage("sidebarNotificationBadgeColorHex") private var sidebarNotificationBadgeColorHex: String?
-    @AppStorage(ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
-    private var showShortcutHintsOnCommandHold = ShortcutHintDebugSettings.defaultShowHintsOnCommandHold
     @AppStorage("sidebarTintHex") private var sidebarTintHex = SidebarTintDefaults.hex
     @AppStorage("sidebarTintHexLight") private var sidebarTintHexLight: String?
     @AppStorage("sidebarTintHexDark") private var sidebarTintHexDark: String?
@@ -114,17 +101,6 @@ struct SettingsView: View {
         return String(
             localized: "settings.app.minimalMode.subtitleOff",
             defaultValue: "Use the standard workspace title bar and controls."
-        )
-    }
-
-    private var selectedSidebarActiveTabIndicatorStyle: SidebarActiveTabIndicatorStyle {
-        SidebarActiveTabIndicatorSettings.resolvedStyle(rawValue: sidebarActiveTabIndicatorStyle)
-    }
-
-    private var sidebarIndicatorStyleSelection: Binding<String> {
-        Binding(
-            get: { selectedSidebarActiveTabIndicatorStyle.rawValue },
-            set: { sidebarActiveTabIndicatorStyle = $0 }
         )
     }
 
@@ -327,7 +303,6 @@ struct SettingsView: View {
                     case .automation:
                         socketControlSection
                         agentsSection
-                        portsSection
                         customCommandsSection
                     case .shortcuts:
                         keyboardShortcutsSection
@@ -477,35 +452,6 @@ struct SettingsView: View {
 
             SettingsCardDivider()
 
-            // Next to New Workspace Placement: both decide where a workspace sits
-            // in the sidebar list, so they read as one question.
-            SettingsCardRow(
-                String(localized: "settings.app.reorderOnNotification", defaultValue: "Reorder on Notification"),
-                subtitle: String(localized: "settings.app.reorderOnNotification.subtitle", defaultValue: "Move workspaces to the top when they receive a notification. Disable for stable shortcut positions.")
-            ) {
-                Toggle("", isOn: $workspaceAutoReorder)
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(WorkspaceAutoReorderSettings.key))
-
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                String(localized: "settings.app.preferredEditor", defaultValue: "Open Files With"),
-                subtitle: String(localized: "settings.app.preferredEditor.subtitle", defaultValue: "Command to open files on Cmd-click. Leave empty for system default.")
-            ) {
-                TextField(
-                    String(localized: "settings.app.preferredEditor.placeholder", defaultValue: "e.g. code, zed, subl"),
-                    text: $preferredEditorCommand
-                )
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 200)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(PreferredEditorSettings.key))
-
-            SettingsCardDivider()
-
             SettingsCardRow(
                 String(localized: "settings.app.showInMenuBar", defaultValue: "Show in Menu Bar"),
                 subtitle: String(localized: "settings.app.showInMenuBar.subtitle", defaultValue: "Keep Programa in the menu bar for unread notifications and quick actions.")
@@ -632,49 +578,6 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .managedBySettingsFile(settingsFileStatus.isManaged(NotificationSoundSettings.key))
-
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                String(localized: "settings.notifications.command.title", defaultValue: "Notification Command"),
-                subtitle: String(
-                    localized: "settings.notifications.command.subtitle",
-                    defaultValue: "Run a shell command when a notification arrives. $PROGRAMA_NOTIFICATION_TITLE, $PROGRAMA_NOTIFICATION_SUBTITLE, $PROGRAMA_NOTIFICATION_BODY are set."
-                )
-            ) {
-                TextField(
-                    String(localized: "settings.notifications.command.placeholder", defaultValue: "say \"done\""),
-                    text: $notificationCustomCommand
-                )
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(NotificationSoundSettings.customCommandKey))
-
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                String(localized: "settings.notifications.longCommandThreshold.title", defaultValue: "Long Command Notification"),
-                subtitle: String(
-                    localized: "settings.notifications.longCommandThreshold.subtitle",
-                    defaultValue: "Notify when a command finishes in a pane you're not looking at, if it ran at least this long. Set to 0 to disable."
-                ),
-                controlWidth: pickerColumnWidth
-            ) {
-                HStack(spacing: 4) {
-                    TextField("", value: $longCommandThresholdSeconds, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
-                        .accessibilityLabel(
-                            String(localized: "settings.notifications.longCommandThreshold.title", defaultValue: "Long Command Notification")
-                        )
-                    Text(String(localized: "settings.notifications.longCommandThreshold.unit", defaultValue: "sec"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(LongCommandNotificationSettings.thresholdSecondsKey))
         }
     }
 
@@ -727,51 +630,6 @@ struct SettingsView: View {
                 }
             }
             .disabled(terminalThemeSettings.isManagedBySettingsFile)
-
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                String(localized: "settings.terminalOpacity.title", defaultValue: "Opacity"),
-                subtitle: terminalThemeSettings.isOpacityManagedBySettingsFile
-                    ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
-                    : String(
-                        localized: "settings.terminalOpacity.subtitle",
-                        defaultValue: "Terminal background transparency."
-                    ),
-                controlWidth: pickerColumnWidth
-            ) {
-                Slider(
-                    value: Binding(
-                        get: { terminalThemeSettings.opacity },
-                        set: { terminalThemeSettings.setOpacity($0) }
-                    ),
-                    in: 0...1
-                )
-            }
-            .disabled(terminalThemeSettings.isOpacityManagedBySettingsFile)
-
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                String(localized: "settings.terminalBlur.title", defaultValue: "Background Blur"),
-                subtitle: terminalThemeSettings.isBlurManagedBySettingsFile
-                    ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
-                    : String(
-                        localized: "settings.terminalBlur.subtitle",
-                        defaultValue: "Blur the desktop behind a transparent terminal background."
-                    )
-            ) {
-                Toggle(
-                    "",
-                    isOn: Binding(
-                        get: { terminalThemeSettings.blurEnabled },
-                        set: { terminalThemeSettings.setBlurEnabled($0) }
-                    )
-                )
-                .labelsHidden()
-                .controlSize(.small)
-            }
-            .disabled(terminalThemeSettings.isBlurManagedBySettingsFile)
 
             SettingsCardDivider()
 
@@ -850,30 +708,10 @@ struct SettingsView: View {
     private var sidebarSection: some View {
         SettingsSectionHeader(title: String(localized: "settings.section.sidebar", defaultValue: "Sidebar"))
         SettingsCard {
-            SettingsPickerRow(
-                String(localized: "settings.workspaceColors.indicator", defaultValue: "Workspace Color Indicator"),
-                controlWidth: pickerColumnWidth,
-                selection: sidebarIndicatorStyleSelection
-            ) {
-                ForEach(SidebarActiveTabIndicatorStyle.allCases) { style in
-                    Text(style.displayName).tag(style.rawValue)
-                }
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(SidebarActiveTabIndicatorSettings.styleKey))
-            // Selection-highlight and notification-badge hex pickers, the inline
-            // palette editor and a section-local Reset Palette used to follow. The
-            // editor duplicated settings.json, which its own note already pointed at
-            // as the way to manage named colors, and the two hex pickers were the
-            // same per-pixel tuning as the sidebar tints. "Reset all settings" still
-            // calls WorkspaceTabColorSettings.reset() and nils both hex keys, so
-            // anything set while these rows existed is still recoverable.
-
             // "Match Terminal Background" removed with the inverted glass layout:
             // the sidebar sits on the system-appearance glass backdrop by design,
             // and the toggle's only remaining effect was forcing terminal-derived
             // text contrast that fought the system scheme.
-
-            SettingsCardDivider()
 
             SettingsCardRow(
                 String(localized: "settings.sidebarAppearance.showClaudeQuota", defaultValue: "Show Provider Usage"),
@@ -888,12 +726,9 @@ struct SettingsView: View {
                     )
             }
             .managedBySettingsFile(settingsFileStatus.isManaged("sidebarShowClaudeQuota"))
-            // Light/dark tint hex, tint opacity and a section-local reset used to
-            // live here. They were per-pixel tuning of one surface, shipped to
-            // every user, and the same four keys are already bound by the Debug
-            // window (DebugWindows.swift) where that kind of tuning belongs. The
-            // bindings stay on this view because "Reset all settings" below still
-            // restores them for anyone who set a value while the rows existed.
+            // The sidebar tint keys, the selection and badge hex keys and the active-tab
+            // indicator style are tuned in the Debug window (DebugWindows.swift). The
+            // bindings stay on this view so "Reset all settings" restores them.
         }
     }
 
@@ -1006,77 +841,6 @@ struct SettingsView: View {
 
             SettingsCardNote(String(localized: "settings.automation.agentScreenDetection.note", defaultValue: "Applies to agents such as Gemini CLI and GitHub Copilot CLI that have no installed hooks. A hooks-managed session (Claude Code, Codex, OpenCode) always takes priority over this."))
         }
-
-        SettingsCard {
-            SettingsCardRow(
-                String(localized: "settings.automation.claudeCode.customPath", defaultValue: "Claude Binary Path"),
-                subtitle: String(localized: "settings.automation.claudeCode.customPath.subtitle", defaultValue: "Custom path to the claude binary. Leave empty to use PATH.")
-            ) {
-                TextField(
-                    String(localized: "settings.automation.claudeCode.customPath.placeholder", defaultValue: "e.g. /usr/local/bin/claude"),
-                    text: $customClaudePath
-                )
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 200)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(ClaudeCodeIntegrationSettings.customClaudePathKey))
-        }
-
-    }
-
-    @ViewBuilder
-    private var portsSection: some View {
-        SettingsSectionHeader(title: String(localized: "settings.section.ports", defaultValue: "Ports"))
-        SettingsCard {
-            SettingsCardRow(String(localized: "settings.automation.portBase", defaultValue: "Port Base"), subtitle: String(localized: "settings.automation.portBase.subtitle", defaultValue: "Starting port for PROGRAMA_PORT env var."), controlWidth: pickerColumnWidth) {
-                TextField("", value: programaPortBaseBinding, format: .number)
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.trailing)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(ProgramaPortRangePolicy.baseDefaultsKey))
-
-            SettingsCardDivider()
-
-            SettingsCardRow(String(localized: "settings.automation.portRange", defaultValue: "Port Range Size"), subtitle: String(localized: "settings.automation.portRange.subtitle", defaultValue: "Number of ports per workspace."), controlWidth: pickerColumnWidth) {
-                TextField("", value: programaPortRangeBinding, format: .number)
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.trailing)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(ProgramaPortRangePolicy.rangeDefaultsKey))
-
-            SettingsCardDivider()
-
-            SettingsCardNote(String(localized: "settings.automation.port.note", defaultValue: "Each workspace gets PROGRAMA_PORT and PROGRAMA_PORT_END env vars with a dedicated port range. New terminals inherit these values."))
-        }
-
-    }
-
-    private var programaPortBaseBinding: Binding<Int> {
-        Binding(
-            get: { programaPortBase },
-            set: { requestedBase in
-                let value = ProgramaPortRangePolicy.clamped(
-                    base: requestedBase,
-                    range: programaPortRange
-                )
-                programaPortBase = value.base
-                programaPortRange = value.range
-            }
-        )
-    }
-
-    private var programaPortRangeBinding: Binding<Int> {
-        Binding(
-            get: { programaPortRange },
-            set: { requestedRange in
-                let value = ProgramaPortRangePolicy.clamped(
-                    base: programaPortBase,
-                    range: requestedRange
-                )
-                programaPortBase = value.base
-                programaPortRange = value.range
-            }
-        )
     }
 
     @ViewBuilder
@@ -1157,20 +921,6 @@ struct SettingsView: View {
 
             SettingsCardDivider()
 
-            SettingsCardRow(
-                String(localized: "settings.shortcuts.showHints", defaultValue: "Show Cmd/Ctrl-Hold Shortcut Hints"),
-                subtitle: showShortcutHintsOnCommandHold
-                    ? String(localized: "settings.shortcuts.showHints.subtitleOn", defaultValue: "Holding Cmd (sidebar/titlebar) or Ctrl/Cmd (pane tabs) shows shortcut hint pills.")
-                    : String(localized: "settings.shortcuts.showHints.subtitleOff", defaultValue: "Holding Cmd or Ctrl keeps shortcut hint pills hidden.")
-            ) {
-                Toggle("", isOn: $showShortcutHintsOnCommandHold)
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .managedBySettingsFile(settingsFileStatus.isManaged(ShortcutHintDebugSettings.showHintsOnCommandHoldKey))
-
-            SettingsCardDivider()
-
             let actions = KeyboardShortcutSettings.Action.allCases
             ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
                 ShortcutSettingRow(action: action)
@@ -1213,11 +963,8 @@ struct SettingsView: View {
         appearanceMode = AppearanceSettings.defaultMode.rawValue
         socketControlMode = SocketControlSettings.defaultMode.rawValue
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
-        customClaudePath = ""
         agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
-        preferredEditorCommand = ""
         notificationSound = NotificationSoundSettings.defaultValue
-        notificationCustomCommand = NotificationSoundSettings.defaultCustomCommand
         showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
         warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
         ScrollbackPersistenceSettings.setEnabled(ScrollbackPersistenceSettings.defaultPersistScrollback)
@@ -1226,11 +973,9 @@ struct SettingsView: View {
         alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
         newWorkspacePlacement = WorkspacePlacementSettings.defaultPlacement.rawValue
         workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
-        workspaceAutoReorder = WorkspaceAutoReorderSettings.defaultValue
         sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
         sidebarSelectionColorHex = nil
         sidebarNotificationBadgeColorHex = nil
-        showShortcutHintsOnCommandHold = ShortcutHintDebugSettings.defaultShowHintsOnCommandHold
         sidebarTintHex = SidebarTintDefaults.hex
         sidebarTintHexLight = nil
         sidebarTintHexDark = nil
@@ -1319,13 +1064,9 @@ private final class TerminalThemeSettingsModel: ObservableObject {
     @Published private(set) var themeNames: [String] = []
     @Published private(set) var lightTheme = ""
     @Published private(set) var darkTheme = ""
-    @Published private(set) var opacity: Double = 1.0
-    @Published private(set) var blurEnabled = false
     @Published private(set) var fontFamily = ""
     @Published private(set) var fontSize: Double = 0
     @Published private(set) var isManagedBySettingsFile = false
-    @Published private(set) var isOpacityManagedBySettingsFile = false
-    @Published private(set) var isBlurManagedBySettingsFile = false
     @Published private(set) var isFontManagedBySettingsFile = false
     @Published private(set) var errorMessage: String?
 
@@ -1377,26 +1118,6 @@ private final class TerminalThemeSettingsModel: ObservableObject {
         }
     }
 
-    func setOpacity(_ value: Double) {
-        guard !isOpacityManagedBySettingsFile else {
-            refresh()
-            return
-        }
-        applyAppearance { overrides in
-            overrides.backgroundOpacity = value
-        }
-    }
-
-    func setBlurEnabled(_ value: Bool) {
-        guard !isBlurManagedBySettingsFile else {
-            refresh()
-            return
-        }
-        applyAppearance { overrides in
-            overrides.backgroundBlur = value
-        }
-    }
-
     func setFontFamily(_ value: String) {
         guard !isFontManagedBySettingsFile else {
             refresh()
@@ -1420,8 +1141,6 @@ private final class TerminalThemeSettingsModel: ObservableObject {
 
     func clearManagedOverride() {
         guard !isManagedBySettingsFile,
-              !isOpacityManagedBySettingsFile,
-              !isBlurManagedBySettingsFile,
               !isFontManagedBySettingsFile else {
             return
         }
@@ -1481,8 +1200,6 @@ private final class TerminalThemeSettingsModel: ObservableObject {
             }
         }
         themeNames = names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-        opacity = current.backgroundOpacity ?? 1.0
-        blurEnabled = current.backgroundBlur ?? false
         fontFamily = current.fontFamily ?? ""
         fontSize = current.fontSize ?? 0
         refreshSelectionAndOwnership(current: current)
@@ -1499,8 +1216,6 @@ private final class TerminalThemeSettingsModel: ObservableObject {
 
         let fileStore = KeyboardShortcutSettings.settingsFileStore
         isManagedBySettingsFile = fileStore.isTerminalThemeManagedByFile()
-        isOpacityManagedBySettingsFile = fileStore.isTerminalOpacityManagedByFile()
-        isBlurManagedBySettingsFile = fileStore.isTerminalBlurManagedByFile()
         isFontManagedBySettingsFile = fileStore.isTerminalFontManagedByFile()
     }
 }

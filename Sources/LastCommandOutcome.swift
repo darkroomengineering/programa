@@ -45,16 +45,7 @@ struct LastCommandOutcome: Equatable {
 }
 
 /// Threshold-gated experimental notification: post a system notification when a long-running
-/// command finishes in a pane the user is not currently looking at. Ships default-ON with a
-/// conservative threshold; set to 0 to disable entirely.
+/// command finishes in a pane the user is not currently looking at.
 enum LongCommandNotificationSettings {
-    static let thresholdSecondsKey = "longCommandThresholdSeconds"
-    static let defaultThresholdSeconds = 30
-
-    static func thresholdSeconds(defaults: UserDefaults = .standard) -> TimeInterval {
-        if defaults.object(forKey: thresholdSecondsKey) == nil {
-            return TimeInterval(defaultThresholdSeconds)
-        }
-        return TimeInterval(defaults.integer(forKey: thresholdSecondsKey))
-    }
+    static let thresholdSeconds: TimeInterval = 30
 }

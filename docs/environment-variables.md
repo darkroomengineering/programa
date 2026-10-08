@@ -24,14 +24,13 @@ them to find the app and the terminal they run in.
 | `PROGRAMA_BUNDLE_ID` | Bundle identifier of the running app. |
 | `PROGRAMA_DEFAULT_BROWSER` | Short key of the system default browser (`chrome`, `safari`, `arc`, ...). Unset when it cannot be resolved. |
 | `PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID` | Bundle identifier of the system default browser. Unset when it cannot be resolved. |
-| `PROGRAMA_PORT`, `PROGRAMA_PORT_END`, `PROGRAMA_PORT_RANGE` | First port, last port and size of the port range reserved for this terminal. The range comes from `automation.portBase` and `automation.portRange`. |
+| `PROGRAMA_PORT`, `PROGRAMA_PORT_END`, `PROGRAMA_PORT_RANGE` | First port, last port and size of the port range reserved for this terminal. Every terminal gets a block of 10 ports starting at 9100. |
 | `PROGRAMA_SHELL_INTEGRATION` | `1` when shell integration is on (`sidebarShellIntegration`, on by default). |
 | `PROGRAMA_SHELL_INTEGRATION_DIR` | Folder that holds the shell integration scripts. |
 | `PROGRAMA_ZSH_ZDOTDIR` | The user's original `ZDOTDIR`, which the zsh integration restores after it loads. |
 | `PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION`, `PROGRAMA_LOAD_GHOSTTY_BASH_INTEGRATION` | `1` when the integration should also load Ghostty's own zsh or bash integration. |
 | `PROGRAMA_FISH_INTEGRATION_FILE`, `PROGRAMA_FISH_USER_CONFIG_ALREADY_LOADED`, `PROGRAMA_FISH_CONFIG_HOME` | Hand-off state between the app and the fish integration. |
 | `PROGRAMA_CLAUDE_HOOKS_DISABLED` | `1` when Claude Code integration is off (`automation.claudeCodeIntegration`). The `claude` wrapper then runs the real binary untouched. |
-| `PROGRAMA_CUSTOM_CLAUDE_PATH` | Value of `automation.claudeBinaryPath`. The `claude` wrapper runs this binary instead of searching `PATH`. |
 
 The zsh, bash and fish integrations also keep internal state in shell variables named
 `_PROGRAMA_*` (git and pull request polling, tty reporting, tmux key syncing). They are not a
@@ -68,11 +67,6 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN`, `PROGRAMA_CLAUDE_TEAMS_TERM` | `programa` binary and `TERM` for the Claude teams wrapper. |
 | `PROGRAMA_OMO_PROGRAMA_BIN`, `PROGRAMA_OMO_TERM`, `PROGRAMA_OMX_PROGRAMA_BIN`, `PROGRAMA_OMX_TERM`, `PROGRAMA_OMC_PROGRAMA_BIN`, `PROGRAMA_OMC_TERM` | The same pair for the OpenCode, Codex and Claude agent wrappers. |
 | `PROGRAMA_THEME_PICKER_CONFIG`, `_BUNDLE_ID`, `_TARGET`, `_COLOR_SCHEME`, `_INITIAL_LIGHT`, `_INITIAL_DARK` | Set by `programa themes` for Ghostty's `+list-themes` helper so it edits Programa's managed theme override. |
-
-## Set for the notification command
-
-When `notifications.command` runs, Programa sets `PROGRAMA_NOTIFICATION_TITLE`,
-`PROGRAMA_NOTIFICATION_SUBTITLE` and `PROGRAMA_NOTIFICATION_BODY` in its environment.
 
 ## App behavior and diagnostics
 

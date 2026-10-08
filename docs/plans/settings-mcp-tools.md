@@ -98,7 +98,7 @@ entry shape as `describe`, minus `description` and `enum`, for one key or one se
 of `path`/`section` is required; both or neither is `invalid_params`, matching the strictness
 `tests_v2/test_jsonrpc_strict_param_validation.py` already enforces for other methods.
 
-**`settings.set`** — `{"values": {"app.appearance": "dark", "app.terminalOpacity": 0.9}}`.
+**`settings.set`** — `{"values": {"app.appearance": "dark", "app.warnBeforeQuit": false}}`.
 Dotted paths, so `browser.proxy.port` addresses a nested key. A JSON `null` means "remove
 Programa's managed override", which is what the parser already treats `NSNull` as for the
 nullable keys (`Sources/ProgramaSettingsFileStore.swift:410-466`). The whole batch is validated
@@ -176,12 +176,11 @@ Deny (`agentWritable: false`), because each widens the agent's own authority:
 |---|---|
 | `automation.socketPassword` | Writes the credential file that gates the socket (`Sources/SocketControlSettings.swift:177-201`). |
 | `automation.socketControlMode` | Sets the gate itself, up to `allowAll`. |
-| `automation.claudeBinaryPath` | Chooses a binary the app then launches. |
 | `customCommands.trustedDirectories` | Turns untrusted `programa.json` commands into auto-run ones. |
 | `browser.insecureHttpHostsAllowedInEmbeddedBrowser`, `browser.proxy` | Downgrade transport security for the embedded browser. |
 
-Everything else in the schema is writable, including appearance, fonts, opacity, blur, workspace
-colors, notification settings, and shortcut bindings. The deny check runs during batch validation,
+Everything else in the schema is writable, including appearance, fonts, notification settings,
+and shortcut bindings. The deny check runs during batch validation,
 before any file read, so a batch containing one denied path changes nothing.
 
 ## 4. MCP surface

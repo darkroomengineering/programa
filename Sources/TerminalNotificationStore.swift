@@ -355,9 +355,7 @@ final class TerminalNotificationStore: ObservableObject {
             setFocusedReadIndicator(forTabId: tabId, surfaceId: surfaceId)
         }
 
-        if WorkspaceAutoReorderSettings.isEnabled() {
-            owningTabManager?.moveTabToTopForNotification(tabId)
-        }
+        owningTabManager?.moveTabToTopForNotification(tabId)
 
         let notification = TerminalNotification(
             id: UUID(),
@@ -636,19 +634,10 @@ final class TerminalNotificationStore: ObservableObject {
                 content: content,
                 trigger: nil
             )
-            let commandTitle = content.title
-            let commandSubtitle = content.subtitle
-            let commandBody = content.body
 
             self.center.add(request) { error in
                 if let error {
                     NSLog("Failed to schedule notification: \(error)")
-                } else {
-                    NotificationSoundSettings.runCustomCommand(
-                        title: commandTitle,
-                        subtitle: commandSubtitle,
-                        body: commandBody
-                    )
                 }
             }
         }
@@ -656,11 +645,6 @@ final class TerminalNotificationStore: ObservableObject {
 
     private func playSuppressedNotificationFeedback(for notification: TerminalNotification) {
         NotificationSoundSettings.playSelectedSound()
-        NotificationSoundSettings.runCustomCommand(
-            title: resolvedNotificationTitle(for: notification),
-            subtitle: notification.subtitle,
-            body: notification.body
-        )
     }
 
     private func ensureAuthorization(
