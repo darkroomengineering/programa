@@ -33,6 +33,10 @@ final class ProgramaSettingsFileStore {
     fileprivate static let trustedDirectoriesBackupIdentifier = "customCommands.trustedDirectories"
     fileprivate static let socketPasswordBackupIdentifier = "automation.socketPassword"
     fileprivate static let terminalThemeBackupIdentifier = "app.terminalTheme"
+    // Restore-only: settings.json does not manage opacity or blur, but a backup saved by an older
+    // build must still restore the user's own Ghostty value once, then be discarded.
+    fileprivate static let terminalOpacityBackupIdentifier = "app.terminalOpacity"
+    fileprivate static let terminalBlurBackupIdentifier = "app.terminalBlur"
     fileprivate static let terminalFontBackupIdentifier = "app.terminalFont"
 
     static var defaultPrimaryPath: String {
@@ -848,6 +852,46 @@ final class ProgramaSettingsFileStore {
             } catch {
                 NSLog(
                     "[ProgramaSettingsFileStore] failed to restore terminal theme: %@",
+                    String(describing: error)
+                )
+            }
+        case Self.terminalOpacityBackupIdentifier:
+            do {
+                let mutation: TerminalThemeMutation
+                switch backup {
+                case .double(let value):
+                    mutation = try terminalThemeStore.set(rawAppearanceValue: String(value), forKey: "background-opacity")
+                case .absent:
+                    mutation = try terminalThemeStore.set(rawAppearanceValue: "", forKey: "background-opacity")
+                default:
+                    return
+                }
+                if mutation.didChange {
+                    terminalThemeReloadHandler()
+                }
+            } catch {
+                NSLog(
+                    "[ProgramaSettingsFileStore] failed to restore terminal opacity: %@",
+                    String(describing: error)
+                )
+            }
+        case Self.terminalBlurBackupIdentifier:
+            do {
+                let mutation: TerminalThemeMutation
+                switch backup {
+                case .bool(let value):
+                    mutation = try terminalThemeStore.set(rawAppearanceValue: value ? "true" : "false", forKey: "background-blur")
+                case .absent:
+                    mutation = try terminalThemeStore.set(rawAppearanceValue: "", forKey: "background-blur")
+                default:
+                    return
+                }
+                if mutation.didChange {
+                    terminalThemeReloadHandler()
+                }
+            } catch {
+                NSLog(
+                    "[ProgramaSettingsFileStore] failed to restore terminal blur: %@",
                     String(describing: error)
                 )
             }
