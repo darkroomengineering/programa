@@ -223,9 +223,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         )
         XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
 
-        let mainWindowId = try XCTUnwrap(
-            socketCommand("current_window")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
+        let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
 
         openCommandPaletteCommands(app: app)
 
@@ -338,22 +336,35 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         )
         XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
 
-        let mainWindowId = try XCTUnwrap(socketCommand("current_window")?.trimmingCharacters(in: .whitespacesAndNewlines))
-        let secondaryWorkspaceId = try XCTUnwrap(okUUID(from: socketCommand("new_workspace")))
+        let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
+        let secondaryWorkspaceId = try XCTUnwrap(createWorkspaceId(), "Expected workspace.create to return a workspace ID")
+        // v2 workspace.create only selects the new workspace when focus mutations are allowed; select explicitly.
+        assertSocketOK("workspace.select", params: ["workspace_id": secondaryWorkspaceId])
         let initialSurfaceId = try XCTUnwrap(waitForSurfaceIDs(minimumCount: 1, timeout: 5.0).first)
-        let hiddenSurfaceId = try XCTUnwrap(okUUID(from: socketCommand("new_surface --type=terminal")))
+        let hiddenSurfaceId = try XCTUnwrap(
+            socketResult("surface.create", params: ["type": "terminal"])?["surface_id"] as? String,
+            "Expected surface.create to return a surface ID"
+        )
 
-        XCTAssertEqual(
-            socketCommand("report_pwd /tmp/\(hiddenSurfaceToken) --tab=\(secondaryWorkspaceId) --panel=\(hiddenSurfaceId)"),
-            "OK"
+        assertSocketOK(
+            "surface.report_pwd",
+            params: [
+                "workspace_id": secondaryWorkspaceId,
+                "surface_id": hiddenSurfaceId,
+                "path": "/tmp/\(hiddenSurfaceToken)",
+            ]
         )
-        XCTAssertEqual(socketCommand("focus_surface \(initialSurfaceId)"), "OK")
-        XCTAssertEqual(
-            socketCommand("report_pwd /tmp/\(visibleSurfaceToken) --tab=\(secondaryWorkspaceId) --panel=\(initialSurfaceId)"),
-            "OK"
+        assertSocketOK("surface.focus", params: ["surface_id": initialSurfaceId])
+        assertSocketOK(
+            "surface.report_pwd",
+            params: [
+                "workspace_id": secondaryWorkspaceId,
+                "surface_id": initialSurfaceId,
+                "path": "/tmp/\(visibleSurfaceToken)",
+            ]
         )
-        XCTAssertEqual(socketCommand("select_workspace 0"), "OK")
-        XCTAssertEqual(socketCommand("focus_window \(mainWindowId)"), "OK")
+        assertFirstWorkspaceSelected()
+        assertSocketOK("window.focus", params: ["window_id": mainWindowId])
 
         RunLoop.current.run(until: Date().addingTimeInterval(0.4))
 
@@ -378,7 +389,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             "Expected the all-surfaces search setting to be enabled"
         )
 
-        XCTAssertEqual(socketCommand("focus_window \(mainWindowId)"), "OK")
+        assertSocketOK("window.focus", params: ["window_id": mainWindowId])
 
         openCommandPalette(app: app, query: hiddenSurfaceToken)
         let enabledSnapshot = try XCTUnwrap(
@@ -482,9 +493,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         )
         XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
 
-        let mainWindowId = try XCTUnwrap(
-            socketCommand("current_window")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
+        let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
 
         focusSettingsWindow(app: app)
         let toggle = try requireMinimalModeToggle(app: app)
@@ -498,7 +507,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             )
         }
 
-        XCTAssertEqual(socketCommand("focus_window \(mainWindowId)"), "OK")
+        assertSocketOK("window.focus", params: ["window_id": mainWindowId])
         openCommandPaletteCommands(app: app)
         let searchField = app.textFields["CommandPaletteSearchField"]
         searchField.typeText("minimal")
@@ -528,7 +537,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             "Expected running the command palette action to enable minimal mode"
         )
 
-        XCTAssertEqual(socketCommand("focus_window \(mainWindowId)"), "OK")
+        assertSocketOK("window.focus", params: ["window_id": mainWindowId])
         openCommandPaletteCommands(app: app)
         let disableSearchField = app.textFields["CommandPaletteSearchField"]
         disableSearchField.typeText("minimal")
@@ -572,9 +581,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         )
         XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
 
-        let mainWindowId = try XCTUnwrap(
-            socketCommand("current_window")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
+        let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
         try seedWorkspaceSwitcherCorpus(workspaceCount: 96)
 
         let searchField = app.textFields["CommandPaletteSearchField"]
@@ -759,7 +766,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
 
     private func waitForSocketPong(timeout: TimeInterval) -> Bool {
         sidebarHelpPollUntil(timeout: timeout) {
-            socketCommand("ping") == "PONG"
+            (socketResult("system.ping")?["pong"] as? Bool) == true
         }
     }
 
@@ -773,21 +780,54 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
     }
 
     private func surfaceIDs() -> [String] {
-        guard let response = socketCommand("list_surfaces"), !response.isEmpty, !response.hasPrefix("No surfaces") else {
+        guard let surfaces = socketResult("surface.list")?["surfaces"] as? [[String: Any]] else {
             return []
         }
-        return response
-            .split(separator: "\n")
-            .compactMap { line in
-                guard let range = line.range(of: ": ") else { return nil }
-                return String(line[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-            }
+        return surfaces.compactMap { $0["id"] as? String }
     }
 
-    private func okUUID(from response: String?) -> String? {
-        guard let response, response.hasPrefix("OK ") else { return nil }
-        let value = String(response.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
-        return UUID(uuidString: value) != nil ? value : nil
+    private func currentWindowId() -> String? {
+        socketResult("window.current")?["window_id"] as? String
+    }
+
+    private func createWorkspaceId() -> String? {
+        guard let id = socketResult("workspace.create")?["workspace_id"] as? String,
+              UUID(uuidString: id) != nil else { return nil }
+        return id
+    }
+
+    private func assertSocketOK(
+        _ method: String,
+        params: [String: Any] = [:],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let envelope = socketJSON(method: method, params: params)
+        XCTAssertEqual(
+            envelope?["ok"] as? Bool,
+            true,
+            "Expected \(method) to succeed. response=\(envelope.map { "\($0)" } ?? "<nil>")",
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertFirstWorkspaceSelected(file: StaticString = #filePath, line: UInt = #line) {
+        let firstWorkspaceId = (socketResult("workspace.list")?["workspaces"] as? [[String: Any]])?
+            .first?["id"] as? String
+        guard let firstWorkspaceId else {
+            XCTFail("Expected workspace.list to return a first workspace", file: file, line: line)
+            return
+        }
+        assertSocketOK("workspace.select", params: ["workspace_id": firstWorkspaceId], file: file, line: line)
+    }
+
+    private func socketResult(_ method: String, params: [String: Any] = [:]) -> [String: Any]? {
+        guard let envelope = socketJSON(method: method, params: params),
+              envelope["ok"] as? Bool == true else {
+            return nil
+        }
+        return envelope["result"] as? [String: Any] ?? [:]
     }
 
     private func debugTypeText(_ text: String) throws {
@@ -822,8 +862,8 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
 
         for index in 1..<workspaceCount {
             let workspaceId = try XCTUnwrap(
-                okUUID(from: socketCommand("new_workspace")),
-                "Expected new_workspace to return a workspace ID"
+                createWorkspaceId(),
+                "Expected workspace.create to return a workspace ID"
             )
             let title = seededWorkspaceTitle(index: index)
             let response = try XCTUnwrap(
@@ -843,15 +883,11 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             )
         }
 
-        XCTAssertEqual(socketCommand("select_workspace 0"), "OK")
+        assertFirstWorkspaceSelected()
     }
 
     private func seededWorkspaceTitle(index: Int) -> String {
         "\(noMatchWorkspaceQuery)-\(index)-" + String(repeating: "workspace-", count: 8)
-    }
-
-    private func socketCommand(_ command: String) -> String? {
-        ControlSocketClient(path: socketPath, responseTimeout: 2.0).sendLine(command)
     }
 
     private func commandPaletteResultRows(from snapshot: [String: Any]) -> [[String: Any]] {
