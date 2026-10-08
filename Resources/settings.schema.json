@@ -59,22 +59,6 @@
           "default": null,
           "description": "Terminal themes from Settings > Appearance. Use null, or null for both variants, to remove Programa's managed theme override and inherit Ghostty configuration."
         },
-        "terminalOpacity": {
-          "oneOf": [
-            { "type": "number", "minimum": 0, "maximum": 1 },
-            { "type": "null" }
-          ],
-          "default": null,
-          "description": "Terminal background opacity from Settings > Appearance. Use null to remove Programa's managed override and inherit Ghostty configuration."
-        },
-        "terminalBlur": {
-          "oneOf": [
-            { "type": "boolean" },
-            { "type": "null" }
-          ],
-          "default": null,
-          "description": "Terminal background blur from Settings > Appearance. Use null to remove Programa's managed override and inherit Ghostty configuration."
-        },
         "terminalFont": {
           "oneOf": [
             {
@@ -110,16 +94,6 @@
           "default": false,
           "description": "Hide the workspace title bar and move controls into the sidebar."
         },
-        "preferredEditor": {
-          "type": "string",
-          "default": "",
-          "description": "Custom editor command used by Programa where applicable. Leave empty to use the default."
-        },
-        "reorderOnNotification": {
-          "type": "boolean",
-          "default": true,
-          "description": "Move workspaces with new notifications toward the top."
-        },
         "warnBeforeQuit": {
           "type": "boolean",
           "default": true,
@@ -148,65 +122,6 @@
           "enum": ["default", "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink", "none"],
           "default": "default",
           "description": "Notification sound preset."
-        },
-        "command": {
-          "type": "string",
-          "default": "",
-          "description": "Optional shell command to run alongside notification delivery."
-        },
-        "longCommandThresholdSeconds": {
-          "type": "integer",
-          "default": 30,
-          "description": "Minimum duration, in seconds, a command must run before a finish notification is posted for a pane the user isn't looking at. 0 disables this notification entirely."
-        }
-      }
-    },
-    "workspaceColors": {
-      "title": "workspaceColors",
-      "description": "Workspace tab and badge colors from Settings > Workspace Colors.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "indicatorStyle": {
-          "type": "string",
-          "enum": ["leftRail", "solidFill", "rail", "border", "wash", "lift", "typography", "washRail", "blueWashColorRail"],
-          "default": "leftRail",
-          "description": "Active workspace indicator style. Legacy aliases are accepted and normalized."
-        },
-        "selectionColor": {
-          "$ref": "#/$defs/colorHexOrNull",
-          "default": null,
-          "description": "Override the selected workspace background color."
-        },
-        "notificationBadgeColor": {
-          "$ref": "#/$defs/colorHexOrNull",
-          "default": null,
-          "description": "Override the unread notification badge color."
-        },
-        "colors": {
-          "type": "object",
-          "description": "Full named workspace color palette. Include built-in entries you want to keep, remove keys to remove colors, and add more named entries to extend the picker.",
-          "default": {
-            "Red": "#C0392B",
-            "Crimson": "#922B21",
-            "Orange": "#A04000",
-            "Amber": "#7D6608",
-            "Olive": "#4A5C18",
-            "Green": "#196F3D",
-            "Teal": "#006B6B",
-            "Aqua": "#0E6B8C",
-            "Blue": "#1565C0",
-            "Navy": "#1A5276",
-            "Indigo": "#283593",
-            "Purple": "#6A1B9A",
-            "Magenta": "#AD1457",
-            "Rose": "#880E4F",
-            "Brown": "#7B3F00",
-            "Charcoal": "#3E4B5E"
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/colorHex"
-          }
         }
       }
     },
@@ -220,28 +135,6 @@
           "type": "boolean",
           "default": false,
           "description": "Use the terminal background instead of the sidebar tint."
-        },
-        "tintColor": {
-          "$ref": "#/$defs/colorHex",
-          "default": "#000000",
-          "description": "Base sidebar tint color used when light/dark overrides are not set."
-        },
-        "lightModeTintColor": {
-          "$ref": "#/$defs/colorHexOrNull",
-          "default": null,
-          "description": "Sidebar tint override for light appearance."
-        },
-        "darkModeTintColor": {
-          "$ref": "#/$defs/colorHexOrNull",
-          "default": null,
-          "description": "Sidebar tint override for dark appearance."
-        },
-        "tintOpacity": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.03,
-          "description": "Sidebar tint opacity from 0 to 1."
         },
         "showClaudeQuota": {
           "type": "boolean",
@@ -278,25 +171,6 @@
           "type": "boolean",
           "default": true,
           "description": "Enable Programa integration hooks for Claude Code."
-        },
-        "claudeBinaryPath": {
-          "type": "string",
-          "default": "",
-          "description": "Custom path to the claude binary."
-        },
-        "portBase": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 65535,
-          "default": 9100,
-          "description": "Starting value for workspace PROGRAMA_PORT assignments. The complete range must fit within 1-65535."
-        },
-        "portRange": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 65535,
-          "default": 10,
-          "description": "Number of ports reserved per workspace. The complete range must fit within 1-65535."
         }
       }
     },
@@ -351,11 +225,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "showModifierHoldHints": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show shortcut hint pills while holding Cmd or Ctrl."
-        },
         "bindings": {
           "type": "object",
           "default": {},
@@ -501,21 +370,6 @@
     }
   },
   "$defs": {
-    "colorHex": {
-      "type": "string",
-      "pattern": "^#[0-9A-Fa-f]{6}$",
-      "description": "Uppercase or lowercase 6-digit hex color."
-    },
-    "colorHexOrNull": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/colorHex"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
     "shortcutBinding": {
       "oneOf": [
         {

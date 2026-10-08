@@ -44,18 +44,6 @@ enum NewWorkspacePlacement: String, CaseIterable, Identifiable {
     }
 }
 
-enum WorkspaceAutoReorderSettings {
-    static let key = "workspaceAutoReorderOnNotification"
-    static let defaultValue = true
-
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: key) == nil {
-            return defaultValue
-        }
-        return defaults.bool(forKey: key)
-    }
-}
-
 struct SidebarWorkspaceAuxiliaryDetailVisibility: Equatable {
     let showsMetadata: Bool
     let showsLog: Bool
@@ -230,17 +218,6 @@ enum WorkspaceTabColorSettings {
         }
         defaults.removeObject(forKey: legacyDefaultOverridesKey)
         defaults.removeObject(forKey: legacyCustomColorsKey)
-    }
-
-    static func backupPaletteMap(defaults: UserDefaults = .standard) -> [String: String]? {
-        if let stored = storedPaletteMap(defaults: defaults) {
-            return stored
-        }
-        return legacyPaletteMap(defaults: defaults)
-    }
-
-    static func resolvedPaletteMap(defaults: UserDefaults = .standard) -> [String: String] {
-        effectivePaletteMap(defaults: defaults)
     }
 
     static func addCustomColor(_ hex: String, defaults: UserDefaults = .standard) -> String? {

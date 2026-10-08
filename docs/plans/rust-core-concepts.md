@@ -242,23 +242,20 @@ underneath.
 **`settings.json`** (`docs/settings-json.md`, `~/.config/programa/settings.json`, schema
 `Resources/settings.schema.json`, JSONC with `//` comments, reloads on file change, a
 file-set key wins over the Settings UI until removed). Top-level sections and every key:
-- `app`: `appearance`, `terminalTheme`, `terminalOpacity`, `terminalBlur`, `terminalFont`,
-  `newWorkspacePlacement`, `minimalMode`, `preferredEditor`, `reorderOnNotification`,
+- `app`: `appearance`, `terminalTheme`, `terminalFont`, `newWorkspacePlacement`, `minimalMode`,
   `warnBeforeQuit`, `commandPaletteSearchesAllSurfaces`.
-- `notifications`: `showInMenuBar`, `sound`, `command`, `longCommandThresholdSeconds`.
-- `workspaceColors`: `indicatorStyle`, `selectionColor`, `notificationBadgeColor`, `colors`.
-- `sidebarAppearance`: `matchTerminalBackground`, `tintColor`, `lightModeTintColor`,
-  `darkModeTintColor`, `tintOpacity`, `showClaudeQuota`.
+- `notifications`: `showInMenuBar`, `sound`.
+- `sidebarAppearance`: `matchTerminalBackground`, `showClaudeQuota`.
 - `automation`: `socketControlMode` (`off|programaOnly|automation|password|allowAll|openAccess|
   fullOpenAccess|notifications|full`), `socketPassword`, `claudeCodeIntegration`,
-  `openBrowserWithAgentSplits`, `claudeBinaryPath`, `portBase`, `portRange`.
+  `openBrowserWithAgentSplits`.
 - `customCommands`: `trustedDirectories`.
 - `browser`: `defaultSearchEngine`, `showSearchSuggestions`, `theme`,
   `openTerminalLinksInProgramaBrowser`, `interceptTerminalOpenCommandInProgramaBrowser`,
   `hostsToOpenInEmbeddedBrowser`, `urlsToAlwaysOpenExternally`, `externalBrowser`,
   `insecureHttpHostsAllowedInEmbeddedBrowser`, `proxy`.
 - `worktrees`: `directory` (default `~/.programa/worktrees`).
-- `shortcuts`: `showModifierHoldHints`, `bindings` (keyed by Programa action id; string or array
+- `shortcuts`: `bindings` (keyed by Programa action id; string or array
   for a chord). Special-cased action id in the doc: `openAgentOverview` (unbound by default).
 Swift source of truth: `Sources/ProgramaSettingsFileStore.swift`,
 `Sources/KeyboardShortcutSettings.swift`.
@@ -286,8 +283,7 @@ theme directories (`GHOSTTY_RESOURCES_DIR`, `XDG_DATA_DIRS`); ships two Programa
 **Min Light** and **Min Dark** (Min Theme VS Code extension style). CLI: `programa themes
 list|set|clear`. Managed block written into `~/Library/Application Support/
 com.darkroom.programa/config.ghostty`, field-by-field (never captures a field it doesn't
-explicitly manage). Mirrors the four `app.terminalTheme/terminalOpacity/terminalBlur/
-terminalFont` settings.json keys.
+explicitly manage). Mirrors the two `app.terminalTheme/terminalFont` settings.json keys.
 
 **Localization**: `Resources/Localizable.xcstrings`, source language `en`, translated languages
 present: `en`, `ja` (English and Japanese — matches `CLAUDE.md`'s "currently English and

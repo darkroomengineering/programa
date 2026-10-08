@@ -534,37 +534,15 @@ final class CommandPaletteSelectionScrollBehaviorTests: XCTestCase {
 
 
 final class ShortcutHintModifierPolicyTests: XCTestCase {
-    func testShortcutHintRequiresEnabledCommandOnlyModifier() {
-        withDefaultsSuite { defaults in
-            defaults.set(true, forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
-
-            XCTAssertTrue(ShortcutHintModifierPolicy.shouldShowHints(for: [.command], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.command, .shift], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control, .shift], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.command, .option], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control, .option], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.command, .control], defaults: defaults))
-        }
-    }
-
-    func testCommandHintCanBeDisabledInSettings() {
-        withDefaultsSuite { defaults in
-            defaults.set(false, forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
-
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.command], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control], defaults: defaults))
-        }
-    }
-
-    func testCommandHintDefaultsToEnabledWhenSettingMissing() {
-        withDefaultsSuite { defaults in
-            defaults.removeObject(forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
-
-            XCTAssertTrue(ShortcutHintModifierPolicy.shouldShowHints(for: [.command], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control], defaults: defaults))
-        }
+    func testShortcutHintRequiresCommandOnlyModifier() {
+        XCTAssertTrue(ShortcutHintModifierPolicy.shouldShowHints(for: [.command]))
+        XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control]))
+        XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: []))
+        XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.command, .shift]))
+        XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control, .shift]))
+        XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.command, .option]))
+        XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control, .option]))
+        XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.command, .control]))
     }
 
     func testShortcutHintStaysCommandOnlyWhenWorkspaceShortcutIsCustomized() {
@@ -579,12 +557,8 @@ final class ShortcutHintModifierPolicyTests: XCTestCase {
             for: action
         )
 
-        withDefaultsSuite { defaults in
-            defaults.set(true, forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
-
-            XCTAssertTrue(ShortcutHintModifierPolicy.shouldShowHints(for: [.command], defaults: defaults))
-            XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control], defaults: defaults))
-        }
+        XCTAssertTrue(ShortcutHintModifierPolicy.shouldShowHints(for: [.command]))
+        XCTAssertFalse(ShortcutHintModifierPolicy.shouldShowHints(for: [.control]))
     }
 
     func testShortcutHintUsesIntentionalHoldDelay() {
@@ -621,65 +595,45 @@ final class ShortcutHintModifierPolicyTests: XCTestCase {
     }
 
     func testWindowScopedShortcutHintsUseKeyWindowWhenNoEventWindowIsAvailable() {
-        withDefaultsSuite { defaults in
-            defaults.set(true, forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
-
-            XCTAssertTrue(
-                ShortcutHintModifierPolicy.shouldShowHints(
-                    for: [.command],
-                    hostWindowNumber: 42,
-                    hostWindowIsKey: true,
-                    eventWindowNumber: nil,
-                    keyWindowNumber: 42,
-                    defaults: defaults
-                )
+        XCTAssertTrue(
+            ShortcutHintModifierPolicy.shouldShowHints(
+                for: [.command],
+                hostWindowNumber: 42,
+                hostWindowIsKey: true,
+                eventWindowNumber: nil,
+                keyWindowNumber: 42
             )
+        )
 
-            XCTAssertFalse(
-                ShortcutHintModifierPolicy.shouldShowHints(
-                    for: [.command],
-                    hostWindowNumber: 42,
-                    hostWindowIsKey: true,
-                    eventWindowNumber: nil,
-                    keyWindowNumber: 7,
-                    defaults: defaults
-                )
+        XCTAssertFalse(
+            ShortcutHintModifierPolicy.shouldShowHints(
+                for: [.command],
+                hostWindowNumber: 42,
+                hostWindowIsKey: true,
+                eventWindowNumber: nil,
+                keyWindowNumber: 7
             )
+        )
 
-            XCTAssertTrue(
-                ShortcutHintModifierPolicy.shouldShowHints(
-                    for: [.command],
-                    hostWindowNumber: 42,
-                    hostWindowIsKey: true,
-                    eventWindowNumber: nil,
-                    keyWindowNumber: 42,
-                    defaults: defaults
-                )
+        XCTAssertTrue(
+            ShortcutHintModifierPolicy.shouldShowHints(
+                for: [.command],
+                hostWindowNumber: 42,
+                hostWindowIsKey: true,
+                eventWindowNumber: nil,
+                keyWindowNumber: 42
             )
+        )
 
-            XCTAssertFalse(
-                ShortcutHintModifierPolicy.shouldShowHints(
-                    for: [.control],
-                    hostWindowNumber: 42,
-                    hostWindowIsKey: true,
-                    eventWindowNumber: nil,
-                    keyWindowNumber: 42,
-                    defaults: defaults
-                )
+        XCTAssertFalse(
+            ShortcutHintModifierPolicy.shouldShowHints(
+                for: [.control],
+                hostWindowNumber: 42,
+                hostWindowIsKey: true,
+                eventWindowNumber: nil,
+                keyWindowNumber: 42
             )
-        }
-    }
-
-    private func withDefaultsSuite(_ body: (UserDefaults) -> Void) {
-        let suiteName = "ShortcutHintModifierPolicyTests-\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create defaults suite")
-            return
-        }
-
-        defaults.removePersistentDomain(forName: suiteName)
-        body(defaults)
-        defaults.removePersistentDomain(forName: suiteName)
+        )
     }
 }
 
@@ -700,30 +654,9 @@ final class ShortcutHintDebugSettingsTests: XCTestCase {
         XCTAssertEqual(ShortcutHintDebugSettings.defaultPaneHintX, 0.0)
         XCTAssertEqual(ShortcutHintDebugSettings.defaultPaneHintY, 0.0)
         XCTAssertFalse(ShortcutHintDebugSettings.defaultAlwaysShowHints)
-        XCTAssertTrue(ShortcutHintDebugSettings.defaultShowHintsOnCommandHold)
     }
 
-    func testShowHintsOnCommandHoldSettingRespectsStoredValue() {
-        let suiteName = "ShortcutHintDebugSettingsTests-\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create defaults suite")
-            return
-        }
-
-        defaults.removePersistentDomain(forName: suiteName)
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        defaults.removeObject(forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
-        XCTAssertTrue(ShortcutHintDebugSettings.showHintsOnCommandHoldEnabled(defaults: defaults))
-
-        defaults.set(false, forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
-        XCTAssertFalse(ShortcutHintDebugSettings.showHintsOnCommandHoldEnabled(defaults: defaults))
-
-        defaults.set(true, forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
-        XCTAssertTrue(ShortcutHintDebugSettings.showHintsOnCommandHoldEnabled(defaults: defaults))
-    }
-
-    func testResetVisibilityDefaultsRestoresAlwaysShowAndCommandHoldFlags() {
+    func testResetVisibilityDefaultsRestoresAlwaysShowFlag() {
         let suiteName = "ShortcutHintDebugSettingsTests-\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             XCTFail("Failed to create defaults suite")
@@ -734,17 +667,12 @@ final class ShortcutHintDebugSettingsTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         defaults.set(true, forKey: ShortcutHintDebugSettings.alwaysShowHintsKey)
-        defaults.set(false, forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey)
 
         ShortcutHintDebugSettings.resetVisibilityDefaults(defaults: defaults)
 
         XCTAssertEqual(
             defaults.object(forKey: ShortcutHintDebugSettings.alwaysShowHintsKey) as? Bool,
             ShortcutHintDebugSettings.defaultAlwaysShowHints
-        )
-        XCTAssertEqual(
-            defaults.object(forKey: ShortcutHintDebugSettings.showHintsOnCommandHoldKey) as? Bool,
-            ShortcutHintDebugSettings.defaultShowHintsOnCommandHold
         )
     }
 }

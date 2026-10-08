@@ -1018,32 +1018,20 @@ final class GhosttyTerminalStartupEnvironmentTests: XCTestCase {
         XCTAssertEqual(wrapped, first)
     }
 
-    func testPortRangeAssignmentReadsDefaultsForEveryNewAssignment() throws {
-        let suiteName = "GhosttyTerminalStartupEnvironmentTests.ports.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        defaults.set(9_100, forKey: ProgramaPortRangePolicy.baseDefaultsKey)
-        defaults.set(10, forKey: ProgramaPortRangePolicy.rangeDefaultsKey)
-        XCTAssertEqual(
-            ProgramaPortRangePolicy.assignment(defaults: defaults, ordinal: 0),
-            ProgramaPortRangeAssignment(start: 9_100, end: 9_109, size: 10)
-        )
-
-        defaults.set(12_000, forKey: ProgramaPortRangePolicy.baseDefaultsKey)
-        defaults.set(25, forKey: ProgramaPortRangePolicy.rangeDefaultsKey)
-        XCTAssertEqual(
-            ProgramaPortRangePolicy.assignment(defaults: defaults, ordinal: 1),
-            ProgramaPortRangeAssignment(start: 12_025, end: 12_049, size: 25)
-        )
-    }
-
-    func testPortRangeClampingKeepsCompleteRangeInsideTCPPortSpace() {
-        let clamped = ProgramaPortRangePolicy.clamped(base: 70_000, range: 10)
-        XCTAssertEqual(clamped.base, 65_535)
-        XCTAssertEqual(clamped.range, 1)
+    func testPortRangeValidityRejectsRangesPastTCPPortSpace() {
         XCTAssertTrue(ProgramaPortRangePolicy.isValid(base: 65_535, range: 1))
         XCTAssertFalse(ProgramaPortRangePolicy.isValid(base: 65_535, range: 2))
+    }
+
+    func testPortRangeAssignmentUsesFixedDefaultRange() {
+        XCTAssertEqual(
+            ProgramaPortRangePolicy.assignment(ordinal: 0),
+            ProgramaPortRangeAssignment(start: 9_100, end: 9_109, size: 10)
+        )
+        XCTAssertEqual(
+            ProgramaPortRangePolicy.assignment(ordinal: 1),
+            ProgramaPortRangeAssignment(start: 9_110, end: 9_119, size: 10)
+        )
     }
 
     func testApplyManagedTerminalIdentityEnvironmentOverridesInheritedValues() {

@@ -9844,40 +9844,6 @@
         }
       }
     },
-    "settings.app.reorderOnNotification": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reorder on Notification"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通知時に並べ替え"
-          }
-        }
-      }
-    },
-    "settings.app.reorderOnNotification.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Move workspaces to the top when they receive a notification. Disable for stable shortcut positions."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通知を受け取ったワークスペースを一番上に移動します。ショートカットの位置を固定したい場合は無効にしてください。"
-          }
-        }
-      }
-    },
     "settings.app.settingsFile.openButton": {
       "extractionState": "manual",
       "localizations": {
@@ -10082,57 +10048,6 @@
         }
       }
     },
-    "settings.automation.claudeCode.customPath": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude Binary Path"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claudeバイナリのパス"
-          }
-        }
-      }
-    },
-    "settings.automation.claudeCode.customPath.placeholder": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "e.g. /usr/local/bin/claude"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "例: /usr/local/bin/claude"
-          }
-        }
-      }
-    },
-    "settings.automation.claudeCode.customPath.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Custom path to the claude binary. Leave empty to use PATH."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "claudeバイナリへのカスタムパスです。空欄にするとPATHを使用します。"
-          }
-        }
-      }
-    },
     "settings.automation.claudeCode.note": {
       "extractionState": "manual",
       "localizations": {
@@ -10265,91 +10180,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "警告: フルオープンアクセスにすると、このMac上のコントロールソケットが誰でも読み書きできる状態になり、認証チェックが無効になります。ローカルでのデバッグ用途以外では使用しないでください。"
-          }
-        }
-      }
-    },
-    "settings.automation.port.note": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Each workspace gets PROGRAMA_PORT and PROGRAMA_PORT_END env vars with a dedicated port range. New terminals inherit these values."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "各ワークスペースには、専用のポート範囲を示すPROGRAMA_PORTとPROGRAMA_PORT_ENDの環境変数が割り当てられます。新規ターミナルはこれらの値を引き継ぎます。"
-          }
-        }
-      }
-    },
-    "settings.automation.portBase": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Port Base"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ポートのベース番号"
-          }
-        }
-      }
-    },
-    "settings.automation.portBase.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Starting port for PROGRAMA_PORT env var."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PROGRAMA_PORT環境変数の開始ポート番号です。"
-          }
-        }
-      }
-    },
-    "settings.automation.portRange": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Port Range Size"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ポート範囲のサイズ"
-          }
-        }
-      }
-    },
-    "settings.automation.portRange.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Number of ports per workspace."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークスペースごとのポート数です。"
           }
         }
       }
@@ -10881,57 +10711,6 @@
         }
       }
     },
-    "settings.notifications.command.placeholder": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "say \"done\""
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "say \"done\""
-          }
-        }
-      }
-    },
-    "settings.notifications.command.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Run a shell command when a notification arrives. $PROGRAMA_NOTIFICATION_TITLE, $PROGRAMA_NOTIFICATION_SUBTITLE, $PROGRAMA_NOTIFICATION_BODY are set."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通知が届いたときにシェルコマンドを実行します。$PROGRAMA_NOTIFICATION_TITLE、$PROGRAMA_NOTIFICATION_SUBTITLE、$PROGRAMA_NOTIFICATION_BODY が設定されます。"
-          }
-        }
-      }
-    },
-    "settings.notifications.command.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Notification Command"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通知コマンド"
-          }
-        }
-      }
-    },
     "settings.notifications.desktop.title": {
       "extractionState": "manual",
       "localizations": {
@@ -10945,57 +10724,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "デスクトップ通知"
-          }
-        }
-      }
-    },
-    "settings.notifications.longCommandThreshold.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Notify when a command finishes in a pane you're not looking at, if it ran at least this long. Set to 0 to disable."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "見ていないペインでコマンドが完了したとき、実行時間がこの秒数以上であれば通知します。0にすると無効になります。"
-          }
-        }
-      }
-    },
-    "settings.notifications.longCommandThreshold.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Long Command Notification"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "長時間コマンドの通知"
-          }
-        }
-      }
-    },
-    "settings.notifications.longCommandThreshold.unit": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "sec"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "秒"
           }
         }
       }
@@ -11255,23 +10983,6 @@
         }
       }
     },
-    "settings.section.ports": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ports"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ポート"
-          }
-        }
-      }
-    },
     "settings.section.reset": {
       "extractionState": "manual",
       "localizations": {
@@ -11421,57 +11132,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "ショートカットの値をクリックして記録します。複合ショートカットにする場合は2つ目のキーを押し、最初のキーのままにする場合はもう一度クリックしてください。"
-          }
-        }
-      }
-    },
-    "settings.shortcuts.showHints": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Shortcut Hints While Holding Modifiers"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "修飾キーを押している間、ショートカットヒントを表示"
-          }
-        }
-      }
-    },
-    "settings.shortcuts.showHints.subtitleOff": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Holding shortcut modifiers keeps shortcut hint pills hidden."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ショートカットの修飾キーを押していても、ショートカットヒントのピルは表示されません。"
-          }
-        }
-      }
-    },
-    "settings.shortcuts.showHints.subtitleOn": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Holding the configured shortcut modifiers shows shortcut hint pills."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "設定した修飾キーを押すと、ショートカットヒントのピルが表示されます。"
           }
         }
       }
@@ -11778,23 +11438,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "設定"
-          }
-        }
-      }
-    },
-    "settings.workspaceColors.indicator": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Workspace Color Indicator"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークスペースカラーインジケータ"
           }
         }
       }
@@ -15556,74 +15199,6 @@
         }
       }
     },
-    "settings.terminalOpacity.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Opacity"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "不透明度"
-          }
-        }
-      }
-    },
-    "settings.terminalOpacity.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Terminal background transparency."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ターミナルの背景の透明度です。"
-          }
-        }
-      }
-    },
-    "settings.terminalBlur.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Background Blur"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "背景のぼかし"
-          }
-        }
-      }
-    },
-    "settings.terminalBlur.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Blur the desktop behind a transparent terminal background."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "透明なターミナル背景の奥にあるデスクトップをぼかします。"
-          }
-        }
-      }
-    },
     "settings.terminalFont.title": {
       "extractionState": "manual",
       "localizations": {
@@ -15671,57 +15246,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "システムのデフォルト"
-          }
-        }
-      }
-    },
-    "settings.app.preferredEditor": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Files With"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ファイルを開くアプリ"
-          }
-        }
-      }
-    },
-    "settings.app.preferredEditor.subtitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Command to open files on Cmd-click. Leave empty for system default."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cmdクリックでファイルを開くコマンドです。空欄にするとシステムのデフォルトを使用します。"
-          }
-        }
-      }
-    },
-    "settings.app.preferredEditor.placeholder": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "e.g. code, zed, subl"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "例: code, zed, subl"
           }
         }
       }

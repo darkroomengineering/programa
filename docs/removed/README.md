@@ -17,5 +17,6 @@ Reductive pass of 2026-09-02, base commit 903027ccef. Core kept: the Ghostty ter
 | Custom notification sound files | [custom-notification-sounds.md](custom-notification-sounds.md) | 400 |
 | tmux active-pane overlay target | [tmux-active-pane-overlay.md](tmux-active-pane-overlay.md) | 70 |
 | cmux upgrade shims (old config paths, defaults migration, env and alias fallbacks) | [cmux-upgrade-shims.md](cmux-upgrade-shims.md) | 100 |
+| Settings options (editor, reorder, opacity and blur overrides, notification command, long-command threshold, sidebar tints, ports, Claude path, workspace colors, hold hints) | [settings-knobs-2026-10.md](settings-knobs-2026-10.md) | 2,100 |
 
 Line counts are git-tracked lines at removal time and include tests and vendored code.

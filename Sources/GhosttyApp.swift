@@ -2178,9 +2178,8 @@ class GhosttyApp {
                 workspace.lastCommand = outcome
 
                 // Experimental: notify when a long-running command finishes in a pane the
-                // user isn't looking at. Default-ON with a conservative threshold; 0 disables.
-                let threshold = LongCommandNotificationSettings.thresholdSeconds()
-                guard threshold > 0, outcome.duration >= threshold else { return }
+                // user isn't looking at. Fires at or above LongCommandNotificationSettings.thresholdSeconds.
+                guard outcome.duration >= LongCommandNotificationSettings.thresholdSeconds else { return }
                 guard !workspace.hasHookManagedAgent else { return }
 
                 let isActiveTab = owningManager.selectedTabId == tabId

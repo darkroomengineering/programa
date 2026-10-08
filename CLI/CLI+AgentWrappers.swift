@@ -293,22 +293,6 @@ extension ProgramaCLI {
                         .deletingLastPathComponent()
                         .appendingPathComponent("claude", isDirectory: false)
                         .path
-                    // Check custom path from Settings > Automation > Claude Code.
-                    // Try env var first (set by the app per-session), then UserDefaults.
-                    let candidates = [
-                        launcherEnvironment["PROGRAMA_CUSTOM_CLAUDE_PATH"],
-                        UserDefaults.standard.string(forKey: "claudeCodeCustomClaudePath"),
-                    ]
-                    for raw in candidates {
-                        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
-                              !trimmed.isEmpty else { continue }
-                        var isDir: ObjCBool = false
-                        guard FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDir),
-                              !isDir.boolValue,
-                              FileManager.default.isExecutableFile(atPath: trimmed),
-                              !isProgramaClaudeWrapper(at: trimmed) else { continue }
-                        return trimmed
-                    }
                     return resolveClaudeExecutable(searchPath: launcherEnvironment["PATH"])
                         ?? {
                             guard let bundledClaudePath,

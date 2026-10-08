@@ -12,9 +12,6 @@ enum NotificationSoundSettings {
     static let key = "notificationSound"
     static let defaultValue = "default"
 
-    static let customCommandKey = "notificationCustomCommand"
-    static let defaultCustomCommand = ""
-
     static let systemSounds: [(label: String, value: String)] = [
         (String(localized: "workspace.notificationSound.default", defaultValue: "Default"), "default"),
         ("Basso", "Basso"),
@@ -71,34 +68,6 @@ enum NotificationSoundSettings {
             break
         default:
             NSSound(named: NSSound.Name(value))?.play()
-        }
-    }
-
-    private static let customCommandQueue = DispatchQueue(
-        label: "com.darkroom.programa.notification-custom-command",
-        qos: .utility
-    )
-
-    static func runCustomCommand(title: String, subtitle: String, body: String, defaults: UserDefaults = .standard) {
-        let command = (defaults.string(forKey: customCommandKey) ?? defaultCustomCommand)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !command.isEmpty else { return }
-        customCommandQueue.async {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", command]
-            var env = ProcessInfo.processInfo.environment
-            env["PROGRAMA_NOTIFICATION_TITLE"] = title
-            env["PROGRAMA_NOTIFICATION_SUBTITLE"] = subtitle
-            env["PROGRAMA_NOTIFICATION_BODY"] = body
-            process.environment = env
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            do {
-                try process.run()
-            } catch {
-                NSLog("Notification command failed to launch: \(error)")
-            }
         }
     }
 }

@@ -106,9 +106,6 @@ struct ProgramaPortRangeAssignment: Equatable, Sendable {
 }
 
 enum ProgramaPortRangePolicy {
-    // Legacy cmux names, kept because existing installs store the port settings under them.
-    static let baseDefaultsKey = "cmuxPortBase"
-    static let rangeDefaultsKey = "cmuxPortRange"
     static let defaultBase = 9_100
     static let defaultRange = 10
     static let minimumPort = 1
@@ -121,12 +118,6 @@ enum ProgramaPortRangePolicy {
         }
         let (end, overflow) = base.addingReportingOverflow(range - 1)
         return !overflow && end <= maximumPort
-    }
-
-    static func clamped(base: Int, range: Int) -> (base: Int, range: Int) {
-        let safeBase = min(max(base, minimumPort), maximumPort)
-        let maximumRange = maximumPort - safeBase + 1
-        return (safeBase, min(max(range, minimumPort), maximumRange))
     }
 
     static func assignment(
@@ -162,14 +153,8 @@ enum ProgramaPortRangePolicy {
         return ProgramaPortRangeAssignment(start: start, end: end, size: range)
     }
 
-    static func assignment(defaults: UserDefaults, ordinal: Int) -> ProgramaPortRangeAssignment {
-        let storedBase = defaults.integer(forKey: baseDefaultsKey)
-        let storedRange = defaults.integer(forKey: rangeDefaultsKey)
-        return assignment(
-            base: storedBase > 0 ? storedBase : defaultBase,
-            range: storedRange > 0 ? storedRange : defaultRange,
-            ordinal: ordinal
-        )
+    static func assignment(ordinal: Int) -> ProgramaPortRangeAssignment {
+        assignment(base: defaultBase, range: defaultRange, ordinal: ordinal)
     }
 }
 
@@ -1379,15 +1364,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
             setManagedEnvironmentValue("PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID", defaultBrowser.bundleIdentifier)
         }
 
-        // Resolve settings for each new terminal so Settings changes take effect without a restart.
-        // The policy validates the full range and wraps the monotonic ordinal within the available
-        // port space, so malformed defaults and long-running sessions can never trap or emit an
-        // invalid TCP port.
+        // The policy wraps the monotonic ordinal within the available port space, so
+        // long-running sessions can never trap or emit an invalid TCP port.
         do {
-            let assignment = ProgramaPortRangePolicy.assignment(
-                defaults: .standard,
-                ordinal: portOrdinal
-            )
+            let assignment = ProgramaPortRangePolicy.assignment(ordinal: portOrdinal)
             setManagedEnvironmentValue("PROGRAMA_PORT", String(assignment.start))
             setManagedEnvironmentValue("PROGRAMA_PORT_END", String(assignment.end))
             setManagedEnvironmentValue("PROGRAMA_PORT_RANGE", String(assignment.size))
@@ -1396,9 +1376,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let claudeHooksEnabled = ClaudeCodeIntegrationSettings.hooksEnabled()
         if !claudeHooksEnabled {
             setManagedEnvironmentValue("PROGRAMA_CLAUDE_HOOKS_DISABLED", "1")
-        }
-        if let customClaudePath = ClaudeCodeIntegrationSettings.customClaudePath() {
-            setManagedEnvironmentValue("PROGRAMA_CUSTOM_CLAUDE_PATH", customClaudePath)
         }
 
         if let cliBinPath = Bundle.main.resourceURL?.appendingPathComponent("bin").path {

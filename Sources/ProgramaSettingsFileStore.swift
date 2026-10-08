@@ -33,8 +33,6 @@ final class ProgramaSettingsFileStore {
     fileprivate static let trustedDirectoriesBackupIdentifier = "customCommands.trustedDirectories"
     fileprivate static let socketPasswordBackupIdentifier = "automation.socketPassword"
     fileprivate static let terminalThemeBackupIdentifier = "app.terminalTheme"
-    fileprivate static let terminalOpacityBackupIdentifier = "app.terminalOpacity"
-    fileprivate static let terminalBlurBackupIdentifier = "app.terminalBlur"
     fileprivate static let terminalFontBackupIdentifier = "app.terminalFont"
 
     static var defaultPrimaryPath: String {
@@ -224,14 +222,6 @@ final class ProgramaSettingsFileStore {
         synchronized { activeManagedCustomSettings.terminalTheme != nil }
     }
 
-    func isTerminalOpacityManagedByFile() -> Bool {
-        synchronized { activeManagedCustomSettings.terminalOpacity != nil }
-    }
-
-    func isTerminalBlurManagedByFile() -> Bool {
-        synchronized { activeManagedCustomSettings.terminalBlur != nil }
-    }
-
     func isTerminalFontManagedByFile() -> Bool {
         synchronized { activeManagedCustomSettings.terminalFont != nil }
     }
@@ -391,9 +381,6 @@ final class ProgramaSettingsFileStore {
         if let notificationsSection = root["notifications"] as? [String: Any] {
             parseNotificationsSection(notificationsSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
-        if let workspaceColorsSection = root["workspaceColors"] as? [String: Any] {
-            parseWorkspaceColorsSection(workspaceColorsSection, sourcePath: sourcePath, snapshot: &snapshot)
-        }
         if let sidebarAppearanceSection = root["sidebarAppearance"] as? [String: Any] {
             parseSidebarAppearanceSection(sidebarAppearanceSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
@@ -447,12 +434,6 @@ final class ProgramaSettingsFileStore {
             let mode = value ? WorkspacePresentationModeSettings.Mode.minimal : .standard
             snapshot.managedUserDefaults[WorkspacePresentationModeSettings.modeKey] = .string(mode.rawValue)
         }
-        if let value = jsonString(section["preferredEditor"]) {
-            snapshot.managedUserDefaults[PreferredEditorSettings.key] = .string(value)
-        }
-        if let value = jsonBool(section["reorderOnNotification"]) {
-            snapshot.managedUserDefaults[WorkspaceAutoReorderSettings.key] = .bool(value)
-        }
         if let value = jsonBool(section["warnBeforeQuit"]) {
             snapshot.managedUserDefaults[QuitWarningSettings.warnBeforeQuitKey] = .bool(value)
         }
@@ -481,24 +462,6 @@ final class ProgramaSettingsFileStore {
                 }
             } else {
                 logInvalid("app.terminalTheme", sourcePath: sourcePath)
-            }
-        }
-        if let rawTerminalOpacity = section["terminalOpacity"] {
-            if rawTerminalOpacity is NSNull {
-                snapshot.managedCustomSettings.terminalOpacity = ManagedTerminalOpacity(value: nil)
-            } else if let opacity = jsonDouble(rawTerminalOpacity), opacity >= 0, opacity <= 1 {
-                snapshot.managedCustomSettings.terminalOpacity = ManagedTerminalOpacity(value: opacity)
-            } else {
-                logInvalid("app.terminalOpacity", sourcePath: sourcePath)
-            }
-        }
-        if let rawTerminalBlur = section["terminalBlur"] {
-            if rawTerminalBlur is NSNull {
-                snapshot.managedCustomSettings.terminalBlur = ManagedTerminalBlur(value: nil)
-            } else if let blur = jsonBool(rawTerminalBlur) {
-                snapshot.managedCustomSettings.terminalBlur = ManagedTerminalBlur(value: blur)
-            } else {
-                logInvalid("app.terminalBlur", sourcePath: sourcePath)
             }
         }
         if let rawTerminalFont = section["terminalFont"] {
@@ -553,118 +516,8 @@ final class ProgramaSettingsFileStore {
                 logInvalid("notifications.sound", sourcePath: sourcePath)
             }
         }
-        if let raw = jsonString(section["command"]) {
-            snapshot.managedUserDefaults[NotificationSoundSettings.customCommandKey] = .string(raw)
-        }
-        if let value = jsonInt(section["longCommandThresholdSeconds"]) {
-            if value >= 0 {
-                snapshot.managedUserDefaults[LongCommandNotificationSettings.thresholdSecondsKey] = .int(value)
-            } else {
-                logInvalid("notifications.longCommandThresholdSeconds", sourcePath: sourcePath)
-            }
-        }
     }
 
-
-    private func parseWorkspaceColorsSection(
-        _ section: [String: Any],
-        sourcePath: String,
-        snapshot: inout ResolvedSettingsSnapshot
-    ) {
-        if let raw = jsonString(section["indicatorStyle"]) {
-            let normalized = SidebarActiveTabIndicatorSettings.resolvedStyle(rawValue: raw).rawValue
-            let accepted = Set(SidebarActiveTabIndicatorStyle.allCases.map(\.rawValue)).union([
-                "rail", "border", "wash", "lift", "typography", "washRail", "blueWashColorRail",
-            ])
-            if accepted.contains(raw) {
-                snapshot.managedUserDefaults[SidebarActiveTabIndicatorSettings.styleKey] = .string(normalized)
-            } else {
-                logInvalid("workspaceColors.indicatorStyle", sourcePath: sourcePath)
-            }
-        }
-        if section.keys.contains("selectionColor") {
-            guard let value = parseNullableHex(
-                section["selectionColor"],
-                path: "workspaceColors.selectionColor",
-                sourcePath: sourcePath
-            ) else { return }
-            snapshot.managedUserDefaults["sidebarSelectionColorHex"] = .nullableString(value)
-        }
-        if section.keys.contains("notificationBadgeColor") {
-            guard let value = parseNullableHex(
-                section["notificationBadgeColor"],
-                path: "workspaceColors.notificationBadgeColor",
-                sourcePath: sourcePath
-            ) else { return }
-            snapshot.managedUserDefaults["sidebarNotificationBadgeColorHex"] = .nullableString(value)
-        }
-        if section.keys.contains("colors") {
-            guard let rawColors = section["colors"] as? [String: Any] else {
-                logInvalid("workspaceColors.colors", sourcePath: sourcePath)
-                return
-            }
-
-            var normalizedPalette: [String: String] = [:]
-            for (rawName, rawValue) in rawColors {
-                let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !name.isEmpty else {
-                    NSLog("[ProgramaSettingsFileStore] ignoring empty workspace color name in %@", sourcePath)
-                    continue
-                }
-                guard let hex = jsonString(rawValue),
-                      let normalizedHex = WorkspaceTabColorSettings.normalizedHex(hex) else {
-                    NSLog("[ProgramaSettingsFileStore] ignoring invalid workspace color '%@' in %@", name, sourcePath)
-                    continue
-                }
-                normalizedPalette[name] = normalizedHex
-            }
-            snapshot.managedUserDefaults[WorkspaceTabColorSettings.paletteKey] = .stringDictionary(normalizedPalette)
-            return
-        }
-
-        let validNames = Set(WorkspaceTabColorSettings.defaultPalette.map(\.name))
-        var normalizedLegacyPalette: [String: String]? = nil
-        if let rawOverrides = section["paletteOverrides"] as? [String: Any] {
-            var palette = Dictionary(
-                uniqueKeysWithValues: WorkspaceTabColorSettings.defaultPalette.map { ($0.name, $0.hex) }
-            )
-            for (name, rawValue) in rawOverrides {
-                guard validNames.contains(name) else {
-                    NSLog("[ProgramaSettingsFileStore] ignoring unknown workspace color '%@' in %@", name, sourcePath)
-                    continue
-                }
-                guard let hex = jsonString(rawValue),
-                      let normalizedHex = WorkspaceTabColorSettings.normalizedHex(hex) else {
-                    NSLog("[ProgramaSettingsFileStore] ignoring invalid workspace color override '%@' in %@", name, sourcePath)
-                    continue
-                }
-                palette[name] = normalizedHex
-            }
-            normalizedLegacyPalette = palette
-        }
-        if let rawCustomColors = jsonStringArray(section["customColors"]) {
-            var palette = normalizedLegacyPalette ?? Dictionary(
-                uniqueKeysWithValues: WorkspaceTabColorSettings.defaultPalette.map { ($0.name, $0.hex) }
-            )
-            var existingNames = Set(palette.keys)
-            var seenCustomHexes: Set<String> = []
-            for rawHex in rawCustomColors {
-                guard let normalizedHex = WorkspaceTabColorSettings.normalizedHex(rawHex),
-                      seenCustomHexes.insert(normalizedHex).inserted else { continue }
-                var index = 1
-                while existingNames.contains("Custom \(index)") {
-                    index += 1
-                }
-                let name = "Custom \(index)"
-                palette[name] = normalizedHex
-                existingNames.insert(name)
-            }
-            normalizedLegacyPalette = palette
-        }
-        if let normalizedLegacyPalette {
-            snapshot.managedUserDefaults[WorkspaceTabColorSettings.paletteKey] = .stringDictionary(normalizedLegacyPalette)
-        }
-    }
 
     private func parseSidebarAppearanceSection(
         _ section: [String: Any],
@@ -673,35 +526,6 @@ final class ProgramaSettingsFileStore {
     ) {
         if let value = jsonBool(section["matchTerminalBackground"]) {
             snapshot.managedUserDefaults["sidebarMatchTerminalBackground"] = .bool(value)
-        }
-        if let raw = jsonString(section["tintColor"]) {
-            if let normalized = WorkspaceTabColorSettings.normalizedHex(raw) {
-                snapshot.managedUserDefaults["sidebarTintHex"] = .string(normalized)
-            } else {
-                logInvalid("sidebarAppearance.tintColor", sourcePath: sourcePath)
-            }
-        }
-        if section.keys.contains("lightModeTintColor") {
-            if let value = parseNullableHex(
-                section["lightModeTintColor"],
-                path: "sidebarAppearance.lightModeTintColor",
-                sourcePath: sourcePath
-            ) {
-                snapshot.managedUserDefaults["sidebarTintHexLight"] = .nullableString(value)
-            }
-        }
-        if section.keys.contains("darkModeTintColor") {
-            if let value = parseNullableHex(
-                section["darkModeTintColor"],
-                path: "sidebarAppearance.darkModeTintColor",
-                sourcePath: sourcePath
-            ) {
-                snapshot.managedUserDefaults["sidebarTintHexDark"] = .nullableString(value)
-            }
-        }
-        if let value = jsonDouble(section["tintOpacity"]) {
-            let clamped = min(max(value, 0), 1)
-            snapshot.managedUserDefaults["sidebarTintOpacity"] = .double(clamped)
         }
         if let value = jsonBool(section["showClaudeQuota"]) {
             snapshot.managedUserDefaults["sidebarShowClaudeQuota"] = .bool(value)
@@ -739,34 +563,6 @@ final class ProgramaSettingsFileStore {
         if let value = jsonBool(section["claudeCodeIntegration"]) {
             snapshot.managedUserDefaults[ClaudeCodeIntegrationSettings.hooksEnabledKey] = .bool(value)
         }
-        if let raw = jsonString(section["claudeBinaryPath"]) {
-            snapshot.managedUserDefaults[ClaudeCodeIntegrationSettings.customClaudePathKey] = .string(raw)
-        }
-        let managesPortBase = section.keys.contains("portBase")
-        let managesPortRange = section.keys.contains("portRange")
-        if managesPortBase || managesPortRange {
-            guard !managesPortBase || jsonInt(section["portBase"]) != nil else {
-                logInvalid("automation.portBase", sourcePath: sourcePath)
-                return
-            }
-            guard !managesPortRange || jsonInt(section["portRange"]) != nil else {
-                logInvalid("automation.portRange", sourcePath: sourcePath)
-                return
-            }
-
-            let portBase = jsonInt(section["portBase"]) ?? ProgramaPortRangePolicy.defaultBase
-            let portRange = jsonInt(section["portRange"]) ?? ProgramaPortRangePolicy.defaultRange
-            guard ProgramaPortRangePolicy.isValid(base: portBase, range: portRange) else {
-                logInvalid("automation.portBase/portRange", sourcePath: sourcePath)
-                return
-            }
-
-            // Manage the resolved pair atomically. If the file supplies only one key, the
-            // documented default counterpart must replace any persisted value that could make
-            // the effective interval overflow.
-            snapshot.managedUserDefaults[ProgramaPortRangePolicy.baseDefaultsKey] = .int(portBase)
-            snapshot.managedUserDefaults[ProgramaPortRangePolicy.rangeDefaultsKey] = .int(portRange)
-        }
     }
 
     private func parseCustomCommandsSection(
@@ -794,12 +590,8 @@ final class ProgramaSettingsFileStore {
             return
         }
 
-        if let value = jsonBool(section["showModifierHoldHints"]) {
-            snapshot.managedUserDefaults[ShortcutHintDebugSettings.showHintsOnCommandHoldKey] = .bool(value)
-        }
-
         var bindings = section["bindings"] as? [String: Any] ?? [:]
-        for (key, rawValue) in section where key != "bindings" && key != "showModifierHoldHints" {
+        for (key, rawValue) in section where key != "bindings" {
             bindings[key] = rawValue
         }
 
@@ -936,34 +728,6 @@ final class ProgramaSettingsFileStore {
         }
     }
 
-    private func parseNullableHex(
-        _ rawValue: Any?,
-        path: String,
-        sourcePath: String
-    ) -> String?? {
-        if rawValue is NSNull {
-            return .some(nil)
-        }
-        guard let raw = jsonString(rawValue),
-              let normalized = WorkspaceTabColorSettings.normalizedHex(raw) else {
-            logInvalid(path, sourcePath: sourcePath)
-            return nil
-        }
-        return .some(normalized)
-    }
-
-    // NOTE (tint precedence, refs #100): among the UserDefaults keys this writes via
-    // `applyManagedUserDefaultsValue` below, `sidebarTintHex(Light/Dark)` and
-    // `sidebarTintOpacity` are ALSO written independently by
-    // `GhosttyConfig.applySidebarAppearanceToUserDefaults()` (GhosttyConfig.swift), driven by
-    // the legacy `~/.config/ghostty/config` file rather than settings.json. There is no single
-    // ordered apply path between the two; the effective value for each key is whichever source
-    // wrote it most recently. See the detailed comment on
-    // `GhosttyConfig.applySidebarAppearanceToUserDefaults()` for the full load-order
-    // walkthrough (settings.json applies first at launch via this store's synchronous init,
-    // ghostty config applies afterward and again on view lifecycle events, and both re-fire
-    // reactively after that). Documented here rather than changed, since unifying them requires
-    // coordinating two independently triggered reactive systems, not a file-reorg-safe edit.
     private func applyManagedSettings(
         snapshot: ResolvedSettingsSnapshot,
         updateBackups: Bool = true
@@ -997,14 +761,6 @@ final class ProgramaSettingsFileStore {
             if snapshot.managedCustomSettings.terminalTheme != nil,
                backups[Self.terminalThemeBackupIdentifier] == nil {
                 backups[Self.terminalThemeBackupIdentifier] = currentTerminalThemeBackupValue()
-            }
-            if snapshot.managedCustomSettings.terminalOpacity != nil,
-               backups[Self.terminalOpacityBackupIdentifier] == nil {
-                backups[Self.terminalOpacityBackupIdentifier] = currentTerminalOpacityBackupValue()
-            }
-            if snapshot.managedCustomSettings.terminalBlur != nil,
-               backups[Self.terminalBlurBackupIdentifier] == nil {
-                backups[Self.terminalBlurBackupIdentifier] = currentTerminalBlurBackupValue()
             }
             if snapshot.managedCustomSettings.terminalFont != nil,
                backups[Self.terminalFontBackupIdentifier] == nil {
@@ -1053,12 +809,6 @@ final class ProgramaSettingsFileStore {
         if let terminalTheme = settings.terminalTheme {
             applyTerminalTheme(light: terminalTheme.light, dark: terminalTheme.dark)
         }
-        if let terminalOpacity = settings.terminalOpacity {
-            applyTerminalOpacity(terminalOpacity.value)
-        }
-        if let terminalBlur = settings.terminalBlur {
-            applyTerminalBlur(terminalBlur.value)
-        }
         if let terminalFont = settings.terminalFont {
             applyTerminalFont(family: terminalFont.family, size: terminalFont.size)
         }
@@ -1101,46 +851,6 @@ final class ProgramaSettingsFileStore {
                     String(describing: error)
                 )
             }
-        case Self.terminalOpacityBackupIdentifier:
-            do {
-                let mutation: TerminalThemeMutation
-                switch backup {
-                case .double(let value):
-                    mutation = try terminalThemeStore.set(rawAppearanceValue: String(value), forKey: "background-opacity")
-                case .absent:
-                    mutation = try terminalThemeStore.set(rawAppearanceValue: "", forKey: "background-opacity")
-                default:
-                    return
-                }
-                if mutation.didChange {
-                    terminalThemeReloadHandler()
-                }
-            } catch {
-                NSLog(
-                    "[ProgramaSettingsFileStore] failed to restore terminal opacity: %@",
-                    String(describing: error)
-                )
-            }
-        case Self.terminalBlurBackupIdentifier:
-            do {
-                let mutation: TerminalThemeMutation
-                switch backup {
-                case .bool(let value):
-                    mutation = try terminalThemeStore.set(rawAppearanceValue: value ? "true" : "false", forKey: "background-blur")
-                case .absent:
-                    mutation = try terminalThemeStore.set(rawAppearanceValue: "", forKey: "background-blur")
-                default:
-                    return
-                }
-                if mutation.didChange {
-                    terminalThemeReloadHandler()
-                }
-            } catch {
-                NSLog(
-                    "[ProgramaSettingsFileStore] failed to restore terminal blur: %@",
-                    String(describing: error)
-                )
-            }
         case Self.terminalFontBackupIdentifier:
             do {
                 let mutation: TerminalThemeMutation
@@ -1178,29 +888,12 @@ final class ProgramaSettingsFileStore {
         case .bool:
             guard defaults.object(forKey: defaultsKey) != nil else { return .absent }
             return .bool(defaults.bool(forKey: defaultsKey))
-        case .int:
-            guard defaults.object(forKey: defaultsKey) != nil else { return .absent }
-            return .int(defaults.integer(forKey: defaultsKey))
-        case .double:
-            guard defaults.object(forKey: defaultsKey) != nil else { return .absent }
-            return .double(defaults.double(forKey: defaultsKey))
-        case .string, .nullableString:
+        case .string:
             guard let value = defaults.string(forKey: defaultsKey) else { return .absent }
             return .string(value)
         case .stringArray:
             guard let value = defaults.array(forKey: defaultsKey) as? [String] else { return .absent }
             return .stringArray(value)
-        case .stringDictionary:
-            if defaultsKey == WorkspaceTabColorSettings.paletteKey {
-                guard let value = WorkspaceTabColorSettings.backupPaletteMap(defaults: defaults) else {
-                    return .absent
-                }
-                return .stringDictionary(value)
-            }
-            guard let value = defaults.dictionary(forKey: defaultsKey) as? [String: String] else {
-                return .absent
-            }
-            return .stringDictionary(value)
         }
     }
 
@@ -1216,20 +909,6 @@ final class ProgramaSettingsFileStore {
             return .absent
         }
         return .string(rawValue)
-    }
-
-    private func currentTerminalOpacityBackupValue() -> BackupValue {
-        guard let opacity = terminalThemeStore.managedRawAppearance().backgroundOpacity else {
-            return .absent
-        }
-        return .double(opacity)
-    }
-
-    private func currentTerminalBlurBackupValue() -> BackupValue {
-        guard let blur = terminalThemeStore.managedRawAppearance().backgroundBlur else {
-            return .absent
-        }
-        return .bool(blur)
     }
 
     private func currentTerminalFontBackupValue() -> BackupValue {
@@ -1257,41 +936,6 @@ final class ProgramaSettingsFileStore {
         }
     }
 
-    private func applyTerminalOpacity(_ value: Double?) {
-        do {
-            let rawValue = value.map { String($0) } ?? ""
-            let mutation = try terminalThemeStore.set(rawAppearanceValue: rawValue, forKey: "background-opacity")
-            if mutation.didChange {
-                terminalThemeReloadHandler()
-            }
-        } catch {
-            NSLog(
-                "[ProgramaSettingsFileStore] failed to apply terminal opacity: %@",
-                String(describing: error)
-            )
-        }
-    }
-
-    private func applyTerminalBlur(_ value: Bool?) {
-        do {
-            let rawValue: String
-            switch value {
-            case .some(true): rawValue = "true"
-            case .some(false): rawValue = "false"
-            case .none: rawValue = ""
-            }
-            let mutation = try terminalThemeStore.set(rawAppearanceValue: rawValue, forKey: "background-blur")
-            if mutation.didChange {
-                terminalThemeReloadHandler()
-            }
-        } catch {
-            NSLog(
-                "[ProgramaSettingsFileStore] failed to apply terminal blur: %@",
-                String(describing: error)
-            )
-        }
-    }
-
     private func applyTerminalFont(family: String?, size: Double?) {
         do {
             let mutation = try terminalThemeStore.set(rawAppearanceValues: [
@@ -1311,28 +955,9 @@ final class ProgramaSettingsFileStore {
 
     private func applyManagedUserDefaultsValue(_ value: ManagedSettingsValue, for defaultsKey: String) {
         let defaults = UserDefaults.standard
-        if defaultsKey == WorkspaceTabColorSettings.paletteKey,
-           case .stringDictionary(let next) = value {
-            let current = WorkspaceTabColorSettings.resolvedPaletteMap(defaults: defaults)
-            if current != next {
-                WorkspaceTabColorSettings.persistPaletteMap(next, defaults: defaults)
-            }
-            return
-        }
-
         switch value {
         case .bool(let next):
             let current = defaults.object(forKey: defaultsKey) as? Bool
-            if current != next {
-                defaults.set(next, forKey: defaultsKey)
-            }
-        case .int(let next):
-            let current = defaults.object(forKey: defaultsKey) as? Int
-            if current != next {
-                defaults.set(next, forKey: defaultsKey)
-            }
-        case .double(let next):
-            let current = defaults.object(forKey: defaultsKey) as? Double
             if current != next {
                 defaults.set(next, forKey: defaultsKey)
             }
@@ -1341,22 +966,8 @@ final class ProgramaSettingsFileStore {
             if current != next {
                 defaults.set(next, forKey: defaultsKey)
             }
-        case .nullableString(let next):
-            let current = defaults.string(forKey: defaultsKey)
-            if current != next {
-                if let next {
-                    defaults.set(next, forKey: defaultsKey)
-                } else {
-                    defaults.removeObject(forKey: defaultsKey)
-                }
-            }
         case .stringArray(let next):
             let current = defaults.array(forKey: defaultsKey) as? [String]
-            if current != next {
-                defaults.set(next, forKey: defaultsKey)
-            }
-        case .stringDictionary(let next):
-            let current = defaults.dictionary(forKey: defaultsKey) as? [String: String]
             if current != next {
                 defaults.set(next, forKey: defaultsKey)
             }
@@ -1365,18 +976,6 @@ final class ProgramaSettingsFileStore {
 
     private func restoreUserDefaultsBackup(_ backup: BackupValue, for defaultsKey: String) {
         let defaults = UserDefaults.standard
-        if defaultsKey == WorkspaceTabColorSettings.paletteKey {
-            switch backup {
-            case .absent:
-                WorkspaceTabColorSettings.reset(defaults: defaults)
-            case .stringDictionary(let value):
-                WorkspaceTabColorSettings.persistPaletteMap(value, defaults: defaults)
-            default:
-                break
-            }
-            return
-        }
-
         switch backup {
         case .absent:
             defaults.removeObject(forKey: defaultsKey)
@@ -1513,13 +1112,9 @@ final class ProgramaSettingsFileStore {
                         "light": NSNull(),
                         "dark": NSNull(),
                     ],
-                    "terminalOpacity": NSNull(),
-                    "terminalBlur": NSNull(),
                     "terminalFont": NSNull(),
                     "newWorkspacePlacement": WorkspacePlacementSettings.defaultPlacement.rawValue,
                     "minimalMode": WorkspacePresentationModeSettings.defaultMode == .minimal,
-                    "preferredEditor": "",
-                    "reorderOnNotification": WorkspaceAutoReorderSettings.defaultValue,
                     "warnBeforeQuit": QuitWarningSettings.defaultWarnBeforeQuit,
                     "commandPaletteSearchesAllSurfaces": CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces,
                 ],
@@ -1528,26 +1123,11 @@ final class ProgramaSettingsFileStore {
                 "notifications": [
                     "showInMenuBar": MenuBarExtraSettings.defaultShowInMenuBar,
                     "sound": NotificationSoundSettings.defaultValue,
-                    "command": NotificationSoundSettings.defaultCustomCommand,
-                ],
-            ],
-            [
-                "workspaceColors": [
-                    "indicatorStyle": SidebarActiveTabIndicatorSettings.defaultStyle.rawValue,
-                    "selectionColor": NSNull(),
-                    "notificationBadgeColor": NSNull(),
-                    "colors": Dictionary(
-                        uniqueKeysWithValues: WorkspaceTabColorSettings.defaultPalette.map { ($0.name, $0.hex) }
-                    ),
                 ],
             ],
             [
                 "sidebarAppearance": [
                     "matchTerminalBackground": false,
-                    "tintColor": SidebarTintDefaults.hex,
-                    "lightModeTintColor": NSNull(),
-                    "darkModeTintColor": NSNull(),
-                    "tintOpacity": SidebarTintDefaults.opacity,
                 ],
             ],
             [
@@ -1555,9 +1135,6 @@ final class ProgramaSettingsFileStore {
                     "socketControlMode": SocketControlSettings.defaultMode.rawValue,
                     "socketPassword": "",
                     "claudeCodeIntegration": ClaudeCodeIntegrationSettings.defaultHooksEnabled,
-                    "claudeBinaryPath": "",
-                    "portBase": 9100,
-                    "portRange": 10,
                 ],
             ],
             [
@@ -1572,7 +1149,6 @@ final class ProgramaSettingsFileStore {
             ],
             [
                 "shortcuts": [
-                    "showModifierHoldHints": ShortcutHintDebugSettings.defaultShowHintsOnCommandHold,
                     "bindings": shortcutsBindings,
                 ],
             ],
@@ -1645,14 +1221,6 @@ private struct ManagedTerminalTheme: Equatable {
     let dark: String?
 }
 
-private struct ManagedTerminalOpacity: Equatable {
-    let value: Double?
-}
-
-private struct ManagedTerminalBlur: Equatable {
-    let value: Bool?
-}
-
 private struct ManagedTerminalFont: Equatable {
     let family: String?
     let size: Double?
@@ -1662,13 +1230,10 @@ private struct ManagedCustomSettings: Equatable {
     var trustedDirectories: [String]?
     var socketPassword: ManagedStringOverride?
     var terminalTheme: ManagedTerminalTheme?
-    var terminalOpacity: ManagedTerminalOpacity?
-    var terminalBlur: ManagedTerminalBlur?
     var terminalFont: ManagedTerminalFont?
 
     var isEmpty: Bool {
-        trustedDirectories == nil && socketPassword == nil && terminalTheme == nil
-            && terminalOpacity == nil && terminalBlur == nil && terminalFont == nil
+        trustedDirectories == nil && socketPassword == nil && terminalTheme == nil && terminalFont == nil
     }
 
     var managedIdentifiers: Set<String> {
@@ -1682,12 +1247,6 @@ private struct ManagedCustomSettings: Equatable {
         if terminalTheme != nil {
             identifiers.insert(ProgramaSettingsFileStore.terminalThemeBackupIdentifier)
         }
-        if terminalOpacity != nil {
-            identifiers.insert(ProgramaSettingsFileStore.terminalOpacityBackupIdentifier)
-        }
-        if terminalBlur != nil {
-            identifiers.insert(ProgramaSettingsFileStore.terminalBlurBackupIdentifier)
-        }
         if terminalFont != nil {
             identifiers.insert(ProgramaSettingsFileStore.terminalFontBackupIdentifier)
         }
@@ -1697,12 +1256,8 @@ private struct ManagedCustomSettings: Equatable {
 
 private enum ManagedSettingsValue: Equatable {
     case bool(Bool)
-    case int(Int)
-    case double(Double)
     case string(String)
-    case nullableString(String?)
     case stringArray([String])
-    case stringDictionary([String: String])
 }
 
 private enum BackupValue: Codable, Equatable {
