@@ -53,6 +53,10 @@ The README download button points at `releases/latest/download/programa-macos.dm
 
 ## Required GitHub secrets
 
+These live in the `release` environment (Settings > Environments > release), not as
+repository secrets, so only the release job can read them. Add or rotate them there; a
+repository secret with the same name is ignored by the release job.
+
 | Secret | Used for |
 |---|---|
 | `APPLE_CERTIFICATE_BASE64` | Developer ID certificate (base64) |
