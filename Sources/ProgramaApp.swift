@@ -133,9 +133,6 @@ struct programaApp: App {
         )
         let primaryTabManagerStore = PrimaryTabManagerStore()
         _primaryTabManagerStore = StateObject(wrappedValue: primaryTabManagerStore)
-        // Rebrand: forward every legacy cmux-prefixed default to its programa key
-        // before anything reads the new keys, so existing users keep their prefs.
-        Self.migrateCmuxDefaultsToProgramaIfNeeded(defaults: defaults)
         // Migrate legacy and old-format socket mode values to the new enum.
         if let stored = defaults.string(forKey: SocketControlSettings.appStorageKey) {
             let migrated = SocketControlSettings.migrateMode(stored)
@@ -238,22 +235,6 @@ struct programaApp: App {
         }
         let updated = current.isEmpty ? path : "\(current):\(path)"
         setenv(key, updated, 1)
-    }
-
-    /// One-time rebrand migration: copy every `cmux`-prefixed UserDefaults value to
-    /// the corresponding `programa`-prefixed key. Version-gated so it runs once, and
-    /// never deletes the legacy keys (a downgrade still finds its old values).
-    private static func migrateCmuxDefaultsToProgramaIfNeeded(defaults: UserDefaults) {
-        let migrationKey = "programaDefaultsRebrandMigrationVersion"
-        let targetVersion = 1
-        guard defaults.integer(forKey: migrationKey) < targetVersion else { return }
-        for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix("cmux") {
-            let newKey = "programa" + key.dropFirst("cmux".count)
-            if defaults.object(forKey: newKey) == nil {
-                defaults.set(value, forKey: newKey)
-            }
-        }
-        defaults.set(targetVersion, forKey: migrationKey)
     }
 
     private static func migrateLanguageOverrideRemovalIfNeeded(defaults: UserDefaults) {

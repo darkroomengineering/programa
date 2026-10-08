@@ -1439,8 +1439,6 @@ final class SocketControlSettingsTests: XCTestCase {
     func testMigrateModeSupportsExpandedSocketModes() {
         XCTAssertEqual(SocketControlSettings.migrateMode("off"), .off)
         XCTAssertEqual(SocketControlSettings.migrateMode("programaOnly"), .programaOnly)
-        // Legacy cmux name, still read so existing socket mode settings keep working.
-        XCTAssertEqual(SocketControlSettings.migrateMode("cmuxOnly"), .programaOnly)
         XCTAssertEqual(SocketControlSettings.migrateMode("automation"), .automation)
         XCTAssertEqual(SocketControlSettings.migrateMode("password"), .password)
         XCTAssertEqual(SocketControlSettings.migrateMode("allow-all"), .allowAll)

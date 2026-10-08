@@ -13,9 +13,7 @@ extension ProgramaCLI {
         guard let data = FileManager.default.contents(atPath: path) else { return false }
         let prefixData = data.prefix(512)
         guard let prefix = String(data: prefixData, encoding: .utf8) else { return false }
-        // Legacy cmux name, still matched so wrappers installed by older versions are recognized.
         return prefix.contains("programa claude wrapper - injects hooks and session tracking")
-            || prefix.contains("cmux claude wrapper - injects hooks and session tracking")
     }
 
     func resolveExecutableInSearchPath(

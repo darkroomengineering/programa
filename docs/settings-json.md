@@ -68,7 +68,7 @@ Socket control and automation settings from Settings > Automation.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
-| `socketControlMode` | string | `"programaOnly"` | Socket control mode. Legacy aliases are accepted and normalized. One of: `off`, `programaOnly`, `cmuxOnly` (legacy alias of `programaOnly`), `automation`, `password`, `allowAll`, `openAccess`, `fullOpenAccess`, `notifications`, `full`. |
+| `socketControlMode` | string | `"programaOnly"` | Socket control mode. Legacy aliases are accepted and normalized. One of: `off`, `programaOnly`, `automation`, `password`, `allowAll`, `openAccess`, `fullOpenAccess`, `notifications`, `full`. |
 | `socketPassword` | object |  | Password for password-mode socket access. Use null or an empty string to clear it. |
 | `claudeCodeIntegration` | boolean | `true` | Enable Programa integration hooks for Claude Code. |
 | `claudeBinaryPath` | string |  | Custom path to the claude binary. |
@@ -81,7 +81,7 @@ Custom command trust settings from Settings > Custom Commands.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
-| `trustedDirectories` | array | `[]` | Directories whose programa.json (or legacy cmux.json) commands can run without confirmation. |
+| `trustedDirectories` | array | `[]` | Directories whose programa.json commands can run without confirmation. |
 
 ## `browser`
 

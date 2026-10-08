@@ -258,7 +258,7 @@
       "properties": {
         "socketControlMode": {
           "type": "string",
-          "enum": ["off", "programaOnly", "cmuxOnly", "automation", "password", "allowAll", "openAccess", "fullOpenAccess", "notifications", "full"],
+          "enum": ["off", "programaOnly", "automation", "password", "allowAll", "openAccess", "fullOpenAccess", "notifications", "full"],
           "default": "programaOnly",
           "description": "Socket control mode. Legacy aliases are accepted and normalized."
         },
@@ -312,7 +312,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Directories whose programa.json (or legacy cmux.json) commands can run without confirmation."
+          "description": "Directories whose programa.json commands can run without confirmation."
         }
       }
     },
