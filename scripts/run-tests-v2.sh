@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This runner is intended for the UTM macOS VM (ssh cmux-vm).
-# It is intentionally guarded so we don't accidentally kill the host user's programa instances.
-if [ "$(id -un)" != "cmux" ]; then
-  echo "ERROR: This script is intended to be run on the cmux-vm (user: cmux)." >&2
-  echo "Run via: ssh cmux-vm 'cd /Users/cmux/GhosttyTabs && ./scripts/run-tests-v2.sh'" >&2
+# This runner targets a disposable macOS VM. It kills running Programa instances,
+# so it refuses to run unless the caller opts in with PROGRAMA_TESTS_V2_VM=1.
+if [ "${PROGRAMA_TESTS_V2_VM:-}" != "1" ]; then
+  echo "ERROR: This script kills running Programa instances and is meant for a disposable VM." >&2
+  echo "Run via: PROGRAMA_TESTS_V2_VM=1 ./scripts/run-tests-v2.sh" >&2
   exit 2
 fi
 
