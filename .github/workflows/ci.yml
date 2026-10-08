@@ -780,8 +780,8 @@ jobs:
 
   # Independent of unit-tests: same "programa" scheme app build-app already
   # produces, so this reuses that artifact instead of paying for its own
-  # ~3 min build. Split out so it no longer serializes behind the unit-test
-  # shards either.
+  # ~3 min build. Split out so it does not serialize behind the unit-test
+  # shards.
   theme-picker-helper-regression:
     needs:
       - build-app

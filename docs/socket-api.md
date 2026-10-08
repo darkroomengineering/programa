@@ -943,8 +943,8 @@ a live `system.capabilities` response.
 **The rule this exists to enforce: a v2 handler's params, result shape, or error codes change
 only after `contracts/v2/methods.json` changes first**, then regenerate
 (`python3 scripts/gen-v2-contract.py`) before touching the handler. This keeps the CLI's method
-names and `system.capabilities` from drifting away from the handlers (the SSH remote-workspaces
-effort is the cautionary case; see `docs/removed/ssh-remote-workspaces.md`, "What we learned").
+names and `system.capabilities` from drifting away from the handlers (see `docs/removed/ssh-remote-workspaces.md`,
+"What we learned", for the drift this prevents).
 
 The contract's params, required lists, threading and `focus_intent` were extracted from the
 handler bodies once. The generator does not re-derive them, so a handler change that is not

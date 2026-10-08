@@ -6,9 +6,8 @@ Coverage:
 - Rename input selects all existing text immediately on open, and the
   selection survives interaction with the field.
 
-Rename selecting the existing name used to be a setting. It is now the only
-behaviour, so this exercises it directly instead of toggling
-`debug.command_palette.rename_input.select_all`, which no longer exists.
+Rename always selects the existing name, so this exercises that behaviour
+directly with no setting to toggle.
 """
 
 import os
