@@ -12,9 +12,8 @@ set -euo pipefail
 # opens it (POSIX 163). Notarization does not catch this class of failure;
 # only a real launch does, and by then it has shipped to everyone.
 #
-# The script derives whether a profile is required from the bundle's own
-# entitlements (for example CloudKit: com.apple.developer.icloud-services /
-# icloud-container-identifiers) rather than from a comment that can go stale.
+# The answer comes from the signed bundle itself, not from a comment that can
+# go stale.
 #
 # Exit codes:
 #   0  no restricted entitlements and no profile, or profile covers them all
