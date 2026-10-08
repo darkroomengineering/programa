@@ -664,8 +664,7 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertTrue(contents.contains(#""$schema": "https://raw.githubusercontent.com/darkroomengineering/programa/main/Resources/settings.schema.json""#))
         XCTAssertTrue(contents.contains(#""schemaVersion": 1,"#))
         XCTAssertTrue(contents.contains(#"//   "app" : {"#))
-        XCTAssertTrue(contents.contains(#"//     "colors" : {"#))
-        XCTAssertTrue(contents.contains(##"//       "Red" : "#C0392B""##))
+        XCTAssertFalse(contents.contains(#""workspaceColors""#))
         XCTAssertTrue(contents.contains(#"//   "shortcuts" : {"#))
     }
 
