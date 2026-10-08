@@ -526,6 +526,13 @@ extension AppDelegate {
         guard let path = env["PROGRAMA_UI_TEST_MULTI_WINDOW_NOTIF_PATH"], !path.isEmpty else { return }
 
         try? FileManager.default.removeItem(atPath: path)
+        let setupStart = Date()
+        func stamp(_ key: String) {
+            writeMultiWindowNotificationTestData(
+                [key: String(format: "%.2f", Date().timeIntervalSince(setupStart))],
+                at: path
+            )
+        }
 
         func waitForContexts(minCount: Int, _ completion: @escaping () -> Void) {
             let isReady = {
@@ -668,18 +675,22 @@ extension AppDelegate {
             guard let window1 = self.mainWindowContexts.values.first else { return }
             guard let tabId1 = window1.tabManager.selectedTabId ?? window1.tabManager.tabs.first?.id else { return }
 
+            stamp("t1Window1Ready")
             // Create a second main terminal window.
             self.openNewMainWindow(nil)
 
             waitForContexts(minCount: 2) { [weak self] in
                 guard let self else { return }
+                stamp("t2Window2Ready")
                 let contexts = Array(self.mainWindowContexts.values)
                 guard let window2 = contexts.first(where: { $0.windowId != window1.windowId }) else { return }
                 guard let tabId2 = window2.tabManager.selectedTabId ?? window2.tabManager.tabs.first?.id else { return }
                 waitForSurfaceId(on: window1.tabManager, tabId: tabId1) { [weak self] surfaceId1 in
                     guard let self else { return }
+                    stamp("t3Surface1Ready")
                     waitForSurfaceId(on: window2.tabManager, tabId: tabId2) { [weak self] surfaceId2 in
                     guard let self else { return }
+                    stamp("t4Surface2Ready")
                     guard let store = self.notificationStore else { return }
 
                     // Ensure the target window is currently showing the Notifications overlay,
@@ -740,12 +751,14 @@ extension AppDelegate {
             "sourceTerminalFocusFailure": "",
         ], at: path)
 
-        let deadline = Date().addingTimeInterval(8.0)
+        let focusStart = Date()
+        let deadline = focusStart.addingTimeInterval(8.0)
 
         func publish(ready: Bool, failure: String = "") {
             writeMultiWindowNotificationTestData([
                 "sourceTerminalReady": ready ? "1" : "0",
                 "sourceTerminalFocusFailure": failure,
+                "t5SourceFocusSeconds": String(format: "%.2f", Date().timeIntervalSince(focusStart)),
             ], at: path)
         }
 

@@ -256,6 +256,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             XCTFail("Missing setup data")
             return
         }
+        print("notify-setup-timing " + setup.filter { $0.key.hasPrefix("t") && $0.key.first?.isNumber == false && $0.key.dropFirst().first?.isNumber == true }.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))
         guard let tabId2 = setup["tabId2"], !tabId2.isEmpty else {
             XCTFail("Missing setup workspace id")
             return
