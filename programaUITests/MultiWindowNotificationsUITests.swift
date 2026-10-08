@@ -209,7 +209,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             return
         }
 
-        _ = socketCommand("clear_notifications")
+        _ = socketResult("notification.clear")
 
         app.typeKey("i", modifierFlags: [.command])
         XCTAssertTrue(app.staticTexts["No notifications yet"].waitForExistence(timeout: 6.0), "Expected empty notifications popover state")
@@ -461,15 +461,15 @@ final class MultiWindowNotificationsUITests: XCTestCase {
     private func waitForSocketPong(timeout: TimeInterval) -> String? {
         var lastResponse: String?
         _ = waitForCondition(timeout: timeout) {
-            lastResponse = self.socketCommand("ping")
+            lastResponse = self.socketPingResponse()
             return lastResponse == "PONG"
         }
-        return lastResponse == "PONG" ? "PONG" : (socketCommand("ping") ?? lastResponse)
+        return lastResponse == "PONG" ? "PONG" : (socketPingResponse() ?? lastResponse)
     }
 
     private func waitForTerminalFocus(surfaceId: String, timeout: TimeInterval) -> Bool {
         waitForCondition(timeout: timeout) {
-            self.socketCommand("is_terminal_focused \(surfaceId)") == "true"
+            self.socketResult("debug.terminal.is_focused", params: ["surface_id": surfaceId])?["focused"] as? Bool == true
         }
     }
 
@@ -562,18 +562,13 @@ final class MultiWindowNotificationsUITests: XCTestCase {
     }
 
     private func firstSurfaceId(forWorkspaceId workspaceId: String) -> String? {
-        guard let response = socketCommand("list_surfaces \(workspaceId)"),
-              !response.isEmpty,
-              !response.hasPrefix("ERROR"),
-              response != "No surfaces" else {
+        guard let result = socketResult("surface.list", params: ["workspace_id": workspaceId]),
+              let surfaces = result["surfaces"] as? [[String: Any]] else {
             return nil
         }
 
-        for line in response.split(separator: "\n", omittingEmptySubsequences: true) {
-            let parts = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-            guard parts.count == 2 else { continue }
-            let candidate = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if UUID(uuidString: candidate) != nil {
+        for surface in surfaces {
+            if let candidate = surface["id"] as? String, UUID(uuidString: candidate) != nil {
                 return candidate
             }
         }
@@ -999,10 +994,9 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         socketPath = candidatePath
         defer { socketPath = originalPath }
 
-        guard let response = socketCommand("list_surfaces \(workspaceId)"),
-              !response.isEmpty,
-              !response.hasPrefix("ERROR"),
-              response != "No surfaces" else {
+        guard let result = socketResult("surface.list", params: ["workspace_id": workspaceId]),
+              let surfaces = result["surfaces"] as? [[String: Any]],
+              !surfaces.isEmpty else {
             return false
         }
         return true
@@ -1032,10 +1026,45 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         let originalPath = socketPath
         socketPath = path
         defer { socketPath = originalPath }
-        return socketCommand("ping") == "PONG"
+        return socketPingResponse() == "PONG"
     }
 
-    private func socketCommand(_ cmd: String, responseTimeout: TimeInterval = 2.0) -> String? {
+    /// Returns "PONG" for a valid v2 `system.ping` response, otherwise the raw response (or nil).
+    private func socketPingResponse() -> String? {
+        guard let envelope = socketJSON(method: "system.ping") else { return nil }
+        if envelope["ok"] as? Bool == true, (envelope["result"] as? [String: Any])?["pong"] as? Bool == true {
+            return "PONG"
+        }
+        return "\(envelope)"
+    }
+
+    /// Sends a v2 JSON-RPC request and returns the full response envelope.
+    private func socketJSON(
+        method: String,
+        params: [String: Any] = [:],
+        responseTimeout: TimeInterval = 2.0
+    ) -> [String: Any]? {
+        let request: [String: Any] = ["id": UUID().uuidString, "method": method, "params": params]
+        guard JSONSerialization.isValidJSONObject(request),
+              let body = try? JSONSerialization.data(withJSONObject: request),
+              let line = String(data: body, encoding: .utf8),
+              let response = socketRequestLine(line, responseTimeout: responseTimeout),
+              let data = response.data(using: .utf8) else {
+            return nil
+        }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    /// Returns the `result` object of a successful v2 response, nil on transport failure or error.
+    private func socketResult(_ method: String, params: [String: Any] = [:]) -> [String: Any]? {
+        guard let envelope = socketJSON(method: method, params: params),
+              envelope["ok"] as? Bool == true else {
+            return nil
+        }
+        return envelope["result"] as? [String: Any] ?? [:]
+    }
+
+    private func socketRequestLine(_ cmd: String, responseTimeout: TimeInterval = 2.0) -> String? {
         if let response = ControlSocketClient(path: socketPath, responseTimeout: responseTimeout).sendLine(cmd) {
             return response
         }
@@ -1200,10 +1229,10 @@ final class MultiWindowNotificationsUITests: XCTestCase {
     }
 
     private func readCurrentTerminalText() -> String? {
-        guard let response = socketCommand("read_terminal_text"), response.hasPrefix("OK ") else {
+        guard let result = socketResult("debug.terminal.read_text"),
+              let encoded = result["base64"] as? String else {
             return nil
         }
-        let encoded = String(response.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let data = Data(base64Encoded: encoded) else { return nil }
         return String(data: data, encoding: .utf8)
     }

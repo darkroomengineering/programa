@@ -596,7 +596,14 @@ class TabManager: ObservableObject {
 
     /// Kept in sidebar hierarchy order (see `canonicalizeHierarchyOrderIfNeeded`).
     @Published var tabs: [Workspace] = [] {
-        didSet { canonicalizeHierarchyOrderIfNeeded() }
+        didSet {
+            canonicalizeHierarchyOrderIfNeeded()
+#if DEBUG
+            // UI-test seam: lets XCUITests read the workspace count without the control socket.
+            // No-op unless PROGRAMA_UI_TEST_KEYEQUIV_PATH is set.
+            UITestRecorder.record(["workspaceCount": String(tabs.count)])
+#endif
+        }
     }
     @Published var isWorkspaceCycleHot: Bool = false
     @Published private(set) var pendingBackgroundWorkspaceLoadIds: Set<UUID> = []
