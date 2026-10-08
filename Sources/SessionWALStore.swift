@@ -4,13 +4,7 @@ import Bonsplit
 
 /// Per-surface durable PTY output WAL + fact file (issue #181, slice 1).
 ///
-/// This file used to be the feat/session-wal-spike byte-counting spike
-/// (`SessionOutputTapSpike`) that proved tapping PTY output via Ghostty's
-/// PTY tee has no measurable typing-latency cost.
-/// It now replaces that counter with a real writer. The filename is kept
-/// as-is (not renamed to SessionWAL.swift) because this change was made by
-/// an agent without filesystem move/delete tools; the type names below are
-/// renamed. A follow-up `git mv` + pbxproj path/name tweak is cosmetic only.
+/// Taps PTY output via Ghostty's PTY tee, which has no measurable typing-latency cost.
 ///
 /// ## Threading path, tee callback to WAL
 /// 1. `ghostty_surface_set_pty_tee_cb`'s C callback fires on ghostty's

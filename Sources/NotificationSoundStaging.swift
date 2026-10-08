@@ -5,11 +5,9 @@ import UserNotifications
 // MARK: - Notification Sound Settings
 //
 // System-sound picker for notification delivery: exposes the built-in macOS sound names
-// available to UNNotificationSound and simple playback for settings-UI previews. The
-// custom-file staging/transcoding flow that used to live here was removed; see
-// docs/removed/custom-notification-sounds.md. Extracted from TerminalNotificationStore.swift,
-// which owns the rest of notification delivery/state and is a heavy consumer of this
-// settings surface.
+// available to UNNotificationSound and simple playback for settings-UI previews.
+// TerminalNotificationStore.swift owns the rest of notification delivery/state and is a
+// heavy consumer of this settings surface.
 enum NotificationSoundSettings {
     static let key = "notificationSound"
     static let defaultValue = "default"

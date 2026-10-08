@@ -9,12 +9,9 @@ import Security
 #endif
 
 extension ProgramaCLI {
-    /// The 23 tmux-emulation command names, all dispatched through the same
-    /// `runTmuxCompatCommand`. Help text preserves the original grouped
-    /// layout, including the two pipe-separated combo lines
-    /// ("next-window | previous-window | last-window" and
-    /// "bind-key | unbind-key | copy-mode") that documented three names on
-    /// one line while still being three independently-dispatchable commands.
+    /// The tmux-emulation command names, all dispatched through the same
+    /// `runTmuxCompatCommand`. The "next-window | previous-window | last-window"
+    /// help line documents three independently-dispatchable commands on one line.
     static func tmuxCompatDescriptors(
         runTmuxCompatCommand: @escaping (CommandContext) throws -> Void
     ) -> [CommandDescriptor] {
@@ -31,8 +28,6 @@ extension ProgramaCLI {
             CommandDescriptor(names: ["find-window"], helpLines: ["find-window [--content] [--select] <query>"], grammar: CLIArgumentGrammar(booleanOptions: ["content", "select"], minPositionals: 1, maxPositionals: nil), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["clear-history"], helpLines: ["clear-history [--workspace <id|ref>] [--surface <id|ref>]"], grammar: CLIArgumentGrammar(valueOptions: ["workspace", "surface"]), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["set-hook"], helpLines: ["set-hook [--list] [--unset <event>] | <event> <command>"], execute: runTmuxCompatCommand),
-            CommandDescriptor(names: ["popup"], helpLines: ["popup"], execute: runTmuxCompatCommand),
-            CommandDescriptor(names: ["bind-key", "unbind-key", "copy-mode"], helpLines: ["bind-key | unbind-key | copy-mode"], execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["set-buffer"], helpLines: ["set-buffer [--name <name>] <text>"], grammar: CLIArgumentGrammar(valueOptions: ["name"], minPositionals: 1, maxPositionals: nil), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["list-buffers"], helpLines: ["list-buffers"], grammar: CLIArgumentGrammar(), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["paste-buffer"], helpLines: ["paste-buffer [--name <name>] [--workspace <id|ref>] [--surface <id|ref>]"], grammar: CLIArgumentGrammar(valueOptions: ["name", "workspace", "surface"]), execute: runTmuxCompatCommand),
@@ -2159,12 +2154,6 @@ extension ProgramaCLI {
             }
             print("OK")
 
-        case "popup":
-            throw CLIError(message: "popup is not supported yet in programa CLI parity mode")
-
-        case "bind-key", "unbind-key", "copy-mode":
-            throw CLIError(message: "\(command) is not supported yet in programa CLI parity mode")
-
         case "set-buffer":
             let (nameArg, rem0) = parseOption(commandArgs, name: "--name")
             let name = (nameArg?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? nameArg! : "default"
@@ -2379,18 +2368,6 @@ extension ProgramaCLI {
             Flags:
               --list            List configured hooks
               --unset <event>   Remove a hook by event name
-            """
-        case "popup":
-            return """
-            Usage: programa popup
-
-            tmux compatibility placeholder. This command is currently not supported.
-            """
-        case "bind-key", "unbind-key", "copy-mode":
-            return """
-            Usage: programa \(command)
-
-            tmux compatibility placeholder. This command is currently not supported.
             """
         case "set-buffer":
             return """

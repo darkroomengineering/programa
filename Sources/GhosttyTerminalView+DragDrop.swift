@@ -17,14 +17,7 @@ import UniformTypeIdentifiers
 // plan resolution, dropped-file/pasteboard insertion, and the
 // NSDraggingDestination overrides.
 //
-// Split out of GhosttyTerminalView.swift (Nuclear Review TC5). Moving these
-// methods into a same-type extension adds zero call-site indirection.
-// Method bodies are moved verbatim.
-
 extension GhosttyNSView {
-    fileprivate static func escapeDropForShell(_ value: String) -> String {
-        TerminalPasteboardPlanner.escapeForShell(value)
-    }
 
     static func dropPlanForTesting(pasteboard: NSPasteboard) -> DropPlan {
         switch TerminalPasteboardPlanner.plan(pasteboard: pasteboard, mode: .drop) {

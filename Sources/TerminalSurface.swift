@@ -12,7 +12,7 @@ import IOSurface
 import UniformTypeIdentifiers
 import os
 
-// MARK: - Debug Render Instrumentation (split out, Nuclear Review #97; verbatim move)
+// MARK: - Debug Render Instrumentation
 
 /// Lightweight instrumentation to detect whether Ghostty is actually requesting Metal drawables.
 /// This helps catch "frozen until refocus" regressions without relying on screenshots (which can
@@ -914,19 +914,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         return true
     }
 
-    func releasePortalHostIfOwned(hostId: ObjectIdentifier, reason: String) {
-        guard let current = activePortalHostLease, current.hostId == hostId else { return }
-        activePortalHostLease = nil
-#if DEBUG
-        dlog(
-            "terminal.portal.host.release surface=\(id.uuidString.prefix(5)) " +
-            "reason=\(reason) host=\(hostId) pane=\(current.paneId.uuidString.prefix(5)) " +
-            "inWin=\(current.inWindow ? 1 : 0) " +
-            "area=\(String(format: "%.1f", current.area))"
-        )
-#endif
-    }
-
     private func recordTeardownRequest(reason: String) {
         withDebugMetadataLock {
             if teardownRequestedAt == nil {
@@ -1128,10 +1115,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
 #if DEBUG
     private static let surfaceLogPath = "/tmp/programa-ghostty-surface.log"
     private static let sizeLogPath = "/tmp/programa-ghostty-size.log"
-
-    func debugCurrentPixelSize() -> (width: UInt32, height: UInt32) {
-        (lastPixelWidth, lastPixelHeight)
-    }
 
     func debugDesiredFocusState() -> Bool {
         desiredFocusState
@@ -2365,7 +2348,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// Force a full size recalculation and surface redraw.
     func forceRefresh(reason: String = "unspecified") {
         // PERF (#183): this diagnostic string is consumed only by the DEBUG-only `dlog` below,
-        // but it used to be built unconditionally -- interpolating the view's bounds and doing a
+        // and building it unconditionally would interpolate the view's bounds and do a
         // CAMetalLayer cast on every call, including the one that runs after each text-input
         // keystroke. Keep the whole thing inside DEBUG so release builds allocate nothing here.
         #if DEBUG

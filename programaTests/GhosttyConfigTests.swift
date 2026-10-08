@@ -3080,7 +3080,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         let bootstrapSourcePath = repoRoot
             .appendingPathComponent("Resources/shell-integration/programa-bash-bootstrap.bash")
         let rawBootstrap = try String(contentsOf: bootstrapSourcePath, encoding: .utf8)
-        // Mirrors Sources/GhosttyTerminalView.swift's comment/blank-line
+        // Mirrors Sources/TerminalSurface.swift's comment/blank-line
         // stripping so the test exercises exactly what ships as
         // $PROMPT_COMMAND.
         let leanBootstrap = rawBootstrap

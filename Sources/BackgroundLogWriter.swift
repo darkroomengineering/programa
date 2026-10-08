@@ -2,11 +2,10 @@ import Foundation
 
 // MARK: - BackgroundLogWriter (ported from upstream cmux cb2129a5a1)
 //
-// Replaces the previous per-call FileManager.fileExists + FileHandle(forWritingTo:)
-// open -> seekToEnd -> write -> close pattern, which ran synchronously under a lock
-// on the calling thread (often the main thread) for every debug log line. Instruments
-// showed this blocking appearance-config resolution during bursts of background log
-// activity.
+// Avoids a per-call FileManager.fileExists + FileHandle(forWritingTo:)
+// open -> seekToEnd -> write -> close pattern, which would run synchronously under a lock
+// on the calling thread (often the main thread) for every debug log line and block
+// appearance-config resolution during bursts of background log activity.
 //
 // This writer serializes all file I/O onto a single serial background queue with one
 // long-lived FileHandle. Callers append lines asynchronously and never block. The log

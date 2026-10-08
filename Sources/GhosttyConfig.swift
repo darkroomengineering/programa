@@ -190,7 +190,7 @@ struct GhosttyConfig {
     //     write) left in UserDefaults stands.
     //   - After launch both sides are reactive and can re-fire independently: settings.json
     //     re-applies on every file-watcher change to settings.json/its fallback (and on
-    //     `.reload()` call sites such as GhosttyTerminalView.swift), while this method re-runs
+    //     explicit `.reload()` call sites), while this method re-runs
     //     whenever `GhosttyConfig.load()` is called again (WorkspaceContentView's `onAppear`,
     //     `ghosttyConfigDidReload` notification, color-scheme changes). Whichever fires most
     //     recently wins, per key.

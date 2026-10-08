@@ -19,7 +19,7 @@
 # separator and let programa-bash-integration.bash's PROMPT_COMMAND merge
 # prepend _programa_prompt_command.
 #
-# This file is the single source of truth. Sources/GhosttyTerminalView.swift
+# This file is the single source of truth. Sources/TerminalSurface.swift
 # reads it (stripping these comments) and exports it as PROMPT_COMMAND, and
 # programaTests/GhosttyConfigTests.swift exercises it.
 PROMPT_COMMAND="${PROMPT_COMMAND##*__programa_bash_bootstrap_marker__}"

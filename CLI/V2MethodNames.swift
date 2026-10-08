@@ -57,7 +57,6 @@ enum V2MethodNames {
     static let debugTerminalRenderStats = "debug.terminal.render_stats"
     static let debugTerminals = "debug.terminals"
     static let debugType = "debug.type"
-    static let debugViewtree = "debug.viewtree"
     static let debugWindowScreenshot = "debug.window.screenshot"
     static let feedbackOpen = "feedback.open"
     static let feedbackSubmit = "feedback.submit"

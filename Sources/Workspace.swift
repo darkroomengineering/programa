@@ -247,10 +247,6 @@ final class Workspace: Identifiable, ObservableObject {
     }()
 
     var focusedSurfaceId: UUID? { focusedPanelId }
-    var surfaceDirectories: [UUID: String] {
-        get { panelDirectories }
-        set { panelDirectories = newValue }
-    }
 
     var processTitle: String
 
@@ -532,8 +528,8 @@ final class Workspace: Identifiable, ObservableObject {
     var isReconcilingFocusState = false
     var focusReconcileScheduled = false
 #if DEBUG
-    // nuclear-review #98: flipped from `private(set)` to internal so Workspace+FocusGeometry.swift
-    // (a separate file) can mutate this after scheduleFocusReconcile() moved there.
+    // Internal (not `private(set)`) so Workspace+FocusGeometry.swift, where
+    // scheduleFocusReconcile() lives, can mutate this.
     var debugFocusReconcileScheduledDuringDetachCount: Int = 0
     var debugLastDidMoveTabTimestamp: TimeInterval = 0
     var debugDidMoveTabEventCount: UInt64 = 0

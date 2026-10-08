@@ -1,4 +1,4 @@
-// Command palette orchestration extracted from ContentView.swift (nuclear-review CV1).
+// Command palette orchestration.
 //
 // Conservative extraction: only pure/computation functions and already-`static`
 // helpers are moved here (fuzzy-search corpus building, result fingerprinting/

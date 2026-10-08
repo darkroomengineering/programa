@@ -167,9 +167,6 @@ enum CommandPaletteSwitcherSearchSettings {
     static let defaultSearchAllSurfaces = false
     private static let flag = UserDefaultsFlag(key: searchAllSurfacesKey, defaultValue: defaultSearchAllSurfaces)
 
-    static func searchAllSurfacesEnabled(defaults: UserDefaults = .standard) -> Bool {
-        flag.isEnabled(defaults: defaults)
-    }
 }
 
 enum ClaudeCodeIntegrationSettings {
@@ -274,8 +271,7 @@ enum PreferredEditorSettings {
 
 /// The tabs the settings window is split across.
 ///
-/// Settings used to be one scroll of nine stacked sections, which meant finding
-/// anything required knowing roughly how far down it lived. Tabs group by the
+/// Tabs group settings by the
 /// question a user is answering, and each tab is further split into its own
 /// named sections so a tab is never just one undivided pile of rows: General
 /// covers how the app behaves day to day (App), what it notifies you about

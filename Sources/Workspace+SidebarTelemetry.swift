@@ -1,4 +1,4 @@
-// Extracted from Workspace.swift (nuclear-review #98): sidebar telemetry mutation/query members
+// Sidebar telemetry mutation/query members
 // (directory, shell-activity, git-branch, pull-request, status, log, and metadata-block state).
 
 import Foundation
@@ -39,22 +39,6 @@ enum SidebarTelemetryLimits {
 
     static func isWithinUTF8Limit(_ value: String?, maxBytes: Int) -> Bool {
         value.map { utf8ByteCount($0) <= maxBytes } ?? true
-    }
-
-    static func truncatedToUTF8Limit(_ value: String, maxBytes: Int) -> String {
-        guard utf8ByteCount(value) > maxBytes else { return value }
-        guard maxBytes > 0 else { return "" }
-
-        var result = ""
-        result.reserveCapacity(maxBytes)
-        var byteCount = 0
-        for character in value {
-            let characterBytes = String(character).utf8.count
-            guard characterBytes <= maxBytes - byteCount else { break }
-            result.append(character)
-            byteCount += characterBytes
-        }
-        return result
     }
 
     static func configuredMaxLogEntries() -> Int {
@@ -760,14 +744,6 @@ extension Workspace {
             logEntries.removeFirst(logEntries.count - limit)
         }
         return true
-    }
-
-    func appendSidebarLog(message: String, level: SidebarLogLevel, source: String?) {
-        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        _ = appendSidebarLogEntry(
-            SidebarLogEntry(message: trimmed, level: level, source: source, timestamp: Date())
-        )
     }
 
     func restoreSidebarLogEntries(_ entries: [SidebarLogEntry]) {

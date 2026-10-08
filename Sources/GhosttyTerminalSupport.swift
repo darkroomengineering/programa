@@ -11,7 +11,7 @@ import Bonsplit
 import IOSurface
 import UniformTypeIdentifiers
 
-// MARK: - GhosttyTerminalView Support (split out, Nuclear Review #97; verbatim move)
+// MARK: - GhosttyTerminalView Support
 
 @_silgen_name("ghostty_surface_clear_selection")
 func ghostty_surface_clear_selection_compat(_ surface: ghostty_surface_t) -> Bool
@@ -51,7 +51,7 @@ func programaShouldUseClearWindowBackground(for opacity: Double) -> Bool {
 }
 
 // Widened from private to internal: used by both GhosttyApp.swift and
-// GhosttyNSView.swift (Nuclear Review #97 split).
+// GhosttyNSView.swift.
 func programaTransparentWindowBaseColor() -> NSColor {
     // A tiny non-zero alpha matches Ghostty's window compositing behavior on macOS and
     // avoids visual artifacts that can happen with a fully clear window background.
@@ -482,19 +482,6 @@ func programaPasteboardImagePathForTesting(_ pasteboard: NSPasteboard) -> String
     GhosttyPasteboardHelper.saveClipboardImageIfNeeded(from: pasteboard)
 }
 
-func programaResolveQuicklookPathForTesting(
-    _ rawText: String,
-    cwd: String,
-    existingPaths: Set<String>
-) -> String? {
-    programaResolveQuicklookPath(
-        rawText,
-        cwd: cwd,
-        fileExists: { path in
-            existingPaths.contains((path as NSString).standardizingPath)
-        }
-    )
-}
 #endif
 
 func programaResolveQuicklookPath(

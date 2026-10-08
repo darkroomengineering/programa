@@ -1,5 +1,4 @@
-// File-drop overlay NSView, extracted from ContentView.swift (nuclear-review #94.3).
-// Pure move — behavior-identical relocation.
+// File-drop overlay NSView.
 
 import AppKit
 import Bonsplit

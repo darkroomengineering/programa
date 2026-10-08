@@ -11,7 +11,7 @@ import Bonsplit
 import IOSurface
 import UniformTypeIdentifiers
 
-// MARK: - Terminal Keyboard Copy Mode (split out, Nuclear Review #97; verbatim move)
+// MARK: - Terminal Keyboard Copy Mode
 // Four `terminalKeyTable*`/`terminalKeyboardCopyModeIndicatorText` items below
 // widened private -> internal (used from GhosttyNSView.swift/GhosttySurfaceScrollView.swift).
 

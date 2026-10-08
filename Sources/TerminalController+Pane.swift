@@ -1,4 +1,4 @@
-// Extracted from TerminalController.swift (nuclear-review #96): pane.* command handlers.
+// pane.* command handlers.
 import AppKit
 import Carbon.HIToolbox
 import Foundation

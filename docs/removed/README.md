@@ -15,5 +15,6 @@ Reductive pass of 2026-09-02, base commit 903027ccef. Core kept: the Ghostty ter
 | AppleScript support | [applescript.md](applescript.md) | 720 |
 | Inline VS Code (serve-web) | [inline-vscode.md](inline-vscode.md) | 610 |
 | Custom notification sound files | [custom-notification-sounds.md](custom-notification-sounds.md) | 400 |
+| tmux active-pane overlay target | [tmux-active-pane-overlay.md](tmux-active-pane-overlay.md) | 70 |
 
 Line counts are git-tracked lines at removal time and include tests and vendored code.

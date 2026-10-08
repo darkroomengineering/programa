@@ -11,7 +11,7 @@ import Bonsplit
 import IOSurface
 import UniformTypeIdentifiers
 
-// MARK: - GhosttyApp (split out, Nuclear Review #97; verbatim move)
+// MARK: - GhosttyApp
 // `GhosttySurfaceCallbackContext` widened private -> internal (also constructed from TerminalSurface.swift).
 
 private func programaRuntimeReadClipboardCallback(
@@ -71,7 +71,7 @@ private enum GhosttyClipboardRequestIdentityRegistry {
 }
 
 // Widened from private to internal: also constructed directly from
-// TerminalSurface.swift (Nuclear Review #97 split).
+// TerminalSurface.swift.
 //
 // DATA-ONLY. Ghostty's IO thread invokes callbacks (clipboard, actions) that read this
 // object SYNCHRONOUSLY, before any main-thread hop. It must therefore never hold a
@@ -378,13 +378,11 @@ class GhosttyApp {
                     tabId: callbackTabId,
                     surfaceId: callbackSurfaceId
                 ) else { return }
-                // Deviation from the pre-fix synchronous behavior: we can no longer tell
-                // off-main whether the surface is still live, so this callback always
-                // returns `true` (accepted) below rather than synchronously falling back to
-                // `false` when the surface is already gone. If resolution fails here, the
-                // read silently completes as a no-op instead -- ghostty's clipboard-read
-                // request is simply never fulfilled, matching what already happened when the
-                // surface went away mid-flight in the old code.
+                // We cannot tell off-main whether the surface is still live, so this callback
+                // always returns `true` (accepted) below rather than synchronously falling back
+                // to `false` when the surface is already gone. If resolution fails here, the
+                // read silently completes as a no-op: ghostty's clipboard-read request is
+                // simply never fulfilled, as when the surface goes away mid-flight.
                 guard let requestSurface = terminalSurface.liveSurfaceForGhosttyAccess(
                     reason: "clipboard.read"
                 ) else { return }
@@ -1900,11 +1898,11 @@ class GhosttyApp {
             return true
         }
 
-        // The old code gated this whole switch on resolving `callbackContext?.surfaceView`
-        // -- a synchronous, off-main weak-reference read. That resolution is exactly the
-        // race that corrupted ARC's weak-ref side tables during rapid window teardown (see
-        // GhosttySurfaceCallbackContext's doc comment). The context is now data-only, so we
-        // gate on the presence of a live callback context instead; every case below
+        // Gating this switch on resolving `callbackContext?.surfaceView` (a synchronous,
+        // off-main weak-reference read) would race and corrupt ARC's weak-ref side tables
+        // during rapid window teardown (see GhosttySurfaceCallbackContext's doc comment).
+        // The context is data-only, so we gate on the presence of a live callback context
+        // instead; every case below
         // resolves any live view/surface it needs only from inside a main-thread hop, via
         // `callbackTabId`/`callbackSurfaceId`.
         guard callbackContext != nil else { return false }

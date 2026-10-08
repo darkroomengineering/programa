@@ -1,4 +1,4 @@
-// Extracted from TerminalController.swift (nuclear-review #96): debug.* command handlers plus their private implementation helpers (DEBUG-only and shared).
+// debug.* command handlers plus their private implementation helpers (DEBUG-only and shared).
 import AppKit
 import Carbon.HIToolbox
 @preconcurrency import Foundation
@@ -414,48 +414,6 @@ extension TerminalController {
         return .ok(payload)
     }
 
-    /// Dumps the key window's AppKit view tree with frames, visibility, and any
-    /// opaque layer background — chrome-layering bugs (a stray view painting
-    /// over content) are otherwise invisible to log-based diagnosis.
-    nonisolated func v2DebugViewTree() -> V2CallResult {
-        let lines: [String] = v2MainSync {
-            guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) else {
-                return []
-            }
-            var out: [String] = []
-            out.append(
-                "WINDOW isOpaque=\(window.isOpaque) bg=\(window.backgroundColor.hexString())@\(String(format: "%.3f", window.backgroundColor.alphaComponent)) " +
-                "appearance=\(window.effectiveAppearance.name.rawValue)"
-            )
-            @MainActor
-            func walk(_ view: NSView, depth: Int) {
-                let frame = view.frame
-                var line = String(repeating: "  ", count: depth)
-                line += String(describing: type(of: view)).prefix(48)
-                line += String(format: " (%.0f,%.0f %.0fx%.0f)", frame.origin.x, frame.origin.y, frame.width, frame.height)
-                if view.isHidden { line += " HIDDEN" }
-                if let bg = view.layer?.backgroundColor, let color = NSColor(cgColor: bg), color.alphaComponent > 0.01 {
-                    line += " bg=\(color.hexString())@\(String(format: "%.2f", color.alphaComponent))"
-                }
-                if view.layer?.cornerRadius ?? 0 > 0 {
-                    line += " r=\(Int(view.layer?.cornerRadius ?? 0))"
-                }
-                if let effect = view as? NSVisualEffectView {
-                    line += " material=\(effect.material.rawValue) blend=\(effect.blendingMode.rawValue) " +
-                        "state=\(effect.state.rawValue) alpha=\(String(format: "%.2f", effect.alphaValue)) " +
-                        "emphasized=\(effect.isEmphasized)"
-                }
-                out.append(line)
-                for child in view.subviews { walk(child, depth: depth + 1) }
-            }
-            if let root = window.contentView?.superview ?? window.contentView {
-                walk(root, depth: 0)
-            }
-            return out
-        }
-        return .ok(["tree": lines])
-    }
-
     nonisolated func v2DebugBonsplitUnderflowCount() -> V2CallResult {
         let resp = bonsplitUnderflowCount()
         guard resp.hasPrefix("OK ") else { return .err(code: "internal_error", message: resp, data: nil) }
@@ -800,117 +758,6 @@ extension TerminalController {
             }
             return "OK"
         }
-    }
-
-    private func parseOverlayEventType(_ token: String) -> (isKnown: Bool, eventType: NSEvent.EventType?) {
-        switch token {
-        case "leftmousedragged":
-            return (true, .leftMouseDragged)
-        case "rightmousedragged":
-            return (true, .rightMouseDragged)
-        case "othermousedragged":
-            return (true, .otherMouseDragged)
-        case "mousemove", "mousemoved":
-            return (true, .mouseMoved)
-        case "mouseentered":
-            return (true, .mouseEntered)
-        case "mouseexited":
-            return (true, .mouseExited)
-        case "flagschanged":
-            return (true, .flagsChanged)
-        case "cursorupdate":
-            return (true, .cursorUpdate)
-        case "appkitdefined":
-            return (true, .appKitDefined)
-        case "systemdefined":
-            return (true, .systemDefined)
-        case "applicationdefined":
-            return (true, .applicationDefined)
-        case "periodic":
-            return (true, .periodic)
-        case "leftmousedown":
-            return (true, .leftMouseDown)
-        case "leftmouseup":
-            return (true, .leftMouseUp)
-        case "rightmousedown":
-            return (true, .rightMouseDown)
-        case "rightmouseup":
-            return (true, .rightMouseUp)
-        case "othermousedown":
-            return (true, .otherMouseDown)
-        case "othermouseup":
-            return (true, .otherMouseUp)
-        case "scrollwheel":
-            return (true, .scrollWheel)
-        case "none":
-            return (true, nil)
-        default:
-            return (false, nil)
-        }
-    }
-
-    private func dragPasteboardType(from token: String) -> NSPasteboard.PasteboardType? {
-        let normalized = token.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch normalized {
-        case "fileurl", "file-url", "public.file-url":
-            return .fileURL
-        case "tabtransfer", "tab-transfer", "com.splittabbar.tabtransfer":
-            return DragOverlayRoutingPolicy.bonsplitTabTransferType
-        case "sidebarreorder", "sidebar-reorder", "sidebar_tab_reorder",
-            "com.darkroom.programa.sidebar-tab-reorder":
-            return DragOverlayRoutingPolicy.sidebarTabReorderType
-        default:
-            // Allow explicit UTI strings for ad-hoc debug probes.
-            guard token.contains(".") else { return nil }
-            return NSPasteboard.PasteboardType(token)
-        }
-    }
-
-    private func debugDragHitViewDescriptor(_ view: NSView) -> String {
-        let className = String(describing: type(of: view))
-        let pointer = String(describing: Unmanaged.passUnretained(view).toOpaque())
-        let types = view.registeredDraggedTypes
-        let renderedTypes: String
-        if types.isEmpty {
-            renderedTypes = "-"
-        } else {
-            let raw = types.map(\.rawValue)
-            renderedTypes = raw.count <= 4
-                ? raw.joined(separator: ",")
-                : raw.prefix(4).joined(separator: ",") + ",+\(raw.count - 4)"
-        }
-        return "\(className)@\(pointer){dragTypes=\(renderedTypes)}"
-    }
-
-    private func unescapeSocketText(_ input: String) -> String {
-        var out = ""
-        var escaping = false
-        for ch in input {
-            if escaping {
-                switch ch {
-                case "n":
-                    out.append("\n")
-                case "r":
-                    out.append("\r")
-                case "t":
-                    out.append("\t")
-                case "\\":
-                    out.append("\\")
-                default:
-                    out.append("\\")
-                    out.append(ch)
-                }
-                escaping = false
-            } else if ch == "\\" {
-                escaping = true
-            } else {
-                out.append(ch)
-            }
-        }
-        if escaping {
-            out.append("\\")
-        }
-        return out
     }
 
     private nonisolated func isTerminalFocused(_ args: String) -> String {

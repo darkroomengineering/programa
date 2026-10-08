@@ -91,7 +91,6 @@
 		WTMG000005 /* ProgramaLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000006 /* ProgramaLayoutStore.swift */; };
 		NRTM00000002 /* TabManager+UITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000001 /* TabManager+UITestHarness.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
-			A5001005 /* GhosttyTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001015 /* GhosttyTerminalView.swift */; };
 			A5FF0051 /* GhosttyTerminalView+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0041 /* GhosttyTerminalView+Keyboard.swift */; };
 			A5FF0052 /* GhosttyTerminalView+Mouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0042 /* GhosttyTerminalView+Mouse.swift */; };
 			A5FF0053 /* GhosttyTerminalView+DragDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0043 /* GhosttyTerminalView+DragDrop.swift */; };
@@ -482,7 +481,6 @@
 		WTMG000006 /* ProgramaLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaLayoutStore.swift; sourceTree = "<group>"; };
 		NRTM00000001 /* TabManager+UITestHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+UITestHarness.swift"; sourceTree = "<group>"; };
 			A5001014 /* GhosttyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfig.swift; sourceTree = "<group>"; };
-			A5001015 /* GhosttyTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTerminalView.swift; sourceTree = "<group>"; };
 			A5FF0041 /* GhosttyTerminalView+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+Keyboard.swift"; sourceTree = "<group>"; };
 			A5FF0042 /* GhosttyTerminalView+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+Mouse.swift"; sourceTree = "<group>"; };
 			A5FF0043 /* GhosttyTerminalView+DragDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyTerminalView+DragDrop.swift"; sourceTree = "<group>"; };
@@ -931,7 +929,6 @@
 					NRWS00000000000000000031 /* Workspace+Bonsplit.swift */,
 				A5001417 /* WorkspaceContentView.swift */,
 				A5001014 /* GhosttyConfig.swift */,
-				A5001015 /* GhosttyTerminalView.swift */,
 				A5FF0041 /* GhosttyTerminalView+Keyboard.swift */,
 				A5FF0042 /* GhosttyTerminalView+Mouse.swift */,
 				A5FF0043 /* GhosttyTerminalView+DragDrop.swift */,
@@ -1464,7 +1461,6 @@
 						NRWS00000000000000000032 /* Workspace+Bonsplit.swift in Sources */,
 				A5001407 /* WorkspaceContentView.swift in Sources */,
 				A5001004 /* GhosttyConfig.swift in Sources */,
-				A5001005 /* GhosttyTerminalView.swift in Sources */,
 				A5FF0051 /* GhosttyTerminalView+Keyboard.swift in Sources */,
 				A5FF0052 /* GhosttyTerminalView+Mouse.swift in Sources */,
 				A5FF0053 /* GhosttyTerminalView+DragDrop.swift in Sources */,

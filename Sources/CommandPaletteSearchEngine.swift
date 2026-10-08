@@ -1,6 +1,6 @@
-// Command palette fuzzy-search engine, extracted from ContentView.swift (nuclear-review #94.1).
-// Pure move: search metadata, indexer, fuzzy matcher, corpus types, and the search engine.
-// Zero coupling to ContentView state — behavior-identical relocation.
+// Command palette fuzzy-search engine.
+// Holds the search metadata, indexer, fuzzy matcher, corpus types, and the search engine.
+// Has no coupling to ContentView state.
 
 import Foundation
 

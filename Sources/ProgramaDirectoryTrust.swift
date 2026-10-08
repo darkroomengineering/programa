@@ -144,17 +144,6 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
         saveLocked()
     }
 
-    /// Remove trust by the trust key directly (as stored/displayed in settings).
-    func revokeTrustByPath(_ path: String) {
-        stateLock.lock()
-        defer {
-            stateLock.unlock()
-            postDidChangeNotification()
-        }
-        trustedDirectories.removeValue(forKey: path)
-        saveLocked()
-    }
-
     /// All currently trusted paths.
     var allTrustedPaths: [String] {
         stateLock.lock()

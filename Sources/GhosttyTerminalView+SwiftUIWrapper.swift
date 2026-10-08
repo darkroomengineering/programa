@@ -17,9 +17,6 @@ import UniformTypeIdentifiers
 // AppKit-hosted terminal portal (GhosttySurfaceScrollView/GhosttyNSView),
 // plus its Coordinator and the private HostContainerView it manages.
 //
-// Split out of GhosttyTerminalView.swift (Nuclear Review #97). Extracted
-// verbatim, so call-site behavior is unchanged.
-
 // MARK: - SwiftUI Wrapper
 
 struct GhosttyTerminalView: NSViewRepresentable {

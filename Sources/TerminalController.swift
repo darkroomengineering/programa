@@ -67,9 +67,6 @@ class TerminalController {
     private nonisolated static let acceptFailureMaxBackoffMs = 5_000
     private nonisolated static let acceptFailureMinimumRearmDelayMs = 100
     private nonisolated static let acceptFailureRearmThreshold = 50
-    private nonisolated static let socketProbePollTimeoutMs: Int32 = 100
-    private nonisolated static let socketProbePollAttempts = 3
-    private nonisolated static let socketProbePollRetryBackoffUs: useconds_t = 50_000
     private nonisolated static let unixSocketPathMaxLength: Int = {
         var addr = sockaddr_un()
         // Reserve one byte for the null terminator.
@@ -133,17 +130,6 @@ class TerminalController {
                 return 0
             case .resumeAfterDelay(let delayMs), .rearmAfterDelay(let delayMs):
                 return delayMs
-            }
-        }
-
-        var debugLabel: String {
-            switch self {
-            case .retryImmediately:
-                return "retry_immediately"
-            case .resumeAfterDelay:
-                return "resume_after_delay"
-            case .rearmAfterDelay:
-                return "rearm_after_delay"
             }
         }
     }
@@ -584,24 +570,8 @@ class TerminalController {
     // `TerminalControllerSocketSecurityTests` via `@testable import` (regression #6618).
     final class SocketFastPathState: @unchecked Sendable {
         private let queue = DispatchQueue(label: "com.darkroom.programa.socket-fast-path")
-        private var lastReportedDirectories: [SocketSurfaceKey: String] = [:]
         private var lastReportedShellStates: [SocketSurfaceKey: Workspace.PanelShellActivityState] = [:]
-        private let maxTrackedDirectories = 4096
         private let maxTrackedShellStates = 4096
-
-        func shouldPublishDirectory(workspaceId: UUID, panelId: UUID, directory: String) -> Bool {
-            let key = SocketSurfaceKey(workspaceId: workspaceId, panelId: panelId)
-            return queue.sync {
-                if lastReportedDirectories[key] == directory {
-                    return false
-                }
-                if lastReportedDirectories.count >= maxTrackedDirectories {
-                    lastReportedDirectories.removeAll(keepingCapacity: true)
-                }
-                lastReportedDirectories[key] = directory
-                return true
-            }
-        }
 
         /// Returns `true` when the incoming state differs from the last *applied* state,
         /// meaning the report is worth dispatching to the main thread.
@@ -2110,8 +2080,6 @@ class TerminalController {
             return v2Result(id: id, self.v2DebugLayout())
         case "debug.portal.stats":
             return v2Result(id: id, self.v2DebugPortalStats())
-        case "debug.viewtree":
-            return v2Result(id: id, self.v2DebugViewTree())
         case "debug.bonsplit_underflow.count":
             return v2Result(id: id, self.v2DebugBonsplitUnderflowCount())
         case "debug.bonsplit_underflow.reset":
@@ -2472,10 +2440,6 @@ class TerminalController {
     nonisolated func v2HasNonNullParam(_ params: [String: Any], _ key: String) -> Bool {
         guard let raw = params[key] else { return false }
         return !(raw is NSNull)
-    }
-
-    nonisolated func v2StrictInt(_ params: [String: Any], _ key: String) -> Int? {
-        v2StrictIntAny(params[key])
     }
 
     private nonisolated func v2StrictIntAny(_ raw: Any?) -> Int? {
