@@ -52,7 +52,7 @@ sign_if_present "$app_path/Contents/Resources/bin/programa-mcp"
 # exact AMFI-kill failure mode this comment is warning about.
 #
 # When PROGRAMA_PROVISION_PROFILE is unset or the file doesn't exist, this is
-# a no-op here — but it is no longer harmless, because the app does now declare
+# a no-op here, but not harmless, because the app declares
 # restricted entitlements. scripts/verify-provision-profile.sh runs after this
 # and fails the build in that case rather than letting an AMFI-killed app ship.
 if [[ -n "${PROGRAMA_PROVISION_PROFILE:-}" && -f "${PROGRAMA_PROVISION_PROFILE:-}" ]]; then

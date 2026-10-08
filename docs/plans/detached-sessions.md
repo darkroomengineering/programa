@@ -49,7 +49,7 @@ POC_RESULT: PASS
 
 Both checks held: no SIGHUP reached the child, and the shell stayed fully interactive through
 the escrowed fd (marker echo round-trip). The original Phase 0 spike (2-3 days probing
-`ghostty/src/termio` for a spawn-side seam) is **no longer the gating question**.
+`ghostty/src/termio` for a spawn-side seam) is not the gating question.
 
 ### Revised layering
 

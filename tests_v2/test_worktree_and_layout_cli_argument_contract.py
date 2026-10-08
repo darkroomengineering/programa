@@ -2,14 +2,14 @@
 """Regression: `worktree` and `layout` CLI subcommands must have a registered
 argument contract.
 
-Both commands' descriptors previously had no `case` in the CLI's
-`validateRegisteredArguments` switch, so every invocation -- even harmless
+Both commands' descriptors need a `case` in the CLI's
+`validateRegisteredArguments` switch. Without one, every invocation -- even harmless
 ones like `worktree list` / `layout list` -- failed before socket dispatch
 with:
 
     Internal CLI registry error: no argument contract for worktree
 
-This shipped to main and made the entire documented `worktree`/`layout` CLI
+That makes the entire documented `worktree`/`layout` CLI
 surface dead on arrival, even though the underlying `worktree.*`/`layout.*`
 socket methods worked fine via `programa rpc`.
 """
@@ -67,13 +67,13 @@ def _merged(proc: "subprocess.CompletedProcess[str]") -> str:
 def main() -> int:
     cli = _find_cli_binary()
 
-    # `worktree list` previously died before ever reaching the socket.
+    # `worktree list` must reach the socket.
     worktree_list = _run(cli, ["worktree", "list", "--repo", REPO_ROOT])
     worktree_out = _merged(worktree_list)
     _must(REGISTRY_ERROR not in worktree_out, f"worktree list hit registry error: {worktree_out!r}")
     _must(worktree_list.returncode == 0, f"worktree list should succeed: {worktree_list.returncode} {worktree_out!r}")
 
-    # `layout list` previously died the same way.
+    # `layout list` must reach the socket too.
     layout_list = _run(cli, ["layout", "list"])
     layout_out = _merged(layout_list)
     _must(REGISTRY_ERROR not in layout_out, f"layout list hit registry error: {layout_out!r}")

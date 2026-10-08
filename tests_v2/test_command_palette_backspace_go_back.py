@@ -65,8 +65,8 @@ def main():
         window_id = client.current_window()
 
         try:
-            # Rename always opens with the existing name selected now, so this
-            # no longer has to pin a setting to get a deterministic starting state.
+            # Rename always opens with the existing name selected, so no setting
+            # needs pinning for a deterministic starting state.
             _open_rename_input(client, window_id)
 
             _wait_until(
