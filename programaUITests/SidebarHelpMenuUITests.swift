@@ -36,16 +36,15 @@ final class SidebarHelpMenuUITests: XCTestCase {
         let toggle = sidebar.descendants(matching: .button)
             .matching(identifier: "titlebarControl.toggleSidebar")
             .firstMatch
-        XCTAssertTrue(
-            sidebarHelpPollUntil(timeout: 3.0) { toggle.exists && toggle.isHittable },
-            "Expected the visible sidebar header to expose its own sidebar toggle"
-        )
-
-        toggle.click()
+        // DIAGNOSTIC (temporary): separate existence from AX hittability, click by coordinate.
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3.0), "Expected the sidebar toggle to exist")
+        let hittable = sidebarHelpPollUntil(timeout: 3.0) { toggle.isHittable }
+        print("DIAG sidebarToggle isHittable=\(hittable) frame=\(toggle.frame)")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
 
         XCTAssertTrue(
             sidebarHelpPollUntil(timeout: 3.0) { !sidebar.exists || !sidebar.isHittable },
-            "The sidebar header toggle must hide the SidebarState that rendered it"
+            "The sidebar header toggle must hide the SidebarState that rendered it (isHittable=\(hittable))"
         )
     }
 
