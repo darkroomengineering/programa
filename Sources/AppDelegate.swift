@@ -4747,8 +4747,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         window.title = ""
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        // Keep the window movable: AppKit validates Window > Fill / Center /
+        // Move & Resize / Move to Display (and their shortcuts) against
+        // `isMovable`. Native titlebar drag stays off because
+        // MainWindowHostingView returns false from `mouseDownCanMoveWindow`;
+        // explicit drag surfaces use `performDrag` instead.
         window.isMovableByWindowBackground = false
-        window.isMovable = false
         let restoredFrame = resolvedWindowFrame(from: sessionWindowSnapshot)
         if let restoredFrame {
             window.setFrame(restoredFrame, display: false)
@@ -7981,15 +7985,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if !window.titlebarAppearsTransparent {
             window.titlebarAppearsTransparent = true
         }
-        // Keep window immovable; the sidebar's WindowDragHandleView handles
-        // drag-to-move via performDrag with temporary movable override.
-        // isMovableByWindowBackground=true breaks tab reordering, and
-        // isMovable=true blocks clicks on sidebar buttons in minimal mode.
+        // isMovableByWindowBackground=true breaks sidebar tab reordering, so
+        // drag-to-move goes through WindowDragHandleView's performDrag. The
+        // window itself stays movable (see createMainWindow) so the Window menu
+        // tiling items validate; MainWindowHostingView's mouseDownCanMoveWindow
+        // override keeps clicks on sidebar buttons from becoming native drags.
         if window.isMovableByWindowBackground {
             window.isMovableByWindowBackground = false
-        }
-        if window.isMovable {
-            window.isMovable = false
         }
         if !window.styleMask.contains(.fullSizeContentView) {
             window.styleMask.insert(.fullSizeContentView)

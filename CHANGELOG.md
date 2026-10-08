@@ -42,6 +42,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The library-validation and unsigned-executable-memory entitlements.
 
 ### Fixed
+- The Window menu's Fill, Center, Move & Resize, Full Screen Tile and Move to Display items, and their shortcuts, work again. The main window had been marked not movable, which makes macOS disable all of them.
 - Port chips in the sidebar now show up again for terminals restored after relaunching Programa. The restored terminals kept their running shell, but port scanning never learned about them.
 - A window closed with the red button no longer comes back on the next launch. Since 0.5.0 a closed window was kept alive for Dock reopen and then saved and restored like a visible one, so every restart opened an extra window of stale workspaces. Closed windows now stay closed across a relaunch and their shells are ended at startup.
 - The agent status badge in a sidebar row stays readable in a narrow sidebar; the tab title is cut short instead. While the badge shows, a spinner character at the start of a program-set title (such as Claude Code's "◐" or "✳") is hidden, since the badge already shows the state.

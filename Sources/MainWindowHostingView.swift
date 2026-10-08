@@ -19,6 +19,12 @@ final class MainWindowHostingView<Content: View>: NSHostingView<Content>, MainWi
     override var safeAreaRect: NSRect { bounds }
     override var safeAreaLayoutGuide: NSLayoutGuide { zeroSafeAreaLayoutGuide }
 
+    /// The window stays `isMovable` so AppKit enables the Window menu tiling
+    /// items, but SwiftUI content under the transparent titlebar must not turn
+    /// a click into a native window drag (sidebar buttons in minimal mode).
+    /// Explicit drag surfaces call `performDrag` themselves.
+    override var mouseDownCanMoveWindow: Bool { false }
+
     required init(rootView: Content) {
         super.init(rootView: rootView)
         // Tell SwiftUI to ignore safe areas outright, rather than relying only on
