@@ -36,8 +36,9 @@ final class SidebarHelpMenuUITests: XCTestCase {
         let toggle = sidebar.descendants(matching: .button)
             .matching(identifier: "titlebarControl.toggleSidebar")
             .firstMatch
+        // Right after launch the header can take longer than 3 seconds on CI to become hittable.
         XCTAssertTrue(
-            sidebarHelpPollUntil(timeout: 3.0) { toggle.exists && toggle.isHittable },
+            sidebarHelpPollUntil(timeout: 10.0) { toggle.exists && toggle.isHittable },
             "Expected the visible sidebar header to expose its own sidebar toggle"
         )
 

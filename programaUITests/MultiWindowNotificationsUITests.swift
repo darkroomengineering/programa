@@ -185,11 +185,8 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
     func testEmptyNotificationsPopoverBlocksTerminalTyping() throws {
         let app = makeTrackedApplication()
-        app.launchArguments += ["-socketControlMode", "allowAll"]
-        app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
-        app.launchEnvironment["PROGRAMA_SOCKET_MODE"] = "allowAll"
-        app.launchEnvironment["PROGRAMA_SOCKET_ENABLE"] = "1"
-        app.launchEnvironment["PROGRAMA_UI_TEST_SOCKET_SANITY"] = "1"
+        // The app records the focused terminal's text here when the popover closes.
+        app.launchEnvironment["PROGRAMA_UI_TEST_KEYEQUIV_PATH"] = dataPath
         app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         app.launch()
         XCTAssertTrue(
@@ -198,18 +195,6 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         )
 
         XCTAssertTrue(waitForWindowCount(atLeast: 1, app: app, timeout: 8.0))
-        guard let resolvedPath = resolveSocketPath(timeout: 8.0) else {
-            XCTFail("Control socket unavailable. requested=\(socketPath)")
-            return
-        }
-        socketPath = resolvedPath
-        let pingResponse = waitForSocketPong(timeout: 8.0)
-        guard pingResponse == "PONG" else {
-            XCTFail("Control socket did not respond in time. path=\(socketPath) response=\(pingResponse ?? "<nil>")")
-            return
-        }
-
-        _ = socketResult("notification.clear")
 
         app.typeKey("i", modifierFlags: [.command])
         XCTAssertTrue(app.staticTexts["No notifications yet"].waitForExistence(timeout: 6.0), "Expected empty notifications popover state")
@@ -221,16 +206,16 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         XCTAssertFalse(clearAllButton.isEnabled, "Expected Clear All button to be disabled with no notifications")
 
         let marker = "programa_notif_block_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))"
-        let before = readCurrentTerminalText() ?? ""
-        XCTAssertFalse(before.contains(marker), "Unexpected marker precondition collision")
-
         app.typeText(marker)
         RunLoop.current.run(until: Date().addingTimeInterval(0.25))
 
-        guard let after = readCurrentTerminalText() else {
-            XCTFail("Expected terminal text from control socket")
-            return
-        }
+        app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        XCTAssertTrue(
+            waitForData(keys: ["terminalTextAtNotificationsPopoverClose"], timeout: 3.0),
+            "Expected the terminal text recorded when the popover closed"
+        )
+        let after = loadData()?["terminalTextAtNotificationsPopoverClose"] ?? ""
+        XCTAssertFalse(after.isEmpty, "Expected a terminal text snapshot, got an empty one")
         XCTAssertFalse(after.contains(marker), "Expected typing to be blocked while empty notifications popover is open")
     }
 
@@ -406,7 +391,11 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         if waitForFocusChange(from: token, timeout: firstDeadline) {
             return true
         }
-        button.click()
+        // A click that landed closes the popover before the focus record is written, so only
+        // retry while the row is still there.
+        if button.exists {
+            button.click()
+        }
         return waitForFocusChange(from: token, timeout: max(0.0, timeout - firstDeadline))
     }
 
@@ -908,120 +897,6 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         return unique
     }
 
-    private func resolveSocketPath(timeout: TimeInterval, requiredWorkspaceId: String? = nil) -> String? {
-        let primaryCandidates = expectedSocketCandidates(includeGlobalFallback: false)
-        let fallbackCandidates: [String]
-        if let requiredWorkspaceId, !requiredWorkspaceId.isEmpty {
-            fallbackCandidates = expectedSocketCandidates(includeGlobalFallback: true)
-                .filter { !primaryCandidates.contains($0) }
-        } else {
-            fallbackCandidates = []
-        }
-
-        var resolvedPath: String?
-        _ = waitForCondition(timeout: timeout) {
-            for candidate in primaryCandidates {
-                guard FileManager.default.fileExists(atPath: candidate) else { continue }
-                // Primary candidate is the explicitly requested PROGRAMA_SOCKET_PATH. If it responds,
-                // prefer it even before workspace contents are fully initialized.
-                if self.socketRespondsToPing(at: candidate) {
-                    resolvedPath = candidate
-                    return true
-                }
-            }
-            for candidate in fallbackCandidates {
-                guard FileManager.default.fileExists(atPath: candidate) else { continue }
-                if self.socketRespondsToPing(at: candidate),
-                   self.socketMatchesRequiredWorkspace(candidate, workspaceId: requiredWorkspaceId) {
-                    resolvedPath = candidate
-                    return true
-                }
-            }
-            return false
-        }
-        if let resolvedPath {
-            return resolvedPath
-        }
-        for candidate in primaryCandidates {
-            guard FileManager.default.fileExists(atPath: candidate) else { continue }
-            if socketRespondsToPing(at: candidate) {
-                return candidate
-            }
-        }
-        for candidate in fallbackCandidates {
-            guard FileManager.default.fileExists(atPath: candidate) else { continue }
-            if socketRespondsToPing(at: candidate),
-               socketMatchesRequiredWorkspace(candidate, workspaceId: requiredWorkspaceId) {
-                return candidate
-            }
-        }
-        return nil
-    }
-
-    private func expectedSocketCandidates(includeGlobalFallback: Bool) -> [String] {
-        var candidates = [socketPath]
-        let taggedDebugSocket = "/tmp/programa-debug-\(launchTag).sock"
-        if !taggedDebugSocket.isEmpty {
-            candidates.append(taggedDebugSocket)
-        }
-        if includeGlobalFallback {
-            candidates.append(contentsOf: discoverTmpSocketCandidates(limit: 12))
-            candidates.append("/tmp/programa-debug.sock")
-            candidates.append(stableSocketPath())
-            candidates.append("/tmp/programa.sock")
-        }
-
-        var unique: [String] = []
-        var seen = Set<String>()
-        for candidate in candidates {
-            if seen.insert(candidate).inserted {
-                unique.append(candidate)
-            }
-        }
-        return unique
-    }
-
-    private func stableSocketPath() -> String {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("programa", isDirectory: true)
-            .appendingPathComponent("programa.sock", isDirectory: false)
-            .path ?? "/tmp/programa.sock"
-    }
-
-    private func socketMatchesRequiredWorkspace(_ candidatePath: String, workspaceId: String?) -> Bool {
-        guard let workspaceId, !workspaceId.isEmpty else { return true }
-        let originalPath = socketPath
-        socketPath = candidatePath
-        defer { socketPath = originalPath }
-
-        guard let result = socketResult("surface.list", params: ["workspace_id": workspaceId]),
-              let surfaces = result["surfaces"] as? [[String: Any]],
-              !surfaces.isEmpty else {
-            return false
-        }
-        return true
-    }
-
-    private func discoverTmpSocketCandidates(limit: Int) -> [String] {
-        let tmpPath = "/tmp"
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: tmpPath) else {
-            return []
-        }
-
-        let matches = entries.filter { $0.hasPrefix("programa") && $0.hasSuffix(".sock") }
-        let sorted = matches.compactMap { entry -> (path: String, mtime: Date)? in
-            let fullPath = (tmpPath as NSString).appendingPathComponent(entry)
-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath) else {
-                return nil
-            }
-            let mtime = (attrs[.modificationDate] as? Date) ?? .distantPast
-            return (fullPath, mtime)
-        }
-        .sorted { $0.mtime > $1.mtime }
-
-        return Array(sorted.prefix(limit)).map(\.path)
-    }
-
     private func socketRespondsToPing(at path: String) -> Bool {
         let originalPath = socketPath
         socketPath = path
@@ -1226,15 +1101,6 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             }
             return accum.isEmpty ? nil : accum.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-    }
-
-    private func readCurrentTerminalText() -> String? {
-        guard let result = socketResult("debug.terminal.read_text"),
-              let encoded = result["base64"] as? String else {
-            return nil
-        }
-        guard let data = Data(base64Encoded: encoded) else { return nil }
-        return String(data: data, encoding: .utf8)
     }
 
     private func loadData() -> [String: String]? {

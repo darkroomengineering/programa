@@ -13,6 +13,8 @@ enum UITestRecorder {
         return p
     }
 
+    static var isEnabled: Bool { path != nil }
+
     static func record(_ updates: [String: String]) {
         guard let path else { return }
         var payload = load(at: path)

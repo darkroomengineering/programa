@@ -1125,6 +1125,17 @@ final class TitlebarControlsAccessoryViewController: NSTitlebarAccessoryViewCont
         // Clear the content view controller to stop SwiftUI observers when popover is hidden
         notificationsPopover.contentViewController = nil
         postNotificationsPopoverVisibilityDidChange(isShown: false)
+#if DEBUG
+        // UI-test seam: lets XCUITests check that typing stayed out of the terminal while the
+        // popover was open, without the control socket. No-op unless PROGRAMA_UI_TEST_KEYEQUIV_PATH is set.
+        if UITestRecorder.isEnabled,
+           let panel = AppDelegate.shared?.tabManager?.selectedWorkspace?.focusedTerminalPanel {
+            UITestRecorder.record([
+                "terminalTextAtNotificationsPopoverClose":
+                    TerminalController.shared.readTerminalTextForSnapshot(terminalPanel: panel, lineLimit: 200) ?? ""
+            ])
+        }
+#endif
     }
 }
 
@@ -1425,6 +1436,24 @@ final class UpdateTitlebarAccessoryController {
     private var startupScanWorkItems: [DispatchWorkItem] = []
     private let controlsIdentifier = NSUserInterfaceItemIdentifier("programa.titlebarControls")
     private let controlsControllers = NSHashTable<TitlebarControlsAccessoryViewController>.weakObjects()
+    /// Minimal mode attaches no titlebar accessory, so nothing in `controlsControllers` can own
+    /// the notifications popover there. This detached controller owns it instead; the popover
+    /// anchors to the sidebar bell when one is passed, otherwise to the key window.
+    private var detachedNotificationsController: TitlebarControlsAccessoryViewController?
+
+    /// Attached controllers first, so standard mode keeps anchoring to its titlebar controls.
+    private func notificationsControllers() -> [TitlebarControlsAccessoryViewController] {
+        var controllers = controlsControllers.allObjects
+        if controllers.isEmpty, detachedNotificationsController == nil {
+            detachedNotificationsController = TitlebarControlsAccessoryViewController(
+                notificationStore: TerminalNotificationStore.shared
+            )
+        }
+        if let detachedNotificationsController {
+            controllers.append(detachedNotificationsController)
+        }
+        return controllers
+    }
     private var lastKnownPresentationMode: WorkspacePresentationModeSettings.Mode = WorkspacePresentationModeSettings.mode()
 
     init(viewModel: UpdateViewModel) {
@@ -1665,7 +1694,7 @@ final class UpdateTitlebarAccessoryController {
     }
 
     func toggleNotificationsPopover(animated: Bool = true, anchorView: NSView? = nil) {
-        let controllers = controlsControllers.allObjects
+        let controllers = notificationsControllers()
         guard !controllers.isEmpty else { return }
 
         // If an external anchor is provided (e.g. fullscreen sidebar controls),
@@ -1689,12 +1718,13 @@ final class UpdateTitlebarAccessoryController {
     }
 
     func isNotificationsPopoverShown() -> Bool {
-        controlsControllers.allObjects.contains(where: { $0.popoverIsShownForTesting })
+        (controlsControllers.allObjects + [detachedNotificationsController].compactMap { $0 })
+            .contains(where: { $0.popoverIsShownForTesting })
     }
 
     @discardableResult
     func dismissNotificationsPopoverIfShown() -> Bool {
-        let controllers = controlsControllers.allObjects
+        let controllers = controlsControllers.allObjects + [detachedNotificationsController].compactMap { $0 }
         var dismissed = false
         for controller in controllers where controller.popoverIsShownForTesting {
             controller.dismissNotificationsPopover()
@@ -1704,7 +1734,7 @@ final class UpdateTitlebarAccessoryController {
     }
 
     func showNotificationsPopover(animated: Bool = true) {
-        let controllers = controlsControllers.allObjects
+        let controllers = notificationsControllers()
         guard !controllers.isEmpty else { return }
 
         let target = preferredNotificationsController(from: controllers, preferShownPopover: false)
