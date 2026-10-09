@@ -47,10 +47,6 @@ enum NotificationSoundSettings {
         (defaults.string(forKey: key) ?? defaultValue) != "none"
     }
 
-    static func isSilent(defaults: UserDefaults = .standard) -> Bool {
-        return (defaults.string(forKey: key) ?? defaultValue) == "none"
-    }
-
     static func playSelectedSound(defaults: UserDefaults = .standard) {
         let value = defaults.string(forKey: key) ?? defaultValue
         playSound(value: value)

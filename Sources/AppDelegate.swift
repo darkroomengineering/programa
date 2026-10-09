@@ -713,7 +713,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     var displayResolutionUITestObservers: [NSObjectProtocol] = []
     private struct UITestRenderDiagnosticsSnapshot {
         let panelId: UUID
-        let drawCount: Int
         let presentCount: Int
         let lastPresentTime: Double
         let windowVisible: Bool
@@ -1104,7 +1103,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         guard let renderState = currentUITestRenderDiagnostics() else {
             payload["renderStatsAvailable"] = "0"
             payload["renderPanelId"] = ""
-            payload["renderDrawCount"] = ""
             payload["renderPresentCount"] = ""
             payload["renderLastPresentTime"] = ""
             payload["renderWindowVisible"] = ""
@@ -1117,7 +1115,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         payload["renderStatsAvailable"] = "1"
         payload["renderPanelId"] = renderState.panelId.uuidString
-        payload["renderDrawCount"] = String(renderState.drawCount)
         payload["renderPresentCount"] = String(renderState.presentCount)
         payload["renderLastPresentTime"] = String(format: "%.6f", renderState.lastPresentTime)
         payload["renderWindowVisible"] = renderState.windowVisible ? "1" : "0"
@@ -1149,7 +1146,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let stats = terminalPanel.hostedView.debugRenderStats()
         return UITestRenderDiagnosticsSnapshot(
             panelId: terminalPanel.id,
-            drawCount: stats.drawCount,
             presentCount: stats.presentCount,
             lastPresentTime: stats.lastPresentTime,
             windowVisible: stats.windowOcclusionVisible,

@@ -414,9 +414,7 @@ class TerminalController {
         }
     }
 
-    private static func socketCommandAllowsInAppFocusMutations(commandKey: String, isV2: Bool) -> Bool {
-        // The v1 line protocol is gone; only v2 JSON-RPC methods can carry focus intent.
-        guard isV2 else { return false }
+    private static func socketCommandAllowsInAppFocusMutations(commandKey: String) -> Bool {
         return focusIntentV2Methods.contains(commandKey)
     }
 
@@ -437,20 +435,19 @@ class TerminalController {
         return body()
     }
 
-    private func withSocketCommandPolicy<T>(commandKey: String, isV2: Bool, _ body: () -> T) -> T {
-        let allowsFocusMutation = Self.socketCommandAllowsInAppFocusMutations(commandKey: commandKey, isV2: isV2)
+    private func withSocketCommandPolicy<T>(commandKey: String, _ body: () -> T) -> T {
+        let allowsFocusMutation = Self.socketCommandAllowsInAppFocusMutations(commandKey: commandKey)
         _ = Self.v2TakeSelectorResolutionFailure()
         return Self.withSocketCommandThreadState(inCommand: true, allowsFocusMutation: allowsFocusMutation, body)
     }
 
 #if DEBUG
     static func debugSocketCommandPolicySnapshot(
-        commandKey: String,
-        isV2: Bool
+        commandKey: String
     ) -> (insideSuppressed: Bool, insideAllowsFocus: Bool, outsideSuppressed: Bool, outsideAllowsFocus: Bool) {
         var insideSuppressed = false
         var insideAllowsFocus = false
-        _ = Self.shared.withSocketCommandPolicy(commandKey: commandKey, isV2: isV2) {
+        _ = Self.shared.withSocketCommandPolicy(commandKey: commandKey) {
             insideSuppressed = Self.shouldSuppressSocketCommandActivation()
             insideAllowsFocus = Self.socketCommandAllowsInAppFocusMutations()
             return 0
@@ -503,15 +500,6 @@ class TerminalController {
         return current.value != value || current.label != label
     }
 
-    nonisolated static func shouldReplaceGitBranch(
-        current: SidebarGitBranchState?,
-        branch: String,
-        isDirty: Bool
-    ) -> Bool {
-        guard let current else { return true }
-        return current.branch != branch || current.isDirty != isDirty
-    }
-
     nonisolated static func shouldReplacePullRequest(
         current: SidebarPullRequestState?,
         number: Int,
@@ -553,12 +541,6 @@ class TerminalController {
             || current.status != status
             || current.branch != effectiveBranch
             || current.checks != effectiveChecks
-    }
-
-    nonisolated static func shouldReplacePorts(current: [Int]?, next: [Int]) -> Bool {
-        let currentSorted = Array(Set(current ?? [])).sorted()
-        let nextSorted = Array(Set(next)).sorted()
-        return currentSorted != nextSorted
     }
 
     private struct SocketSurfaceKey: Hashable {
@@ -609,28 +591,6 @@ class TerminalController {
     }
 
     nonisolated static let socketFastPathState = SocketFastPathState()
-    nonisolated static func explicitSocketScope(
-        options: [String: String]
-    ) -> (workspaceId: UUID, panelId: UUID)? {
-        guard let tabRaw = options["tab"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !tabRaw.isEmpty,
-              let panelRaw = (options["panel"] ?? options["surface"])?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !panelRaw.isEmpty,
-              let workspaceId = UUID(uuidString: tabRaw),
-              let panelId = UUID(uuidString: panelRaw) else {
-            return nil
-        }
-        return (workspaceId, panelId)
-    }
-
-    nonisolated static func normalizeReportedDirectory(_ directory: String) -> String {
-        let trimmed = directory.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return directory }
-        if trimmed.hasPrefix("file://"), let url = URL(string: trimmed), !url.path.isEmpty {
-            return url.path
-        }
-        return trimmed
-    }
 
     nonisolated static func normalizedExportedScreenPath(_ raw: String?) -> String? {
         guard let raw else { return nil }
@@ -1763,7 +1723,7 @@ class TerminalController {
             return v2Error(id: id, code: "invalid_request", message: "Missing method")
         }
 
-        return withSocketCommandPolicy(commandKey: method, isV2: true) {
+        return withSocketCommandPolicy(commandKey: method) {
             if let result = AgentRPCDispatcher.dispatch(method: method, params: params, controller: self) {
                 return v2Result(id: id, result)
             }

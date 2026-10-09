@@ -785,8 +785,6 @@ extension TerminalController {
 
     private struct RenderStatsResponse: Codable {
         let panelId: String
-        let drawCount: Int
-        let lastDrawTime: Double
         let presentCount: Int
         let lastPresentTime: Double
         let layerClass: String
@@ -825,8 +823,6 @@ extension TerminalController {
             let stats = terminalPanel.hostedView.debugRenderStats()
             let payload = RenderStatsResponse(
                 panelId: panelId.uuidString,
-                drawCount: stats.drawCount,
-                lastDrawTime: stats.lastDrawTime,
                 presentCount: stats.presentCount,
                 lastPresentTime: stats.lastPresentTime,
                 layerClass: stats.layerClass,

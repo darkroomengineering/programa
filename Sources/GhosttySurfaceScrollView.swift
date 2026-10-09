@@ -234,8 +234,6 @@ final class GhosttySurfaceScrollView: NSView {
     private static let tabTransferPasteboardType = NSPasteboard.PasteboardType("com.splittabbar.tabtransfer")
     private static let sidebarTabReorderPasteboardType = NSPasteboard.PasteboardType("com.darkroom.programa.sidebar-tab-reorder")
     private static var flashCounts: [UUID: Int] = [:]
-    private static var drawCounts: [UUID: Int] = [:]
-    private static var lastDrawTimes: [UUID: CFTimeInterval] = [:]
     private static var presentCounts: [UUID: Int] = [:]
     private static var lastPresentTimes: [UUID: CFTimeInterval] = [:]
     private static var lastContentsKeys: [UUID: String] = [:]
@@ -250,20 +248,6 @@ final class GhosttySurfaceScrollView: NSView {
 
     private static func recordFlash(for surfaceId: UUID) {
         flashCounts[surfaceId, default: 0] += 1
-    }
-
-    static func drawStats(for surfaceId: UUID) -> (count: Int, last: CFTimeInterval) {
-        (drawCounts[surfaceId, default: 0], lastDrawTimes[surfaceId, default: 0])
-    }
-
-    static func resetDrawStats() {
-        drawCounts.removeAll()
-        lastDrawTimes.removeAll()
-    }
-
-    static func recordSurfaceDraw(_ surfaceId: UUID) {
-        drawCounts[surfaceId, default: 0] += 1
-        lastDrawTimes[surfaceId] = CACurrentMediaTime()
     }
 
     // Widened from private to internal: called from the debug-only RenderStats

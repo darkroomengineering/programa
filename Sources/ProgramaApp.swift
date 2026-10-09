@@ -1758,11 +1758,6 @@ final class AppIconAppearanceObserver: NSObject {
         }
     }
 
-    func stopObserving() {
-        observation?.invalidate()
-        observation = nil
-    }
-
     private func applyIconForCurrentAppearance() {
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let imageName = isDark ? "AppIconDark" : "AppIconLight"

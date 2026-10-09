@@ -572,7 +572,6 @@ struct ProgramaCLI {
                 connectionPolicy: .local,
                 detailedUsage: """
                 Usage: programa codex <install-integration|uninstall-integration> [--yes]
-                       programa codex <install-hooks|uninstall-hooks>  (legacy aliases, still supported)
 
                 Shows the changes and asks before applying them. --yes (-y) applies
                 without asking; without it a non-interactive stdin exits 1 unchanged.

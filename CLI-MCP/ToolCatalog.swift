@@ -75,10 +75,6 @@ enum ProgramaToolSchema {
         ["type": "number", "description": .string(description)]
     }
 
-    static func stringArray(_ description: String) -> Value {
-        ["type": "array", "items": ["type": "string"], "description": .string(description)]
-    }
-
     static func integerArray(_ description: String) -> Value {
         ["type": "array", "items": ["type": "integer"], "description": .string(description)]
     }

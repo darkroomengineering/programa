@@ -180,28 +180,6 @@ enum PanelOverlayRingMetrics {
     }
 }
 
-#if DEBUG
-func programaFlashDebugID(_ id: UUID?) -> String {
-    guard let id else { return "nil" }
-    return String(id.uuidString.prefix(6))
-}
-
-func programaFlashDebugRect(_ rect: CGRect?) -> String {
-    guard let rect else { return "nil" }
-    return String(
-        format: "%.1f,%.1f %.1fx%.1f",
-        rect.origin.x,
-        rect.origin.y,
-        rect.size.width,
-        rect.size.height
-    )
-}
-
-func programaFlashDebugBool(_ value: Bool) -> Int {
-    value ? 1 : 0
-}
-#endif
-
 struct FocusFlashSegment: Equatable {
     let delay: TimeInterval
     let duration: TimeInterval
