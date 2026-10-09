@@ -8,6 +8,31 @@ import Bonsplit
 import UserNotifications
 import Combine
 
+private func makeTemporaryDirectory() throws -> URL {
+    let directoryURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+    return directoryURL
+}
+
+@MainActor
+private func waitForCondition(
+    timeout: TimeInterval = 2,
+    pollInterval: TimeInterval = 0.01,
+    _ condition: () -> Bool
+) -> Bool {
+    // Scaled by `ciScale` (TabManagerUnitTests.swift). This one polls the main run loop for a real window to
+    // settle, so a flat 2s is comfortable locally and thin on a loaded CI runner.
+    let deadline = Date().addingTimeInterval(timeout * ciScale)
+    while Date() < deadline {
+        if condition() {
+            return true
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
+    }
+    return condition()
+}
+
 @MainActor
 final class ProgramaLayoutFileIdentityTests: XCTestCase {
     private let layout = ProgramaLayoutNode.pane(ProgramaPaneDefinition(surfaces: [
@@ -1121,13 +1146,6 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertEqual(manager.selectedTabId, inserted.id)
     }
 
-    private func makeTemporaryDirectory() throws -> URL {
-        let directoryURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        return directoryURL
-    }
-
     private func writeSettingsFile(_ contents: String, to url: URL) throws {
         try contents.write(to: url, atomically: true, encoding: .utf8)
     }
@@ -1415,13 +1433,6 @@ final class TerminalThemeSettingsTests: XCTestCase {
         XCTAssertTrue(managedContents.contains("background-blur = false"))
         XCTAssertEqual(store.managedRawAppearance().backgroundBlur, false)
         XCTAssertEqual(store.currentAppearance().backgroundBlur, false)
-    }
-
-    private func makeTemporaryDirectory() throws -> URL {
-        let directoryURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        return directoryURL
     }
 
     private func writeSettingsFile(_ contents: String, to url: URL) throws {
@@ -2415,24 +2426,6 @@ final class WorkspaceTeardownTests: XCTestCase {
 
 @MainActor
 final class WorkspaceSplitWorkingDirectoryTests: XCTestCase {
-    private func waitForCondition(
-        timeout: TimeInterval = 2,
-        pollInterval: TimeInterval = 0.01,
-        _ condition: () -> Bool
-    ) -> Bool {
-        // Scaled by `ciScale` (TabManagerUnitTests.swift), matching the copy of this
-        // helper in that file. This one polls the main run loop for a real window to
-        // settle, so a flat 2s is comfortable locally and thin on a loaded CI runner.
-        let deadline = Date().addingTimeInterval(timeout * ciScale)
-        while Date() < deadline {
-            if condition() {
-                return true
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
-        }
-        return condition()
-    }
-
     private func hostTerminalPanelInWindow(_ panel: TerminalPanel) throws -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 280),
@@ -4335,21 +4328,6 @@ final class ReviewPanelWorkspaceTransferTests: XCTestCase {
             sidebarSelectionState: SidebarSelectionState()
         )
         return (app, window)
-    }
-
-    private func waitForCondition(
-        timeout: TimeInterval = 2,
-        pollInterval: TimeInterval = 0.01,
-        _ condition: () -> Bool
-    ) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition() {
-                return true
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
-        }
-        return condition()
     }
 
     func testMovingReviewPanelReinstallsSubscriptionAndTracksSourceInItsOriginalWorkspace() throws {

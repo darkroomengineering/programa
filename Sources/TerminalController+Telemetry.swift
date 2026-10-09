@@ -322,16 +322,10 @@ extension TerminalController {
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
             tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey)
-            let taskState: AgentTaskState
-            switch state {
-            case .idle: taskState = .idle
-            case .working: taskState = .working
-            case .blocked: taskState = .blocked
-            }
             _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
                 workspaceId: workspaceId,
                 surfaceId: sid,
-                state: taskState
+                state: AgentTaskState(state)
             )
             if let reportedPid, let provider, let pidKey = Self.agentPIDKey(forProvider: provider) {
                 if tab.setSidebarAgentPID(key: pidKey, pid: reportedPid) {
@@ -418,16 +412,10 @@ extension TerminalController {
         case .applyState(let state):
             v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
                 tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: .hooks, sessionKey: sessionKey)
-                let taskState: AgentTaskState
-                switch state {
-                case .idle: taskState = .idle
-                case .working: taskState = .working
-                case .blocked: taskState = .blocked
-                }
                 _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
                     workspaceId: workspaceId,
                     surfaceId: sid,
-                    state: taskState
+                    state: AgentTaskState(state)
                 )
                 if let reportedPid, let provider, let pidKey = Self.agentPIDKey(forProvider: provider) {
                     if tab.setSidebarAgentPID(key: pidKey, pid: reportedPid) {

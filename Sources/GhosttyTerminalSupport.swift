@@ -175,7 +175,7 @@ enum GhosttyPasteboardHelper {
         return result
     }
 
-    private static func shellSingleQuoted(_ value: String) -> String {
+    static func shellSingleQuoted(_ value: String) -> String {
         let escaped = value.replacingOccurrences(of: "'", with: "'\\''")
         return "'\(escaped)'"
     }

@@ -18,6 +18,16 @@ enum AgentTaskState: String, Sendable {
     }
 }
 
+extension AgentTaskState {
+    init(_ state: AgentActivityState) {
+        switch state {
+        case .idle: self = .idle
+        case .working: self = .working
+        case .blocked: self = .blocked
+        }
+    }
+}
+
 enum AgentTaskPlacement: String, Sendable {
     case nestedWorkspace = "nested_workspace"
     case separateWorktree = "separate_worktree"

@@ -41,6 +41,7 @@ _TESTS_V2_DIR = os.path.normpath(
 )
 sys.path.insert(0, _TESTS_V2_DIR)
 from programa_client import ProgramaClient, ProgramaClientError
+from v2_support import wait_for
 
 NEW_WORKSPACES = int(os.environ.get("PROGRAMA_LAG_NEW_WORKSPACES", "20"))
 SWITCH_PASSES = int(os.environ.get("PROGRAMA_LAG_SWITCH_PASSES", "1"))
@@ -159,15 +160,6 @@ class RawSocketClient:
         code = err.get("code") or "error"
         msg = err.get("message") or "Unknown error"
         raise ProgramaClientError(f"{code}: {msg}")
-
-
-def wait_for(predicate: Callable[[], bool], timeout_s: float, step_s: float = 0.05) -> None:
-    start = time.time()
-    while time.time() - start < timeout_s:
-        if predicate():
-            return
-        time.sleep(step_s)
-    raise ProgramaClientError("Timed out waiting for condition")
 
 
 def percentile(values: list[float], p: float) -> float:
