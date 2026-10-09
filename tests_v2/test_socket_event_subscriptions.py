@@ -32,21 +32,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
 from v2_support import must as _must
+from v2_support import wait_for as _wait_for
 from pane_resize_test_support import (  # noqa: E402
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
 )
 
 
 DEFAULT_SOCKET_PATHS = ["/tmp/programa-debug.sock", "/tmp/programa.sock"]
-
-
-def _wait_for(pred, timeout_s: float = 10.0, step_s: float = 0.05) -> None:
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        if pred():
-            return
-        time.sleep(step_s)
-    raise ProgramaClientError("Timed out waiting for condition")
 
 
 def _call_while_events_may_be_pending(client: ProgramaClient, method: str, params: dict | None = None) -> dict:

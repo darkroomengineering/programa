@@ -151,6 +151,25 @@ enum ProgramaTypingTiming {
     }
 }
 
+fileprivate func runLoopActivityLabel(_ activity: CFRunLoopActivity) -> String {
+    switch activity {
+    case .entry:
+        return "entry"
+    case .beforeTimers:
+        return "beforeTimers"
+    case .beforeSources:
+        return "beforeSources"
+    case .beforeWaiting:
+        return "beforeWaiting"
+    case .afterWaiting:
+        return "afterWaiting"
+    case .exit:
+        return "exit"
+    default:
+        return "unknown(\(activity.rawValue))"
+    }
+}
+
 final class ProgramaMainRunLoopStallMonitor {
     static let shared = ProgramaMainRunLoopStallMonitor()
 
@@ -210,28 +229,9 @@ final class ProgramaMainRunLoopStallMonitor {
         let firstResponder = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
         let currentEvent = NSApp.currentEvent.map(ProgramaTypingTiming.eventFields) ?? "event=nil"
         dlog(
-            "runloop.stall gapMs=\(String(format: "%.2f", elapsedMs)) prev=\(label(for: lastActivity)) " +
-            "next=\(label(for: activity)) mode=\(mode) firstResponder=\(firstResponder) \(currentEvent)"
+            "runloop.stall gapMs=\(String(format: "%.2f", elapsedMs)) prev=\(runLoopActivityLabel(lastActivity)) " +
+            "next=\(runLoopActivityLabel(activity)) mode=\(mode) firstResponder=\(firstResponder) \(currentEvent)"
         )
-    }
-
-    private func label(for activity: CFRunLoopActivity) -> String {
-        switch activity {
-        case .entry:
-            return "entry"
-        case .beforeTimers:
-            return "beforeTimers"
-        case .beforeSources:
-            return "beforeSources"
-        case .beforeWaiting:
-            return "beforeWaiting"
-        case .afterWaiting:
-            return "afterWaiting"
-        case .exit:
-            return "exit"
-        default:
-            return "unknown(\(activity.rawValue))"
-        }
     }
 }
 
@@ -349,28 +349,9 @@ final class ProgramaMainThreadTurnProfiler {
 
         dlog(
             "main.turn.work turnMs=\(String(format: "%.2f", turnMs)) trackedMs=\(String(format: "%.2f", trackedMs)) totalCount=\(totalCount) " +
-            "next=\(label(for: nextActivity)) mode=\(mode) firstResponder=\(firstResponder) \(eventSummary) " +
+            "next=\(runLoopActivityLabel(nextActivity)) mode=\(mode) firstResponder=\(firstResponder) \(eventSummary) " +
             "\(bucketSummary)"
         )
-    }
-
-    private func label(for activity: CFRunLoopActivity) -> String {
-        switch activity {
-        case .entry:
-            return "entry"
-        case .beforeTimers:
-            return "beforeTimers"
-        case .beforeSources:
-            return "beforeSources"
-        case .beforeWaiting:
-            return "beforeWaiting"
-        case .afterWaiting:
-            return "afterWaiting"
-        case .exit:
-            return "exit"
-        default:
-            return "unknown(\(activity.rawValue))"
-        }
     }
 }
 #endif

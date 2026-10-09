@@ -282,6 +282,28 @@ final class Workspace: Identifiable, ObservableObject {
 
     // MARK: - Initialization
 
+    private static func makeBonsplitController() -> BonsplitController {
+        let appearance = bonsplitAppearance(
+            from: GhosttyApp.shared.defaultBackgroundColor,
+            backgroundOpacity: GhosttyApp.shared.defaultBackgroundOpacity
+        )
+        let config = BonsplitConfiguration(
+            allowSplits: true,
+            allowCloseTabs: true,
+            allowCloseLastPane: false,
+            allowTabReordering: true,
+            allowCrossPaneTabMove: true,
+            autoCloseEmptyPanes: true,
+            contentViewLifecycle: .keepAllAlive,
+            newTabPosition: .current,
+            appearance: appearance
+        )
+        let controller = BonsplitController(configuration: config)
+        controller.contextMenuShortcuts = buildContextMenuShortcuts()
+        return controller
+    }
+
+
     init(
         title: String = String(localized: "workspace.defaultTitle.terminal", defaultValue: "Terminal"),
         workingDirectory: String? = nil,
@@ -307,23 +329,7 @@ final class Workspace: Identifiable, ObservableObject {
         // and keep split entry instantaneous.
         // Avoid re-reading/parsing Ghostty config on every new workspace; this hot path
         // runs for socket/CLI workspace creation and can cause visible typing lag.
-        let appearance = Self.bonsplitAppearance(
-            from: GhosttyApp.shared.defaultBackgroundColor,
-            backgroundOpacity: GhosttyApp.shared.defaultBackgroundOpacity
-        )
-        let config = BonsplitConfiguration(
-            allowSplits: true,
-            allowCloseTabs: true,
-            allowCloseLastPane: false,
-            allowTabReordering: true,
-            allowCrossPaneTabMove: true,
-            autoCloseEmptyPanes: true,
-            contentViewLifecycle: .keepAllAlive,
-            newTabPosition: .current,
-            appearance: appearance
-        )
-        self.bonsplitController = BonsplitController(configuration: config)
-        bonsplitController.contextMenuShortcuts = Self.buildContextMenuShortcuts()
+        self.bonsplitController = Self.makeBonsplitController()
 
         // Remove the default "Welcome" tab that bonsplit creates
         let welcomeTabIds = bonsplitController.allTabIds
@@ -413,23 +419,7 @@ final class Workspace: Identifiable, ObservableObject {
             ? trimmedWorkingDirectory
             : FileManager.default.homeDirectoryForCurrentUser.path
 
-        let appearance = Self.bonsplitAppearance(
-            from: GhosttyApp.shared.defaultBackgroundColor,
-            backgroundOpacity: GhosttyApp.shared.defaultBackgroundOpacity
-        )
-        let config = BonsplitConfiguration(
-            allowSplits: true,
-            allowCloseTabs: true,
-            allowCloseLastPane: false,
-            allowTabReordering: true,
-            allowCrossPaneTabMove: true,
-            autoCloseEmptyPanes: true,
-            contentViewLifecycle: .keepAllAlive,
-            newTabPosition: .current,
-            appearance: appearance
-        )
-        self.bonsplitController = BonsplitController(configuration: config)
-        bonsplitController.contextMenuShortcuts = Self.buildContextMenuShortcuts()
+        self.bonsplitController = Self.makeBonsplitController()
 
         let welcomeTabIds = bonsplitController.allTabIds
 

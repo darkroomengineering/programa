@@ -285,14 +285,14 @@ struct ProgramaCLIPathInstaller {
     private static func installWithAdministratorPrivileges(sourceURL: URL, destinationURL: URL) throws {
         let destinationPath = destinationURL.path
         let parentPath = destinationURL.deletingLastPathComponent().path
-        let command = "/bin/mkdir -p \(shellQuoted(parentPath)) && " +
-            "/bin/rm -f \(shellQuoted(destinationPath)) && " +
-            "/bin/ln -s \(shellQuoted(sourceURL.path)) \(shellQuoted(destinationPath))"
+        let command = "/bin/mkdir -p \(GhosttyPasteboardHelper.shellSingleQuoted(parentPath)) && " +
+            "/bin/rm -f \(GhosttyPasteboardHelper.shellSingleQuoted(destinationPath)) && " +
+            "/bin/ln -s \(GhosttyPasteboardHelper.shellSingleQuoted(sourceURL.path)) \(GhosttyPasteboardHelper.shellSingleQuoted(destinationPath))"
         try runPrivilegedShellCommand(command)
     }
 
     private static func uninstallWithAdministratorPrivileges(destinationURL: URL) throws {
-        let command = "/bin/rm -f \(shellQuoted(destinationURL.path))"
+        let command = "/bin/rm -f \(GhosttyPasteboardHelper.shellSingleQuoted(destinationURL.path))"
         try runPrivilegedShellCommand(command)
     }
 
@@ -330,10 +330,6 @@ struct ProgramaCLIPathInstaller {
                 : details
             throw InstallerError.privilegedCommandFailed(message: message)
         }
-    }
-
-    private static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private static func isPermissionDenied(_ error: Error) -> Bool {

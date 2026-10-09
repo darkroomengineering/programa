@@ -654,12 +654,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
     static func managedFishShellCommand(shell: String) -> String {
         let initCommand = #"source "$PROGRAMA_FISH_INTEGRATION_FILE""#
-        return "\(shellSingleQuoted(shell)) -il --init-command \(shellSingleQuoted(initCommand))"
-    }
-
-    private static func shellSingleQuoted(_ value: String) -> String {
-        let escaped = value.replacingOccurrences(of: "'", with: "'\\''")
-        return "'\(escaped)'"
+        return "\(GhosttyPasteboardHelper.shellSingleQuoted(shell)) -il --init-command \(GhosttyPasteboardHelper.shellSingleQuoted(initCommand))"
     }
 
     func isAttached(to view: GhosttyNSView) -> Bool {
