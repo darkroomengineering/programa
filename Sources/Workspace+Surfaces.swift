@@ -271,7 +271,6 @@ extension Workspace {
             workingDirectory: splitWorkingDirectory,
             portOrdinal: portOrdinal
         )
-        configureTerminalPanel(newPanel)
         panels[newPanel.id] = newPanel
         panelTitles[newPanel.id] = newPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: newPanel.id, configTemplate: inheritedConfig)
@@ -367,7 +366,6 @@ extension Workspace {
             reviveDescriptor: reviveDescriptor,
             pendingScrollbackSeedText: pendingScrollbackSeedText
         )
-        configureTerminalPanel(newPanel)
         panels[newPanel.id] = newPanel
         panelTitles[newPanel.id] = newPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: newPanel.id, configTemplate: inheritedConfig)

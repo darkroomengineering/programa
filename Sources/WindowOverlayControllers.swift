@@ -5,9 +5,7 @@ import SwiftUI
 
 var fileDropOverlayKey: UInt8 = 0
 private var commandPaletteWindowOverlayKey: UInt8 = 0
-private var tmuxWorkspacePaneWindowOverlayKey: UInt8 = 0
 let commandPaletteOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("programa.commandPalette.overlay.container")
-let tmuxWorkspacePaneOverlayContainerIdentifier = NSUserInterfaceItemIdentifier("programa.tmuxWorkspacePane.overlay.container")
 
 enum CommandPaletteOverlayPromotionPolicy {
     static func shouldPromote(previouslyVisible: Bool, isVisible: Bool) -> Bool {
@@ -25,15 +23,6 @@ private final class CommandPaletteOverlayContainerView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard capturesMouseEvents else { return nil }
         return super.hitTest(point)
-    }
-}
-
-@MainActor
-private final class PassthroughWindowOverlayContainerView: NSView {
-    override var isOpaque: Bool { false }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        nil
     }
 }
 
@@ -591,143 +580,6 @@ func commandPaletteWindowOverlayController(for window: NSWindow) -> WindowComman
     }
     let controller = WindowCommandPaletteOverlayController(window: window)
     objc_setAssociatedObject(window, &commandPaletteWindowOverlayKey, controller, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-    return controller
-}
-
-@MainActor
-final class WindowTmuxWorkspacePaneOverlayController: NSObject {
-    private weak var window: NSWindow?
-    private let containerView = PassthroughWindowOverlayContainerView(frame: .zero)
-    private let model = TmuxWorkspacePaneOverlayModel()
-    private let hostingView: NSHostingView<TmuxWorkspacePaneOverlayView>
-    private var installConstraints: [NSLayoutConstraint] = []
-    /// Identifies the flash whose end-of-animation re-render is pending, so a
-    /// newer flash or a clear does not get overwritten by a stale callback.
-    private var flashSettleGeneration: UInt64 = 0
-
-    init(window: NSWindow) {
-        self.window = window
-        self.hostingView = NSHostingView(
-            rootView: TmuxWorkspacePaneOverlayView(
-                unreadRects: [],
-                flashRect: nil,
-                flashStartedAt: nil,
-                flashReason: nil,
-                isFlashActive: false
-            )
-        )
-        super.init()
-        // Window-level overlay; safe-area observation left on feeds the
-        // layout-loop guard on ambient display events (issue #307).
-        hostingView.safeAreaRegions = []
-        containerView.translatesAutoresizingMaskIntoConstraints = false
-        containerView.wantsLayer = true
-        containerView.layer?.backgroundColor = NSColor.clear.cgColor
-        containerView.isHidden = true
-        containerView.alphaValue = 0
-        containerView.identifier = tmuxWorkspacePaneOverlayContainerIdentifier
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        hostingView.wantsLayer = true
-        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
-        containerView.addSubview(hostingView)
-        NSLayoutConstraint.activate([
-            hostingView.topAnchor.constraint(equalTo: containerView.topAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
-            hostingView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
-            hostingView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
-        ])
-        _ = ensureInstalled()
-    }
-
-    @discardableResult
-    private func ensureInstalled() -> Bool {
-        guard let window,
-              let contentView = window.contentView,
-              let themeFrame = contentView.superview else { return false }
-
-        if containerView.superview !== themeFrame {
-            NSLayoutConstraint.deactivate(installConstraints)
-            installConstraints.removeAll()
-            containerView.removeFromSuperview()
-            themeFrame.addSubview(containerView, positioned: .above, relativeTo: contentView)
-            installConstraints = [
-                containerView.topAnchor.constraint(equalTo: contentView.topAnchor),
-                containerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-                containerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-                containerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            ]
-            NSLayoutConstraint.activate(installConstraints)
-        }
-
-        return true
-    }
-
-    func update(state: TmuxWorkspacePaneOverlayRenderState?) {
-        guard ensureInstalled() else { return }
-        if let state {
-            model.apply(state)
-            renderModel(flashActive: TmuxWorkspacePaneOverlayView.isFlashActive(
-                flashRect: model.flashRect,
-                flashStartedAt: model.flashStartedAt
-            ))
-            containerView.alphaValue = 1
-            containerView.isHidden = false
-            scheduleFlashSettleIfNeeded()
-        } else {
-            flashSettleGeneration &+= 1
-            model.clear()
-            hostingView.rootView = TmuxWorkspacePaneOverlayView(
-                unreadRects: [],
-                flashRect: nil,
-                flashStartedAt: nil,
-                flashReason: nil,
-                isFlashActive: false
-            )
-            containerView.alphaValue = 0
-            containerView.isHidden = true
-        }
-    }
-
-    private func renderModel(flashActive: Bool) {
-        hostingView.rootView = TmuxWorkspacePaneOverlayView(
-            unreadRects: model.unreadRects,
-            flashRect: model.flashRect,
-            flashStartedAt: model.flashStartedAt,
-            flashReason: model.flashReason,
-            isFlashActive: flashActive
-        )
-    }
-
-    /// The overlay view only mounts its animation timeline while a flash is
-    /// active, and SwiftUI does not re-evaluate the root view on its own when
-    /// the flash window elapses. Re-render once just after the flash ends so
-    /// the timeline is torn down instead of running for the life of the window.
-    private func scheduleFlashSettleIfNeeded() {
-        guard let flashStartedAt = model.flashStartedAt,
-              TmuxWorkspacePaneOverlayView.isFlashActive(
-                flashRect: model.flashRect,
-                flashStartedAt: flashStartedAt
-              ) else { return }
-        flashSettleGeneration &+= 1
-        let generation = flashSettleGeneration
-        let remaining = FocusFlashPattern.duration - Date().timeIntervalSince(flashStartedAt)
-        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, remaining) + 0.05) { [weak self] in
-            guard let self, self.flashSettleGeneration == generation else { return }
-            // Explicitly inactive: the flash window has elapsed on the monotonic
-            // dispatch clock, so do not re-read the wall clock here (a backwards
-            // clock step would otherwise leave the timeline mounted).
-            self.renderModel(flashActive: false)
-        }
-    }
-}
-
-@MainActor
-func tmuxWorkspacePaneWindowOverlayController(for window: NSWindow) -> WindowTmuxWorkspacePaneOverlayController {
-    if let existing = objc_getAssociatedObject(window, &tmuxWorkspacePaneWindowOverlayKey) as? WindowTmuxWorkspacePaneOverlayController {
-        return existing
-    }
-    let controller = WindowTmuxWorkspacePaneOverlayController(window: window)
-    objc_setAssociatedObject(window, &tmuxWorkspacePaneWindowOverlayKey, controller, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     return controller
 }
 

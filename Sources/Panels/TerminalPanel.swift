@@ -39,8 +39,6 @@ final class TerminalPanel: Panel, ObservableObject {
     /// (hostedView.window == nil) until the user switches workspaces.
     @Published var viewReattachToken: UInt64 = 0
 
-    var onRequestWorkspacePaneFlash: ((WorkspaceAttentionFlashReason) -> Void)?
-
     private var cancellables = Set<AnyCancellable>()
 
     var displayTitle: String {
@@ -211,17 +209,7 @@ final class TerminalPanel: Panel, ObservableObject {
     }
 
     func triggerFlash(reason: WorkspaceAttentionFlashReason) {
-
-        switch TmuxOverlayExperimentSettings.target() {
-        case .bonsplitPane:
-            if let onRequestWorkspacePaneFlash {
-                onRequestWorkspacePaneFlash(reason)
-                return
-            }
-            hostedView.triggerFlash(style: GhosttySurfaceScrollView.flashStyle(for: reason))
-        case .surface:
-            hostedView.triggerFlash(style: GhosttySurfaceScrollView.flashStyle(for: reason))
-        }
+        hostedView.triggerFlash(style: GhosttySurfaceScrollView.flashStyle(for: reason))
     }
 
     func triggerNotificationDismissFlash() {
