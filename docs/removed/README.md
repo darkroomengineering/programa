@@ -15,7 +15,7 @@ Reductive pass of 2026-09-02, base commit 903027ccef. Core kept: the Ghostty ter
 | AppleScript support | [applescript.md](applescript.md) | 720 |
 | Inline VS Code (serve-web) | [inline-vscode.md](inline-vscode.md) | 610 |
 | Custom notification sound files | [custom-notification-sounds.md](custom-notification-sounds.md) | 400 |
-| tmux active-pane overlay target | [tmux-active-pane-overlay.md](tmux-active-pane-overlay.md) | 70 |
+| tmux overlay experiment (active-pane and Bonsplit-pane targets, window overlay) | [tmux-active-pane-overlay.md](tmux-active-pane-overlay.md) | 1,090 |
 | cmux upgrade shims (old config paths, defaults migration, env and alias fallbacks) | [cmux-upgrade-shims.md](cmux-upgrade-shims.md) | 100 |
 | Settings options (editor, reorder, opacity and blur overrides, notification command, long-command threshold, sidebar tints, ports, Claude path, workspace colors, hold hints) | [settings-knobs-2026-10.md](settings-knobs-2026-10.md) | 2,100 |
 

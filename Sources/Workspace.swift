@@ -122,10 +122,6 @@ final class Workspace: Identifiable, ObservableObject {
     /// which is the sidebar's per-workspace color.
     @Published var panelColorHexes: [UUID: String] = [:]
     @Published var manualUnreadPanelIds: Set<UUID> = []
-    @Published var tmuxLayoutSnapshot: LayoutSnapshot?
-    @Published private(set) var tmuxWorkspaceFlashPanelId: UUID?
-    @Published private(set) var tmuxWorkspaceFlashReason: WorkspaceAttentionFlashReason?
-    @Published private(set) var tmuxWorkspaceFlashToken: UInt64 = 0
     var manualUnreadMarkedAt: [UUID: Date] = [:]
     nonisolated private static let manualUnreadFocusGraceInterval: TimeInterval = 0.2
     nonisolated static let manualUnreadClearDelayAfterFocusFlash: TimeInterval = 0.2
@@ -342,7 +338,6 @@ final class Workspace: Identifiable, ObservableObject {
             initialCommand: initialTerminalCommand,
             initialEnvironmentOverrides: initialTerminalEnvironment
         )
-        configureTerminalPanel(terminalPanel)
         panels[terminalPanel.id] = terminalPanel
         panelTitles[terminalPanel.id] = terminalPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: terminalPanel.id, configTemplate: configTemplate)
@@ -394,7 +389,6 @@ final class Workspace: Identifiable, ObservableObject {
             }
             bonsplitController.selectTab(initialTabId)
         }
-        tmuxLayoutSnapshot = bonsplitController.layoutSnapshot()
     }
 
     /// Initialize a workspace using a pre-warmed terminal panel from the surface pool.
@@ -442,7 +436,6 @@ final class Workspace: Identifiable, ObservableObject {
         // Use the pre-warmed panel, updating its workspace ID to ours
         claimedPanel.updateWorkspaceId(id)
         let terminalPanel = claimedPanel
-        configureTerminalPanel(terminalPanel)
         panels[terminalPanel.id] = terminalPanel
         panelTitles[terminalPanel.id] = terminalPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: terminalPanel.id, configTemplate: configTemplate)
@@ -487,7 +480,6 @@ final class Workspace: Identifiable, ObservableObject {
             }
             bonsplitController.selectTab(initialTabId)
         }
-        tmuxLayoutSnapshot = bonsplitController.layoutSnapshot()
     }
 
     // MARK: - Surface ID to Panel ID Mapping
@@ -721,23 +713,6 @@ final class Workspace: Identifiable, ObservableObject {
     func surfaceIdFromPanelId(_ panelId: UUID) -> TabID? {
         surfaceIdToPanelId.first { $0.value == panelId }?.key
     }
-
-    func configureTerminalPanel(_ terminalPanel: TerminalPanel) {
-        terminalPanel.onRequestWorkspacePaneFlash = { [weak self, weak terminalPanel] reason in
-            guard let self, let terminalPanel else { return }
-            self.triggerWorkspacePaneFlash(panelId: terminalPanel.id, reason: reason)
-        }
-    }
-
-    func triggerWorkspacePaneFlash(panelId: UUID, reason: WorkspaceAttentionFlashReason) {
-        tmuxWorkspaceFlashPanelId = panelId
-        tmuxWorkspaceFlashReason = reason
-        tmuxWorkspaceFlashToken &+= 1
-    }
-
-
-
-
 
     func installMarkdownPanelSubscription(_ markdownPanel: MarkdownPanel) {
         let subscription = markdownPanel.$displayTitle
@@ -1700,7 +1675,6 @@ final class Workspace: Identifiable, ObservableObject {
             configTemplate: inheritedConfig,
             portOrdinal: portOrdinal
         )
-        configureTerminalPanel(newPanel)
         panels[newPanel.id] = newPanel
         panelTitles[newPanel.id] = newPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: newPanel.id, configTemplate: inheritedConfig)
