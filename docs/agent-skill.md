@@ -6,17 +6,17 @@ The skill is [`SKILL.md`](../SKILL.md) at the repo root. This page is the longer
 
 ## Install
 
-`SKILL.md` gets dropped automatically by the existing integration installers, so a normal `programa claude install-integration` / `programa codex install-hooks` / `programa opencode install-integration` is enough — there's no separate skill-install step.
+`SKILL.md` gets dropped automatically by the existing integration installers, so a normal `programa claude install-integration` / `programa codex install-integration` / `programa opencode install-integration` is enough — there's no separate skill-install step.
 
 | Tool | Install command | Skill location |
 | --- | --- | --- |
 | Claude Code | `programa claude install-integration` | `~/.claude/skills/programa/SKILL.md` (or `$CLAUDE_CONFIG_DIR/skills/programa/SKILL.md`) |
-| Codex | `programa codex install-hooks` (alias `install-integration`) | `~/.agents/skills/programa/SKILL.md` |
+| Codex | `programa codex install-integration` | `~/.agents/skills/programa/SKILL.md` |
 | OpenCode | `programa opencode install-integration` | `~/.config/opencode/skills/programa/SKILL.md` (or `$OPENCODE_CONFIG_DIR/skills/programa/SKILL.md`) |
 
 `~/.claude/skills` and `~/.agents/skills` are also both read by OpenCode's own global skill discovery, so running any one of the three installers above already covers OpenCode for most setups — the OpenCode-specific install just makes it explicit and respects `OPENCODE_CONFIG_DIR`.
 
-Uninstalling (`programa claude uninstall-integration`, `programa codex uninstall-hooks`, `programa opencode uninstall-integration`) removes the matching copy the same way it already removes hooks/plugin files, and refuses to touch a file that isn't marked as programa-managed.
+Uninstalling (`programa claude uninstall-integration`, `programa codex uninstall-integration`, `programa opencode uninstall-integration`) removes the matching copy the same way it already removes hooks/plugin files, and refuses to touch a file that isn't marked as programa-managed.
 
 ## Why this exists
 

@@ -3,7 +3,7 @@ name: programa
 description: Drive the programa terminal app from inside a programa surface — inspect windows/workspaces/panes/surfaces, split panes and run commands without stealing the user's focus, read output from sibling panes, spawn and coordinate a helper agent, and wait on it. Use whenever an agent is running inside programa (PROGRAMA_SURFACE_ID and PROGRAMA_SOCKET_PATH are set) and needs to control the app itself, not just the shell inside one pane. Do not use, and do not call the programa CLI at all, when those two variables are unset — that means the agent is not running inside programa.
 ---
 
-<!-- Installed and managed by `programa claude install-integration` / `programa codex install-integration` (legacy alias `install-hooks`) / `programa opencode install-integration`. Manual edits to an installed copy get overwritten on the next install — edit the source at repo root (darkroomengineering/programa) instead. -->
+<!-- Installed and managed by `programa claude install-integration` / `programa codex install-integration` / `programa opencode install-integration`. Manual edits to an installed copy get overwritten on the next install — edit the source at repo root (darkroomengineering/programa) instead. -->
 
 # programa
 

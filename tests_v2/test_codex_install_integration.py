@@ -12,8 +12,6 @@ command branch is dispatched before any socket connection is opened. Exercises:
   keys survive, emptied event keys are dropped, and config.toml's
   Programa block is removed.
 - Declining the confirmation prompt leaves the files untouched.
-- Legacy alias: `programa codex install-hooks` / `uninstall-hooks` behave
-  identically to `install-integration` / `uninstall-integration`.
 """
 
 import glob
@@ -276,35 +274,6 @@ def test_decline_confirmation_leaves_file_untouched(cli: str) -> None:
         print("  PASS: declining the confirmation prompt leaves hooks.json untouched")
 
 
-def test_legacy_alias_install_hooks(cli: str) -> None:
-    with tempfile.TemporaryDirectory() as codex_home:
-        proc = _run(cli, ["codex", "install-hooks", "--yes"], codex_home)
-        _must(proc.returncode == 0, f"legacy install-hooks should exit 0: {_merged(proc)}")
-
-        hooks_path = Path(codex_home) / "hooks.json"
-        _must(hooks_path.exists(), f"hooks.json should be created at {hooks_path}")
-        data = json.loads(hooks_path.read_text(encoding="utf-8"))
-        hooks = data.get("hooks", {})
-        for event in EXPECTED_EVENTS:
-            commands = _hooks_commands(hooks, event)
-            _must(
-                any(CODEX_HOOK_MARKER in cmd for cmd in commands),
-                f"legacy install-hooks: expected a '{CODEX_HOOK_MARKER}' command for {event}, got: {commands}",
-            )
-
-        proc_uninstall = _run(cli, ["codex", "uninstall-hooks", "--yes"], codex_home)
-        _must(proc_uninstall.returncode == 0, f"legacy uninstall-hooks should exit 0: {_merged(proc_uninstall)}")
-        data_after = json.loads(hooks_path.read_text(encoding="utf-8"))
-        hooks_after = data_after.get("hooks", {})
-        for event in EXPECTED_EVENTS:
-            _must(
-                not any(CODEX_HOOK_MARKER in cmd for cmd in _hooks_commands(hooks_after, event)),
-                f"legacy uninstall-hooks: no programa hooks should remain for {event}, got: {hooks_after.get(event)}",
-            )
-
-        print("  PASS: legacy install-hooks/uninstall-hooks aliases behave identically")
-
-
 def test_eof_does_not_authorize_changes(cli: str) -> None:
     with tempfile.TemporaryDirectory() as home:
         config_dir = Path(home) / "integration"
@@ -356,7 +325,6 @@ def main() -> int:
     test_idempotent_reinstall(cli)
     test_preserves_user_hooks_and_replaces_stale_entry(cli)
     test_decline_confirmation_leaves_file_untouched(cli)
-    test_legacy_alias_install_hooks(cli)
 
     print("\nPASS: All codex install-integration tests passed")
     return 0

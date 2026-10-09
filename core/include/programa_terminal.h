@@ -26,7 +26,6 @@ PROGRAMA_TERMINAL_API void programa_terminal_free(ProgramaTerminalSession *sessi
 PROGRAMA_TERMINAL_API int32_t programa_terminal_write(ProgramaTerminalSession *session, const uint8_t *data, size_t len);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_resize(ProgramaTerminalSession *session, uint16_t cols, uint16_t rows, uint16_t cell_width, uint16_t cell_height);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_scroll(ProgramaTerminalSession *session, int32_t lines);
-PROGRAMA_TERMINAL_API int32_t programa_terminal_scroll_to_bottom(ProgramaTerminalSession *session);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_snapshot_json(ProgramaTerminalSession *session, ProgramaTerminalBuffer *out);
 PROGRAMA_TERMINAL_API uint64_t programa_terminal_generation(ProgramaTerminalSession *session);
 PROGRAMA_TERMINAL_API bool programa_terminal_application_cursor(ProgramaTerminalSession *session);
@@ -35,7 +34,6 @@ PROGRAMA_TERMINAL_API int32_t programa_terminal_acknowledge_generation(ProgramaT
 PROGRAMA_TERMINAL_API int32_t programa_terminal_selection_begin(ProgramaTerminalSession *session, size_t col, size_t row, uint32_t mode);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_selection_update(ProgramaTerminalSession *session, size_t col, size_t row);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_selection_end(ProgramaTerminalSession *session);
-PROGRAMA_TERMINAL_API int32_t programa_terminal_selection_clear(ProgramaTerminalSession *session);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_copy_selection(ProgramaTerminalSession *session, ProgramaTerminalBuffer *out);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_paste(ProgramaTerminalSession *session, const uint8_t *data, size_t len, bool bracketed);
 PROGRAMA_TERMINAL_API bool programa_terminal_is_terminated(ProgramaTerminalSession *session);

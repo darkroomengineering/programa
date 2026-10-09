@@ -40,6 +40,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ### Removed
 - Browser socket methods that only ever answered `not_supported` (network routing, viewport emulation, raw input injection and similar) are gone; calling them is now an unknown-method error.
 - The library-validation and unsigned-executable-memory entitlements.
+- The `programa codex install-hooks` and `uninstall-hooks` legacy aliases. Use `programa codex install-integration` and `uninstall-integration`.
 
 ### Fixed
 - The notifications popover now opens in minimal mode, the default layout. Show Notifications (⌘I), the sidebar bell and the menu bar icon's Show Notifications did nothing there.

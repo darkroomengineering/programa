@@ -215,16 +215,4 @@ extension TabManager {
             return ResizeSplitTrace(containsTarget: containsTarget, bounds: combinedBounds)
         }
     }
-
-    /// Close a surface/panel
-    func closeSurface(tabId: UUID, surfaceId: UUID) -> Bool {
-        guard let tab = workspace(withId: tabId) else { return false }
-        // Guard against stale close callbacks (e.g. child-exit can trigger multiple actions).
-        // A stale callback must never affect unrelated panels/workspaces.
-        guard tab.panels[surfaceId] != nil,
-              tab.surfaceIdFromPanelId(surfaceId) != nil else { return false }
-        _ = tab.closePanel(surfaceId)
-        AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tabId, surfaceId: surfaceId)
-        return true
-    }
 }

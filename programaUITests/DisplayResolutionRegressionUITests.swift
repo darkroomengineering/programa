@@ -465,7 +465,6 @@ final class DisplayResolutionRegressionUITests: XCTestCase {
 
     private struct RenderStats: CustomStringConvertible {
         let panelId: String
-        let drawCount: Int
         let presentCount: Int
         let lastPresentTime: Double
         let windowVisible: Bool
@@ -477,7 +476,6 @@ final class DisplayResolutionRegressionUITests: XCTestCase {
         init?(diagnostics: [String: String]) {
             guard diagnostics["renderStatsAvailable"] == "1",
                   let panelId = diagnostics["renderPanelId"], !panelId.isEmpty,
-                  let drawCount = Int(diagnostics["renderDrawCount"] ?? ""),
                   let presentCount = Int(diagnostics["renderPresentCount"] ?? ""),
                   let lastPresentTime = Double(diagnostics["renderLastPresentTime"] ?? ""),
                   let diagnosticsUpdatedAt = Double(diagnostics["renderDiagnosticsUpdatedAt"] ?? "") else {
@@ -485,7 +483,6 @@ final class DisplayResolutionRegressionUITests: XCTestCase {
             }
 
             self.panelId = panelId
-            self.drawCount = drawCount
             self.presentCount = presentCount
             self.lastPresentTime = lastPresentTime
             self.windowVisible = diagnostics["renderWindowVisible"] == "1"
@@ -496,7 +493,7 @@ final class DisplayResolutionRegressionUITests: XCTestCase {
         }
 
         var description: String {
-            "panel=\(panelId) draw=\(drawCount) present=\(presentCount) lastPresent=\(String(format: "%.3f", lastPresentTime)) visible=\(windowVisible) active=\(appIsActive) desiredFocus=\(desiredFocus) firstResponder=\(isFirstResponder) updatedAt=\(String(format: "%.3f", diagnosticsUpdatedAt))"
+            "panel=\(panelId) present=\(presentCount) lastPresent=\(String(format: "%.3f", lastPresentTime)) visible=\(windowVisible) active=\(appIsActive) desiredFocus=\(desiredFocus) firstResponder=\(isFirstResponder) updatedAt=\(String(format: "%.3f", diagnosticsUpdatedAt))"
         }
     }
 

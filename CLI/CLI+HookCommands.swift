@@ -35,15 +35,15 @@ extension ProgramaCLI {
             """
         case "codex":
             return """
-            Usage: programa codex <install-hooks|uninstall-hooks>
+            Usage: programa codex <install-integration|uninstall-integration> [--yes]
 
             Manage Codex CLI hooks integration.
 
             Subcommands:
-              install-hooks     Install programa hooks into ~/.codex/hooks.json,
-                                 plus the agent skill into ~/.agents/skills/programa/
-              uninstall-hooks   Remove programa hooks from ~/.codex/hooks.json,
-                                 plus the agent skill if programa-managed
+              install-integration     Install programa hooks into ~/.codex/hooks.json,
+                                       plus the agent skill into ~/.agents/skills/programa/
+              uninstall-integration   Remove programa hooks from ~/.codex/hooks.json,
+                                       plus the agent skill if programa-managed
             """
         case "codex-hook":
             return """

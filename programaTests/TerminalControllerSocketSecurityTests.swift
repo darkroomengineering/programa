@@ -1284,72 +1284,52 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
 
     func testSocketCommandPolicyDistinguishesFocusIntent() throws {
 #if DEBUG
-        // The v1 line protocol was removed: isV2: false is now unreachable from any real
-        // socket command (only v2 JSON-RPC is dispatched), and always denies focus
-        // mutation regardless of commandKey — verify that fallback explicitly.
-        let nonFocus = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "ping",
-            isV2: false
-        )
-        XCTAssertTrue(nonFocus.insideSuppressed)
-        XCTAssertFalse(nonFocus.insideAllowsFocus)
-        XCTAssertFalse(nonFocus.outsideSuppressed)
-        XCTAssertFalse(nonFocus.outsideAllowsFocus)
-
         let windowFocus = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "window.focus",
-            isV2: true
+            commandKey: "window.focus"
         )
         XCTAssertTrue(windowFocus.insideSuppressed)
         XCTAssertTrue(windowFocus.insideAllowsFocus)
         XCTAssertFalse(windowFocus.outsideSuppressed)
 
         let focusV2 = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "workspace.select",
-            isV2: true
+            commandKey: "workspace.select"
         )
         XCTAssertTrue(focusV2.insideSuppressed)
         XCTAssertTrue(focusV2.insideAllowsFocus)
         XCTAssertFalse(focusV2.outsideSuppressed)
 
         let moveWorkspace = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "workspace.move_to_window",
-            isV2: true
+            commandKey: "workspace.move_to_window"
         )
         XCTAssertTrue(moveWorkspace.insideSuppressed)
         XCTAssertFalse(moveWorkspace.insideAllowsFocus)
 
         let triggerFlash = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "surface.trigger_flash",
-            isV2: true
+            commandKey: "surface.trigger_flash"
         )
         XCTAssertTrue(triggerFlash.insideSuppressed)
         XCTAssertFalse(triggerFlash.insideAllowsFocus)
 
         let simulateShortcut = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "debug.shortcut.simulate",
-            isV2: true
+            commandKey: "debug.shortcut.simulate"
         )
         XCTAssertTrue(simulateShortcut.insideSuppressed)
         XCTAssertFalse(simulateShortcut.insideAllowsFocus)
 
         let settingsOpen = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "settings.open",
-            isV2: true
+            commandKey: "settings.open"
         )
         XCTAssertTrue(settingsOpen.insideSuppressed)
         XCTAssertFalse(settingsOpen.insideAllowsFocus)
 
         let feedbackOpen = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "feedback.open",
-            isV2: true
+            commandKey: "feedback.open"
         )
         XCTAssertTrue(feedbackOpen.insideSuppressed)
         XCTAssertFalse(feedbackOpen.insideAllowsFocus)
 
         let debugType = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "debug.type",
-            isV2: true
+            commandKey: "debug.type"
         )
         XCTAssertTrue(debugType.insideSuppressed)
         XCTAssertFalse(debugType.insideAllowsFocus)
