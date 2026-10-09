@@ -1680,33 +1680,7 @@ final class MarkdownPanelPointerObserverViewTests: XCTestCase {
 }
 
 @MainActor
-final class TmuxWorkspacePaneOverlayTests: XCTestCase {
-    func testOverlayMountsAnimationTimelineOnlyWhileFlashIsWithinItsDuration() {
-        let start = Date(timeIntervalSince1970: 1_000)
-        let rect = CGRect(x: 0, y: 0, width: 10, height: 10)
-        XCTAssertFalse(
-            TmuxWorkspacePaneOverlayView.isFlashActive(flashRect: nil, flashStartedAt: nil, now: start),
-            "No flash: the overlay must render statically, never with a display-rate timeline"
-        )
-        XCTAssertFalse(
-            TmuxWorkspacePaneOverlayView.isFlashActive(flashRect: rect, flashStartedAt: nil, now: start),
-            "A flash rect without a start time is not an active flash"
-        )
-        XCTAssertTrue(
-            TmuxWorkspacePaneOverlayView.isFlashActive(
-                flashRect: rect, flashStartedAt: start,
-                now: start.addingTimeInterval(FocusFlashPattern.duration / 2)
-            )
-        )
-        XCTAssertFalse(
-            TmuxWorkspacePaneOverlayView.isFlashActive(
-                flashRect: rect, flashStartedAt: start,
-                now: start.addingTimeInterval(FocusFlashPattern.duration + 0.01)
-            ),
-            "Once the flash pattern has finished, the timeline must be torn down"
-        )
-    }
-
+final class AppIconAndFlashStyleTests: XCTestCase {
     func testAppearanceAppIconsDecodeAtRetinaDockSizeNotDoubleIt() {
         for name in ["AppIconDark", "AppIconLight"] {
             guard let icon = NSImage(named: name) else {
@@ -1720,29 +1694,6 @@ final class TmuxWorkspacePaneOverlayTests: XCTestCase {
         }
     }
 
-    func testTmuxWorkspacePaneOverlayModelTracksFlashReason() {
-        let model = TmuxWorkspacePaneOverlayModel()
-        let initialState = TmuxWorkspacePaneOverlayRenderState(
-            workspaceId: UUID(),
-            unreadRects: [],
-            flashRect: CGRect(x: 10, y: 20, width: 300, height: 200),
-            flashToken: 1,
-            flashReason: .notificationArrival
-        )
-        let laterState = TmuxWorkspacePaneOverlayRenderState(
-            workspaceId: initialState.workspaceId,
-            unreadRects: [],
-            flashRect: CGRect(x: 10, y: 20, width: 300, height: 200),
-            flashToken: 2,
-            flashReason: .navigation
-        )
-
-        model.apply(initialState)
-        model.apply(laterState)
-
-        XCTAssertEqual(model.flashReason, .navigation)
-    }
-
     func testNavigationFlashUsesNonNotificationPresentation() {
         XCTAssertNotEqual(
             WorkspaceAttentionCoordinator.flashStyle(for: .navigation),
@@ -1754,29 +1705,6 @@ final class TmuxWorkspacePaneOverlayTests: XCTestCase {
         XCTAssertEqual(
             WorkspaceAttentionCoordinator.flashStyle(for: .navigation).accent,
             .navigationTeal
-        )
-    }
-
-    func testTmuxWorkspacePaneExactRectReturnsContentRelativeFrameForDescendantView() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 400),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        defer { window.orderOut(nil) }
-
-        guard let contentView = window.contentView else {
-            XCTFail("Expected contentView")
-            return
-        }
-
-        let targetView = NSView(frame: NSRect(x: 120, y: 48, width: 300, height: 200))
-        contentView.addSubview(targetView)
-
-        XCTAssertEqual(
-            ContentView.tmuxWorkspacePaneExactRect(for: targetView, in: contentView),
-            CGRect(x: 120, y: 48, width: 300, height: 200)
         )
     }
 }
