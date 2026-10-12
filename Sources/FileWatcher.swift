@@ -3,8 +3,8 @@ import Foundation
 /// Low-level primitive for watching a single filesystem path (file or directory) via
 /// `DispatchSource.makeFileSystemObjectSource`.
 ///
-/// This extracts the open-fd / create-source / resume / cancel-and-close boilerplate that
-/// used to be duplicated across `ProgramaConfigStore`'s local + global config watchers and
+/// This holds the open-fd / create-source / resume / cancel-and-close boilerplate shared by
+/// `ProgramaConfigStore`'s local + global config watchers and
 /// `ShortcutSettingsFileWatcher`'s primary + fallback watchers.
 ///
 /// `FileWatcher` owns exactly one active `DispatchSourceFileSystemObject` at a time; starting

@@ -984,7 +984,7 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         XCTAssertEqual(otherWorkspace.metadataBlocks["other-metadata"]?.markdown, "other-details")
     }
 
-    /// Regression for #6618: `shouldPublishShellActivity` used to record the state
+    /// Regression for #6618: `shouldPublishShellActivity` must not record the state
     /// it was queried with (write-on-read). When a report arrived before the panel
     /// existed, that premature write suppressed every later identical report, so the
     /// panel's shell state stayed `.unknown` forever. The read and the write are now
@@ -1284,72 +1284,52 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
 
     func testSocketCommandPolicyDistinguishesFocusIntent() throws {
 #if DEBUG
-        // The v1 line protocol was removed: isV2: false is now unreachable from any real
-        // socket command (only v2 JSON-RPC is dispatched), and always denies focus
-        // mutation regardless of commandKey — verify that fallback explicitly.
-        let nonFocus = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "ping",
-            isV2: false
-        )
-        XCTAssertTrue(nonFocus.insideSuppressed)
-        XCTAssertFalse(nonFocus.insideAllowsFocus)
-        XCTAssertFalse(nonFocus.outsideSuppressed)
-        XCTAssertFalse(nonFocus.outsideAllowsFocus)
-
         let windowFocus = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "window.focus",
-            isV2: true
+            commandKey: "window.focus"
         )
         XCTAssertTrue(windowFocus.insideSuppressed)
         XCTAssertTrue(windowFocus.insideAllowsFocus)
         XCTAssertFalse(windowFocus.outsideSuppressed)
 
         let focusV2 = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "workspace.select",
-            isV2: true
+            commandKey: "workspace.select"
         )
         XCTAssertTrue(focusV2.insideSuppressed)
         XCTAssertTrue(focusV2.insideAllowsFocus)
         XCTAssertFalse(focusV2.outsideSuppressed)
 
         let moveWorkspace = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "workspace.move_to_window",
-            isV2: true
+            commandKey: "workspace.move_to_window"
         )
         XCTAssertTrue(moveWorkspace.insideSuppressed)
         XCTAssertFalse(moveWorkspace.insideAllowsFocus)
 
         let triggerFlash = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "surface.trigger_flash",
-            isV2: true
+            commandKey: "surface.trigger_flash"
         )
         XCTAssertTrue(triggerFlash.insideSuppressed)
         XCTAssertFalse(triggerFlash.insideAllowsFocus)
 
         let simulateShortcut = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "debug.shortcut.simulate",
-            isV2: true
+            commandKey: "debug.shortcut.simulate"
         )
         XCTAssertTrue(simulateShortcut.insideSuppressed)
         XCTAssertFalse(simulateShortcut.insideAllowsFocus)
 
         let settingsOpen = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "settings.open",
-            isV2: true
+            commandKey: "settings.open"
         )
         XCTAssertTrue(settingsOpen.insideSuppressed)
         XCTAssertFalse(settingsOpen.insideAllowsFocus)
 
         let feedbackOpen = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "feedback.open",
-            isV2: true
+            commandKey: "feedback.open"
         )
         XCTAssertTrue(feedbackOpen.insideSuppressed)
         XCTAssertFalse(feedbackOpen.insideAllowsFocus)
 
         let debugType = TerminalController.debugSocketCommandPolicySnapshot(
-            commandKey: "debug.type",
-            isV2: true
+            commandKey: "debug.type"
         )
         XCTAssertTrue(debugType.insideSuppressed)
         XCTAssertFalse(debugType.insideAllowsFocus)
@@ -1836,9 +1816,9 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         XCTAssertEqual(created, [direct.id.uuidString, alias.id.uuidString], "Both creation APIs must publish exactly once")
     }
 
-    /// Regression for #82: `surface.report_tty`/`surface.ports_kick` used to block the socket
-    /// thread with `DispatchQueue.main.sync` so the response could echo the surface resolved on
-    /// main (e.g. falling back to the focused surface when `surface_id` is omitted). They now
+    /// Regression for #82: `surface.report_tty`/`surface.ports_kick` must not block the socket
+    /// thread with `DispatchQueue.main.sync` to echo the surface resolved on
+    /// main (e.g. falling back to the focused surface when `surface_id` is omitted). They
     /// follow the same off-main-parse + main.async-mutate telemetry shape as
     /// `workspace.set_status`/`workspace.report_meta_block`: the JSON-RPC response acknowledges
     /// immediately (echoing the request, not a value resolved on main) and the surface-resolving
@@ -1923,7 +1903,7 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
             to: socketPath
         )
 
-        // The unknown surface_id can no longer be validated synchronously (that check now
+        // The unknown surface_id cannot be validated synchronously (that check
         // happens inside the fire-and-forget main.async mutation), so the request is acked
         // immediately and the mutation silently no-ops once it resolves.
         XCTAssertEqual(reportTTYResponse["ok"] as? Bool, true, "Unexpected JSON-RPC response: \(reportTTYResponse)")

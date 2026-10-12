@@ -105,6 +105,21 @@ private enum ReviewValidatedCommentOperation<Value: Sendable>: Sendable {
     case workspaceNotFound
     case panelNotFound
     case value(Value)
+
+    func v2Result(onValue: (Value) -> TerminalController.V2CallResult) -> TerminalController.V2CallResult {
+        switch self {
+        case .tabManagerUnavailable:
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        case .invalidParams(let message):
+            return .err(code: "invalid_params", message: message, data: nil)
+        case .workspaceNotFound:
+            return .err(code: "not_found", message: "Workspace not found", data: nil)
+        case .panelNotFound:
+            return .err(code: "not_found", message: "Review panel not found", data: nil)
+        case .value(let value):
+            return onValue(value)
+        }
+    }
 }
 
 private struct ReviewCommentWireValue: Sendable {
@@ -426,17 +441,8 @@ extension TerminalController {
             }
         }
 
-        switch outcome {
-        case .tabManagerUnavailable:
-            return .err(code: "unavailable", message: "TabManager not available", data: nil)
-        case .invalidParams(let message):
-            return .err(code: "invalid_params", message: message, data: nil)
-        case .workspaceNotFound:
-            return .err(code: "not_found", message: "Workspace not found", data: nil)
-        case .panelNotFound:
-            return .err(code: "not_found", message: "Review panel not found", data: nil)
-        case .value(let commentId):
-            return .ok(["comment_id": commentId.uuidString])
+        return outcome.v2Result { commentId in
+            .ok(["comment_id": commentId.uuidString])
         }
     }
 
@@ -466,19 +472,13 @@ extension TerminalController {
             return .value((result, rawId))
         }
 
-        switch outcome {
-        case .tabManagerUnavailable:
-            return .err(code: "unavailable", message: "TabManager not available", data: nil)
-        case .invalidParams(let message):
-            return .err(code: "invalid_params", message: message, data: nil)
-        case .workspaceNotFound:
-            return .err(code: "not_found", message: "Workspace not found", data: nil)
-        case .panelNotFound:
-            return .err(code: "not_found", message: "Review panel not found", data: nil)
-        case .value((.commentNotFound, let rawId)):
-            return .err(code: "not_found", message: "Comment not found", data: ["comment_id": rawId])
-        case .value((.removed, _)):
-            return .ok(["ok": true])
+        return outcome.v2Result { value in
+            switch value {
+            case (.commentNotFound, let rawId):
+                return .err(code: "not_found", message: "Comment not found", data: ["comment_id": rawId])
+            case (.removed, _):
+                return .ok(["ok": true])
+            }
         }
     }
 

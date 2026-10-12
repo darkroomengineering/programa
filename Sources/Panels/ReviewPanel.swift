@@ -98,17 +98,6 @@ final class ReviewPanel: Panel, ObservableObject {
         focusFlashToken += 1
     }
 
-    // MARK: - Mode
-
-    func setMode(_ newMode: ReviewDiffMode, baseBranch newBaseBranch: String? = nil) {
-        mode = newMode
-        if let newBaseBranch {
-            baseBranch = newBaseBranch
-        }
-        displayTitle = Self.title(mode: newMode, baseBranch: baseBranch)
-        refresh()
-    }
-
     // MARK: - Refresh
 
     /// Kicks off `ReviewDiffProber.diffSnapshot` on a background queue and publishes the

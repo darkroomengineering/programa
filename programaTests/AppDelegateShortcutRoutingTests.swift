@@ -8,8 +8,6 @@ import Combine
 @testable import Programa
 #endif
 
-private let appDelegateLastSurfaceCloseShortcutDefaultsKey = "closeWorkspaceOnLastSurfaceShortcut"
-private final class FakeWKInspectorContainerView: NSView {}
 private final class FocusableTestView: NSView {
     override var acceptsFirstResponder: Bool { true }
 }
@@ -2138,7 +2136,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             return
         }
 
-
         let windowId = appDelegate.createMainWindow()
         defer { closeWindow(withId: windowId) }
 
@@ -2881,7 +2878,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         wait(for: [paletteExpectation], timeout: 1.0)
         XCTAssertEqual(observedPaletteWindow?.windowNumber, window.windowNumber)
     }
-
 
     func testCmdPhysicalWWithDvorakCharactersDoesNotTriggerClosePanelShortcut() {
         guard let appDelegate = AppDelegate.shared else {
@@ -4665,11 +4661,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
     // MARK: - Non-Latin keyboard layout shortcut tests
 
-
-
-
-
-
     func testCmdTWorksWithRussianKeyboardLayout() {
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")
@@ -5323,7 +5314,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
     /// Regression test for the ghostty IO-thread callback-context teardown race.
     ///
     /// Root cause: `GhosttySurfaceCallbackContext` (the per-surface userdata handed to
-    /// ghostty) used to hold `weak var surfaceView: GhosttyNSView?` and `weak var
+    /// ghostty) must not hold `weak var surfaceView: GhosttyNSView?` and `weak var
     /// terminalSurface: TerminalSurface?`. Ghostty's IO thread invokes callbacks that
     /// read those weak refs SYNCHRONOUSLY, before any main-thread hop --
     /// `runtimeReadClipboardCallback` read `callbackContext.runtimeSurface` directly, and
@@ -5338,7 +5329,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
     /// (`PROGRAMA_FORCE_OCCLUDED=1`, honored by
     /// `GhosttySurfaceScrollView.applyEffectiveOcclusion()`) with a live shell in each
     /// window -- exactly the kind of concurrent IO-thread callback traffic vs. main-thread
-    /// teardown that used to race. This same rapid create/close shape is also the one the
+    /// teardown that could race. This same rapid create/close shape is also the one the
     /// `windowObserverGeneration` guard in `GhosttySurfaceScrollView.viewDidMoveToWindow`
     /// targets (a second, distinct teardown-race mechanism: an
     /// `NSNotificationCenter.addObserver(queue: .main)` block already handed off to the

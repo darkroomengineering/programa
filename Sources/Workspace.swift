@@ -3,9 +3,7 @@ import SwiftUI
 import AppKit
 import Bonsplit
 import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 /// Workspace represents a sidebar tab.
@@ -78,7 +76,6 @@ final class Workspace: Identifiable, ObservableObject {
 
     weak var owningTabManager: TabManager?
 
-
     // Closing tabs mutates split layout immediately; terminal views handle their own AppKit
     // layout/size synchronization.
 
@@ -122,10 +119,6 @@ final class Workspace: Identifiable, ObservableObject {
     /// which is the sidebar's per-workspace color.
     @Published var panelColorHexes: [UUID: String] = [:]
     @Published var manualUnreadPanelIds: Set<UUID> = []
-    @Published var tmuxLayoutSnapshot: LayoutSnapshot?
-    @Published private(set) var tmuxWorkspaceFlashPanelId: UUID?
-    @Published private(set) var tmuxWorkspaceFlashReason: WorkspaceAttentionFlashReason?
-    @Published private(set) var tmuxWorkspaceFlashToken: UInt64 = 0
     var manualUnreadMarkedAt: [UUID: Date] = [:]
     nonisolated private static let manualUnreadFocusGraceInterval: TimeInterval = 0.2
     nonisolated static let manualUnreadClearDelayAfterFocusFlash: TimeInterval = 0.2
@@ -247,10 +240,6 @@ final class Workspace: Identifiable, ObservableObject {
     }()
 
     var focusedSurfaceId: UUID? { focusedPanelId }
-    var surfaceDirectories: [UUID: String] {
-        get { panelDirectories }
-        set { panelDirectories = newValue }
-    }
 
     var processTitle: String
 
@@ -281,14 +270,34 @@ final class Workspace: Identifiable, ObservableObject {
             // known for this panel, there is no attached shell whose work
             // could be lost — never prompt. The ghostty needs-confirm
             // fallback can spuriously return true in the pre-attach window
-            // (ported from upstream cmux 2e03978ae1, adapted to our
-            // shell-integration telemetry signals).
+            // (keyed off our shell-integration telemetry signals).
             guard hasKnownTTY else { return false }
             return fallbackNeedsConfirmClose
         }
     }
 
     // MARK: - Initialization
+
+    private static func makeBonsplitController() -> BonsplitController {
+        let appearance = bonsplitAppearance(
+            from: GhosttyApp.shared.defaultBackgroundColor,
+            backgroundOpacity: GhosttyApp.shared.defaultBackgroundOpacity
+        )
+        let config = BonsplitConfiguration(
+            allowSplits: true,
+            allowCloseTabs: true,
+            allowCloseLastPane: false,
+            allowTabReordering: true,
+            allowCrossPaneTabMove: true,
+            autoCloseEmptyPanes: true,
+            contentViewLifecycle: .keepAllAlive,
+            newTabPosition: .current,
+            appearance: appearance
+        )
+        let controller = BonsplitController(configuration: config)
+        controller.contextMenuShortcuts = buildContextMenuShortcuts()
+        return controller
+    }
 
     init(
         title: String = String(localized: "workspace.defaultTitle.terminal", defaultValue: "Terminal"),
@@ -315,23 +324,7 @@ final class Workspace: Identifiable, ObservableObject {
         // and keep split entry instantaneous.
         // Avoid re-reading/parsing Ghostty config on every new workspace; this hot path
         // runs for socket/CLI workspace creation and can cause visible typing lag.
-        let appearance = Self.bonsplitAppearance(
-            from: GhosttyApp.shared.defaultBackgroundColor,
-            backgroundOpacity: GhosttyApp.shared.defaultBackgroundOpacity
-        )
-        let config = BonsplitConfiguration(
-            allowSplits: true,
-            allowCloseTabs: true,
-            allowCloseLastPane: false,
-            allowTabReordering: true,
-            allowCrossPaneTabMove: true,
-            autoCloseEmptyPanes: true,
-            contentViewLifecycle: .keepAllAlive,
-            newTabPosition: .current,
-            appearance: appearance
-        )
-        self.bonsplitController = BonsplitController(configuration: config)
-        bonsplitController.contextMenuShortcuts = Self.buildContextMenuShortcuts()
+        self.bonsplitController = Self.makeBonsplitController()
 
         // Remove the default "Welcome" tab that bonsplit creates
         let welcomeTabIds = bonsplitController.allTabIds
@@ -346,7 +339,6 @@ final class Workspace: Identifiable, ObservableObject {
             initialCommand: initialTerminalCommand,
             initialEnvironmentOverrides: initialTerminalEnvironment
         )
-        configureTerminalPanel(terminalPanel)
         panels[terminalPanel.id] = terminalPanel
         panelTitles[terminalPanel.id] = terminalPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: terminalPanel.id, configTemplate: configTemplate)
@@ -398,7 +390,6 @@ final class Workspace: Identifiable, ObservableObject {
             }
             bonsplitController.selectTab(initialTabId)
         }
-        tmuxLayoutSnapshot = bonsplitController.layoutSnapshot()
     }
 
     /// Initialize a workspace using a pre-warmed terminal panel from the surface pool.
@@ -423,30 +414,13 @@ final class Workspace: Identifiable, ObservableObject {
             ? trimmedWorkingDirectory
             : FileManager.default.homeDirectoryForCurrentUser.path
 
-        let appearance = Self.bonsplitAppearance(
-            from: GhosttyApp.shared.defaultBackgroundColor,
-            backgroundOpacity: GhosttyApp.shared.defaultBackgroundOpacity
-        )
-        let config = BonsplitConfiguration(
-            allowSplits: true,
-            allowCloseTabs: true,
-            allowCloseLastPane: false,
-            allowTabReordering: true,
-            allowCrossPaneTabMove: true,
-            autoCloseEmptyPanes: true,
-            contentViewLifecycle: .keepAllAlive,
-            newTabPosition: .current,
-            appearance: appearance
-        )
-        self.bonsplitController = BonsplitController(configuration: config)
-        bonsplitController.contextMenuShortcuts = Self.buildContextMenuShortcuts()
+        self.bonsplitController = Self.makeBonsplitController()
 
         let welcomeTabIds = bonsplitController.allTabIds
 
         // Use the pre-warmed panel, updating its workspace ID to ours
         claimedPanel.updateWorkspaceId(id)
         let terminalPanel = claimedPanel
-        configureTerminalPanel(terminalPanel)
         panels[terminalPanel.id] = terminalPanel
         panelTitles[terminalPanel.id] = terminalPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: terminalPanel.id, configTemplate: configTemplate)
@@ -491,7 +465,6 @@ final class Workspace: Identifiable, ObservableObject {
             }
             bonsplitController.selectTab(initialTabId)
         }
-        tmuxLayoutSnapshot = bonsplitController.layoutSnapshot()
     }
 
     // MARK: - Surface ID to Panel ID Mapping
@@ -532,8 +505,8 @@ final class Workspace: Identifiable, ObservableObject {
     var isReconcilingFocusState = false
     var focusReconcileScheduled = false
 #if DEBUG
-    // nuclear-review #98: flipped from `private(set)` to internal so Workspace+FocusGeometry.swift
-    // (a separate file) can mutate this after scheduleFocusReconcile() moved there.
+    // Internal (not `private(set)`) so Workspace+FocusGeometry.swift, where
+    // scheduleFocusReconcile() lives, can mutate this.
     var debugFocusReconcileScheduledDuringDetachCount: Int = 0
     var debugLastDidMoveTabTimestamp: TimeInterval = 0
     var debugDidMoveTabEventCount: UInt64 = 0
@@ -726,23 +699,6 @@ final class Workspace: Identifiable, ObservableObject {
         surfaceIdToPanelId.first { $0.value == panelId }?.key
     }
 
-    func configureTerminalPanel(_ terminalPanel: TerminalPanel) {
-        terminalPanel.onRequestWorkspacePaneFlash = { [weak self, weak terminalPanel] reason in
-            guard let self, let terminalPanel else { return }
-            self.triggerWorkspacePaneFlash(panelId: terminalPanel.id, reason: reason)
-        }
-    }
-
-    func triggerWorkspacePaneFlash(panelId: UUID, reason: WorkspaceAttentionFlashReason) {
-        tmuxWorkspaceFlashPanelId = panelId
-        tmuxWorkspaceFlashReason = reason
-        tmuxWorkspaceFlashToken &+= 1
-    }
-
-
-
-
-
     func installMarkdownPanelSubscription(_ markdownPanel: MarkdownPanel) {
         let subscription = markdownPanel.$displayTitle
             .removeDuplicates()
@@ -846,7 +802,6 @@ final class Workspace: Identifiable, ObservableObject {
     func terminalPanel(for panelId: UUID) -> TerminalPanel? {
         panels[panelId] as? TerminalPanel
     }
-
 
     func markdownPanel(for panelId: UUID) -> MarkdownPanel? {
         panels[panelId] as? MarkdownPanel
@@ -1332,19 +1287,6 @@ final class Workspace: Identifiable, ObservableObject {
         return bonsplitController.tabs(inPane: paneId).firstIndex(where: { $0.id == tabId })
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     @discardableResult
     func moveSurface(panelId: UUID, toPane paneId: PaneID, atIndex index: Int? = nil, focus: Bool = true) -> Bool {
         guard let tabId = surfaceIdFromPanelId(panelId) else { return false }
@@ -1704,7 +1646,6 @@ final class Workspace: Identifiable, ObservableObject {
             configTemplate: inheritedConfig,
             portOrdinal: portOrdinal
         )
-        configureTerminalPanel(newPanel)
         panels[newPanel.id] = newPanel
         panelTitles[newPanel.id] = newPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: newPanel.id, configTemplate: inheritedConfig)
@@ -1769,8 +1710,6 @@ final class Workspace: Identifiable, ObservableObject {
         guard let newPanel = newTerminalSurface(inPane: paneId, focus: true) else { return }
         _ = reorderSurface(panelId: newPanel.id, toIndex: targetIndex)
     }
-
-
 
     func promptRenamePanel(tabId: TabID) {
         guard let panelId = panelIdFromSurfaceId(tabId),

@@ -13,9 +13,7 @@ extension ProgramaCLI {
         guard let data = FileManager.default.contents(atPath: path) else { return false }
         let prefixData = data.prefix(512)
         guard let prefix = String(data: prefixData, encoding: .utf8) else { return false }
-        // Legacy cmux name, still matched so wrappers installed by older versions are recognized.
         return prefix.contains("programa claude wrapper - injects hooks and session tracking")
-            || prefix.contains("cmux claude wrapper - injects hooks and session tracking")
     }
 
     func resolveExecutableInSearchPath(
@@ -295,22 +293,6 @@ extension ProgramaCLI {
                         .deletingLastPathComponent()
                         .appendingPathComponent("claude", isDirectory: false)
                         .path
-                    // Check custom path from Settings > Automation > Claude Code.
-                    // Try env var first (set by the app per-session), then UserDefaults.
-                    let candidates = [
-                        launcherEnvironment["PROGRAMA_CUSTOM_CLAUDE_PATH"],
-                        UserDefaults.standard.string(forKey: "claudeCodeCustomClaudePath"),
-                    ]
-                    for raw in candidates {
-                        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
-                              !trimmed.isEmpty else { continue }
-                        var isDir: ObjCBool = false
-                        guard FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDir),
-                              !isDir.boolValue,
-                              FileManager.default.isExecutableFile(atPath: trimmed),
-                              !isProgramaClaudeWrapper(at: trimmed) else { continue }
-                        return trimmed
-                    }
                     return resolveClaudeExecutable(searchPath: launcherEnvironment["PATH"])
                         ?? {
                             guard let bundledClaudePath,

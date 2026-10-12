@@ -167,19 +167,6 @@ final class WorkspaceFixSweepWKSPTests: XCTestCase {
         XCTAssertFalse(headRule.recognizes(text: headSample), "text beyond the cap must not match")
     }
 
-    // MARK: 16 pane cap vetoes a split before building a panel
-
-    private func makeFourPaneWorkspace() throws -> Workspace {
-        let workspace = Workspace()
-        for _ in 0..<3 {
-            let source = try XCTUnwrap(workspace.focusedPanelId)
-            XCTAssertNotNil(workspace.newTerminalSplit(from: source, orientation: .horizontal))
-        }
-        XCTAssertEqual(workspace.bonsplitController.allPaneIds.count, SplitPolicy.maxPanesPerWorkspace)
-        return workspace
-    }
-
-
     // MARK: 19 background tab creation leaves selection and focus alone
 
     private func twoPaneFixture() throws -> (workspace: Workspace, backgroundPane: PaneID, selectedTab: TabID, focusedPane: PaneID) {

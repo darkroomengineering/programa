@@ -1,13 +1,10 @@
-// Extracted from Workspace.swift (nuclear-review #98): session snapshot/restore (sessionSnapshot, restoreSessionSnapshot, and their layout/panel helpers).
+// Session snapshot/restore (sessionSnapshot, restoreSessionSnapshot, and their layout/panel helpers).
 
 import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 extension Workspace {
@@ -129,13 +126,13 @@ extension Workspace {
         // before releasing any surface gated under this restore pass -- see
         // `TerminalSurface.isSessionRestoreSettling`'s doc comment.
         //
-        // Widened to two turns (was one): the primary-window restore path
+        // The gate waits two turns: the primary-window restore path
         // runs this restore before `window.setFrame(restoredFrame, display:
         // true)` (`AppDelegate.swift` restore-then-setFrame ordering), and the
         // terminal portal's own geometry sync is itself deferred past the
         // current layout turn (`TerminalWindowPortalRegistry
         // .scheduleExternalGeometrySynchronize`,
-        // `GhosttyTerminalView+SwiftUIWrapper.swift`). One turn released the
+        // `GhosttyTerminalView+SwiftUIWrapper.swift`). A single turn would release the
         // gate before the surface ever saw the final window width, which is
         // what let width-dependent WAL replay scatter text across the wrong
         // columns on restore.

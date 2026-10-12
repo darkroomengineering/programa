@@ -6,6 +6,40 @@ import XCTest
 @testable import Programa
 #endif
 
+@discardableResult
+func configFixtureGit(_ arguments: [String], in directory: URL) throws -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    process.arguments = arguments
+    process.currentDirectoryURL = directory
+    var environment = ProcessInfo.processInfo.environment
+    environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
+    environment["GIT_CONFIG_SYSTEM"] = "/dev/null"
+    environment["GIT_AUTHOR_NAME"] = "Conf Test"
+    environment["GIT_AUTHOR_EMAIL"] = "conf@example.invalid"
+    environment["GIT_COMMITTER_NAME"] = "Conf Test"
+    environment["GIT_COMMITTER_EMAIL"] = "conf@example.invalid"
+    process.environment = environment
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+    try process.run()
+    let outData = stdout.fileHandleForReading.readDataToEndOfFile()
+    let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    let output = String(decoding: outData, as: UTF8.self)
+    guard process.terminationStatus == 0 else {
+        throw NSError(
+            domain: "ConfigFixSweepFixtures",
+            code: Int(process.terminationStatus),
+            userInfo: [NSLocalizedDescriptionKey:
+                "git \(arguments.joined(separator: " ")) failed: \(String(decoding: errData, as: UTF8.self))"]
+        )
+    }
+    return output
+}
+
 /// Regression tests for the CONF (config, git, trust) fix cluster that only use APIs that
 /// existed before the fixes, so they can be committed first and fail on the unfixed code.
 ///
@@ -43,48 +77,14 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
 
     // MARK: - Fixture helpers
 
-    @discardableResult
-    private func git(_ arguments: [String], in directory: URL) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = arguments
-        process.currentDirectoryURL = directory
-        var environment = ProcessInfo.processInfo.environment
-        environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
-        environment["GIT_CONFIG_SYSTEM"] = "/dev/null"
-        environment["GIT_AUTHOR_NAME"] = "Conf Test"
-        environment["GIT_AUTHOR_EMAIL"] = "conf@example.invalid"
-        environment["GIT_COMMITTER_NAME"] = "Conf Test"
-        environment["GIT_COMMITTER_EMAIL"] = "conf@example.invalid"
-        process.environment = environment
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-        try process.run()
-        let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        let output = String(decoding: outData, as: UTF8.self)
-        guard process.terminationStatus == 0 else {
-            throw NSError(
-                domain: "ConfigFixSweepRegressionTests",
-                code: Int(process.terminationStatus),
-                userInfo: [NSLocalizedDescriptionKey:
-                    "git \(arguments.joined(separator: " ")) failed: \(String(decoding: errData, as: UTF8.self))"]
-            )
-        }
-        return output
-    }
-
     /// A repo on `branch` with one commit containing `fileName`.
     private func makeRepo(branch: String, fileName: String = "README.md", contents: String = "one\n") throws -> URL {
         let repo = tempRoot.appendingPathComponent("repo-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
-        try git(["init", "-q", "-b", branch], in: repo)
+        try configFixtureGit(["init", "-q", "-b", branch], in: repo)
         try contents.write(to: repo.appendingPathComponent(fileName), atomically: true, encoding: .utf8)
-        try git(["add", "."], in: repo)
-        try git(["commit", "-q", "-m", "init"], in: repo)
+        try configFixtureGit(["add", "."], in: repo)
+        try configFixtureGit(["commit", "-q", "-m", "init"], in: repo)
         return repo
     }
 
@@ -97,11 +97,11 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
         let repo = try makeRepo(branch: "feature-x")
         let marker = tempRoot.appendingPathComponent("fsmonitor-ran-probe")
         // Configure last so none of the fixture's own git commands trip the hook.
-        try git(["config", "core.fsmonitor", "touch \(marker.path)"], in: repo)
+        try configFixtureGit(["config", "core.fsmonitor", "touch \(marker.path)"], in: repo)
 
         // Positive control: plain git does run the hook, so an absent marker below really means
         // the probe neutralized it rather than that this git never runs it.
-        try git(["status", "--porcelain"], in: repo)
+        try configFixtureGit(["status", "--porcelain"], in: repo)
         XCTAssertTrue(
             FileManager.default.fileExists(atPath: marker.path),
             "control: plain `git status` should execute the hostile core.fsmonitor command"
@@ -120,7 +120,7 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
     func testWorktreeListingNeverRunsRepositoryFsmonitorCommand() throws {
         let repo = try makeRepo(branch: "feature-x")
         let marker = tempRoot.appendingPathComponent("fsmonitor-ran-worktrees")
-        try git(["config", "core.fsmonitor", "touch \(marker.path)"], in: repo)
+        try configFixtureGit(["config", "core.fsmonitor", "touch \(marker.path)"], in: repo)
 
         let entries = GitWorktreeManager.listWorktrees(repoRoot: repo.path)
 
@@ -145,8 +145,8 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
         let repo = try makeRepo(branch: "main", fileName: "café.md")
         try "one\ntwo\n".write(to: repo.appendingPathComponent("café.md"), atomically: true, encoding: .utf8)
         try "fresh\n".write(to: repo.appendingPathComponent("naïve.txt"), atomically: true, encoding: .utf8)
-        try git(["config", "diff.external", "/bin/false"], in: repo)
-        try git(["config", "diff.noprefix", "true"], in: repo)
+        try configFixtureGit(["config", "diff.external", "/bin/false"], in: repo)
+        try configFixtureGit(["config", "diff.noprefix", "true"], in: repo)
 
         let snapshot = ReviewDiffProber.diffSnapshot(directory: repo.path, mode: .uncommitted, baseBranch: "main")
 

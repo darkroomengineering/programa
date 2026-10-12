@@ -1,10 +1,9 @@
-// Extracted from AppDelegate.swift (nuclear-review N3): XCUITest-only instrumentation.
+// XCUITest-only instrumentation.
 import AppKit
 import SwiftUI
 import Bonsplit
 import CoreServices
 import UserNotifications
-import Combine
 import ObjectiveC.runtime
 import Darwin
 

@@ -1,4 +1,4 @@
-// Extracted from TerminalController.swift (nuclear-review #96): system.*/settings.*/feedback.*/app.* command handlers.
+// system.*/settings.*/feedback.*/app.* command handlers.
 import AppKit
 import Carbon.HIToolbox
 import Foundation

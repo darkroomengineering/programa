@@ -1018,32 +1018,20 @@ final class GhosttyTerminalStartupEnvironmentTests: XCTestCase {
         XCTAssertEqual(wrapped, first)
     }
 
-    func testPortRangeAssignmentReadsDefaultsForEveryNewAssignment() throws {
-        let suiteName = "GhosttyTerminalStartupEnvironmentTests.ports.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        defaults.set(9_100, forKey: ProgramaPortRangePolicy.baseDefaultsKey)
-        defaults.set(10, forKey: ProgramaPortRangePolicy.rangeDefaultsKey)
-        XCTAssertEqual(
-            ProgramaPortRangePolicy.assignment(defaults: defaults, ordinal: 0),
-            ProgramaPortRangeAssignment(start: 9_100, end: 9_109, size: 10)
-        )
-
-        defaults.set(12_000, forKey: ProgramaPortRangePolicy.baseDefaultsKey)
-        defaults.set(25, forKey: ProgramaPortRangePolicy.rangeDefaultsKey)
-        XCTAssertEqual(
-            ProgramaPortRangePolicy.assignment(defaults: defaults, ordinal: 1),
-            ProgramaPortRangeAssignment(start: 12_025, end: 12_049, size: 25)
-        )
-    }
-
-    func testPortRangeClampingKeepsCompleteRangeInsideTCPPortSpace() {
-        let clamped = ProgramaPortRangePolicy.clamped(base: 70_000, range: 10)
-        XCTAssertEqual(clamped.base, 65_535)
-        XCTAssertEqual(clamped.range, 1)
+    func testPortRangeValidityRejectsRangesPastTCPPortSpace() {
         XCTAssertTrue(ProgramaPortRangePolicy.isValid(base: 65_535, range: 1))
         XCTAssertFalse(ProgramaPortRangePolicy.isValid(base: 65_535, range: 2))
+    }
+
+    func testPortRangeAssignmentUsesFixedDefaultRange() {
+        XCTAssertEqual(
+            ProgramaPortRangePolicy.assignment(ordinal: 0),
+            ProgramaPortRangeAssignment(start: 9_100, end: 9_109, size: 10)
+        )
+        XCTAssertEqual(
+            ProgramaPortRangePolicy.assignment(ordinal: 1),
+            ProgramaPortRangeAssignment(start: 9_110, end: 9_119, size: 10)
+        )
     }
 
     func testApplyManagedTerminalIdentityEnvironmentOverridesInheritedValues() {
@@ -1434,13 +1422,10 @@ final class GhosttyDefaultBackgroundNotificationDispatcherTests: XCTestCase {
     }
 }
 
-
 final class SocketControlSettingsTests: XCTestCase {
     func testMigrateModeSupportsExpandedSocketModes() {
         XCTAssertEqual(SocketControlSettings.migrateMode("off"), .off)
         XCTAssertEqual(SocketControlSettings.migrateMode("programaOnly"), .programaOnly)
-        // Legacy cmux name, still read so existing socket mode settings keep working.
-        XCTAssertEqual(SocketControlSettings.migrateMode("cmuxOnly"), .programaOnly)
         XCTAssertEqual(SocketControlSettings.migrateMode("automation"), .automation)
         XCTAssertEqual(SocketControlSettings.migrateMode("password"), .password)
         XCTAssertEqual(SocketControlSettings.migrateMode("allow-all"), .allowAll)
@@ -2983,7 +2968,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testBashBootstrapPreservesStarshipPromptCommandAcrossPrompts() throws {
         // Regression test: Programa's local macOS bash bootstrap is injected
-        // as PROMPT_COMMAND and used to begin by unconditionally clobbering
+        // as PROMPT_COMMAND and must not begin by unconditionally clobbering
         // PROMPT_COMMAND. A user's startup files run
         // `eval "$(starship init bash)"` before the first prompt, which
         // appends starship_precmd to PROMPT_COMMAND; the bootstrap then
@@ -3080,7 +3065,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         let bootstrapSourcePath = repoRoot
             .appendingPathComponent("Resources/shell-integration/programa-bash-bootstrap.bash")
         let rawBootstrap = try String(contentsOf: bootstrapSourcePath, encoding: .utf8)
-        // Mirrors Sources/GhosttyTerminalView.swift's comment/blank-line
+        // Mirrors Sources/TerminalSurface.swift's comment/blank-line
         // stripping so the test exercises exactly what ships as
         // $PROMPT_COMMAND.
         let leanBootstrap = rawBootstrap
@@ -3539,56 +3524,6 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     private func writeExecutableScript(at url: URL, contents: String) throws {
         try contents.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-    }
-
-    private func bindUnixSocket(at path: String) throws -> Int32 {
-        unlink(path)
-
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else {
-            throw NSError(
-                domain: NSPOSIXErrorDomain,
-                code: Int(errno),
-                userInfo: [NSLocalizedDescriptionKey: "Failed to create Unix socket"]
-            )
-        }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let maxPathLength = MemoryLayout.size(ofValue: addr.sun_path)
-        path.withCString { ptr in
-            withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
-                let pathBuf = UnsafeMutableRawPointer(pathPtr).assumingMemoryBound(to: CChar.self)
-                strncpy(pathBuf, ptr, maxPathLength - 1)
-            }
-        }
-
-        let bindResult = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
-                Darwin.bind(fd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard bindResult == 0 else {
-            let code = Int(errno)
-            Darwin.close(fd)
-            throw NSError(
-                domain: NSPOSIXErrorDomain,
-                code: code,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to bind Unix socket"]
-            )
-        }
-
-        guard Darwin.listen(fd, 1) == 0 else {
-            let code = Int(errno)
-            Darwin.close(fd)
-            throw NSError(
-                domain: NSPOSIXErrorDomain,
-                code: code,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to listen on Unix socket"]
-            )
-        }
-
-        return fd
     }
 }
 

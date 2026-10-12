@@ -1,13 +1,10 @@
-// Extracted from Workspace.swift (nuclear-review #98): BonsplitDelegate conformance.
+// BonsplitDelegate conformance.
 
 import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 /// One predicate for the workspace split cap: the pane-chrome split buttons
@@ -126,7 +123,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
     }
 
-
     private func applyTabSelectionNow(
         tabId: TabID,
         inPane pane: PaneID,
@@ -205,7 +201,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         for (id, p) in panels where id != effectiveFocusedPanelId {
             p.unfocus()
         }
-
 
         if let focusWindow = activationWindow(for: panel) {
             yieldForeignOwnedFocusIfNeeded(
@@ -316,7 +311,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             return
         }
 
-
         if reassertAppKitFocus {
             panel.focus()
         }
@@ -358,8 +352,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             return true
         }
     }
-
-
 
     private func shouldRestoreFocusIntentAfterActivation(_ intent: PanelFocusIntent) -> Bool {
         switch intent {
@@ -522,7 +514,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
 
         #if DEBUG
-        NSLog("[Workspace] didCloseTab panelId=\(panelId) remainingPanels=\(panels.count - 1) remainingPanes=\(controller.allPaneIds.count)")
+        dlog("[Workspace] didCloseTab panelId=\(panelId) remainingPanels=\(panels.count - 1) remainingPanes=\(controller.allPaneIds.count)")
         #endif
 
         let panel = panels[panelId]
@@ -688,9 +680,9 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     }
 
     /// Canonical per-panel metadata teardown shared by every close path.
-    /// The single-surface and pane-close paths previously hand-copied this
-    /// list and drifted (pane close leaked inheritance font points and never
-    /// cleared notifications). Aggregate recomputes (recomputeListeningPorts)
+    /// Every close path calls this one list so none can drift (a hand-copied
+    /// pane-close list leaked inheritance font points and never cleared
+    /// notifications). Aggregate recomputes (recomputeListeningPorts)
     /// stay at the call sites.
     private func removeSurfaceMetadata(panelId: UUID, isDetaching: Bool = false) {
         panelDirectories.removeValue(forKey: panelId)
@@ -853,7 +845,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                         configTemplate: inheritedConfig,
                         portOrdinal: portOrdinal
                     )
-                    configureTerminalPanel(replacementPanel)
                     panels[replacementPanel.id] = replacementPanel
                     panelTitles[replacementPanel.id] = replacementPanel.displayTitle
                     seedTerminalInheritanceFontPoints(panelId: replacementPanel.id, configTemplate: inheritedConfig)
@@ -918,7 +909,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             configTemplate: inheritedConfig,
             portOrdinal: portOrdinal
         )
-        configureTerminalPanel(newPanel)
         panels[newPanel.id] = newPanel
         panelTitles[newPanel.id] = newPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: newPanel.id, configTemplate: inheritedConfig)
@@ -1021,7 +1011,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     }
 
     func splitTabBar(_ controller: BonsplitController, didChangeGeometry snapshot: LayoutSnapshot) {
-        tmuxLayoutSnapshot = snapshot
         scheduleTerminalGeometryReconcile()
         if !isDetachingCloseTransaction {
             scheduleFocusReconcile()

@@ -1,26 +1,17 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
 import QuartzCore
-import Combine
-import CoreText
-import Darwin
-import Carbon.HIToolbox
 import Bonsplit
 import IOSurface
-import UniformTypeIdentifiers
 
 // MARK: - GhosttyNSView + Accessibility
 //
 // Accessibility support for GhosttyNSView: AX text-area exposure so
 // voice-input tools and other assistive tech can read/insert terminal text.
 //
-// Split out of GhosttyTerminalView.swift (Nuclear Review TC5). Moving these
-// methods into a same-type extension adds zero call-site indirection.
-// Method bodies are moved verbatim. withExternalCommittedText stays on the
-// primary class declaration (it is called from an untouched
-// NSTextInputClient extension elsewhere in the file).
+// withExternalCommittedText stays on the primary class declaration (it is
+// called from the NSTextInputClient extension).
 
 extension GhosttyNSView {
     // MARK: - Accessibility
@@ -74,7 +65,6 @@ extension GhosttyNSView {
             DispatchQueue.main.async(execute: inject)
         }
     }
-
 
     override func accessibilitySelectedTextRange() -> NSRange {
         selectedRange()
@@ -153,8 +143,7 @@ extension GhosttyNSView {
             }
 
             // Always notify the host app that this pane became the first responder so bonsplit
-            // focus/selection can converge. Previously this was gated on `surface != nil`, which
-            // allowed a mismatch where AppKit focus moved but the UI focus indicator (bonsplit)
+            // focus/selection can converge. Gating this on `surface != nil` would allow a mismatch where AppKit focus moved but the UI focus indicator (bonsplit)
             // stayed behind.
             let hiddenInHierarchy = isHiddenOrHasHiddenAncestor
             if isVisibleInUI && hasUsableFocusGeometry && !hiddenInHierarchy {

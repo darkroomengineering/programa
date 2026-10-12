@@ -8,6 +8,31 @@ import Bonsplit
 import UserNotifications
 import Combine
 
+private func makeTemporaryDirectory() throws -> URL {
+    let directoryURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+    return directoryURL
+}
+
+@MainActor
+private func waitForCondition(
+    timeout: TimeInterval = 2,
+    pollInterval: TimeInterval = 0.01,
+    _ condition: () -> Bool
+) -> Bool {
+    // Scaled by `ciScale` (TabManagerUnitTests.swift). This one polls the main run loop for a real window to
+    // settle, so a flat 2s is comfortable locally and thin on a loaded CI runner.
+    let deadline = Date().addingTimeInterval(timeout * ciScale)
+    while Date() < deadline {
+        if condition() {
+            return true
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
+    }
+    return condition()
+}
+
 @MainActor
 final class ProgramaLayoutFileIdentityTests: XCTestCase {
     private let layout = ProgramaLayoutNode.pane(ProgramaPaneDefinition(surfaces: [
@@ -62,7 +87,6 @@ final class ProgramaLayoutFileIdentityTests: XCTestCase {
 @testable import Programa
 #endif
 
-
 final class SidebarSelectedWorkspaceColorTests: XCTestCase {
     func testLightModeUsesConfiguredSelectedWorkspaceBackgroundColor() {
         guard let color = sidebarSelectedWorkspaceBackgroundNSColor(for: .light).usingColorSpace(.sRGB) else {
@@ -100,7 +124,6 @@ final class SidebarSelectedWorkspaceColorTests: XCTestCase {
         XCTAssertEqual(color.alphaComponent, 0.65, accuracy: 0.001)
     }
 }
-
 
 final class WorkspaceRenameShortcutDefaultsTests: XCTestCase {
     func testRenameTabShortcutDefaultsAndMetadata() {
@@ -664,8 +687,7 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertTrue(contents.contains(#""$schema": "https://raw.githubusercontent.com/darkroomengineering/programa/main/Resources/settings.schema.json""#))
         XCTAssertTrue(contents.contains(#""schemaVersion": 1,"#))
         XCTAssertTrue(contents.contains(#"//   "app" : {"#))
-        XCTAssertTrue(contents.contains(#"//     "colors" : {"#))
-        XCTAssertTrue(contents.contains(##"//       "Red" : "#C0392B""##))
+        XCTAssertFalse(contents.contains(#""workspaceColors""#))
         XCTAssertTrue(contents.contains(#"//   "shortcuts" : {"#))
     }
 
@@ -945,152 +967,9 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         )
     }
 
-    func testSettingsFileRejectsInvalidCombinedAutomationPortInterval() throws {
-        let defaults = UserDefaults.standard
-        let backupsKey = "programa.settingsFile.backups.v1"
-        let baseKey = ProgramaPortRangePolicy.baseDefaultsKey
-        let rangeKey = ProgramaPortRangePolicy.rangeDefaultsKey
-        let previousBase = defaults.object(forKey: baseKey)
-        let previousRange = defaults.object(forKey: rangeKey)
-        let previousBackups = defaults.data(forKey: backupsKey)
-        defer {
-            restoreDefaultsValue(previousBase, key: baseKey, defaults: defaults)
-            restoreDefaultsValue(previousRange, key: rangeKey, defaults: defaults)
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: backupsKey)
-            } else {
-                defaults.removeObject(forKey: backupsKey)
-            }
-        }
-
-        defaults.set(12_000, forKey: baseKey)
-        defaults.set(20, forKey: rangeKey)
-        defaults.removeObject(forKey: backupsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
-        try writeSettingsFile(
-            """
-            {
-              "automation": {
-                "portBase": 65530,
-                "portRange": 10
-              }
-            }
-            """,
-            to: settingsFileURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: settingsFileURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        XCTAssertEqual(defaults.integer(forKey: baseKey), 12_000)
-        XCTAssertEqual(defaults.integer(forKey: rangeKey), 20)
-        XCTAssertNil(defaults.data(forKey: backupsKey))
-    }
-
-    func testSettingsFileAppliesValidAutomationPortIntervalAtomically() throws {
-        let defaults = UserDefaults.standard
-        let backupsKey = "programa.settingsFile.backups.v1"
-        let baseKey = ProgramaPortRangePolicy.baseDefaultsKey
-        let rangeKey = ProgramaPortRangePolicy.rangeDefaultsKey
-        let previousBase = defaults.object(forKey: baseKey)
-        let previousRange = defaults.object(forKey: rangeKey)
-        let previousBackups = defaults.data(forKey: backupsKey)
-        defer {
-            restoreDefaultsValue(previousBase, key: baseKey, defaults: defaults)
-            restoreDefaultsValue(previousRange, key: rangeKey, defaults: defaults)
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: backupsKey)
-            } else {
-                defaults.removeObject(forKey: backupsKey)
-            }
-        }
-
-        defaults.set(12_000, forKey: baseKey)
-        defaults.set(20, forKey: rangeKey)
-        defaults.removeObject(forKey: backupsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
-        try writeSettingsFile(
-            """
-            {
-              "automation": {
-                "portBase": 64000,
-                "portRange": 100
-              }
-            }
-            """,
-            to: settingsFileURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: settingsFileURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        XCTAssertEqual(defaults.integer(forKey: baseKey), 64_000)
-        XCTAssertEqual(defaults.integer(forKey: rangeKey), 100)
-        XCTAssertNotNil(defaults.data(forKey: backupsKey))
-    }
-
-    func testSettingsFileRejectsSingleAutomationPortKeyThatOverflowsWithDefaultCounterpart() throws {
-        let defaults = UserDefaults.standard
-        let backupsKey = "programa.settingsFile.backups.v1"
-        let baseKey = ProgramaPortRangePolicy.baseDefaultsKey
-        let rangeKey = ProgramaPortRangePolicy.rangeDefaultsKey
-        let previousBase = defaults.object(forKey: baseKey)
-        let previousRange = defaults.object(forKey: rangeKey)
-        let previousBackups = defaults.data(forKey: backupsKey)
-        defer {
-            restoreDefaultsValue(previousBase, key: baseKey, defaults: defaults)
-            restoreDefaultsValue(previousRange, key: rangeKey, defaults: defaults)
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: backupsKey)
-            } else {
-                defaults.removeObject(forKey: backupsKey)
-            }
-        }
-
-        defaults.set(12_000, forKey: baseKey)
-        defaults.set(20, forKey: rangeKey)
-        defaults.removeObject(forKey: backupsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-        let settingsFileURL = directoryURL.appendingPathComponent("settings.json")
-        try writeSettingsFile(
-            """
-            {
-              "automation": {
-                "portBase": 65530
-              }
-            }
-            """,
-            to: settingsFileURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: settingsFileURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        XCTAssertEqual(defaults.integer(forKey: baseKey), 12_000)
-        XCTAssertEqual(defaults.integer(forKey: rangeKey), 20)
-        XCTAssertNil(defaults.data(forKey: backupsKey))
-    }
-
     func testManagedUserDefaultSettingRestoresBackedUpValueWhenFileSettingIsRemoved() throws {
         let defaults = UserDefaults.standard
-        let managedKey = WorkspaceAutoReorderSettings.key
+        let managedKey = QuitWarningSettings.warnBeforeQuitKey
         let previousValue = defaults.object(forKey: managedKey)
         let previousBackups = defaults.data(forKey: settingsFileBackupsDefaultsKey)
         defer {
@@ -1118,7 +997,7 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
             """
             {
               "app": {
-                "reorderOnNotification": true
+                "warnBeforeQuit": true
               }
             }
             """,
@@ -1144,130 +1023,6 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: settingsFileBackupsDefaultsKey))
     }
 
-    func testSettingsFileStoreAppliesWorkspaceColorDictionaryAndAllowsRemovingDefaults() throws {
-        let defaults = UserDefaults.standard
-        let previousPalette = defaults.dictionary(forKey: WorkspaceTabColorSettings.paletteKey) as? [String: String]
-        let previousLegacyOverrides = defaults.dictionary(forKey: "workspaceTabColor.defaultOverrides") as? [String: String]
-        let previousLegacyCustomColors = defaults.array(forKey: "workspaceTabColor.customColors") as? [String]
-        let previousBackups = defaults.data(forKey: settingsFileBackupsDefaultsKey)
-        defer {
-            WorkspaceTabColorSettings.reset(defaults: defaults)
-            if let previousPalette {
-                defaults.set(previousPalette, forKey: WorkspaceTabColorSettings.paletteKey)
-            }
-            if let previousLegacyOverrides {
-                defaults.set(previousLegacyOverrides, forKey: "workspaceTabColor.defaultOverrides")
-            }
-            if let previousLegacyCustomColors {
-                defaults.set(previousLegacyCustomColors, forKey: "workspaceTabColor.customColors")
-            }
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: settingsFileBackupsDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
-            }
-        }
-
-        WorkspaceTabColorSettings.reset(defaults: defaults)
-        defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-
-        let settingsFileURL = directoryURL.appendingPathComponent("settings.json", isDirectory: false)
-        try writeSettingsFile(
-            """
-            {
-              "workspaceColors": {
-                "colors": {
-                  "Blue": "#2244ff",
-                  "Neon Mint": "#00f5d4"
-                }
-              }
-            }
-            """,
-            to: settingsFileURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: settingsFileURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        let palette = WorkspaceTabColorSettings.palette(defaults: defaults)
-        XCTAssertEqual(palette.map(\.name), ["Blue", "Neon Mint"])
-        XCTAssertEqual(palette.map(\.hex), ["#2244FF", "#00F5D4"])
-    }
-
-    func testManagedWorkspaceColorsRestoreLegacyPaletteWhenFileSettingIsRemoved() throws {
-        let defaults = UserDefaults.standard
-        let previousPalette = defaults.dictionary(forKey: WorkspaceTabColorSettings.paletteKey) as? [String: String]
-        let previousLegacyOverrides = defaults.dictionary(forKey: "workspaceTabColor.defaultOverrides") as? [String: String]
-        let previousLegacyCustomColors = defaults.array(forKey: "workspaceTabColor.customColors") as? [String]
-        let previousBackups = defaults.data(forKey: settingsFileBackupsDefaultsKey)
-        defer {
-            WorkspaceTabColorSettings.reset(defaults: defaults)
-            if let previousPalette {
-                defaults.set(previousPalette, forKey: WorkspaceTabColorSettings.paletteKey)
-            }
-            if let previousLegacyOverrides {
-                defaults.set(previousLegacyOverrides, forKey: "workspaceTabColor.defaultOverrides")
-            }
-            if let previousLegacyCustomColors {
-                defaults.set(previousLegacyCustomColors, forKey: "workspaceTabColor.customColors")
-            }
-            if let previousBackups {
-                defaults.set(previousBackups, forKey: settingsFileBackupsDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
-            }
-        }
-
-        WorkspaceTabColorSettings.reset(defaults: defaults)
-        defaults.set(["Blue": "#010203"], forKey: "workspaceTabColor.defaultOverrides")
-        defaults.set(["#778899"], forKey: "workspaceTabColor.customColors")
-        defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
-
-        let directoryURL = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-
-        let managedSettingsURL = directoryURL.appendingPathComponent("managed.json", isDirectory: false)
-        try writeSettingsFile(
-            """
-            {
-              "workspaceColors": {
-                "colors": {
-                  "Neon Mint": "#00F5D4"
-                }
-              }
-            }
-            """,
-            to: managedSettingsURL
-        )
-
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: managedSettingsURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        XCTAssertEqual(WorkspaceTabColorSettings.palette(defaults: defaults).map(\.name), ["Neon Mint"])
-
-        let missingSettingsURL = directoryURL.appendingPathComponent("missing.json", isDirectory: false)
-        _ = KeyboardShortcutSettingsFileStore(
-            primaryPath: missingSettingsURL.path,
-            fallbackPath: nil,
-            startWatching: false
-        )
-
-        let restored = WorkspaceTabColorSettings.palette(defaults: defaults)
-        XCTAssertEqual(restored.first(where: { $0.name == "Blue" })?.hex, "#010203")
-        XCTAssertEqual(restored.first(where: { $0.name == "Custom 1" })?.hex, "#778899")
-        XCTAssertNil(defaults.data(forKey: settingsFileBackupsDefaultsKey))
-    }
-
-    @MainActor
     func testReloadConfigurationReloadsManagedAppSettingsFromSettingsFile() throws {
         let defaults = UserDefaults.standard
         let managedKey = WorkspacePlacementSettings.placementKey
@@ -1389,13 +1144,6 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertEqual(manager.selectedTabId, inserted.id)
     }
 
-    private func makeTemporaryDirectory() throws -> URL {
-        let directoryURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        return directoryURL
-    }
-
     private func writeSettingsFile(_ contents: String, to url: URL) throws {
         try contents.write(to: url, atomically: true, encoding: .utf8)
     }
@@ -1408,7 +1156,6 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         }
     }
 }
-
 
 final class TerminalThemeSettingsTests: XCTestCase {
     private let settingsFileBackupsDefaultsKey = "programa.settingsFile.backups.v1"
@@ -1510,7 +1257,6 @@ final class TerminalThemeSettingsTests: XCTestCase {
         XCTAssertEqual(themeStore.currentSelection().dark, "Original Dark")
         XCTAssertEqual(reloadRequestCount, 2)
     }
-
 
     private func restoreDefaultsValue(_ value: Any?, key: String, defaults: UserDefaults) {
         if let value {
@@ -1685,18 +1431,10 @@ final class TerminalThemeSettingsTests: XCTestCase {
         XCTAssertEqual(store.currentAppearance().backgroundBlur, false)
     }
 
-    private func makeTemporaryDirectory() throws -> URL {
-        let directoryURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        return directoryURL
-    }
-
     private func writeSettingsFile(_ contents: String, to url: URL) throws {
         try contents.write(to: url, atomically: true, encoding: .utf8)
     }
 }
-
 
 final class WorkspaceShortcutMapperTests: XCTestCase {
     func testCommandNineMapsToLastWorkspaceIndex() {
@@ -1811,7 +1549,6 @@ final class WorkspacePlacementSettingsTests: XCTestCase {
         XCTAssertEqual(noSelectionIndex, 5)
     }
 }
-
 
 @MainActor
 final class WorkspaceCreationPlacementTests: XCTestCase {
@@ -2128,7 +1865,6 @@ final class WorkspaceCreationConfigSanitizationTests: XCTestCase {
         XCTAssertTrue(capturedConfig.environmentVariables.isEmpty)
     }
 }
-
 
 final class WorkspaceTabColorSettingsTests: XCTestCase {
     func testNormalizedHexAcceptsAndNormalizesValidInput() {
@@ -2506,45 +2242,6 @@ final class WorkspaceTabColorSettingsTests: XCTestCase {
     }
 }
 
-
-final class WorkspaceAutoReorderSettingsTests: XCTestCase {
-    func testDefaultIsEnabled() {
-        let suiteName = "WorkspaceAutoReorderSettingsTests.Default.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        XCTAssertTrue(WorkspaceAutoReorderSettings.isEnabled(defaults: defaults))
-    }
-
-    func testDisabledWhenSetToFalse() {
-        let suiteName = "WorkspaceAutoReorderSettingsTests.Disabled.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        defaults.set(false, forKey: WorkspaceAutoReorderSettings.key)
-        XCTAssertFalse(WorkspaceAutoReorderSettings.isEnabled(defaults: defaults))
-    }
-
-    func testEnabledWhenSetToTrue() {
-        let suiteName = "WorkspaceAutoReorderSettingsTests.Enabled.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        defaults.set(true, forKey: WorkspaceAutoReorderSettings.key)
-        XCTAssertTrue(WorkspaceAutoReorderSettings.isEnabled(defaults: defaults))
-    }
-}
-
-
 final class WorkspaceReorderTests: XCTestCase {
     @MainActor
     func testRelativeWorkspaceMovesUseIndicesAfterRemovingTheMovingWorkspace() {
@@ -2635,7 +2332,6 @@ final class WorkspaceReorderTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class WorkspaceNotificationReorderTests: XCTestCase {
     func testNotificationAutoReorderDoesNotMovePinnedWorkspace() {
@@ -2645,15 +2341,12 @@ final class WorkspaceNotificationReorderTests: XCTestCase {
 
         let originalTabManager = appDelegate.tabManager
         let originalNotificationStore = appDelegate.notificationStore
-        let defaults = UserDefaults.standard
-        let originalAutoReorderSetting = defaults.object(forKey: WorkspaceAutoReorderSettings.key)
         let originalAppFocusOverride = AppFocusState.overrideIsFocused
 
         notificationStore.replaceNotificationsForTesting([])
         notificationStore.configureNotificationDeliveryHandlerForTesting { _, _ in }
         appDelegate.tabManager = manager
         appDelegate.notificationStore = notificationStore
-        defaults.set(true, forKey: WorkspaceAutoReorderSettings.key)
         AppFocusState.overrideIsFocused = false
 
         defer {
@@ -2662,11 +2355,6 @@ final class WorkspaceNotificationReorderTests: XCTestCase {
             appDelegate.tabManager = originalTabManager
             appDelegate.notificationStore = originalNotificationStore
             AppFocusState.overrideIsFocused = originalAppFocusOverride
-            if let originalAutoReorderSetting {
-                defaults.set(originalAutoReorderSetting, forKey: WorkspaceAutoReorderSettings.key)
-            } else {
-                defaults.removeObject(forKey: WorkspaceAutoReorderSettings.key)
-            }
         }
 
         let firstPinned = manager.tabs[0]
@@ -2687,7 +2375,6 @@ final class WorkspaceNotificationReorderTests: XCTestCase {
         XCTAssertEqual(manager.tabs.map(\.id), expectedOrder)
     }
 }
-
 
 @MainActor
 final class WorkspaceTeardownTests: XCTestCase {
@@ -2726,27 +2413,8 @@ final class WorkspaceTeardownTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class WorkspaceSplitWorkingDirectoryTests: XCTestCase {
-    private func waitForCondition(
-        timeout: TimeInterval = 2,
-        pollInterval: TimeInterval = 0.01,
-        _ condition: () -> Bool
-    ) -> Bool {
-        // Scaled by `ciScale` (TabManagerUnitTests.swift), matching the copy of this
-        // helper in that file. This one polls the main run loop for a real window to
-        // settle, so a flat 2s is comfortable locally and thin on a loaded CI runner.
-        let deadline = Date().addingTimeInterval(timeout * ciScale)
-        while Date() < deadline {
-            if condition() {
-                return true
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
-        }
-        return condition()
-    }
-
     private func hostTerminalPanelInWindow(_ panel: TerminalPanel) throws -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 280),
@@ -2985,7 +2653,6 @@ final class WorkspaceSplitWorkingDirectoryTests: XCTestCase {
 #endif
     }
 }
-
 
 @MainActor
 final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
@@ -3251,7 +2918,7 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
         // newTerminalSplit's initial selection hand-off to rightPanel schedules its own
         // deferred first-responder/active-state reconciliation for leftPanel (see
         // scheduleAutomaticFirstResponderApply / resignOwnedFirstResponderIfNeeded in
-        // GhosttyTerminalView.swift, reason="setActive"). That work is queued on the main
+        // GhosttySurfaceScrollView.swift, reason="setActive"). That work is queued on the main
         // queue and normally drains almost immediately, well before this test's manual
         // makeFirstResponder override below. Under a full serial suite run the main queue
         // can carry a backlog of unpredictable, varying depth from hundreds of prior
@@ -3291,7 +2958,6 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
 #endif
     }
 }
-
 
 @MainActor
 final class WorkspaceTerminalConfigInheritanceSelectionTests: XCTestCase {
@@ -3370,111 +3036,6 @@ final class WorkspaceTerminalConfigInheritanceSelectionTests: XCTestCase {
         )
     }
 }
-
-
-@MainActor
-final class WorkspaceAttentionFlashTests: XCTestCase {
-    func testMoveFocusDoesNotTriggerWholePaneFlashTokenWhenWholePaneModeEnabled() {
-        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
-
-        defer {
-            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
-        }
-
-        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
-
-        let manager = TabManager()
-        guard let workspace = manager.selectedWorkspace,
-              let leftPanelId = workspace.focusedPanelId,
-              let rightPanel = workspace.newTerminalSplit(from: leftPanelId, orientation: .horizontal) else {
-            XCTFail("Expected split terminal panels")
-            return
-        }
-
-        XCTAssertEqual(workspace.focusedPanelId, rightPanel.id)
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashToken, 0)
-        XCTAssertNil(workspace.tmuxWorkspaceFlashPanelId)
-
-        workspace.moveFocus(direction: .left)
-
-        XCTAssertEqual(workspace.focusedPanelId, leftPanelId)
-        XCTAssertEqual(
-            workspace.tmuxWorkspaceFlashToken,
-            0,
-            "Expected moving focus left to avoid any workspace-pane flash"
-        )
-        XCTAssertNil(workspace.tmuxWorkspaceFlashPanelId)
-
-        workspace.moveFocus(direction: .right)
-
-        XCTAssertEqual(workspace.focusedPanelId, rightPanel.id)
-        XCTAssertEqual(
-            workspace.tmuxWorkspaceFlashToken,
-            0,
-            "Expected moving focus right to avoid any workspace-pane flash"
-        )
-        XCTAssertNil(workspace.tmuxWorkspaceFlashPanelId)
-    }
-
-    func testMoveFocusSuppressesWorkspacePaneFlashWhenAnotherPaneOwnsUnreadAttention() {
-        let appDelegate = AppDelegate.shared ?? AppDelegate()
-        let manager = TabManager()
-        let notificationStore = TerminalNotificationStore.shared
-        let originalTabManager = appDelegate.tabManager
-        let originalNotificationStore = appDelegate.notificationStore
-        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
-        let originalAppFocusOverride = AppFocusState.overrideIsFocused
-        defer {
-            notificationStore.replaceNotificationsForTesting([])
-            notificationStore.resetNotificationDeliveryHandlerForTesting()
-            appDelegate.tabManager = originalTabManager
-            appDelegate.notificationStore = originalNotificationStore
-            AppFocusState.overrideIsFocused = originalAppFocusOverride
-            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
-        }
-
-        notificationStore.replaceNotificationsForTesting([])
-        notificationStore.configureNotificationDeliveryHandlerForTesting { _, _ in }
-        appDelegate.tabManager = manager
-        appDelegate.notificationStore = notificationStore
-        AppFocusState.overrideIsFocused = true
-        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
-
-        guard let workspace = manager.selectedWorkspace,
-              let leftPanelId = workspace.focusedPanelId,
-              let rightPanel = workspace.newTerminalSplit(from: leftPanelId, orientation: .horizontal) else {
-            XCTFail("Expected split terminal panels")
-            return
-        }
-
-        workspace.moveFocus(direction: .left)
-
-        notificationStore.addNotification(
-            tabId: workspace.id,
-            surfaceId: leftPanelId,
-            title: "Unread",
-            subtitle: "",
-            body: "Left pane owns notification attention"
-        )
-
-        XCTAssertTrue(
-            notificationStore.hasVisibleNotificationIndicator(forTabId: workspace.id, surfaceId: leftPanelId),
-            "Expected the left pane to own visible notification attention before moving focus"
-        )
-
-        let flashTokenBeforeNavigation = workspace.tmuxWorkspaceFlashToken
-
-        workspace.moveFocus(direction: .right)
-
-        XCTAssertEqual(workspace.focusedPanelId, rightPanel.id)
-        XCTAssertEqual(
-            workspace.tmuxWorkspaceFlashToken,
-            flashTokenBeforeNavigation,
-            "Expected navigation flash to be suppressed while another pane owns notification attention"
-        )
-    }
-}
-
 
 @MainActor
 final class WorkspacePanelGitBranchTests: XCTestCase {
@@ -3786,7 +3347,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         assertPanelAndTabTitle("live-process", workspace: restored, panelId: restoredPanelId)
     }
 
-
     func testTerminalSplitWithFocusFalsePreservesOriginalFocusedPanel() {
         let workspace = Workspace()
         guard let originalFocusedPanelId = workspace.focusedPanelId else {
@@ -3933,10 +3493,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         XCTAssertFalse(attachedTab.hasCustomTitle)
     }
 
-
-
-
-
     func testAttachedTransferIgnoresStaleFinalizeAndNextDetachHasIndependentOwnership() throws {
         let source = Workspace()
         let destination = Workspace()
@@ -3973,8 +3529,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         XCTAssertEqual(terminalPanel.surface.portalBindingStateLabel(), "closed")
     }
 
-
-
     func testNewTerminalSurfaceWithFocusFalsePreservesFocusedPanel() {
         let workspace = Workspace()
         guard let originalFocusedPanelId = workspace.focusedPanelId,
@@ -4004,7 +3558,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
             "Expected selected tab to stay on the original focused panel"
         )
     }
-
 
     func testClosingFocusedSplitRestoresBranchForRemainingFocusedPanel() {
         let workspace = Workspace()
@@ -4157,20 +3710,8 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         )
     }
 
-    // Renamed from testSidebarPullRequestsTrackFocusedPanelOnly. That name asserted a
-    // focused-only filter that never existed in production: `sidebarPullRequestsInDisplayOrder()`
-    // has surfaced PRs for every panel in sidebar order since it was introduced (commit
-    // 2d454df5, "feat(sidebar): show linked pull request metadata"), mirroring the pre-existing
-    // multi-panel `sidebarGitBranchesInDisplayOrder()`. The perf-only precompute in f7388715
-    // ("Precompute panel ordering to reduce sidebar scroll lag") didn't change that. And the
-    // recent poll-candidate fix (commit d94d79ee, "fix: PR-probe filtering, poll candidates...")
-    // together with the green `TabManagerPullRequestProbeTests
-    // .testTrackedWorkspaceGitMetadataPollCandidatesIncludeMainAndMasterPanels` test explicitly
-    // proves background/non-main panels (master, feature, mainline splits) are polled for PR
-    // metadata -- which would be pointless if the sidebar only ever displayed the focused panel's
-    // PR. This test now documents the real contract: background panels with a valid,
-    // branch-matched PR are shown in sidebar order; PRs whose recorded branch no longer matches
-    // the panel's current git branch are filtered out.
+    // Contract: background panels with a valid, branch-matched PR are shown in sidebar order;
+    // PRs whose recorded branch no longer matches the panel's current git branch are filtered out.
     @MainActor
     func testSidebarPullRequestsShowAllPanelsInSidebarOrderFilteringBranchMismatches() {
         let workspace = Workspace()
@@ -4443,7 +3984,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
     }
 }
 
-
 final class WorkspaceMountPolicyTests: XCTestCase {
     func testDefaultPolicyMountsOnlySelectedWorkspace() {
         let a = UUID()
@@ -4651,21 +4191,6 @@ final class ReviewPanelWorkspaceTransferTests: XCTestCase {
         return (app, window)
     }
 
-    private func waitForCondition(
-        timeout: TimeInterval = 2,
-        pollInterval: TimeInterval = 0.01,
-        _ condition: () -> Bool
-    ) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition() {
-                return true
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
-        }
-        return condition()
-    }
-
     func testMovingReviewPanelReinstallsSubscriptionAndTracksSourceInItsOriginalWorkspace() throws {
         let workspaceA = Workspace()
         let workspaceB = Workspace()
@@ -4734,7 +4259,6 @@ final class ReviewPanelWorkspaceTransferTests: XCTestCase {
         )
     }
 }
-
 
 @MainActor
 final class SidebarWorkspaceShortcutHintMetricsTests: XCTestCase {

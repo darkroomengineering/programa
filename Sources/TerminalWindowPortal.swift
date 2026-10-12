@@ -5,8 +5,6 @@ import Bonsplit
 #endif
 
 #if DEBUG
-// Widened from private to internal: also called from
-// TerminalWindowPortalRegistry.swift (Nuclear Review #97 split).
 func portalDebugToken(_ view: NSView?) -> String {
     guard let view else { return "nil" }
     let ptr = Unmanaged.passUnretained(view).toOpaque()

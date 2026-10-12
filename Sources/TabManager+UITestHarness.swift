@@ -305,7 +305,6 @@ extension TabManager {
         return (attached, hasSurface, firstResponder)
     }
 
-    // Widened from `private` to `internal`: called from TabManager.init() in TabManager.swift.
     func setupUITestFocusShortcutsIfNeeded() {
         guard !didSetupUITestFocusShortcuts else { return }
         didSetupUITestFocusShortcuts = true
@@ -333,7 +332,6 @@ extension TabManager {
         )
     }
 
-    // Widened from `private` to `internal`: called from TabManager.init() in TabManager.swift.
     func setupSplitCloseRightUITestIfNeeded() {
         guard !didSetupSplitCloseRightUITest else { return }
         didSetupSplitCloseRightUITest = true
@@ -441,7 +439,6 @@ extension TabManager {
                 _ = tab.closePanel(topRight.id, force: true)
                 tab.focusPanel(bottomRight.id)
                 _ = tab.closePanel(bottomRight.id, force: true)
-
 
                 // Capture final state after Bonsplit/AppKit/Ghostty geometry reconciliation.
                 // We avoid sleep-based timing and converge over a few main-actor turns.
@@ -845,7 +842,6 @@ extension TabManager {
         return object
     }
 
-    // Widened from `private` to `internal`: called from TabManager.init() in TabManager.swift.
     func setupChildExitKeyboardUITestIfNeeded() {
         guard !didSetupChildExitKeyboardUITest else { return }
         didSetupChildExitKeyboardUITest = true

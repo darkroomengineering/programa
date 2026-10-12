@@ -1,18 +1,12 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
 import QuartzCore
-import Combine
 import CoreText
 import Darwin
-import Carbon.HIToolbox
 import Bonsplit
-import IOSurface
-import UniformTypeIdentifiers
 
-// MARK: - GhosttyApp (split out, Nuclear Review #97; verbatim move)
-// `GhosttySurfaceCallbackContext` widened private -> internal (also constructed from TerminalSurface.swift).
+// MARK: - GhosttyApp
 
 private func programaRuntimeReadClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
@@ -70,9 +64,6 @@ private enum GhosttyClipboardRequestIdentityRegistry {
     }
 }
 
-// Widened from private to internal: also constructed directly from
-// TerminalSurface.swift (Nuclear Review #97 split).
-//
 // DATA-ONLY. Ghostty's IO thread invokes callbacks (clipboard, actions) that read this
 // object SYNCHRONOUSLY, before any main-thread hop. It must therefore never hold a
 // reference -- weak or strong -- to a Swift UI/runtime object such as `GhosttyNSView` or
@@ -116,16 +107,16 @@ final class GhosttySurfaceCallbackContext {
 /// `read_clipboard_cb`/`confirm_read_clipboard_cb` resolve this off the ghostty IO thread
 /// (see the "off-main" comment on `runtimeReadClipboardCallback` below) -- so a
 /// main-actor-only registry is NOT sound here. This uses a lock instead. Unlike the
-/// original fix (#262), the registry now OWNS the data: `register`/`updateTabId` store the
+/// original fix (#262), the registry OWNS the data: `register`/`updateTabId` store the
 /// snapshot directly, keyed by pointer, so `resolve(from:)` is a pure dictionary lookup --
 /// it never calls `Unmanaged.fromOpaque(_:).takeUnretainedValue()` and never touches the
-/// `GhosttySurfaceCallbackContext` instance at all. This removes two defects the pointer-set
-/// version had: (1) the DEBUG stale-pointer `dlog` used to fire while `lock` was held, and
-/// dlog does synchronous real-time file I/O -- on the frequent stale-teardown path under
-/// surface churn that serialized every ghostty callback on file I/O; now the log is emitted
-/// after the lock is released. (2) `resolve` used to read `context.tabId`, which took the
+/// `GhosttySurfaceCallbackContext` instance at all. This avoids two defects a pointer-set
+/// design has: (1) a DEBUG stale-pointer `dlog` fired while `lock` is held would do
+/// synchronous real-time file I/O on the frequent stale-teardown path under surface
+/// churn, serializing every ghostty callback on file I/O; the log is emitted
+/// after the lock is released. (2) reading `context.tabId` in `resolve` would take the
 /// context's own lock while still holding the registry lock (a nested-lock pattern) and
-/// required dereferencing a pointer that is exactly what we're trying to make un-dereferenceable.
+/// require dereferencing a pointer that is exactly what we're trying to make un-dereferenceable.
 enum GhosttySurfaceUserdataRegistry {
     private static let lock = NSLock()
     private static var liveContexts: [UnsafeMutableRawPointer: GhosttySurfaceCallbackSnapshot] = [:]
@@ -378,13 +369,11 @@ class GhosttyApp {
                     tabId: callbackTabId,
                     surfaceId: callbackSurfaceId
                 ) else { return }
-                // Deviation from the pre-fix synchronous behavior: we can no longer tell
-                // off-main whether the surface is still live, so this callback always
-                // returns `true` (accepted) below rather than synchronously falling back to
-                // `false` when the surface is already gone. If resolution fails here, the
-                // read silently completes as a no-op instead -- ghostty's clipboard-read
-                // request is simply never fulfilled, matching what already happened when the
-                // surface went away mid-flight in the old code.
+                // We cannot tell off-main whether the surface is still live, so this callback
+                // always returns `true` (accepted) below rather than synchronously falling back
+                // to `false` when the surface is already gone. If resolution fails here, the
+                // read silently completes as a no-op: ghostty's clipboard-read request is
+                // simply never fulfilled, as when the surface goes away mid-flight.
                 guard let requestSurface = terminalSurface.liveSurfaceForGhosttyAccess(
                     reason: "clipboard.read"
                 ) else { return }
@@ -453,8 +442,8 @@ class GhosttyApp {
     private let backgroundLogURL = GhosttyApp.resolveBackgroundLogURL()
     private let backgroundLogStartUptime = ProcessInfo.processInfo.systemUptime
     // Guards only the cheap `backgroundLogSequence` increment below; the actual file
-    // write is offloaded to `backgroundLogWriter`'s serial queue (ported from upstream
-    // cmux cb2129a5a1) so callers never block on FileHandle open/seek/write/close.
+    // write is offloaded to `backgroundLogWriter`'s serial queue
+    // so callers never block on FileHandle open/seek/write/close.
     private let backgroundLogLock = NSLock()
     private var backgroundLogSequence: UInt64 = 0
     // Non-lazy: `handleAction`/`logBackground` run on Ghostty callback threads, and
@@ -522,13 +511,13 @@ class GhosttyApp {
         // Initialize Ghostty library first
         let result = ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv)
         if result != GHOSTTY_SUCCESS {
-            print("Failed to initialize ghostty: \(result)")
+            NSLog("Failed to initialize ghostty: \(result)")
             return
         }
 
         // Load config
         guard let primaryConfig = ghostty_config_new() else {
-            print("Failed to create ghostty config")
+            NSLog("Failed to create ghostty config")
             return
         }
 
@@ -689,7 +678,7 @@ class GhosttyApp {
             ghostty_config_free(primaryConfig)
 
             guard let fallbackConfig = ghostty_config_new() else {
-                print("Failed to create ghostty fallback config")
+                NSLog("Failed to create ghostty fallback config")
                 return
             }
 
@@ -708,7 +697,7 @@ class GhosttyApp {
                 Self.initLog("ghostty_app_new(fallback) failed")
                 Self.dumpConfigDiagnostics(fallbackConfig, label: "fallback")
                 #endif
-                print("Failed to create ghostty app")
+                NSLog("Failed to create ghostty app")
                 ghostty_config_free(fallbackConfig)
                 return
             }
@@ -844,8 +833,6 @@ class GhosttyApp {
     /// default based on the system's preferred languages without overriding
     /// user-managed fallback chains or configured fonts that already cover
     /// the affected CJK ranges.
-    ///
-    /// See: https://github.com/manaflow-ai/cmux/pull/1017
     private func loadCJKFontFallbackIfNeeded(_ config: ghostty_config_t) {
         guard let mappings = Self.autoInjectedCJKFontMappings() else { return }
 
@@ -1900,11 +1887,11 @@ class GhosttyApp {
             return true
         }
 
-        // The old code gated this whole switch on resolving `callbackContext?.surfaceView`
-        // -- a synchronous, off-main weak-reference read. That resolution is exactly the
-        // race that corrupted ARC's weak-ref side tables during rapid window teardown (see
-        // GhosttySurfaceCallbackContext's doc comment). The context is now data-only, so we
-        // gate on the presence of a live callback context instead; every case below
+        // Gating this switch on resolving `callbackContext?.surfaceView` (a synchronous,
+        // off-main weak-reference read) would race and corrupt ARC's weak-ref side tables
+        // during rapid window teardown (see GhosttySurfaceCallbackContext's doc comment).
+        // The context is data-only, so we gate on the presence of a live callback context
+        // instead; every case below
         // resolves any live view/surface it needs only from inside a main-thread hop, via
         // `callbackTabId`/`callbackSurfaceId`.
         guard callbackContext != nil else { return false }
@@ -2079,7 +2066,7 @@ class GhosttyApp {
                 .flatMap { String(cString: $0) } ?? ""
             if let tabId = callbackTabId,
                let surfaceId = callbackSurfaceId {
-                // Coalesced (ported from upstream cmux c30733e5e6): shells/agent CLIs
+                // Coalesced: shells/agent CLIs
                 // that rewrite the title on every render would otherwise flood the
                 // main actor with one NotificationCenter post per keystroke. The
                 // dispatcher guarantees the last title set within the window is
@@ -2180,9 +2167,8 @@ class GhosttyApp {
                 workspace.lastCommand = outcome
 
                 // Experimental: notify when a long-running command finishes in a pane the
-                // user isn't looking at. Default-ON with a conservative threshold; 0 disables.
-                let threshold = LongCommandNotificationSettings.thresholdSeconds()
-                guard threshold > 0, outcome.duration >= threshold else { return }
+                // user isn't looking at. Fires at or above LongCommandNotificationSettings.thresholdSeconds.
+                guard outcome.duration >= LongCommandNotificationSettings.thresholdSeconds else { return }
                 guard !workspace.hasHookManagedAgent else { return }
 
                 let isActiveTab = owningManager.selectedTabId == tabId
@@ -2411,8 +2397,8 @@ class GhosttyApp {
 #if DEBUG
     /// Test-only seam exposing the private `callbackContext(from:)` resolution (which
     /// wraps `GhosttySurfaceUserdataRegistry.resolve(from:)`) so tests can verify a stale
-    /// userdata pointer resolves to `nil` instead of dereferencing freed memory. Widened
-    /// from `private` to an internal, DEBUG-only static func rather than exposing the
+    /// userdata pointer resolves to `nil` instead of dereferencing freed memory. This is an
+    /// internal, DEBUG-only static func rather than exposing the
     /// registry or the callback context type directly, matching the DEBUG-only test
     /// scaffolding pattern used elsewhere (e.g. `TerminalSurface.replaceSurfaceWithFreedPointerForTesting`).
     static func debugCallbackContextResolves(from userdata: UnsafeMutableRawPointer?) -> Bool {

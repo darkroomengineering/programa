@@ -1,15 +1,8 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
 import QuartzCore
-import Combine
-import CoreText
-import Darwin
-import Carbon.HIToolbox
 import Bonsplit
-import IOSurface
-import UniformTypeIdentifiers
 
 // MARK: - GhosttyTerminalView (SwiftUI Wrapper)
 //
@@ -17,9 +10,6 @@ import UniformTypeIdentifiers
 // AppKit-hosted terminal portal (GhosttySurfaceScrollView/GhosttyNSView),
 // plus its Coordinator and the private HostContainerView it manages.
 //
-// Split out of GhosttyTerminalView.swift (Nuclear Review #97). Extracted
-// verbatim, so call-site behavior is unchanged.
-
 // MARK: - SwiftUI Wrapper
 
 struct GhosttyTerminalView: NSViewRepresentable {

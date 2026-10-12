@@ -121,9 +121,9 @@ extension AgentPresence {
     }
 }
 
-/// The single derived glyph/label/tint for a workspace's aggregate agent state, replacing the
-/// three independent renderings that used to read `panelAgentStates`, `statusEntries["claude_code"]`,
-/// and the notification subtitle separately. `TabItemView` is the only consumer.
+/// The single derived glyph/label/tint for a workspace's aggregate agent state, derived once from
+/// `panelAgentStates`, `statusEntries["claude_code"]`, and the notification subtitle
+/// so no consumer renders them independently. `TabItemView` is the only consumer.
 struct SidebarAgentIndicator: Equatable {
     enum Tint: Equatable {
         case blocked

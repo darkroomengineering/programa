@@ -47,7 +47,6 @@ final class SidebarActiveForegroundColorTests: XCTestCase {
     }
 }
 
-
 final class SidebarActiveTabIndicatorSettingsTests: XCTestCase {
     func testDefaultStyleWhenUnset() {
         let suiteName = "SidebarActiveTabIndicatorSettingsTests.Default.\(UUID().uuidString)"
@@ -85,7 +84,6 @@ final class SidebarActiveTabIndicatorSettingsTests: XCTestCase {
         )
     }
 }
-
 
 final class SidebarWorkspaceHierarchyTests: XCTestCase {
     func testCollapsedFolderHidesOnlyItsChildren() {
@@ -166,7 +164,6 @@ final class SidebarWorkspaceHierarchyTests: XCTestCase {
         )
     }
 }
-
 
 final class SidebarBranchOrderingTests: XCTestCase {
 
@@ -566,7 +563,6 @@ final class SidebarBranchOrderingTests: XCTestCase {
     }
 }
 
-
 final class SidebarDragFailsafePolicyTests: XCTestCase {
     func testShouldRequestClearWhenDragActiveAndMouseButtonUp() {
         XCTAssertTrue(
@@ -628,7 +624,6 @@ final class SidebarDragFailsafePolicyTests: XCTestCase {
         )
     }
 }
-
 
 final class SidebarDropPlannerTests: XCTestCase {
     func testNoIndicatorForNoOpEdges() {
@@ -858,7 +853,6 @@ final class SidebarDropPlannerTests: XCTestCase {
 
 }
 
-
 final class SidebarDragAutoScrollPlannerTests: XCTestCase {
     func testAutoScrollPlanTriggersNearTopAndBottomOnly() {
         let topPlan = SidebarDragAutoScrollPlanner.plan(distanceToTop: 4, distanceToBottom: 96, edgeInset: 44, minStep: 2, maxStep: 12)
@@ -893,7 +887,6 @@ final class SidebarDragAutoScrollPlannerTests: XCTestCase {
         XCTAssertEqual(belowBottom?.pointsPerTick, 12)
     }
 }
-
 
 final class TerminalControllerSidebarDedupeTests: XCTestCase {
     func testShouldReplaceStatusEntryReturnsFalseForUnchangedPayload() {
@@ -947,84 +940,6 @@ final class TerminalControllerSidebarDedupeTests: XCTestCase {
                 value: 0.42,
                 label: "indexing"
             )
-        )
-    }
-
-    func testShouldReplaceGitBranchReturnsFalseForUnchangedPayload() {
-        XCTAssertFalse(
-            TerminalController.shouldReplaceGitBranch(
-                current: SidebarGitBranchState(branch: "main", isDirty: true),
-                branch: "main",
-                isDirty: true
-            )
-        )
-    }
-
-    func testShouldReplacePortsIgnoresOrderAndDuplicates() {
-        XCTAssertFalse(
-            TerminalController.shouldReplacePorts(
-                current: [9229, 3000],
-                next: [3000, 9229, 3000]
-            )
-        )
-        XCTAssertTrue(
-            TerminalController.shouldReplacePorts(
-                current: [9229, 3000],
-                next: [3000]
-            )
-        )
-    }
-
-    func testExplicitSocketScopeParsesValidUUIDTabAndPanel() {
-        let workspaceId = UUID()
-        let panelId = UUID()
-        let scope = TerminalController.explicitSocketScope(
-            options: [
-                "tab": workspaceId.uuidString,
-                "panel": panelId.uuidString
-            ]
-        )
-        XCTAssertEqual(scope?.workspaceId, workspaceId)
-        XCTAssertEqual(scope?.panelId, panelId)
-    }
-
-    func testExplicitSocketScopeAcceptsSurfaceAlias() {
-        let workspaceId = UUID()
-        let panelId = UUID()
-        let scope = TerminalController.explicitSocketScope(
-            options: [
-                "tab": workspaceId.uuidString,
-                "surface": panelId.uuidString
-            ]
-        )
-        XCTAssertEqual(scope?.workspaceId, workspaceId)
-        XCTAssertEqual(scope?.panelId, panelId)
-    }
-
-    func testExplicitSocketScopeRejectsMissingOrInvalidValues() {
-        XCTAssertNil(TerminalController.explicitSocketScope(options: [:]))
-        XCTAssertNil(TerminalController.explicitSocketScope(options: ["tab": "workspace:1", "panel": UUID().uuidString]))
-        XCTAssertNil(TerminalController.explicitSocketScope(options: ["tab": UUID().uuidString, "panel": "surface:1"]))
-    }
-
-    func testNormalizeReportedDirectoryTrimsWhitespace() {
-        XCTAssertEqual(
-            TerminalController.normalizeReportedDirectory("   /Users/programa/project   "),
-            "/Users/programa/project"
-        )
-    }
-
-    func testNormalizeReportedDirectoryResolvesFileURL() {
-        XCTAssertEqual(
-            TerminalController.normalizeReportedDirectory("file:///Users/programa/project"),
-            "/Users/programa/project"
-        )
-    }
-
-    func testNormalizeReportedDirectoryLeavesInvalidURLTrimmed() {
-        XCTAssertEqual(
-            TerminalController.normalizeReportedDirectory("  file://bad host  "),
-            "file://bad host"
         )
     }
 }

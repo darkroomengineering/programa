@@ -294,12 +294,10 @@ enum CanonicalSubprocessRunner {
         guard actionResults.allSatisfy({ $0 == 0 }) else {
             return .failure("could not configure subprocess output pipes")
         }
+        // The _np variant exists in every supported SDK; the non-_np name is
+        // missing from the macOS 15 SDK, so referencing it breaks that build.
         let chdirResult = currentDirectory.withCString { directory in
-            if #available(macOS 26, *) {
-                posix_spawn_file_actions_addchdir(&fileActions, directory)
-            } else {
-                posix_spawn_file_actions_addchdir_np(&fileActions, directory)
-            }
+            posix_spawn_file_actions_addchdir_np(&fileActions, directory)
         }
         guard chdirResult == 0 else {
             return .failure("could not configure subprocess working directory: \(String(cString: strerror(chdirResult)))")
@@ -496,11 +494,10 @@ extension CanonicalSubprocessRunner {
 // MARK: - GitMetadataProber
 //
 // Stateless git/GitHub CLI probing library: given a working directory, runs `git`/`gh`
-// commands and parses their output into workspace sidebar git/PR metadata. Extracted from
-// TabManager (which owns the stateful scheduling/timers/dedup around these probes) so the
-// probing logic itself has no dependency on TabManager instance state and can be tested and
-// reasoned about independently. A `struct` (not an `enum` namespace) so TabManager can hold
-// a thin owned instance; the API surface is static. The one piece of shared state is the
+// commands and parses their output into workspace sidebar git/PR metadata. TabManager owns
+// the stateful scheduling/timers/dedup around these probes, so the probing logic itself has
+// no dependency on TabManager instance state and can be tested and reasoned about
+// independently. The API surface is static. The one piece of shared state is the
 // process-wide pull-request lookup throttle (`PullRequestLookupThrottle`), which limits the
 // GitHub `gh` calls while the cheap local git probes keep their own cadence.
 struct GitMetadataProber {
@@ -618,7 +615,6 @@ struct GitMetadataProber {
         pullRequestLookupThrottle.removeAll()
     }
 
-    // Widened from `private` to `internal`: called from TabManager.swift.
     nonisolated static func initialWorkspaceGitMetadataSnapshot(
         for directory: String
     ) -> InitialWorkspaceGitMetadataSnapshot {
@@ -1125,7 +1121,6 @@ struct GitMetadataProber {
         return String(trimmed.prefix(180))
     }
 
-    // Widened from `private` to `internal`: called from TabManager.swift.
     nonisolated static func normalizedBranchName(_ branch: String?) -> String? {
         let trimmed = branch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed

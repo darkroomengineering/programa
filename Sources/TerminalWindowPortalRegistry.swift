@@ -4,7 +4,7 @@ import ObjectiveC
 import Bonsplit
 #endif
 
-// MARK: - Terminal Window Portal Registry (split out, Nuclear Review #97; verbatim move)
+// MARK: - Terminal Window Portal Registry
 
 private var programaWindowTerminalPortalKey: UInt8 = 0
 private var programaWindowTerminalPortalCloseObserverKey: UInt8 = 0

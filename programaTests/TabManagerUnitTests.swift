@@ -205,7 +205,6 @@ final class TabManagerChildExitCloseTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerWorkspaceOwnershipTests: XCTestCase {
     func testCloseWorkspaceIgnoresWorkspaceNotOwnedByManager() {
@@ -803,7 +802,6 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerCloseWorkspacesWithConfirmationTests: XCTestCase {
     func testCloseWorkspacesWithConfirmationPromptsOnceAndClosesAcceptedWorkspaces() {
@@ -911,7 +909,6 @@ final class TabManagerCloseWorkspacesWithConfirmationTests: XCTestCase {
         XCTAssertEqual(manager.tabs.map(\.title), ["Alpha", "Beta", "Gamma"])
     }
 }
-
 
 @MainActor
 final class TabManagerCloseCurrentPanelTests: XCTestCase {
@@ -1201,7 +1198,6 @@ final class TabManagerCloseCurrentPanelTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerNotificationFocusTests: XCTestCase {
     func testFocusTabFromNotificationClearsSplitZoomBeforeFocusingTargetPanel() {
@@ -1246,14 +1242,12 @@ final class TabManagerNotificationFocusTests: XCTestCase {
         let originalTabManager = appDelegate.tabManager
         let originalNotificationStore = appDelegate.notificationStore
         let originalAppFocusOverride = AppFocusState.overrideIsFocused
-        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
 
         store.replaceNotificationsForTesting([])
         store.configureNotificationDeliveryHandlerForTesting { _, _ in }
         appDelegate.tabManager = manager
         appDelegate.notificationStore = store
         AppFocusState.overrideIsFocused = true
-        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
 
         defer {
             store.replaceNotificationsForTesting([])
@@ -1261,7 +1255,6 @@ final class TabManagerNotificationFocusTests: XCTestCase {
             appDelegate.tabManager = originalTabManager
             appDelegate.notificationStore = originalNotificationStore
             AppFocusState.overrideIsFocused = originalAppFocusOverride
-            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
         }
 
         guard let workspace = manager.selectedWorkspace,
@@ -1282,7 +1275,6 @@ final class TabManagerNotificationFocusTests: XCTestCase {
 
         XCTAssertTrue(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: rightPanel.id))
         XCTAssertTrue(store.hasVisibleNotificationIndicator(forTabId: workspace.id, surfaceId: rightPanel.id))
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashToken, 0)
 
         XCTAssertTrue(manager.focusTabFromNotification(workspace.id, surfaceId: rightPanel.id))
 
@@ -1298,12 +1290,8 @@ final class TabManagerNotificationFocusTests: XCTestCase {
         XCTAssertEqual(workspace.focusedPanelId, rightPanel.id)
         XCTAssertFalse(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: rightPanel.id))
         XCTAssertFalse(store.hasVisibleNotificationIndicator(forTabId: workspace.id, surfaceId: rightPanel.id))
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashToken, 1)
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashPanelId, rightPanel.id)
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashReason, .notificationDismiss)
     }
 }
-
 
 @MainActor
 final class TabManagerPendingUnfocusPolicyTests: XCTestCase {
@@ -1334,7 +1322,6 @@ final class TabManagerPendingUnfocusPolicyTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerSurfaceCreationTests: XCTestCase {
     func testNewSurfaceFocusesCreatedSurface() {
@@ -1359,10 +1346,7 @@ final class TabManagerSurfaceCreationTests: XCTestCase {
         )
     }
 
-
-
 }
-
 
 @MainActor
 final class TabManagerEqualizeSplitsTests: XCTestCase {
@@ -1644,7 +1628,6 @@ final class TabManagerResizeSplitsTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerWorkspaceConfigInheritanceSourceTests: XCTestCase {
     func testUsesFocusedTerminalWhenTerminalIsFocused() {
@@ -1702,7 +1685,6 @@ final class TabManagerWorkspaceConfigInheritanceSourceTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
     func testFocusPanelDismissesUnreadNotificationWithDismissFlash() {
@@ -1713,14 +1695,12 @@ final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
         let originalTabManager = appDelegate.tabManager
         let originalNotificationStore = appDelegate.notificationStore
         let originalAppFocusOverride = AppFocusState.overrideIsFocused
-        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
 
         store.replaceNotificationsForTesting([])
         store.configureNotificationDeliveryHandlerForTesting { _, _ in }
         appDelegate.tabManager = manager
         appDelegate.notificationStore = store
         AppFocusState.overrideIsFocused = true
-        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
 
         defer {
             store.replaceNotificationsForTesting([])
@@ -1728,7 +1708,6 @@ final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
             appDelegate.tabManager = originalTabManager
             appDelegate.notificationStore = originalNotificationStore
             AppFocusState.overrideIsFocused = originalAppFocusOverride
-            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
         }
 
         guard let workspace = manager.selectedWorkspace,
@@ -1749,16 +1728,12 @@ final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
         XCTAssertTrue(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: leftPanelId))
         XCTAssertTrue(store.hasVisibleNotificationIndicator(forTabId: workspace.id, surfaceId: leftPanelId))
         XCTAssertEqual(workspace.focusedPanelId, rightPanel.id)
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashToken, 0)
 
         workspace.focusPanel(leftPanelId)
 
         XCTAssertEqual(workspace.focusedPanelId, leftPanelId)
         XCTAssertFalse(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: leftPanelId))
         XCTAssertFalse(store.hasVisibleNotificationIndicator(forTabId: workspace.id, surfaceId: leftPanelId))
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashToken, 1)
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashPanelId, leftPanelId)
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashReason, .notificationDismiss)
     }
 
     func testDismissNotificationOnDirectInteractionClearsFocusedNotificationIndicator() {
@@ -1799,54 +1774,4 @@ final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {
         XCTAssertFalse(store.hasVisibleNotificationIndicator(forTabId: workspace.id, surfaceId: panelId))
     }
 
-    func testDismissNotificationOnDirectInteractionTriggersDismissFlashForFocusedIndicatorOnly() {
-        let appDelegate = AppDelegate.shared ?? AppDelegate()
-        let manager = TabManager()
-        let store = TerminalNotificationStore.shared
-
-        let originalTabManager = appDelegate.tabManager
-        let originalNotificationStore = appDelegate.notificationStore
-        let originalAppFocusOverride = AppFocusState.overrideIsFocused
-        let originalExperimentTarget = TmuxOverlayExperimentSettings.targetOverrideForTesting
-
-        store.replaceNotificationsForTesting([])
-        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
-        appDelegate.tabManager = manager
-        appDelegate.notificationStore = store
-        AppFocusState.overrideIsFocused = true
-        TmuxOverlayExperimentSettings.targetOverrideForTesting = .bonsplitPane
-
-        defer {
-            store.replaceNotificationsForTesting([])
-            store.resetNotificationDeliveryHandlerForTesting()
-            appDelegate.tabManager = originalTabManager
-            appDelegate.notificationStore = originalNotificationStore
-            AppFocusState.overrideIsFocused = originalAppFocusOverride
-            TmuxOverlayExperimentSettings.targetOverrideForTesting = originalExperimentTarget
-        }
-
-        guard let workspace = manager.selectedWorkspace,
-              let panelId = workspace.focusedPanelId else {
-            XCTFail("Expected selected workspace with focused panel")
-            return
-        }
-
-        store.setFocusedReadIndicator(forTabId: workspace.id, surfaceId: panelId)
-        XCTAssertTrue(store.hasVisibleNotificationIndicator(forTabId: workspace.id, surfaceId: panelId))
-        XCTAssertFalse(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: panelId))
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashToken, 0)
-
-        XCTAssertTrue(
-            manager.dismissNotificationOnDirectInteraction(tabId: workspace.id, surfaceId: panelId)
-        )
-
-        XCTAssertFalse(store.hasVisibleNotificationIndicator(forTabId: workspace.id, surfaceId: panelId))
-        XCTAssertEqual(
-            workspace.tmuxWorkspaceFlashToken,
-            1,
-            "Expected dismissing a focused-read indicator to emit a dismiss flash even when unread is already cleared"
-        )
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashPanelId, panelId)
-        XCTAssertEqual(workspace.tmuxWorkspaceFlashReason, .notificationDismiss)
-    }
 }

@@ -12,12 +12,8 @@ set -euo pipefail
 # opens it (POSIX 163). Notarization does not catch this class of failure;
 # only a real launch does, and by then it has shipped to everyone.
 #
-# This script previously treated a missing profile as fine, on the stated
-# grounds that "Programa ships no restricted entitlements." That stopped
-# being true when CloudKit (com.apple.developer.icloud-services /
-# icloud-container-identifiers) landed, which left the one check that exists
-# to catch an AMFI brick asserting the brick was expected. It now derives the
-# answer from the bundle itself rather than from a comment that can go stale.
+# The answer comes from the signed bundle itself, not from a comment that can
+# go stale.
 #
 # Exit codes:
 #   0  no restricted entitlements and no profile, or profile covers them all

@@ -57,18 +57,12 @@ struct ShortcutHintPill<Content: View>: View {
 enum ShortcutHintModifierPolicy {
     static let intentionalHoldDelay: TimeInterval = 0.30
 
-    static func shouldShowHints(
-        for modifierFlags: NSEvent.ModifierFlags,
-        defaults: UserDefaults = .standard
-    ) -> Bool {
+    static func shouldShowHints(for modifierFlags: NSEvent.ModifierFlags) -> Bool {
         let shortcut = KeyboardShortcutSettings.shortcut(for: .selectWorkspaceByNumber)
         guard !shortcut.hasChord else { return false }
         let normalized = modifierFlags.intersection(.deviceIndependentFlagsMask)
             .subtracting([.numericPad, .function, .capsLock])
-        guard normalized == [.command] else {
-            return false
-        }
-        return ShortcutHintDebugSettings.showHintsOnCommandHoldEnabled(defaults: defaults)
+        return normalized == [.command]
     }
 
     static func isCurrentWindow(
@@ -89,10 +83,9 @@ enum ShortcutHintModifierPolicy {
         hostWindowNumber: Int?,
         hostWindowIsKey: Bool,
         eventWindowNumber: Int?,
-        keyWindowNumber: Int?,
-        defaults: UserDefaults = .standard
+        keyWindowNumber: Int?
     ) -> Bool {
-        shouldShowHints(for: modifierFlags, defaults: defaults) &&
+        shouldShowHints(for: modifierFlags) &&
             isCurrentWindow(
                 hostWindowNumber: hostWindowNumber,
                 hostWindowIsKey: hostWindowIsKey,
@@ -110,7 +103,6 @@ enum ShortcutHintDebugSettings {
     static let paneHintXKey = "shortcutHintPaneTabXOffset"
     static let paneHintYKey = "shortcutHintPaneTabYOffset"
     static let alwaysShowHintsKey = "shortcutHintAlwaysShow"
-    static let showHintsOnCommandHoldKey = "shortcutHintShowOnCommandHold"
 
     static let defaultSidebarHintX = 0.0
     static let defaultSidebarHintY = 0.0
@@ -119,7 +111,6 @@ enum ShortcutHintDebugSettings {
     static let defaultPaneHintX = 0.0
     static let defaultPaneHintY = 0.0
     static let defaultAlwaysShowHints = false
-    static let defaultShowHintsOnCommandHold = true
 
     static let offsetRange: ClosedRange<Double> = -20...20
 
@@ -127,16 +118,8 @@ enum ShortcutHintDebugSettings {
         min(max(value, offsetRange.lowerBound), offsetRange.upperBound)
     }
 
-    static func showHintsOnCommandHoldEnabled(defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: showHintsOnCommandHoldKey) != nil else {
-            return defaultShowHintsOnCommandHold
-        }
-        return defaults.bool(forKey: showHintsOnCommandHoldKey)
-    }
-
     static func resetVisibilityDefaults(defaults: UserDefaults = .standard) {
         defaults.set(defaultAlwaysShowHints, forKey: alwaysShowHintsKey)
-        defaults.set(defaultShowHintsOnCommandHold, forKey: showHintsOnCommandHoldKey)
     }
 }
 

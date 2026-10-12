@@ -194,12 +194,12 @@ tend to conflict together during rebases.
 ### cursor-click-to-move respects OSC 133 click-to-move
 
 - Was local in the fork as `10a585754`.
-- Landed upstream as `bb646926f`, so it is no longer carried as a fork-only patch.
+- Landed upstream as `bb646926f`, so the fork does not carry it as a separate patch.
 
 ### zsh prompt redraw follow-ups
 
 - Were local in the fork as `8ade43ce5`, `0cf559581`, `312c7b23a`, and `404a3f175`.
-- Dropped during the March 30, 2026 rebase because newer Ghostty prompt-marking changes on the refreshed base superseded these fork-only zsh redraw patches, so Programa no longer carries them separately.
+- Not carried: newer Ghostty prompt-marking changes on the current base supersede these fork-only zsh redraw patches (dropped in the March 30, 2026 rebase).
 
 ### initial focus seeding and DECSET 1004 startup behavior
 

@@ -47,22 +47,10 @@ tests/visual_report.html
 # Local scratch (screenshots, etc.)
 tmp/
 tmp-*/
-node_modules
 
 # Working plan documents. These are scratch thinking, not deliverables, and they
 # accumulate fast enough to bury real docs in review diffs.
-#
-# `plans/*` rather than `plans/`: git cannot re-include a file whose parent
-# DIRECTORY is excluded, so the negation below only works against a glob on the
-# directory's contents. Do not "simplify" this to `plans/`.
-#
-# golden-tumbling-gray.md stays tracked because shipped code cites it as the
-# rationale for a security rule — Sources/MobileBridge/MobileBridgePush.swift
-# points at its "Security implications" section for why prompt and output text
-# never goes into a notification payload. Untracking it would leave that comment
-# pointing at a file nobody who clones the repo has.
-plans/*
-!plans/golden-tumbling-gray.md
+plans/
 
 # Agent-written recaps, written into the repo root by `programa recap`. The CLI
 # also drops a self-ignoring .gitignore inside the directory on first use; this

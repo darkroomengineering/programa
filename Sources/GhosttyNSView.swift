@@ -3,15 +3,11 @@ import SwiftUI
 import AppKit
 import Metal
 import QuartzCore
-import Combine
-import CoreText
-import Darwin
-import Carbon.HIToolbox
 import Bonsplit
 import IOSurface
 import UniformTypeIdentifiers
 
-// MARK: - Ghostty Surface View (split out, Nuclear Review #97; verbatim move)
+// MARK: - Ghostty Surface View
 // Keyboard/mouse/drag/accessibility/IME/render-stats live in GhosttyTerminalView+*.swift.
 
 class GhosttyNSView: NSView, NSUserInterfaceValidations {
@@ -163,10 +159,9 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
     var trackingArea: NSTrackingArea?
     private var windowObserver: NSObjectProtocol?
     private var screenParametersObserver: NSObjectProtocol?
-    // Teardown-race guard (ported from #258's GhosttySurfaceScrollView fix; this was
-    // the residual crasher on the reland gate — the `notification.object as? NSWindow`
-    // downcast in windowDidChangeScreen implicitly retaining a freed notification
-    // object). NotificationCenter's removeObserver does NOT cancel a block already
+    // Teardown-race guard (same pattern as GhosttySurfaceScrollView; it protects the
+    // `notification.object as? NSWindow` downcast in windowDidChangeScreen from
+    // implicitly retaining a freed notification object). NotificationCenter's removeObserver does NOT cancel a block already
     // handed off to the main queue — during rapid window create/close, a block
     // enqueued against the *previous* window/registration batch can still run after
     // viewDidMoveToWindow has already torn down and re-registered observers for a
@@ -680,15 +675,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         abs(lhs - rhs) <= epsilon
     }
 
-    func expectedPixelSize(for pointsSize: CGSize) -> CGSize {
-        let backing = convertToBacking(NSRect(origin: .zero, size: pointsSize)).size
-        if backing.width > 0, backing.height > 0 {
-            return backing
-        }
-        let scale = max(1.0, window?.backingScaleFactor ?? layer?.contentsScale ?? 1.0)
-        return CGSize(width: pointsSize.width * scale, height: pointsSize.height * scale)
-    }
-
     // Convenience accessor for the ghostty surface
     var surface: ghostty_surface_t? {
         terminalSurface?.surface
@@ -718,8 +704,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
             )
         }
     }
-
-
 
     func withExternalCommittedText<T>(_ body: () -> T) -> T {
         externalCommittedTextDepth += 1
@@ -752,7 +736,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
 
     // Test-only IME point override so firstRect behavior can be regression tested.
     // private(set): read from the NSTextInputClient conformance in
-    // GhosttyTerminalView+IME.swift (Nuclear Review #97 split), written only here.
+    // GhosttyTerminalView+IME.swift, written only here.
     private(set) var imePointOverrideForTesting: (x: Double, y: Double, width: Double, height: Double)?
 
     func setIMEPointForTesting(x: Double, y: Double, width: Double, height: Double) {
@@ -763,8 +747,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         imePointOverrideForTesting = nil
     }
 #endif
-
-
 
     func shouldSuppressCommandPathHover(for flags: NSEvent.ModifierFlags) -> Bool {
         guard flags.contains(.command), let surface else { return false }
@@ -813,8 +795,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         return ghostty_input_mods_e(rawValue: mods)
     }
 
-
-
     deinit {
         // Surface lifecycle is managed by TerminalSurface, not the view
 #if DEBUG
@@ -836,7 +816,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         }
         terminalSurface = nil
     }
-
 
     private func windowDidChangeScreen(_ notification: Notification) {
         guard let window else { return }

@@ -59,46 +59,13 @@ final class ConfigFixSweepCONFTests: XCTestCase {
 
     // MARK: - Fixture helpers
 
-    @discardableResult
-    private func git(_ arguments: [String], in directory: URL) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = arguments
-        process.currentDirectoryURL = directory
-        var environment = ProcessInfo.processInfo.environment
-        environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
-        environment["GIT_CONFIG_SYSTEM"] = "/dev/null"
-        environment["GIT_AUTHOR_NAME"] = "Conf Test"
-        environment["GIT_AUTHOR_EMAIL"] = "conf@example.invalid"
-        environment["GIT_COMMITTER_NAME"] = "Conf Test"
-        environment["GIT_COMMITTER_EMAIL"] = "conf@example.invalid"
-        process.environment = environment
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-        try process.run()
-        let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw NSError(
-                domain: "ConfigFixSweepCONFTests",
-                code: Int(process.terminationStatus),
-                userInfo: [NSLocalizedDescriptionKey:
-                    "git \(arguments.joined(separator: " ")) failed: \(String(decoding: errData, as: UTF8.self))"]
-            )
-        }
-        return String(decoding: outData, as: UTF8.self)
-    }
-
     private func makeRepo(branch: String) throws -> URL {
         let repo = tempRoot.appendingPathComponent("repo-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
-        try git(["init", "-q", "-b", branch], in: repo)
+        try configFixtureGit(["init", "-q", "-b", branch], in: repo)
         try "one\n".write(to: repo.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
-        try git(["add", "."], in: repo)
-        try git(["commit", "-q", "-m", "init"], in: repo)
+        try configFixtureGit(["add", "."], in: repo)
+        try configFixtureGit(["commit", "-q", "-m", "init"], in: repo)
         return repo
     }
 
@@ -269,7 +236,7 @@ final class ConfigFixSweepCONFTests: XCTestCase {
 
     func testRepeatedProbesWithinRefreshWindowCallGhOnce() throws {
         let repo = try makeRepo(branch: "feature-y")
-        try git(["remote", "add", "origin", "https://github.com/acme/widget.git"], in: repo)
+        try configFixtureGit(["remote", "add", "origin", "https://github.com/acme/widget.git"], in: repo)
 
         _ = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: repo.path)
         _ = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: repo.path)

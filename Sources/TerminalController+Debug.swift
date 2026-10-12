@@ -1,72 +1,8 @@
-// Extracted from TerminalController.swift (nuclear-review #96): debug.* command handlers plus their private implementation helpers (DEBUG-only and shared).
+// debug.* command handlers plus their private implementation helpers (DEBUG-only and shared).
 import AppKit
 import Carbon.HIToolbox
 @preconcurrency import Foundation
 import Bonsplit
-
-#if DEBUG
-@MainActor
-private final class TerminalSurfaceWaitState {
-    let terminalSurface: TerminalSurface
-    let finish: () -> Void
-    var readyObserver: NSObjectProtocol?
-    var hostedViewObserver: NSObjectProtocol?
-    private var completed = false
-
-    init(terminalSurface: TerminalSurface, finish: @escaping () -> Void) {
-        self.terminalSurface = terminalSurface
-        self.finish = finish
-    }
-
-    func complete() {
-        guard !completed else { return }
-        completed = true
-        if let readyObserver {
-            NotificationCenter.default.removeObserver(readyObserver)
-            self.readyObserver = nil
-        }
-        if let hostedViewObserver {
-            NotificationCenter.default.removeObserver(hostedViewObserver)
-            self.hostedViewObserver = nil
-        }
-        finish()
-    }
-
-    func installReadyObserver(_ observer: NSObjectProtocol) {
-        if completed {
-            NotificationCenter.default.removeObserver(observer)
-        } else {
-            readyObserver = observer
-        }
-    }
-
-    func installHostedViewObserver(_ observer: NSObjectProtocol) {
-        if completed {
-            NotificationCenter.default.removeObserver(observer)
-        } else {
-            hostedViewObserver = observer
-        }
-    }
-
-    func completeIfSurfaceReady() {
-        guard terminalSurface.surface != nil else { return }
-        complete()
-    }
-
-    func cancel() {
-        guard !completed else { return }
-        completed = true
-        if let readyObserver {
-            NotificationCenter.default.removeObserver(readyObserver)
-            self.readyObserver = nil
-        }
-        if let hostedViewObserver {
-            NotificationCenter.default.removeObserver(hostedViewObserver)
-            self.hostedViewObserver = nil
-        }
-    }
-}
-#endif
 
 extension TerminalController {
 #if DEBUG
@@ -337,8 +273,6 @@ extension TerminalController {
         }
     }
 
-
-
     nonisolated func v2DebugSidebarVisible(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
             return v2InvalidParam("window_id")
@@ -412,48 +346,6 @@ extension TerminalController {
             TerminalWindowPortalRegistry.debugPortalStats()
         }
         return .ok(payload)
-    }
-
-    /// Dumps the key window's AppKit view tree with frames, visibility, and any
-    /// opaque layer background — chrome-layering bugs (a stray view painting
-    /// over content) are otherwise invisible to log-based diagnosis.
-    nonisolated func v2DebugViewTree() -> V2CallResult {
-        let lines: [String] = v2MainSync {
-            guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) else {
-                return []
-            }
-            var out: [String] = []
-            out.append(
-                "WINDOW isOpaque=\(window.isOpaque) bg=\(window.backgroundColor.hexString())@\(String(format: "%.3f", window.backgroundColor.alphaComponent)) " +
-                "appearance=\(window.effectiveAppearance.name.rawValue)"
-            )
-            @MainActor
-            func walk(_ view: NSView, depth: Int) {
-                let frame = view.frame
-                var line = String(repeating: "  ", count: depth)
-                line += String(describing: type(of: view)).prefix(48)
-                line += String(format: " (%.0f,%.0f %.0fx%.0f)", frame.origin.x, frame.origin.y, frame.width, frame.height)
-                if view.isHidden { line += " HIDDEN" }
-                if let bg = view.layer?.backgroundColor, let color = NSColor(cgColor: bg), color.alphaComponent > 0.01 {
-                    line += " bg=\(color.hexString())@\(String(format: "%.2f", color.alphaComponent))"
-                }
-                if view.layer?.cornerRadius ?? 0 > 0 {
-                    line += " r=\(Int(view.layer?.cornerRadius ?? 0))"
-                }
-                if let effect = view as? NSVisualEffectView {
-                    line += " material=\(effect.material.rawValue) blend=\(effect.blendingMode.rawValue) " +
-                        "state=\(effect.state.rawValue) alpha=\(String(format: "%.2f", effect.alphaValue)) " +
-                        "emphasized=\(effect.isEmphasized)"
-                }
-                out.append(line)
-                for child in view.subviews { walk(child, depth: depth + 1) }
-            }
-            if let root = window.contentView?.superview ?? window.contentView {
-                walk(root, depth: 0)
-            }
-            return out
-        }
-        return .ok(["tree": lines])
     }
 
     nonisolated func v2DebugBonsplitUnderflowCount() -> V2CallResult {
@@ -802,117 +694,6 @@ extension TerminalController {
         }
     }
 
-    private func parseOverlayEventType(_ token: String) -> (isKnown: Bool, eventType: NSEvent.EventType?) {
-        switch token {
-        case "leftmousedragged":
-            return (true, .leftMouseDragged)
-        case "rightmousedragged":
-            return (true, .rightMouseDragged)
-        case "othermousedragged":
-            return (true, .otherMouseDragged)
-        case "mousemove", "mousemoved":
-            return (true, .mouseMoved)
-        case "mouseentered":
-            return (true, .mouseEntered)
-        case "mouseexited":
-            return (true, .mouseExited)
-        case "flagschanged":
-            return (true, .flagsChanged)
-        case "cursorupdate":
-            return (true, .cursorUpdate)
-        case "appkitdefined":
-            return (true, .appKitDefined)
-        case "systemdefined":
-            return (true, .systemDefined)
-        case "applicationdefined":
-            return (true, .applicationDefined)
-        case "periodic":
-            return (true, .periodic)
-        case "leftmousedown":
-            return (true, .leftMouseDown)
-        case "leftmouseup":
-            return (true, .leftMouseUp)
-        case "rightmousedown":
-            return (true, .rightMouseDown)
-        case "rightmouseup":
-            return (true, .rightMouseUp)
-        case "othermousedown":
-            return (true, .otherMouseDown)
-        case "othermouseup":
-            return (true, .otherMouseUp)
-        case "scrollwheel":
-            return (true, .scrollWheel)
-        case "none":
-            return (true, nil)
-        default:
-            return (false, nil)
-        }
-    }
-
-    private func dragPasteboardType(from token: String) -> NSPasteboard.PasteboardType? {
-        let normalized = token.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch normalized {
-        case "fileurl", "file-url", "public.file-url":
-            return .fileURL
-        case "tabtransfer", "tab-transfer", "com.splittabbar.tabtransfer":
-            return DragOverlayRoutingPolicy.bonsplitTabTransferType
-        case "sidebarreorder", "sidebar-reorder", "sidebar_tab_reorder",
-            "com.darkroom.programa.sidebar-tab-reorder":
-            return DragOverlayRoutingPolicy.sidebarTabReorderType
-        default:
-            // Allow explicit UTI strings for ad-hoc debug probes.
-            guard token.contains(".") else { return nil }
-            return NSPasteboard.PasteboardType(token)
-        }
-    }
-
-    private func debugDragHitViewDescriptor(_ view: NSView) -> String {
-        let className = String(describing: type(of: view))
-        let pointer = String(describing: Unmanaged.passUnretained(view).toOpaque())
-        let types = view.registeredDraggedTypes
-        let renderedTypes: String
-        if types.isEmpty {
-            renderedTypes = "-"
-        } else {
-            let raw = types.map(\.rawValue)
-            renderedTypes = raw.count <= 4
-                ? raw.joined(separator: ",")
-                : raw.prefix(4).joined(separator: ",") + ",+\(raw.count - 4)"
-        }
-        return "\(className)@\(pointer){dragTypes=\(renderedTypes)}"
-    }
-
-    private func unescapeSocketText(_ input: String) -> String {
-        var out = ""
-        var escaping = false
-        for ch in input {
-            if escaping {
-                switch ch {
-                case "n":
-                    out.append("\n")
-                case "r":
-                    out.append("\r")
-                case "t":
-                    out.append("\t")
-                case "\\":
-                    out.append("\\")
-                default:
-                    out.append("\\")
-                    out.append(ch)
-                }
-                escaping = false
-            } else if ch == "\\" {
-                escaping = true
-            } else {
-                out.append(ch)
-            }
-        }
-        if escaping {
-            out.append("\\")
-        }
-        return out
-    }
-
     private nonisolated func isTerminalFocused(_ args: String) -> String {
         let panelArg = args.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !panelArg.isEmpty else { return "ERROR: Usage: is_terminal_focused <panel_id|idx>" }
@@ -938,8 +719,6 @@ extension TerminalController {
 
     private struct RenderStatsResponse: Codable {
         let panelId: String
-        let drawCount: Int
-        let lastDrawTime: Double
         let presentCount: Int
         let lastPresentTime: Double
         let layerClass: String
@@ -978,8 +757,6 @@ extension TerminalController {
             let stats = terminalPanel.hostedView.debugRenderStats()
             let payload = RenderStatsResponse(
                 panelId: panelId.uuidString,
-                drawCount: stats.drawCount,
-                lastDrawTime: stats.lastDrawTime,
                 presentCount: stats.presentCount,
                 lastPresentTime: stats.lastPresentTime,
                 layerClass: stats.layerClass,
@@ -1601,7 +1378,6 @@ extension TerminalController {
 	                    )
 	                }
 
-
 	                return LayoutDebugSelectedPanel(
 	                    paneId: paneIdStr,
 	                    paneFrame: paneFrame,
@@ -1778,115 +1554,6 @@ extension TerminalController {
         return result
     }
 
-    private func resolveTerminalPanel(from arg: String, tabManager: TabManager) -> TerminalPanel? {
-        guard let tabId = tabManager.selectedTabId,
-              let tab = tabManager.tabs.first(where: { $0.id == tabId }) else {
-            return nil
-        }
-
-        if let uuid = UUID(uuidString: arg) {
-            return tab.terminalPanel(for: uuid)
-        }
-
-        if let index = Int(arg), index >= 0 {
-            let panels = orderedPanels(in: tab)
-            guard index < panels.count else { return nil }
-            return panels[index] as? TerminalPanel
-        }
-
-        return nil
-    }
-
-#if DEBUG
-    func v2AwaitCallback<T>(
-        timeout: TimeInterval,
-        start: (@escaping (T) -> Void) -> Void
-    ) -> T? {
-        if Thread.isMainThread {
-            // Each nested wait polls its own flag, so another client's completion cannot end it.
-            var resolved = false
-            var result: T?
-            start { value in
-                guard !resolved else { return }
-                resolved = true
-                result = value
-            }
-            let deadline = Date().addingTimeInterval(timeout)
-            while !resolved && Date() < deadline {
-                CFRunLoopRunInMode(.defaultMode, 0.05, true)
-            }
-            guard resolved else {
-                resolved = true  // a callback arriving after the deadline is dropped
-                return nil
-            }
-            return result
-        }
-
-        let semaphore = DispatchSemaphore(value: 0)
-        let lock = NSLock()
-        var result: T?
-        start { value in
-            lock.lock()
-            result = value
-            lock.unlock()
-            semaphore.signal()
-        }
-        guard semaphore.wait(timeout: .now() + timeout) == .success else {
-            return nil
-        }
-        lock.lock()
-        defer { lock.unlock() }
-        return result
-    }
-
-    private func resolveTerminalSurface(from arg: String, tabManager: TabManager, waitUpTo timeout: TimeInterval = 0.6) -> ghostty_surface_t? {
-        guard let terminalPanel = resolveTerminalPanel(from: arg, tabManager: tabManager) else { return nil }
-        return waitForTerminalSurface(terminalPanel, waitUpTo: timeout)
-    }
-
-    private func waitForTerminalSurface(_ terminalPanel: TerminalPanel, waitUpTo timeout: TimeInterval = 0.6) -> ghostty_surface_t? {
-        if let surface = terminalPanel.surface.surface { return surface }
-
-        let terminalSurface = terminalPanel.surface
-        terminalSurface.requestBackgroundSurfaceStartIfNeeded()
-        var waitState: TerminalSurfaceWaitState?
-        _ = v2AwaitCallback(timeout: timeout) { finish in
-            let state = TerminalSurfaceWaitState(
-                terminalSurface: terminalSurface,
-                finish: { finish(()) }
-            )
-            waitState = state
-            let readyObserver = NotificationCenter.default.addObserver(
-                forName: .terminalSurfaceDidBecomeReady,
-                object: terminalSurface,
-                queue: .main
-            ) { [state] _ in
-                MainActor.assumeIsolated {
-                    state.complete()
-                }
-            }
-            state.installReadyObserver(readyObserver)
-            let hostedViewObserver = NotificationCenter.default.addObserver(
-                forName: .terminalSurfaceHostedViewDidMoveToWindow,
-                object: terminalSurface,
-                queue: .main
-            ) { [state] _ in
-                MainActor.assumeIsolated {
-                    state.completeIfSurfaceReady()
-                }
-            }
-            state.installHostedViewObserver(hostedViewObserver)
-
-            if terminalSurface.surface != nil {
-                state.complete()
-            }
-        }
-        waitState?.cancel()
-
-        return terminalPanel.surface.surface
-    }
-#endif
-
     private func resolveSurfaceId(from arg: String, tab: Workspace) -> UUID? {
         if let uuid = UUID(uuidString: arg), tab.panels[uuid] != nil {
             return uuid
@@ -1911,8 +1578,4 @@ extension TerminalController {
             return nil
         }
     }
-
-
-    // MARK: - Bonsplit Pane Commands
-
 }

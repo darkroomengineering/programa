@@ -161,21 +161,18 @@ jobs:
       # on a macOS version other than the one `release.yml` ships from. That is
       # the build + smoke steps below, and they now run FIRST and gate the job.
       #
-      # Previously the full ~1,500-test unit suite ran first and gated. That was
-      # backwards twice over:
+      # The full ~1,500-test unit suite runs after the build and smoke steps, not
+      # before them, for two reasons:
       #
       #   1. Those tests are OS-agnostic logic and already run on every PR in
-      #      ci.yml. Re-running them on two more macOS versions produced no
-      #      unique signal.
-      #   2. They failed on the macos-15 runner (async starvation, see
-      #      QUARANTINED_ON_COMPAT in scripts/ci-run-unit-tests.sh), so steps
-      #      13-15 -- the build and smoke test, the actual point -- were SKIPPED
-      #      on every run. The compatibility check never once verified
-      #      compatibility, for over a week, while five successive attempts to
-      #      quarantine the failing tests each fixed what was in front of them
-      #      and revealed the next thing.
+      #      ci.yml. Re-running them on more macOS versions gives no unique
+      #      signal.
+      #   2. They can fail on the macos-15 runner (async starvation, see
+      #      QUARANTINED_ON_COMPAT in scripts/ci-run-unit-tests.sh). If they
+      #      gated the job, a failure would skip the build and smoke steps,
+      #      the actual point, and the job would never verify compatibility.
       #
-      # Unit tests still run here, after, and are now informational: a failure
+      # Unit tests still run here, after, and are informational: a failure
       # marks the step red without failing the job. That keeps the data (and the
       # uploaded xcresult bundles) without letting OS-agnostic test noise mask
       # the one result this job exists to produce.

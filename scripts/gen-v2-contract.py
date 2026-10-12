@@ -39,11 +39,6 @@ def camel_case(method: str) -> str:
     return out
 
 
-def pascal_case(method: str) -> str:
-    c = camel_case(method)
-    return c[:1].upper() + c[1:]
-
-
 # ---------------------------------------------------------------------------
 # (a) Sources/V2CommandCatalog.swift
 # ---------------------------------------------------------------------------
@@ -82,7 +77,7 @@ def gen_v2_command_catalog(contract) -> str:
     body += swift_array("debugMethods", debug, "Methods only available in DEBUG builds, appended after `baseMethods`.")
     body += "\n\n"
     body += "    /// Full method list for the current build configuration, mirroring the\n"
-    body += "    /// conditional `#if DEBUG` append that used to live inline in\n"
+    body += "    /// conditional `#if DEBUG` append in\n"
     body += "    /// `TerminalController.v2Capabilities()`.\n"
     body += "    static var methods: [String] {\n"
     body += "        #if DEBUG\n"

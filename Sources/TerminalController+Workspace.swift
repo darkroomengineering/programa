@@ -1,4 +1,4 @@
-// Extracted from TerminalController.swift (nuclear-review #96): workspace.* command handlers (CRUD, action/tab.action verbs).
+// workspace.* command handlers (CRUD, action/tab.action verbs).
 import AppKit
 import Carbon.HIToolbox
 import Foundation

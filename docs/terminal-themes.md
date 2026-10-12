@@ -2,7 +2,7 @@
 
 Programa reads the themes installed with its embedded Ghostty, Ghostty's standard user theme directories, and any directories configured through `GHOSTTY_RESOURCES_DIR` or `XDG_DATA_DIRS`. Two Programa-specific themes, **Min Light** and **Min Dark**, ship alongside Ghostty's bundled catalog — minimal, low-saturation palettes in the style of the [Min Theme](https://marketplace.visualstudio.com/items?itemName=miguelsolorio.min-theme) VS Code extension.
 
-Choose separate light and dark themes, background opacity, background blur, and a terminal font in **Settings → Appearance → Terminal**. Changes apply to every open terminal without relaunching Programa. Choosing **Use Ghostty Configuration** for a theme removes Programa's managed override for that field and returns it to your Ghostty config.
+Choose separate light and dark themes and a terminal font in **Settings → Appearance → Terminal**. Background opacity and blur are set with `programa themes set` or in your Ghostty config. Changes apply to every open terminal without relaunching Programa. Choosing **Use Ghostty Configuration** for a theme removes Programa's managed override for that field and returns it to your Ghostty config.
 
 The same settings are available from the CLI:
 
@@ -17,7 +17,7 @@ All surfaces write the same managed block in `~/Library/Application Support/com.
 
 ## settings.json
 
-Four independent `app.*` keys manage these settings as configuration in `~/.config/programa/settings.json`:
+Two independent `app.*` keys manage these settings as configuration in `~/.config/programa/settings.json`:
 
 ```jsonc
 {
@@ -26,8 +26,6 @@ Four independent `app.*` keys manage these settings as configuration in `~/.conf
       "light": "Catppuccin Latte",
       "dark": "Catppuccin Mocha"
     },
-    "terminalOpacity": 0.85,
-    "terminalBlur": true,
     "terminalFont": {
       "family": "JetBrains Mono",
       "size": 13
@@ -36,4 +34,4 @@ Four independent `app.*` keys manage these settings as configuration in `~/.conf
 }
 ```
 
-Each key is managed independently — pin `terminalFont` while leaving `terminalTheme`, `terminalOpacity`, and `terminalBlur` editable in Settings, or any other combination. While a key is present, its corresponding Settings row (or pair of rows, for theme) is read-only. Removing a key restores the value that was active before `settings.json` took ownership of it. Set `terminalTheme`/`terminalOpacity`/`terminalBlur`/`terminalFont` to `null` to explicitly inherit your Ghostty configuration for that field while keeping it file-managed.
+Each key is managed independently — pin `terminalFont` while leaving `terminalTheme` editable in Settings, or the reverse. While a key is present, its corresponding Settings row (or pair of rows, for theme) is read-only. Removing a key restores the value that was active before `settings.json` took ownership of it. Set `terminalTheme` or `terminalFont` to `null` to explicitly inherit your Ghostty configuration for that field while keeping it file-managed.

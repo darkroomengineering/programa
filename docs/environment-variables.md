@@ -24,14 +24,13 @@ them to find the app and the terminal they run in.
 | `PROGRAMA_BUNDLE_ID` | Bundle identifier of the running app. |
 | `PROGRAMA_DEFAULT_BROWSER` | Short key of the system default browser (`chrome`, `safari`, `arc`, ...). Unset when it cannot be resolved. |
 | `PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID` | Bundle identifier of the system default browser. Unset when it cannot be resolved. |
-| `PROGRAMA_PORT`, `PROGRAMA_PORT_END`, `PROGRAMA_PORT_RANGE` | First port, last port and size of the port range reserved for this terminal. The range comes from `automation.portBase` and `automation.portRange`. |
+| `PROGRAMA_PORT`, `PROGRAMA_PORT_END`, `PROGRAMA_PORT_RANGE` | First port, last port and size of the port range reserved for this terminal. Every terminal gets a block of 10 ports starting at 9100. |
 | `PROGRAMA_SHELL_INTEGRATION` | `1` when shell integration is on (`sidebarShellIntegration`, on by default). |
 | `PROGRAMA_SHELL_INTEGRATION_DIR` | Folder that holds the shell integration scripts. |
 | `PROGRAMA_ZSH_ZDOTDIR` | The user's original `ZDOTDIR`, which the zsh integration restores after it loads. |
 | `PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION`, `PROGRAMA_LOAD_GHOSTTY_BASH_INTEGRATION` | `1` when the integration should also load Ghostty's own zsh or bash integration. |
 | `PROGRAMA_FISH_INTEGRATION_FILE`, `PROGRAMA_FISH_USER_CONFIG_ALREADY_LOADED`, `PROGRAMA_FISH_CONFIG_HOME` | Hand-off state between the app and the fish integration. |
 | `PROGRAMA_CLAUDE_HOOKS_DISABLED` | `1` when Claude Code integration is off (`automation.claudeCodeIntegration`). The `claude` wrapper then runs the real binary untouched. |
-| `PROGRAMA_CUSTOM_CLAUDE_PATH` | Value of `automation.claudeBinaryPath`. The `claude` wrapper runs this binary instead of searching `PATH`. |
 
 The zsh, bash and fish integrations also keep internal state in shell variables named
 `_PROGRAMA_*` (git and pull request polling, tty reporting, tmux key syncing). They are not a
@@ -47,7 +46,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_SOCKET_PATH` | CLI, MCP, app | Socket path to use. The app honors it for Debug and Staging builds, or when `PROGRAMA_ALLOW_SOCKET_OVERRIDE` is truthy. |
 | `PROGRAMA_SOCKET` | CLI, MCP | Second choice for the socket path. `PROGRAMA_SOCKET_PATH` wins when both are set. The app never reads it. |
 | `PROGRAMA_SOCKET_PASSWORD` | CLI, MCP, app | Socket password for `password` mode. The CLI checks `--password` first. The app checks it before the saved password file. |
-| `PROGRAMA_SOCKET_MODE` | app | Socket mode for this launch: `off`, `programaOnly` (legacy alias `cmuxOnly`), `automation`, `password` or `allowAll`. Overrides the setting. |
+| `PROGRAMA_SOCKET_MODE` | app | Socket mode for this launch: `off`, `programaOnly`, `automation`, `password` or `allowAll`. Overrides the setting. |
 | `PROGRAMA_SOCKET_ENABLE` | app | `1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`. `0` turns the socket off regardless of the mode. |
 | `PROGRAMA_ALLOW_SOCKET_OVERRIDE` | app | Truthy value lets `PROGRAMA_SOCKET_PATH` move the socket in a Release build or a tagged Debug build. |
 | `PROGRAMA_TAG` | app, CLI | Name of a tagged build. The app uses it for the tag badge (at most 10 characters), for the tagged socket path, and to allow a Debug launch. The CLI adds `/tmp/programa-debug-<tag>.sock` to its socket search. An untagged Debug build refuses to launch. |
@@ -59,7 +58,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_PANE_ID` | Default pane target for the tmux-compatible commands when they are given none. |
 | `PROGRAMA_COMMIT` | Commit hash the CLI and the About box show when the build has no embedded value. |
 | `PROGRAMA_CLI_TTY_NAME`, `PROGRAMA_TTY_NAME` | Terminal device name that the agent hooks report for the surface. They fall back to `TTY` and `SSH_TTY`. |
-| `PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC` | CLI | Seconds the CLI waits for a socket response (default 15). The legacy name `CMUXTERM_CLI_RESPONSE_TIMEOUT_SEC` is still read. |
+| `PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC` | CLI | Seconds the CLI waits for a socket response (default 15). |
 | `PROGRAMA_CLAUDE_HOOK_STATE_PATH` | Overrides where the Claude, Codex and OpenCode hooks keep their session state file. |
 | `PROGRAMA_CLAUDE_PID` | Process id of the Claude Code instance a hook belongs to. Set by the `claude` wrapper. |
 | `PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN` | `programa` binary the `claude` wrapper's hooks call. |
@@ -68,11 +67,6 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN`, `PROGRAMA_CLAUDE_TEAMS_TERM` | `programa` binary and `TERM` for the Claude teams wrapper. |
 | `PROGRAMA_OMO_PROGRAMA_BIN`, `PROGRAMA_OMO_TERM`, `PROGRAMA_OMX_PROGRAMA_BIN`, `PROGRAMA_OMX_TERM`, `PROGRAMA_OMC_PROGRAMA_BIN`, `PROGRAMA_OMC_TERM` | The same pair for the OpenCode, Codex and Claude agent wrappers. |
 | `PROGRAMA_THEME_PICKER_CONFIG`, `_BUNDLE_ID`, `_TARGET`, `_COLOR_SCHEME`, `_INITIAL_LIGHT`, `_INITIAL_DARK` | Set by `programa themes` for Ghostty's `+list-themes` helper so it edits Programa's managed theme override. |
-
-## Set for the notification command
-
-When `notifications.command` runs, Programa sets `PROGRAMA_NOTIFICATION_TITLE`,
-`PROGRAMA_NOTIFICATION_SUBTITLE` and `PROGRAMA_NOTIFICATION_BODY` in its environment.
 
 ## App behavior and diagnostics
 

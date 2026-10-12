@@ -1,14 +1,11 @@
-// Extracted from Workspace.swift (nuclear-review #98): sidebar/telemetry value types
+// Sidebar/telemetry value types
 // (status, metadata, log, progress, git-branch, and pull-request models).
 
 import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 struct SidebarWorkspaceHierarchyEntry: Equatable {

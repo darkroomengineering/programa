@@ -1,15 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
-import QuartzCore
-import Combine
-import CoreText
-import Darwin
-import Carbon.HIToolbox
 import Bonsplit
-import IOSurface
-import UniformTypeIdentifiers
 
 // MARK: - GhosttyNSView + Keyboard
 //
@@ -17,11 +9,6 @@ import UniformTypeIdentifiers
 // actions, and the typing-latency-critical key path (performKeyEquivalent,
 // keyDown, keyUp, flagsChanged, and their key-encoding helpers).
 //
-// Split out of GhosttyTerminalView.swift (Nuclear Review TC5). Moving these
-// methods into a same-type extension adds zero call-site indirection, so the
-// typing-latency-sensitive behavior here is unchanged from the original
-// single-file version. Method bodies are moved verbatim.
-
 extension GhosttyNSView {
     @discardableResult
     func ensureSurfaceReadyForInput() -> ghostty_surface_t? {

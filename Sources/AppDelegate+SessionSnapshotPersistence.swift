@@ -2,9 +2,9 @@ import AppKit
 import Bonsplit
 import Foundation
 
-/// Session snapshot build/save/persist machinery, extracted from `AppDelegate.swift` to stay
-/// under its structural line budget (`scripts/check-structural-budgets.py`). Behavior-neutral
-/// split: everything here still runs on `AppDelegate`, just from a sibling file.
+/// Session snapshot build/save/persist machinery, kept out of `AppDelegate.swift` to stay
+/// under its structural line budget (`scripts/check-structural-budgets.py`).
+/// Everything here runs on `AppDelegate`, from a sibling file.
 extension AppDelegate {
     /// A synchronous save returns the disk-write result; an asynchronous save returns queue
     /// acceptance and reports the completed disk write through its main-queue completion.

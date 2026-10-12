@@ -34,7 +34,7 @@
 
 ## Plans
 
-Design and planning documents. Each starts with a `Status:` line.
+Design and planning documents. Most start with a `Status:` line.
 
 - [plans/agent-events.md](plans/agent-events.md): normalized agent lifecycle events.
 - [plans/agent-state-unification.md](plans/agent-state-unification.md): one source of agent state and one sidebar indicator.

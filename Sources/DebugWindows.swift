@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 import Darwin
 import Bonsplit
-import UniformTypeIdentifiers
 
 private func localizedDebugLabel(_ value: String) -> String {
     String(localized: String.LocalizationValue(value))
@@ -192,7 +191,6 @@ private enum DebugWindowConfigSnapshot {
         shortcutHintPaneTabXOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.paneHintXKey, fallback: ShortcutHintDebugSettings.defaultPaneHintX)))
         shortcutHintPaneTabYOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.paneHintYKey, fallback: ShortcutHintDebugSettings.defaultPaneHintY)))
         shortcutHintAlwaysShow=\(boolValue(defaults, key: ShortcutHintDebugSettings.alwaysShowHintsKey, fallback: ShortcutHintDebugSettings.defaultAlwaysShowHints))
-        shortcutHintShowOnCommandHold=\(boolValue(defaults, key: ShortcutHintDebugSettings.showHintsOnCommandHoldKey, fallback: ShortcutHintDebugSettings.defaultShowHintsOnCommandHold))
         """
 
         let backgroundPayload = """

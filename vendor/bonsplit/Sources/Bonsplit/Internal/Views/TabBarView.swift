@@ -67,7 +67,6 @@ struct TabBarView: View {
     var showSplitButtons: Bool = true
 
     @AppStorage("workspacePresentationMode") private var presentationMode = "standard"
-    @AppStorage("debugFadeColorStyle") private var fadeColorStyle = 0
     @State private var isHoveringTabBar = false
     @State private var dropTargetIndex: Int?
     @State private var dropLifecycle: TabDropLifecycle = .idle
@@ -149,13 +148,13 @@ struct TabBarView: View {
                             // glass island so the empty drag target does not expand the island.
                             dropZoneAfterTabs
 
-                            // Reserved gutter behind the split-action icon cluster. This used to
-                            // be plain `.padding(.trailing, 114)` — dead space with no NSView, so
-                            // AppKit's hit-test walk fell into the ScrollView's own hosting/clip
-                            // view here instead of reaching the tab bar's window-drag background,
-                            // silently swallowing clicks (#window-drag-areas). A real (still
-                            // fully transparent) drag-capture view makes window drag work in this
-                            // strip the same way it already does in the 30pt zone before it.
+                            // Reserved gutter behind the split-action icon cluster. Keep this a
+                            // real view, not plain `.padding(.trailing, 114)`: padding is dead
+                            // space with no NSView, so AppKit's hit-test walk falls into the
+                            // ScrollView's own hosting/clip view instead of reaching the tab bar's
+                            // window-drag background and silently swallows clicks
+                            // (#window-drag-areas). A fully transparent drag-capture view makes
+                            // window drag work in this strip as it does in the 30pt zone before it.
                             if showSplitButtons {
                                 splitButtonsGutterDragZone
                             }
@@ -490,8 +489,7 @@ struct TabBarView: View {
     // MARK: - Split Buttons Gutter Drag Zone
 
     /// Fixed-width gutter reserved behind the split-action icon cluster (terminal/
-    /// split buttons), matching the 114pt previously consumed by trailing padding. Kept as a
-    /// real drag-capturing view so window drag works there.
+    /// split buttons), 114pt wide. Kept as a real drag-capturing view so window drag works there.
     @ViewBuilder
     private var splitButtonsGutterDragZone: some View {
         TabBarDragZoneView()
@@ -547,61 +545,6 @@ struct TabBarView: View {
         .padding(.trailing, 8)
     }
 
-
-    private static func buttonBackdropColor(
-        for appearance: BonsplitConfiguration.Appearance,
-        focused: Bool,
-        style: Int
-    ) -> NSColor {
-        switch style {
-        case 1: // raw paneBackground forced opaque
-            return TabBarColors.nsColorPaneBackground(for: appearance).withAlphaComponent(1.0)
-        case 2: // barBackground (tab bar chrome)
-            let c = NSColor(TabBarColors.barBackground(for: appearance))
-            return (c.usingColorSpace(.sRGB) ?? c).withAlphaComponent(1.0)
-        case 3: // windowBackgroundColor
-            return NSColor.windowBackgroundColor.withAlphaComponent(1.0)
-        case 4: // controlBackgroundColor
-            return NSColor.controlBackgroundColor.withAlphaComponent(1.0)
-        case 5: // pre-composited barBackground over windowBg
-            let chrome = NSColor(TabBarColors.barBackground(for: appearance))
-            let winBg = NSColor.windowBackgroundColor
-            guard let fg = chrome.usingColorSpace(.sRGB),
-                  let bk = winBg.usingColorSpace(.sRGB) else {
-                return chrome.withAlphaComponent(1.0)
-            }
-            let a: CGFloat = focused ? fg.alphaComponent : fg.alphaComponent * 0.95
-            let oneMinusA = 1.0 - a
-            let r = fg.redComponent * a + bk.redComponent * oneMinusA
-            let g = fg.greenComponent * a + bk.greenComponent * oneMinusA
-            let b = fg.blueComponent * a + bk.blueComponent * oneMinusA
-            return NSColor(red: r, green: g, blue: b, alpha: 1.0)
-        default: // 0: pre-composited paneBackground over windowBg
-            return precompositedPaneBackground(for: appearance, focused: focused)
-        }
-    }
-
-    /// Pre-composite the pane background over the window background to produce
-    /// a flat opaque color that matches what .background(barFill) looks like
-    /// after compositing. Avoids double-compositing mismatch on overlays.
-    private static func precompositedPaneBackground(
-        for appearance: BonsplitConfiguration.Appearance,
-        focused: Bool
-    ) -> NSColor {
-        let chrome = TabBarColors.nsColorPaneBackground(for: appearance)
-        let winBg = NSColor.windowBackgroundColor
-        guard let fg = chrome.usingColorSpace(.sRGB),
-              let bk = winBg.usingColorSpace(.sRGB) else {
-            return chrome.withAlphaComponent(1.0)
-        }
-        let a: CGFloat = focused ? fg.alphaComponent : fg.alphaComponent * 0.95
-        let oneMinusA = 1.0 - a
-        let r = fg.redComponent * a + bk.redComponent * oneMinusA
-        let g = fg.greenComponent * a + bk.greenComponent * oneMinusA
-        let b = fg.blueComponent * a + bk.blueComponent * oneMinusA
-        return NSColor(red: r, green: g, blue: b, alpha: 1.0)
-    }
-
     // MARK: - Combined Mask (scroll fades + button area)
 
     @ViewBuilder
@@ -609,7 +552,6 @@ struct TabBarView: View {
         let fadeWidth: CGFloat = 24
         let shouldShowButtons = showSplitButtons && (presentationMode != "minimal" || isHoveringTabBar)
         let buttonClearWidth: CGFloat = shouldShowButtons ? 90 : 0
-        let buttonFadeWidth: CGFloat = shouldShowButtons ? fadeWidth : 0
 
         HStack(spacing: 0) {
             // Left scroll fade
@@ -629,25 +571,6 @@ struct TabBarView: View {
             }
         }
         .animation(.easeOut(duration: 0.14), value: shouldShowButtons)
-    }
-
-    // MARK: - Fade Overlays
-
-    /// Mask that fades scroll content at the edges instead of overlaying
-    /// a colored gradient. The mask uses black (visible) → clear (hidden),
-    /// so the tab bar background shows through naturally with no compositing.
-    @ViewBuilder
-    private var fadeOverlays: some View {
-        let fadeWidth: CGFloat = 24
-        HStack(spacing: 0) {
-            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                .frame(width: canScrollLeft ? fadeWidth : 0)
-
-            Rectangle().fill(Color.black)
-
-            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                .frame(width: canScrollRight ? fadeWidth : 0)
-        }
     }
 
     // MARK: - Background
@@ -1127,7 +1050,6 @@ private final class TabControlShortcutKeyMonitor: ObservableObject {
         }
     }
 }
-
 
 /// Drop lifecycle state to prevent dropUpdated from re-setting state after performDrop
 enum TabDropLifecycle {

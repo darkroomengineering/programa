@@ -758,18 +758,6 @@ pub unsafe extern "C" fn programa_terminal_scroll(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn programa_terminal_scroll_to_bottom(
-    value: *mut ProgramaTerminalSession,
-) -> i32 {
-    ffi_status(|| {
-        let value = session(value)?;
-        value.term.lock().scroll_display(Scroll::Bottom);
-        value.state.changed();
-        Ok(())
-    })
-}
-
-#[no_mangle]
 pub unsafe extern "C" fn programa_terminal_snapshot_json(
     value: *mut ProgramaTerminalSession,
     out: *mut ProgramaTerminalBuffer,
@@ -883,18 +871,6 @@ pub unsafe extern "C" fn programa_terminal_selection_end(
 ) -> i32 {
     ffi_status(|| {
         let _ = session(value)?;
-        Ok(())
-    })
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn programa_terminal_selection_clear(
-    value: *mut ProgramaTerminalSession,
-) -> i32 {
-    ffi_status(|| {
-        let value = session(value)?;
-        value.term.lock().selection = None;
-        value.state.changed();
         Ok(())
     })
 }

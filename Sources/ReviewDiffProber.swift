@@ -75,7 +75,7 @@ struct ReviewDiffProber {
     private nonisolated static func uncommittedSnapshot(repoRoot: String) -> ReviewDiffSnapshot {
         // `HEAD` doesn't resolve on an unborn branch (a repo with commits never made yet). Diff
         // against the empty tree in that case so staged files before the first commit still show
-        // up as added, instead of `git diff HEAD` failing and (previously) reading as clean.
+        // up as added, instead of `git diff HEAD` failing and reading as clean.
         let diffRangeArgs = headDiffRangeArgs(repoRoot: repoRoot)
         switch diffAndOverrides(repoRoot: repoRoot, diffRangeArgs: diffRangeArgs) {
         case .failure(let error):
@@ -158,8 +158,7 @@ struct ReviewDiffProber {
     }
 
     /// `git diff --numstat` reports `-\t-\t<path>` for binary files -- a cheap single extra
-    /// invocation used to build a binary-file set before the unified-diff parse, per
-    /// docs/plans/diff-review-panel.md §3 point 4.
+    /// invocation builds a binary-file set before the unified-diff parse.
     private nonisolated static func binaryFilePaths(repoRoot: String, diffRangeArgs: [String]) -> Result<Set<String>, ReviewDiffError> {
         switch runCommandResult(
             directory: repoRoot,

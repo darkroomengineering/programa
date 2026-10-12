@@ -44,18 +44,6 @@ enum NewWorkspacePlacement: String, CaseIterable, Identifiable {
     }
 }
 
-enum WorkspaceAutoReorderSettings {
-    static let key = "workspaceAutoReorderOnNotification"
-    static let defaultValue = true
-
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        if defaults.object(forKey: key) == nil {
-            return defaultValue
-        }
-        return defaults.bool(forKey: key)
-    }
-}
-
 struct SidebarWorkspaceAuxiliaryDetailVisibility: Equatable {
     let showsMetadata: Bool
     let showsLog: Bool
@@ -208,10 +196,6 @@ enum WorkspaceTabColorSettings {
         return palette(defaults: defaults).filter { !builtInNames.contains($0.name) }
     }
 
-    static func defaultColorHex(named name: String) -> String? {
-        defaultPalette.first(where: { $0.name == name })?.hex
-    }
-
     static func currentColorHex(named name: String, defaults: UserDefaults = .standard) -> String? {
         effectivePaletteMap(defaults: defaults)[name]
     }
@@ -225,13 +209,6 @@ enum WorkspaceTabColorSettings {
         persistPaletteMap(palette, defaults: defaults)
     }
 
-    static func removeColor(named name: String, defaults: UserDefaults = .standard) {
-        guard let normalizedName = normalizedColorName(name) else { return }
-        var palette = editablePaletteMap(defaults: defaults)
-        palette.removeValue(forKey: normalizedName)
-        persistPaletteMap(palette, defaults: defaults)
-    }
-
     static func persistPaletteMap(_ rawPalette: [String: String], defaults: UserDefaults = .standard) {
         let normalizedPalette = normalizedPaletteMap(rawPalette)
         if normalizedPalette == defaultPaletteMap {
@@ -241,17 +218,6 @@ enum WorkspaceTabColorSettings {
         }
         defaults.removeObject(forKey: legacyDefaultOverridesKey)
         defaults.removeObject(forKey: legacyCustomColorsKey)
-    }
-
-    static func backupPaletteMap(defaults: UserDefaults = .standard) -> [String: String]? {
-        if let stored = storedPaletteMap(defaults: defaults) {
-            return stored
-        }
-        return legacyPaletteMap(defaults: defaults)
-    }
-
-    static func resolvedPaletteMap(defaults: UserDefaults = .standard) -> [String: String] {
-        effectivePaletteMap(defaults: defaults)
     }
 
     static func addCustomColor(_ hex: String, defaults: UserDefaults = .standard) -> String? {
@@ -576,7 +542,6 @@ final class NotificationBurstCoalescer {
     }
 }
 
-
 @MainActor
 class TabManager: ObservableObject {
     struct LifecycleResourceSnapshot {
@@ -598,10 +563,6 @@ class TabManager: ObservableObject {
         let panelId: UUID
     }
 
-    /// Thin owned instance of the stateless git/GitHub CLI probing library (GitMetadataProber.swift).
-    /// Its API is invoked as static calls (`GitMetadataProber.foo(...)`); this instance exists as
-    /// TabManager's ownership point for that responsibility.
-    let gitMetadataProber = GitMetadataProber()
     let focusTransitionCoordinator = FocusTransitionCoordinator()
 
     /// The window that owns this TabManager. Set by AppDelegate.registerMainWindow().
@@ -611,7 +572,14 @@ class TabManager: ObservableObject {
 
     /// Kept in sidebar hierarchy order (see `canonicalizeHierarchyOrderIfNeeded`).
     @Published var tabs: [Workspace] = [] {
-        didSet { canonicalizeHierarchyOrderIfNeeded() }
+        didSet {
+            canonicalizeHierarchyOrderIfNeeded()
+#if DEBUG
+            // UI-test seam: lets XCUITests read the workspace count without the control socket.
+            // No-op unless PROGRAMA_UI_TEST_KEYEQUIV_PATH is set.
+            UITestRecorder.record(["workspaceCount": String(tabs.count)])
+#endif
+        }
     }
     @Published var isWorkspaceCycleHot: Bool = false
     @Published private(set) var pendingBackgroundWorkspaceLoadIds: Set<UUID> = []
@@ -796,8 +764,6 @@ class TabManager: ObservableObject {
 #endif
 
 #if DEBUG
-    // Widened from `private` to `internal` (default access) so TabManager+UITestHarness.swift,
-    // which owns the setup functions that mutate this state, can see it across files.
     var didSetupSplitCloseRightUITest = false
     var didSetupUITestFocusShortcuts = false
     var didSetupChildExitKeyboardUITest = false
@@ -1042,7 +1008,9 @@ class TabManager: ObservableObject {
             if panel.searchState == nil {
                 panel.searchState = TerminalSurface.SearchState()
             }
-            NSLog("Find: startSearch workspace=%@ panel=%@", panel.workspaceId.uuidString, panel.id.uuidString)
+#if DEBUG
+            dlog("Find: startSearch workspace=\(panel.workspaceId.uuidString) panel=\(panel.id.uuidString)")
+#endif
             NotificationCenter.default.post(name: .ghosttySearchFocus, object: panel.surface)
             _ = panel.performBindingAction("start_search")
             return
@@ -1060,7 +1028,9 @@ class TabManager: ObservableObject {
         if panel.searchState == nil {
             panel.searchState = TerminalSurface.SearchState()
         }
-        NSLog("Find: searchSelection workspace=%@ panel=%@", panel.workspaceId.uuidString, panel.id.uuidString)
+#if DEBUG
+        dlog("Find: searchSelection workspace=\(panel.workspaceId.uuidString) panel=\(panel.id.uuidString)")
+#endif
         NotificationCenter.default.post(name: .ghosttySearchFocus, object: panel.surface)
         _ = panel.performBindingAction("search_selection")
     }
@@ -1344,20 +1314,6 @@ class TabManager: ObservableObject {
                 }
             }
         }
-    }
-
-    private func scheduleInitialWorkspaceGitMetadataRefresh(
-        workspaceId: UUID,
-        panelId: UUID,
-        directory: String
-    ) {
-        scheduleWorkspaceGitMetadataRefresh(
-            workspaceId: workspaceId,
-            panelId: panelId,
-            directory: directory,
-            delays: Self.initialWorkspaceGitProbeDelays,
-            reason: "initial"
-        )
     }
 
     func scheduleWorkspaceGitMetadataRefresh(
@@ -2387,12 +2343,6 @@ class TabManager: ObservableObject {
     func closeTab(_ tab: Workspace) { closeWorkspace(tab) }
     func closeCurrentTabWithConfirmation() { closeCurrentWorkspaceWithConfirmation() }
 
-    func closeCurrentWorkspace() {
-        guard let selectedId = selectedTabId,
-              let workspace = workspace(withId: selectedId) else { return }
-        closeWorkspace(workspace)
-    }
-
     func closeCurrentPanelWithConfirmation() {
 #if DEBUG
         UITestRecorder.incrementInt("closePanelInvocations")
@@ -2862,11 +2812,10 @@ class TabManager: ObservableObject {
 
     // MARK: - Panel/Surface ID Access
 
-    /// Returns the focused panel ID for a tab (replaces focusedSurfaceId)
+    /// Returns the focused panel ID for a tab.
     func focusedPanelId(for tabId: UUID) -> UUID? {
         workspace(withId: tabId)?.focusedPanelId
     }
-
 
     /// Returns the focused panel if it's a MarkdownPanel, nil otherwise
     var focusedMarkdownPanel: MarkdownPanel? {
@@ -2875,19 +2824,9 @@ class TabManager: ObservableObject {
         return tab.panels[panelId] as? MarkdownPanel
     }
 
-
-
-
-
-
-
     /// Backwards compatibility: returns the focused surface ID
     func focusedSurfaceId(for tabId: UUID) -> UUID? {
         focusedPanelId(for: tabId)
-    }
-
-    func rememberFocusedSurface(tabId: UUID, surfaceId: UUID) {
-        lastFocusedPanelByTab[tabId] = surfaceId
     }
 
     func applyWindowBackgroundForSelectedTab() {
@@ -3384,11 +3323,6 @@ class TabManager: ObservableObject {
         selectedTabId = tabs[index].id
     }
 
-    func selectLastTab() {
-        guard let lastTab = tabs.last else { return }
-        selectedTabId = lastTab.id
-    }
-
     // MARK: - Surface Navigation
 
     /// Select the next surface in the currently focused pane of the selected workspace
@@ -3468,38 +3402,6 @@ class TabManager: ObservableObject {
             tabHistory.remove(at: targetIndex)
             historyIndex -= 1
             targetIndex -= 1
-        }
-    }
-
-    func navigateForward() {
-        guard historyIndex < tabHistory.count - 1 else { return }
-
-        // Find the next valid tab in history (skip closed tabs)
-        let targetIndex = historyIndex + 1
-        while targetIndex < tabHistory.count {
-            let tabId = tabHistory[targetIndex]
-            if tabs.contains(where: { $0.id == tabId }) {
-                isNavigatingHistory = true
-                historyIndex = targetIndex
-                selectedTabId = tabId
-                isNavigatingHistory = false
-                return
-            }
-            // Remove closed tab from history
-            tabHistory.remove(at: targetIndex)
-            // Don't increment targetIndex since we removed the element
-        }
-    }
-
-    var canNavigateBack: Bool {
-        historyIndex > 0 && tabHistory.prefix(historyIndex).contains { tabId in
-            tabs.contains { $0.id == tabId }
-        }
-    }
-
-    var canNavigateForward: Bool {
-        historyIndex < tabHistory.count - 1 && tabHistory.suffix(from: historyIndex + 1).contains { tabId in
-            tabs.contains { $0.id == tabId }
         }
     }
 

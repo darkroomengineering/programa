@@ -242,31 +242,27 @@ underneath.
 **`settings.json`** (`docs/settings-json.md`, `~/.config/programa/settings.json`, schema
 `Resources/settings.schema.json`, JSONC with `//` comments, reloads on file change, a
 file-set key wins over the Settings UI until removed). Top-level sections and every key:
-- `app`: `appearance`, `terminalTheme`, `terminalOpacity`, `terminalBlur`, `terminalFont`,
-  `newWorkspacePlacement`, `minimalMode`, `preferredEditor`, `reorderOnNotification`,
+- `app`: `appearance`, `terminalTheme`, `terminalFont`, `newWorkspacePlacement`, `minimalMode`,
   `warnBeforeQuit`, `commandPaletteSearchesAllSurfaces`.
-- `notifications`: `showInMenuBar`, `sound`, `command`, `longCommandThresholdSeconds`.
-- `workspaceColors`: `indicatorStyle`, `selectionColor`, `notificationBadgeColor`, `colors`.
-- `sidebarAppearance`: `matchTerminalBackground`, `tintColor`, `lightModeTintColor`,
-  `darkModeTintColor`, `tintOpacity`, `showClaudeQuota`.
+- `notifications`: `showInMenuBar`, `sound`.
+- `sidebarAppearance`: `matchTerminalBackground`, `showClaudeQuota`.
 - `automation`: `socketControlMode` (`off|programaOnly|automation|password|allowAll|openAccess|
   fullOpenAccess|notifications|full`), `socketPassword`, `claudeCodeIntegration`,
-  `openBrowserWithAgentSplits`, `claudeBinaryPath`, `portBase`, `portRange`.
+  `openBrowserWithAgentSplits`.
 - `customCommands`: `trustedDirectories`.
 - `browser`: `defaultSearchEngine`, `showSearchSuggestions`, `theme`,
   `openTerminalLinksInProgramaBrowser`, `interceptTerminalOpenCommandInProgramaBrowser`,
   `hostsToOpenInEmbeddedBrowser`, `urlsToAlwaysOpenExternally`, `externalBrowser`,
   `insecureHttpHostsAllowedInEmbeddedBrowser`, `proxy`.
 - `worktrees`: `directory` (default `~/.programa/worktrees`).
-- `shortcuts`: `showModifierHoldHints`, `bindings` (keyed by Programa action id; string or array
+- `shortcuts`: `bindings` (keyed by Programa action id; string or array
   for a chord). Special-cased action id in the doc: `openAgentOverview` (unbound by default).
 Swift source of truth: `Sources/ProgramaSettingsFileStore.swift`,
 `Sources/KeyboardShortcutSettings.swift`.
 
 **`programa.json`** (`docs/programa-json.md`, `Sources/ProgramaConfig.swift`,
 `Sources/ProgramaConfigExecutor.swift`). Command-palette entries, walked up from the focused
-workspace's cwd plus a global `~/.config/programa/programa.json` fallback (legacy names
-`cmux.json`/`~/.config/cmux/cmux.json` still read). Two entry kinds: `commands` (either a
+workspace's cwd plus a global `~/.config/programa/programa.json` fallback. Two entry kinds: `commands` (either a
 `workspace` command — opens/recreates a named workspace with a saved layout — or a `command`
 command — types+submits shell text) and `recipes` (fills a prompt template and types it into the
 focused terminal **without** auto-submitting, so a cloned repo can't fire attacker-chosen text
@@ -287,8 +283,7 @@ theme directories (`GHOSTTY_RESOURCES_DIR`, `XDG_DATA_DIRS`); ships two Programa
 **Min Light** and **Min Dark** (Min Theme VS Code extension style). CLI: `programa themes
 list|set|clear`. Managed block written into `~/Library/Application Support/
 com.darkroom.programa/config.ghostty`, field-by-field (never captures a field it doesn't
-explicitly manage). Mirrors the four `app.terminalTheme/terminalOpacity/terminalBlur/
-terminalFont` settings.json keys.
+explicitly manage). Mirrors the two `app.terminalTheme/terminalFont` settings.json keys.
 
 **Localization**: `Resources/Localizable.xcstrings`, source language `en`, translated languages
 present: `en`, `ja` (English and Japanese — matches `CLAUDE.md`'s "currently English and
@@ -340,7 +335,7 @@ have to reimplement or find an equivalent for:
     `ghostty_surface_set_pty_tee_cb` callback (runs pre-VT-parse) backs the session WAL and
     superseded an older Programa-only output-tap export (intentionally not restored).
 
-Also upstreamed (no longer fork-only): cursor-click-to-move honoring OSC 133. Dropped as
+Also upstreamed (not fork-only): cursor-click-to-move honoring OSC 133. Dropped as
 superseded: several zsh prompt-redraw patches (upstream's newer prompt-marking made them
 redundant after the 2026-03-30 rebase); an older initial-focus-seeding/DECSET 1004 patch
 (replaced by post-create focus synchronization, which the current fork preserves as items 6/10's
@@ -356,7 +351,7 @@ transitions, enabling DECSET 1004 immediately reports current state).
   skip starves state machines (like the scrollbar dirty/clear split) that live partly inside the
   throttled call.
 - **Portal layering contract** (`CLAUDE.md` pitfalls): `SurfaceSearchOverlay` must mount from
-  `GhosttySurfaceScrollView` (`Sources/GhosttyTerminalView.swift`, the AppKit portal layer), not
+  `GhosttySurfaceScrollView` (`Sources/GhosttySurfaceScrollView.swift`, the AppKit portal layer), not
   from SwiftUI panel containers (`Sources/Panels/TerminalPanelView.swift`) — portal-hosted
   terminal views can sit above SwiftUI during split/workspace churn. Portal registry:
   `Sources/HostedViewPortalRegistry.swift`, `Sources/TerminalWindowPortal.swift`,
@@ -370,7 +365,7 @@ transitions, enabling DECSET 1004 immediately reports current state).
   events; `TabItemView` (`Sources/ContentView.swift`) relies on `Equatable` + `.equatable()` to
   skip SwiftUI body re-evaluation during typing — no new `@EnvironmentObject`/`@ObservedObject`/
   `@Binding` without updating `==`; `TerminalSurface.forceRefresh()`
-  (`Sources/GhosttyTerminalView.swift`) runs on every keystroke and must stay allocation/IO-free.
+  (`Sources/TerminalSurface.swift`) runs on every keystroke and must stay allocation/IO-free.
 - **Socket command threading policy** (`CLAUDE.md`): telemetry hot-path commands
   (`surface.report_*`, `surface.ports_kick`, status/progress/log metadata) must not use
   `DispatchQueue.main.sync`; parse/validate/dedupe off-main, minimal main-thread mutation only.
@@ -392,37 +387,8 @@ built by the same workflow on tag push). Diagnostics log:
 `[[release-diagnostics-log]]` — ask for it first on release bug reports); `programa-update.log`
 for update-flow-specific bugs. (Sparkle is the updater: `Sources/Update/UpdateController.swift` drives `SPUUpdater` with a custom delegate and UI in `Sources/Update/`; the feed points at the GitHub `rolling` release described in CLAUDE.md.)
 
-## 11. Things removed on purpose (`docs/removed/*.md`)
+## 11. Things removed on purpose
 
-Reductive pass of 2026-09-02, base commit `903027ccef`. Every entry names the commit to restore
-from (`git checkout 903027ccef -- <paths>`) and a "what we learned" section (not reproduced here
-— read the individual file before re-adding).
-
-- **`applescript.md`** — AppleScript support (`Sources/AppleScriptSupport.swift`,
-  `Resources/programa.sdef`).
-- **`browser-data-import.md`** — browser data import wizard.
-- **`browser-developer-tools.md`** (in `docs/plans/`): **not actually removed**; scoped for the same pass but the
-  implementer stopped and reported back instead of guessing. The hosted inspector dock is still
-  live (`Sources/Panels/InspectorDock.swift`).
-- **`browser-extensions.md`** — browser extension support
-  (`BrowserExtensionManager.swift`, `BrowserExtensionAdapters.swift`).
-- **`browser-react-grab.md`** — React Grab (`Sources/Panels/ReactGrab.swift`).
-- **`custom-notification-sounds.md`** — custom notification sound files.
-- **`inline-vscode.md`** — inline VS Code / `serve-web` integration
-  (`Sources/VSCodeIntegration.swift`).
-- **`mobile-bridge-and-ios.md`** — Mobile Bridge and an iOS companion app
-  (`Sources/MobileBridge`, `ios/`, `vendor/CmuxIrohTransport`, `vendor/CMUXMobileCore`, iOS
-  TestFlight CI workflows).
-- **`ssh-remote-workspaces.md`** — SSH remote workspaces: the largest removal, a full remote
-  daemon/session/proxy stack (`Sources/Workspace+Remote.swift` and ~15 sibling files,
-  `CLI/CLI+SSH.swift`, a `daemon/` directory, `docs/remote-daemon-spec.md`, ~15 `tests_v2/
-  test_ssh_remote_*.py` files). Notable because `docs/plans/detached-sessions.md` explicitly
-  models its local escrow design on this removed feature's `session.*` naming/resize semantics —
-  the removed remote daemon is still a live design reference even though its code is gone.
-
-Core kept per the removal pass's own summary (`docs/removed/README.md`): the Ghostty terminal,
-workspaces and splits, the sidebar, agent status detection and hooks, notifications, the browser
-panel and its automation API, the diff review panel, worktrees and race, layouts, the markdown
-recap panel, the CLI, socket API, and MCP server, updates, session persistence and escrow, the
-Claude quota footer, and the local tmux-compat CLI — i.e. everything covered in §1-§10 above is
-the deliberately-retained surface a cross-platform core spec should target.
+Removed features, with the commit to restore from and what was learned, are listed in
+[`docs/removed/README.md`](../removed/README.md). Nothing in the removed set is part of the
+surface a cross-platform core targets: §1-§10 above cover the retained surface.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OSC 7501 Program Status Protocol end-to-end test (docs/plans/osc7501-program-status.md, T-14).
+"""OSC 7501 Program Status Protocol end-to-end test (docs/program-status.md).
 
 Drives real terminal output: each case runs `printf '\\033]7501;...\\033\\\\'` in the surface's shell,
 then asserts through `surface.wait` (`agent_state` / `program_state`) and `surface.list`

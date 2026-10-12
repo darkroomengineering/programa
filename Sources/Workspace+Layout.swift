@@ -1,13 +1,10 @@
-// Extracted from Workspace.swift (nuclear-review #98): programa.json custom layout application (applyCustomLayout and its tree/pane helpers).
+// programa.json custom layout application (applyCustomLayout and its tree/pane helpers).
 
 @preconcurrency import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 @MainActor
@@ -96,7 +93,6 @@ extension Workspace {
                     focus: nil
                 )
             }
-
 
             // Markdown panels have no `ProgramaSurfaceType` counterpart yet (v1 cut).
             return nil

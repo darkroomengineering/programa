@@ -6,19 +6,9 @@ final class DebugEventLogTests: XCTestCase {
     func testProgramaDebugLogWinsOverEverything() {
         let env: [String: String] = [
             "PROGRAMA_DEBUG_LOG": "/tmp/explicit-programa.log",
-            "CMUX_DEBUG_LOG": "/tmp/explicit-cmux.log",
-            "PROGRAMA_TAG": "my-tag",
-            "CMUX_TAG": "old-tag"
-        ]
-        XCTAssertEqual(DebugEventLog.resolveLogPath(env: env), "/tmp/explicit-programa.log")
-    }
-
-    func testCmuxDebugLogWinsWhenNoProgramaDebugLog() {
-        let env: [String: String] = [
-            "CMUX_DEBUG_LOG": "/tmp/explicit-cmux.log",
             "PROGRAMA_TAG": "my-tag"
         ]
-        XCTAssertEqual(DebugEventLog.resolveLogPath(env: env), "/tmp/explicit-cmux.log")
+        XCTAssertEqual(DebugEventLog.resolveLogPath(env: env), "/tmp/explicit-programa.log")
     }
 
     func testProgramaTagProducesProgramaDebugPath() {

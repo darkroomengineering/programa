@@ -376,13 +376,7 @@ final class ProgramaConfigStore: ObservableObject {
     var localConfigPath: String?
     var globalConfigPath: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let newPath = (home as NSString).appendingPathComponent(".config/programa/programa.json")
-        // Legacy cmux name, still read so existing ~/.config/cmux/cmux.json files keep working.
-        let legacyPath = (home as NSString).appendingPathComponent(".config/cmux/cmux.json")
-        let fm = FileManager.default
-        if fm.fileExists(atPath: newPath) { return newPath }
-        if fm.fileExists(atPath: legacyPath) { return legacyPath }
-        return newPath
+        return (home as NSString).appendingPathComponent(".config/programa/programa.json")
     }()
 
     private var cancellables = Set<AnyCancellable>()
@@ -455,12 +449,9 @@ final class ProgramaConfigStore: ObservableObject {
         var current = directory
         let fs = FileManager.default
         while true {
-            // Legacy cmux name, still read so existing project roots keep working.
-            for name in ["programa.json", "cmux.json"] {
-                let candidate = (current as NSString).appendingPathComponent(name)
-                if fs.fileExists(atPath: candidate) {
-                    return candidate
-                }
+            let candidate = (current as NSString).appendingPathComponent("programa.json")
+            if fs.fileExists(atPath: candidate) {
+                return candidate
             }
             let parent = (current as NSString).deletingLastPathComponent
             if parent == current { break }

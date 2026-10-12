@@ -111,7 +111,7 @@ enum SocketPasswordResolver {
         }
 
         let candidate = URL(fileURLWithPath: socketPath).lastPathComponent
-        let prefixes = ["programa-debug-", "programa-", "cmux-debug-", "cmux-"] // Legacy cmux socket names, still read so older sockets keep resolving a scope.
+        let prefixes = ["programa-debug-", "programa-"]
         for prefix in prefixes {
             guard candidate.hasPrefix(prefix), candidate.hasSuffix(".sock") else { continue }
             let start = candidate.index(candidate.startIndex, offsetBy: prefix.count)
@@ -357,7 +357,7 @@ enum CLIProcessRunner {
 
 /// Execution context passed to a `CommandDescriptor`'s `execute` closure.
 ///
-/// Bundles everything a command body previously read from `run()`'s locals
+/// Bundles everything a command body reads from `run()`'s locals
 /// (commandArgs, client, jsonOutput, idFormat, windowId, and the literal
 /// command name, needed by handlers shared across several names such as
 /// the tmux-compat group).
@@ -431,7 +431,7 @@ struct CLIArgumentGrammar {
 /// Single source of truth for a CLI command's name(s), its one-line entry in
 /// the grouped `Commands:` help block, and how it executes.
 ///
-/// This collapses what used to be independently maintained in three places:
+/// This one table covers what would otherwise be three separate places:
 /// the kebab-case dispatch switch, the free-text `usage()` help string, and
 /// (implicitly) the "is this a known command" check used for unknown-command
 /// handling. A command added to the table automatically gets dispatch,
@@ -572,7 +572,6 @@ struct ProgramaCLI {
                 connectionPolicy: .local,
                 detailedUsage: """
                 Usage: programa codex <install-integration|uninstall-integration> [--yes]
-                       programa codex <install-hooks|uninstall-hooks>  (legacy aliases, still supported)
 
                 Shows the changes and asks before applying them. --yes (-y) applies
                 without asking; without it a non-interactive stdin exits 1 unchanged.
@@ -3224,45 +3223,6 @@ struct ProgramaCLI {
         return (cwd as NSString).appendingPathComponent(expanded)
     }
 
-    func sanitizedFilenameComponent(_ raw: String) -> String {
-        let sanitized = raw.replacingOccurrences(
-            of: #"[^\p{L}\p{N}._-]+"#,
-            with: "-",
-            options: .regularExpression
-        )
-        let trimmed = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "-."))
-        return trimmed.isEmpty ? "item" : trimmed
-    }
-
-    func bestEffortPruneTemporaryFiles(
-        in directoryURL: URL,
-        keepingMostRecent maxCount: Int = 50,
-        maxAge: TimeInterval = 24 * 60 * 60
-    ) {
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: directoryURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .creationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return
-        }
-
-        let now = Date()
-        let datedEntries = entries.compactMap { url -> (url: URL, date: Date)? in
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey, .creationDateKey]),
-                  values.isRegularFile == true else {
-                return nil
-            }
-            return (url, values.contentModificationDate ?? values.creationDate ?? .distantPast)
-        }.sorted { $0.date > $1.date }
-
-        for (index, entry) in datedEntries.enumerated() {
-            if index >= maxCount || now.timeIntervalSince(entry.date) > maxAge {
-                try? FileManager.default.removeItem(at: entry.url)
-            }
-        }
-    }
-
     /// Returns true if the argument looks like a filesystem path rather than a CLI command.
     func looksLikePath(_ arg: String) -> Bool {
         if arg == "." || arg == ".." { return true }
@@ -3546,14 +3506,6 @@ struct ProgramaCLI {
         default:
             return nil
         }
-    }
-
-    private func parsePositiveInt(_ raw: String?, label: String) throws -> Int? {
-        guard let raw else { return nil }
-        guard let value = Int(raw) else {
-            throw CLIError(message: "\(label) must be an integer")
-        }
-        return value
     }
 
     func isHandleRef(_ value: String) -> Bool {
@@ -4450,7 +4402,7 @@ struct ProgramaCLI {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    // MARK: - Race command (fan one prompt across N agents in isolated worktrees, v1: spawn only)
+    // MARK: - Race command (fan one prompt across N agents in isolated worktrees, spawn only)
 
     /// The only agents `race` supports: the three that report state via lifecycle hooks
     /// (Claude Code, OpenCode, Codex). Racing needs a trustworthy idle signal, which
@@ -4459,14 +4411,7 @@ struct ProgramaCLI {
     /// elsewhere in the app for status badges.
     private static let raceSupportedAgents: [String] = ["claude", "opencode", "codex"]
 
-    /// Builds the shell command line that starts an agent with `prompt` as its initial task.
-    /// Reuses the same bare binary names Programa already invokes elsewhere for these agents
-    /// (`initialTerminalInput: "claude\n"` for the "New Claude Code Workspace" shortcut in
-    /// AppDelegate.swift, and the `process_names` in Resources/AgentDetection/*.json), just
-    /// with the prompt appended as a shell-quoted positional argument so the agent starts
-    /// working immediately instead of sitting at its own empty prompt. No prior art exists in
-    /// this codebase for "agent + initial prompt argument" specifically, so this is a new,
-    /// minimal one-place mapping rather than an existing construction being reused verbatim.
+    /// Builds the shell command line that starts an agent with `prompt` as a shell-quoted positional argument.
     private func raceAgentLaunchCommand(agent: String, prompt: String) -> String {
         "\(agent) \(shellSingleQuote(prompt))"
     }
@@ -4525,9 +4470,8 @@ struct ProgramaCLI {
         // Fail immediately, before creating anything, if the cwd isn't inside a git repo.
         let repo = try resolveWorktreeRepoRoot(explicit: nil)
 
-        // Racing twice in a row used to collide on every index, because the branches were
-        // always `<prefix>/1...<prefix>/N`. Start after whatever `<prefix>/<number>` branches
-        // already exist so a second run just continues the numbering.
+        // Start after whatever `<prefix>/<number>` branches already exist so repeated runs
+        // continue the numbering instead of colliding.
         let taken = existingRaceIndexes(repo: repo, prefix: prefix)
         let firstIndex = (taken.max() ?? 0) + 1
         let indexes = Array(firstIndex..<(firstIndex + n))
@@ -5046,10 +4990,6 @@ struct ProgramaCLI {
         args.contains(name)
     }
 
-    private func replaceToken(_ args: [String], from: String, to: String) -> [String] {
-        args.map { $0 == from ? to : $0 }
-    }
-
     /// Unescape CLI escape sequences for send behavior.
     /// \n and \r → carriage return (Enter), \t → tab.
     private func unescapeSendText(_ text: String) -> String {
@@ -5537,8 +5477,6 @@ struct ProgramaCLI {
             if parsed.options["list"] == nil, parsed.options["unset"] == nil, parsed.positional.count < 2 {
                 throw CLIError(message: "set-hook requires <event> <command>")
             }
-        case "popup", "bind-key", "unbind-key", "copy-mode":
-            throw CLIError(message: "\(command) is not supported yet in programa CLI parity mode")
         case "display-message":
             let parsed = try parse(booleans: ["print"], minPositionals: 1, maxPositionals: nil)
             guard parsed.positional.filter({ $0 != "-p" }).isEmpty == false else {
@@ -6343,19 +6281,6 @@ struct ProgramaCLI {
                               to ~/Library/Application Support/programa/programa.sock and never connects to tagged/debug sockets on its own.
         """
     }
-
-#if DEBUG
-    func debugUsageTextForTesting() -> String {
-        usage()
-    }
-
-    func debugFormatDebugTerminalsPayloadForTesting(
-        _ payload: [String: Any],
-        idFormat: CLIIDFormat = .refs
-    ) -> String {
-        formatDebugTerminalsPayload(payload, idFormat: idFormat)
-    }
-#endif
 }
 
 @main

@@ -224,7 +224,7 @@ class CodexHookTrustTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        install = self.run_cli("install-hooks")
+        install = self.run_cli("install-integration")
         self.assert_succeeded(install)
 
         hooks = self.read_hooks()
@@ -288,12 +288,12 @@ class CodexHookTrustTests(unittest.TestCase):
 
         hooks_once = (self.codex_home / "hooks.json").read_bytes()
         config_once = (self.codex_home / "config.toml").read_bytes()
-        reinstall = self.run_cli("install-hooks")
+        reinstall = self.run_cli("install-integration")
         self.assert_succeeded(reinstall)
         self.assertEqual((self.codex_home / "hooks.json").read_bytes(), hooks_once)
         self.assertEqual((self.codex_home / "config.toml").read_bytes(), config_once)
 
-        uninstall = self.run_cli("uninstall-hooks")
+        uninstall = self.run_cli("uninstall-integration")
         self.assert_succeeded(uninstall)
         uninstalled_hooks = self.read_hooks()
         self.assertEqual(foreign_commands(uninstalled_hooks), expected_foreign)
@@ -352,7 +352,7 @@ class CodexHookTrustTests(unittest.TestCase):
                 original_config = config_content.encode("utf-8")
                 (self.codex_home / "config.toml").write_bytes(original_config)
 
-                install = self.run_cli("install-hooks")
+                install = self.run_cli("install-integration")
 
                 self.assertNotEqual(
                     install.returncode,
@@ -388,7 +388,7 @@ class CodexHookTrustTests(unittest.TestCase):
         ).encode("utf-8")
         (self.codex_home / "config.toml").write_bytes(original_config)
 
-        install = self.run_cli("install-hooks")
+        install = self.run_cli("install-integration")
 
         self.assertNotEqual(
             install.returncode,
@@ -415,7 +415,7 @@ class CodexHookTrustTests(unittest.TestCase):
             ]
         self.write_hooks(hooks)
 
-        install = self.run_cli("install-hooks")
+        install = self.run_cli("install-integration")
         self.assert_succeeded(install)
 
         installed = self.read_hooks()["hooks"]
@@ -447,7 +447,7 @@ class CodexHookTrustTests(unittest.TestCase):
         ).encode("utf-8")
         (self.codex_home / "config.toml").write_bytes(original_config)
 
-        uninstall = self.run_cli("uninstall-hooks")
+        uninstall = self.run_cli("uninstall-integration")
 
         self.assertNotEqual(
             uninstall.returncode,
@@ -462,7 +462,7 @@ class CodexHookTrustTests(unittest.TestCase):
         hooks = {"hooks": {"SessionStart": [{"hooks": [owned_handler("session-start")]}]}}
         owned_key = f"{self.codex_home.resolve() / 'hooks.json'}:session_start:0:0"
         owned_hash = expected_trust_hash("session_start", owned_handler("session-start"))
-        for operation in ("install-hooks", "uninstall-hooks"):
+        for operation in ("install-integration", "uninstall-integration"):
             with self.subTest(operation=operation):
                 original_hooks = self.write_hooks(hooks)
                 original_config = (
@@ -503,7 +503,7 @@ class CodexHookTrustTests(unittest.TestCase):
         expected_instructions = tomllib.loads(original_config)["instructions"]
         (self.codex_home / "config.toml").write_text(original_config, encoding="utf-8")
 
-        install = self.run_cli("install-hooks")
+        install = self.run_cli("install-integration")
 
         self.assert_succeeded(install)
         rendered_text = (self.codex_home / "config.toml").read_text(encoding="utf-8")
@@ -520,7 +520,7 @@ class CodexHookTrustTests(unittest.TestCase):
         self.assertFalse(hooks_path.exists())
         self.assertFalse(config_path.exists())
 
-        uninstall = self.run_cli("uninstall-hooks")
+        uninstall = self.run_cli("uninstall-integration")
 
         self.assert_succeeded(uninstall)
         self.assertFalse(hooks_path.exists())
@@ -539,7 +539,7 @@ class CodexHookTrustTests(unittest.TestCase):
         config_link = self.codex_home / "config.toml"
         config_link.symlink_to(target)
 
-        install = self.run_cli("install-hooks")
+        install = self.run_cli("install-integration")
         self.assert_succeeded(install)
         self.assertTrue(config_link.is_symlink())
         installed_target = target.read_bytes()
@@ -551,12 +551,12 @@ class CodexHookTrustTests(unittest.TestCase):
         )
         self.assertGreater(len(installed_config["hooks"]["state"]), 1)
 
-        reinstall = self.run_cli("install-hooks")
+        reinstall = self.run_cli("install-integration")
         self.assert_succeeded(reinstall)
         self.assertTrue(config_link.is_symlink())
         self.assertEqual(target.read_bytes(), installed_target)
 
-        uninstall = self.run_cli("uninstall-hooks")
+        uninstall = self.run_cli("uninstall-integration")
         self.assert_succeeded(uninstall)
         self.assertTrue(config_link.is_symlink())
         final_config = tomllib.loads(target.read_text(encoding="utf-8"))
@@ -578,7 +578,7 @@ class CodexHookTrustTests(unittest.TestCase):
         user_config = b'model = "gpt-5.6"\n\n[history]\npersistence = "save-all"\n'
         (self.codex_home / "config.toml").write_bytes(user_config)
 
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         installed = self.config_bytes()
         text = installed.decode("utf-8")
         self.assertEqual(text.count(self.BEGIN_MARKER), 1)
@@ -589,11 +589,11 @@ class CodexHookTrustTests(unittest.TestCase):
         self.assertEqual(len(state), len(EVENT_LABELS))
         self.assertEqual(tomllib.loads(text)["history"]["persistence"], "save-all")
 
-        self.assert_succeeded(self.run_cli("uninstall-hooks"))
+        self.assert_succeeded(self.run_cli("uninstall-integration"))
         self.assertEqual(self.config_bytes(), user_config)
 
     def test_fresh_install_without_config_creates_only_the_block(self) -> None:
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         text = self.config_bytes().decode("utf-8")
         self.assertTrue(text.startswith(self.BEGIN_MARKER + "\n"))
         self.assertEqual(len(tomllib.loads(text)["hooks"]["state"]), len(EVENT_LABELS))
@@ -603,7 +603,7 @@ class CodexHookTrustTests(unittest.TestCase):
         before = b'# my notes\nmodel = "gpt-5.6"\n\n[tui]\nnotifications = true\n'
         after = b"\n[other]\nkey = 1\n"
         (self.codex_home / "config.toml").write_bytes(before)
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         installed = self.config_bytes()
 
         stale = (
@@ -614,7 +614,7 @@ class CodexHookTrustTests(unittest.TestCase):
             + after
         )
         (self.codex_home / "config.toml").write_bytes(stale)
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         rewritten = self.config_bytes()
         self.assertNotIn(b"stale/hooks.json", rewritten)
         self.assertTrue(rewritten.startswith(before))
@@ -626,14 +626,14 @@ class CodexHookTrustTests(unittest.TestCase):
             installed[installed.index(self.BEGIN_MARKER.encode()):],
         )
 
-        self.assert_succeeded(self.run_cli("uninstall-hooks"))
+        self.assert_succeeded(self.run_cli("uninstall-integration"))
         self.assertEqual(self.config_bytes(), before + after)
 
     def test_reinstall_is_byte_identical(self) -> None:
         (self.codex_home / "config.toml").write_bytes(b'model = "gpt-5.6"\n')
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         first = (self.config_bytes(), (self.codex_home / "hooks.json").read_bytes())
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         self.assertEqual((self.config_bytes(), (self.codex_home / "hooks.json").read_bytes()), first)
 
     def test_user_owned_trust_table_is_skipped_with_one_warning(self) -> None:
@@ -647,7 +647,7 @@ class CodexHookTrustTests(unittest.TestCase):
         ).encode("utf-8")
         (self.codex_home / "config.toml").write_bytes(user_config)
 
-        install = self.run_cli("install-hooks")
+        install = self.run_cli("install-integration")
 
         self.assert_succeeded(install)
         warnings = [line for line in install.stderr.splitlines() if line.startswith("warning:")]
@@ -659,13 +659,13 @@ class CodexHookTrustTests(unittest.TestCase):
         self.assertEqual(state[key], {"trusted_hash": "sha256:mine", "enabled": False})
         self.assertEqual(len(state), len(EVENT_LABELS))
 
-        self.assert_succeeded(self.run_cli("uninstall-hooks"))
+        self.assert_succeeded(self.run_cli("uninstall-integration"))
         self.assertEqual(self.config_bytes(), user_config)
 
     def test_migrates_the_older_spliced_format_into_the_block(self) -> None:
         """Keys older installers wrote outside any block are removed once, then the block is written."""
         self.write_hooks({"hooks": {"Stop": [{"hooks": [owned_handler("stop")]}]}})
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         hooks_path = self.codex_home.resolve() / "hooks.json"
         stop_handler = self.read_hooks()["hooks"]["Stop"][0]["hooks"][0]
         stop_key = f"{hooks_path}:stop:0:0"
@@ -679,7 +679,7 @@ class CodexHookTrustTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         text = self.config_bytes().decode("utf-8")
         self.assertNotIn("codex_hooks", text)
         self.assertEqual(text.count(stop_key), 1)
@@ -692,12 +692,12 @@ class CodexHookTrustTests(unittest.TestCase):
         self.assertTrue(text.endswith(self.END_MARKER + "\n"))
 
         migrated = self.config_bytes()
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         self.assertEqual(self.config_bytes(), migrated)
 
     def test_uninstall_migrates_the_older_spliced_format(self) -> None:
         self.write_hooks({"hooks": {"Stop": [{"hooks": [owned_handler("stop")]}]}})
-        self.assert_succeeded(self.run_cli("install-hooks"))
+        self.assert_succeeded(self.run_cli("install-integration"))
         hooks_path = self.codex_home.resolve() / "hooks.json"
         stop_handler = self.read_hooks()["hooks"]["Stop"][0]["hooks"][0]
         stop_key = f"{hooks_path}:stop:0:0"
@@ -710,12 +710,12 @@ class CodexHookTrustTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        self.assert_succeeded(self.run_cli("uninstall-hooks"))
+        self.assert_succeeded(self.run_cli("uninstall-integration"))
         self.assertEqual(self.config_bytes(), b'model = "gpt-5.6"\n')
 
     def test_settings_right_after_the_block_are_refused(self) -> None:
         """A bare assignment after the END marker would move into another table."""
-        for operation in ("install-hooks", "uninstall-hooks"):
+        for operation in ("install-integration", "uninstall-integration"):
             with self.subTest(operation=operation):
                 original = (
                     'model = "gpt-5.6"\n\n'
@@ -750,7 +750,7 @@ class CodexHookTrustTests(unittest.TestCase):
             ),
         }
         for name, body in bodies.items():
-            for operation in ("install-hooks", "uninstall-hooks"):
+            for operation in ("install-integration", "uninstall-integration"):
                 with self.subTest(case=name, operation=operation):
                     original_hooks = self.write_hooks(hooks)
                     original = (

@@ -185,11 +185,8 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
     func testEmptyNotificationsPopoverBlocksTerminalTyping() throws {
         let app = makeTrackedApplication()
-        app.launchArguments += ["-socketControlMode", "allowAll"]
-        app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
-        app.launchEnvironment["PROGRAMA_SOCKET_MODE"] = "allowAll"
-        app.launchEnvironment["PROGRAMA_SOCKET_ENABLE"] = "1"
-        app.launchEnvironment["PROGRAMA_UI_TEST_SOCKET_SANITY"] = "1"
+        // The app records the focused terminal's text here when the popover closes.
+        app.launchEnvironment["PROGRAMA_UI_TEST_KEYEQUIV_PATH"] = dataPath
         app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         app.launch()
         XCTAssertTrue(
@@ -198,18 +195,6 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         )
 
         XCTAssertTrue(waitForWindowCount(atLeast: 1, app: app, timeout: 8.0))
-        guard let resolvedPath = resolveSocketPath(timeout: 8.0) else {
-            XCTFail("Control socket unavailable. requested=\(socketPath)")
-            return
-        }
-        socketPath = resolvedPath
-        let pingResponse = waitForSocketPong(timeout: 8.0)
-        guard pingResponse == "PONG" else {
-            XCTFail("Control socket did not respond in time. path=\(socketPath) response=\(pingResponse ?? "<nil>")")
-            return
-        }
-
-        _ = socketCommand("clear_notifications")
 
         app.typeKey("i", modifierFlags: [.command])
         XCTAssertTrue(app.staticTexts["No notifications yet"].waitForExistence(timeout: 6.0), "Expected empty notifications popover state")
@@ -221,16 +206,16 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         XCTAssertFalse(clearAllButton.isEnabled, "Expected Clear All button to be disabled with no notifications")
 
         let marker = "programa_notif_block_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))"
-        let before = readCurrentTerminalText() ?? ""
-        XCTAssertFalse(before.contains(marker), "Unexpected marker precondition collision")
-
         app.typeText(marker)
         RunLoop.current.run(until: Date().addingTimeInterval(0.25))
 
-        guard let after = readCurrentTerminalText() else {
-            XCTFail("Expected terminal text from control socket")
-            return
-        }
+        app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        XCTAssertTrue(
+            waitForData(keys: ["terminalTextAtNotificationsPopoverClose"], timeout: 3.0),
+            "Expected the terminal text recorded when the popover closed"
+        )
+        let after = loadData()?["terminalTextAtNotificationsPopoverClose"] ?? ""
+        XCTAssertFalse(after.isEmpty, "Expected a terminal text snapshot, got an empty one")
         XCTAssertFalse(after.contains(marker), "Expected typing to be blocked while empty notifications popover is open")
     }
 
@@ -263,7 +248,8 @@ final class MultiWindowNotificationsUITests: XCTestCase {
                     !sourceTerminalReady.isEmpty &&
                     sourceTerminalReady != "pending"
             },
-            "Expected multi-window notification setup data, socket readiness, and source terminal focus"
+            "Expected multi-window notification setup data, socket readiness, and source terminal focus. " +
+            "data=\(loadData().map { $0.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ") } ?? "<missing>")"
         )
 
         guard let setup = loadData() else {
@@ -326,7 +312,7 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             try? FileManager.default.removeItem(atPath: commandScriptPath)
         }
 
-        guard let bundledCLIPath = resolveProgramaCLIPaths(strategy: .bundledOnly).first else {
+        guard let bundledCLIPath = resolveProgramaCLIPaths().first else {
             XCTFail("Failed to locate bundled programa CLI for notify regression test")
             return
         }
@@ -406,7 +392,11 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         if waitForFocusChange(from: token, timeout: firstDeadline) {
             return true
         }
-        button.click()
+        // A click that landed closes the popover before the focus record is written, so only
+        // retry while the row is still there.
+        if button.exists {
+            button.click()
+        }
         return waitForFocusChange(from: token, timeout: max(0.0, timeout - firstDeadline))
     }
 
@@ -458,60 +448,6 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         }
     }
 
-    private func waitForSocketPong(timeout: TimeInterval) -> String? {
-        var lastResponse: String?
-        _ = waitForCondition(timeout: timeout) {
-            lastResponse = self.socketCommand("ping")
-            return lastResponse == "PONG"
-        }
-        return lastResponse == "PONG" ? "PONG" : (socketCommand("ping") ?? lastResponse)
-    }
-
-    private func waitForTerminalFocus(surfaceId: String, timeout: TimeInterval) -> Bool {
-        waitForCondition(timeout: timeout) {
-            self.socketCommand("is_terminal_focused \(surfaceId)") == "true"
-        }
-    }
-
-    private func waitForProgramaPing(timeout: TimeInterval) -> (stdout: String?, stderr: String?) {
-        var lastStdout: String?
-        var lastStderr: String?
-        let didSucceed = waitForCondition(timeout: timeout) {
-            let result = self.runProgramaCommand(
-                socketPath: self.socketPath,
-                arguments: ["ping"],
-                responseTimeoutSeconds: 2.0
-            )
-            let stdout = result.stdout.isEmpty ? nil : result.stdout
-            let stderr = result.stderr.isEmpty ? nil : result.stderr
-            if let stdout {
-                lastStdout = stdout
-            }
-            if let stderr {
-                lastStderr = stderr
-            }
-            if result.terminationStatus == 0, stdout == "PONG" {
-                return true
-            }
-            if self.isSocketPermissionFailure(stderr),
-               self.waitForSocketPong(timeout: 0.5) == "PONG" {
-                return true
-            }
-            return false
-        }
-        if didSucceed {
-            return ("PONG", lastStderr)
-        }
-
-        let result = runProgramaCommand(socketPath: socketPath, arguments: ["ping"], responseTimeoutSeconds: 2.0)
-        let stdout = result.stdout.isEmpty ? nil : result.stdout
-        let stderr = result.stderr.isEmpty ? nil : result.stderr
-        if isSocketPermissionFailure(stderr), waitForSocketPong(timeout: 0.5) == "PONG" {
-            return ("PONG", stderr)
-        }
-        return (stdout ?? lastStdout, stderr ?? lastStderr)
-    }
-
     /// Whether the app under test is the frontmost (active) application according to the
     /// workspace. `XCUIApplication.state` can report `.runningForeground` for an instant on the
     /// CI virtual display while the app itself never receives `applicationDidBecomeActive`;
@@ -561,197 +497,12 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         }
     }
 
-    private func firstSurfaceId(forWorkspaceId workspaceId: String) -> String? {
-        guard let response = socketCommand("list_surfaces \(workspaceId)"),
-              !response.isEmpty,
-              !response.hasPrefix("ERROR"),
-              response != "No surfaces" else {
-            return nil
-        }
-
-        for line in response.split(separator: "\n", omittingEmptySubsequences: true) {
-            let parts = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-            guard parts.count == 2 else { continue }
-            let candidate = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if UUID(uuidString: candidate) != nil {
-                return candidate
-            }
-        }
-        return nil
-    }
-
-    private func waitForSurfaceId(forWorkspaceId workspaceId: String, timeout: TimeInterval) -> String? {
-        var surfaceId: String?
-        _ = waitForCondition(timeout: timeout) {
-            surfaceId = self.firstSurfaceId(forWorkspaceId: workspaceId)
-            return surfaceId != nil
-        }
-        return surfaceId ?? firstSurfaceId(forWorkspaceId: workspaceId)
-    }
-
-    private func waitForSurfaceIdViaCLI(forWorkspaceId workspaceId: String, timeout: TimeInterval) -> String? {
-        var surfaceId: String?
-        _ = waitForCondition(timeout: timeout) {
-            surfaceId = self.firstSurfaceIdViaCLI(forWorkspaceId: workspaceId)
-            return surfaceId != nil
-        }
-        return surfaceId ?? firstSurfaceIdViaCLI(forWorkspaceId: workspaceId)
-    }
-
     private func waitForCondition(timeout: TimeInterval, predicate: @escaping () -> Bool) -> Bool {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in predicate() },
             object: nil
         )
         return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
-    }
-
-    private func firstSurfaceIdViaCLI(forWorkspaceId workspaceId: String) -> String? {
-        guard let paneId = firstPaneIdViaCLI(forWorkspaceId: workspaceId) else {
-            return firstSurfaceId(forWorkspaceId: workspaceId)
-        }
-        let result = runProgramaCommand(
-            socketPath: socketPath,
-            arguments: [
-                "list-pane-surfaces",
-                "--workspace",
-                workspaceId,
-                "--pane",
-                paneId,
-                "--id-format",
-                "uuids"
-            ],
-            responseTimeoutSeconds: 3.0
-        )
-        guard result.terminationStatus == 0 else {
-            if isSocketPermissionFailure(result.stderr) {
-                return firstSurfaceId(forWorkspaceId: workspaceId)
-            }
-            return nil
-        }
-        return firstHandle(in: result.stdout)
-    }
-
-    private func firstPaneIdViaCLI(forWorkspaceId workspaceId: String) -> String? {
-        let result = runProgramaCommand(
-            socketPath: socketPath,
-            arguments: [
-                "list-panes",
-                "--workspace",
-                workspaceId,
-                "--id-format",
-                "uuids"
-            ],
-            responseTimeoutSeconds: 3.0
-        )
-        guard result.terminationStatus == 0 else {
-            if isSocketPermissionFailure(result.stderr) {
-                return nil
-            }
-            return nil
-        }
-        return firstHandle(in: result.stdout)
-    }
-
-    private func firstHandle(in output: String) -> String? {
-        for rawLine in output.split(separator: "\n", omittingEmptySubsequences: true) {
-            var line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !line.isEmpty, !line.hasPrefix("No ") else { continue }
-            if line.hasPrefix("* ") || line.hasPrefix("  ") {
-                line = String(line.dropFirst(2))
-            }
-            guard let token = line.split(whereSeparator: \.isWhitespace).first else { continue }
-            return String(token)
-        }
-        return nil
-    }
-
-    private func runProgramaNotify(
-        socketPath: String,
-        workspaceId: String,
-        surfaceId: String,
-        title: String
-    ) -> (terminationStatus: Int32, stdout: String, stderr: String) {
-        runProgramaCommand(
-            socketPath: socketPath,
-            arguments: [
-                "notify",
-                "--workspace",
-                workspaceId,
-                "--surface",
-                surfaceId,
-                "--title",
-                title,
-                "--subtitle",
-                "ui-test",
-                "--body",
-                "focus-regression"
-            ],
-            responseTimeoutSeconds: 4.0,
-            cliStrategy: .bundledOnly
-        )
-    }
-
-    private func runProgramaCommand(
-        socketPath: String,
-        arguments: [String],
-        responseTimeoutSeconds: Double = 3.0,
-        cliStrategy: ProgramaCLIStrategy = .any
-    ) -> (terminationStatus: Int32, stdout: String, stderr: String) {
-        var args = ["--socket", socketPath]
-        args.append(contentsOf: arguments)
-        var environment = ProcessInfo.processInfo.environment
-        environment["PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC"] = String(responseTimeoutSeconds)
-
-        let cliPaths = resolveProgramaCLIPaths(strategy: cliStrategy)
-        if cliPaths.isEmpty, cliStrategy == .bundledOnly {
-            return (
-                terminationStatus: -1,
-                stdout: "",
-                stderr: "Failed to locate bundled programa CLI"
-            )
-        }
-
-        var lastPermissionFailure: (terminationStatus: Int32, stdout: String, stderr: String)?
-        for cliPath in cliPaths {
-            let result = executeProgramaCommand(
-                executablePath: cliPath,
-                arguments: args,
-                environment: environment
-            )
-            if result.terminationStatus == 0 {
-                return result
-            }
-            if result.stderr.localizedCaseInsensitiveContains("operation not permitted") {
-                lastPermissionFailure = result
-                continue
-            }
-            return result
-        }
-
-        if cliStrategy == .bundledOnly {
-            return lastPermissionFailure ?? (
-                terminationStatus: -1,
-                stdout: "",
-                stderr: "Bundled programa CLI command failed without an executable path"
-            )
-        }
-
-        let fallbackArgs = ["programa"] + args
-        let fallbackResult = executeProgramaCommand(
-            executablePath: "/usr/bin/env",
-            arguments: fallbackArgs,
-            environment: environment
-        )
-        if fallbackResult.terminationStatus == 0 || lastPermissionFailure == nil {
-            return fallbackResult
-        }
-        return lastPermissionFailure ?? fallbackResult
-    }
-
-    private enum ProgramaCLIStrategy: Equatable {
-        case any
-        case bundledOnly
     }
 
     private func socketDiagnostics(from data: [String: String]) -> String {
@@ -762,19 +513,11 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             "signals=\(data["socketFailureSignals"] ?? "")"
     }
 
-    private func resolveProgramaCLIPaths(strategy: ProgramaCLIStrategy) -> [String] {
+    private func resolveProgramaCLIPaths() -> [String] {
         let fileManager = FileManager.default
         let env = ProcessInfo.processInfo.environment
         var candidates: [String] = []
         var productDirectories: [String] = []
-
-        if strategy == .any {
-            for key in ["PROGRAMA_UI_TEST_CLI_PATH", "PROGRAMA_CLI"] {
-                if let value = env[key], !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    candidates.append(value)
-                }
-            }
-        }
 
         if let builtProductsDir = env["BUILT_PRODUCTS_DIR"], !builtProductsDir.isEmpty {
             productDirectories.append(builtProductsDir)
@@ -793,14 +536,11 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
         productDirectories.append(contentsOf: inferredBuildProductsDirectories())
         for productsDir in uniquePaths(productDirectories) {
-            appendCLIPathCandidates(fromProductsDirectory: productsDir, strategy: strategy, to: &candidates)
+            appendCLIPathCandidates(fromProductsDirectory: productsDir, to: &candidates)
         }
 
         candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/Programa DEV.app/Contents/Resources/bin/programa")
         candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/Programa.app/Contents/Resources/bin/programa")
-        if strategy == .any {
-            candidates.append("/tmp/programa-\(launchTag)/Build/Products/Debug/programa")
-        }
 
         var resolvedPaths: [String] = []
         for path in uniquePaths(candidates) {
@@ -830,14 +570,10 @@ final class MultiWindowNotificationsUITests: XCTestCase {
 
     private func appendCLIPathCandidates(
         fromProductsDirectory productsDir: String,
-        strategy: ProgramaCLIStrategy,
         to candidates: inout [String]
     ) {
         candidates.append("\(productsDir)/Programa DEV.app/Contents/Resources/bin/programa")
         candidates.append("\(productsDir)/Programa.app/Contents/Resources/bin/programa")
-        if strategy == .any {
-            candidates.append("\(productsDir)/programa")
-        }
 
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: productsDir) else {
             return
@@ -850,56 +586,6 @@ final class MultiWindowNotificationsUITests: XCTestCase {
                 .path
             candidates.append(cliPath)
         }
-        if strategy == .any {
-            for entry in entries.sorted() where entry == "programa" {
-                let cliPath = URL(fileURLWithPath: productsDir)
-                    .appendingPathComponent(entry)
-                    .path
-                candidates.append(cliPath)
-            }
-        }
-    }
-
-    private func executeProgramaCommand(
-        executablePath: String,
-        arguments: [String],
-        environment: [String: String]
-    ) -> (terminationStatus: Int32, stdout: String, stderr: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = arguments
-        process.environment = environment
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return (
-                terminationStatus: -1,
-                stdout: "",
-                stderr: "Failed to run programa command: \(error.localizedDescription) (cliPath=\(executablePath))"
-            )
-        }
-
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        let stdout = String(data: stdoutData, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let rawStderr = String(data: stderrData, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let stderr = rawStderr.isEmpty ? "" : "\(rawStderr) (cliPath=\(executablePath))"
-        return (process.terminationStatus, stdout, stderr)
-    }
-
-    private func isSocketPermissionFailure(_ stderr: String?) -> Bool {
-        guard let stderr, !stderr.isEmpty else { return false }
-        return stderr.localizedCaseInsensitiveContains("failed to connect to socket") &&
-            stderr.localizedCaseInsensitiveContains("operation not permitted")
     }
 
     private func uniquePaths(_ paths: [String]) -> [String] {
@@ -913,165 +599,6 @@ final class MultiWindowNotificationsUITests: XCTestCase {
         return unique
     }
 
-    private func resolveSocketPath(timeout: TimeInterval, requiredWorkspaceId: String? = nil) -> String? {
-        let primaryCandidates = expectedSocketCandidates(includeGlobalFallback: false)
-        let fallbackCandidates: [String]
-        if let requiredWorkspaceId, !requiredWorkspaceId.isEmpty {
-            fallbackCandidates = expectedSocketCandidates(includeGlobalFallback: true)
-                .filter { !primaryCandidates.contains($0) }
-        } else {
-            fallbackCandidates = []
-        }
-
-        var resolvedPath: String?
-        _ = waitForCondition(timeout: timeout) {
-            for candidate in primaryCandidates {
-                guard FileManager.default.fileExists(atPath: candidate) else { continue }
-                // Primary candidate is the explicitly requested PROGRAMA_SOCKET_PATH. If it responds,
-                // prefer it even before workspace contents are fully initialized.
-                if self.socketRespondsToPing(at: candidate) {
-                    resolvedPath = candidate
-                    return true
-                }
-            }
-            for candidate in fallbackCandidates {
-                guard FileManager.default.fileExists(atPath: candidate) else { continue }
-                if self.socketRespondsToPing(at: candidate),
-                   self.socketMatchesRequiredWorkspace(candidate, workspaceId: requiredWorkspaceId) {
-                    resolvedPath = candidate
-                    return true
-                }
-            }
-            return false
-        }
-        if let resolvedPath {
-            return resolvedPath
-        }
-        for candidate in primaryCandidates {
-            guard FileManager.default.fileExists(atPath: candidate) else { continue }
-            if socketRespondsToPing(at: candidate) {
-                return candidate
-            }
-        }
-        for candidate in fallbackCandidates {
-            guard FileManager.default.fileExists(atPath: candidate) else { continue }
-            if socketRespondsToPing(at: candidate),
-               socketMatchesRequiredWorkspace(candidate, workspaceId: requiredWorkspaceId) {
-                return candidate
-            }
-        }
-        return nil
-    }
-
-    private func expectedSocketCandidates(includeGlobalFallback: Bool) -> [String] {
-        var candidates = [socketPath]
-        let taggedDebugSocket = "/tmp/programa-debug-\(launchTag).sock"
-        if !taggedDebugSocket.isEmpty {
-            candidates.append(taggedDebugSocket)
-        }
-        if includeGlobalFallback {
-            candidates.append(contentsOf: discoverTmpSocketCandidates(limit: 12))
-            candidates.append("/tmp/programa-debug.sock")
-            candidates.append(stableSocketPath())
-            candidates.append("/tmp/programa.sock")
-        }
-
-        var unique: [String] = []
-        var seen = Set<String>()
-        for candidate in candidates {
-            if seen.insert(candidate).inserted {
-                unique.append(candidate)
-            }
-        }
-        return unique
-    }
-
-    private func stableSocketPath() -> String {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("programa", isDirectory: true)
-            .appendingPathComponent("programa.sock", isDirectory: false)
-            .path ?? "/tmp/programa.sock"
-    }
-
-    private func socketMatchesRequiredWorkspace(_ candidatePath: String, workspaceId: String?) -> Bool {
-        guard let workspaceId, !workspaceId.isEmpty else { return true }
-        let originalPath = socketPath
-        socketPath = candidatePath
-        defer { socketPath = originalPath }
-
-        guard let response = socketCommand("list_surfaces \(workspaceId)"),
-              !response.isEmpty,
-              !response.hasPrefix("ERROR"),
-              response != "No surfaces" else {
-            return false
-        }
-        return true
-    }
-
-    private func discoverTmpSocketCandidates(limit: Int) -> [String] {
-        let tmpPath = "/tmp"
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: tmpPath) else {
-            return []
-        }
-
-        let matches = entries.filter { $0.hasPrefix("programa") && $0.hasSuffix(".sock") }
-        let sorted = matches.compactMap { entry -> (path: String, mtime: Date)? in
-            let fullPath = (tmpPath as NSString).appendingPathComponent(entry)
-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath) else {
-                return nil
-            }
-            let mtime = (attrs[.modificationDate] as? Date) ?? .distantPast
-            return (fullPath, mtime)
-        }
-        .sorted { $0.mtime > $1.mtime }
-
-        return Array(sorted.prefix(limit)).map(\.path)
-    }
-
-    private func socketRespondsToPing(at path: String) -> Bool {
-        let originalPath = socketPath
-        socketPath = path
-        defer { socketPath = originalPath }
-        return socketCommand("ping") == "PONG"
-    }
-
-    private func socketCommand(_ cmd: String, responseTimeout: TimeInterval = 2.0) -> String? {
-        if let response = ControlSocketClient(path: socketPath, responseTimeout: responseTimeout).sendLine(cmd) {
-            return response
-        }
-        return socketCommandViaNetcat(cmd, responseTimeout: responseTimeout)
-    }
-
-    private func socketCommandViaNetcat(_ cmd: String, responseTimeout: TimeInterval = 2.0) -> String? {
-        let nc = "/usr/bin/nc"
-        guard FileManager.default.isExecutableFile(atPath: nc) else { return nil }
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-        let timeoutSeconds = max(1, Int(ceil(responseTimeout)))
-        let script = "printf '%s\\n' \(shellSingleQuote(cmd)) | \(nc) -U \(shellSingleQuote(socketPath)) -w \(timeoutSeconds) 2>/dev/null"
-        proc.arguments = ["-lc", script]
-
-        let outPipe = Pipe()
-        proc.standardOutput = outPipe
-
-        do {
-            try proc.run()
-        } catch {
-            return nil
-        }
-
-        proc.waitUntilExit()
-
-        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-        guard let outStr = String(data: outData, encoding: .utf8) else { return nil }
-        if let first = outStr.split(separator: "\n", maxSplits: 1).first {
-            return String(first).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        let trimmed = outStr.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
     private func shellSingleQuote(_ value: String) -> String {
         if value.isEmpty { return "''" }
         return "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
@@ -1083,129 +610,6 @@ final class MultiWindowNotificationsUITests: XCTestCase {
             return nil
         }
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private final class ControlSocketClient {
-        private let path: String
-        private let responseTimeout: TimeInterval
-
-        init(path: String, responseTimeout: TimeInterval = 2.0) {
-            self.path = path
-            self.responseTimeout = responseTimeout
-        }
-
-        func sendLine(_ line: String) -> String? {
-            let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-            guard fd >= 0 else { return nil }
-            defer { close(fd) }
-            var socketTimeout = timeval(
-                tv_sec: Int(responseTimeout.rounded(.down)),
-                tv_usec: Int32(((responseTimeout - floor(responseTimeout)) * 1_000_000).rounded())
-            )
-
-#if os(macOS)
-            var noSigPipe: Int32 = 1
-            _ = withUnsafePointer(to: &noSigPipe) { ptr in
-                setsockopt(
-                    fd,
-                    SOL_SOCKET,
-                    SO_NOSIGPIPE,
-                    ptr,
-                    socklen_t(MemoryLayout<Int32>.size)
-                )
-            }
-#endif
-            _ = withUnsafePointer(to: &socketTimeout) { ptr in
-                setsockopt(
-                    fd,
-                    SOL_SOCKET,
-                    SO_RCVTIMEO,
-                    ptr,
-                    socklen_t(MemoryLayout<timeval>.size)
-                )
-            }
-            _ = withUnsafePointer(to: &socketTimeout) { ptr in
-                setsockopt(
-                    fd,
-                    SOL_SOCKET,
-                    SO_SNDTIMEO,
-                    ptr,
-                    socklen_t(MemoryLayout<timeval>.size)
-                )
-            }
-
-            var addr = sockaddr_un()
-            memset(&addr, 0, MemoryLayout<sockaddr_un>.size)
-            addr.sun_family = sa_family_t(AF_UNIX)
-
-            let maxLen = MemoryLayout.size(ofValue: addr.sun_path)
-            let bytes = Array(path.utf8CString)
-            guard bytes.count <= maxLen else { return nil }
-            withUnsafeMutablePointer(to: &addr.sun_path) { p in
-                let raw = UnsafeMutableRawPointer(p).assumingMemoryBound(to: CChar.self)
-                memset(raw, 0, maxLen)
-                for i in 0..<bytes.count {
-                    raw[i] = bytes[i]
-                }
-            }
-
-            let pathOffset = MemoryLayout<sockaddr_un>.offset(of: \.sun_path) ?? 0
-            let addrLen = socklen_t(pathOffset + bytes.count)
-#if os(macOS)
-            addr.sun_len = UInt8(min(Int(addrLen), 255))
-#endif
-
-            let connected = withUnsafePointer(to: &addr) { ptr in
-                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
-                    connect(fd, sa, addrLen)
-                }
-            }
-            guard connected == 0 else { return nil }
-
-            let payload = line + "\n"
-            let wrote: Bool = payload.withCString { cstr in
-                var remaining = strlen(cstr)
-                var p = UnsafeRawPointer(cstr)
-                while remaining > 0 {
-                    let n = write(fd, p, remaining)
-                    if n <= 0 { return false }
-                    remaining -= n
-                    p = p.advanced(by: n)
-                }
-                return true
-            }
-            guard wrote else { return nil }
-
-            var buf = [UInt8](repeating: 0, count: 4096)
-            var accum = ""
-            while true {
-                let n = read(fd, &buf, buf.count)
-                if n < 0 {
-                    let code = errno
-                    if code == EAGAIN || code == EWOULDBLOCK {
-                        break
-                    }
-                    return nil
-                }
-                if n <= 0 { break }
-                if let chunk = String(bytes: buf[0..<n], encoding: .utf8) {
-                    accum.append(chunk)
-                    if let idx = accum.firstIndex(of: "\n") {
-                        return String(accum[..<idx])
-                    }
-                }
-            }
-            return accum.isEmpty ? nil : accum.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-    }
-
-    private func readCurrentTerminalText() -> String? {
-        guard let response = socketCommand("read_terminal_text"), response.hasPrefix("OK ") else {
-            return nil
-        }
-        let encoded = String(response.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = Data(base64Encoded: encoded) else { return nil }
-        return String(data: data, encoding: .utf8)
     }
 
     private func loadData() -> [String: String]? {

@@ -37,9 +37,9 @@ extension ProgramaCLI {
     }
 
     /// Reports a surface's agent activity state, then a matching `agent.event`, in that
-    /// order, with the same workspace/surface ids -- combines the two adjacent calls that
-    /// used to sit back-to-back at each hook call site in CLI+Hooks.swift. Same two socket
-    /// sends, same order, same arguments as before; purely a call-site collapse.
+    /// order, with the same workspace/surface ids -- combines the two adjacent calls a hook
+    /// call site in CLI+Hooks.swift would otherwise make back-to-back: two socket
+    /// sends, in that order, with the same arguments.
     func reportAgentStateAndEvent(
         client: SocketClient,
         provider: String,
@@ -60,9 +60,9 @@ extension ProgramaCLI {
     }
 
     /// Sends `agent.needs_input` (docs/plans/agent-state-unification.md T2): one atomic
-    /// socket call replacing the `notification.create_for_target` +
+    /// socket call covering the `notification.create_for_target` +
     /// `workspace.set_status` "Needs input" + `surface.report_agent_state` trio a hook
-    /// used to send independently for the same "needs input" moment.
+    /// would otherwise send independently for the same "needs input" moment.
     func reportAgentNeedsInput(
         client: SocketClient,
         provider: String,
@@ -107,8 +107,7 @@ extension ProgramaCLI {
     }
 
     /// Maps a classified notification subtitle ("Permission" / "Waiting") to the matching
-    /// `agent.event` type. Mirrors the `switch summary.subtitle` blocks that used to sit
-    /// inline at the Claude Code and Codex notification-hook call sites in CLI+Hooks.swift.
+    /// `agent.event` type. Shared by the Claude Code and Codex notification-hook call sites in CLI+Hooks.swift.
     func reportAgentEventForClassifiedNotificationSubtitle(
         client: SocketClient,
         provider: String,

@@ -2,33 +2,34 @@ import XCTest
 import Foundation
 
 final class CloseWorkspacesConfirmDialogUITests: XCTestCase {
-    private var socketPath = ""
+    private var countPath = ""
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        socketPath = "/tmp/programa-ui-test-close-workspaces-\(UUID().uuidString).sock"
-        try? FileManager.default.removeItem(atPath: socketPath)
+        countPath = "/tmp/programa-ui-test-close-workspaces-\(UUID().uuidString).json"
+        try? FileManager.default.removeItem(atPath: countPath)
     }
 
     func testCommandPaletteCloseOtherWorkspacesShowsSingleSummaryDialog() {
         let app = XCUIApplication()
-        app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        configureLaunch(app)
         app.launchEnvironment["PROGRAMA_UI_TEST_FORCE_CONFIRM_CLOSE_WORKSPACE"] = "1"
         app.launch()
         XCTAssertTrue(
             ensureForegroundAfterLaunch(app, timeout: 12.0),
             "Expected app to launch for close-workspaces confirmation test. state=\(app.state.rawValue)"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket to respond at \(socketPath)")
+        XCTAssertTrue(waitForWorkspaceCount(1, timeout: 12.0), "Expected initial workspace. count=\(workspaceCount())")
 
-        XCTAssertEqual(socketCommand("new_workspace")?.prefix(2), "OK")
-        XCTAssertEqual(socketCommand("new_workspace")?.prefix(2), "OK")
+        app.typeKey("n", modifierFlags: [.command])
+        XCTAssertTrue(waitForWorkspaceCount(2, timeout: 5.0), "Expected 2 workspaces. count=\(workspaceCount())")
+        app.typeKey("n", modifierFlags: [.command])
         XCTAssertTrue(
             waitForWorkspaceCount(3, timeout: 5.0),
-            "Expected 3 workspaces before running the close-other-workspaces command. list=\(socketCommand("list_workspaces") ?? "<nil>")"
+            "Expected 3 workspaces before running the close-other-workspaces command. count=\(workspaceCount())"
         )
-        XCTAssertEqual(socketCommand("select_workspace 1"), "OK")
+        app.typeKey("2", modifierFlags: [.command])
 
         app.typeKey("p", modifierFlags: [.command, .shift])
 
@@ -57,26 +58,31 @@ final class CloseWorkspacesConfirmDialogUITests: XCTestCase {
         )
         XCTAssertTrue(
             waitForWorkspaceCount(3, timeout: 5.0),
-            "Expected all workspaces to remain after cancelling multi-close. list=\(socketCommand("list_workspaces") ?? "<nil>")"
+            "Expected all workspaces to remain after cancelling multi-close. count=\(workspaceCount())"
         )
     }
 
     func testCmdShiftWUsesSidebarMultiSelectionSummaryDialog() {
         let app = XCUIApplication()
-        app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
+        configureLaunch(app)
         app.launchEnvironment["PROGRAMA_UI_TEST_FORCE_CONFIRM_CLOSE_WORKSPACE"] = "1"
-        app.launchEnvironment["PROGRAMA_UI_TEST_SIDEBAR_SELECTED_WORKSPACE_INDICES"] = "0,1"
+        // Applied by the app once the third workspace exists, so later Cmd+N presses cannot reset it.
+        app.launchEnvironment["PROGRAMA_UI_TEST_SIDEBAR_SELECTED_WORKSPACE_INDICES"] = "1,2"
         app.launch()
         XCTAssertTrue(
             ensureForegroundAfterLaunch(app, timeout: 12.0),
             "Expected app to launch for close-workspaces shortcut test. state=\(app.state.rawValue)"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket to respond at \(socketPath)")
+        XCTAssertTrue(waitForWorkspaceCount(1, timeout: 12.0), "Expected initial workspace. count=\(workspaceCount())")
 
-        XCTAssertEqual(socketCommand("new_workspace")?.prefix(2), "OK")
+        // Three workspaces so the two selected ones are not all of them; closing every
+        // workspace shows the "Close window?" alert instead.
+        app.typeKey("n", modifierFlags: [.command])
+        XCTAssertTrue(waitForWorkspaceCount(2, timeout: 5.0), "Expected 2 workspaces. count=\(workspaceCount())")
+        app.typeKey("n", modifierFlags: [.command])
         XCTAssertTrue(
-            waitForWorkspaceCount(2, timeout: 5.0),
-            "Expected 2 workspaces before running Cmd+Shift+W. list=\(socketCommand("list_workspaces") ?? "<nil>")"
+            waitForWorkspaceCount(3, timeout: 5.0),
+            "Expected 3 workspaces before running Cmd+Shift+W. count=\(workspaceCount())"
         )
 
         app.typeKey("w", modifierFlags: [.command, .shift])
@@ -93,9 +99,14 @@ final class CloseWorkspacesConfirmDialogUITests: XCTestCase {
             "Expected aggregated close-workspaces alert to dismiss after clicking Cancel"
         )
         XCTAssertTrue(
-            waitForWorkspaceCount(2, timeout: 5.0),
-            "Expected both workspaces to remain after cancelling Cmd+Shift+W multi-close. list=\(socketCommand("list_workspaces") ?? "<nil>")"
+            waitForWorkspaceCount(3, timeout: 5.0),
+            "Expected all workspaces to remain after cancelling Cmd+Shift+W multi-close. count=\(workspaceCount())"
         )
+    }
+
+    private func configureLaunch(_ app: XCUIApplication) {
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_KEYEQUIV_PATH"] = countPath
     }
 
     private func ensureForegroundAfterLaunch(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
@@ -109,16 +120,6 @@ final class CloseWorkspacesConfirmDialogUITests: XCTestCase {
         return false
     }
 
-    private func waitForSocketPong(timeout: TimeInterval) -> Bool {
-        let expectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in
-                self.socketCommand("ping") == "PONG"
-            },
-            object: NSObject()
-        )
-        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
-    }
-
     private func waitForWorkspaceCount(_ expectedCount: Int, timeout: TimeInterval) -> Bool {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in
@@ -129,48 +130,12 @@ final class CloseWorkspacesConfirmDialogUITests: XCTestCase {
         return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
+    /// Reads the workspace count the app records to `PROGRAMA_UI_TEST_KEYEQUIV_PATH`; -1 if unavailable.
     private func workspaceCount() -> Int {
-        guard let response = socketCommand("list_workspaces") else { return -1 }
-        if response == "No workspaces" {
-            return 0
-        }
-        return response
-            .split(separator: "\n")
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .count
-    }
-
-    private func socketCommand(_ cmd: String) -> String? {
-        let nc = "/usr/bin/nc"
-        guard FileManager.default.isExecutableFile(atPath: nc) else { return nil }
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: nc)
-        proc.arguments = ["-U", socketPath, "-w", "2"]
-
-        let inPipe = Pipe()
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        proc.standardInput = inPipe
-        proc.standardOutput = outPipe
-        proc.standardError = errPipe
-
-        do {
-            try proc.run()
-        } catch {
-            return nil
-        }
-
-        if let data = (cmd + "\n").data(using: .utf8) {
-            inPipe.fileHandleForWriting.write(data)
-        }
-        inPipe.fileHandleForWriting.closeFile()
-
-        proc.waitUntilExit()
-
-        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-        guard let outStr = String(data: outData, encoding: .utf8) else { return nil }
-        return outStr.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: countPath)),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+              let raw = object["workspaceCount"], let count = Int(raw) else { return -1 }
+        return count
     }
 
     private func isCloseWorkspacesAlertPresent(app: XCUIApplication) -> Bool {

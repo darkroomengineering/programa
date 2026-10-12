@@ -2,7 +2,7 @@
 //
 // Ghostty's parser has already validated every report before the action reaches Swift. The
 // checks here are defense in depth, so the store never holds a record the sidebar or the socket
-// could not safely show. See docs/plans/osc7501-program-status.md (D6, D7).
+// could not safely show. See docs/program-status.md.
 import Foundation
 
 enum ProgramStatusState: String, Sendable, CaseIterable {

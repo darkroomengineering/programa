@@ -4,7 +4,6 @@ import Combine
 import ImageIO
 import SwiftUI
 import ObjectiveC
-import UniformTypeIdentifiers
 
 struct ContentView: View {
     @ObservedObject var updateViewModel: UpdateViewModel
@@ -180,133 +179,6 @@ struct ContentView: View {
     struct CommandPaletteUsageEntry: Codable, Sendable {
         var useCount: Int
         var lastUsedAt: TimeInterval
-    }
-
-    static func tmuxWorkspacePaneExactRect(
-        for panel: any Panel,
-        in contentView: NSView
-    ) -> CGRect? {
-        let targetView: NSView?
-        switch panel {
-        case let terminal as TerminalPanel:
-            targetView = terminal.hostedView
-        default:
-            targetView = nil
-        }
-        guard let targetView else { return nil }
-        return tmuxWorkspacePaneExactRect(for: targetView, in: contentView)
-    }
-
-    static func tmuxWorkspacePaneExactRect(
-        for targetView: NSView,
-        in contentView: NSView
-    ) -> CGRect? {
-        guard let contentWindow = contentView.window,
-              let targetWindow = targetView.window,
-              contentWindow === targetWindow,
-              targetView.superview != nil else {
-            return nil
-        }
-
-        let rectInWindow = targetView.convert(targetView.bounds, to: nil)
-        let rectInContent = contentView.convert(rectInWindow, from: nil)
-        guard rectInContent.width > 1, rectInContent.height > 1 else { return nil }
-        return rectInContent
-    }
-
-    static func preferredTmuxWorkspacePaneWindowOverlayRect(
-        exactRect: CGRect?,
-        paneRect: CGRect?
-    ) -> CGRect? {
-        guard let paneRect else { return exactRect }
-        guard let exactRect,
-              exactRect.width > 1,
-              exactRect.height > 1 else {
-            return paneRect
-        }
-
-        let tolerance: CGFloat = 0.5
-        let exactFitsWithinPane =
-            exactRect.minX >= paneRect.minX - tolerance &&
-            exactRect.maxX <= paneRect.maxX + tolerance &&
-            exactRect.minY >= paneRect.minY - tolerance &&
-            exactRect.maxY <= paneRect.maxY + tolerance
-        return exactFitsWithinPane ? exactRect : paneRect
-    }
-
-    private func tmuxWorkspacePaneWindowOverlayState(for window: NSWindow) -> TmuxWorkspacePaneOverlayRenderState? {
-        guard TmuxOverlayExperimentSettings.target().usesWorkspacePaneOverlay,
-              let workspace = tabManager.selectedWorkspace else { return nil }
-        let layoutSnapshot = WorkspaceContentView.effectiveTmuxLayoutSnapshot(
-            cachedSnapshot: workspace.tmuxLayoutSnapshot,
-            liveSnapshot: workspace.bonsplitController.layoutSnapshot()
-        )
-        let contentView = window.contentView
-
-        let unreadRects: [CGRect]
-        if let layoutSnapshot, let contentView {
-            unreadRects = layoutSnapshot.panes.compactMap { pane in
-                guard let selectedTabId = pane.selectedTabId,
-                      let tabUUID = UUID(uuidString: selectedTabId),
-                      let panelId = workspace.panelIdFromSurfaceId(TabID(uuid: tabUUID)),
-                      let panel = workspace.panels[panelId] else {
-                    return nil
-                }
-
-                let shouldShowUnread = Workspace.shouldShowUnreadIndicator(
-                    hasUnreadNotification: notificationStore.hasVisibleNotificationIndicator(
-                        forTabId: workspace.id,
-                        surfaceId: panelId
-                    ),
-                    isManuallyUnread: workspace.manualUnreadPanelIds.contains(panelId)
-                )
-                guard shouldShowUnread else { return nil }
-
-                let paneRect = WorkspaceContentView.tmuxWorkspacePaneWindowOverlayRect(
-                    layoutSnapshot: layoutSnapshot,
-                    paneId: workspace.paneId(forPanelId: panelId)
-                )
-                let exactRect = Self.tmuxWorkspacePaneExactRect(for: panel, in: contentView)
-                return Self.preferredTmuxWorkspacePaneWindowOverlayRect(
-                    exactRect: exactRect,
-                    paneRect: paneRect
-                )
-            }
-        } else {
-            unreadRects = WorkspaceContentView.tmuxWorkspacePaneWindowUnreadRects(
-                workspace: workspace,
-                notificationStore: notificationStore,
-                layoutSnapshot: layoutSnapshot
-            )
-        }
-
-        let flashRect: CGRect?
-        if let panelId = workspace.tmuxWorkspaceFlashPanelId,
-           let panel = workspace.panels[panelId],
-           let contentView {
-            let paneRect = WorkspaceContentView.tmuxWorkspacePaneWindowOverlayRect(
-                layoutSnapshot: layoutSnapshot,
-                paneId: workspace.paneId(forPanelId: panelId)
-            )
-            let exactRect = Self.tmuxWorkspacePaneExactRect(for: panel, in: contentView)
-            flashRect = Self.preferredTmuxWorkspacePaneWindowOverlayRect(
-                exactRect: exactRect,
-                paneRect: paneRect
-            )
-        } else {
-            flashRect = WorkspaceContentView.tmuxWorkspacePaneWindowOverlayRect(
-                layoutSnapshot: layoutSnapshot,
-                paneId: workspace.tmuxWorkspaceFlashPanelId.flatMap { workspace.paneId(forPanelId: $0) }
-            )
-        }
-
-        return TmuxWorkspacePaneOverlayRenderState(
-            workspaceId: workspace.id,
-            unreadRects: unreadRects,
-            flashRect: flashRect,
-            flashToken: workspace.tmuxWorkspaceFlashToken,
-            flashReason: workspace.tmuxWorkspaceFlashReason
-        )
     }
 
     struct CommandPaletteContextSnapshot {
@@ -1197,8 +1069,6 @@ struct ContentView: View {
         view
             .background(WindowAccessor(dedupeByWindow: false) { window in
                 MainActor.assumeIsolated {
-                    let tmuxOverlayController = tmuxWorkspacePaneWindowOverlayController(for: window)
-                    tmuxOverlayController.update(state: tmuxWorkspacePaneWindowOverlayState(for: window))
                     let overlayController = commandPaletteWindowOverlayController(for: window)
                     overlayController.update(rootView: AnyView(commandPaletteOverlay), isVisible: commandPaletteController.isCommandPalettePresented)
                 }
@@ -4188,7 +4058,6 @@ struct ContentView: View {
             }
         }
 
-
         for target in TerminalDirectoryOpenTarget.commandPaletteShortcutTargets {
             registry.register(commandId: target.commandPaletteCommandId) {
                 if !openFocusedDirectory(in: target) {
@@ -4320,10 +4189,6 @@ struct ContentView: View {
 
     private func syncCommandPaletteSelectionAnchorFromCurrentResults() {
         syncCommandPaletteSelectionAnchor(resultIDs: commandPaletteController.cachedCommandPaletteResults.map(\.id))
-    }
-
-    private func syncCommandPaletteSelectionAnchorFromVisibleResults() {
-        syncCommandPaletteSelectionAnchor(resultIDs: commandPaletteController.commandPaletteVisibleResults.map(\.id))
     }
 
     private func moveCommandPaletteSelection(by delta: Int) {
@@ -4859,8 +4724,7 @@ struct ContentView: View {
 
     private func commandPaletteRenameInputFocusPolicy() -> CommandPaletteInputFocusPolicy {
         // Rename always opens with the existing name selected, so typing replaces
-        // it. This used to be a preference. Other focus policies still use
-        // .caretAtEnd, so only this call site is fixed.
+        // it. Other focus policies still use .caretAtEnd, so only this call site is fixed.
         return CommandPaletteInputFocusPolicy(
             focusTarget: .rename,
             selectionBehavior: .selectAll
@@ -4928,9 +4792,7 @@ struct ContentView: View {
         guard let data = UserDefaults.standard.data(forKey: Self.commandPaletteUsageDefaultsKey) else {
             return [:]
         }
-        let history = (try? JSONDecoder().decode([String: CommandPaletteUsageEntry].self, from: data)) ?? [:]
-        // Legacy cmux name, still read so existing custom-command usage history keeps working.
-        return Dictionary(history.map { ($0.key.replacingOccurrences(of: "cmux.config.", with: "programa.config.", options: .anchored), $0.value) }) { current, _ in current }
+        return (try? JSONDecoder().decode([String: CommandPaletteUsageEntry].self, from: data)) ?? [:]
     }
 
     private func persistCommandPaletteUsageHistory(_ history: [String: CommandPaletteUsageEntry]) {

@@ -1,7 +1,7 @@
-// Command-palette state ownership, extracted from ContentView.swift (nuclear-review #88).
+// Command-palette state ownership.
 //
-// CommandPaletteController owns every @State property that used to live on
-// ContentView and is exclusively used by the command palette (query, mode,
+// CommandPaletteController owns every piece of palette state that is
+// exclusively used by the command palette (query, mode,
 // search corpus/results, rename/workspace-description drafts, focus-restore
 // targets, usage history, etc.). ContentView holds a single
 // `@StateObject private var commandPaletteController` and exposes each
@@ -15,13 +15,12 @@
 // SwiftUI View-only property wrapper and cannot be hosted on an
 // ObservableObject.
 //
-// Access-level widening: CommandPaletteMode, CommandPaletteRestoreFocusTarget,
+// CommandPaletteMode, CommandPaletteRestoreFocusTarget,
 // CommandPaletteTextSelectionBehavior, and CommandPaletteMultilineTextEditorRepresentable
-// were `private` nested types inside ContentView; widened to internal (dropped
-// the `private` modifier) so this controller (a different file) can reference
-// them. No other behavior change. CommandPaletteCommand, CommandPaletteSearchResult,
+// are internal nested types of ContentView so this controller (a different file) can
+// reference them. CommandPaletteCommand, CommandPaletteSearchResult,
 // CommandPaletteListScope, CommandPalettePendingActivation, and
-// CommandPaletteUsageEntry were already internal nested types; referenced here
+// CommandPaletteUsageEntry are also internal nested types; referenced here
 // via `ContentView.` qualification since nested-type name lookup requires it
 // from outside the enclosing type's lexical scope.
 

@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
 import QuartzCore
 import Combine
 import CoreText
@@ -9,10 +8,9 @@ import Darwin
 import Carbon.HIToolbox
 import Bonsplit
 import IOSurface
-import UniformTypeIdentifiers
 import os
 
-// MARK: - Debug Render Instrumentation (split out, Nuclear Review #97; verbatim move)
+// MARK: - Debug Render Instrumentation
 
 /// Lightweight instrumentation to detect whether Ghostty is actually requesting Metal drawables.
 /// This helps catch "frozen until refocus" regressions without relying on screenshots (which can
@@ -106,9 +104,6 @@ struct ProgramaPortRangeAssignment: Equatable, Sendable {
 }
 
 enum ProgramaPortRangePolicy {
-    // Legacy cmux names, kept because existing installs store the port settings under them.
-    static let baseDefaultsKey = "cmuxPortBase"
-    static let rangeDefaultsKey = "cmuxPortRange"
     static let defaultBase = 9_100
     static let defaultRange = 10
     static let minimumPort = 1
@@ -121,12 +116,6 @@ enum ProgramaPortRangePolicy {
         }
         let (end, overflow) = base.addingReportingOverflow(range - 1)
         return !overflow && end <= maximumPort
-    }
-
-    static func clamped(base: Int, range: Int) -> (base: Int, range: Int) {
-        let safeBase = min(max(base, minimumPort), maximumPort)
-        let maximumRange = maximumPort - safeBase + 1
-        return (safeBase, min(max(range, minimumPort), maximumRange))
     }
 
     static func assignment(
@@ -162,14 +151,8 @@ enum ProgramaPortRangePolicy {
         return ProgramaPortRangeAssignment(start: start, end: end, size: range)
     }
 
-    static func assignment(defaults: UserDefaults, ordinal: Int) -> ProgramaPortRangeAssignment {
-        let storedBase = defaults.integer(forKey: baseDefaultsKey)
-        let storedRange = defaults.integer(forKey: rangeDefaultsKey)
-        return assignment(
-            base: storedBase > 0 ? storedBase : defaultBase,
-            range: storedRange > 0 ? storedRange : defaultRange,
-            ordinal: ordinal
-        )
+    static func assignment(ordinal: Int) -> ProgramaPortRangeAssignment {
+        assignment(base: defaultBase, range: defaultRange, ordinal: ordinal)
     }
 }
 
@@ -479,7 +462,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         }
     }
 
-
     func updateWorkspaceId(_ newTabId: UUID) {
         tabId = newTabId
         attachedView?.tabId = newTabId
@@ -669,12 +651,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
     static func managedFishShellCommand(shell: String) -> String {
         let initCommand = #"source "$PROGRAMA_FISH_INTEGRATION_FILE""#
-        return "\(shellSingleQuoted(shell)) -il --init-command \(shellSingleQuoted(initCommand))"
-    }
-
-    private static func shellSingleQuoted(_ value: String) -> String {
-        let escaped = value.replacingOccurrences(of: "'", with: "'\\''")
-        return "'\(escaped)'"
+        return "\(GhosttyPasteboardHelper.shellSingleQuoted(shell)) -il --init-command \(GhosttyPasteboardHelper.shellSingleQuoted(initCommand))"
     }
 
     func isAttached(to view: GhosttyNSView) -> Bool {
@@ -914,19 +891,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         return true
     }
 
-    func releasePortalHostIfOwned(hostId: ObjectIdentifier, reason: String) {
-        guard let current = activePortalHostLease, current.hostId == hostId else { return }
-        activePortalHostLease = nil
-#if DEBUG
-        dlog(
-            "terminal.portal.host.release surface=\(id.uuidString.prefix(5)) " +
-            "reason=\(reason) host=\(hostId) pane=\(current.paneId.uuidString.prefix(5)) " +
-            "inWin=\(current.inWindow ? 1 : 0) " +
-            "area=\(String(format: "%.1f", current.area))"
-        )
-#endif
-    }
-
     private func recordTeardownRequest(reason: String) {
         withDebugMetadataLock {
             if teardownRequestedAt == nil {
@@ -1129,10 +1093,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private static let surfaceLogPath = "/tmp/programa-ghostty-surface.log"
     private static let sizeLogPath = "/tmp/programa-ghostty-size.log"
 
-    func debugCurrentPixelSize() -> (width: UInt32, height: UInt32) {
-        (lastPixelWidth, lastPixelHeight)
-    }
-
     func debugDesiredFocusState() -> Bool {
         desiredFocusState
     }
@@ -1293,7 +1253,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         #endif
 
         guard let app = GhosttyApp.shared.app else {
-            print("Ghostty app not initialized")
+            NSLog("Ghostty app not initialized")
             #if DEBUG
             Self.surfaceLog("createSurface FAILED surface=\(id.uuidString): ghostty app not initialized")
             #endif
@@ -1396,15 +1356,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
             setManagedEnvironmentValue("PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID", defaultBrowser.bundleIdentifier)
         }
 
-        // Resolve settings for each new terminal so Settings changes take effect without a restart.
-        // The policy validates the full range and wraps the monotonic ordinal within the available
-        // port space, so malformed defaults and long-running sessions can never trap or emit an
-        // invalid TCP port.
+        // The policy wraps the monotonic ordinal within the available port space, so
+        // long-running sessions can never trap or emit an invalid TCP port.
         do {
-            let assignment = ProgramaPortRangePolicy.assignment(
-                defaults: .standard,
-                ordinal: portOrdinal
-            )
+            let assignment = ProgramaPortRangePolicy.assignment(ordinal: portOrdinal)
             setManagedEnvironmentValue("PROGRAMA_PORT", String(assignment.start))
             setManagedEnvironmentValue("PROGRAMA_PORT_END", String(assignment.end))
             setManagedEnvironmentValue("PROGRAMA_PORT_RANGE", String(assignment.size))
@@ -1413,9 +1368,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let claudeHooksEnabled = ClaudeCodeIntegrationSettings.hooksEnabled()
         if !claudeHooksEnabled {
             setManagedEnvironmentValue("PROGRAMA_CLAUDE_HOOKS_DISABLED", "1")
-        }
-        if let customClaudePath = ClaudeCodeIntegrationSettings.customClaudePath() {
-            setManagedEnvironmentValue("PROGRAMA_CUSTOM_CLAUDE_PATH", customClaudePath)
         }
 
         if let cliBinPath = Bundle.main.resourceURL?.appendingPathComponent("bin").path {
@@ -1633,7 +1585,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             }
             GhosttySurfaceUserdataRegistry.release(surfaceCallbackContext)
             surfaceCallbackContext = nil
-            print("Failed to create ghostty surface")
+            NSLog("Failed to create ghostty surface")
             #if DEBUG
             Self.surfaceLog("createSurface FAILED surface=\(id.uuidString): ghostty_surface_new returned nil")
             if let cfg = GhosttyApp.shared.config {
@@ -2365,7 +2317,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// Force a full size recalculation and surface redraw.
     func forceRefresh(reason: String = "unspecified") {
         // PERF (#183): this diagnostic string is consumed only by the DEBUG-only `dlog` below,
-        // but it used to be built unconditionally -- interpolating the view's bounds and doing a
+        // and building it unconditionally would interpolate the view's bounds and do a
         // CAMetalLayer cast on every call, including the one that runs after each text-input
         // keystroke. Keep the whole thing inside DEBUG so release builds allocate nothing here.
         #if DEBUG

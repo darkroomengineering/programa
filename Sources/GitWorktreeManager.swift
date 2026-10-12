@@ -306,12 +306,8 @@ enum ProgramaWorktreeSettings {
 
     private static func readSettingsRoot() -> [String: Any]? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let newPath = (home as NSString).appendingPathComponent(".config/programa/settings.json")
-        // Legacy cmux name, still read so existing ~/.config/cmux/settings.json files keep working.
-        let legacyPath = (home as NSString).appendingPathComponent(".config/cmux/settings.json")
-        let fm = FileManager.default
-        let path = fm.fileExists(atPath: newPath) ? newPath : legacyPath
-        guard let data = fm.contents(atPath: path), !data.isEmpty else { return nil }
+        let path = (home as NSString).appendingPathComponent(".config/programa/settings.json")
+        guard let data = FileManager.default.contents(atPath: path), !data.isEmpty else { return nil }
         guard let sanitized = try? JSONCParser.preprocess(data: data),
               let object = try? JSONSerialization.jsonObject(with: sanitized, options: []) else {
             return nil

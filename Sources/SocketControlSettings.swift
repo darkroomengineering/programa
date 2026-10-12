@@ -433,8 +433,7 @@ struct SocketControlSettings {
         switch normalizeMode(raw) {
         case "off":
             return .off
-        // Legacy cmux name, still read so existing socket mode settings keep working.
-        case "cmuxonly", "programaonly":
+        case "programaonly":
             return .programaOnly
         case "automation":
             return .automation

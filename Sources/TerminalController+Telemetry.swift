@@ -1,4 +1,4 @@
-// Extracted from TerminalController.swift (nuclear-review #96): off-main-parse + main.async-mutate telemetry commands (surface.report_*/ports_kick, workspace.set_status/log/progress/sidebar metadata).
+// Off-main-parse + main.async-mutate telemetry commands (surface.report_*/ports_kick, workspace.set_status/log/progress/sidebar metadata).
 import AppKit
 import Carbon.HIToolbox
 import Foundation
@@ -322,16 +322,10 @@ extension TerminalController {
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
             tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey)
-            let taskState: AgentTaskState
-            switch state {
-            case .idle: taskState = .idle
-            case .working: taskState = .working
-            case .blocked: taskState = .blocked
-            }
             _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
                 workspaceId: workspaceId,
                 surfaceId: sid,
-                state: taskState
+                state: AgentTaskState(state)
             )
             if let reportedPid, let provider, let pidKey = Self.agentPIDKey(forProvider: provider) {
                 if tab.setSidebarAgentPID(key: pidKey, pid: reportedPid) {
@@ -418,16 +412,10 @@ extension TerminalController {
         case .applyState(let state):
             v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
                 tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: .hooks, sessionKey: sessionKey)
-                let taskState: AgentTaskState
-                switch state {
-                case .idle: taskState = .idle
-                case .working: taskState = .working
-                case .blocked: taskState = .blocked
-                }
                 _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
                     workspaceId: workspaceId,
                     surfaceId: sid,
-                    state: taskState
+                    state: AgentTaskState(state)
                 )
                 if let reportedPid, let provider, let pidKey = Self.agentPIDKey(forProvider: provider) {
                     if tab.setSidebarAgentPID(key: pidKey, pid: reportedPid) {
@@ -452,10 +440,9 @@ extension TerminalController {
     }
 
     /// Atomically reports a surface as blocked on user input and posts the matching
-    /// notification (docs/plans/agent-state-unification.md T2): replaces the three
-    /// independent socket calls (`notification.create_for_target` +
-    /// `workspace.set_status` "Needs input" + `surface.report_agent_state`) a hook used to
-    /// make for the same "needs input" moment, any one of which could fail alone. Parses
+    /// notification in one call, instead of three independent socket calls
+    /// (`notification.create_for_target` + `workspace.set_status` "Needs input" +
+    /// `surface.report_agent_state`), any one of which could fail alone. Parses
     /// and validates off-main; hops to main once via `v2ScheduleSurfaceTelemetryMutation`
     /// (notification creation must run on main -- it drives AppKit) and performs the state
     /// write, notification, and supervision update in that single hop.

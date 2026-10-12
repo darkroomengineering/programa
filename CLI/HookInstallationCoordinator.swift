@@ -14,9 +14,9 @@ struct HookInstallationCoordinator {
         guard let provider = Provider(rawValue: command) else { return nil }
         let subcommand = arguments.first?.lowercased() ?? "help"
         switch (provider, subcommand) {
-        case (.codex, "install-hooks"), (.codex, "install-integration"):
+        case (.codex, "install-integration"):
             return Request(provider: provider, action: .install)
-        case (.codex, "uninstall-hooks"), (.codex, "uninstall-integration"):
+        case (.codex, "uninstall-integration"):
             return Request(provider: provider, action: .uninstall)
         case (.claude, "install-integration"), (.opencode, "install-integration"):
             return Request(provider: provider, action: .install)
@@ -147,7 +147,7 @@ extension ProgramaCLI {
             print("")
             if install {
                 print("Installed. Codex trusts programa hooks inside programa; they silently no-op elsewhere.")
-                print("To remove: programa codex uninstall-hooks")
+                print("To remove: programa codex uninstall-integration")
             } else {
                 print("Removed programa Codex hooks and their trust entries.")
             }

@@ -1,7 +1,6 @@
 import Foundation
 
-/// Generic, closure-based undo staging for terminal panel closes (issue #140, ported from
-/// upstream cmux's task-undo-close-grace-period). Closing a terminal stages it here instead of
+/// Generic, closure-based undo staging for terminal panel closes (issue #140). Closing a terminal stages it here instead of
 /// tearing it down immediately; if nothing restores it within the grace period, `finalize` runs
 /// the real teardown.
 ///
@@ -37,7 +36,7 @@ final class ClosedTerminalUndoStore {
 
     /// Stages a close for undo. `restore` reattaches the closed panel; `finalize` performs the
     /// real teardown once the grace period elapses without a restore. Returns an opaque id that
-    /// can be used to cancel staging early (not currently needed by any caller).
+    /// can be used to cancel staging early.
     @discardableResult
     func stage(restore: @escaping () -> Void, finalize: @escaping () -> Void) -> UUID {
         let id = UUID()

@@ -3,8 +3,7 @@
 # tests. The full suite still runs manually on the VM via
 # scripts/run-tests-v2.sh.
 #
-# Do NOT add: test_splits_focus_close_resize.py,
-# test_visual_screenshots.py, test_notifications.py.
+# Do NOT add: test_splits_focus_close_resize.py, test_notifications.py.
 test_cli_id_format_defaults.py
 # test_windows_api.py — excluded on CI: moved surfaces report in_window=false on
 # GitHub runners even with a virtual display; needs runner-side investigation (#169).

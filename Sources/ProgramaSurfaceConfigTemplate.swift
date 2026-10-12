@@ -1,4 +1,4 @@
-// Extracted from Workspace.swift (nuclear-review #98): ProgramaSurfaceConfigTemplate and the
+// ProgramaSurfaceConfigTemplate and the
 // surface-config-inheritance free functions that operate on it.
 
 import Foundation

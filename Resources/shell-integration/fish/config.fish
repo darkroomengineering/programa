@@ -50,9 +50,7 @@ if test "$_programa_integration_enabled" != 0
             printf '%s\n' "$PROGRAMA_BUNDLED_CLI_PATH"
             return 0
         end
-        # Rebranded CLI binary ships as "programa"; fall back to the pre-rebrand
-        # "cmux" name for older installs that only symlinked that binary.
-        command -v programa 2>/dev/null; or command -v cmux 2>/dev/null
+        command -v programa 2>/dev/null
     end
 
     function _programa_socket_uses_remote_relay
@@ -368,7 +366,7 @@ end
 # ran the user's real ~/.config/fish/config.fish, functions/, completions/, and
 # conf.d/*.fish *before* this file was sourced (Swift sets
 # PROGRAMA_FISH_USER_CONFIG_ALREADY_LOADED=1 for that path — see
-# GhosttyTerminalView.swift). This block only fires when that flag is absent,
+# TerminalSurface.swift). This block only fires when that flag is absent,
 # e.g. a future remote-relay bootstrap that overrides HOME/XDG_CONFIG_HOME
 # before fish's normal startup can find the real user config.
 set -l _programa_user_config_home ""

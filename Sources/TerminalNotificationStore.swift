@@ -340,11 +340,9 @@ final class TerminalNotificationStore: ObservableObject {
         // Judge focus state by the tab manager that owns this tab — the primary
         // window's manager gives wrong answers for tabs in secondary windows.
         //
-        // NOTE (nuclear-review #90): TerminalNotificationStore reaching back into
-        // AppDelegate.shared for tab-manager lookups is a layering smell — this store should
-        // arguably be handed the owning TabManager(s) rather than reaching for a global.
-        // Flagged, not fixed here: untangling it needs a real design pass on how
-        // TerminalNotificationStore is scoped/injected across windows, not a mechanical move.
+        // NOTE: reaching back into AppDelegate.shared for tab-manager lookups is a layering
+        // smell; the store should arguably be handed the owning TabManager(s). Untangling it
+        // needs a design pass on how the store is scoped/injected across windows.
         let owningTabManager = AppDelegate.shared?.tabManagerFor(tabId: tabId) ?? AppDelegate.shared?.tabManager
         let isActiveTab = owningTabManager?.selectedTabId == tabId
         let focusedSurfaceId = owningTabManager?.focusedSurfaceId(for: tabId)
@@ -357,9 +355,7 @@ final class TerminalNotificationStore: ObservableObject {
             setFocusedReadIndicator(forTabId: tabId, surfaceId: surfaceId)
         }
 
-        if WorkspaceAutoReorderSettings.isEnabled() {
-            owningTabManager?.moveTabToTopForNotification(tabId)
-        }
+        owningTabManager?.moveTabToTopForNotification(tabId)
 
         let notification = TerminalNotification(
             id: UUID(),
@@ -486,12 +482,6 @@ final class TerminalNotificationStore: ObservableObject {
     func clearFocusedReadIndicator(forTabId tabId: UUID, surfaceId: UUID? = nil) {
         guard let existingSurfaceId = focusedReadIndicatorByTabId[tabId] else { return }
         guard surfaceId == nil || existingSurfaceId == surfaceId else { return }
-        focusedReadIndicatorByTabId.removeValue(forKey: tabId)
-    }
-
-    func clearFocusedReadIndicatorIfSurfaceChanged(forTabId tabId: UUID, surfaceId: UUID?) {
-        guard let existingSurfaceId = focusedReadIndicatorByTabId[tabId] else { return }
-        guard existingSurfaceId != surfaceId else { return }
         focusedReadIndicatorByTabId.removeValue(forKey: tabId)
     }
 
@@ -644,19 +634,10 @@ final class TerminalNotificationStore: ObservableObject {
                 content: content,
                 trigger: nil
             )
-            let commandTitle = content.title
-            let commandSubtitle = content.subtitle
-            let commandBody = content.body
 
             self.center.add(request) { error in
                 if let error {
                     NSLog("Failed to schedule notification: \(error)")
-                } else {
-                    NotificationSoundSettings.runCustomCommand(
-                        title: commandTitle,
-                        subtitle: commandSubtitle,
-                        body: commandBody
-                    )
                 }
             }
         }
@@ -664,11 +645,6 @@ final class TerminalNotificationStore: ObservableObject {
 
     private func playSuppressedNotificationFeedback(for notification: TerminalNotification) {
         NotificationSoundSettings.playSelectedSound()
-        NotificationSoundSettings.runCustomCommand(
-            title: resolvedNotificationTitle(for: notification),
-            subtitle: notification.subtitle,
-            body: notification.body
-        )
     }
 
     private func ensureAuthorization(

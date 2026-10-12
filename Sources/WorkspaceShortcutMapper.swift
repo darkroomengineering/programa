@@ -2,10 +2,7 @@ import AppKit
 import SwiftUI
 import Bonsplit
 import CoreServices
-import UserNotifications
-import Combine
 import ObjectiveC.runtime
-import Darwin
 
 enum WorkspaceShortcutMapper {
     /// Maps numbered workspace shortcuts to a zero-based workspace index.

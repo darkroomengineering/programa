@@ -159,28 +159,6 @@ class UpdateViewModel: ObservableObject {
         }
     }
 
-    var iconColor: Color {
-        if showsDetectedBackgroundUpdate {
-            return programaAccentColor()
-        }
-        switch effectiveState {
-        case .idle:
-            return .secondary
-        case .permissionRequest:
-            return .white
-        case .checking:
-            return .secondary
-        case .updateAvailable:
-            return programaAccentColor()
-        case .downloading, .extracting, .installing:
-            return .secondary
-        case .notFound:
-            return .secondary
-        case .error:
-            return .orange
-        }
-    }
-
     var backgroundColor: Color {
         if showsDetectedBackgroundUpdate {
             return programaAccentColor()

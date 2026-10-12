@@ -2,30 +2,11 @@ import AppKit
 import SwiftUI
 import Bonsplit
 import CoreServices
-import UserNotifications
-import Combine
 import ObjectiveC.runtime
-import Darwin
 
 private var programaFirstResponderGuardHitViewContext: NSView?
-private var programaWindowFirstResponderBypassDepth = 0
-
-@discardableResult
-func programaWithWindowFirstResponderBypass<T>(_ body: () -> T) -> T {
-    programaWindowFirstResponderBypassDepth += 1
-    defer {
-        programaWindowFirstResponderBypassDepth = max(0, programaWindowFirstResponderBypassDepth - 1)
-    }
-    return body()
-}
-
-func programaIsWindowFirstResponderBypassActive() -> Bool {
-    programaWindowFirstResponderBypassDepth > 0
-}
 
 #if DEBUG
-// Widened from `private extension` to `extension`: AppDelegate.installWindowResponderSwizzles()
-// (in AppDelegate.swift) references these @objc methods via #selector(...) for method swizzling. Refs #95.
 // DEBUG-only: the swizzle exists solely for typing-timing instrumentation.
 extension NSApplication {
     @objc func programa_applicationSendEvent(_ event: NSEvent) {
@@ -56,20 +37,8 @@ extension NSApplication {
 }
 #endif
 
-// Widened from `private extension` to `extension`: AppDelegate.installWindowResponderSwizzles()
-// (in AppDelegate.swift) references these @objc methods via #selector(...) for method swizzling. Refs #95.
 extension NSWindow {
     @objc func programa_makeFirstResponder(_ responder: NSResponder?) -> Bool {
-        if programaIsWindowFirstResponderBypassActive() {
-#if DEBUG
-            dlog(
-                "focus.guard bypassFirstResponder responder=\(String(describing: responder.map { type(of: $0) })) " +
-                "window=\(ObjectIdentifier(self))"
-            )
-#endif
-            return false
-        }
-
         if AppDelegate.shared?.shouldBlockFirstResponderChangeWhileCommandPaletteVisible(
             window: self,
             responder: responder
@@ -444,7 +413,6 @@ extension NSWindow {
             return false
         }
     }
-
 
 }
 

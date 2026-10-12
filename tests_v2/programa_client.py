@@ -496,22 +496,6 @@ class ProgramaClient:
         wsid = self._resolve_workspace_id(workspace_id)
         self._call("workspace.close", {"workspace_id": wsid})
 
-    # Backwards-compatible aliases
-    def list_tabs(self) -> List[Tuple[int, str, str, bool]]:
-        return self.list_workspaces()
-
-    def new_tab(self) -> str:
-        return self.new_workspace()
-
-    def close_tab(self, workspace_id: str) -> None:
-        return self.close_workspace(workspace_id)
-
-    def select_tab(self, workspace: Union[str, int]) -> None:
-        return self.select_workspace(workspace)
-
-    def current_tab(self) -> str:
-        return self.current_workspace()
-
     # ---------------------------------------------------------------------
     # Surfaces / panes
     # ---------------------------------------------------------------------

@@ -559,7 +559,7 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertFalse(freshIndicator?.isStale ?? true)
     }
 
-    // MARK: - OSC 7501 program authority (docs/plans/osc7501-program-status.md D7)
+    // MARK: - OSC 7501 program authority (docs/program-status.md)
 
     func testProgramActiveBlocksHooksAndInferredWrites() {
         let workspace = Workspace(title: "Test")

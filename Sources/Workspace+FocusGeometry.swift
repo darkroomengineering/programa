@@ -1,4 +1,4 @@
-// Extracted from Workspace.swift (nuclear-review #98): focus/geometry reconciliation members
+// Focus/geometry reconciliation members
 // (non-focus-split focus preservation, focusPanel, attention flashes, portal lifecycle, and the
 // event-driven layout follow-up / terminal-geometry / portal-visibility reconciliation pipeline).
 
@@ -7,9 +7,7 @@ import SwiftUI
 import AppKit
 import Bonsplit
 import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 extension Workspace {
@@ -220,7 +218,6 @@ extension Workspace {
             )
         }
 
-
         if trigger == .terminalFirstResponder,
            panels[panelId] is TerminalPanel {
             beginEventDrivenLayoutFollowUp(
@@ -228,28 +225,6 @@ extension Workspace {
                 terminalFocusPanelId: panelId
             )
         }
-    }
-
-
-    func isCommandPaletteVisibleForWorkspaceWindow() -> Bool {
-        guard let app = AppDelegate.shared else {
-            return false
-        }
-
-        if let manager = app.tabManagerFor(tabId: id),
-           let windowId = app.windowId(for: manager),
-           let window = app.mainWindow(for: windowId),
-           app.isCommandPaletteVisible(for: window) {
-            return true
-        }
-
-        if let keyWindow = NSApp.keyWindow, app.isCommandPaletteVisible(for: keyWindow) {
-            return true
-        }
-        if let mainWindow = NSApp.mainWindow, app.isCommandPaletteVisible(for: mainWindow) {
-            return true
-        }
-        return false
     }
 
     func moveFocus(direction: NavigationDirection) {
@@ -316,7 +291,6 @@ extension Workspace {
             TerminalWindowPortalRegistry.hideHostedView(terminal.hostedView)
         }
     }
-
 
     func reconcileFocusState() {
         guard !isReconcilingFocusState else { return }
@@ -524,9 +498,6 @@ extension Workspace {
         }
     }
 
-
-
-
     func terminalFocusNeedsFollowUp() -> Bool {
         guard let panelId = layoutFollowUpTerminalFocusPanelId,
               let terminalPanel = terminalPanel(for: panelId) else {
@@ -534,7 +505,6 @@ extension Workspace {
         }
         return focusedPanelId != panelId || !terminalPanel.hostedView.isSurfaceViewFirstResponder()
     }
-
 
     func attemptEventDrivenLayoutFollowUp() {
         guard layoutFollowUpTimeoutWorkItem != nil, !isAttemptingLayoutFollowUp else { return }
@@ -565,9 +535,6 @@ extension Workspace {
 
         reconcileTerminalPortalVisibilityForCurrentRenderedLayout()
         let terminalPortalPending = terminalPortalVisibilityNeedsFollowUp()
-
-
-
 
         let terminalFocusPending = terminalFocusNeedsFollowUp()
         let needsMoreWork =
@@ -708,8 +675,6 @@ extension Workspace {
 
         return false
     }
-
-
 
     func scheduleMovedTerminalRefresh(panelId: UUID) {
         guard terminalPanel(for: panelId) != nil else { return }

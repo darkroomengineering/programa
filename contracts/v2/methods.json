@@ -1294,28 +1294,6 @@
       },
       "threading": "main"
     },
-    "debug.viewtree": {
-      "auth_required": true,
-      "debug_only": true,
-      "description": "DEBUG-build-only introspection and simulation. (viewtree).",
-      "errors": [
-        "invalid_params",
-        "not_found",
-        "internal_error"
-      ],
-      "focus_intent": false,
-      "handler": "v2DebugViewTree",
-      "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "required": [],
-        "type": "object"
-      },
-      "result": {
-        "type": "object"
-      },
-      "threading": "main"
-    },
     "debug.window.screenshot": {
       "auth_required": true,
       "debug_only": true,

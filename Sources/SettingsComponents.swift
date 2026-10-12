@@ -4,7 +4,6 @@ import Darwin
 import Bonsplit
 import UniformTypeIdentifiers
 
-
 struct SettingsSectionHeader: View {
     let title: String
 

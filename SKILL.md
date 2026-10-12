@@ -3,7 +3,7 @@ name: programa
 description: Drive the programa terminal app from inside a programa surface — inspect windows/workspaces/panes/surfaces, split panes and run commands without stealing the user's focus, read output from sibling panes, spawn and coordinate a helper agent, and wait on it. Use whenever an agent is running inside programa (PROGRAMA_SURFACE_ID and PROGRAMA_SOCKET_PATH are set) and needs to control the app itself, not just the shell inside one pane. Do not use, and do not call the programa CLI at all, when those two variables are unset — that means the agent is not running inside programa.
 ---
 
-<!-- Installed and managed by `programa claude install-integration` / `programa codex install-integration` (legacy alias `install-hooks`) / `programa opencode install-integration`. Manual edits to an installed copy get overwritten on the next install — edit the source at repo root (darkroomengineering/programa) instead. -->
+<!-- Installed and managed by `programa claude install-integration` / `programa codex install-integration` / `programa opencode install-integration`. Manual edits to an installed copy get overwritten on the next install — edit the source at repo root (darkroomengineering/programa) instead. -->
 
 # programa
 
@@ -218,21 +218,9 @@ Use the same panel that renders `programa markdown open` for it, so lean on its 
 
 ## Browser work
 
-Two browsers, two jobs. Do not reach for a Chrome extension for either.
+Do not reach for a Chrome extension. Programa has no built-in browser; browser work goes through Aside.
 
-- **Local previews, smoke tests, screenshots you read back, DOM checks, console errors:** use programa's embedded browser. It opens beside your pane, keeps its own profile, and never moves the user's focus:
-
-  ```bash
-  programa browser open-split http://localhost:3000            # prints the new surface id
-  programa browser --surface surface:7 snapshot --interactive  # interactive elements only
-  programa browser --surface surface:7 click "button.submit" --snapshot-after
-  programa browser --surface surface:7 screenshot --out /tmp/after.png
-  programa browser --surface surface:7 tab close
-  ```
-
-  `programa browser --help` lists the rest (wait, fill, eval, cookies, console, errors). Network routing, viewport control, and raw input injection are not available on WKWebView, so there are no commands for them. Over MCP the same calls are the `browser_*` tools of `programa-mcp`.
-
-- **Logged-in sites, private dashboards, CI logs, anything that needs the user's real browser profile:** use Aside through its MCP server if it is registered (tools from the `aside` server, or `aside-devtools` for raw Chrome DevTools control), or delegate a whole task from the shell:
+- **Previews, smoke tests, screenshots, DOM checks, console errors, logged-in sites, private dashboards, CI logs:** use Aside through its MCP server if it is registered (tools from the `aside` server, or `aside-devtools` for raw Chrome DevTools control), or delegate a whole task from the shell:
 
   ```bash
   aside "Open the staging dashboard and tell me whether the last deploy is green"

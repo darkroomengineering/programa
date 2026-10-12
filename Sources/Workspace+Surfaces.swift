@@ -1,14 +1,11 @@
-// Extracted from Workspace.swift (nuclear-review #98): surface creation/adoption/config
+// Surface creation/adoption/config
 // inheritance members (terminal/markdown split + surface creation).
 
 import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 extension Workspace {
@@ -271,7 +268,6 @@ extension Workspace {
             workingDirectory: splitWorkingDirectory,
             portOrdinal: portOrdinal
         )
-        configureTerminalPanel(newPanel)
         panels[newPanel.id] = newPanel
         panelTitles[newPanel.id] = newPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: newPanel.id, configTemplate: inheritedConfig)
@@ -367,7 +363,6 @@ extension Workspace {
             reviveDescriptor: reviveDescriptor,
             pendingScrollbackSeedText: pendingScrollbackSeedText
         )
-        configureTerminalPanel(newPanel)
         panels[newPanel.id] = newPanel
         panelTitles[newPanel.id] = newPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: newPanel.id, configTemplate: inheritedConfig)
@@ -416,8 +411,6 @@ extension Workspace {
         )
         return newPanel
     }
-
-
 
     func newMarkdownSplit(
         from panelId: UUID,

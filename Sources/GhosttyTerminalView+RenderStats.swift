@@ -1,15 +1,8 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
-import QuartzCore
-import Combine
-import CoreText
-import Darwin
-import Carbon.HIToolbox
 import Bonsplit
 import IOSurface
-import UniformTypeIdentifiers
 
 // MARK: - GhosttySurfaceScrollView + RenderStats
 //
@@ -17,14 +10,11 @@ import UniformTypeIdentifiers
 // counters exposed to the debug socket, and IOSurface-backed frame sampling used to
 // detect blank-frame regressions without Screen Recording permissions.
 //
-// Split out of GhosttyTerminalView.swift (Nuclear Review #97). Extracted verbatim
-// as a same-type extension (entirely #if DEBUG), so behavior is unchanged.
+// Same-type extension, entirely #if DEBUG.
 
 extension GhosttySurfaceScrollView {
 #if DEBUG
     struct DebugRenderStats {
-        let drawCount: Int
-        let lastDrawTime: CFTimeInterval
         let presentCount: Int
         let lastPresentTime: CFTimeInterval
         let layerClass: String
@@ -40,9 +30,6 @@ extension GhosttySurfaceScrollView {
 
     func debugRenderStats() -> DebugRenderStats {
         let layerClass = surfaceView.layer.map { String(describing: type(of: $0)) } ?? "nil"
-        let (drawCount, lastDraw): (Int, CFTimeInterval) = surfaceView.terminalSurface.map { terminalSurface in
-            Self.drawStats(for: terminalSurface.id)
-        } ?? (0, 0)
         let (presentCount, lastPresent, contentsKey): (Int, CFTimeInterval, String) = surfaceView.terminalSurface.map { terminalSurface in
             let stats = Self.updatePresentStats(surfaceId: terminalSurface.id, layer: surfaceView.layer)
             return (stats.count, stats.last, stats.key)
@@ -54,8 +41,6 @@ extension GhosttySurfaceScrollView {
         let fr = window?.firstResponder as? NSView
         let isFirstResponder = fr == surfaceView || (fr?.isDescendant(of: surfaceView) ?? false)
         return DebugRenderStats(
-            drawCount: drawCount,
-            lastDrawTime: lastDraw,
             presentCount: presentCount,
             lastPresentTime: lastPresent,
             layerClass: layerClass,

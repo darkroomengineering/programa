@@ -6,9 +6,9 @@ import XCTest
 @testable import Programa
 #endif
 
-/// Issue #188: trust used to be a flat list of directory paths with no way to tell whether the
-/// `programa.json` inside had changed since approval, so a later edit to an already-trusted
-/// config ran with no prompt at all. These pin the fix: trust is pinned to a digest of the
+/// Issue #188: a flat list of trusted directory paths cannot tell whether the
+/// `programa.json` inside changed since approval, so a later edit to an already-trusted
+/// config would run with no prompt at all. These pin the fix: trust is pinned to a digest of the
 /// config's *executable content* (JSONC comments/formatting stripped, keys canonicalized), so a
 /// changed command is detected while a comment edit or reformat is not.
 ///

@@ -67,9 +67,6 @@ class TerminalController {
     private nonisolated static let acceptFailureMaxBackoffMs = 5_000
     private nonisolated static let acceptFailureMinimumRearmDelayMs = 100
     private nonisolated static let acceptFailureRearmThreshold = 50
-    private nonisolated static let socketProbePollTimeoutMs: Int32 = 100
-    private nonisolated static let socketProbePollAttempts = 3
-    private nonisolated static let socketProbePollRetryBackoffUs: useconds_t = 50_000
     private nonisolated static let unixSocketPathMaxLength: Int = {
         var addr = sockaddr_un()
         // Reserve one byte for the null terminator.
@@ -133,17 +130,6 @@ class TerminalController {
                 return 0
             case .resumeAfterDelay(let delayMs), .rearmAfterDelay(let delayMs):
                 return delayMs
-            }
-        }
-
-        var debugLabel: String {
-            switch self {
-            case .retryImmediately:
-                return "retry_immediately"
-            case .resumeAfterDelay:
-                return "resume_after_delay"
-            case .rearmAfterDelay:
-                return "rearm_after_delay"
             }
         }
     }
@@ -428,9 +414,7 @@ class TerminalController {
         }
     }
 
-    private static func socketCommandAllowsInAppFocusMutations(commandKey: String, isV2: Bool) -> Bool {
-        // The v1 line protocol is gone; only v2 JSON-RPC methods can carry focus intent.
-        guard isV2 else { return false }
+    private static func socketCommandAllowsInAppFocusMutations(commandKey: String) -> Bool {
         return focusIntentV2Methods.contains(commandKey)
     }
 
@@ -451,20 +435,19 @@ class TerminalController {
         return body()
     }
 
-    private func withSocketCommandPolicy<T>(commandKey: String, isV2: Bool, _ body: () -> T) -> T {
-        let allowsFocusMutation = Self.socketCommandAllowsInAppFocusMutations(commandKey: commandKey, isV2: isV2)
+    private func withSocketCommandPolicy<T>(commandKey: String, _ body: () -> T) -> T {
+        let allowsFocusMutation = Self.socketCommandAllowsInAppFocusMutations(commandKey: commandKey)
         _ = Self.v2TakeSelectorResolutionFailure()
         return Self.withSocketCommandThreadState(inCommand: true, allowsFocusMutation: allowsFocusMutation, body)
     }
 
 #if DEBUG
     static func debugSocketCommandPolicySnapshot(
-        commandKey: String,
-        isV2: Bool
+        commandKey: String
     ) -> (insideSuppressed: Bool, insideAllowsFocus: Bool, outsideSuppressed: Bool, outsideAllowsFocus: Bool) {
         var insideSuppressed = false
         var insideAllowsFocus = false
-        _ = Self.shared.withSocketCommandPolicy(commandKey: commandKey, isV2: isV2) {
+        _ = Self.shared.withSocketCommandPolicy(commandKey: commandKey) {
             insideSuppressed = Self.shouldSuppressSocketCommandActivation()
             insideAllowsFocus = Self.socketCommandAllowsInAppFocusMutations()
             return 0
@@ -517,15 +500,6 @@ class TerminalController {
         return current.value != value || current.label != label
     }
 
-    nonisolated static func shouldReplaceGitBranch(
-        current: SidebarGitBranchState?,
-        branch: String,
-        isDirty: Bool
-    ) -> Bool {
-        guard let current else { return true }
-        return current.branch != branch || current.isDirty != isDirty
-    }
-
     nonisolated static func shouldReplacePullRequest(
         current: SidebarPullRequestState?,
         number: Int,
@@ -569,12 +543,6 @@ class TerminalController {
             || current.checks != effectiveChecks
     }
 
-    nonisolated static func shouldReplacePorts(current: [Int]?, next: [Int]) -> Bool {
-        let currentSorted = Array(Set(current ?? [])).sorted()
-        let nextSorted = Array(Set(next)).sorted()
-        return currentSorted != nextSorted
-    }
-
     private struct SocketSurfaceKey: Hashable {
         let workspaceId: UUID
         let panelId: UUID
@@ -584,24 +552,8 @@ class TerminalController {
     // `TerminalControllerSocketSecurityTests` via `@testable import` (regression #6618).
     final class SocketFastPathState: @unchecked Sendable {
         private let queue = DispatchQueue(label: "com.darkroom.programa.socket-fast-path")
-        private var lastReportedDirectories: [SocketSurfaceKey: String] = [:]
         private var lastReportedShellStates: [SocketSurfaceKey: Workspace.PanelShellActivityState] = [:]
-        private let maxTrackedDirectories = 4096
         private let maxTrackedShellStates = 4096
-
-        func shouldPublishDirectory(workspaceId: UUID, panelId: UUID, directory: String) -> Bool {
-            let key = SocketSurfaceKey(workspaceId: workspaceId, panelId: panelId)
-            return queue.sync {
-                if lastReportedDirectories[key] == directory {
-                    return false
-                }
-                if lastReportedDirectories.count >= maxTrackedDirectories {
-                    lastReportedDirectories.removeAll(keepingCapacity: true)
-                }
-                lastReportedDirectories[key] = directory
-                return true
-            }
-        }
 
         /// Returns `true` when the incoming state differs from the last *applied* state,
         /// meaning the report is worth dispatching to the main thread.
@@ -639,28 +591,6 @@ class TerminalController {
     }
 
     nonisolated static let socketFastPathState = SocketFastPathState()
-    nonisolated static func explicitSocketScope(
-        options: [String: String]
-    ) -> (workspaceId: UUID, panelId: UUID)? {
-        guard let tabRaw = options["tab"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !tabRaw.isEmpty,
-              let panelRaw = (options["panel"] ?? options["surface"])?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !panelRaw.isEmpty,
-              let workspaceId = UUID(uuidString: tabRaw),
-              let panelId = UUID(uuidString: panelRaw) else {
-            return nil
-        }
-        return (workspaceId, panelId)
-    }
-
-    nonisolated static func normalizeReportedDirectory(_ directory: String) -> String {
-        let trimmed = directory.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return directory }
-        if trimmed.hasPrefix("file://"), let url = URL(string: trimmed), !url.path.isEmpty {
-            return url.path
-        }
-        return trimmed
-    }
 
     nonisolated static func normalizedExportedScreenPath(_ raw: String?) -> String? {
         guard let raw else { return nil }
@@ -1043,7 +973,7 @@ class TerminalController {
         // Create socket
         let newServerSocket = socket(AF_UNIX, SOCK_STREAM, 0)
         guard newServerSocket >= 0 else {
-            print("TerminalController: Failed to create socket")
+            NSLog("TerminalController: Failed to create socket")
             return
         }
 
@@ -1072,7 +1002,7 @@ class TerminalController {
             close(newServerSocket)
             return
         case .failure:
-            print("TerminalController: Failed to bind socket")
+            NSLog("TerminalController: Failed to bind socket")
             close(newServerSocket)
             return
         }
@@ -1081,7 +1011,7 @@ class TerminalController {
 
         // Listen
         guard listen(newServerSocket, Self.socketListenBacklog) >= 0 else {
-            print("TerminalController: Failed to listen on socket")
+            NSLog("TerminalController: Failed to listen on socket")
             close(newServerSocket)
             return
         }
@@ -1101,7 +1031,6 @@ class TerminalController {
         }
         listenerActivated = true
         let listenerSocket = newServerSocket
-        print("TerminalController: Listening on \(activeSocketPath)")
         dilog("socket.listener", "start path=\(activeSocketPath) accessMode=\(accessMode)")
         NotificationCenter.default.post(
             name: .socketListenerDidStart,
@@ -1317,9 +1246,7 @@ class TerminalController {
             (socketPath, mode_t(accessMode.socketFilePermissions))
         }
         if chmod(currentSocketPath, permissions) != 0 {
-            print(
-                "TerminalController: Failed to set socket permissions to \(String(permissions, radix: 8)) for \(currentSocketPath)"
-            )
+            NSLog("TerminalController: Failed to set socket permissions to %@ for %@", String(permissions, radix: 8), currentSocketPath)
         }
     }
 
@@ -1738,9 +1665,8 @@ class TerminalController {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "ERROR: Empty command" }
 
-        // The v1 line-based protocol was removed; v2 JSON-RPC is the only protocol.
-        // Stale clients still speaking v1 get a terse, identifiable error rather than
-        // a confusing JSON parse failure.
+        // Only v2 JSON-RPC is accepted. Stale clients still speaking the v1 line protocol
+        // get a terse, identifiable error rather than a confusing JSON parse failure.
         guard trimmed.hasPrefix("{") else {
             return v2Error(
                 id: nil,
@@ -1793,7 +1719,7 @@ class TerminalController {
             return v2Error(id: id, code: "invalid_request", message: "Missing method")
         }
 
-        return withSocketCommandPolicy(commandKey: method, isV2: true) {
+        return withSocketCommandPolicy(commandKey: method) {
             if let result = AgentRPCDispatcher.dispatch(method: method, params: params, controller: self) {
                 return v2Result(id: id, result)
             }
@@ -2110,8 +2036,6 @@ class TerminalController {
             return v2Result(id: id, self.v2DebugLayout())
         case "debug.portal.stats":
             return v2Result(id: id, self.v2DebugPortalStats())
-        case "debug.viewtree":
-            return v2Result(id: id, self.v2DebugViewTree())
         case "debug.bonsplit_underflow.count":
             return v2Result(id: id, self.v2DebugBonsplitUnderflowCount())
         case "debug.bonsplit_underflow.reset":
@@ -2468,14 +2392,9 @@ class TerminalController {
         return result
     }
 
-
     nonisolated func v2HasNonNullParam(_ params: [String: Any], _ key: String) -> Bool {
         guard let raw = params[key] else { return false }
         return !(raw is NSNull)
-    }
-
-    nonisolated func v2StrictInt(_ params: [String: Any], _ key: String) -> Int? {
-        v2StrictIntAny(params[key])
     }
 
     private nonisolated func v2StrictIntAny(_ raw: Any?) -> Int? {

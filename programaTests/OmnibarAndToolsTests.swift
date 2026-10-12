@@ -155,7 +155,6 @@ final class FinderServicePathResolverTests: XCTestCase {
     }
 }
 
-
 final class CanonicalSubprocessRunnerTests: XCTestCase {
     func testSeparatelyCapturesBoundedStandardOutputAndError() {
         let result = CanonicalSubprocessRunner.run(

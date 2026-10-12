@@ -1,14 +1,11 @@
-// Extracted from Workspace.swift (nuclear-review #98): theming (split-button tooltips, bonsplit
+// Theming (split-button tooltips, bonsplit
 // chrome/divider appearance, and applyGhosttyChrome).
 
 import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 extension Workspace {

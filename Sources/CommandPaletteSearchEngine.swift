@@ -1,6 +1,6 @@
-// Command palette fuzzy-search engine, extracted from ContentView.swift (nuclear-review #94.1).
-// Pure move: search metadata, indexer, fuzzy matcher, corpus types, and the search engine.
-// Zero coupling to ContentView state — behavior-identical relocation.
+// Command palette fuzzy-search engine.
+// Holds the search metadata, indexer, fuzzy matcher, corpus types, and the search engine.
+// Has no coupling to ContentView state.
 
 import Foundation
 
@@ -172,7 +172,7 @@ enum CommandPaletteFuzzyMatcher {
                 // the two interpretations point at candidates of very different lengths/title
                 // positions: `distancePenalty`/`trailingPenalty` (both scale with the matched
                 // word's position and the candidate's overall length) can swing by hundreds of
-                // points, which used to swamp a mere 10-point base gap and let a shorter,
+                // points, which would swamp a mere 10-point base gap and let a shorter,
                 // less-relevant command's stray-extra-character interpretation outrank a
                 // longer command's genuine one-character-omitted match on its own keyword.
                 return 260
@@ -1012,4 +1012,3 @@ enum CommandPaletteSearchEngine {
         return max(fuzzyScore, titleScore + titleMatchBonus)
     }
 }
-

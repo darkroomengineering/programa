@@ -332,8 +332,8 @@ jobs:
 
   # Build the Debug app + UI test bundle once and share it with every job that
   # only needs to *run* it (socket-integration-tests, tests-build-and-lag,
-  # ui-regressions). Those three jobs used to each pay their own ~7 min
-  # "Build app" step for an identical build; this collapses that to one.
+  # ui-regressions). Building once here saves each of those three jobs
+  # its own ~7 min "Build app" step for an identical build.
   # unit-tests keeps building its own artifacts: it uses the programa-unit
   # scheme/test host, a different target from the programa app scheme built
   # here, so its output isn't the same product.
@@ -780,8 +780,8 @@ jobs:
 
   # Independent of unit-tests: same "programa" scheme app build-app already
   # produces, so this reuses that artifact instead of paying for its own
-  # ~3 min build. Split out so it no longer serializes behind the unit-test
-  # shards either.
+  # ~3 min build. Split out so it does not serialize behind the unit-test
+  # shards.
   theme-picker-helper-regression:
     needs:
       - build-app
@@ -1175,13 +1175,11 @@ jobs:
           DISPLAY_DONE="/tmp/programa-ui-test-display-${TOKEN}.done"
           HELPER_LOG="/tmp/programa-ui-test-display-${TOKEN}-helper.log"
 
-          # This churn test used to spin up its own second CGVirtualDisplay
-          # alongside the persistent one from the previous step. A headless CI
-          # session only reliably holds one live CGVirtualDisplay at a time —
-          # the second instantiation was reproducibly failing with "Failed to
-          # create CGVirtualDisplay" on both retry attempts (a masked bug: an
-          # earlier version of this step didn't fail the job when that
-          # happened, so it silently never ran the regression test at all).
+          # This churn test must not spin up a second CGVirtualDisplay alongside
+          # the persistent one from the previous step. A headless CI session
+          # only reliably holds one live CGVirtualDisplay at a time; a second
+          # instantiation fails with "Failed to create CGVirtualDisplay" on
+          # every retry.
           # Reuse the persistent display's ID instead of creating a second one.
           PERSISTENT_ID_PATH="/tmp/programa-vdisplay-persistent.id"
           if [ ! -f "$PERSISTENT_ID_PATH" ]; then
