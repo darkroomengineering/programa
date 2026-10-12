@@ -149,13 +149,13 @@ struct TabBarView: View {
                             // glass island so the empty drag target does not expand the island.
                             dropZoneAfterTabs
 
-                            // Reserved gutter behind the split-action icon cluster. This used to
-                            // be plain `.padding(.trailing, 114)` — dead space with no NSView, so
-                            // AppKit's hit-test walk fell into the ScrollView's own hosting/clip
-                            // view here instead of reaching the tab bar's window-drag background,
-                            // silently swallowing clicks (#window-drag-areas). A real (still
-                            // fully transparent) drag-capture view makes window drag work in this
-                            // strip the same way it already does in the 30pt zone before it.
+                            // Reserved gutter behind the split-action icon cluster. Keep this a
+                            // real view, not plain `.padding(.trailing, 114)`: padding is dead
+                            // space with no NSView, so AppKit's hit-test walk falls into the
+                            // ScrollView's own hosting/clip view instead of reaching the tab bar's
+                            // window-drag background and silently swallows clicks
+                            // (#window-drag-areas). A fully transparent drag-capture view makes
+                            // window drag work in this strip as it does in the 30pt zone before it.
                             if showSplitButtons {
                                 splitButtonsGutterDragZone
                             }
@@ -490,8 +490,7 @@ struct TabBarView: View {
     // MARK: - Split Buttons Gutter Drag Zone
 
     /// Fixed-width gutter reserved behind the split-action icon cluster (terminal/
-    /// split buttons), matching the 114pt previously consumed by trailing padding. Kept as a
-    /// real drag-capturing view so window drag works there.
+    /// split buttons), 114pt wide. Kept as a real drag-capturing view so window drag works there.
     @ViewBuilder
     private var splitButtonsGutterDragZone: some View {
         TabBarDragZoneView()
@@ -609,7 +608,6 @@ struct TabBarView: View {
         let fadeWidth: CGFloat = 24
         let shouldShowButtons = showSplitButtons && (presentationMode != "minimal" || isHoveringTabBar)
         let buttonClearWidth: CGFloat = shouldShowButtons ? 90 : 0
-        let buttonFadeWidth: CGFloat = shouldShowButtons ? fadeWidth : 0
 
         HStack(spacing: 0) {
             // Left scroll fade

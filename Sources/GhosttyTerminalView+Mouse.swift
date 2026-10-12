@@ -1,15 +1,9 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
 import QuartzCore
-import Combine
-import CoreText
 import Darwin
-import Carbon.HIToolbox
 import Bonsplit
-import IOSurface
-import UniformTypeIdentifiers
 
 // MARK: - GhosttyNSView + Mouse
 //
@@ -921,8 +915,7 @@ extension GhosttyNSView {
         var y = event.scrollingDeltaY
         let precision = event.hasPreciseScrollingDeltas
         // Boost only gesture-driven precise deltas; high-res mouse wheels
-        // report precise deltas with no phase and must not be doubled
-        // (ported from upstream cmux da4e4bc460).
+        // report precise deltas with no phase and must not be doubled.
         if GhosttyTerminalScrollBoost(event: event).shouldDoublePreciseScrollDelta {
             x *= 2
             y *= 2

@@ -7,7 +7,6 @@ import UserNotifications
 import Combine
 import ObjectiveC.runtime
 import Darwin
-import Security
 
 private enum ProgramaThemeNotifications {
     static let reloadConfig = Notification.Name("com.darkroom.programa.themes.reload-config")
@@ -2264,15 +2263,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     /// Runs everything that must be re-asserted after the Mac wakes from sleep.
     /// See `SessionEscrow.swift`'s `serve` death-detection loop for the
-    /// confirmed root cause this responds to: the escrow holder used to
-    /// measure heartbeat staleness with wall-clock time, so any sleep longer
-    /// than `SessionEscrowPolicy.heartbeatStaleAfter` (6s) made it declare
-    /// every escrowed PTY dead the instant the app woke back up and start
-    /// reading from them concurrently with the still-alive app, corrupting
-    /// terminal output until the app was force-quit. That's fixed at the
-    /// source (mach-uptime-based staleness, which pauses across sleep), but
-    /// this handler still proactively refreshes the escrow connection and
-    /// renderer state on every wake as defense in depth and to leave a
+    /// failure this guards against: if the escrow holder measured heartbeat
+    /// staleness with wall-clock time, any sleep longer than
+    /// `SessionEscrowPolicy.heartbeatStaleAfter` (6s) would make it declare
+    /// every escrowed PTY dead the instant the app woke and start reading
+    /// from them concurrently with the still-alive app, corrupting terminal
+    /// output until force-quit. Staleness is mach-uptime based (pauses across
+    /// sleep), and this handler additionally refreshes the escrow connection
+    /// and renderer state on every wake as defense in depth and to leave a
     /// record in the always-on diagnostics log if it ever happens again.
     private func handleSystemDidWake() {
         dilog("wake.lifecycle", "didWake")

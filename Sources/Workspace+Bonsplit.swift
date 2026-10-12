@@ -4,10 +4,7 @@ import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 /// One predicate for the workspace split cap: the pane-chrome split buttons
@@ -522,7 +519,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
 
         #if DEBUG
-        NSLog("[Workspace] didCloseTab panelId=\(panelId) remainingPanels=\(panels.count - 1) remainingPanes=\(controller.allPaneIds.count)")
+        dlog("[Workspace] didCloseTab panelId=\(panelId) remainingPanels=\(panels.count - 1) remainingPanes=\(controller.allPaneIds.count)")
         #endif
 
         let panel = panels[panelId]
@@ -688,9 +685,9 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     }
 
     /// Canonical per-panel metadata teardown shared by every close path.
-    /// The single-surface and pane-close paths previously hand-copied this
-    /// list and drifted (pane close leaked inheritance font points and never
-    /// cleared notifications). Aggregate recomputes (recomputeListeningPorts)
+    /// Every close path calls this one list so none can drift (a hand-copied
+    /// pane-close list leaked inheritance font points and never cleared
+    /// notifications). Aggregate recomputes (recomputeListeningPorts)
     /// stay at the call sites.
     private func removeSurfaceMetadata(panelId: UUID, isDetaching: Bool = false) {
         panelDirectories.removeValue(forKey: panelId)

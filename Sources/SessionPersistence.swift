@@ -1197,9 +1197,8 @@ enum TerminalReplayModeReset {
 /// transcript for a session whose child did not survive to be reattached)
 /// for injection into a freshly spawned surface's revive-seed path
 /// (`TerminalSurface.pendingReviveSeed` / `seedRevivedScrollbackIfPending`),
-/// instead of the old temp-file + `PROGRAMA_RESTORE_SCROLLBACK_FILE` +
-/// shell-rc-`cat` mechanism this replaces (formerly
-/// `SessionScrollbackReplayStore`). A pure text transform now -- no temp
+/// rather than a temp-file + `PROGRAMA_RESTORE_SCROLLBACK_FILE` +
+/// shell-rc-`cat` mechanism. A pure text transform -- no temp
 /// files, no environment variables, no shell integration involved -- because
 /// the seed path bypasses the pty entirely (`ghostty_surface_process_output`)
 /// exactly like the escrow-revive path already does. See

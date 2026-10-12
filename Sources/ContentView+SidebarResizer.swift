@@ -2,8 +2,8 @@
 // The backing @State stays on `ContentView` (SwiftUI requires stored properties on the primary
 // declaration); those properties, plus `SidebarResizerHandle`, `updateSidebarResizerBandState`,
 // `installSidebarResizerPointerMonitorIfNeeded`, `removeSidebarResizerPointerMonitor`, and
-// `sidebarResizerOverlay`, were widened from `private` to internal so this extension and
-// ContentView.swift's view body can both see them. See the PR description for the exact list.
+// `sidebarResizerOverlay`, are internal so this extension and
+// ContentView.swift's view body can both see them.
 
 import AppKit
 import SwiftUI

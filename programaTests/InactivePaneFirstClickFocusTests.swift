@@ -9,12 +9,12 @@ import WebKit
 #endif
 
 /// Clicking into an inactive Programa window activates the window without also
-/// focusing the pane under the pointer. That used to be a preference
-/// (`paneFirstClickFocus.enabled`); it is now the only behaviour, so these
-/// tests pin it rather than exercising both sides of a toggle.
+/// focusing the pane under the pointer. This is the only behaviour
+/// (there is no preference), so these tests pin it rather than exercising both
+/// sides of a toggle.
 ///
-/// The three view classes are covered separately because each one used to
-/// override `acceptsFirstMouse` on its own, and a future override on any of
+/// The three view classes are covered separately because each one
+/// overrides `acceptsFirstMouse` on its own, and a future override on any of
 /// them would silently reintroduce click-through.
 @MainActor
 final class InactivePaneFirstClickFocusTests: XCTestCase {

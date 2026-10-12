@@ -2,12 +2,10 @@
 // Holds sidebar footer/help-menu/scrim/blur/material/tint/preset enums,
 // visual-effect/backdrop views, and the NSColor extension.
 //
-// Access-level widening: SidebarFooter, SidebarTopScrim, SidebarScrollViewResolver,
-// SidebarEmptyArea, ClearScrollBackground, DraggableFolderIcon,
-// TitlebarLeadingInsetReader, and SidebarBackdrop were
-// file-private to the old ContentView.swift; widened to internal (dropped the
-// `private` modifier) because VerticalTabsSidebar and ContentView, which stay in
-// ContentView.swift, still construct/reference them. No other behavior change.
+// SidebarFooter, SidebarTopScrim, SidebarScrollViewResolver, SidebarEmptyArea,
+// ClearScrollBackground, DraggableFolderIcon, TitlebarLeadingInsetReader, and
+// SidebarBackdrop are internal because VerticalTabsSidebar and ContentView
+// (in ContentView.swift) construct/reference them.
 
 import AppKit
 import Bonsplit

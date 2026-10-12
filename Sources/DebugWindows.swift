@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 import Darwin
 import Bonsplit
-import UniformTypeIdentifiers
 
 private func localizedDebugLabel(_ value: String) -> String {
     String(localized: String.LocalizationValue(value))

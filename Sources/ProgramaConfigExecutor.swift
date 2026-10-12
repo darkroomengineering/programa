@@ -143,7 +143,7 @@ struct ProgramaConfigExecutor {
     ///
     /// | directory | `confirm:` | prompt? |
     /// |-----------|------------|---------|
-    /// | untrusted | absent     | **yes** -- this is the case that used to run silently |
+    /// | untrusted | absent     | **yes** -- this is the case that must never run silently |
     /// | untrusted | true       | yes     |
     /// | trusted   | absent     | no      |
     /// | trusted   | true       | yes -- author's "ask me anyway" marker |
@@ -162,17 +162,15 @@ struct ProgramaConfigExecutor {
     /// The single gate in front of everything a `programa.json` can run or send. Returns false
     /// when the user declined, in which case the caller must not proceed.
     ///
-    /// Trust is the app's decision, not the config file's. It previously was not: the gate ran
-    /// only `if command.confirm == true`, and `confirm` is a field in the very file we are
-    /// deciding whether to trust, so any config could opt out of being checked by simply
-    /// omitting it. `workspace`-type commands were never gated at all, despite being able to
-    /// carry an arbitrary `command` and `env` per surface. Between them, cloning a repo and
-    /// picking a plausible-looking entry out of the command palette ran arbitrary shell with no
-    /// prompt. Recipes are the same shape of risk with a different payload: a cloned repo could
+    /// Trust is the app's decision, not the config file's. Gating on
+    /// `command.confirm == true` alone would let any config opt out of being checked by omitting
+    /// it, since `confirm` is a field in the very file being judged. `workspace`-type commands
+    /// can carry an arbitrary `command` and `env` per surface, so they are gated too. Otherwise,
+    /// cloning a repo and picking a plausible-looking entry out of the command palette would run
+    /// arbitrary shell with no prompt. Recipes are the same shape of risk with a different payload: a cloned repo could
     /// ship a recipe whose prompt text is chosen by an attacker and fired at the user's coding
     /// agent, so they go through this exact same gate rather than a parallel path.
     ///
-    /// Now:
     ///  - untrusted directory: always confirm, whatever the file says, for every entry type;
     ///  - trusted directory: run, unless the author set `confirm: true`, which stays meaningful
     ///    as a "this one is destructive, ask me anyway" marker (commands only -- recipes have no
@@ -307,8 +305,8 @@ struct ProgramaConfigExecutor {
     /// unfiltered (only Programa's own `PROGRAMA_*` identity keys are protected, see
     /// `protectedStartupEnvironmentKeys` in TerminalSurface.swift), so `ZDOTDIR` /
     /// `BASH_ENV` / `ENV` set here execute a repo-controlled shell startup file the
-    /// moment the surface spawns. Filtering surfaces down to "has a command" -- as this
-    /// function used to -- let such a surface contribute nothing to the dialog, so the
+    /// moment the surface spawns. Filtering surfaces down to "has a command" -- as a
+    /// command-only filter would -- lets such a surface contribute nothing to the dialog, so the
     /// user would approve a workspace the dialog claimed ran nothing. Every surface that
     /// sets `command`, `cwd`, or `env` must produce a visible line.
     private static func surfaceDescriptions(in node: ProgramaLayoutNode) -> [String] {

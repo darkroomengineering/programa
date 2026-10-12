@@ -3,10 +3,6 @@ import SwiftUI
 import AppKit
 import Metal
 import QuartzCore
-import Combine
-import CoreText
-import Darwin
-import Carbon.HIToolbox
 import Bonsplit
 import IOSurface
 import UniformTypeIdentifiers
@@ -163,10 +159,9 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
     var trackingArea: NSTrackingArea?
     private var windowObserver: NSObjectProtocol?
     private var screenParametersObserver: NSObjectProtocol?
-    // Teardown-race guard (ported from #258's GhosttySurfaceScrollView fix; this was
-    // the residual crasher on the reland gate — the `notification.object as? NSWindow`
-    // downcast in windowDidChangeScreen implicitly retaining a freed notification
-    // object). NotificationCenter's removeObserver does NOT cancel a block already
+    // Teardown-race guard (same pattern as GhosttySurfaceScrollView; it protects the
+    // `notification.object as? NSWindow` downcast in windowDidChangeScreen from
+    // implicitly retaining a freed notification object). NotificationCenter's removeObserver does NOT cancel a block already
     // handed off to the main queue — during rapid window create/close, a block
     // enqueued against the *previous* window/registration batch can still run after
     // viewDidMoveToWindow has already torn down and re-registered observers for a

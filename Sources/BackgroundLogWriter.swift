@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - BackgroundLogWriter (ported from upstream cmux cb2129a5a1)
+// MARK: - BackgroundLogWriter
 //
 // Avoids a per-call FileManager.fileExists + FileHandle(forWritingTo:)
 // open -> seekToEnd -> write -> close pattern, which would run synchronously under a lock

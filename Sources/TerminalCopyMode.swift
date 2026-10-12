@@ -1,19 +1,14 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
-import QuartzCore
-import Combine
 import CoreText
-import Darwin
 import Carbon.HIToolbox
 import Bonsplit
 import IOSurface
-import UniformTypeIdentifiers
 
 // MARK: - Terminal Keyboard Copy Mode
 // Four `terminalKeyTable*`/`terminalKeyboardCopyModeIndicatorText` items below
-// widened private -> internal (used from GhosttyNSView.swift/GhosttySurfaceScrollView.swift).
+// are internal: used from GhosttyNSView.swift/GhosttySurfaceScrollView.swift.
 
 enum TerminalKeyboardCopyModeSelectionMove: String, Equatable {
     case left

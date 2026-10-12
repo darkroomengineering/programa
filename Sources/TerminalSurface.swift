@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
 import QuartzCore
 import Combine
 import CoreText
@@ -9,7 +8,6 @@ import Darwin
 import Carbon.HIToolbox
 import Bonsplit
 import IOSurface
-import UniformTypeIdentifiers
 import os
 
 // MARK: - Debug Render Instrumentation
@@ -1256,7 +1254,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         #endif
 
         guard let app = GhosttyApp.shared.app else {
-            print("Ghostty app not initialized")
+            NSLog("Ghostty app not initialized")
             #if DEBUG
             Self.surfaceLog("createSurface FAILED surface=\(id.uuidString): ghostty app not initialized")
             #endif
@@ -1588,7 +1586,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
             }
             GhosttySurfaceUserdataRegistry.release(surfaceCallbackContext)
             surfaceCallbackContext = nil
-            print("Failed to create ghostty surface")
+            NSLog("Failed to create ghostty surface")
             #if DEBUG
             Self.surfaceLog("createSurface FAILED surface=\(id.uuidString): ghostty_surface_new returned nil")
             if let cfg = GhosttyApp.shared.config {

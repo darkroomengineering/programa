@@ -305,7 +305,6 @@ extension TabManager {
         return (attached, hasSurface, firstResponder)
     }
 
-    // Widened from `private` to `internal`: called from TabManager.init() in TabManager.swift.
     func setupUITestFocusShortcutsIfNeeded() {
         guard !didSetupUITestFocusShortcuts else { return }
         didSetupUITestFocusShortcuts = true
@@ -333,7 +332,6 @@ extension TabManager {
         )
     }
 
-    // Widened from `private` to `internal`: called from TabManager.init() in TabManager.swift.
     func setupSplitCloseRightUITestIfNeeded() {
         guard !didSetupSplitCloseRightUITest else { return }
         didSetupSplitCloseRightUITest = true
@@ -845,7 +843,6 @@ extension TabManager {
         return object
     }
 
-    // Widened from `private` to `internal`: called from TabManager.init() in TabManager.swift.
     func setupChildExitKeyboardUITestIfNeeded() {
         guard !didSetupChildExitKeyboardUITest else { return }
         didSetupChildExitKeyboardUITest = true

@@ -1,15 +1,9 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
 import QuartzCore
-import Combine
-import CoreText
-import Darwin
-import Carbon.HIToolbox
 import Bonsplit
 import IOSurface
-import UniformTypeIdentifiers
 
 // MARK: - GhosttyNSView + Accessibility
 //

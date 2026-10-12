@@ -611,7 +611,7 @@ final class ProgramaConfigDecodingTests: XCTestCase {
 
 // MARK: - JSONC (comments + trailing commas) config parsing
 //
-// Regression coverage for a real user pain point: a project's programa.json (ported from
+// Regression coverage for a real user pain point: a project's programa.json (like
 // ~/.config/programa/programa.json) failed to parse with "Unexpected character '/' at line 5 col 4"
 // because plain JSONDecoder rejects `//`/`/* */` comments and trailing commas. These tests
 // exercise the same JSONCParser.preprocess -> JSONDecoder pipeline ProgramaConfigStore uses
@@ -970,7 +970,7 @@ final class ProgramaLayoutEncodingTests: XCTestCase {
 /// ran only when the file itself set `confirm: true`, so any config could opt out of being
 /// checked by leaving the key off, and `workspace`-type commands were never gated at all.
 ///
-/// These pin the corrected truth table. The first case is the one that used to execute
+/// These pin the corrected truth table. The first case is the one that must never execute
 /// arbitrary shell with no prompt at all.
 @MainActor
 final class ProgramaConfigTrustGateTests: XCTestCase {
