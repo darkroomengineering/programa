@@ -43,6 +43,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The `programa codex install-hooks` and `uninstall-hooks` legacy aliases. Use `programa codex install-integration` and `uninstall-integration`.
 
 ### Fixed
+- The Window menu's Fill, Center, Move & Resize, Full Screen Tile and Move to Display items, and their shortcuts, work again. The main window had been marked not movable, which makes macOS disable all of them.
 - The notifications popover now opens in minimal mode, the default layout. Show Notifications (⌘I), the sidebar bell and the menu bar icon's Show Notifications did nothing there.
 - Port chips in the sidebar now show up again for terminals restored after relaunching Programa. The restored terminals kept their running shell, but port scanning never learned about them.
 - A window closed with the red button no longer comes back on the next launch. Since 0.5.0 a closed window was kept alive for Dock reopen and then saved and restored like a visible one, so every restart opened an extra window of stale workspaces. Closed windows now stay closed across a relaunch and their shells are ended at startup.
