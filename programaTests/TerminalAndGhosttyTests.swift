@@ -431,7 +431,6 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 }
 
-
 final class TerminalKeyboardCopyModeActionTests: XCTestCase {
     func testCopyModeBypassAllowsOnlyCommandShortcuts() {
         XCTAssertTrue(terminalKeyboardCopyModeShouldBypassForShortcut(modifierFlags: [.command]))
@@ -750,7 +749,6 @@ final class TerminalKeyboardCopyModeActionTests: XCTestCase {
     }
 }
 
-
 final class TerminalKeyboardCopyModeResolveTests: XCTestCase {
     private func resolve(
         _ keyCode: UInt16,
@@ -907,7 +905,6 @@ final class TerminalKeyboardCopyModeResolveTests: XCTestCase {
     }
 }
 
-
 final class TerminalKeyboardCopyModeViewportRowTests: XCTestCase {
     func testInitialViewportRowUsesImePointBaseline() {
         XCTAssertEqual(
@@ -964,7 +961,6 @@ final class TerminalKeyboardCopyModeViewportRowTests: XCTestCase {
         )
     }
 }
-
 
 final class GhosttyBackgroundThemeTests: XCTestCase {
     func testColorClampsOpacity() {
@@ -1027,7 +1023,6 @@ final class GhosttyBackgroundThemeTests: XCTestCase {
     }
 }
 
-
 final class GhosttyResponderResolutionTests: XCTestCase {
     private final class FocusProbeView: NSView {
         override var acceptsFirstResponder: Bool { true }
@@ -1051,7 +1046,6 @@ final class GhosttyResponderResolutionTests: XCTestCase {
         XCTAssertNil(programaOwningGhosttyView(for: view))
     }
 }
-
 
 final class TerminalDirectoryOpenTargetAvailabilityTests: XCTestCase {
     private func environment(
@@ -1145,7 +1139,6 @@ final class TerminalDirectoryOpenTargetAvailabilityTests: XCTestCase {
         XCTAssertFalse(targets.contains(where: { $0.commandPaletteCommandId == "palette.terminalOpenDirectory" }))
     }
 }
-
 
 @MainActor
 final class TerminalNotificationDirectInteractionTests: XCTestCase {
@@ -1602,7 +1595,6 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class WindowTerminalHostViewTests: XCTestCase {
     private final class CapturingView: NSView {
@@ -1774,7 +1766,6 @@ final class WindowTerminalHostViewTests: XCTestCase {
         )
     }
 }
-
 
 @MainActor
 final class GhosttySurfaceOverlayTests: XCTestCase {
@@ -2706,7 +2697,6 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TerminalWindowPortalLifecycleTests: XCTestCase {
     private final class ContentViewCountingWindow: NSWindow {
@@ -2770,7 +2760,6 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
             "Portal host must remain above content view so portal-hosted terminals stay visible"
         )
     }
-
 
     func testRegistryPrunesPortalWhenWindowCloses() {
         let baseline = TerminalWindowPortalRegistry.debugPortalCount()
@@ -3649,7 +3638,6 @@ final class TransientRecoveryRetryStateTests: XCTestCase {
         XCTAssertEqual(state.remaining, 2)
     }
 
-
 }
 
 final class TerminalOpenURLTargetResolutionTests: XCTestCase {
@@ -3722,7 +3710,6 @@ final class TerminalOpenURLTargetResolutionTests: XCTestCase {
     }
 }
 
-
 final class TerminalControllerSocketTextChunkTests: XCTestCase {
     func testSocketTextChunksReturnsSingleChunkForPlainText() {
         XCTAssertEqual(
@@ -3755,7 +3742,6 @@ final class TerminalControllerSocketTextChunkTests: XCTestCase {
         )
     }
 }
-
 
 final class GhosttyTerminalViewVisibilityPolicyTests: XCTestCase {
     func testImmediateStateUpdateAllowedWhenHostNotInWindow() {
@@ -3811,7 +3797,6 @@ final class GhosttyTerminalViewVisibilityPolicyTests: XCTestCase {
         )
     }
 }
-
 
 final class TerminalControllerSocketListenerHealthTests: XCTestCase {
     func testStableSocketBindPermissionFailureFallsBackToUserScopedSocket() {
@@ -4016,7 +4001,6 @@ final class TerminalControllerSocketListenerHealthTests: XCTestCase {
         )
     }
 }
-
 
 @MainActor
 final class ThemeReloadCoalescerTests: XCTestCase {

@@ -926,8 +926,6 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(object["height"]), 704.5, accuracy: 0.001)
     }
 
-
-
     func testFreshSpawnScrollbackSeedPreparesText() {
         let prepared = SessionFreshSpawnScrollbackSeed.preparedText(for: "line one\nline two\n")
         XCTAssertEqual(prepared, "line one\nline two\n")

@@ -33,7 +33,6 @@ final class InactivePaneFirstClickFocusTests: XCTestCase {
         XCTAssertFalse(view.acceptsFirstMouse(for: nil))
     }
 
-
     func testMarkdownPointerObserverRejectsFirstMouse() {
         let view = MarkdownPanelPointerObserverView(frame: .zero)
 

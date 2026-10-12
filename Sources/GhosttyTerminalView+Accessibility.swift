@@ -66,7 +66,6 @@ extension GhosttyNSView {
         }
     }
 
-
     override func accessibilitySelectedTextRange() -> NSRange {
         selectedRange()
     }

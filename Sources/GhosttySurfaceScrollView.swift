@@ -219,7 +219,6 @@ final class GhosttySurfaceScrollView: NSView {
     }
     private(set) var searchFocusTarget: SearchFocusTarget = .searchField
 
-
 #if DEBUG
     private var lastDropZoneOverlayLogSignature: String?
     private var lastDragGeometryLogSignature: String?

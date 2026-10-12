@@ -132,7 +132,7 @@ extension TerminalController {
             let panels = orderedPanels(in: ws)
             let surfaces: [[String: Any]] = panels.enumerated().map { index, panel in
                 let paneUUID = paneByPanelId[panel.id]
-                var item: [String: Any] = [
+                let item: [String: Any] = [
                     "id": panel.id.uuidString,
                     "ref": v2Ref(kind: .surface, uuid: panel.id),
                     "index": index,

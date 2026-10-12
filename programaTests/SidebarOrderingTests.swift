@@ -47,7 +47,6 @@ final class SidebarActiveForegroundColorTests: XCTestCase {
     }
 }
 
-
 final class SidebarActiveTabIndicatorSettingsTests: XCTestCase {
     func testDefaultStyleWhenUnset() {
         let suiteName = "SidebarActiveTabIndicatorSettingsTests.Default.\(UUID().uuidString)"
@@ -85,7 +84,6 @@ final class SidebarActiveTabIndicatorSettingsTests: XCTestCase {
         )
     }
 }
-
 
 final class SidebarWorkspaceHierarchyTests: XCTestCase {
     func testCollapsedFolderHidesOnlyItsChildren() {
@@ -166,7 +164,6 @@ final class SidebarWorkspaceHierarchyTests: XCTestCase {
         )
     }
 }
-
 
 final class SidebarBranchOrderingTests: XCTestCase {
 
@@ -566,7 +563,6 @@ final class SidebarBranchOrderingTests: XCTestCase {
     }
 }
 
-
 final class SidebarDragFailsafePolicyTests: XCTestCase {
     func testShouldRequestClearWhenDragActiveAndMouseButtonUp() {
         XCTAssertTrue(
@@ -628,7 +624,6 @@ final class SidebarDragFailsafePolicyTests: XCTestCase {
         )
     }
 }
-
 
 final class SidebarDropPlannerTests: XCTestCase {
     func testNoIndicatorForNoOpEdges() {
@@ -858,7 +853,6 @@ final class SidebarDropPlannerTests: XCTestCase {
 
 }
 
-
 final class SidebarDragAutoScrollPlannerTests: XCTestCase {
     func testAutoScrollPlanTriggersNearTopAndBottomOnly() {
         let topPlan = SidebarDragAutoScrollPlanner.plan(distanceToTop: 4, distanceToBottom: 96, edgeInset: 44, minStep: 2, maxStep: 12)
@@ -893,7 +887,6 @@ final class SidebarDragAutoScrollPlannerTests: XCTestCase {
         XCTAssertEqual(belowBottom?.pointsPerTick, 12)
     }
 }
-
 
 final class TerminalControllerSidebarDedupeTests: XCTestCase {
     func testShouldReplaceStatusEntryReturnsFalseForUnchangedPayload() {

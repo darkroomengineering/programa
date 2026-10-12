@@ -43,4 +43,3 @@ enum UITestRecorder {
     }
 }
 #endif
-

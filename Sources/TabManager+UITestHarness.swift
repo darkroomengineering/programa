@@ -440,7 +440,6 @@ extension TabManager {
                 tab.focusPanel(bottomRight.id)
                 _ = tab.closePanel(bottomRight.id, force: true)
 
-
                 // Capture final state after Bonsplit/AppKit/Ghostty geometry reconciliation.
                 // We avoid sleep-based timing and converge over a few main-actor turns.
                  @MainActor func collectSplitCloseRightState() -> (data: [String: String], settled: Bool) {

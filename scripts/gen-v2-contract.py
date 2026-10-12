@@ -39,11 +39,6 @@ def camel_case(method: str) -> str:
     return out
 
 
-def pascal_case(method: str) -> str:
-    c = camel_case(method)
-    return c[:1].upper() + c[1:]
-
-
 # ---------------------------------------------------------------------------
 # (a) Sources/V2CommandCatalog.swift
 # ---------------------------------------------------------------------------

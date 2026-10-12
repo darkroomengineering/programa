@@ -462,7 +462,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         }
     }
 
-
     func updateWorkspaceId(_ newTabId: UUID) {
         tabId = newTabId
         attachedView?.tabId = newTabId

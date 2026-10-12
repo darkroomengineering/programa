@@ -198,19 +198,6 @@ extension BonsplitConfiguration {
 
         public static let `default` = Appearance()
 
-        public static let compact = Appearance(
-            tabBarHeight: 28,
-            tabMinWidth: 100,
-            tabMaxWidth: 160
-        )
-
-        public static let spacious = Appearance(
-            tabBarHeight: 38,
-            tabMinWidth: 160,
-            tabMaxWidth: 280,
-            tabSpacing: 2
-        )
-
         // MARK: - Initializer
 
         public init(

@@ -98,8 +98,6 @@ final class ReviewPanel: Panel, ObservableObject {
         focusFlashToken += 1
     }
 
-    // MARK: - Mode
-
     // MARK: - Refresh
 
     /// Kicks off `ReviewDiffProber.diffSnapshot` on a background queue and publishes the

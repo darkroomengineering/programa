@@ -412,8 +412,6 @@ extension Workspace {
         return newPanel
     }
 
-
-
     func newMarkdownSplit(
         from panelId: UUID,
         orientation: SplitOrientation,

@@ -542,7 +542,6 @@ final class NotificationBurstCoalescer {
     }
 }
 
-
 @MainActor
 class TabManager: ObservableObject {
     struct LifecycleResourceSnapshot {
@@ -2818,19 +2817,12 @@ class TabManager: ObservableObject {
         workspace(withId: tabId)?.focusedPanelId
     }
 
-
     /// Returns the focused panel if it's a MarkdownPanel, nil otherwise
     var focusedMarkdownPanel: MarkdownPanel? {
         guard let tab = selectedWorkspace,
               let panelId = tab.focusedPanelId else { return nil }
         return tab.panels[panelId] as? MarkdownPanel
     }
-
-
-
-
-
-
 
     /// Backwards compatibility: returns the focused surface ID
     func focusedSurfaceId(for tabId: UUID) -> UUID? {

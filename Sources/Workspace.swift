@@ -76,7 +76,6 @@ final class Workspace: Identifiable, ObservableObject {
 
     weak var owningTabManager: TabManager?
 
-
     // Closing tabs mutates split layout immediately; terminal views handle their own AppKit
     // layout/size synchronization.
 
@@ -299,7 +298,6 @@ final class Workspace: Identifiable, ObservableObject {
         controller.contextMenuShortcuts = buildContextMenuShortcuts()
         return controller
     }
-
 
     init(
         title: String = String(localized: "workspace.defaultTitle.terminal", defaultValue: "Terminal"),
@@ -805,7 +803,6 @@ final class Workspace: Identifiable, ObservableObject {
         panels[panelId] as? TerminalPanel
     }
 
-
     func markdownPanel(for panelId: UUID) -> MarkdownPanel? {
         panels[panelId] as? MarkdownPanel
     }
@@ -1290,19 +1287,6 @@ final class Workspace: Identifiable, ObservableObject {
         return bonsplitController.tabs(inPane: paneId).firstIndex(where: { $0.id == tabId })
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     @discardableResult
     func moveSurface(panelId: UUID, toPane paneId: PaneID, atIndex index: Int? = nil, focus: Bool = true) -> Bool {
         guard let tabId = surfaceIdFromPanelId(panelId) else { return false }
@@ -1726,8 +1710,6 @@ final class Workspace: Identifiable, ObservableObject {
         guard let newPanel = newTerminalSurface(inPane: paneId, focus: true) else { return }
         _ = reorderSurface(panelId: newPanel.id, toIndex: targetIndex)
     }
-
-
 
     func promptRenamePanel(tabId: TabID) {
         guard let panelId = panelIdFromSurfaceId(tabId),

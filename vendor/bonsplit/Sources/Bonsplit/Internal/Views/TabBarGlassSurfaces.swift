@@ -16,7 +16,6 @@ enum TabBarGlassStyling {
     }
 }
 
-
 /// Hosts compact overlay content, such as a shortcut hint, inside native glass. The
 /// actual tab controls never use this bridge; they are fully native AppKit controls above.
 struct TabPillGlassHost<Content: View>: NSViewRepresentable {

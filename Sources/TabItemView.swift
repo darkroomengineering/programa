@@ -101,7 +101,6 @@ private enum SidebarWorktreeCreationResult: Sendable {
     case failure(message: String)
 }
 
-
 // PERF: TabItemView is Equatable so SwiftUI skips body re-evaluation when
 // the parent rebuilds with unchanged values. Without this, every TabManager
 // or NotificationStore publish causes ALL tab items to re-evaluate (~18% of
@@ -1584,18 +1583,6 @@ struct TabItemView: View, Equatable {
         case .warning: return .orange
         case .error: return .red
         }
-    }
-
-    private func shortenPath(_ path: String, home: String) -> String {
-        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return path }
-        if trimmed == home {
-            return "~"
-        }
-        if trimmed.hasPrefix(home + "/") {
-            return "~" + trimmed.dropFirst(home.count)
-        }
-        return trimmed
     }
 
     private struct PullRequestStatusIcon: View {

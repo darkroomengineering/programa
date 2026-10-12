@@ -94,7 +94,6 @@ extension Workspace {
                 )
             }
 
-
             // Markdown panels have no `ProgramaSurfaceType` counterpart yet (v1 cut).
             return nil
         }

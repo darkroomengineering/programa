@@ -40,11 +40,6 @@ final class SplitViewController {
     /// Receives the dropped URLs and the pane ID where the drop occurred.
     @ObservationIgnored var onFileDrop: ((_ urls: [URL], _ paneId: PaneID) -> Bool)?
 
-    /// During drop, SwiftUI may keep the source tab view alive briefly (default removal animation)
-    /// even after we've updated the model. Hide it explicitly so it disappears immediately.
-    var dragHiddenSourceTabId: UUID?
-    var dragHiddenSourcePaneId: PaneID?
-
     /// Current frame of the entire split view container
     var containerFrame: CGRect = .zero
 
@@ -440,21 +435,6 @@ final class SplitViewController {
         return sorted.first?.0
     }
 
-    /// Create a new tab in the focused pane
-    func createNewTab() {
-        guard let pane = focusedPane else { return }
-        let count = pane.tabs.count + 1
-        let newTab = TabItem(title: "Untitled \(count)", icon: "doc")
-        pane.addTab(newTab)
-    }
-
-    /// Close the currently selected tab in the focused pane
-    func closeSelectedTab() {
-        guard let pane = focusedPane,
-              let selectedTabId = pane.selectedTabId else { return }
-        closeTab(selectedTabId, inPane: pane.id)
-    }
-
     /// Select the previous tab in the focused pane
     func selectPreviousTab() {
         guard let pane = focusedPane,
@@ -496,20 +476,6 @@ final class SplitViewController {
                 return found
             }
             return findSplitRecursively(in: splitState.second, id: id)
-        }
-    }
-
-    /// Get all split states in the tree
-    var allSplits: [SplitState] {
-        return collectSplits(from: rootNode)
-    }
-
-    private func collectSplits(from node: SplitNode) -> [SplitState] {
-        switch node {
-        case .pane:
-            return []
-        case .split(let splitState):
-            return [splitState] + collectSplits(from: splitState.first) + collectSplits(from: splitState.second)
         }
     }
 }

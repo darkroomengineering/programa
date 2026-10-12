@@ -137,8 +137,6 @@ struct ProgramaConfigExecutor {
         }
     }
 
-
-
     /// The security decision, isolated from the UI so it can be tested directly.
     ///
     /// | directory | `confirm:` | prompt? |
@@ -323,7 +321,6 @@ struct ProgramaConfigExecutor {
     /// individually before composition.
     private static func describeSurface(_ surface: ProgramaSurfaceDefinition) -> String? {
         var parts: [String] = []
-
 
         if let command = surface.command, !command.isEmpty {
             parts.append(sanitizeForDisplay(command))

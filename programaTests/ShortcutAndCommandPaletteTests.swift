@@ -59,8 +59,6 @@ final class SplitShortcutTransientFocusGuardTests: XCTestCase {
     }
 }
 
-
-
 final class FullScreenShortcutTests: XCTestCase {
     func testMatchesCommandControlF() {
         XCTAssertTrue(
@@ -185,7 +183,6 @@ final class FullScreenShortcutTests: XCTestCase {
         )
     }
 }
-
 
 final class CommandPaletteKeyboardNavigationTests: XCTestCase {
     func testArrowKeysMoveSelectionWithoutModifiers() {
@@ -336,7 +333,6 @@ final class CommandPaletteKeyboardNavigationTests: XCTestCase {
     }
 }
 
-
 final class CommandPaletteOpenShortcutConsumptionTests: XCTestCase {
     func testDoesNotConsumeWhenPaletteIsNotVisible() {
         XCTAssertFalse(
@@ -434,7 +430,6 @@ final class CommandPaletteOpenShortcutConsumptionTests: XCTestCase {
     }
 }
 
-
 final class CommandPaletteFocusStealerClassificationTests: XCTestCase {
     private final class NonViewTextDelegate: NSObject, NSTextViewDelegate {}
     private final class UnrelatedViewTextDelegate: NSView, NSTextViewDelegate {}
@@ -495,9 +490,6 @@ final class CommandPaletteFocusStealerClassificationTests: XCTestCase {
     }
 }
 
-
-
-
 final class CommandPaletteSelectionScrollBehaviorTests: XCTestCase {
     func testFirstEntryPinsToTopAnchor() {
         let anchor = ContentView.commandPaletteScrollPositionAnchor(
@@ -531,7 +523,6 @@ final class CommandPaletteSelectionScrollBehaviorTests: XCTestCase {
         XCTAssertNil(anchor)
     }
 }
-
 
 final class ShortcutHintModifierPolicyTests: XCTestCase {
     func testShortcutHintRequiresCommandOnlyModifier() {
@@ -637,7 +628,6 @@ final class ShortcutHintModifierPolicyTests: XCTestCase {
     }
 }
 
-
 final class ShortcutHintDebugSettingsTests: XCTestCase {
     func testClampKeepsValuesWithinSupportedRange() {
         XCTAssertEqual(ShortcutHintDebugSettings.clamped(0.0), 0.0)
@@ -677,7 +667,6 @@ final class ShortcutHintDebugSettingsTests: XCTestCase {
     }
 }
 
-
 final class DevBuildBannerDebugSettingsTests: XCTestCase {
     func testShowSidebarBannerDefaultsToVisible() {
         let suiteName = "DevBuildBannerDebugSettingsTests.Default.\(UUID().uuidString)"
@@ -707,7 +696,6 @@ final class DevBuildBannerDebugSettingsTests: XCTestCase {
     }
 }
 
-
 final class ShortcutHintLanePlannerTests: XCTestCase {
     func testAssignLanesKeepsSeparatedIntervalsOnSingleLane() {
         let intervals: [ClosedRange<CGFloat>] = [0...20, 28...40, 48...64]
@@ -719,7 +707,6 @@ final class ShortcutHintLanePlannerTests: XCTestCase {
         XCTAssertEqual(ShortcutHintLanePlanner.assignLanes(for: intervals, minSpacing: 4), [0, 1, 2, 0])
     }
 }
-
 
 final class ShortcutHintHorizontalPlannerTests: XCTestCase {
     func testAssignRightEdgesResolvesOverlapWithMinimumSpacing() {
@@ -744,7 +731,6 @@ final class ShortcutHintHorizontalPlannerTests: XCTestCase {
     }
 }
 
-
 final class AppearanceSettingsTests: XCTestCase {
     func testResolvedModeDefaultsToSystemWhenUnset() {
         let suiteName = "AppearanceSettingsTests.Default.\(UUID().uuidString)"
@@ -761,7 +747,6 @@ final class AppearanceSettingsTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: AppearanceSettings.appearanceModeKey), AppearanceMode.system.rawValue)
     }
 }
-
 
 final class QuitWarningSettingsTests: XCTestCase {
     func testDefaultWarnBeforeQuitIsEnabledWhenUnset() {
@@ -793,7 +778,6 @@ final class QuitWarningSettingsTests: XCTestCase {
     }
 }
 
-
 final class UpdateChannelSettingsTests: XCTestCase {
     func testResolvedFeedFallsBackWhenInfoFeedMissing() {
         let resolved = UpdateFeedResolver.resolvedFeedURLString(infoFeedURL: nil)
@@ -814,7 +798,6 @@ final class UpdateChannelSettingsTests: XCTestCase {
         XCTAssertFalse(resolved.usedFallback)
     }
 }
-
 
 private final class UpdateRelaunchPreparationRecorder: @unchecked Sendable {
     private let lock = NSLock()
@@ -846,7 +829,6 @@ private final class UpdateRelaunchPreparationRecorder: @unchecked Sendable {
         return (events, operationRanOnMainThread)
     }
 }
-
 
 final class UpdateRelaunchPreparationTests: XCTestCase {
     @MainActor
@@ -907,7 +889,6 @@ final class UpdateRelaunchPreparationTests: XCTestCase {
         XCTAssertEqual(recorder.snapshot().events, ["earlier", "final", "returned"])
     }
 }
-
 
 final class UpdateSettingsTests: XCTestCase {
     func testApplyEnablesAutomaticChecksAndDailySchedule() {
