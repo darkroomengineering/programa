@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import os
 
-/// Batched port scanner that replaces per-shell `ps + lsof` scanning.
+/// Batched port scanner: one coalesced `ps + lsof` pass instead of per-shell scanning.
 ///
 /// Each shell sends a lightweight `report_tty` + `ports_kick` over the socket.
 /// PortScanner coalesces kicks across all panels, then runs a single
@@ -692,7 +692,7 @@ final class PortScanner: @unchecked Sendable {
     }
 
     /// Every `ps`/`lsof` run is bounded: a hung `lsof` (for example on a stale network mount)
-    /// used to block this serial queue, and with it all port scanning, for the rest of the
+    /// would block this serial queue, and with it all port scanning, for the rest of the
     /// session. Returns nil when the tool timed out or could not run; callers skip the cycle.
     private static let subprocessTimeout: TimeInterval = 5
     private static let subprocessStdoutLimit = 16 * 1024 * 1024

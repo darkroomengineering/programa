@@ -2,8 +2,7 @@ import XCTest
 @testable import Programa_DEV
 
 /// Regression tests for the close-confirmation-before-tty-attach race
-/// (ported from upstream cmux 2e03978ae1, adapted to our shell-integration
-/// telemetry signals).
+/// (keyed off our shell-integration telemetry signals).
 ///
 /// Right after a terminal is created, no shell-activity state has been
 /// reported and no TTY is known for the panel. In that window there is no

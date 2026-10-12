@@ -812,8 +812,7 @@ enum SessionWALCore {
     /// Extracted out of the singleton/file-system-coupled store method so it
     /// is directly unit-testable: the raw-byte suffix cut below has the exact
     /// same torn-escape/torn-UTF-8 hazard `readFrameAndDelta` already guards
-    /// against at its own cut sites (~554) -- this call site was previously
-    /// missing that guard, leaking orphaned CSI/UTF-8 fragments as literal
+    /// against at its own cut sites (~554), so orphaned CSI/UTF-8 fragments never leak as literal
     /// replayed text.
     static func decodeFallbackScrollbackText(
         rotated: Data?,

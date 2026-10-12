@@ -3,13 +3,9 @@ import SwiftUI
 import AppKit
 import Metal
 import QuartzCore
-import Combine
-import CoreText
 import Darwin
-import Carbon.HIToolbox
 import Bonsplit
 import IOSurface
-import UniformTypeIdentifiers
 
 // MARK: - Scroll View Wrapper
 // Layering contract: SurfaceSearchOverlay stays mounted from this file — see
@@ -145,9 +141,6 @@ final class GhosttySurfaceScrollView: NSView {
     private let backgroundView: NSView
     private let scrollView: GhosttyScrollView
     private let documentView: NSView
-    // Widened from private to internal (immutable `let`, so this only grants
-    // read access): read from the debug-only RenderStats extension
-    // (GhosttyTerminalView+RenderStats.swift).
     let surfaceView: GhosttyNSView
     private let inactiveOverlayView: GhosttyFlashOverlayView
     private let dropZoneOverlayView: GhosttyFlashOverlayView
@@ -250,8 +243,6 @@ final class GhosttySurfaceScrollView: NSView {
         flashCounts[surfaceId, default: 0] += 1
     }
 
-    // Widened from private to internal: called from the debug-only RenderStats
-    // extension (GhosttyTerminalView+RenderStats.swift).
     static func contentsKey(for layer: CALayer?) -> String {
         guard let modelLayer = layer else { return "nil" }
         // Prefer the presentation layer to better reflect what the user sees on screen.
@@ -277,8 +268,6 @@ final class GhosttySurfaceScrollView: NSView {
         return String(describing: contents)
     }
 
-    // Widened from private to internal: called from the debug-only RenderStats
-    // extension (GhosttyTerminalView+RenderStats.swift).
     static func updatePresentStats(surfaceId: UUID, layer: CALayer?) -> (count: Int, last: CFTimeInterval, key: String) {
         let key = contentsKey(for: layer)
         if lastContentsKeys[surfaceId] != key {

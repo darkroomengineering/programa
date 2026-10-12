@@ -64,7 +64,7 @@ public final class DebugEventLog: @unchecked Sendable {
                 if let handle = FileHandle(forWritingAtPath: Self.logPath) {
                     // Throwing APIs instead of the deprecated seekToEndOfFile/write/closeFile
                     // trio, which raise ObjC exceptions (uncatchable from Swift) if the file
-                    // disappears out from under us. Ported from upstream bonsplit cffd9a6.
+                    // disappears out from under us.
                     _ = try? handle.seekToEnd()
                     try? handle.write(contentsOf: data)
                     try? handle.close()

@@ -5,10 +5,7 @@ import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Combine
-import CryptoKit
 import Darwin
-import Network
 import CoreText
 
 struct SidebarWorkspaceHierarchyEntry: Equatable {

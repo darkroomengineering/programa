@@ -174,7 +174,7 @@ enum V2CommandCatalog {
     ]
 
     /// Full method list for the current build configuration, mirroring the
-    /// conditional `#if DEBUG` append that used to live inline in
+    /// conditional `#if DEBUG` append in
     /// `TerminalController.v2Capabilities()`.
     static var methods: [String] {
         #if DEBUG

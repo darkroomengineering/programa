@@ -973,7 +973,7 @@ class TerminalController {
         // Create socket
         let newServerSocket = socket(AF_UNIX, SOCK_STREAM, 0)
         guard newServerSocket >= 0 else {
-            print("TerminalController: Failed to create socket")
+            NSLog("TerminalController: Failed to create socket")
             return
         }
 
@@ -1002,7 +1002,7 @@ class TerminalController {
             close(newServerSocket)
             return
         case .failure:
-            print("TerminalController: Failed to bind socket")
+            NSLog("TerminalController: Failed to bind socket")
             close(newServerSocket)
             return
         }
@@ -1011,7 +1011,7 @@ class TerminalController {
 
         // Listen
         guard listen(newServerSocket, Self.socketListenBacklog) >= 0 else {
-            print("TerminalController: Failed to listen on socket")
+            NSLog("TerminalController: Failed to listen on socket")
             close(newServerSocket)
             return
         }
@@ -1031,7 +1031,6 @@ class TerminalController {
         }
         listenerActivated = true
         let listenerSocket = newServerSocket
-        print("TerminalController: Listening on \(activeSocketPath)")
         dilog("socket.listener", "start path=\(activeSocketPath) accessMode=\(accessMode)")
         NotificationCenter.default.post(
             name: .socketListenerDidStart,
@@ -1247,9 +1246,7 @@ class TerminalController {
             (socketPath, mode_t(accessMode.socketFilePermissions))
         }
         if chmod(currentSocketPath, permissions) != 0 {
-            print(
-                "TerminalController: Failed to set socket permissions to \(String(permissions, radix: 8)) for \(currentSocketPath)"
-            )
+            NSLog("TerminalController: Failed to set socket permissions to %@ for %@", String(permissions, radix: 8), currentSocketPath)
         }
     }
 

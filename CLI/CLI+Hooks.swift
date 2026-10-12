@@ -730,7 +730,7 @@ extension ProgramaCLI {
         let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
 
         // Deliberately best-effort, for the same reason as the surfaceId resolution
-        // further down. A throw here used to abort the hook before any of the three
+        // further down. A throw here would abort the hook before any of the three
         // independent clears below, while Claude Code continued with a stale red
         // "blocked" badge that nothing would clear.
         //

@@ -615,7 +615,6 @@ struct GitMetadataProber {
         pullRequestLookupThrottle.removeAll()
     }
 
-    // Widened from `private` to `internal`: called from TabManager.swift.
     nonisolated static func initialWorkspaceGitMetadataSnapshot(
         for directory: String
     ) -> InitialWorkspaceGitMetadataSnapshot {
@@ -1122,7 +1121,6 @@ struct GitMetadataProber {
         return String(trimmed.prefix(180))
     }
 
-    // Widened from `private` to `internal`: called from TabManager.swift.
     nonisolated static func normalizedBranchName(_ branch: String?) -> String? {
         let trimmed = branch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed

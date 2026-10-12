@@ -2,10 +2,7 @@ import AppKit
 import SwiftUI
 import Bonsplit
 import CoreServices
-import UserNotifications
-import Combine
 import ObjectiveC.runtime
-import Darwin
 
 private var programaFirstResponderGuardHitViewContext: NSView?
 private var programaWindowFirstResponderBypassDepth = 0
@@ -24,8 +21,6 @@ func programaIsWindowFirstResponderBypassActive() -> Bool {
 }
 
 #if DEBUG
-// Widened from `private extension` to `extension`: AppDelegate.installWindowResponderSwizzles()
-// (in AppDelegate.swift) references these @objc methods via #selector(...) for method swizzling. Refs #95.
 // DEBUG-only: the swizzle exists solely for typing-timing instrumentation.
 extension NSApplication {
     @objc func programa_applicationSendEvent(_ event: NSEvent) {
@@ -56,8 +51,6 @@ extension NSApplication {
 }
 #endif
 
-// Widened from `private extension` to `extension`: AppDelegate.installWindowResponderSwizzles()
-// (in AppDelegate.swift) references these @objc methods via #selector(...) for method swizzling. Refs #95.
 extension NSWindow {
     @objc func programa_makeFirstResponder(_ responder: NSResponder?) -> Bool {
         if programaIsWindowFirstResponderBypassActive() {

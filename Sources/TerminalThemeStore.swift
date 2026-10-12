@@ -166,8 +166,7 @@ struct TerminalThemeStore {
         return Self.directiveValue(for: "theme", in: body)
     }
 
-    /// Reads only the managed block (replaces `managedRawThemeValue()`'s role for backups, now
-    /// generalized to all five directives).
+    /// Reads only the managed block, for backups of all five directives.
     func managedRawAppearance() -> TerminalAppearanceOverrides {
         guard let body = managedBlockBody() else { return TerminalAppearanceOverrides() }
 
@@ -372,8 +371,8 @@ struct TerminalThemeStore {
         }
     }
 
-    /// "Last matching line wins" scan for a single `key = value` directive, generalized from
-    /// the theme-only scanner this store used to have.
+    /// "Last matching line wins" scan for a single `key = value` directive, shared by every
+    /// managed directive.
     private static func directiveValue(for key: String, in contents: String) -> String? {
         var lastValue: String?
 

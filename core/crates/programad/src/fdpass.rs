@@ -470,18 +470,16 @@ mod tests {
 
     // Isolated from the default `cargo test` run and re-run alone (see the
     // shared-core CI step: `cargo test -p programad --locked --lib --
-    // --ignored --test-threads=1`). `RecvWithFds` (above `recv_with_fds`)
-    // fixed the production bug this test's EPIPE check used to be exposed
-    // to: `MsgStream::fill_more` now closes a rejected batch while
-    // `recv_with_fds`'s `SPAWN_FD_LOCK` guard is still held, instead of
-    // after it, so a concurrent fork can no longer inherit a not-yet-closed
-    // duplicate from *this* rejection path. Kept isolated anyway as
-    // defense in depth: the EPIPE assertion below is still, structurally,
-    // sensitive to *any* process anywhere holding the pipe's read end, not
-    // just this one -- see `too_many_descriptors_are_closed_before_the_reject_returns`
-    // below for a regression test that instead counts this process's own
-    // fd table, which is robust against other processes by construction
-    // and is the one that would have caught the fixed bug directly.
+    // --ignored --test-threads=1`). `MsgStream::fill_more` closes a
+    // rejected batch while `recv_with_fds`'s `SPAWN_FD_LOCK` guard (see
+    // `RecvWithFds`) is still held, so a concurrent fork cannot inherit a
+    // not-yet-closed duplicate from *this* rejection path. Kept isolated
+    // anyway as defense in depth: the EPIPE assertion below is
+    // structurally sensitive to *any* process anywhere holding the pipe's
+    // read end, not just this one -- see
+    // `too_many_descriptors_are_closed_before_the_reject_returns` below,
+    // which instead counts this process's own fd table and is robust
+    // against other processes by construction.
     #[tokio::test]
     #[ignore = "must run alone: see the shared-core CI step for why"]
     async fn max_sendmsg_descriptors_close_without_leak() {
@@ -556,10 +554,10 @@ mod tests {
             .unwrap_or(0)
     }
 
-    /// Regression test for the production bug fixed alongside this test:
-    /// `recv_with_fds` used to drop its `SPAWN_FD_LOCK` guard on its own
-    /// return, before `MsgStream::fill_more` (the caller) actually closed
-    /// a rejected batch -- see `RecvWithFds`'s doc comment. Unlike
+    /// Guards that `recv_with_fds` keeps its `SPAWN_FD_LOCK` guard alive
+    /// until `MsgStream::fill_more` (the caller) has closed a rejected
+    /// batch, rather than dropping it on return -- see `RecvWithFds`'s doc
+    /// comment. Unlike
     /// `max_sendmsg_descriptors_close_without_leak` above, this doesn't
     /// infer leak-freedom from a side effect (a write returning EPIPE)
     /// that's sensitive to what *any* process holds open; it counts this

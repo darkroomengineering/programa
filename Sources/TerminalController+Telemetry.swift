@@ -440,10 +440,9 @@ extension TerminalController {
     }
 
     /// Atomically reports a surface as blocked on user input and posts the matching
-    /// notification (docs/plans/agent-state-unification.md T2): replaces the three
-    /// independent socket calls (`notification.create_for_target` +
-    /// `workspace.set_status` "Needs input" + `surface.report_agent_state`) a hook used to
-    /// make for the same "needs input" moment, any one of which could fail alone. Parses
+    /// notification in one call, instead of three independent socket calls
+    /// (`notification.create_for_target` + `workspace.set_status` "Needs input" +
+    /// `surface.report_agent_state`), any one of which could fail alone. Parses
     /// and validates off-main; hops to main once via `v2ScheduleSurfaceTelemetryMutation`
     /// (notification creation must run on main -- it drives AppKit) and performs the state
     /// write, notification, and supervision update in that single hop.

@@ -234,7 +234,6 @@ struct SettingsView: View {
 #if DEBUG
         dlog("notification.ui enableTapped state=\(state)")
 #endif
-        NSLog("notification.ui enableTapped state=%@", state)
         switch notificationStore.authorizationState {
         case .unknown, .notDetermined:
             notificationStore.requestAuthorizationFromSettings()
@@ -346,7 +345,7 @@ struct SettingsView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
             ZStack(alignment: .top) {
                 // A gradient that fades to clear never fully hides what scrolls behind
-                // it, so rows used to read straight through the tab strip. A solid
+                // it, so rows read straight through the tab strip. A solid
                 // header material plus a hairline on scroll is what AppKit does.
                 AboutVisualEffectBackground(material: .headerView, blendingMode: .withinWindow)
 

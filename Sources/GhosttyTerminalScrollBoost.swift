@@ -1,7 +1,7 @@
 import AppKit
 
-/// Classifies a terminal scroll event for the historical precise-delta 2x
-/// boost (ported from upstream cmux da4e4bc460).
+/// Classifies a terminal scroll event for the precise-delta 2x
+/// boost.
 ///
 /// Trackpads and Magic Mouse drive a continuous gesture phase; high-res plain
 /// wheels (e.g. Logitech free-spin) report precise deltas but leave both

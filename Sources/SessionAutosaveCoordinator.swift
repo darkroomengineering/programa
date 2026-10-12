@@ -255,9 +255,9 @@ final class SessionAutosaveCoordinator {
         }
     }
 
-    // Widened from `fileprivate` to `internal`: NSWindow.programa_sendEvent(_:) (in
-    // WindowSwizzles.swift) calls AppDelegate.shared?.sessionAutosave.recordTypingActivity()
-    // from a different file. Refs #95, #187.
+    // NSWindow.programa_sendEvent(_:) (in WindowSwizzles.swift) calls
+    // AppDelegate.shared?.sessionAutosave.recordTypingActivity() from a different file.
+    // Refs #95, #187.
     //
     // HOT PATH: called on every keyDown via NSWindow.programa_sendEvent. Keep this a single
     // property write -- no allocation, logging, formatting, or locks.

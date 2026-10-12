@@ -313,7 +313,7 @@ struct TabItemView: View, Equatable {
         return SidebarTitle.strippingLeadingStatusGlyph(tab.title)
     }
 
-    /// Status entry keys/values that used to duplicate agent state in the metadata rows.
+    /// Status entry keys/values that duplicate agent state in the metadata rows.
     /// Filtered out at render time so older CLI builds that still send them don't double up
     /// with the badge above.
     private static let agentStateStatusKeys: Set<String> = ["claude_code", "codex", "opencode"]

@@ -131,10 +131,10 @@ import Bonsplit
 /// `HeldSession` carries a `stopRequested` flag (mutated only under
 /// `SessionEscrowHolder.registryLock`) and a `DispatchSemaphore` the drain
 /// thread signals exactly once, right after it stops. The drain loop itself
-/// no longer blocks in a bare `read()`: it `poll()`s the fd together with
+/// never blocks in a bare `read()`: it `poll()`s the fd together with
 /// the session's self-pipe (`HeldSession.requestStop()` writes one byte to
 /// it), so a stop is noticed immediately even while the child is producing
-/// no output at all, and only calls the actual (now effectively non-blocking, since
+/// no output at all, and only calls the actual (effectively non-blocking, since
 /// `poll` already confirmed readability) `read()` once data is pending --
 /// this is the "bounded by one `drainReadBufferSize` read" a retrieval
 /// waits out. A retrieval request sets `stopRequested`, blocks on the
@@ -479,15 +479,12 @@ enum EscrowWireFormat {
 /// `session_escrow_shim.h`, wired into this target via
 /// `programa-Bridging-Header.h`).
 ///
-/// The fd-passing send/receive used to be hand-rolled here in Swift,
-/// manually computing the `cmsghdr` control-message layout since Darwin's
-/// `<sys/socket.h>` `CMSG_*` macros are C preprocessor macros and aren't
-/// importable into Swift. That version's `sendmsg` failed with `EINVAL` in
-/// a real repro despite the byte-offset arithmetic matching the macros on
-/// paper -- marshalling `msghdr`/`cmsghdr` by hand across several nested
-/// `withUnsafe...` closures is exactly the kind of detail that's easy to
-/// get subtly wrong in a way that's hard to diagnose without a debugger on
-/// the actual kernel call. `session_escrow_shim.c` does the same job in
+/// Darwin's `<sys/socket.h>` `CMSG_*` macros are C preprocessor macros and aren't
+/// importable into Swift, so marshalling `msghdr`/`cmsghdr` by hand across several
+/// nested `withUnsafe...` closures is easy to get subtly wrong (a hand-rolled
+/// `sendmsg` failed with `EINVAL` despite byte offsets matching the macros on
+/// paper) and hard to diagnose without a debugger on the actual kernel call.
+/// `session_escrow_shim.c` does the same job in
 /// ~30 lines of plain C using the real `CMSG_*` macros, which is strictly
 /// more reliable for this one piece; everything else (framing, session
 /// bookkeeping, heartbeats, retry/backoff) stays in Swift.
@@ -2512,13 +2509,12 @@ enum SessionEscrowHolder {
     /// exactly the same file (same path, same rotation cap) the app's own
     /// `SessionWALStore` was writing before it died. Runs on a dedicated
     /// thread -- this process has no rendering/latency constraints, unlike
-    /// the app -- but no longer blocks in a bare `read()`: it `poll()`s
+    /// the app -- and never blocks in a bare `read()`: it `poll()`s
     /// first (bounded, `SessionEscrowPolicy.drainPollIntervalMilliseconds`)
     /// so `session.stopRequested` (set by a retrieval, see
     /// `handleRetrieveRequest`) is noticed promptly even while the child is
     /// producing no output. See the file-level "Drain/retrieve
-    /// coordination" doc comment for the full contract. Unlike the
-    /// pre-slice-2 version, this method does NOT unconditionally close
+    /// coordination" doc comment for the full contract. This method does NOT unconditionally close
     /// `session.fd` on every exit path -- only on a genuine end-of-stream
     /// (the child truly exited). Stopping for a retrieval must leave the fd
     /// open and untouched so it can be handed back; closing it here would

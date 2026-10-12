@@ -4,7 +4,6 @@ import Combine
 import ImageIO
 import SwiftUI
 import ObjectiveC
-import UniformTypeIdentifiers
 
 struct ContentView: View {
     @ObservedObject var updateViewModel: UpdateViewModel

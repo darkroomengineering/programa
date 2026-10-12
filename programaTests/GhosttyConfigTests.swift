@@ -2969,7 +2969,7 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
 
     func testBashBootstrapPreservesStarshipPromptCommandAcrossPrompts() throws {
         // Regression test: Programa's local macOS bash bootstrap is injected
-        // as PROMPT_COMMAND and used to begin by unconditionally clobbering
+        // as PROMPT_COMMAND and must not begin by unconditionally clobbering
         // PROMPT_COMMAND. A user's startup files run
         // `eval "$(starship init bash)"` before the first prompt, which
         // appends starship_precmd to PROMPT_COMMAND; the bootstrap then

@@ -1,10 +1,10 @@
 import Foundation
 
-// MARK: - GhosttyTitleUpdateDispatcher (ported from upstream cmux c30733e5e6)
+// MARK: - GhosttyTitleUpdateDispatcher
 //
-// Every GHOSTTY_ACTION_SET_TITLE callback used to post `.ghosttyDidSetTitle` via an
-// unconditional `DispatchQueue.main.async`. Shells and agent CLIs that rewrite the
-// title on every render (e.g. progress spinners) flood the main actor with
+// Posting `.ghosttyDidSetTitle` through an unconditional `DispatchQueue.main.async` on
+// every GHOSTTY_ACTION_SET_TITLE callback would let shells and agent CLIs that rewrite
+// the title on every render (e.g. progress spinners) flood the main actor with
 // NotificationCenter posts during typing, adding up to real input latency.
 //
 // This dispatcher coalesces title updates per surface: at most one
@@ -12,9 +12,6 @@ import Foundation
 // that arrive while a flush is already scheduled overwrite the pending title rather
 // than queuing a second post, but the *last* title set within the window is always
 // the one delivered -- no title is ever silently dropped.
-//
-// Only the coalescing machinery is ported here. Upstream's notification-hook /
-// desktop-notification ingress is cmux agent-chat machinery programa doesn't have.
 final class GhosttyTitleUpdateDispatcher {
     /// Identifies the surface a title update belongs to. Coalescing is scoped per key
     /// so a burst of title churn on one surface never delays or drops updates for

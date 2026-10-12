@@ -9,13 +9,8 @@
 // remain on the `ContentView` struct in ContentView.swift, since SwiftUI's
 // `@State` cannot be split across files without a larger controller-based
 // rewrite (tracked as a follow-up).
-//
-// A handful of members these functions call into were widened from `private`
-// to `internal` (no other behavior change) so this extension can see them;
-// see the CV1 PR description for the exact list.
 
 import AppKit
-import Combine
 import SwiftUI
 
 extension ContentView {

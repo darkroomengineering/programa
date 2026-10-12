@@ -765,8 +765,6 @@ class TabManager: ObservableObject {
 #endif
 
 #if DEBUG
-    // Widened from `private` to `internal` (default access) so TabManager+UITestHarness.swift,
-    // which owns the setup functions that mutate this state, can see it across files.
     var didSetupSplitCloseRightUITest = false
     var didSetupUITestFocusShortcuts = false
     var didSetupChildExitKeyboardUITest = false
@@ -1011,7 +1009,9 @@ class TabManager: ObservableObject {
             if panel.searchState == nil {
                 panel.searchState = TerminalSurface.SearchState()
             }
-            NSLog("Find: startSearch workspace=%@ panel=%@", panel.workspaceId.uuidString, panel.id.uuidString)
+#if DEBUG
+            dlog("Find: startSearch workspace=\(panel.workspaceId.uuidString) panel=\(panel.id.uuidString)")
+#endif
             NotificationCenter.default.post(name: .ghosttySearchFocus, object: panel.surface)
             _ = panel.performBindingAction("start_search")
             return
@@ -1029,7 +1029,9 @@ class TabManager: ObservableObject {
         if panel.searchState == nil {
             panel.searchState = TerminalSurface.SearchState()
         }
-        NSLog("Find: searchSelection workspace=%@ panel=%@", panel.workspaceId.uuidString, panel.id.uuidString)
+#if DEBUG
+        dlog("Find: searchSelection workspace=\(panel.workspaceId.uuidString) panel=\(panel.id.uuidString)")
+#endif
         NotificationCenter.default.post(name: .ghosttySearchFocus, object: panel.surface)
         _ = panel.performBindingAction("search_selection")
     }
@@ -2811,7 +2813,7 @@ class TabManager: ObservableObject {
 
     // MARK: - Panel/Surface ID Access
 
-    /// Returns the focused panel ID for a tab (replaces focusedSurfaceId)
+    /// Returns the focused panel ID for a tab.
     func focusedPanelId(for tabId: UUID) -> UUID? {
         workspace(withId: tabId)?.focusedPanelId
     }

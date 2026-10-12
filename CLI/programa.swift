@@ -357,7 +357,7 @@ enum CLIProcessRunner {
 
 /// Execution context passed to a `CommandDescriptor`'s `execute` closure.
 ///
-/// Bundles everything a command body previously read from `run()`'s locals
+/// Bundles everything a command body reads from `run()`'s locals
 /// (commandArgs, client, jsonOutput, idFormat, windowId, and the literal
 /// command name, needed by handlers shared across several names such as
 /// the tmux-compat group).
@@ -431,7 +431,7 @@ struct CLIArgumentGrammar {
 /// Single source of truth for a CLI command's name(s), its one-line entry in
 /// the grouped `Commands:` help block, and how it executes.
 ///
-/// This collapses what used to be independently maintained in three places:
+/// This one table covers what would otherwise be three separate places:
 /// the kebab-case dispatch switch, the free-text `usage()` help string, and
 /// (implicitly) the "is this a known command" check used for unknown-command
 /// handling. A command added to the table automatically gets dispatch,
@@ -4402,7 +4402,7 @@ struct ProgramaCLI {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    // MARK: - Race command (fan one prompt across N agents in isolated worktrees, v1: spawn only)
+    // MARK: - Race command (fan one prompt across N agents in isolated worktrees, spawn only)
 
     /// The only agents `race` supports: the three that report state via lifecycle hooks
     /// (Claude Code, OpenCode, Codex). Racing needs a trustworthy idle signal, which
@@ -4411,14 +4411,7 @@ struct ProgramaCLI {
     /// elsewhere in the app for status badges.
     private static let raceSupportedAgents: [String] = ["claude", "opencode", "codex"]
 
-    /// Builds the shell command line that starts an agent with `prompt` as its initial task.
-    /// Reuses the same bare binary names Programa already invokes elsewhere for these agents
-    /// (`initialTerminalInput: "claude\n"` for the "New Claude Code Workspace" shortcut in
-    /// AppDelegate.swift, and the `process_names` in Resources/AgentDetection/*.json), just
-    /// with the prompt appended as a shell-quoted positional argument so the agent starts
-    /// working immediately instead of sitting at its own empty prompt. No prior art exists in
-    /// this codebase for "agent + initial prompt argument" specifically, so this is a new,
-    /// minimal one-place mapping rather than an existing construction being reused verbatim.
+    /// Builds the shell command line that starts an agent with `prompt` as a shell-quoted positional argument.
     private func raceAgentLaunchCommand(agent: String, prompt: String) -> String {
         "\(agent) \(shellSingleQuote(prompt))"
     }
@@ -4477,9 +4470,8 @@ struct ProgramaCLI {
         // Fail immediately, before creating anything, if the cwd isn't inside a git repo.
         let repo = try resolveWorktreeRepoRoot(explicit: nil)
 
-        // Racing twice in a row used to collide on every index, because the branches were
-        // always `<prefix>/1...<prefix>/N`. Start after whatever `<prefix>/<number>` branches
-        // already exist so a second run just continues the numbering.
+        // Start after whatever `<prefix>/<number>` branches already exist so repeated runs
+        // continue the numbering instead of colliding.
         let taken = existingRaceIndexes(repo: repo, prefix: prefix)
         let firstIndex = (taken.max() ?? 0) + 1
         let indexes = Array(firstIndex..<(firstIndex + n))

@@ -172,7 +172,7 @@ enum CommandPaletteFuzzyMatcher {
                 // the two interpretations point at candidates of very different lengths/title
                 // positions: `distancePenalty`/`trailingPenalty` (both scale with the matched
                 // word's position and the candidate's overall length) can swing by hundreds of
-                // points, which used to swamp a mere 10-point base gap and let a shorter,
+                // points, which would swamp a mere 10-point base gap and let a shorter,
                 // less-relevant command's stray-extra-character interpretation outrank a
                 // longer command's genuine one-character-omitted match on its own keyword.
                 return 260
