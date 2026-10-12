@@ -131,8 +131,9 @@ extension NSWindow {
         // The card's dead top-edge sliver (the padding-ring WindowDragHandleView
         // mount in ContentView.swift doesn't fully cover it -- AppKit's hit-test
         // bottoms out at the bare content host there) has no native drag:
-        // isMovable=false and isMovableByWindowBackground=false disable AppKit's
-        // own titlebar drag globally. Handle it here for genuine unclaimed
+        // MainWindowHostingView returns false from mouseDownCanMoveWindow and
+        // isMovableByWindowBackground is false, so AppKit never starts its own
+        // titlebar drag there. Handle it here for genuine unclaimed
         // background only -- real controls (traffic lights, titlebar accessory
         // buttons) and real content (terminal surfaces, bonsplit's tab bar, which
         // are portal-hosted outside contentView's subtree by design) keep their
