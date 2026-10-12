@@ -1665,9 +1665,8 @@ class TerminalController {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "ERROR: Empty command" }
 
-        // The v1 line-based protocol was removed; v2 JSON-RPC is the only protocol.
-        // Stale clients still speaking v1 get a terse, identifiable error rather than
-        // a confusing JSON parse failure.
+        // Only v2 JSON-RPC is accepted. Stale clients still speaking the v1 line protocol
+        // get a terse, identifiable error rather than a confusing JSON parse failure.
         guard trimmed.hasPrefix("{") else {
             return v2Error(
                 id: nil,
@@ -2392,7 +2391,6 @@ class TerminalController {
         }
         return result
     }
-
 
     nonisolated func v2HasNonNullParam(_ params: [String: Any], _ key: String) -> Bool {
         guard let raw = params[key] else { return false }

@@ -361,7 +361,6 @@ extension Workspace {
         metadataBlocks.removeAll()
     }
 
-
     @discardableResult
     func updatePanelTitle(panelId: UUID, title: String) -> Bool {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)

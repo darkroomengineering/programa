@@ -113,11 +113,6 @@ final class ExternalOpenPolicySHELTests: XCTestCase {
     }
 }
 
-
-
-// MARK: - SHEL-12: design mode payload bounds
-
-
 // MARK: - SHEL-15: notification reorder keeps children under their parent
 
 @MainActor

@@ -5,20 +5,6 @@ import CoreServices
 import ObjectiveC.runtime
 
 private var programaFirstResponderGuardHitViewContext: NSView?
-private var programaWindowFirstResponderBypassDepth = 0
-
-@discardableResult
-func programaWithWindowFirstResponderBypass<T>(_ body: () -> T) -> T {
-    programaWindowFirstResponderBypassDepth += 1
-    defer {
-        programaWindowFirstResponderBypassDepth = max(0, programaWindowFirstResponderBypassDepth - 1)
-    }
-    return body()
-}
-
-func programaIsWindowFirstResponderBypassActive() -> Bool {
-    programaWindowFirstResponderBypassDepth > 0
-}
 
 #if DEBUG
 // DEBUG-only: the swizzle exists solely for typing-timing instrumentation.
@@ -53,16 +39,6 @@ extension NSApplication {
 
 extension NSWindow {
     @objc func programa_makeFirstResponder(_ responder: NSResponder?) -> Bool {
-        if programaIsWindowFirstResponderBypassActive() {
-#if DEBUG
-            dlog(
-                "focus.guard bypassFirstResponder responder=\(String(describing: responder.map { type(of: $0) })) " +
-                "window=\(ObjectIdentifier(self))"
-            )
-#endif
-            return false
-        }
-
         if AppDelegate.shared?.shouldBlockFirstResponderChangeWhileCommandPaletteVisible(
             window: self,
             responder: responder
@@ -437,7 +413,6 @@ extension NSWindow {
             return false
         }
     }
-
 
 }
 

@@ -1422,7 +1422,6 @@ final class GhosttyDefaultBackgroundNotificationDispatcherTests: XCTestCase {
     }
 }
 
-
 final class SocketControlSettingsTests: XCTestCase {
     func testMigrateModeSupportsExpandedSocketModes() {
         XCTAssertEqual(SocketControlSettings.migrateMode("off"), .off)
@@ -3525,56 +3524,6 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
     private func writeExecutableScript(at url: URL, contents: String) throws {
         try contents.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-    }
-
-    private func bindUnixSocket(at path: String) throws -> Int32 {
-        unlink(path)
-
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else {
-            throw NSError(
-                domain: NSPOSIXErrorDomain,
-                code: Int(errno),
-                userInfo: [NSLocalizedDescriptionKey: "Failed to create Unix socket"]
-            )
-        }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let maxPathLength = MemoryLayout.size(ofValue: addr.sun_path)
-        path.withCString { ptr in
-            withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
-                let pathBuf = UnsafeMutableRawPointer(pathPtr).assumingMemoryBound(to: CChar.self)
-                strncpy(pathBuf, ptr, maxPathLength - 1)
-            }
-        }
-
-        let bindResult = withUnsafePointer(to: &addr) { ptr in
-            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
-                Darwin.bind(fd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard bindResult == 0 else {
-            let code = Int(errno)
-            Darwin.close(fd)
-            throw NSError(
-                domain: NSPOSIXErrorDomain,
-                code: code,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to bind Unix socket"]
-            )
-        }
-
-        guard Darwin.listen(fd, 1) == 0 else {
-            let code = Int(errno)
-            Darwin.close(fd)
-            throw NSError(
-                domain: NSPOSIXErrorDomain,
-                code: code,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to listen on Unix socket"]
-            )
-        }
-
-        return fd
     }
 }
 

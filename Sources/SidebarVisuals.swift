@@ -1,8 +1,8 @@
 // Sidebar visual chrome.
-// Holds sidebar footer/help-menu/scrim/blur/material/tint/preset enums,
+// Holds sidebar footer/help-menu/blur/material/tint/preset enums,
 // visual-effect/backdrop views, and the NSColor extension.
 //
-// SidebarFooter, SidebarTopScrim, SidebarScrollViewResolver, SidebarEmptyArea,
+// SidebarFooter, SidebarScrollViewResolver, SidebarEmptyArea,
 // ClearScrollBackground, DraggableFolderIcon, TitlebarLeadingInsetReader, and
 // SidebarBackdrop are internal because VerticalTabsSidebar and ContentView
 // (in ContentView.swift) construct/reference them.
@@ -623,71 +623,6 @@ enum SidebarTerminalAppearance {
     }
 }
 
-struct SidebarTopScrim: View {
-    let height: CGFloat
-    @AppStorage("sidebarMatchTerminalBackground") private var matchTerminalBackground = false
-    @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
-    @State private var terminalColor = Color(nsColor: GhosttyBackgroundTheme.currentColor())
-
-    private var usesNativeGlassSidebar: Bool {
-        WindowGlassEffect.isAvailable && !accessibilityReduceTransparency
-    }
-
-    var body: some View {
-        Group {
-            if usesNativeGlassSidebar {
-                // The glass surface provides its own top treatment; a material
-                // scrim reads as an opaque gray band on it (Maps has none).
-                Color.clear
-            } else if matchTerminalBackground {
-                // The system material stays light over a terminal-coloured sidebar, which
-                // reads as a grey wash across the top. Fade the terminal colour instead.
-                LinearGradient(
-                    colors: [
-                        terminalColor,
-                        terminalColor.opacity(0.85),
-                        terminalColor.opacity(0.4),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            } else {
-                SidebarTopBlurEffect()
-                    .mask(
-                        LinearGradient(
-                            colors: [
-                                Color.black.opacity(0.95),
-                                Color.black.opacity(0.75),
-                                Color.black.opacity(0.35),
-                                Color.clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            }
-        }
-        .frame(height: height)
-        .onReceive(NotificationCenter.default.publisher(for: .ghosttyDefaultBackgroundDidChange)) { _ in
-            terminalColor = Color(nsColor: GhosttyBackgroundTheme.currentColor())
-        }
-    }
-}
-
-private struct SidebarTopBlurEffect: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.blendingMode = .withinWindow
-        view.material = .underWindowBackground
-        view.state = .active
-        view.isEmphasized = false
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
-}
-
 struct SidebarScrollViewResolver: NSViewRepresentable {
     let onResolve: (NSScrollView?) -> Void
 
@@ -889,7 +824,6 @@ enum SidebarTrailingAccessoryWidthPolicy {
         return canCloseWorkspace ? closeButtonWidth : 0
     }
 }
-
 
 struct MiddleClickCapture: NSViewRepresentable {
     let onMiddleClick: () -> Void

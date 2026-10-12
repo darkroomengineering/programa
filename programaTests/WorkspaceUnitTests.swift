@@ -87,7 +87,6 @@ final class ProgramaLayoutFileIdentityTests: XCTestCase {
 @testable import Programa
 #endif
 
-
 final class SidebarSelectedWorkspaceColorTests: XCTestCase {
     func testLightModeUsesConfiguredSelectedWorkspaceBackgroundColor() {
         guard let color = sidebarSelectedWorkspaceBackgroundNSColor(for: .light).usingColorSpace(.sRGB) else {
@@ -125,7 +124,6 @@ final class SidebarSelectedWorkspaceColorTests: XCTestCase {
         XCTAssertEqual(color.alphaComponent, 0.65, accuracy: 0.001)
     }
 }
-
 
 final class WorkspaceRenameShortcutDefaultsTests: XCTestCase {
     func testRenameTabShortcutDefaultsAndMetadata() {
@@ -1159,7 +1157,6 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
     }
 }
 
-
 final class TerminalThemeSettingsTests: XCTestCase {
     private let settingsFileBackupsDefaultsKey = "programa.settingsFile.backups.v1"
 
@@ -1260,7 +1257,6 @@ final class TerminalThemeSettingsTests: XCTestCase {
         XCTAssertEqual(themeStore.currentSelection().dark, "Original Dark")
         XCTAssertEqual(reloadRequestCount, 2)
     }
-
 
     private func restoreDefaultsValue(_ value: Any?, key: String, defaults: UserDefaults) {
         if let value {
@@ -1440,7 +1436,6 @@ final class TerminalThemeSettingsTests: XCTestCase {
     }
 }
 
-
 final class WorkspaceShortcutMapperTests: XCTestCase {
     func testCommandNineMapsToLastWorkspaceIndex() {
         XCTAssertEqual(WorkspaceShortcutMapper.workspaceIndex(forDigit: 9, workspaceCount: 1), 0)
@@ -1554,7 +1549,6 @@ final class WorkspacePlacementSettingsTests: XCTestCase {
         XCTAssertEqual(noSelectionIndex, 5)
     }
 }
-
 
 @MainActor
 final class WorkspaceCreationPlacementTests: XCTestCase {
@@ -1871,7 +1865,6 @@ final class WorkspaceCreationConfigSanitizationTests: XCTestCase {
         XCTAssertTrue(capturedConfig.environmentVariables.isEmpty)
     }
 }
-
 
 final class WorkspaceTabColorSettingsTests: XCTestCase {
     func testNormalizedHexAcceptsAndNormalizesValidInput() {
@@ -2249,7 +2242,6 @@ final class WorkspaceTabColorSettingsTests: XCTestCase {
     }
 }
 
-
 final class WorkspaceReorderTests: XCTestCase {
     @MainActor
     func testRelativeWorkspaceMovesUseIndicesAfterRemovingTheMovingWorkspace() {
@@ -2340,7 +2332,6 @@ final class WorkspaceReorderTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class WorkspaceNotificationReorderTests: XCTestCase {
     func testNotificationAutoReorderDoesNotMovePinnedWorkspace() {
@@ -2385,7 +2376,6 @@ final class WorkspaceNotificationReorderTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class WorkspaceTeardownTests: XCTestCase {
     func testTeardownAllPanelsClearsPanelMetadataCaches() {
@@ -2422,7 +2412,6 @@ final class WorkspaceTeardownTests: XCTestCase {
         XCTAssertTrue(workspace.manualUnreadPanelIds.isEmpty)
     }
 }
-
 
 @MainActor
 final class WorkspaceSplitWorkingDirectoryTests: XCTestCase {
@@ -2664,7 +2653,6 @@ final class WorkspaceSplitWorkingDirectoryTests: XCTestCase {
 #endif
     }
 }
-
 
 @MainActor
 final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
@@ -2971,7 +2959,6 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class WorkspaceTerminalConfigInheritanceSelectionTests: XCTestCase {
     func testPrefersSelectedTerminalInTargetPaneOverFocusedTerminalElsewhere() {
@@ -3049,7 +3036,6 @@ final class WorkspaceTerminalConfigInheritanceSelectionTests: XCTestCase {
         )
     }
 }
-
 
 @MainActor
 final class WorkspacePanelGitBranchTests: XCTestCase {
@@ -3361,7 +3347,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         assertPanelAndTabTitle("live-process", workspace: restored, panelId: restoredPanelId)
     }
 
-
     func testTerminalSplitWithFocusFalsePreservesOriginalFocusedPanel() {
         let workspace = Workspace()
         guard let originalFocusedPanelId = workspace.focusedPanelId else {
@@ -3508,10 +3493,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         XCTAssertFalse(attachedTab.hasCustomTitle)
     }
 
-
-
-
-
     func testAttachedTransferIgnoresStaleFinalizeAndNextDetachHasIndependentOwnership() throws {
         let source = Workspace()
         let destination = Workspace()
@@ -3548,8 +3529,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         XCTAssertEqual(terminalPanel.surface.portalBindingStateLabel(), "closed")
     }
 
-
-
     func testNewTerminalSurfaceWithFocusFalsePreservesFocusedPanel() {
         let workspace = Workspace()
         guard let originalFocusedPanelId = workspace.focusedPanelId,
@@ -3579,7 +3558,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
             "Expected selected tab to stay on the original focused panel"
         )
     }
-
 
     func testClosingFocusedSplitRestoresBranchForRemainingFocusedPanel() {
         let workspace = Workspace()
@@ -3732,20 +3710,8 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         )
     }
 
-    // Renamed from testSidebarPullRequestsTrackFocusedPanelOnly. That name asserted a
-    // focused-only filter that never existed in production: `sidebarPullRequestsInDisplayOrder()`
-    // has surfaced PRs for every panel in sidebar order since it was introduced (commit
-    // 2d454df5, "feat(sidebar): show linked pull request metadata"), mirroring the pre-existing
-    // multi-panel `sidebarGitBranchesInDisplayOrder()`. The perf-only precompute in f7388715
-    // ("Precompute panel ordering to reduce sidebar scroll lag") didn't change that. And the
-    // recent poll-candidate fix (commit d94d79ee, "fix: PR-probe filtering, poll candidates...")
-    // together with the green `TabManagerPullRequestProbeTests
-    // .testTrackedWorkspaceGitMetadataPollCandidatesIncludeMainAndMasterPanels` test explicitly
-    // proves background/non-main panels (master, feature, mainline splits) are polled for PR
-    // metadata -- which would be pointless if the sidebar only ever displayed the focused panel's
-    // PR. This test now documents the real contract: background panels with a valid,
-    // branch-matched PR are shown in sidebar order; PRs whose recorded branch no longer matches
-    // the panel's current git branch are filtered out.
+    // Contract: background panels with a valid, branch-matched PR are shown in sidebar order;
+    // PRs whose recorded branch no longer matches the panel's current git branch are filtered out.
     @MainActor
     func testSidebarPullRequestsShowAllPanelsInSidebarOrderFilteringBranchMismatches() {
         let workspace = Workspace()
@@ -4017,7 +3983,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         )
     }
 }
-
 
 final class WorkspaceMountPolicyTests: XCTestCase {
     func testDefaultPolicyMountsOnlySelectedWorkspace() {
@@ -4294,7 +4259,6 @@ final class ReviewPanelWorkspaceTransferTests: XCTestCase {
         )
     }
 }
-
 
 @MainActor
 final class SidebarWorkspaceShortcutHintMetricsTests: XCTestCase {

@@ -262,7 +262,6 @@ struct SessionTerminalPanelSnapshot: Codable, Sendable {
     var scrollback: String?
 }
 
-
 struct SessionMarkdownPanelSnapshot: Codable, Sendable {
     var filePath: String
 }
@@ -1002,7 +1001,6 @@ enum SessionPersistenceStore {
             }
         }
 
-
         if let markdown = panel.markdown,
            !isValidString(
                markdown.filePath,
@@ -1041,7 +1039,6 @@ enum SessionPersistenceStore {
                 maxBytes: SidebarTelemetryLimits.maxLogSourceBytes
             )
     }
-
 
     private static func isValidString(
         _ value: String?,

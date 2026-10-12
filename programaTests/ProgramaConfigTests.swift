@@ -308,7 +308,6 @@ final class ProgramaConfigDecodingTests: XCTestCase {
         }
     }
 
-
     func testDecodeMultipleSurfacesInPane() throws {
         let json = """
         {

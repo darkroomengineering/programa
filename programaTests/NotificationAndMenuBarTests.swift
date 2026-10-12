@@ -532,7 +532,6 @@ final class NotificationDockBadgeTests: XCTestCase {
     }
 }
 
-
 final class MenuBarBadgeLabelFormatterTests: XCTestCase {
     func testBadgeLabelFormatting() {
         XCTAssertNil(MenuBarBadgeLabelFormatter.badgeText(for: 0))
@@ -647,7 +646,6 @@ final class FocusedNotificationIndicatorTests: XCTestCase {
     }
 }
 
-
 final class NotificationMenuSnapshotBuilderTests: XCTestCase {
     func testSnapshotCountsUnreadAndLimitsRecentItems() {
         let notifications = (0..<8).map { index in
@@ -682,7 +680,6 @@ final class NotificationMenuSnapshotBuilderTests: XCTestCase {
     }
 }
 
-
 final class MenuBarBuildHintFormatterTests: XCTestCase {
     func testReleaseBuildShowsNoHint() {
         XCTAssertNil(MenuBarBuildHintFormatter.menuTitle(appName: "Programa DEV menubar-extra", isDebugBuild: false))
@@ -702,7 +699,6 @@ final class MenuBarBuildHintFormatterTests: XCTestCase {
         )
     }
 }
-
 
 final class MenuBarNotificationLineFormatterTests: XCTestCase {
     func testPlainTitleContainsUnreadDotBodyAndTab() {
@@ -786,7 +782,6 @@ final class MenuBarNotificationLineFormatterTests: XCTestCase {
     }
 }
 
-
 final class MenuBarIconDebugSettingsTests: XCTestCase {
     func testDisplayedUnreadCountUsesPreviewOverrideWhenEnabled() {
         let suiteName = "MenuBarIconDebugSettingsTests.\(UUID().uuidString)"
@@ -838,7 +833,6 @@ final class MenuBarIconDebugSettingsTests: XCTestCase {
 }
 
 @MainActor
-
 
 final class MenuBarIconRendererTests: XCTestCase {
     func testImageWidthDoesNotShiftWhenBadgeAppears() {

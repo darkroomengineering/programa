@@ -4,70 +4,6 @@ import Carbon.HIToolbox
 @preconcurrency import Foundation
 import Bonsplit
 
-#if DEBUG
-@MainActor
-private final class TerminalSurfaceWaitState {
-    let terminalSurface: TerminalSurface
-    let finish: () -> Void
-    var readyObserver: NSObjectProtocol?
-    var hostedViewObserver: NSObjectProtocol?
-    private var completed = false
-
-    init(terminalSurface: TerminalSurface, finish: @escaping () -> Void) {
-        self.terminalSurface = terminalSurface
-        self.finish = finish
-    }
-
-    func complete() {
-        guard !completed else { return }
-        completed = true
-        if let readyObserver {
-            NotificationCenter.default.removeObserver(readyObserver)
-            self.readyObserver = nil
-        }
-        if let hostedViewObserver {
-            NotificationCenter.default.removeObserver(hostedViewObserver)
-            self.hostedViewObserver = nil
-        }
-        finish()
-    }
-
-    func installReadyObserver(_ observer: NSObjectProtocol) {
-        if completed {
-            NotificationCenter.default.removeObserver(observer)
-        } else {
-            readyObserver = observer
-        }
-    }
-
-    func installHostedViewObserver(_ observer: NSObjectProtocol) {
-        if completed {
-            NotificationCenter.default.removeObserver(observer)
-        } else {
-            hostedViewObserver = observer
-        }
-    }
-
-    func completeIfSurfaceReady() {
-        guard terminalSurface.surface != nil else { return }
-        complete()
-    }
-
-    func cancel() {
-        guard !completed else { return }
-        completed = true
-        if let readyObserver {
-            NotificationCenter.default.removeObserver(readyObserver)
-            self.readyObserver = nil
-        }
-        if let hostedViewObserver {
-            NotificationCenter.default.removeObserver(hostedViewObserver)
-            self.hostedViewObserver = nil
-        }
-    }
-}
-#endif
-
 extension TerminalController {
 #if DEBUG
     // MARK: - V2 Debug / Test-only Methods
@@ -336,8 +272,6 @@ extension TerminalController {
             ])
         }
     }
-
-
 
     nonisolated func v2DebugSidebarVisible(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
@@ -1444,7 +1378,6 @@ extension TerminalController {
 	                    )
 	                }
 
-
 	                return LayoutDebugSelectedPanel(
 	                    paneId: paneIdStr,
 	                    paneFrame: paneFrame,
@@ -1621,115 +1554,6 @@ extension TerminalController {
         return result
     }
 
-    private func resolveTerminalPanel(from arg: String, tabManager: TabManager) -> TerminalPanel? {
-        guard let tabId = tabManager.selectedTabId,
-              let tab = tabManager.tabs.first(where: { $0.id == tabId }) else {
-            return nil
-        }
-
-        if let uuid = UUID(uuidString: arg) {
-            return tab.terminalPanel(for: uuid)
-        }
-
-        if let index = Int(arg), index >= 0 {
-            let panels = orderedPanels(in: tab)
-            guard index < panels.count else { return nil }
-            return panels[index] as? TerminalPanel
-        }
-
-        return nil
-    }
-
-#if DEBUG
-    func v2AwaitCallback<T>(
-        timeout: TimeInterval,
-        start: (@escaping (T) -> Void) -> Void
-    ) -> T? {
-        if Thread.isMainThread {
-            // Each nested wait polls its own flag, so another client's completion cannot end it.
-            var resolved = false
-            var result: T?
-            start { value in
-                guard !resolved else { return }
-                resolved = true
-                result = value
-            }
-            let deadline = Date().addingTimeInterval(timeout)
-            while !resolved && Date() < deadline {
-                CFRunLoopRunInMode(.defaultMode, 0.05, true)
-            }
-            guard resolved else {
-                resolved = true  // a callback arriving after the deadline is dropped
-                return nil
-            }
-            return result
-        }
-
-        let semaphore = DispatchSemaphore(value: 0)
-        let lock = NSLock()
-        var result: T?
-        start { value in
-            lock.lock()
-            result = value
-            lock.unlock()
-            semaphore.signal()
-        }
-        guard semaphore.wait(timeout: .now() + timeout) == .success else {
-            return nil
-        }
-        lock.lock()
-        defer { lock.unlock() }
-        return result
-    }
-
-    private func resolveTerminalSurface(from arg: String, tabManager: TabManager, waitUpTo timeout: TimeInterval = 0.6) -> ghostty_surface_t? {
-        guard let terminalPanel = resolveTerminalPanel(from: arg, tabManager: tabManager) else { return nil }
-        return waitForTerminalSurface(terminalPanel, waitUpTo: timeout)
-    }
-
-    private func waitForTerminalSurface(_ terminalPanel: TerminalPanel, waitUpTo timeout: TimeInterval = 0.6) -> ghostty_surface_t? {
-        if let surface = terminalPanel.surface.surface { return surface }
-
-        let terminalSurface = terminalPanel.surface
-        terminalSurface.requestBackgroundSurfaceStartIfNeeded()
-        var waitState: TerminalSurfaceWaitState?
-        _ = v2AwaitCallback(timeout: timeout) { finish in
-            let state = TerminalSurfaceWaitState(
-                terminalSurface: terminalSurface,
-                finish: { finish(()) }
-            )
-            waitState = state
-            let readyObserver = NotificationCenter.default.addObserver(
-                forName: .terminalSurfaceDidBecomeReady,
-                object: terminalSurface,
-                queue: .main
-            ) { [state] _ in
-                MainActor.assumeIsolated {
-                    state.complete()
-                }
-            }
-            state.installReadyObserver(readyObserver)
-            let hostedViewObserver = NotificationCenter.default.addObserver(
-                forName: .terminalSurfaceHostedViewDidMoveToWindow,
-                object: terminalSurface,
-                queue: .main
-            ) { [state] _ in
-                MainActor.assumeIsolated {
-                    state.completeIfSurfaceReady()
-                }
-            }
-            state.installHostedViewObserver(hostedViewObserver)
-
-            if terminalSurface.surface != nil {
-                state.complete()
-            }
-        }
-        waitState?.cancel()
-
-        return terminalPanel.surface.surface
-    }
-#endif
-
     private func resolveSurfaceId(from arg: String, tab: Workspace) -> UUID? {
         if let uuid = UUID(uuidString: arg), tab.panels[uuid] != nil {
             return uuid
@@ -1754,8 +1578,4 @@ extension TerminalController {
             return nil
         }
     }
-
-
-    // MARK: - Bonsplit Pane Commands
-
 }

@@ -183,8 +183,7 @@ struct VerticalTabsSidebar: View {
     private var usesBackdropSidebar: Bool {
         WindowGlassEffect.isAvailable && !accessibilityReduceTransparency
     }
-    /// Resolved from `ChromeDensity.sidebarRowSpacing` -- was a fixed `2pt`
-    /// constant before density tokens (see `WindowChrome.swift`).
+    /// Resolved from `ChromeDensity.sidebarRowSpacing` (see `WindowChrome.swift`).
     private var tabRowSpacing: CGFloat { ChromeDensity.sidebarRowSpacing }
     #if DEBUG
     // Subscribing here makes the whole sidebar (rows, spacing, header/panel

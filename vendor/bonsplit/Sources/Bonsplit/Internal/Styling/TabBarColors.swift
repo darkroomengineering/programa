@@ -96,10 +96,6 @@ enum TabBarColors {
         return Color(nsColor: adjusted.withAlphaComponent(0.78))
     }
 
-    static var inactiveTabBackground: Color {
-        .clear
-    }
-
     // MARK: - Text Colors
 
     static var activeText: Color {
@@ -171,10 +167,6 @@ enum TabBarColors {
         return dropIndicator
     }
 
-    static var focusRing: Color {
-        Color.accentColor.opacity(0.5)
-    }
-
     static var dirtyIndicator: Color {
         Color(nsColor: .labelColor).opacity(0.6)
     }
@@ -191,12 +183,6 @@ enum TabBarColors {
     static func notificationBadge(for appearance: BonsplitConfiguration.Appearance) -> Color {
         _ = appearance
         return notificationBadge
-    }
-
-    // MARK: - Shadows
-
-    static var tabShadow: Color {
-        Color.black.opacity(0.08)
     }
 }
 

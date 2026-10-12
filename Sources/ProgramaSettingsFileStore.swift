@@ -522,7 +522,6 @@ final class ProgramaSettingsFileStore {
         }
     }
 
-
     private func parseSidebarAppearanceSection(
         _ section: [String: Any],
         sourcePath: String,

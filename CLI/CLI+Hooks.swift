@@ -2368,8 +2368,6 @@ extension ProgramaCLI {
         return pruned(.table(root))
     }
 
-
-
     private func codexParseTOML(_ source: String, path: String) throws -> CodexTOMLValue {
         let decoder = TOMLDecoder()
         decoder.limits = .init(

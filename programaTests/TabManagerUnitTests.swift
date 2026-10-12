@@ -205,7 +205,6 @@ final class TabManagerChildExitCloseTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerWorkspaceOwnershipTests: XCTestCase {
     func testCloseWorkspaceIgnoresWorkspaceNotOwnedByManager() {
@@ -803,7 +802,6 @@ final class TabManagerPullRequestProbeTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerCloseWorkspacesWithConfirmationTests: XCTestCase {
     func testCloseWorkspacesWithConfirmationPromptsOnceAndClosesAcceptedWorkspaces() {
@@ -911,7 +909,6 @@ final class TabManagerCloseWorkspacesWithConfirmationTests: XCTestCase {
         XCTAssertEqual(manager.tabs.map(\.title), ["Alpha", "Beta", "Gamma"])
     }
 }
-
 
 @MainActor
 final class TabManagerCloseCurrentPanelTests: XCTestCase {
@@ -1201,7 +1198,6 @@ final class TabManagerCloseCurrentPanelTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerNotificationFocusTests: XCTestCase {
     func testFocusTabFromNotificationClearsSplitZoomBeforeFocusingTargetPanel() {
@@ -1297,7 +1293,6 @@ final class TabManagerNotificationFocusTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerPendingUnfocusPolicyTests: XCTestCase {
     func testDoesNotUnfocusWhenPendingTabIsCurrentlySelected() {
@@ -1327,7 +1322,6 @@ final class TabManagerPendingUnfocusPolicyTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerSurfaceCreationTests: XCTestCase {
     func testNewSurfaceFocusesCreatedSurface() {
@@ -1352,10 +1346,7 @@ final class TabManagerSurfaceCreationTests: XCTestCase {
         )
     }
 
-
-
 }
-
 
 @MainActor
 final class TabManagerEqualizeSplitsTests: XCTestCase {
@@ -1637,7 +1628,6 @@ final class TabManagerResizeSplitsTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TabManagerWorkspaceConfigInheritanceSourceTests: XCTestCase {
     func testUsesFocusedTerminalWhenTerminalIsFocused() {
@@ -1694,7 +1684,6 @@ final class TabManagerWorkspaceConfigInheritanceSourceTests: XCTestCase {
         )
     }
 }
-
 
 @MainActor
 final class TabManagerFocusedNotificationIndicatorTests: XCTestCase {

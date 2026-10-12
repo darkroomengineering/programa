@@ -762,7 +762,6 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class AppDelegateLaunchServicesRegistrationTests: XCTestCase {
     // See the comment on AppDelegateWindowContextRoutingTests above: `AppDelegate()` overwrites
@@ -806,7 +805,6 @@ final class AppDelegateLaunchServicesRegistrationTests: XCTestCase {
     }
 }
 
-
 final class FocusFlashPatternTests: XCTestCase {
     func testFocusFlashPatternMatchesTerminalDoublePulseShape() {
         XCTAssertEqual(FocusFlashPattern.values, [0, 1, 0, 1, 0])
@@ -842,7 +840,6 @@ final class FocusFlashPatternTests: XCTestCase {
         XCTAssertEqual(segments[3].curve, .easeIn)
     }
 }
-
 
 @available(macOS 26.0, *)
 private struct DragConfigurationOperationsSnapshot: Equatable {
@@ -913,7 +910,6 @@ final class InternalTabDragConfigurationTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class InternalTabDragBundleDeclarationTests: XCTestCase {
     private func exportedTypeIdentifiers(bundle: Bundle) -> Set<String> {
@@ -935,7 +931,6 @@ final class InternalTabDragBundleDeclarationTests: XCTestCase {
     }
 }
 #endif
-
 
 @MainActor
 final class WindowDragHandleHitTests: XCTestCase {
@@ -1308,7 +1303,6 @@ final class WindowDragHandleHitTests: XCTestCase {
 
 #if DEBUG
 
-
 @MainActor
 final class DragOverlayRoutingPolicyPassiveMouseEventTests: XCTestCase {
     // Covers the WIN-1 perf fast path in WindowTerminalHostView.hitTest: passive
@@ -1360,7 +1354,6 @@ final class DragOverlayRoutingPolicyPassiveMouseEventTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class DraggableFolderHitTests: XCTestCase {
     func testFolderHitTestReturnsContainerWhenInsideBounds() {
@@ -1387,7 +1380,6 @@ final class DraggableFolderHitTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class TitlebarLeadingInsetPassthroughViewTests: XCTestCase {
     func testLeadingInsetViewDoesNotParticipateInHitTesting() {
@@ -1400,7 +1392,6 @@ final class TitlebarLeadingInsetPassthroughViewTests: XCTestCase {
         XCTAssertFalse(view.mouseDownCanMoveWindow)
     }
 }
-
 
 @MainActor
 final class FolderWindowMoveSuppressionTests: XCTestCase {
@@ -1499,7 +1490,6 @@ final class FolderWindowMoveSuppressionTests: XCTestCase {
     }
 }
 
-
 @MainActor
 final class WindowMoveSuppressionHitPathTests: XCTestCase {
     private func makeWindowWithContentView() -> (NSWindow, NSView) {
@@ -1573,7 +1563,6 @@ final class WindowMoveSuppressionHitPathTests: XCTestCase {
         XCTAssertFalse(shouldSuppressWindowMoveForFolderDrag(window: window, event: dragged))
     }
 }
-
 
 @MainActor
 final class MarkdownPanelPointerObserverViewTests: XCTestCase {

@@ -4058,7 +4058,6 @@ struct ContentView: View {
             }
         }
 
-
         for target in TerminalDirectoryOpenTarget.commandPaletteShortcutTargets {
             registry.register(commandId: target.commandPaletteCommandId) {
                 if !openFocusedDirectory(in: target) {

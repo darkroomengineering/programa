@@ -3,7 +3,6 @@
 import AppKit
 import Bonsplit
 
-
 /// Transparent NSView installed on the window's theme frame (above the NSHostingView) to
 /// handle file/URL drags from Finder. Nested NSHostingController layers (created by bonsplit's
 /// SinglePaneWrapper) prevent AppKit's NSDraggingDestination routing from reaching deeply

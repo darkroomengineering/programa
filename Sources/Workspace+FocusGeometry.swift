@@ -218,7 +218,6 @@ extension Workspace {
             )
         }
 
-
         if trigger == .terminalFirstResponder,
            panels[panelId] is TerminalPanel {
             beginEventDrivenLayoutFollowUp(
@@ -227,7 +226,6 @@ extension Workspace {
             )
         }
     }
-
 
     func moveFocus(direction: NavigationDirection) {
         // If a pane is zoomed, un-zoom before navigating so the target
@@ -293,7 +291,6 @@ extension Workspace {
             TerminalWindowPortalRegistry.hideHostedView(terminal.hostedView)
         }
     }
-
 
     func reconcileFocusState() {
         guard !isReconcilingFocusState else { return }
@@ -501,9 +498,6 @@ extension Workspace {
         }
     }
 
-
-
-
     func terminalFocusNeedsFollowUp() -> Bool {
         guard let panelId = layoutFollowUpTerminalFocusPanelId,
               let terminalPanel = terminalPanel(for: panelId) else {
@@ -511,7 +505,6 @@ extension Workspace {
         }
         return focusedPanelId != panelId || !terminalPanel.hostedView.isSurfaceViewFirstResponder()
     }
-
 
     func attemptEventDrivenLayoutFollowUp() {
         guard layoutFollowUpTimeoutWorkItem != nil, !isAttemptingLayoutFollowUp else { return }
@@ -542,9 +535,6 @@ extension Workspace {
 
         reconcileTerminalPortalVisibilityForCurrentRenderedLayout()
         let terminalPortalPending = terminalPortalVisibilityNeedsFollowUp()
-
-
-
 
         let terminalFocusPending = terminalFocusNeedsFollowUp()
         let needsMoreWork =
@@ -685,8 +675,6 @@ extension Workspace {
 
         return false
     }
-
-
 
     func scheduleMovedTerminalRefresh(panelId: UUID) {
         guard terminalPanel(for: panelId) != nil else { return }

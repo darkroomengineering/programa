@@ -123,7 +123,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
     }
 
-
     private func applyTabSelectionNow(
         tabId: TabID,
         inPane pane: PaneID,
@@ -202,7 +201,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         for (id, p) in panels where id != effectiveFocusedPanelId {
             p.unfocus()
         }
-
 
         if let focusWindow = activationWindow(for: panel) {
             yieldForeignOwnedFocusIfNeeded(
@@ -313,7 +311,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             return
         }
 
-
         if reassertAppKitFocus {
             panel.focus()
         }
@@ -355,8 +352,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             return true
         }
     }
-
-
 
     private func shouldRestoreFocusIntentAfterActivation(_ intent: PanelFocusIntent) -> Bool {
         switch intent {

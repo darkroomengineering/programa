@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 import CoreImage
 import CoreImage.CIFilterBuiltins
 
-
 /// Height tracks the selected tab's content; width is free above a floor derived from
 /// the tab labels, so the six segments never truncate.
 enum SettingsWindowMetrics {
@@ -463,7 +462,6 @@ struct SettingsView: View {
                     )
             }
             .managedBySettingsFile(settingsFileStatus.isManaged(MenuBarExtraSettings.showInMenuBarKey))
-
 
             SettingsCardDivider()
 
@@ -992,7 +990,6 @@ struct SettingsView: View {
         WorkspaceTabColorSettings.resetRememberedFolderColors()
         shortcutResetToken = UUID()
     }
-
 
 }
 
@@ -1547,7 +1544,6 @@ private struct ThemePickerRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-
 
 private struct ShortcutSettingRow: View {
     let action: KeyboardShortcutSettings.Action

@@ -48,7 +48,6 @@ final class UpdateReleaseNotesDestinationTests: XCTestCase {
     }
 }
 
-
 final class TitlebarControlsSizingPolicyTests: XCTestCase {
     func testSchedulePolicyRequiresMeaningfulViewSizeChange() {
         XCTAssertFalse(titlebarControlsShouldScheduleForViewSizeChange(previous: .zero, current: .zero))

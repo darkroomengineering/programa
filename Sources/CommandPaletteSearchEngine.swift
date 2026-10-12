@@ -1012,4 +1012,3 @@ enum CommandPaletteSearchEngine {
         return max(fuzzyScore, titleScore + titleMatchBonus)
     }
 }
-

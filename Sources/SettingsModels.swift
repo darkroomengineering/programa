@@ -4,7 +4,6 @@ import Darwin
 import Bonsplit
 import UniformTypeIdentifiers
 
-
 enum WorkspacePresentationModeSettings {
     static let modeKey = "workspacePresentationMode"
 
@@ -78,8 +77,6 @@ enum AppearanceSettings {
         return resolved
     }
 }
-
-
 
 enum QuitWarningSettings {
     static let warnBeforeQuitKey = "warnBeforeQuitShortcut"
@@ -223,7 +220,6 @@ enum PreferredEditorSettings {
         }
     }
 }
-
 
 /// The tabs the settings window is split across.
 ///

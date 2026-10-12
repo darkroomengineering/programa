@@ -8,8 +8,6 @@ import Combine
 @testable import Programa
 #endif
 
-private let appDelegateLastSurfaceCloseShortcutDefaultsKey = "closeWorkspaceOnLastSurfaceShortcut"
-private final class FakeWKInspectorContainerView: NSView {}
 private final class FocusableTestView: NSView {
     override var acceptsFirstResponder: Bool { true }
 }
@@ -2138,7 +2136,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             return
         }
 
-
         let windowId = appDelegate.createMainWindow()
         defer { closeWindow(withId: windowId) }
 
@@ -2881,7 +2878,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         wait(for: [paletteExpectation], timeout: 1.0)
         XCTAssertEqual(observedPaletteWindow?.windowNumber, window.windowNumber)
     }
-
 
     func testCmdPhysicalWWithDvorakCharactersDoesNotTriggerClosePanelShortcut() {
         guard let appDelegate = AppDelegate.shared else {
@@ -4664,11 +4660,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
     }
 
     // MARK: - Non-Latin keyboard layout shortcut tests
-
-
-
-
-
 
     func testCmdTWorksWithRussianKeyboardLayout() {
         guard let appDelegate = AppDelegate.shared else {
