@@ -171,6 +171,12 @@ final class GhosttySurfaceScrollView: NSView {
         isKeyWindowOverrideForTesting = value
     }
 #endif
+    var isHostWindowKey: Bool {
+#if DEBUG
+        if let isKeyWindowOverrideForTesting { return isKeyWindowOverrideForTesting }
+#endif
+        return window?.isKeyWindow ?? false
+    }
     private var observers: [NSObjectProtocol] = []
     private var windowObservers: [NSObjectProtocol] = []
     // Teardown-race guard (forensic evidence: 6/7 CI minidumps traced to a
@@ -862,6 +868,7 @@ final class GhosttySurfaceScrollView: NSView {
         windowObserverGeneration &+= 1
         let observerGeneration = windowObserverGeneration
         guard let window else { return }
+        surfaceView.terminalSurface?.syncGhosttyFocus()
         windowObservers.append(NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: window,
@@ -873,6 +880,9 @@ final class GhosttySurfaceScrollView: NSView {
             dlog("find.window.didBecomeKey surface=\(self.surfaceView.terminalSurface?.id.uuidString.prefix(5) ?? "nil") searchActive=\(searchActive) focusTarget=\(self.searchFocusTarget) firstResponder=\(String(describing: self.window?.firstResponder))")
 #endif
             self.scheduleAutomaticFirstResponderApply(reason: "didBecomeKey")
+            // Ghostty focus is withheld while the window is not key; a terminal that was
+            // already first responder does not become it again here.
+            self.surfaceView.terminalSurface?.syncGhosttyFocus()
             // A window cannot become key while miniaturized or fully occluded, so becoming
             // key implies visible. This corrects spurious occlusion=false notifications
             // that AppKit can deliver to other windows during a new-window creation burst.
@@ -902,6 +912,7 @@ final class GhosttySurfaceScrollView: NSView {
                 dlog("find.window.didResignKey surface=\(self.surfaceView.terminalSurface?.id.uuidString.prefix(5) ?? "nil") searchActive=\(searchActive) firstResponder=\(String(describing: window.firstResponder)) (not terminal, skipping)")
 #endif
             }
+            self.surfaceView.terminalSurface?.syncGhosttyFocus()
         })
         if window.isKeyWindow {
             scheduleAutomaticFirstResponderApply(reason: "viewDidMoveToWindow")
@@ -1150,12 +1161,7 @@ final class GhosttySurfaceScrollView: NSView {
         guard searchOverlayMutationGeneration == generation else { return }
         guard force || searchFocusTarget == .searchField else { return }
         guard canApplyMountedSearchFieldFocusRequest() else { return }
-        let windowIsKey: Bool = {
-#if DEBUG
-            if let isKeyWindowOverrideForTesting { return isKeyWindowOverrideForTesting }
-#endif
-            return window?.isKeyWindow ?? false
-        }()
+        let windowIsKey = isHostWindowKey
         guard let overlay = searchOverlayHostingView,
               overlay.superview === self,
               let window,

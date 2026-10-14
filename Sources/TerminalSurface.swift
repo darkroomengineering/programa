@@ -2402,7 +2402,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// loses key status.
     func syncGhosttyFocus(force: Bool = false) {
         guard let surface = surface else { return }
-        let focused = desiredFocusState
+        let focused = desiredFocusState && hostedView.isHostWindowKey
         guard force || pushedGhosttyFocus != focused else { return }
         pushedGhosttyFocus = focused
         ghostty_surface_set_focus(surface, focused)
