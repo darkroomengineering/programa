@@ -356,6 +356,11 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// path explicitly requests it so background panes do not keep a focused
     /// state unless the workspace focus path requests it.
     private var desiredFocusState: Bool = false
+    /// The focus value last pushed to the Ghostty C surface: `desiredFocusState` while the
+    /// host window is key, otherwise false. Ghostty runs a vsync display link (and redraws
+    /// on every tick) for each focused, visible surface, so a restored window that never
+    /// became key must not report focus. nil until pushed to the current C surface.
+    private var pushedGhosttyFocus: Bool?
 #if DEBUG
     private var needsConfirmCloseOverrideForTesting: Bool?
     private var runtimeSurfaceFreedOutOfBandForTesting = false
@@ -1097,6 +1102,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
         desiredFocusState
     }
 
+    func debugPushedGhosttyFocus() -> Bool? {
+        pushedGhosttyFocus
+    }
+
     private static func surfaceLog(_ message: String) {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let line = "[\(timestamp)] \(message)\n"
@@ -1710,7 +1719,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
         // Re-apply the desired focus state after creation so the live runtime
         // surface converges with any focus changes that happened while the
         // surface was being initialized.
-        ghostty_surface_set_focus(createdSurface, desiredFocusState)
+        pushedGhosttyFocus = nil
+        syncGhosttyFocus()
 
         flushPendingSocketInputIfNeeded()
 
@@ -2364,15 +2374,15 @@ final class TerminalSurface: Identifiable, ObservableObject {
     }
 
     /// Keep `desiredFocusState` in sync when the hosted view's responder chain
-    /// calls `ghostty_surface_set_focus` directly (bypassing `setFocus`).
+    /// pushes focus itself through `syncGhosttyFocus` (bypassing `setFocus`).
     /// Without this, `createSurface` would replay a stale state on recreation.
     ///
     /// `desiredFocusState` must have exactly one writer per focus transition:
-    /// either this method (paired with a direct `ghostty_surface_set_focus` call,
-    /// or standing in for one that's deferred) or `setFocus`, never both for the
-    /// same transition. Calling this immediately before `setFocus` for the same
+    /// either this method (paired with a `syncGhosttyFocus` call, or standing in
+    /// for one that's deferred) or `setFocus`, never both for the same
+    /// transition. Calling this immediately before `setFocus` for the same
     /// transition pre-sets the value `setFocus`'s dedup guard checks against,
-    /// which makes it silently skip the real `ghostty_surface_set_focus` push.
+    /// which makes it silently skip the real Ghostty focus push.
     func recordExternalFocusState(_ focused: Bool) {
         desiredFocusState = focused
     }
@@ -2384,7 +2394,17 @@ final class TerminalSurface: Identifiable, ObservableObject {
         desiredFocusState = focused
         // Track desired state even before the C surface exists (e.g. during
         // layout restoration). createSurface syncs the state once created.
+        syncGhosttyFocus(force: force)
+    }
+
+    /// Pushes `desiredFocusState` gated on the host window being key. Every Ghostty focus
+    /// push goes through here; the hosted view calls it again when its window gains or
+    /// loses key status.
+    func syncGhosttyFocus(force: Bool = false) {
         guard let surface = surface else { return }
+        let focused = desiredFocusState
+        guard force || pushedGhosttyFocus != focused else { return }
+        pushedGhosttyFocus = focused
         ghostty_surface_set_focus(surface, focused)
 
         // If we focus a surface while it is being rapidly reparented (closing splits, etc),

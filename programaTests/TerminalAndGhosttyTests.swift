@@ -1536,6 +1536,74 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
 #endif
     }
 
+    func testFirstResponderInNonKeyWindowWithholdsGhosttyFocusUntilWindowBecomesKey() throws {
+#if DEBUG
+        let window = makeWindow()
+        defer { window.orderOut(nil) }
+
+        guard let contentView = window.contentView else {
+            XCTFail("Expected content view")
+            return
+        }
+
+        let surface = TerminalSurface(
+            tabId: UUID(),
+            context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
+            configTemplate: nil,
+            workingDirectory: nil
+        )
+        defer { surface.releaseSurfaceForTesting() }
+        let hostedView = surface.hostedView
+        hostedView.frame = contentView.bounds
+        hostedView.autoresizingMask = [.width, .height]
+        contentView.addSubview(hostedView)
+
+        window.makeKeyAndOrderFront(nil)
+        window.displayIfNeeded()
+        contentView.layoutSubtreeIfNeeded()
+        hostedView.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+        guard let surfaceView = surfaceView(in: hostedView) as? GhosttyNSView else {
+            XCTFail("Expected terminal surface view")
+            return
+        }
+
+        // Session restore makes each restored window's terminal first responder while
+        // only one window is key; a focused, visible Ghostty surface runs a display link.
+        hostedView.setIsKeyWindowOverrideForTesting(false)
+        XCTAssertTrue(window.makeFirstResponder(surfaceView))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertNotNil(surface.surface, "Expected a live Ghostty surface")
+        XCTAssertTrue(surface.debugDesiredFocusState(), "The first-responder terminal keeps its logical focus")
+        XCTAssertEqual(
+            surface.debugPushedGhosttyFocus(),
+            false,
+            "A terminal that becomes first responder in a non-key window must not push Ghostty focus"
+        )
+
+        hostedView.setIsKeyWindowOverrideForTesting(true)
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertEqual(
+            surface.debugPushedGhosttyFocus(),
+            true,
+            "The first-responder terminal must push Ghostty focus once its window becomes key"
+        )
+
+        hostedView.setIsKeyWindowOverrideForTesting(false)
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertEqual(
+            surface.debugPushedGhosttyFocus(),
+            false,
+            "Losing key status must clear Ghostty focus"
+        )
+#else
+        throw XCTSkip("Debug-only regression test")
+#endif
+    }
+
     func testKeyDownRecoveryDoesNotRecreateClosedSurface() throws {
 #if DEBUG
         let window = makeWindow()

@@ -186,7 +186,11 @@ extension GhosttyNSView {
             }
             terminalSurface?.recordExternalFocusState(true)
             terminalSurface?.hostedView.cancelSuppressedFirstResponderFocusReapply()
-            ghostty_surface_set_focus(surface, true)
+            if let terminalSurface {
+                terminalSurface.syncGhosttyFocus(force: true)
+            } else {
+                ghostty_surface_set_focus(surface, true)
+            }
 
             // Ghostty only restarts its vsync display link on display-id changes while focused.
             // During rapid split close / SwiftUI reparenting, the view can reattach to a window
@@ -211,7 +215,11 @@ extension GhosttyNSView {
             let now = CACurrentMediaTime()
             let deltaMs = (now - lastScrollEventTime) * 1000
             Self.focusLog("resignFirstResponder: surface=\(terminalSurface?.id.uuidString ?? "nil") deltaSinceScrollMs=\(String(format: "%.2f", deltaMs))")
-            ghostty_surface_set_focus(surface, false)
+            if let terminalSurface {
+                terminalSurface.syncGhosttyFocus(force: true)
+            } else {
+                ghostty_surface_set_focus(surface, false)
+            }
         }
         return result
     }
