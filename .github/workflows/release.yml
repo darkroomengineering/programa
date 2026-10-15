@@ -407,8 +407,11 @@ jobs:
             xcrun notarytool log "$APP_SUBMIT_ID" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" || true
             exit 1
           fi
-          xcrun stapler staple "$APP_PATH"
-          xcrun stapler validate "$APP_PATH"
+          # stapler fetches the ticket from Apple's CloudKit service, which drops
+          # connections on CI often enough to fail releases (exit 68, NSURLError -1005).
+          retry() { local n; for n in 1 2 3 4 5; do "$@" && return 0; echo "Attempt $n failed: $*" >&2; sleep $((n * 15)); done; return 1; }
+          retry xcrun stapler staple "$APP_PATH"
+          retry xcrun stapler validate "$APP_PATH"
           spctl -a -vv --type execute "$APP_PATH"
           rm -f "$ZIP_SUBMIT"
 
@@ -453,8 +456,11 @@ jobs:
             xcrun notarytool log "$DMG_SUBMIT_ID" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" || true
             exit 1
           fi
-          xcrun stapler staple "$DMG_RELEASE"
-          xcrun stapler validate "$DMG_RELEASE"
+          # stapler fetches the ticket from Apple's CloudKit service, which drops
+          # connections on CI often enough to fail releases (exit 68, NSURLError -1005).
+          retry() { local n; for n in 1 2 3 4 5; do "$@" && return 0; echo "Attempt $n failed: $*" >&2; sleep $((n * 15)); done; return 1; }
+          retry xcrun stapler staple "$DMG_RELEASE"
+          retry xcrun stapler validate "$DMG_RELEASE"
 
       - name: Create build-specific DMG alias
         run: |
