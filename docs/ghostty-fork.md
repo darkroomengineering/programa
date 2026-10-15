@@ -13,7 +13,7 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Current fork changes
 
-The pinned fork head is `2076a6134` on the fork branch `idle-park-display-link`, which is
+The pinned fork head is `617aac442` on the fork branch `idle-park-display-link`, which is
 fork `main`'s `bccfc8333fecf707dd918d46e3849fc8ed72cca0` plus the OSC 7501 patch group and the
 idle display link park. Never delete that branch: the pin and its xcframework release point at it. It is built on
 `ghostty-org/ghostty` `main` at `c8634f3fce12f8189ed058e018195eb693f8562b` and Zig 0.16.0, and
@@ -192,7 +192,8 @@ tend to conflict together during rebases.
 
 ### 12) Idle display link parking
 
-- Commit: `2076a6134` (renderer: park an idle display link until the next change)
+- Commits: `2076a6134` (renderer: park an idle display link until the next change),
+  `617aac442` (reset the idle timer under `draw_mutex`)
 - Files:
   - `src/renderer/generic.zig`, `src/renderer/Thread.zig`
 - Summary:
