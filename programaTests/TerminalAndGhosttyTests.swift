@@ -1558,6 +1558,11 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
         hostedView.autoresizingMask = [.width, .height]
         contentView.addSubview(hostedView)
 
+        // Session restore makes each restored window's terminal first responder while
+        // only one window is key; a focused, visible Ghostty surface runs a display link.
+        // Set before ordering front: the automatic first-responder pass can run during the
+        // settle below, and in a really-key window it would push focus before the check.
+        hostedView.setIsKeyWindowOverrideForTesting(false)
         window.makeKeyAndOrderFront(nil)
         window.displayIfNeeded()
         contentView.layoutSubtreeIfNeeded()
@@ -1569,9 +1574,6 @@ final class TerminalNotificationDirectInteractionTests: XCTestCase {
             return
         }
 
-        // Session restore makes each restored window's terminal first responder while
-        // only one window is key; a focused, visible Ghostty surface runs a display link.
-        hostedView.setIsKeyWindowOverrideForTesting(false)
         XCTAssertTrue(window.makeFirstResponder(surfaceView))
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         XCTAssertNotNil(surface.surface, "Expected a live Ghostty surface")
