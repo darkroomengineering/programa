@@ -880,6 +880,19 @@ class TerminalController {
         if let errnoCode = ensureSocketParentDirectoryExists(path: path) {
             return .failure(path: path, stage: "create_directory", errnoCode: errnoCode)
         }
+        // Another running app (a second build, a bench, a tagged app on the default path) may be
+        // serving this path; unlinking it would silently cut that app's CLI and agent hooks off.
+        // Only a path proven stale or missing is unlinked. An inconclusive probe (EMFILE, EACCES,
+        // a listener owned by another uid) fails as a bind error so the default path falls back.
+        switch UnixDomainFDPassing.probeConnection(to: path) {
+        case .stale, .missing:
+            break
+        case .live(let probeFD):
+            close(probeFD)
+            return .failure(path: path, stage: "bind", errnoCode: EADDRINUSE)
+        case .indeterminate(let probeErrno):
+            return .failure(path: path, stage: "bind", errnoCode: probeErrno)
+        }
         if unlink(path) != 0, errno != ENOENT {
             return .failure(path: path, stage: "unlink", errnoCode: errno)
         }
@@ -1001,8 +1014,11 @@ class TerminalController {
         case .pathTooLong:
             close(newServerSocket)
             return
-        case .failure:
-            NSLog("TerminalController: Failed to bind socket")
+        case .failure(let failedPath, let failedStage, let failedErrnoCode):
+            NSLog(
+                "TerminalController: Failed to bind socket path=%@ stage=%@ errno=%d",
+                failedPath, failedStage, failedErrnoCode
+            )
             close(newServerSocket)
             return
         }

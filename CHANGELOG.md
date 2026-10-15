@@ -43,6 +43,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The `programa codex install-hooks` and `uninstall-hooks` legacy aliases. Use `programa codex install-integration` and `uninstall-integration`.
 
 ### Fixed
+- Launching a second build of Programa no longer cuts the running app's command line tool and agent hooks off. The new copy used to delete the running app's socket and take it over.
 - Dragging the sidebar edge resizes the sidebar again instead of moving the whole window.
 - The Window menu's Fill, Center, Move & Resize, Full Screen Tile and Move to Display items, and their shortcuts, work again. The main window had been marked not movable, which makes macOS disable all of them.
 - The notifications popover now opens in minimal mode, the default layout. Show Notifications (⌘I), the sidebar bell and the menu bar icon's Show Notifications did nothing there.
