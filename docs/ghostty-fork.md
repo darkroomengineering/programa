@@ -13,14 +13,15 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Current fork changes
 
-The pinned fork head is `9d8aeccac` on the fork branch `osc7501-program-status`, which is
-fork `main`'s `bccfc8333fecf707dd918d46e3849fc8ed72cca0` plus the OSC 7501 patch group. Never
-delete that branch: the pin and its xcframework release point at it. It is built on
+The pinned fork head is `617aac442` on the fork branch `idle-park-display-link`, which is
+fork `main`'s `bccfc8333fecf707dd918d46e3849fc8ed72cca0` plus the OSC 7501 patch group and the
+idle display link park. Never delete that branch: the pin and its xcframework release point at it. It is built on
 `ghostty-org/ghostty` `main` at `c8634f3fce12f8189ed058e018195eb693f8562b` and Zig 0.16.0, and
-carries the eleven patch groups below: display-link restart, resize stale-frame mitigation, OSC 99
+carries the twelve patch groups below: display-link restart, resize stale-frame mitigation, OSC 99
 notifications, theme picker hooks, color scheme mode 2031, keyboard copy mode selection API,
 layer-background flag, occluded-surface throttle, offscreen renderer realization, session
-introspection and revival APIs (which include the PTY tee), and OSC 7501 program status.
+introspection and revival APIs (which include the PTY tee), OSC 7501 program status, and idle
+display link parking.
 
 Prebuilt framework for the pinned head:
 
@@ -188,6 +189,28 @@ tend to conflict together during rebases.
     bulk. Take upstream's on the next sync.
   - `GHOSTTY_OSC_COMMAND_PROGRAM_STATUS` is 26 here and 28 upstream, because the pin lacks the
     Kitty desktop notification and unknown-OSC commands. Take upstream's value on the next sync.
+
+### 12) Idle display link parking
+
+- Commits: `2076a6134` (renderer: park an idle display link until the next change),
+  `617aac442` (reset the idle timer under `draw_mutex`)
+- Files:
+  - `src/renderer/generic.zig`, `src/renderer/Thread.zig`
+- Summary:
+  - A focused, visible terminal ran its CVDisplayLink nonstop. Every vsync woke the render thread
+    for a `drawFrame` that found nothing to draw, about 1.2% of a core per focused terminal on an
+    Apple Silicon Mac.
+  - `drawFrame` notes each tick with nothing to draw and stops the link after 250ms of them.
+    `Thread.drawFrame` calls `resumeVsync` instead of `hasVsync`, which restarts a parked link when
+    the surface is visible and focused, so the change still draws on the next vsync rather than
+    without one.
+  - Restarting a parked link added about 4ms to that one draw on a bench. 250ms outlasts the gap
+    between keystrokes, so typing keeps the link running, and stays under the 600ms cursor blink,
+    so a blinking prompt still parks between blinks.
+- Conflict notes:
+  - Upstream reworks `syncDisplayLink` and the vsync path in `Thread.drawFrame` from time to time.
+    Keep the `resumeVsync` call at the `!now` draw gate and the idle-timer reset wherever the link
+    starts.
 
 ## Upstreamed fork changes
 
