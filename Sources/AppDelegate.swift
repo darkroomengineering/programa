@@ -762,6 +762,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
     var mainWindowContexts: [ObjectIdentifier: MainWindowContext] = [:]
+    private var didRegisterAnyMainWindow = false
     private var mainWindowControllers: [MainWindowController] = []
 
     /// Tracks the cascade point for new windows, matching Ghostty's upstream algorithm.
@@ -964,6 +965,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         installShortcutDefaultsObserver()
         RendererRealizationController.shared.start()
         NSApp.servicesProvider = self
+        if !isRunningUnderXCTest {
+            scheduleMissingLaunchWindowFallback()
+        }
 #if DEBUG
         UpdateTestSupport.applyIfNeeded(to: updateController.viewModel)
         if env["PROGRAMA_UI_TEST_MODE"] == "1" {
@@ -2455,6 +2459,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             mainWindowContexts[key] = newContext
             context = newContext
         }
+        didRegisterAnyMainWindow = true
         installMainWindowCloseObserver(for: context, window: window)
         CommandPaletteController.windowLifecycle.reset(windowId: windowId)
 
@@ -4094,6 +4099,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         _ = createMainWindow()
     }
 
+    /// SwiftUI's `WindowGroup` sometimes never creates its launch window, most often for a
+    /// background (`open -g`) launch. The socket listener starts from that window's `onAppear`,
+    /// so such a launch has no window and no socket. Whichever window registers first runs
+    /// startup session restore, so the replacement window still restores the saved session.
+    private func scheduleMissingLaunchWindowFallback() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            // A window that registered and was then closed is the user's choice, not a missing one.
+            guard let self, !self.didRegisterAnyMainWindow, !self.isTerminatingApp else { return }
+            dilog("launch", "default window missing after 3s; creating one")
+            // A background (`open -g`) launch must stay in the background.
+            self.createMainWindow(activates: NSApp.isActive)
+            self.restartSocketListenerIfDead(source: "launchWindowFallback")
+        }
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         true
     }
@@ -4668,7 +4688,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     @discardableResult
     func createMainWindow(
         initialWorkingDirectory: String? = nil,
-        sessionWindowSnapshot: SessionWindowSnapshot? = nil
+        sessionWindowSnapshot: SessionWindowSnapshot? = nil,
+        activates: Bool = true
     ) -> UUID {
         let windowId = UUID()
         let tabManager = TabManager(initialWorkingDirectory: initialWorkingDirectory)
@@ -4788,6 +4809,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             if TerminalController.socketCommandAllowsInAppFocusMutations() {
                 setActiveMainWindow(window)
             }
+        } else if !activates {
+            window.orderFront(nil)
+            setActiveMainWindow(window)
         } else {
             window.makeKeyAndOrderFront(nil)
             setActiveMainWindow(window)

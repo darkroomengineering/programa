@@ -1221,9 +1221,11 @@ class TerminalController {
             return (socketToClose, socketPath)
         }
         dilog("socket.listener", "stop path=\(socketPathToUnlink)")
-        if socketToClose >= 0 {
-            close(socketToClose)
-        }
+        // Only the listener that bound the path may unlink it. `socketPath` holds the stable
+        // default until `start` binds, so an instance that never listened (a launch whose window
+        // never appeared) would otherwise delete another running app's socket on quit.
+        guard socketToClose >= 0 else { return }
+        close(socketToClose)
         unlink(socketPathToUnlink)
     }
 
