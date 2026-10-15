@@ -165,8 +165,14 @@ extension NSWindow {
             return
         }
 
-        guard shouldSuppressWindowMoveForFolderDrag(window: self, event: event),
-              let contentView = self.contentView else {
+        // The window stays isMovable so AppKit validates the Window menu tiling
+        // items, but no click may start a native window drag: one on the SwiftUI
+        // sidebar resizer band moved the window instead of resizing the sidebar,
+        // and folder-icon drags dragged the window along. Every deliberate drag
+        // surface (WindowDragHandleView, the titlebar background above) re-enables
+        // movability around its own performDrag via withTemporaryWindowMovableEnabled.
+        guard event.type == .leftMouseDown, isMovable,
+              contentView is MainWindowHostingViewMarker else {
 #if DEBUG
             if event.type == .keyDown {
                 folderGuardMs = (ProcessInfo.processInfo.systemUptime - folderGuardStart) * 1000.0
@@ -179,39 +185,10 @@ extension NSWindow {
             programa_sendEvent(event)
             return
         }
-#if DEBUG
-        if event.type == .keyDown {
-            folderGuardMs = (ProcessInfo.processInfo.systemUptime - folderGuardStart) * 1000.0
-        }
-        let originalDispatchStart = event.type == .keyDown ? ProcessInfo.processInfo.systemUptime : 0
-#endif
 
-        let contentPoint = contentView.convert(event.locationInWindow, from: nil)
-        let hitView = contentView.hitTest(contentPoint)
-        let previousMovableState = isMovable
-        if previousMovableState {
-            isMovable = false
-        }
-
-        #if DEBUG
-        let hitDesc = hitView.map { String(describing: type(of: $0)) } ?? "nil"
-        dlog("window.sendEvent.folderDown suppress=1 hit=\(hitDesc) wasMovable=\(previousMovableState)")
-        #endif
-
+        isMovable = false
         programa_sendEvent(event)
-#if DEBUG
-        if event.type == .keyDown {
-            originalDispatchMs = (ProcessInfo.processInfo.systemUptime - originalDispatchStart) * 1000.0
-        }
-#endif
-
-        if previousMovableState {
-            isMovable = previousMovableState
-        }
-
-        #if DEBUG
-        dlog("window.sendEvent.folderDown restore nowMovable=\(isMovable)")
-        #endif
+        isMovable = true
     }
 
     @objc func programa_performKeyEquivalent(with event: NSEvent) -> Bool {
