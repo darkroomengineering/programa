@@ -1058,6 +1058,44 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         )
     }
 
+    func testStartLeavesALiveListenerFromAnotherProcessInPlace() throws {
+        let path = makeSocketPath("live-owner")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        // Another app is serving the path.
+        let foreignListener = socket(AF_UNIX, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(foreignListener, 0)
+        defer { Darwin.close(foreignListener) }
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let maxLength = MemoryLayout.size(ofValue: addr.sun_path)
+        path.withCString { ptr in
+            withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
+                strncpy(UnsafeMutableRawPointer(pathPtr).assumingMemoryBound(to: CChar.self), ptr, maxLength - 1)
+            }
+        }
+        let bound = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(foreignListener, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        XCTAssertEqual(bound, 0)
+        XCTAssertEqual(listen(foreignListener, 4), 0)
+        let foreignInode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: path)[.systemFileNumber] as? UInt64
+        )
+
+        TerminalController.shared.start(tabManager: TabManager(), socketPath: path, accessMode: .allowAll)
+        defer { TerminalController.shared.stop() }
+
+        XCTAssertEqual(
+            try FileManager.default.attributesOfItem(atPath: path)[.systemFileNumber] as? UInt64,
+            foreignInode,
+            "start must not unlink and rebind a path another process is listening on"
+        )
+        XCTAssertTrue(SocketConnectProbe.canConnect(at: path, timeout: 0.5))
+    }
+
     #if DEBUG
     func testProgramaOnlyRejectsSameUserWhenPeerProcessCannotBeVerified() throws {
         TerminalController.shared.setSocketPeerPIDProviderForTesting { _ in nil }
