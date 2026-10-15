@@ -1041,6 +1041,23 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         XCTAssertEqual(try socketMode(at: restrictedPath), 0o600)
     }
 
+    func testStopWithoutListenerLeavesSocketPathOwnedByAnotherProcess() throws {
+        let path = makeSocketPath("foreign-owner")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        TerminalController.shared.start(tabManager: TabManager(), socketPath: path, accessMode: .allowAll)
+        try waitForSocket(at: path)
+        TerminalController.shared.stop()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+
+        // Another app now owns the path; this controller is not listening on it.
+        XCTAssertTrue(FileManager.default.createFile(atPath: path, contents: nil))
+        TerminalController.shared.stop()
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: path),
+            "a controller that is not listening must not unlink another owner's socket path"
+        )
+    }
+
     #if DEBUG
     func testProgramaOnlyRejectsSameUserWhenPeerProcessCannotBeVerified() throws {
         TerminalController.shared.setSocketPeerPIDProviderForTesting { _ in nil }
