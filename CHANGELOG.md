@@ -17,6 +17,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - On Windows, pasting text with line breaks or control characters into a program that has not turned on bracketed paste (cmd.exe, PowerShell) asks first, with a preview.
 
 ### Changed
+- A focused terminal that has nothing new to show uses about half as much CPU. It stops waking up on every screen refresh after a quarter second of quiet and starts again on the next change.
 - Only one copy of Programa runs at a time: launching a second copy brings the running app forward and exits.
 - Closing a window with its red button or Close Window asks first when any of its workspaces has a running process, with the same confirmation as closing the last workspace. The socket method `window.close` still closes without asking.
 - Splitting a pane or opening a pane from the socket or CLI no longer moves focus; only explicit focus commands do.
