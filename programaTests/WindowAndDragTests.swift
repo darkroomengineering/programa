@@ -1571,7 +1571,17 @@ final class WindowMoveSuppressionHitPathTests: XCTestCase {
         }
     }
 
-    private func movabilityDuringMouseDown(contentView: NSView) -> (during: Bool?, after: Bool) {
+    private struct MovabilityRecordingRepresentable: NSViewRepresentable {
+        let view: MovabilityRecordingView
+        func makeNSView(context: Context) -> MovabilityRecordingView { view }
+        func updateNSView(_ nsView: MovabilityRecordingView, context: Context) {}
+    }
+
+    /// The click only reaches the recorder once the window is on screen and key;
+    /// an unshown window drops it before hit-testing.
+    private func movabilityDuringMouseDown(
+        contentView: (MovabilityRecordingView) -> NSView
+    ) -> (during: Bool?, after: Bool) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
             styleMask: [.titled, .closable],
@@ -1579,25 +1589,33 @@ final class WindowMoveSuppressionHitPathTests: XCTestCase {
             defer: false
         )
         defer { window.orderOut(nil) }
-        window.contentView = contentView
+        let recorder = MovabilityRecordingView(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
+        window.contentView = contentView(recorder)
         window.isMovable = true
-        let view = MovabilityRecordingView(frame: NSRect(x: 0, y: 0, width: 80, height: 60))
-        contentView.addSubview(view)
-        window.sendEvent(makeMouseEvent(type: .leftMouseDown, location: NSPoint(x: 40, y: 30), window: window))
-        return (view.movableDuringMouseDown, window.isMovable)
+        window.makeKeyAndOrderFront(nil)
+        window.displayIfNeeded()
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.sendEvent(makeMouseEvent(type: .leftMouseDown, location: NSPoint(x: 160, y: 90), window: window))
+        return (recorder.movableDuringMouseDown, window.isMovable)
     }
 
     /// A movable main window must not let a plain click start a native window drag:
     /// the sidebar resizer band moved the window instead of resizing the sidebar.
     func testMainWindowMouseDownDispatchKeepsWindowImmovableThenRestoresMovable() {
-        let result = movabilityDuringMouseDown(contentView: MainWindowHostingView(rootView: EmptyView()))
+        let result = movabilityDuringMouseDown { recorder in
+            MainWindowHostingView(rootView: MovabilityRecordingRepresentable(view: recorder))
+        }
         XCTAssertEqual(result.during, false)
         XCTAssertTrue(result.after)
     }
 
     /// Other windows (Settings, Debug windows) keep native window dragging.
     func testNonMainWindowMouseDownDispatchLeavesWindowMovable() {
-        let result = movabilityDuringMouseDown(contentView: NSView())
+        let result = movabilityDuringMouseDown { recorder in
+            let container = NSView(frame: recorder.frame)
+            container.addSubview(recorder)
+            return container
+        }
         XCTAssertEqual(result.during, true)
         XCTAssertTrue(result.after)
     }
