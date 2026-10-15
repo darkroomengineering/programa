@@ -1562,6 +1562,45 @@ final class WindowMoveSuppressionHitPathTests: XCTestCase {
         let dragged = makeMouseEvent(type: .leftMouseDragged, location: NSPoint(x: 20, y: 20), window: window)
         XCTAssertFalse(shouldSuppressWindowMoveForFolderDrag(window: window, event: dragged))
     }
+
+    private final class MovabilityRecordingView: NSView {
+        var movableDuringMouseDown: Bool?
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override func mouseDown(with event: NSEvent) {
+            movableDuringMouseDown = window?.isMovable
+        }
+    }
+
+    private func movabilityDuringMouseDown(contentView: NSView) -> (during: Bool?, after: Bool) {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        defer { window.orderOut(nil) }
+        window.contentView = contentView
+        window.isMovable = true
+        let view = MovabilityRecordingView(frame: NSRect(x: 0, y: 0, width: 80, height: 60))
+        contentView.addSubview(view)
+        window.sendEvent(makeMouseEvent(type: .leftMouseDown, location: NSPoint(x: 40, y: 30), window: window))
+        return (view.movableDuringMouseDown, window.isMovable)
+    }
+
+    /// A movable main window must not let a plain click start a native window drag:
+    /// the sidebar resizer band moved the window instead of resizing the sidebar.
+    func testMainWindowMouseDownDispatchKeepsWindowImmovableThenRestoresMovable() {
+        let result = movabilityDuringMouseDown(contentView: MainWindowHostingView(rootView: EmptyView()))
+        XCTAssertEqual(result.during, false)
+        XCTAssertTrue(result.after)
+    }
+
+    /// Other windows (Settings, Debug windows) keep native window dragging.
+    func testNonMainWindowMouseDownDispatchLeavesWindowMovable() {
+        let result = movabilityDuringMouseDown(contentView: NSView())
+        XCTAssertEqual(result.during, true)
+        XCTAssertTrue(result.after)
+    }
 }
 
 @MainActor
