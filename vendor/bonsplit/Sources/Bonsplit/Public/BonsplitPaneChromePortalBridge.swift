@@ -17,6 +17,7 @@ public struct BonsplitPaneChromeTabDescriptor {
     public let title: String
     public let icon: String?
     public let iconImageData: Data?
+    public let iconAsset: String?
     public let isSelected: Bool
     public let isPinned: Bool
     public let isDirty: Bool
@@ -31,6 +32,7 @@ public struct BonsplitPaneChromeTabDescriptor {
         title: String,
         icon: String?,
         iconImageData: Data?,
+        iconAsset: String? = nil,
         isSelected: Bool,
         isPinned: Bool,
         isDirty: Bool,
@@ -43,6 +45,7 @@ public struct BonsplitPaneChromeTabDescriptor {
         self.title = title
         self.icon = icon
         self.iconImageData = iconImageData
+        self.iconAsset = iconAsset
         self.isSelected = isSelected
         self.isPinned = isPinned
         self.isDirty = isDirty

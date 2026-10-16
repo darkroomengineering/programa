@@ -1206,6 +1206,8 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         closeButton.contentTintColor = .secondaryLabelColor
         if let data = tab.iconImageData, let image = NSImage(data: data) {
             iconView.image = image
+        } else if let asset = tab.iconAsset, let image = NSImage(named: asset) {
+            iconView.image = image
         } else if let icon = tab.icon {
             // Unconfigured symbols render at the full 16pt slot; boxy filled
             // glyphs like terminal.fill then dominate the pill. Match the

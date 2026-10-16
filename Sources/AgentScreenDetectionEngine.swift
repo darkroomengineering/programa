@@ -354,7 +354,8 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
             workspace.updatePanelAgentState(
                 panelId: surfaceId,
                 state: resolvedState,
-                source: .inferred
+                source: .inferred,
+                inferredAgent: manifest.agent
             )
         }
     }

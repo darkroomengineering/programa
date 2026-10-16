@@ -104,6 +104,12 @@ struct TabItemView: View {
                         FaviconIconView(image: image)
                             .frame(width: iconSlotSize, height: iconSlotSize, alignment: .center)
                             .clipped()
+                    } else if let iconAsset = tab.iconAsset {
+                        Image(iconAsset, bundle: .main)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: iconSlotSize, height: iconSlotSize, alignment: .center)
+                            .clipped()
                     } else if let iconName = tab.icon {
                         if iconName == "globe", !showGlobeFallback {
                             // Avoid a distracting "globe -> favicon" flash: show a neutral placeholder
@@ -118,8 +124,8 @@ struct TabItemView: View {
                         }
                     }
                 }
-                // Keep downloaded favicon bitmaps in full color even for inactive tab bars.
-                .saturation(TabItemStyling.iconSaturation(hasRasterIcon: faviconImage != nil, tabSaturation: saturation))
+                // Keep downloaded favicon bitmaps and agent logos in full color even for inactive tab bars.
+                .saturation(TabItemStyling.iconSaturation(hasRasterIcon: faviconImage != nil || tab.iconAsset != nil, tabSaturation: saturation))
                 .transaction { tx in
                     // Prevent incidental parent animations from briefly fading icon content.
                     tx.animation = nil

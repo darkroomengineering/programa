@@ -8,6 +8,8 @@ public struct Tab: Identifiable, Hashable, Sendable {
     public let icon: String?
     /// Optional image data (PNG recommended) for the tab icon. When present, this takes precedence over `icon`.
     public let iconImageData: Data?
+    /// Optional asset-catalog image name, resolved in the host app's main bundle. Takes precedence over `icon` but not over `iconImageData`.
+    public let iconAsset: String?
     /// Consumer-defined tab kind identifier (for example, "terminal" or "markdown").
     public let kind: String?
     public let isDirty: Bool
@@ -26,6 +28,7 @@ public struct Tab: Identifiable, Hashable, Sendable {
         hasCustomTitle: Bool = false,
         icon: String? = nil,
         iconImageData: Data? = nil,
+        iconAsset: String? = nil,
         kind: String? = nil,
         isDirty: Bool = false,
         showsNotificationBadge: Bool = false,
@@ -38,6 +41,7 @@ public struct Tab: Identifiable, Hashable, Sendable {
         self.hasCustomTitle = hasCustomTitle
         self.icon = icon
         self.iconImageData = iconImageData
+        self.iconAsset = iconAsset
         self.kind = kind
         self.isDirty = isDirty
         self.showsNotificationBadge = showsNotificationBadge
@@ -52,6 +56,7 @@ public struct Tab: Identifiable, Hashable, Sendable {
         self.hasCustomTitle = tabItem.hasCustomTitle
         self.icon = tabItem.icon
         self.iconImageData = tabItem.iconImageData
+        self.iconAsset = tabItem.iconAsset
         self.kind = tabItem.kind
         self.isDirty = tabItem.isDirty
         self.showsNotificationBadge = tabItem.showsNotificationBadge

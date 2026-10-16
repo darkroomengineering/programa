@@ -142,7 +142,9 @@ final class Workspace: Identifiable, ObservableObject {
     /// by the agent-state-unification plan). This is the stored source of truth; `panelAgentStates`
     /// and `panelAgentStateSources` below are derived, read-only mirrors kept for the existing
     /// wire shapes (`agent_state`/`agent_state_source`) and call sites. See AgentActivityState.swift.
-    @Published var panelAgentPresence: [UUID: AgentPresence] = [:]
+    @Published var panelAgentPresence: [UUID: AgentPresence] = [:] {
+        didSet { syncTerminalTabAgentIconAssets(previous: oldValue) }
+    }
     /// Read-only mirror of `panelAgentPresence.state`, kept for existing wire serialization and
     /// read call sites. Never write to this directly -- go through `updatePanelAgentState`.
     var panelAgentStates: [UUID: AgentActivityState] {
