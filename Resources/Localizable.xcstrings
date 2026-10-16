@@ -14944,23 +14944,6 @@
         }
       }
     },
-    "tabBar.autoTitle.pullRequest": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PR #%lld"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PR #%lld"
-          }
-        }
-      }
-    },
     "tabBar.newTerminalTab": {
       "extractionState": "manual",
       "localizations": {
