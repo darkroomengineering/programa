@@ -114,7 +114,10 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
         // descriptors must not steer this window's controls.
         let inWindow = descriptors.values.filter { $0.anchorView?.window === window }
         let visible = inWindow.filter(\.isVisible)
-        guard let active = visible.first(where: { $0.isFocused }) ?? visible.first,
+        // A focused pane with a hidden strip (single tab) hides the controls instead of
+        // lending them to another pane, where they would act on the wrong pane.
+        let focused = inWindow.first(where: \.isFocused)
+        guard let active = focused.map({ $0.isVisible ? $0 : nil }) ?? visible.first,
               let anchor = active.anchorView else {
             newTabCluster.isHidden = true
             splitCluster.isHidden = true
