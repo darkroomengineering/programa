@@ -345,8 +345,6 @@ newTabPosition: .end
 ```swift
 let appearance = BonsplitConfiguration.Appearance(
     tabBarHeight: 33,
-    tabMinWidth: 140,
-    tabMaxWidth: 220,
     tabSpacing: 0,
     minimumPaneWidth: 100,
     minimumPaneHeight: 100,

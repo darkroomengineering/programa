@@ -114,7 +114,10 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
         // descriptors must not steer this window's controls.
         let inWindow = descriptors.values.filter { $0.anchorView?.window === window }
         let visible = inWindow.filter(\.isVisible)
-        guard let active = visible.first(where: { $0.isFocused }) ?? visible.first,
+        // A focused pane with a hidden strip (single tab) hides the controls instead of
+        // lending them to another pane, where they would act on the wrong pane.
+        let focused = inWindow.first(where: \.isFocused)
+        guard let active = focused.map({ $0.isVisible ? $0 : nil }) ?? visible.first,
               let anchor = active.anchorView else {
             newTabCluster.isHidden = true
             splitCluster.isHidden = true
@@ -565,12 +568,34 @@ enum NativePaneTabInsertionPolicy {
     }
 }
 
+/// Horizontal tab strip that also scrolls sideways from a plain mouse wheel.
+private final class TabStripScrollView: NSScrollView {
+    override func scrollWheel(with event: NSEvent) {
+        // A mouse wheel reports a vertical delta with no gesture phase; trackpads and
+        // Magic Mouse report phases (and horizontal deltas) and keep native handling.
+        guard event.phase.isEmpty, event.momentumPhase.isEmpty,
+              event.scrollingDeltaX == 0, event.scrollingDeltaY != 0,
+              let documentView else {
+            super.scrollWheel(with: event)
+            return
+        }
+        let delta = event.hasPreciseScrollingDeltas
+            ? event.scrollingDeltaY
+            : event.scrollingDeltaY * horizontalLineScroll
+        let clip = contentView
+        let maxX = max(0, documentView.frame.width - clip.bounds.width)
+        let x = min(max(0, clip.bounds.origin.x - delta), maxX)
+        clip.scroll(to: NSPoint(x: x, y: 0))
+        reflectScrolledClipView(clip)
+    }
+}
+
 @MainActor
 @available(macOS 26.0, *)
 private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
     private static let tabTransferPasteboardType =
         NSPasteboard.PasteboardType("com.splittabbar.tabtransfer")
-    private let scrollView = NSScrollView(frame: .zero)
+    private let scrollView = TabStripScrollView(frame: .zero)
     // Unflipped on purpose: a flipped document view mirrors the glass pills'
     // built-in shadow upward (layer geometry flip flips shadowOffset), while
     // the control capsules in the unflipped host cast theirs downward. Layout
@@ -587,6 +612,9 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         return view
     }()
     private var dropIndicatorIndex: Int?
+    /// Selected tab that still has to be scrolled into view once layout knows its frame.
+    private var pendingRevealTabID: TabID?
+    private var lastSelectedTabID: TabID?
     /// Safari-style "+" after the last pill; scrolls with the tabs. Bare glyph,
     /// no capsule — it's an affordance, not a peer of the tab pills.
     private let newTabButton: NSButton = {
@@ -673,6 +701,11 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
             )
         }
         newTabAction = descriptor.onNewTab
+        let selectedTabID = descriptor.tabs.first(where: \.isSelected)?.id
+        if selectedTabID != lastSelectedTabID {
+            lastSelectedTabID = selectedTabID
+            pendingRevealTabID = selectedTabID
+        }
         if let dropIndicatorIndex,
            descriptor.validatedDropIndex(dropIndicatorIndex) == nil {
             clearDropIndicator()
@@ -691,17 +724,9 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         let pills = descriptor.tabs.compactMap { pillViews[$0.id] }
         let plusWidth: CGFloat = 28
 
-        // Natural width per pill; only compress (which is what introduces
-        // truncation) once the row genuinely runs out of space. The "+" always
-        // keeps its seat at the end of the row.
-        var widths = pills.map { min(220, max(minPillWidth, $0.preferredWidth)) }
-        let available = scrollView.contentSize.width - leadingInset - (gap + plusWidth)
-        let naturalTotal = widths.reduce(0, +) + gap * CGFloat(max(0, widths.count - 1))
-        if naturalTotal > available, !widths.isEmpty {
-            let evenWidth = (available - gap * CGFloat(widths.count - 1)) / CGFloat(widths.count)
-            let compressed = max(minPillWidth, evenWidth.rounded(.down))
-            widths = widths.map { min($0, max(compressed, minPillWidth)) }
-        }
+        // Pills keep a width that fits their title; a row wider than the strip
+        // scrolls instead of squeezing every title down to a clipped glyph.
+        let widths = pills.map { min(220, max(minPillWidth, $0.preferredWidth)) }
 
         var x = leadingInset
         for (pill, width) in zip(pills, widths) {
@@ -712,9 +737,25 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         newTabButton.frame = NSRect(x: x, y: 0, width: plusWidth, height: height)
         x += plusWidth + gap
         documentView.frame = NSRect(x: 0, y: 0, width: max(x, scrollView.contentSize.width), height: height)
+        revealPendingTab()
         if let dropIndicatorIndex {
             positionDropIndicator(at: dropIndicatorIndex)
         }
+    }
+
+    /// Centers the newly selected tab in the strip, like the SwiftUI strip's
+    /// `scrollTo(anchor: .center)`. Runs once per selection change so manual scrolling
+    /// is never undone by a later layout pass.
+    private func revealPendingTab() {
+        guard let tabID = pendingRevealTabID else { return }
+        let clip = scrollView.contentView
+        // Early layout passes run before the strip has a size; keep the request pending.
+        guard clip.bounds.width > 0, let pill = pillViews[tabID], pill.frame.width > 0 else { return }
+        pendingRevealTabID = nil
+        let maxX = max(0, documentView.frame.width - clip.bounds.width)
+        let targetX = min(max(0, pill.frame.midX - clip.bounds.width / 2), maxX)
+        clip.scroll(to: NSPoint(x: targetX, y: 0))
+        scrollView.reflectScrolledClipView(clip)
     }
 
     fileprivate var tabFramesForTesting: [NSRect] {

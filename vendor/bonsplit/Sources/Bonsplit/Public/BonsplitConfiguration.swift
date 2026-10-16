@@ -146,12 +146,6 @@ extension BonsplitConfiguration {
 
         // MARK: - Tabs
 
-        /// Minimum width of a tab
-        public var tabMinWidth: CGFloat
-
-        /// Maximum width of a tab
-        public var tabMaxWidth: CGFloat
-
         /// Spacing between tabs
         public var tabSpacing: CGFloat
 
@@ -202,8 +196,6 @@ extension BonsplitConfiguration {
 
         public init(
             tabBarHeight: CGFloat = 33,
-            tabMinWidth: CGFloat = 140,
-            tabMaxWidth: CGFloat = 220,
             tabSpacing: CGFloat = 0,
             minimumPaneWidth: CGFloat = 100,
             minimumPaneHeight: CGFloat = 100,
@@ -218,8 +210,6 @@ extension BonsplitConfiguration {
             chromeColors: ChromeColors = .init()
         ) {
             self.tabBarHeight = tabBarHeight
-            self.tabMinWidth = tabMinWidth
-            self.tabMaxWidth = tabMaxWidth
             self.tabSpacing = tabSpacing
             self.minimumPaneWidth = minimumPaneWidth
             self.minimumPaneHeight = minimumPaneHeight

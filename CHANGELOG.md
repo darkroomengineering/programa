@@ -17,6 +17,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - On Windows, pasting text with line breaks or control characters into a program that has not turned on bracketed paste (cmd.exe, PowerShell) asks first, with a preview.
 
 ### Changed
+- A pane with a single tab hides its tab bar, along with the new-tab and split buttons. The bar comes back when the pane gets a second tab.
 - A focused terminal that has nothing new to show uses about half as much CPU. It stops waking up on every screen refresh after a quarter second of quiet and starts again on the next change.
 - Only one copy of Programa runs at a time: launching a second copy brings the running app forward and exits.
 - Closing a window with its red button or Close Window asks first when any of its workspaces has a running process, with the same confirmation as closing the last workspace. The socket method `window.close` still closes without asking.
@@ -44,6 +45,8 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The `programa codex install-hooks` and `uninstall-hooks` legacy aliases. Use `programa codex install-integration` and `uninstall-integration`.
 
 ### Fixed
+- With dozens of tabs in a pane, each tab keeps a width that shows its title instead of shrinking to one letter. The tab bar scrolls with a regular mouse wheel and keeps the selected tab in view.
+- Renaming a tab, or a program changing its title, updates the tab bar right away.
 - Launching a second build of Programa no longer cuts the running app's command line tool and agent hooks off. The new copy used to delete the running app's socket and take it over.
 - Dragging the sidebar edge resizes the sidebar again instead of moving the whole window.
 - The Window menu's Fill, Center, Move & Resize, Full Screen Tile and Move to Display items, and their shortcuts, work again. The main window had been marked not movable, which makes macOS disable all of them.
