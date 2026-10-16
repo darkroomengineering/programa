@@ -24,6 +24,7 @@
 			NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */; };
 			NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */; };
 			AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */; };
+			TTAI0001A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = TTAI0002A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift */; };
 			7501A0000000000000000003 /* GhosttyApp+ProgramStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000004 /* GhosttyApp+ProgramStatus.swift */; };
 			7501A0000000000000000001 /* ProgramStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000002 /* ProgramStatus.swift */; };
 			7501A0000000000000000007 /* TerminalController+SurfaceWaitProgram.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000008 /* TerminalController+SurfaceWaitProgram.swift */; };
@@ -417,6 +418,7 @@
 			NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Surfaces.swift"; sourceTree = "<group>"; };
 			NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+SidebarTelemetry.swift"; sourceTree = "<group>"; };
 			AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AgentActivityState.swift"; sourceTree = "<group>"; };
+			TTAI0002A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalTabAgentIcon.swift"; sourceTree = "<group>"; };
 			7501A0000000000000000002 /* ProgramStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramStatus.swift; sourceTree = "<group>"; };
 			7501A0000000000000000008 /* TerminalController+SurfaceWaitProgram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SurfaceWaitProgram.swift"; sourceTree = "<group>"; };
 			7501A0000000000000000004 /* GhosttyApp+ProgramStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyApp+ProgramStatus.swift"; sourceTree = "<group>"; };
@@ -865,6 +867,7 @@
 					NRSP0075A1B2C3D4E5F60719 /* Workspace+Surfaces.swift */,
 					NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */,
 					AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */,
+					TTAI0002A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift */,
 					7501A0000000000000000002 /* ProgramStatus.swift */,
 					7501A0000000000000000008 /* TerminalController+SurfaceWaitProgram.swift */,
 					7501A0000000000000000004 /* GhosttyApp+ProgramStatus.swift */,
@@ -1398,6 +1401,7 @@
 					NRSP0076A1B2C3D4E5F60719 /* Workspace+Surfaces.swift in Sources */,
 					NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */,
 					AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */,
+					TTAI0001A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift in Sources */,
 					7501A0000000000000000001 /* ProgramStatus.swift in Sources */,
 					7501A0000000000000000007 /* TerminalController+SurfaceWaitProgram.swift in Sources */,
 					7501A0000000000000000003 /* GhosttyApp+ProgramStatus.swift in Sources */,

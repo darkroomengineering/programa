@@ -243,6 +243,7 @@ extension Workspace {
         state: AgentActivityState,
         source: AgentStateSource = .hooks,
         sessionKey: AgentSessionKey? = nil,
+        inferredAgent: String? = nil,
         programState: ProgramStatusState? = nil,
         at now: Date = Date()
     ) {
@@ -271,7 +272,10 @@ extension Workspace {
             resolvedSessionKey = sessionKey ?? current?.sessionKey
         }
 
+        let resolvedInferredAgent = source == .inferred ? inferredAgent : nil
+
         guard current?.state != state || current?.source != source || current?.sessionKey != resolvedSessionKey
+                || current?.inferredAgent != resolvedInferredAgent
                 || current?.programState != programState else {
             // Same state from the same writer: only the liveness clock moves. Without this a
             // long-running agent that keeps reporting `working` would read as stale at the
@@ -285,6 +289,7 @@ extension Workspace {
             source: source,
             lastEventAt: now,
             sessionKey: resolvedSessionKey,
+            inferredAgent: resolvedInferredAgent,
             programState: programState
         )
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and

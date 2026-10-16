@@ -284,6 +284,7 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
                 title: tab.title,
                 icon: tab.icon,
                 iconImageData: tab.iconImageData,
+                iconAsset: tab.iconAsset,
                 isSelected: selectedTabID == tab.id,
                 isPinned: tab.isPinned,
                 isDirty: tab.isDirty,
@@ -633,6 +634,7 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
             hasher.combine(tab.hasCustomTitle)
             hasher.combine(tab.icon)
             hasher.combine(tab.iconImageData)
+            hasher.combine(tab.iconAsset)
             hasher.combine(tab.kind)
             hasher.combine(tab.isDirty)
             hasher.combine(tab.showsNotificationBadge)

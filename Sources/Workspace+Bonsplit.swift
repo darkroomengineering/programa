@@ -855,6 +855,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                         title: replacementPanel.displayTitle,
                         icon: .some(replacementPanel.displayIcon),
                         iconImageData: .some(nil),
+                        iconAsset: .some(nil),
                         kind: .some(SurfaceKind.terminal),
                         hasCustomTitle: false,
                         isDirty: replacementPanel.isDirty,

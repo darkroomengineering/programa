@@ -85,6 +85,9 @@ struct AgentPresence: Equatable, Sendable {
     var source: AgentStateSource
     var lastEventAt: Date
     var sessionKey: AgentSessionKey?
+    /// Manifest id of the agent the screen-manifest engine recognized (`.inferred` source only;
+    /// inferred reports carry no session key, so this is the only record of who the agent is).
+    var inferredAgent: String?
     /// The root record's state when `source == .program`; `state` holds its legacy projection
     /// (done and error both read as `.idle`). Nil for every other source.
     var programState: ProgramStatusState?

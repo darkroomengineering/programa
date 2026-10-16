@@ -635,3 +635,61 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertEqual(workspace.panelAgentPresence[panel]?.isStale(now: Date()), false)
     }
 }
+
+@MainActor
+final class TerminalTabAgentIconTests: XCTestCase {
+    func testResolverMapsEveryLogoAgentAndIgnoresCaseAndWhitespace() {
+        let expected: [String: String] = [
+            "claude-code": "AgentIconClaudeCode",
+            "codex": "AgentIconCodex",
+            "copilot-cli": "AgentIconCopilot",
+            "cursor-agent": "AgentIconCursor",
+            "gemini-cli": "AgentIconGeminiCLI",
+            "opencode": "AgentIconOpenCode",
+        ]
+        for (identifier, asset) in expected {
+            XCTAssertEqual(TerminalTabAgentIconResolver.assetName(forAgent: identifier), asset, identifier)
+        }
+        XCTAssertEqual(TerminalTabAgentIconResolver.assetName(forAgent: "  Claude-Code\n"), "AgentIconClaudeCode")
+        XCTAssertEqual(TerminalTabAgentIconResolver.assetName(forAgent: "CODEX"), "AgentIconCodex")
+    }
+
+    func testResolverReturnsNilForAiderUnknownAndEmpty() {
+        XCTAssertNil(TerminalTabAgentIconResolver.assetName(forAgent: "aider"))
+        XCTAssertNil(TerminalTabAgentIconResolver.assetName(forAgent: "unknown"))
+        XCTAssertNil(TerminalTabAgentIconResolver.assetName(forAgent: ""))
+    }
+
+    func testTabIconAssetFollowsHookPresenceAndClearsWhenAgentLeaves() throws {
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        let tabId = try XCTUnwrap(workspace.surfaceIdFromPanelId(panelId))
+        XCTAssertNil(workspace.bonsplitController.tab(tabId)?.iconAsset)
+
+        workspace.updatePanelAgentState(
+            panelId: panelId,
+            state: .working,
+            source: .hooks,
+            sessionKey: AgentSessionKey(provider: "codex", sessionId: "s1", pid: nil)
+        )
+        XCTAssertEqual(workspace.bonsplitController.tab(tabId)?.iconAsset, "AgentIconCodex")
+
+        workspace.clearPanelAgentState(panelId: panelId)
+        XCTAssertNil(workspace.bonsplitController.tab(tabId)?.iconAsset)
+    }
+
+    func testTabIconAssetFollowsInferredAgentAndSkipsAgentsWithoutLogo() throws {
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        let tabId = try XCTUnwrap(workspace.surfaceIdFromPanelId(panelId))
+
+        workspace.updatePanelAgentState(panelId: panelId, state: .working, source: .inferred, inferredAgent: "gemini-cli")
+        XCTAssertEqual(workspace.bonsplitController.tab(tabId)?.iconAsset, "AgentIconGeminiCLI")
+
+        workspace.clearPanelAgentState(panelId: panelId)
+        workspace.updatePanelAgentState(panelId: panelId, state: .working, source: .inferred, inferredAgent: "aider")
+        XCTAssertNil(workspace.bonsplitController.tab(tabId)?.iconAsset)
+    }
+}

@@ -93,6 +93,7 @@ public final class BonsplitController {
     ///   - title: The tab title
     ///   - icon: Optional SF Symbol name for the tab icon
     ///   - iconImageData: Optional image data (PNG recommended) for the tab icon. When present, takes precedence over `icon`.
+    ///   - iconAsset: Optional asset-catalog image name (host main bundle). Takes precedence over `icon`, below `iconImageData`.
     ///   - kind: Consumer-defined tab kind identifier (e.g. "terminal", "markdown")
     ///   - hasCustomTitle: Whether the tab title came from a custom user override
     ///   - isDirty: Whether the tab shows a dirty indicator
@@ -107,6 +108,7 @@ public final class BonsplitController {
         hasCustomTitle: Bool = false,
         icon: String? = "doc.text",
         iconImageData: Data? = nil,
+        iconAsset: String? = nil,
         kind: String? = nil,
         isDirty: Bool = false,
         showsNotificationBadge: Bool = false,
@@ -122,6 +124,7 @@ public final class BonsplitController {
             hasCustomTitle: hasCustomTitle,
             icon: icon,
             iconImageData: iconImageData,
+            iconAsset: iconAsset,
             kind: kind,
             isDirty: isDirty,
             showsNotificationBadge: showsNotificationBadge,
@@ -187,6 +190,7 @@ public final class BonsplitController {
     ///   - title: New title (pass nil to keep current)
     ///   - icon: New icon (pass nil to keep current, pass .some(nil) to remove icon)
     ///   - iconImageData: New icon image data (pass nil to keep current, pass .some(nil) to remove)
+    ///   - iconAsset: New asset-catalog image name (pass nil to keep current, pass .some(nil) to remove)
     ///   - kind: New tab kind (pass nil to keep current, pass .some(nil) to clear)
     ///   - hasCustomTitle: New custom-title state (pass nil to keep current)
     ///   - isDirty: New dirty state (pass nil to keep current)
@@ -198,6 +202,7 @@ public final class BonsplitController {
         title: String? = nil,
         icon: String?? = nil,
         iconImageData: Data?? = nil,
+        iconAsset: String?? = nil,
         kind: String?? = nil,
         hasCustomTitle: Bool? = nil,
         isDirty: Bool? = nil,
@@ -216,6 +221,9 @@ public final class BonsplitController {
         }
         if let iconImageData = iconImageData {
             pane.tabs[tabIndex].iconImageData = iconImageData
+        }
+        if let iconAsset = iconAsset {
+            pane.tabs[tabIndex].iconAsset = iconAsset
         }
         if let kind = kind {
             pane.tabs[tabIndex].kind = kind

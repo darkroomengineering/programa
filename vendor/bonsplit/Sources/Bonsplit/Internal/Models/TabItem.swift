@@ -20,6 +20,7 @@ struct TabItem: Identifiable, Hashable, Codable {
     var hasCustomTitle: Bool
     var icon: String?
     var iconImageData: Data?
+    var iconAsset: String?
     var kind: String?
     var isDirty: Bool
     var showsNotificationBadge: Bool
@@ -33,6 +34,7 @@ struct TabItem: Identifiable, Hashable, Codable {
         hasCustomTitle: Bool = false,
         icon: String? = "doc.text",
         iconImageData: Data? = nil,
+        iconAsset: String? = nil,
         kind: String? = nil,
         isDirty: Bool = false,
         showsNotificationBadge: Bool = false,
@@ -45,6 +47,7 @@ struct TabItem: Identifiable, Hashable, Codable {
         self.hasCustomTitle = hasCustomTitle
         self.icon = icon
         self.iconImageData = iconImageData
+        self.iconAsset = iconAsset
         self.kind = kind
         self.isDirty = isDirty
         self.showsNotificationBadge = showsNotificationBadge
@@ -60,6 +63,7 @@ struct TabItem: Identifiable, Hashable, Codable {
             hasCustomTitle: tab.hasCustomTitle,
             icon: tab.icon,
             iconImageData: tab.iconImageData,
+            iconAsset: tab.iconAsset,
             kind: tab.kind,
             isDirty: tab.isDirty,
             showsNotificationBadge: tab.showsNotificationBadge,
@@ -83,6 +87,7 @@ struct TabItem: Identifiable, Hashable, Codable {
         case hasCustomTitle
         case icon
         case iconImageData
+        case iconAsset
         case kind
         case isDirty
         case showsNotificationBadge
@@ -98,6 +103,7 @@ struct TabItem: Identifiable, Hashable, Codable {
         self.hasCustomTitle = try c.decodeIfPresent(Bool.self, forKey: .hasCustomTitle) ?? false
         self.icon = try c.decodeIfPresent(String.self, forKey: .icon)
         self.iconImageData = try c.decodeIfPresent(Data.self, forKey: .iconImageData)
+        self.iconAsset = try c.decodeIfPresent(String.self, forKey: .iconAsset)
         self.kind = try c.decodeIfPresent(String.self, forKey: .kind)
         self.isDirty = try c.decodeIfPresent(Bool.self, forKey: .isDirty) ?? false
         self.showsNotificationBadge = try c.decodeIfPresent(Bool.self, forKey: .showsNotificationBadge) ?? false
@@ -113,6 +119,7 @@ struct TabItem: Identifiable, Hashable, Codable {
         try c.encode(hasCustomTitle, forKey: .hasCustomTitle)
         try c.encodeIfPresent(icon, forKey: .icon)
         try c.encodeIfPresent(iconImageData, forKey: .iconImageData)
+        try c.encodeIfPresent(iconAsset, forKey: .iconAsset)
         try c.encodeIfPresent(kind, forKey: .kind)
         try c.encode(isDirty, forKey: .isDirty)
         try c.encode(showsNotificationBadge, forKey: .showsNotificationBadge)
