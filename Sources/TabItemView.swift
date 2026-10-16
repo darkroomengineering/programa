@@ -322,7 +322,8 @@ struct TabItemView: View, Equatable {
         switch indicator.tint {
         case .blocked: return .red
         case .working: return programaAccentColor()
-        case .idle: return activeSecondaryColor(0.6)
+        // The badge backing is the window color, so the inverted selected-row foreground would vanish on it.
+        case .idle: return .secondary
         case .done: return .green
         case .error: return .red
         }
@@ -492,6 +493,26 @@ struct TabItemView: View, Equatable {
                             .opacity(agentIndicator.isStale ? 0.55 : 1)
                             .lineLimit(1)
                     }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    // The tints (accent blue, green, red) can match the selected row's fill or the
+                    // wallpaper behind the glass, so the badge carries its own backing: a translucent
+                    // window-tinted fill that still lets the glass through, with a Liquid Glass-style rim.
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.8))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [.white.opacity(0.38), .white.opacity(0.08)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        ),
+                                        lineWidth: 0.75
+                                    )
+                            )
+                    )
                     // The badge keeps its full width; the title truncates first.
                     .fixedSize(horizontal: true, vertical: false)
                     .layoutPriority(2)
