@@ -19,7 +19,9 @@ enum TabBarMetrics {
     // MARK: - Individual Tabs
 
     static var tabHeight: CGFloat { resolved("tabBarHeight", default: 26) }
-    static let tabMinWidth: CGFloat = 48
+    /// Floor for a tab's width: below it a title shows only a letter or two, so
+    /// the strip scrolls instead of squeezing tabs further.
+    static let tabMinWidth: CGFloat = 120
     static let tabMaxWidth: CGFloat = 220
     static let tabCornerRadius: CGFloat = 0
     static var tabHorizontalPadding: CGFloat { resolved("tabHorizontalPadding", default: 8) }

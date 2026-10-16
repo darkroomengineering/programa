@@ -494,7 +494,18 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
     var hostViewForTesting: NSView { hostView }
 
     func nativeTabFramesForTesting(in paneID: PaneID) -> [NSRect] {
-        bars[paneID]?.tabFramesForTesting ?? []
+        bars[paneID]?.layoutSubtreeIfNeeded()
+        return bars[paneID]?.tabFramesForTesting ?? []
+    }
+
+    func nativeVisibleTabRectForTesting(in paneID: PaneID) -> NSRect {
+        bars[paneID]?.layoutSubtreeIfNeeded()
+        return bars[paneID]?.visibleDocumentRectForTesting ?? .zero
+    }
+
+    func nativeTabDocumentWidthForTesting(in paneID: PaneID) -> CGFloat {
+        bars[paneID]?.layoutSubtreeIfNeeded()
+        return bars[paneID]?.documentWidthForTesting ?? 0
     }
 
     func nativeTabInsertionIndexForTesting(in paneID: PaneID, documentX: CGFloat) -> Int? {
@@ -595,7 +606,9 @@ private final class TabStripScrollView: NSScrollView {
 private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
     private static let tabTransferPasteboardType =
         NSPasteboard.PasteboardType("com.splittabbar.tabtransfer")
+    private static let edgeFadeWidth: CGFloat = 24
     private let scrollView = TabStripScrollView(frame: .zero)
+    private let edgeFadeMask = CAGradientLayer()
     // Unflipped on purpose: a flipped document view mirrors the glass pills'
     // built-in shadow upward (layer geometry flip flips shadowOffset), while
     // the control capsules in the unflipped host cast theirs downward. Layout
@@ -649,6 +662,16 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         scrollView.horizontalScrollElasticity = .automatic
         scrollView.verticalScrollElasticity = .none
         scrollView.documentView = documentView
+        scrollView.wantsLayer = true
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(clipBoundsDidChange),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+        edgeFadeMask.startPoint = CGPoint(x: 0, y: 0.5)
+        edgeFadeMask.endPoint = CGPoint(x: 1, y: 0.5)
         addSubview(scrollView)
         documentView.addSubview(dropIndicator, positioned: .above, relativeTo: nil)
         registerForDraggedTypes([Self.tabTransferPasteboardType])
@@ -658,6 +681,8 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
     }
 
     @objc private func newTabPressed() { newTabAction?() }
+
+    @objc private func clipBoundsDidChange(_ note: Notification) { updateEdgeFades() }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
@@ -737,7 +762,9 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         newTabButton.frame = NSRect(x: x, y: 0, width: plusWidth, height: height)
         x += plusWidth + gap
         documentView.frame = NSRect(x: 0, y: 0, width: max(x, scrollView.contentSize.width), height: height)
+        constrainClipOrigin()
         revealPendingTab()
+        updateEdgeFades()
         if let dropIndicatorIndex {
             positionDropIndicator(at: dropIndicatorIndex)
         }
@@ -757,6 +784,43 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         clip.scroll(to: NSPoint(x: targetX, y: 0))
         scrollView.reflectScrolledClipView(clip)
     }
+
+    /// Closing tabs shrinks the document under a scrolled clip view; pull the
+    /// origin back inside the new bounds.
+    private func constrainClipOrigin() {
+        let clip = scrollView.contentView
+        let constrained = clip.constrainBoundsRect(clip.bounds).origin
+        guard constrained.x != clip.bounds.origin.x else { return }
+        clip.setBoundsOrigin(NSPoint(x: constrained.x, y: 0))
+        scrollView.reflectScrolledClipView(clip)
+    }
+
+    /// Fades the edge that has hidden tabs. The mask exists only while the row
+    /// overflows so a row that fits renders exactly as before.
+    private func updateEdgeFades() {
+        let bounds = scrollView.contentView.bounds
+        let hasLeading = bounds.minX > 0.5
+        let hasTrailing = bounds.maxX < documentView.frame.width - 0.5
+        let width = scrollView.bounds.width
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        guard hasLeading || hasTrailing, width > Self.edgeFadeWidth * 2 else {
+            scrollView.layer?.mask = nil
+            return
+        }
+        let fraction = Self.edgeFadeWidth / width
+        let opaque = NSColor.black.cgColor
+        let clear = NSColor.clear.cgColor
+        edgeFadeMask.frame = scrollView.bounds
+        edgeFadeMask.colors = [hasLeading ? clear : opaque, opaque, opaque, hasTrailing ? clear : opaque]
+        edgeFadeMask.locations = [0, fraction, 1 - fraction, 1].map { NSNumber(value: Double($0)) }
+        scrollView.layer?.mask = edgeFadeMask
+    }
+
+    fileprivate var visibleDocumentRectForTesting: NSRect { scrollView.contentView.bounds }
+
+    fileprivate var documentWidthForTesting: CGFloat { documentView.frame.width }
 
     fileprivate var tabFramesForTesting: [NSRect] {
         guard let descriptor else { return [] }
