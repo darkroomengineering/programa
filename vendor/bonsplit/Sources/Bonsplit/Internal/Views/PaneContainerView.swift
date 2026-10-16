@@ -192,6 +192,9 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
     weak var splitController: SplitViewController?
     weak var bonsplitController: BonsplitController?
     let tabs: [TabItem]
+    /// `TabItem ==` compares ids only, so SwiftUI treats `tabs` as unchanged when a
+    /// title, icon, or badge changes and skips `updateNSView`. This forces the diff.
+    let tabsContentSignature: Int
     let selectedTabID: UUID?
     let isFocused: Bool
     let isVisible: Bool
@@ -548,6 +551,20 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
             bonsplitController.paneChromePortalBridge?.supportsNativePaneChrome == true
     }
 
+    private var leadingInset: CGFloat {
+        controller.rootNode.allPaneIds.first == pane.id
+            ? bonsplitController.configuration.appearance.tabBarLeadingInset
+            : 0
+    }
+
+    /// A pane with exactly one tab has nothing to switch between, so its strip is
+    /// hidden. A nonzero `leadingInset` means the strip doubles as the titlebar row
+    /// beside the traffic lights (minimal mode, sidebar hidden); it stays so the
+    /// terminal does not slide under them and the window remains draggable there.
+    private var showsTabStrip: Bool {
+        pane.tabs.count != 1 || leadingInset > 0
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if usesNativePaneChrome {
@@ -556,18 +573,17 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
                     splitController: controller,
                     bonsplitController: bonsplitController,
                     tabs: pane.tabs,
+                    tabsContentSignature: Self.contentSignature(of: pane.tabs),
                     selectedTabID: pane.selectedTabId,
                     isFocused: isFocused,
-                    isVisible: bonsplitController.isInteractive,
-                    leadingInset: controller.rootNode.allPaneIds.first == pane.id
-                        ? bonsplitController.configuration.appearance.tabBarLeadingInset
-                        : 0,
+                    isVisible: bonsplitController.isInteractive && showsTabStrip,
+                    leadingInset: leadingInset,
                     showsSplitButtons: showSplitButtons
                 )
-                .frame(height: TabBarGlassStyling.barHeight)
+                .frame(height: showsTabStrip ? TabBarGlassStyling.barHeight : 0)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
-            } else {
+            } else if showsTabStrip {
                 // macOS 14–25 and bridge-unavailable windows retain the flat SwiftUI strip.
                 TabBarView(
                     pane: pane,
@@ -607,6 +623,24 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
             )
 #endif
         }
+    }
+
+    private static func contentSignature(of tabs: [TabItem]) -> Int {
+        var hasher = Hasher()
+        for tab in tabs {
+            hasher.combine(tab.id)
+            hasher.combine(tab.title)
+            hasher.combine(tab.hasCustomTitle)
+            hasher.combine(tab.icon)
+            hasher.combine(tab.iconImageData)
+            hasher.combine(tab.kind)
+            hasher.combine(tab.isDirty)
+            hasher.combine(tab.showsNotificationBadge)
+            hasher.combine(tab.isLoading)
+            hasher.combine(tab.isPinned)
+            hasher.combine(tab.customColorHex)
+        }
+        return hasher.finalize()
     }
 
     // MARK: - Content Area with Drop Zones
