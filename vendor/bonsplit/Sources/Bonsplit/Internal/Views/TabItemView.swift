@@ -193,6 +193,8 @@ struct TabItemView: View {
             minHeight: TabBarMetrics.tabHeight,
             maxHeight: TabBarMetrics.tabHeight
         )
+        // Size to the title within [min, max]; the strip's proposal never shrinks a tab.
+        .fixedSize(horizontal: true, vertical: false)
         .padding(.bottom, isSelected ? 1 : 0)
         .background(tabBackground.saturation(saturation))
         .animation(.easeOut(duration: 0.14), value: showsShortcutHint)

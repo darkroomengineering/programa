@@ -3066,7 +3066,7 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         XCTAssertEqual(tab.title, expected, file: file, line: line)
     }
 
-    func testPanelTitleUsesPRTicketBranchManualPrecedenceWithoutRenamingWorkspace() throws {
+    func testPanelTitleKeepsLiveTitleWhenBranchAndPullRequestArriveWithoutRenamingWorkspace() throws {
         let workspace = Workspace()
         let panelId = try XCTUnwrap(workspace.focusedPanelId)
         let pullRequestURL = try XCTUnwrap(URL(string: "https://github.com/darkroomengineering/programa/pull/482"))
@@ -3080,9 +3080,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
             branch: "feature/PROG-123-summary",
             isDirty: false
         )
-        assertPanelAndTabTitle("PROG-123", workspace: workspace, panelId: panelId)
-        XCTAssertEqual(workspace.title, workspaceTitle)
-
         workspace.updatePanelPullRequest(
             panelId: panelId,
             number: 482,
@@ -3091,167 +3088,54 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
             status: .open,
             branch: "feature/PROG-123-summary"
         )
-        assertPanelAndTabTitle("PR #482", workspace: workspace, panelId: panelId)
-        XCTAssertEqual(workspace.title, workspaceTitle)
-
-        workspace.setPanelCustomTitle(panelId: panelId, title: "  Manual lane  ")
-        assertPanelAndTabTitle("Manual lane", workspace: workspace, panelId: panelId)
-
-        workspace.updatePanelGitBranch(
-            panelId: panelId,
-            branch: "feature/OPS9-77-follow-up",
-            isDirty: true
-        )
-        workspace.updatePanelPullRequest(
-            panelId: panelId,
-            number: 483,
-            label: "Follow-up",
-            url: pullRequestURL,
-            status: .open,
-            branch: "feature/OPS9-77-follow-up"
-        )
-        assertPanelAndTabTitle("Manual lane", workspace: workspace, panelId: panelId)
-
-        workspace.setPanelCustomTitle(panelId: panelId, title: nil)
-        assertPanelAndTabTitle("PR #483", workspace: workspace, panelId: panelId)
-
-        workspace.clearPanelPullRequest(panelId: panelId)
-        assertPanelAndTabTitle("OPS9-77", workspace: workspace, panelId: panelId)
-
-        workspace.clearPanelGitBranch(panelId: panelId)
         assertPanelAndTabTitle("agent-shell", workspace: workspace, panelId: panelId)
         XCTAssertEqual(
             workspace.title,
             workspaceTitle,
-            "Panel metadata must not rename the workspace shown in the sidebar"
-        )
-    }
-
-    func testAutomaticPanelTitleUsesOnlyConservativeUppercaseTicketTokens() throws {
-        let workspace = Workspace()
-        let panelId = try XCTUnwrap(workspace.focusedPanelId)
-        XCTAssertTrue(workspace.updatePanelTitle(panelId: panelId, title: "live-process"))
-        let workspaceTitle = workspace.title
-
-        workspace.updatePanelGitBranch(
-            panelId: panelId,
-            branch: "  feature/lowercase-summary  ",
-            isDirty: false
-        )
-        assertPanelAndTabTitle(
-            "feature/lowercase-summary",
-            workspace: workspace,
-            panelId: panelId
+            "Branch and pull request metadata must not rename the workspace shown in the sidebar"
         )
 
-        workspace.updatePanelGitBranch(
-            panelId: panelId,
-            branch: "feature/prog-123-summary",
-            isDirty: false
-        )
-        assertPanelAndTabTitle(
-            "feature/prog-123-summary",
-            workspace: workspace,
-            panelId: panelId
-        )
-
-        workspace.updatePanelGitBranch(
-            panelId: panelId,
-            branch: "feature/PROG-123-summary",
-            isDirty: false
-        )
-        assertPanelAndTabTitle("PROG-123", workspace: workspace, panelId: panelId)
-        XCTAssertEqual(workspace.title, workspaceTitle)
-    }
-
-    func testPanelTitleUsesOnlyPullRequestMetadataScopedToTheCurrentBranch() throws {
-        let workspace = Workspace()
-        let panelId = try XCTUnwrap(workspace.focusedPanelId)
-        let pullRequestURL = try XCTUnwrap(URL(string: "https://github.com/darkroomengineering/programa/pull/484"))
-
-        XCTAssertTrue(workspace.updatePanelTitle(panelId: panelId, title: "live-process"))
-        workspace.updatePanelPullRequest(
-            panelId: panelId,
-            number: 484,
-            label: "Other lane",
-            url: pullRequestURL,
-            status: .open,
-            branch: "feature/OTHER-484-summary"
-        )
-        assertPanelAndTabTitle(
-            "live-process",
-            workspace: workspace,
-            panelId: panelId
-        )
-
-        workspace.updatePanelGitBranch(
-            panelId: panelId,
-            branch: "feature/CURRENT-21-summary",
-            isDirty: false
-        )
-        assertPanelAndTabTitle("CURRENT-21", workspace: workspace, panelId: panelId)
-
-        workspace.clearPanelGitBranch(panelId: panelId)
-        workspace.updatePanelPullRequest(
-            panelId: panelId,
-            number: 485,
-            label: "Unscoped lane",
-            url: pullRequestURL,
-            status: .open
-        )
-        assertPanelAndTabTitle(
-            "PR #485",
-            workspace: workspace,
-            panelId: panelId,
-            file: #filePath,
-            line: #line
-        )
-    }
-
-    func testResetSidebarContextClearsAutomaticPanelTitlesButPreservesManualNames() throws {
-        let workspace = Workspace()
-        let panelId = try XCTUnwrap(workspace.focusedPanelId)
-        let pullRequestURL = try XCTUnwrap(URL(string: "https://github.com/darkroomengineering/programa/pull/486"))
-
-        XCTAssertTrue(workspace.updatePanelTitle(panelId: panelId, title: "live-process"))
-        workspace.updatePanelGitBranch(
-            panelId: panelId,
-            branch: "feature/RESET-12-summary",
-            isDirty: false
-        )
-        workspace.updatePanelPullRequest(
-            panelId: panelId,
-            number: 486,
-            label: "Reset lane",
-            url: pullRequestURL,
-            status: .open,
-            branch: "feature/RESET-12-summary"
-        )
-        assertPanelAndTabTitle("PR #486", workspace: workspace, panelId: panelId)
-
-        workspace.resetSidebarContext(reason: "test")
-        assertPanelAndTabTitle("live-process", workspace: workspace, panelId: panelId)
-
-        workspace.setPanelCustomTitle(panelId: panelId, title: "Manual lane")
-        workspace.updatePanelGitBranch(
-            panelId: panelId,
-            branch: "feature/RESET-13-summary",
-            isDirty: false
-        )
-        workspace.updatePanelPullRequest(
-            panelId: panelId,
-            number: 487,
-            label: "Reset manual lane",
-            url: pullRequestURL,
-            status: .open,
-            branch: "feature/RESET-13-summary"
-        )
-
-        workspace.resetSidebarContext(reason: "test-manual")
+        workspace.setPanelCustomTitle(panelId: panelId, title: "  Manual lane  ")
         assertPanelAndTabTitle("Manual lane", workspace: workspace, panelId: panelId)
+
+        workspace.setPanelCustomTitle(panelId: panelId, title: nil)
+        assertPanelAndTabTitle("agent-shell", workspace: workspace, panelId: panelId)
+
+        XCTAssertTrue(workspace.updatePanelTitle(panelId: panelId, title: "claude"))
+        assertPanelAndTabTitle("claude", workspace: workspace, panelId: panelId)
+
+        workspace.clearPanelPullRequest(panelId: panelId)
+        workspace.clearPanelGitBranch(panelId: panelId)
+        assertPanelAndTabTitle("claude", workspace: workspace, panelId: panelId)
     }
 
-    func testDetachAttachDoesNotPersistAutomaticPanelTitleButPreservesManualName() throws {
+    func testTabsInTheSameRepositoryKeepTheirOwnLiveTitles() throws {
+        let workspace = Workspace()
+        let firstPanelId = try XCTUnwrap(workspace.focusedPanelId)
+        let secondPanel = try XCTUnwrap(
+            workspace.newTerminalSplit(from: firstPanelId, orientation: .horizontal, focus: false)
+        )
+        let pullRequestURL = try XCTUnwrap(URL(string: "https://github.com/darkroomengineering/programa/pull/840"))
+
+        XCTAssertTrue(workspace.updatePanelTitle(panelId: firstPanelId, title: "claude"))
+        XCTAssertTrue(workspace.updatePanelTitle(panelId: secondPanel.id, title: "vim README.md"))
+        for panelId in [firstPanelId, secondPanel.id] {
+            workspace.updatePanelGitBranch(panelId: panelId, branch: "fix/shared-branch", isDirty: false)
+            workspace.updatePanelPullRequest(
+                panelId: panelId,
+                number: 840,
+                label: "Shared lane",
+                url: pullRequestURL,
+                status: .open,
+                branch: "fix/shared-branch"
+            )
+        }
+
+        assertPanelAndTabTitle("claude", workspace: workspace, panelId: firstPanelId)
+        assertPanelAndTabTitle("vim README.md", workspace: workspace, panelId: secondPanel.id)
+    }
+
+    func testDetachAttachPreservesLiveAndManualPanelTitles() throws {
         let source = Workspace()
         let destination = Workspace()
         let finalDestination = Workspace()
@@ -3261,7 +3145,6 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
             finalDestination.teardownAllPanels()
         }
         let panelId = try XCTUnwrap(source.focusedPanelId)
-        let pullRequestURL = try XCTUnwrap(URL(string: "https://github.com/darkroomengineering/programa/pull/488"))
 
         XCTAssertTrue(source.updatePanelTitle(panelId: panelId, title: "live-process"))
         source.updatePanelGitBranch(
@@ -3269,27 +3152,14 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
             branch: "feature/MOVE-33-summary",
             isDirty: false
         )
-        source.updatePanelPullRequest(
-            panelId: panelId,
-            number: 488,
-            label: "Move lane",
-            url: pullRequestURL,
-            status: .open,
-            branch: "feature/MOVE-33-summary"
-        )
-        assertPanelAndTabTitle("PR #488", workspace: source, panelId: panelId)
 
-        let detachedAutomatic = try XCTUnwrap(source.detachSurface(panelId: panelId))
+        let detachedLive = try XCTUnwrap(source.detachSurface(panelId: panelId))
         let destinationPane = try XCTUnwrap(destination.bonsplitController.allPaneIds.first)
         XCTAssertEqual(
-            destination.attachDetachedSurface(detachedAutomatic, inPane: destinationPane, focus: false),
+            destination.attachDetachedSurface(detachedLive, inPane: destinationPane, focus: false),
             panelId
         )
-        assertPanelAndTabTitle(
-            "live-process",
-            workspace: destination,
-            panelId: panelId
-        )
+        assertPanelAndTabTitle("live-process", workspace: destination, panelId: panelId)
 
         destination.setPanelCustomTitle(panelId: panelId, title: "Manual moved lane")
         let detachedManual = try XCTUnwrap(destination.detachSurface(panelId: panelId))
@@ -3298,14 +3168,10 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
             finalDestination.attachDetachedSurface(detachedManual, inPane: finalPane, focus: false),
             panelId
         )
-        assertPanelAndTabTitle(
-            "Manual moved lane",
-            workspace: finalDestination,
-            panelId: panelId
-        )
+        assertPanelAndTabTitle("Manual moved lane", workspace: finalDestination, panelId: panelId)
     }
 
-    func testSessionRestoreKeepsRawLiveTitleSeparateFromAutomaticAndManualTitles() throws {
+    func testSessionRestoreKeepsLiveTitleSeparateFromManualTitle() throws {
         let source = Workspace()
         let restored = Workspace()
         defer {
@@ -3324,26 +3190,14 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
 
         let snapshot = source.sessionSnapshot(includeScrollback: false)
         let panelSnapshot = try XCTUnwrap(snapshot.panels.first { $0.id == panelId })
-        XCTAssertEqual(
-            panelSnapshot.title,
-            "live-process",
-            "The persisted base title must remain the live title so transient metadata cannot become stale state"
-        )
+        XCTAssertEqual(panelSnapshot.title, "live-process")
         XCTAssertEqual(panelSnapshot.customTitle, "Manual restored lane")
-        XCTAssertEqual(panelSnapshot.gitBranch?.branch, "feature/RESTORE-91-summary")
 
         restored.restoreSessionSnapshot(snapshot)
         let restoredPanelId = try XCTUnwrap(restored.focusedPanelId)
-        assertPanelAndTabTitle(
-            "Manual restored lane",
-            workspace: restored,
-            panelId: restoredPanelId
-        )
+        assertPanelAndTabTitle("Manual restored lane", workspace: restored, panelId: restoredPanelId)
 
         restored.setPanelCustomTitle(panelId: restoredPanelId, title: nil)
-        assertPanelAndTabTitle("RESTORE-91", workspace: restored, panelId: restoredPanelId)
-
-        restored.clearPanelGitBranch(panelId: restoredPanelId)
         assertPanelAndTabTitle("live-process", workspace: restored, panelId: restoredPanelId)
     }
 

@@ -209,6 +209,73 @@ final class WindowGlassEffectTests: XCTestCase {
         throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK and runtime")
     }
 
+    func testNativePaneTabBarKeepsTitlesReadableAndScrollsSelectedTabIntoView() throws {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            _ = NSApplication.shared
+            let root = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 320))
+            let terminalHost = WindowTerminalHostView(frame: root.bounds)
+            let anchor = NSView(frame: NSRect(x: 20, y: 270, width: 300, height: 40))
+            root.addSubview(anchor)
+            root.addSubview(terminalHost, positioned: .above, relativeTo: anchor)
+            let window = NSWindow(
+                contentRect: root.bounds,
+                styleMask: [.titled, .closable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            defer { window.orderOut(nil) }
+            window.contentView = root
+
+            let bridge = WindowPaneChromePortalRegistry.bridge(for: window)
+            let paneID = PaneID()
+            let ids = (0..<15).map { _ in TabID() }
+            func publish(selected: Int) {
+                let tabs = ids.enumerated().map { index, id in
+                    BonsplitPaneChromeTabDescriptor(
+                        id: id, title: "A long terminal title number \(index)", icon: "terminal",
+                        iconImageData: nil, isSelected: index == selected, isPinned: false,
+                        isDirty: false, showsNotificationBadge: false, accessibilityValue: "",
+                        menuItems: []
+                    )
+                }
+                bridge.updatePaneChrome(BonsplitPaneChromeDescriptor(
+                    paneID: paneID, anchorView: anchor, tabs: tabs, isFocused: true,
+                    isVisible: true, leadingInset: 0, showsSplitButtons: false,
+                    onSelect: { _ in }, onClose: { _ in }, onContextAction: { _, _ in },
+                    dragPasteboardData: { _ in nil }, onDragStateChanged: { _, _ in },
+                    validatedDropIndex: { (0...tabs.count).contains($0) ? $0 : nil },
+                    onDropTab: { _ in true },
+                    onNewTab: {}, onSplitRight: {}, onSplitDown: {}
+                ))
+                root.layoutSubtreeIfNeeded()
+            }
+
+            publish(selected: 0)
+            let readableMinimumWidth: CGFloat = 78
+            let frames = bridge.nativeTabFramesForTesting(in: paneID)
+            XCTAssertEqual(frames.count, ids.count)
+            for frame in frames {
+                XCTAssertGreaterThanOrEqual(frame.width, readableMinimumWidth)
+            }
+            let visible = bridge.nativeVisibleTabRectForTesting(in: paneID)
+            XCTAssertGreaterThan(visible.width, 0)
+            XCTAssertGreaterThan(bridge.nativeTabDocumentWidthForTesting(in: paneID), visible.width)
+            XCTAssertLessThanOrEqual(try XCTUnwrap(frames.first).minX, visible.minX + 0.5)
+
+            publish(selected: ids.count - 1)
+            let scrolledVisible = bridge.nativeVisibleTabRectForTesting(in: paneID)
+            let lastFrame = try XCTUnwrap(bridge.nativeTabFramesForTesting(in: paneID).last)
+            XCTAssertGreaterThan(scrolledVisible.minX, 0)
+            XCTAssertGreaterThanOrEqual(lastFrame.minX, scrolledVisible.minX)
+            XCTAssertLessThanOrEqual(lastFrame.maxX, scrolledVisible.maxX)
+            return
+        }
+        #endif
+
+        throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK and runtime")
+    }
+
     func testNativePaneTabInsertionIndicatorStaysInsideDocumentBounds() throws {
         #if compiler(>=6.2)
         let bounds = NSRect(x: 0, y: 0, width: 240, height: 28)
