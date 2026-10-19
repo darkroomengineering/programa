@@ -197,6 +197,12 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         launchTag = "ui-tests-command-palette-\(UUID().uuidString.prefix(8).lowercased())"
         try? FileManager.default.removeItem(atPath: socketPath)
         try? FileManager.default.removeItem(atPath: diagnosticsPath)
+        // A test that turns on all-surfaces search persists it in the app's defaults; start clean.
+        let reset = Process()
+        reset.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        reset.arguments = ["delete", "com.darkroom.programa.debug", "commandPalette.switcherSearchAllSurfaces"]
+        try? reset.run()
+        reset.waitUntilExit()
     }
 
     override func tearDown() {
