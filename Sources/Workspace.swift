@@ -776,12 +776,13 @@ final class Workspace: Identifiable, ObservableObject {
         return presence.state != .blocked && !presence.isStale(now: now)
     }
 
-    /// Delivers `text` to `terminalPanel` as one paste (bracketed paste when the program enabled
-    /// it), so embedded newlines stay inside a single prompt instead of each becoming Return.
-    /// Submits with a single Return only when `canAutoSubmitToAgent` holds. The paste and the
-    /// Return queue in order while the surface is not realized yet.
+    /// Delivers `text` to `terminalPanel` as one paste. Multi-line text keeps its newlines only
+    /// while the program has bracketed paste on; otherwise the newlines become spaces so a plain
+    /// shell receives one line and runs nothing (see `TerminalSurface.sendPaste`). Sends a single
+    /// Return only when `canAutoSubmitToAgent` holds. The paste and the Return queue in order
+    /// while the surface is not realized yet.
     func deliverTextToAgent(_ text: String, terminalPanel: TerminalPanel) {
-        terminalPanel.sendText(text)
+        terminalPanel.surface.sendPaste(text)
         if canAutoSubmitToAgent(panelId: terminalPanel.id) {
             terminalPanel.surface.sendNamedKey("enter")
         }

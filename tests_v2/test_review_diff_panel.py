@@ -87,9 +87,8 @@ def main() -> int:
             source_surface_id = str(surface_rows[0].get("id") or "")
             _must(bool(source_surface_id), f"Initial surface has no id: {surface_rows}")
 
-            # Pasted multi-line text only stays inert in a shell that enables bracketed paste.
-            # The CI runner's login shell is bash 3.2, which does not; zsh does.
-            c.send_surface(source_surface_id, "exec /bin/zsh -f\n")
+            # The initial shell is the runner's login shell (bash 3.2 on CI), which has no bracketed
+            # paste: the delivery below must reach it as one inert line.
             _wait_for_surface_command_roundtrip(c, workspace_id, source_surface_id)
 
             # 1. review.open on the dirty repo returns the panel + a non-empty diffable file list.
