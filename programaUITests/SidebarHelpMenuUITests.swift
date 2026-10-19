@@ -189,7 +189,10 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        socketPath = "/tmp/programa-ui-test-command-palette-\(UUID().uuidString).sock"
+        // The UI test runner is sandboxed: connect() to a socket under /tmp fails with EPERM,
+        // but its own temporary directory is reachable (the app is not sandboxed and can bind there).
+        socketPath = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("pc-\(UUID().uuidString.prefix(8).lowercased()).sock")
         diagnosticsPath = "/tmp/programa-ui-test-command-palette-\(UUID().uuidString).json"
         launchTag = "ui-tests-command-palette-\(UUID().uuidString.prefix(8).lowercased())"
         try? FileManager.default.removeItem(atPath: socketPath)

@@ -552,12 +552,18 @@ extension TerminalController {
             action = .selectWorkspaceByNumber
         case "surface_digits", "surface_number", "select_surface_by_number":
             action = .selectSurfaceByNumber
+        case "new_window", "newwindow":
+            action = .newWindow
+        case "close_window", "closewindow":
+            action = .closeWindow
+        case "rename_tab", "renametab":
+            action = .renameTab
         default:
             action = nil
         }
 
         guard let action else {
-            return "ERROR: Unknown shortcut name. Supported: focus_left, focus_right, focus_up, focus_down, workspace_digits, surface_digits"
+            return "ERROR: Unknown shortcut name. Supported: focus_left, focus_right, focus_up, focus_down, workspace_digits, surface_digits, new_window, close_window, rename_tab"
         }
 
         if combo.lowercased() == "clear" || combo.lowercased() == "default" || combo.lowercased() == "reset" {
