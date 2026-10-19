@@ -201,6 +201,35 @@ def main() -> int:
             resent = c._call("review.send_comments", {"surface_id": review_surface_id}, timeout_s=10.0) or {}
             _must(int(resent.get("sent_count") or 0) == 0, f"Expected sent_count 0 for an empty pending queue: {resent}")
 
+            # 4. A shell that enables bracketed paste (zsh) keeps the multi-line text: the comment
+            # line starts its own row instead of being flattened onto the header's row.
+            c.send_surface(source_surface_id, "exec /bin/zsh -f\n")
+            _wait_for_surface_command_roundtrip(c, workspace_id, source_surface_id)
+            zsh_marker = f"ZSHP{int(time.time()) % 100000000}"
+            zsh_header = "ZSHHEAD"
+            c._call(
+                "review.comment.add",
+                {
+                    "surface_id": review_surface_id,
+                    "file_path": "src_foo.txt",
+                    "start_line": 4,
+                    "text": zsh_marker,
+                },
+                timeout_s=10.0,
+            )
+            zsh_sent = c._call(
+                "review.send_comments",
+                {"surface_id": review_surface_id, "preamble": zsh_header},
+                timeout_s=10.0,
+            ) or {}
+            _must(int(zsh_sent.get("sent_count") or 0) == 1, f"Expected 1 comment sent to zsh: {zsh_sent}")
+            zsh_text = _read_terminal_text_until(c, source_surface_id, zsh_marker)
+            marker_rows = [row for row in zsh_text.splitlines() if zsh_marker in row]
+            _must(
+                bool(marker_rows) and all(f"{zsh_header} (1)" not in row for row in marker_rows),
+                f"Expected zsh (bracketed paste) to keep the comment on its own row: {zsh_text!r}",
+            )
+
     finally:
         if workspace_id:
             try:
