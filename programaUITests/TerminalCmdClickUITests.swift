@@ -529,6 +529,11 @@ final class TerminalCmdClickUITests: XCTestCase {
 
         var previousOpenCount = loadCapturedOpenPaths().count
         for tokenColumnOffset in 0..<fileName.count {
+            // Clicks closer together than ghostty's multi-click interval (500ms) count as a
+            // double click, which selects a word and suppresses the next cmd-click.
+            if tokenColumnOffset > 0 {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+            }
             let result = try runCommand(
                 action: "cmd_click_token",
                 additionalPayload: ["tokenColumnOffset": tokenColumnOffset]
