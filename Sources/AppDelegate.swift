@@ -7994,9 +7994,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // part of what feeds the safe-area invalidation storm in issue #307 — diffing
         // stops the re-entry without changing what gets configured on first apply.
         let nextIdentifier = NSUserInterfaceItemIdentifier(windowIdentifier)
-        if window.identifier != nextIdentifier {
-            window.identifier = nextIdentifier
-        }
         if let identifierGuard = objc_getAssociatedObject(window, &mainWindowIdentifierGuardAssociationKey) as? MainWindowIdentifierGuard {
             identifierGuard.expected = nextIdentifier
         } else {
@@ -8006,6 +8003,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 MainWindowIdentifierGuard(window: window, expected: nextIdentifier),
                 .OBJC_ASSOCIATION_RETAIN_NONATOMIC
             )
+        }
+        if window.identifier != nextIdentifier {
+            window.identifier = nextIdentifier
         }
         if !window.titlebarAppearsTransparent {
             window.titlebarAppearsTransparent = true
