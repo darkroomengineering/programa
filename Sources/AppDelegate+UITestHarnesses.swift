@@ -18,47 +18,6 @@ private final class SocketListenerUITestObservationState {
 }
 #endif
 
-#if DEBUG
-/// Records `NSWindow.identifier` changes on main windows so a UI-test setup timeout can show
-/// who replaced `programa.main.*`.
-@MainActor
-final class WindowIdentifierTrace {
-    static let shared = WindowIdentifierTrace()
-    private var observations: [ObjectIdentifier: NSKeyValueObservation] = [:]
-    private var events: [String] = []
-    private let start = Date()
-
-    private func record(_ line: String) {
-        events.append(String(format: "+%.2fs ", Date().timeIntervalSince(start)) + line)
-    }
-
-    func noteLaunchState() {
-        let fm = FileManager.default
-        let dir = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Saved Application State")
-            .appendingPathComponent("\(Bundle.main.bundleIdentifier ?? "?").savedState")
-        let names = ((try? fm.contentsOfDirectory(atPath: dir.path)) ?? []).sorted()
-        record("savedState=[\(names.joined(separator: ","))]")
-    }
-
-    func attach(to window: NSWindow) {
-        let key = ObjectIdentifier(window)
-        guard observations[key] == nil else { return }
-        record("attach window#\(window.windowNumber) id=\(window.identifier?.rawValue ?? "nil") restorable=\(window.isRestorable) visible=\(window.isVisible)")
-        observations[key] = window.observe(\.identifier, options: [.old, .new]) { [weak self] window, change in
-            let old = change.oldValue.flatMap { $0?.rawValue } ?? "nil"
-            let new = change.newValue.flatMap { $0?.rawValue } ?? "nil"
-            let stack = Thread.callStackSymbols.dropFirst(2).prefix(8).joined(separator: " <- ")
-            MainActor.assumeIsolated {
-                self?.record("window#\(window.windowNumber) id \(old.suffix(40)) -> \(new.suffix(40)) stack=\(stack)")
-            }
-        }
-    }
-
-    var summary: String { events.joined(separator: " ;; ") }
-}
-#endif
-
 extension AppDelegate {
 #if DEBUG
     func setupJumpUnreadUITestIfNeeded() {
@@ -205,9 +164,9 @@ extension AppDelegate {
         func runSetupWhenWindowReady() {
             guard Date() < deadline else {
                 let windowSummary = NSApp.windows
-                    .map { "#\($0.windowNumber) \(type(of: $0))|\(String(($0.identifier?.rawValue ?? "nil").suffix(40)))|visible=\($0.isVisible)|restorable=\($0.isRestorable)" }
+                    .map { "\($0.identifier?.rawValue ?? "nil")|visible=\($0.isVisible)" }
                     .joined(separator: ",")
-                writeBonsplitTabDragUITestData(["setupError": "Timed out waiting for main window. windows=[\(windowSummary)] trace=[\(WindowIdentifierTrace.shared.summary)]"])
+                writeBonsplitTabDragUITestData(["setupError": "Timed out waiting for main window. windows=[\(windowSummary)]"])
                 return
             }
             guard hasMainTerminalWindow() else {

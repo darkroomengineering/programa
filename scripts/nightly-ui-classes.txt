@@ -13,8 +13,6 @@ TitlebarShortcutHintsUITests
 TerminalCmdClickUITests
 # Raw CGEvent drags need the Accessibility (Events) grant that CI runners do not have; the recording shows the prompt and no drag.
 !BonsplitTabDragUITests/testMinimalModeKeepsTabReorderWorking
-# The second app launch of this class often has no configured main window (passes when run alone), so the second-launched method fails.
-!BonsplitTabDragUITests/testMinimalModeCollapsedSidebarKeepsWorkspaceControlsSuppressed
 !CommandPaletteAllSurfacesUITests/testCmdPSearchCanIncludeSurfacesFromOtherWorkspacesWhenEnabled
 !CommandPaletteAllSurfacesUITests/testCommandPaletteCanEnableAndDisableMinimalMode
 !CommandPaletteAllSurfacesUITests/testSwitcherEmptyStateDoesNotBlinkWhileRefiningNoMatchQuery

@@ -72,7 +72,26 @@ final class ThemeReloadCoalescer {
 /// `NSToolbar.delegate` is weak, so without this the delegate is deallocated
 /// immediately and the toolbar silently loses its item provider.
 private var mainWindowToolbarDelegateAssociationKey: UInt8 = 0
+private var mainWindowIdentifierGuardAssociationKey: UInt8 = 0
 let mainWindowToolbarIdentifier = NSToolbar.Identifier("programa.main.titlebar")
+
+/// Keeps a main window's `programa.main.<id>` identifier in place. SwiftUI's
+/// `AppWindowsController.makeMainWindow` assigns the scene identifier after it attaches the
+/// content view, so it can land after `configureMainWindow` ran from the first `WindowAccessor`
+/// callback and silently replace ours; `WindowAccessor` dedupes per window and never re-applies
+/// it. Main-window routing and the UI test harnesses look windows up by this identifier.
+private final class MainWindowIdentifierGuard {
+    var expected: NSUserInterfaceItemIdentifier
+    private var observation: NSKeyValueObservation?
+
+    init(window: NSWindow, expected: NSUserInterfaceItemIdentifier) {
+        self.expected = expected
+        observation = window.observe(\.identifier, options: [.new]) { [weak self] window, _ in
+            guard let self, window.identifier != self.expected else { return }
+            window.identifier = self.expected
+        }
+    }
+}
 
 /// Supplies a single system space item so the main window's otherwise-empty
 /// unified toolbar reports a non-zero height, growing the titlebar so AppKit
@@ -912,7 +931,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
 #if DEBUG
-        WindowIdentifierTrace.shared.noteLaunchState()
         writeUITestDiagnosticsIfNeeded(stage: "didFinishLaunching")
         ProgramaMainRunLoopStallMonitor.shared.installIfNeeded()
         ProgramaMainThreadTurnProfiler.shared.installIfNeeded()
@@ -7976,11 +7994,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // part of what feeds the safe-area invalidation storm in issue #307 — diffing
         // stops the re-entry without changing what gets configured on first apply.
         let nextIdentifier = NSUserInterfaceItemIdentifier(windowIdentifier)
-#if DEBUG
-        WindowIdentifierTrace.shared.attach(to: window)
-#endif
         if window.identifier != nextIdentifier {
             window.identifier = nextIdentifier
+        }
+        if let identifierGuard = objc_getAssociatedObject(window, &mainWindowIdentifierGuardAssociationKey) as? MainWindowIdentifierGuard {
+            identifierGuard.expected = nextIdentifier
+        } else {
+            objc_setAssociatedObject(
+                window,
+                &mainWindowIdentifierGuardAssociationKey,
+                MainWindowIdentifierGuard(window: window, expected: nextIdentifier),
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
         }
         if !window.titlebarAppearsTransparent {
             window.titlebarAppearsTransparent = true
