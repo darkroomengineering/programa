@@ -144,26 +144,16 @@ enum WindowGlassEffect {
     /// Concentric with the window corner at the panel inset.
     static var sidebarPanelCornerRadius: CGFloat { windowCornerRadius - sidebarPanelInset }
     /// Height of the sidebar header row shared by the traffic lights and controls.
-    /// On the glass path this is calibrated to the system traffic-light center
-    /// under `mainWindowTitlebarSpacerHeight` -- see that constant's doc comment.
-    /// Off the glass path no spacer toolbar is installed, so the pre-calibration
-    /// height still applies.
+    /// On the glass path the main window's toolbar (`AppDelegate.configureMainWindow` /
+    /// `MainWindowToolbarDelegate`) holds one system space item. An empty `NSToolbar`
+    /// and a `.top`-attribute `NSTitlebarAccessoryViewController` both leave the
+    /// titlebar height unchanged; the space item grows it so AppKit re-centers the
+    /// traffic lights near `sidebarHeaderCenterFromWindowTop` (measured center 26pt
+    /// against the 26pt target). Off the glass path no toolbar is installed, so the
+    /// 38pt height applies.
     static var sidebarHeaderHeight: CGFloat { isAvailable ? 40 : 38 }
     /// Vertical midline of the header row measured from the window top.
     static var sidebarHeaderCenterFromWindowTop: CGFloat { sidebarPanelInset + sidebarHeaderHeight / 2 }
-    /// Height of the invisible spacer item given to the main window's unified
-    /// toolbar (`AppDelegate.configureMainWindow` / `MainWindowToolbarDelegate`)
-    /// so AppKit computes a taller titlebar and re-centers the traffic lights on
-    /// `sidebarHeaderCenterFromWindowTop`. An empty `NSToolbar` (zero items) and
-    /// a `.top`-attribute `NSTitlebarAccessoryViewController` were both measured
-    /// to have no effect on titlebar height -- only a real, sized toolbar item
-    /// grows it. That item also painted a persistent vertical divider next to
-    /// the traffic lights until `NSToolbarItem.isBordered = false` was set,
-    /// which suppresses it with no other visible chrome. Calibrated empirically
-    /// against the measured system center (measured: spacer height 20 ->
-    /// traffic-light center 25.75pt, matching the 25pt design target within
-    /// 0.75pt), not derived from a formula.
-    static let mainWindowTitlebarSpacerHeight: CGFloat = 20
 
     /// Inverted (Aside-style) layout: the window backdrop is the sidebar's
     /// material, sampling the desktop and following the system appearance.

@@ -337,9 +337,18 @@ final class TitlebarShortcutHintsUITests: XCTestCase {
         let notificationsHint = hintedApp.staticTexts["titlebarShortcutHint.showNotifications"]
         let newTabHint = hintedApp.staticTexts["titlebarShortcutHint.newTab"]
 
-        XCTAssertTrue(waitForElementVisible(sidebarHint, timeout: 6.0))
-        XCTAssertTrue(waitForElementVisible(notificationsHint, timeout: 6.0))
-        XCTAssertTrue(waitForElementVisible(newTabHint, timeout: 6.0))
+        let hintsVisible = [sidebarHint, notificationsHint, newTabHint].map {
+            waitForElementVisible($0, timeout: 6.0)
+        }
+        if hintsVisible.contains(false) {
+            let hierarchy = XCTAttachment(string: hintedApp.debugDescription)
+            hierarchy.name = "hinted app hierarchy"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
+        XCTAssertTrue(hintsVisible[0], "Expected the toggle sidebar shortcut hint to be visible")
+        XCTAssertTrue(hintsVisible[1], "Expected the notifications shortcut hint to be visible")
+        XCTAssertTrue(hintsVisible[2], "Expected the new workspace shortcut hint to be visible")
 
         let hintedToggleFrame = hintedToggle.frame
         let hintedNotificationsFrame = hintedNotifications.frame

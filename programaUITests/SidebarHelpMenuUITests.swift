@@ -39,14 +39,27 @@ final class SidebarHelpMenuUITests: XCTestCase {
         // Right after launch the header can take longer than 3 seconds on CI to become hittable.
         XCTAssertTrue(
             sidebarHelpPollUntil(timeout: 10.0) { toggle.exists && toggle.isHittable },
-            "Expected the visible sidebar header to expose its own sidebar toggle"
+            "Expected the visible sidebar header to expose its own sidebar toggle. toggle=\(toggle.debugDescription) exists=\(toggle.exists) hittable=\(toggle.isHittable) frame=\(toggle.frame) sidebar=\(sidebar.frame)"
         )
 
         toggle.click()
 
+        let sidebarHidden = sidebarHelpPollUntil(timeout: 3.0) { !sidebar.exists || !sidebar.isHittable }
+        if !sidebarHidden {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "hierarchy after toggle click"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+            if let log = try? String(contentsOfFile: "/tmp/programa-debug.log", encoding: .utf8) {
+                let debugLog = XCTAttachment(string: String(log.suffix(20_000)))
+                debugLog.name = "debug log tail after toggle click"
+                debugLog.lifetime = .keepAlways
+                add(debugLog)
+            }
+        }
         XCTAssertTrue(
-            sidebarHelpPollUntil(timeout: 3.0) { !sidebar.exists || !sidebar.isHittable },
-            "The sidebar header toggle must hide the SidebarState that rendered it"
+            sidebarHidden,
+            "The sidebar header toggle must hide the SidebarState that rendered it. sidebar.exists=\(sidebar.exists) sidebar.frame=\(sidebar.frame) toggle.exists=\(toggle.exists)"
         )
     }
 
