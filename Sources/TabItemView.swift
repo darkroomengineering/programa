@@ -1212,8 +1212,13 @@ struct TabItemView: View, Equatable {
         return tabManager.tabs[currentIndex - 1].id == indicator.tabId
     }
 
+    /// `.combine` hides the description's own accessibility element, so the row label carries
+    /// the description (markdown rendered to plain text, line breaks kept) after the position.
     private var accessibilityTitle: String {
-        String(localized: "accessibility.workspacePosition", defaultValue: "\(tab.title), workspace \(index + 1) of \(accessibilityWorkspaceCount)")
+        let position = String(localized: "accessibility.workspacePosition", defaultValue: "\(tab.title), workspace \(index + 1) of \(accessibilityWorkspaceCount)")
+        guard let description = tab.customDescription else { return position }
+        let plain = SidebarMarkdownRenderer.renderWorkspaceDescription(description).map { String($0.characters) } ?? description
+        return "\(position), \(plain)"
     }
 
     private func moveBy(_ delta: Int) {

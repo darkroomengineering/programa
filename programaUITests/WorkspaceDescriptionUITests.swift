@@ -142,16 +142,16 @@ final class WorkspaceDescriptionUITests: XCTestCase {
             "Expected Enter to save and dismiss the workspace description editor after multiline input"
         )
 
-        let renderedDescription = app
-            .descendants(matching: .staticText)
-            .matching(NSPredicate(format: "label == %@", description))
+        let workspaceRow = app
+            .descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "sidebarWorkspace."))
             .firstMatch
 
         XCTAssertTrue(
             workspaceDescriptionPollUntil(timeout: 5.0) {
-                renderedDescription.exists
+                workspaceRow.exists && workspaceRow.label.contains(description)
             },
-            "Expected the sidebar to render the saved multiline description with a newline-preserving label"
+            "Expected the sidebar workspace row to expose the saved multiline description, line break included, in its accessibility label. row=\(workspaceRow.debugDescription)"
         )
     }
 
