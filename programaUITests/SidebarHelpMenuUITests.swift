@@ -233,7 +233,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). client=\(ControlSocketClient.lastFailure) diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
 
@@ -346,7 +346,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window and Settings window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). client=\(ControlSocketClient.lastFailure) diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
         let secondaryWorkspaceId = try XCTUnwrap(createWorkspaceId(), "Expected workspace.create to return a workspace ID")
@@ -503,7 +503,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window and Settings window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). client=\(ControlSocketClient.lastFailure) diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
 
@@ -591,7 +591,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). client=\(ControlSocketClient.lastFailure) diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
         try seedWorkspaceSwitcherCorpus(workspaceCount: 96)
@@ -991,6 +991,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
     }
 
     private final class ControlSocketClient {
+        nonisolated(unsafe) static var lastFailure = ""
         private let path: String
         private let responseTimeout: TimeInterval
 
@@ -1055,7 +1056,10 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
                     connect(fd, sa, addrLen)
                 }
             }
-            guard connected == 0 else { return nil }
+            guard connected == 0 else {
+                Self.lastFailure = "connect errno=\(errno) \(String(cString: strerror(errno)))"
+                return nil
+            }
 
             let payload = line + "\n"
             let wrote: Bool = payload.withCString { cString in

@@ -22,6 +22,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
+from pane_resize_test_support import (
+    wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
+)
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -83,6 +86,11 @@ def main() -> int:
             _must(len(surface_rows) >= 1, f"Expected an initial terminal surface: {surfaces}")
             source_surface_id = str(surface_rows[0].get("id") or "")
             _must(bool(source_surface_id), f"Initial surface has no id: {surface_rows}")
+
+            # Pasted multi-line text only stays inert in a shell that enables bracketed paste.
+            # The CI runner's login shell is bash 3.2, which does not; zsh does.
+            c.send_surface(source_surface_id, "exec /bin/zsh -f\n")
+            _wait_for_surface_command_roundtrip(c, workspace_id, source_surface_id)
 
             # 1. review.open on the dirty repo returns the panel + a non-empty diffable file list.
             opened = c._call(

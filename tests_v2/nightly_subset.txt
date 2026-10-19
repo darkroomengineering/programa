@@ -1,5 +1,6 @@
 # tests_v2 files run nightly by .github/workflows/nightly-extended-tests.yml (not per PR).
 # One basename per line. Add a file here only after it passes in a manual dispatch of that workflow.
+test_agent_screen_manifest_detection.py
 test_claude_install_integration.py
 test_cli_global_flags_and_v1_error_contract.py
 test_cli_new_workspace_external_git_branch_refresh.py
@@ -7,6 +8,7 @@ test_cli_non_focus_commands_preserve_workspace.py
 test_cli_sidebar_metadata_commands.py
 test_close_surface_selection.py
 test_close_workspace_selection.py
+test_codex_install_integration.py
 test_command_palette_backspace_go_back.py
 test_command_palette_focus.py
 test_command_palette_focus_lock_workspace_spawn.py
@@ -15,6 +17,7 @@ test_command_palette_modes.py
 test_command_palette_navigation_keys.py
 test_command_palette_rename_enter.py
 test_command_palette_rename_select_all.py
+test_command_palette_search_action_sync.py
 test_command_palette_switcher_all_windows.py
 test_command_palette_window_scope.py
 test_ctrl_socket.py
@@ -45,6 +48,7 @@ test_surface_move_reorder_api.py
 test_suspended_subscriber_does_not_block_server.py
 test_tab_workspace_action_naming.py
 test_terminal_focus_routing.py
+test_tmux_compat_geometry.py
 test_visual_typing_char_by_char.py
 test_workspace_create_background_starts_terminal.py
 test_workspace_split_title_updates.py
