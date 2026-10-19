@@ -147,6 +147,28 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         XCTAssertFalse(GhosttyApp.allowsClipboardWrites(from: other), "Allowing one terminal must not allow another")
     }
 
+    func testClipboardWriteDenyHoldsForThirtySecondsPerTerminal() {
+        _ = NSApplication.shared
+        func makeTerminal() -> TerminalSurface {
+            TerminalSurface(
+                tabId: UUID(),
+                context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
+                configTemplate: nil,
+                workingDirectory: nil
+            )
+        }
+        let denied = makeTerminal()
+        let other = makeTerminal()
+        let start = Date()
+        XCTAssertFalse(GhosttyApp.isDenyingClipboardWrites(from: denied, now: start))
+
+        GhosttyApp.denyClipboardWrites(from: denied, now: start)
+
+        XCTAssertTrue(GhosttyApp.isDenyingClipboardWrites(from: denied, now: start.addingTimeInterval(29)))
+        XCTAssertFalse(GhosttyApp.isDenyingClipboardWrites(from: denied, now: start.addingTimeInterval(31)))
+        XCTAssertFalse(GhosttyApp.isDenyingClipboardWrites(from: other, now: start), "Denying one terminal must not deny another")
+    }
+
     func testReportedDirectoryMustBeAnExistingAbsoluteDirectoryWithoutRelativeComponents() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("reported-dir-\(UUID().uuidString)", isDirectory: true)

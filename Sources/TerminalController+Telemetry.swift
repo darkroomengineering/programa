@@ -236,20 +236,23 @@ extension TerminalController {
                 data: nil
             )
         }
-        let isDirty = v2Bool(params, "dirty") ?? false
+        // Shell integration no longer sends `dirty`; the app's git probe owns it, so an absent
+        // value keeps what the probe last reported.
+        let isDirty = v2Bool(params, "dirty")
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
             tabManager.updateSurfaceGitBranch(tabId: workspaceId, surfaceId: sid, branch: branch, isDirty: isDirty)
         }
 
-        return .ok([
+        var result: [String: Any] = [
             "workspace_id": workspaceId.uuidString,
             "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
             "surface_id": surfaceId.uuidString,
             "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
             "branch": branch,
-            "dirty": isDirty,
-        ])
+        ]
+        if let isDirty { result["dirty"] = isDirty }
+        return .ok(result)
     }
 
     nonisolated func v2SurfaceClearGitBranch(params: [String: Any]) -> V2CallResult {

@@ -497,8 +497,10 @@ extension CanonicalSubprocessRunner {
     /// Config that disables every filter driver defined or redefined by repository-local config
     /// (`local` and `worktree` scope). Drivers that only global/system config defines, such as
     /// Git LFS, keep working. A repository that sets a driver to exactly the global value
-    /// (`git lfs install --local`) is left alone. Input is the output of
-    /// `git config -z --show-scope --get-regexp '^filter\.'`: `scope NUL key LF value NUL`
+    /// (`git lfs install --local`) is left alone. Git LFS reads `lfs.extension.<name>.clean` from
+    /// the repository's config and runs it from inside the `filter.lfs` driver, so any
+    /// repository-local `lfs.extension.*` key also disables `filter.lfs`. Input is the output of
+    /// `git config -z --show-scope --get-regexp '^(filter|lfs)\.'`: `scope NUL key LF value NUL`
     /// records in precedence order.
     static func untrustedFilterDriverConfig(
         fromShowScopeOutput output: String
@@ -508,6 +510,9 @@ extension CanonicalSubprocessRunner {
             let value: String?
         }
         let prefix = "filter."
+        let lfsExtensionPrefix = "lfs.extension."
+        var hasRepositoryLocalLFSExtension = false
+        func isRepositoryLocal(_ scope: String) -> Bool { scope == "local" || scope == "worktree" }
         let tokens = output.split(separator: "\0", omittingEmptySubsequences: false)
         var driverOrder: [String] = []
         var variablesByDriver: [String: [String: [Entry]]] = [:]
@@ -525,6 +530,9 @@ extension CanonicalSubprocessRunner {
                 key = record
                 value = nil
             }
+            if key.hasPrefix(lfsExtensionPrefix), isRepositoryLocal(scope) {
+                hasRepositoryLocalLFSExtension = true
+            }
             guard key.hasPrefix(prefix),
                   let lastDot = key.lastIndex(of: "."),
                   lastDot > key.index(key.startIndex, offsetBy: prefix.count) else { continue }
@@ -534,11 +542,13 @@ extension CanonicalSubprocessRunner {
             variablesByDriver[driver, default: [:]][variable, default: []].append(Entry(scope: scope, value: value))
         }
 
-        func isRepositoryLocal(_ scope: String) -> Bool { scope == "local" || scope == "worktree" }
-
+        if hasRepositoryLocalLFSExtension, variablesByDriver["lfs"] == nil {
+            driverOrder.append("lfs")
+        }
         var overrides: [(key: String, value: String)] = []
         for driver in driverOrder {
-            let untrusted = variablesByDriver[driver, default: [:]].values.contains { entries in
+            let untrusted = (hasRepositoryLocalLFSExtension && driver == "lfs")
+                || variablesByDriver[driver, default: [:]].values.contains { entries in
                 guard let effective = entries.last, isRepositoryLocal(effective.scope) else { return false }
                 guard let trusted = entries.last(where: { !isRepositoryLocal($0.scope) }) else { return true }
                 return trusted.value != effective.value
@@ -562,7 +572,7 @@ extension CanonicalSubprocessRunner {
         if let cached = filterOverridesCache.value(for: directory, now: Date()) { return cached }
         let result = run(
             executable: "git",
-            arguments: automaticGitArguments(["config", "-z", "--show-scope", "--get-regexp", "^filter\\."]),
+            arguments: automaticGitArguments(["config", "-z", "--show-scope", "--get-regexp", "^(filter|lfs)\\."]),
             currentDirectory: directory,
             timeout: 5,
             stdoutLimit: 1 << 20,
@@ -571,12 +581,13 @@ extension CanonicalSubprocessRunner {
             environmentOverrides: automaticGitEnvironment
         )
         // Exit 1: no filter keys. 128: not a repository; the command that follows fails on its own.
+        // Neither is cached: a repository can appear in the directory (an extracted archive)
+        // right after a probe saw none, and it must not inherit the empty answer.
         guard result.outcome == .exited,
               let status = result.exitStatus,
               status == 0 || status == 1 || status == 128 else { return nil }
-        let overrides = status == 0
-            ? untrustedFilterDriverConfig(fromShowScopeOutput: result.stdout ?? "")
-            : []
+        guard status == 0 else { return [] }
+        let overrides = untrustedFilterDriverConfig(fromShowScopeOutput: result.stdout ?? "")
         filterOverridesCache.store(overrides, for: directory, now: Date())
         return overrides
     }
@@ -774,7 +785,13 @@ struct GitMetadataProber {
             )
         }
 
-        let statusOutput = runGitCommand(directory: directory, arguments: ["status", "--porcelain", "-uno"])
+        // `--ignore-submodules=dirty`: git would otherwise run a child `git status` inside each
+        // populated submodule, which reads the submodule's own config and bypasses this
+        // process's overrides. Moved gitlink commits are still reported.
+        let statusOutput = runGitCommand(
+            directory: directory,
+            arguments: ["status", "--porcelain", "-uno", "--ignore-submodules=dirty"]
+        )
         let isDirty = !(statusOutput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         let pullRequest = workspacePullRequestSnapshot(directory: directory, branch: branch)
         return InitialWorkspaceGitMetadataSnapshot(branch: branch, isDirty: isDirty, pullRequest: pullRequest)

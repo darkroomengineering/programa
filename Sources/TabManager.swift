@@ -2001,12 +2001,25 @@ class TabManager: ObservableObject {
         tabId: UUID,
         surfaceId: UUID,
         branch: String,
-        isDirty: Bool
+        isDirty reportedDirty: Bool?
     ) {
         guard let tab = workspace(withId: tabId) else { return }
         let current = tab.panelGitBranches[surfaceId]
+        let isDirty = reportedDirty ?? current?.isDirty ?? false
         let normalizedBranch = GitMetadataProber.normalizedBranchName(branch) ?? branch
-        guard current?.branch != normalizedBranch || current?.isDirty != isDirty else { return }
+        guard current?.branch != normalizedBranch || current?.isDirty != isDirty else {
+            // A shell report without `dirty` is the prompt-time cue to re-check it: the shell no
+            // longer runs `git status`. A probe already in flight for this panel covers it.
+            let probeKey = WorkspaceGitProbeKey(workspaceId: tabId, panelId: surfaceId)
+            if reportedDirty == nil, workspaceGitProbeGenerationByKey[probeKey] == nil {
+                scheduleWorkspaceGitMetadataRefreshIfPossible(
+                    workspaceId: tabId,
+                    panelId: surfaceId,
+                    reason: "shellReport"
+                )
+            }
+            return
+        }
         tab.updatePanelGitBranch(panelId: surfaceId, branch: normalizedBranch, isDirty: isDirty)
         if let directory = gitProbeDirectory(for: tab, panelId: surfaceId) {
             let probeKey = WorkspaceGitProbeKey(workspaceId: tabId, panelId: surfaceId)

@@ -8161,6 +8161,23 @@
         }
       }
     },
+    "sess.clipboardWrite.messageNamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A program running in \"%@\" wants to replace your clipboard contents. Allow it to write to the clipboard?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」で実行中のプログラムがクリップボードの内容を置き換えようとしています。クリップボードへの書き込みを許可しますか？"
+          }
+        }
+      }
+    },
     "sess.clipboardWrite.deny": {
       "extractionState": "manual",
       "localizations": {
@@ -8184,13 +8201,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Always allow for this terminal"
+            "value": "Always allow until this terminal closes"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このターミナルでは常に許可"
+            "value": "このターミナルが閉じるまで常に許可"
           }
         }
       }

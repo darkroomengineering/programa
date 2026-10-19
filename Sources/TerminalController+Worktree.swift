@@ -42,7 +42,13 @@ extension TerminalController {
             baseDirectory: worktreeBaseDirectory
         )
 
-        let branchExisted = GitWorktreeManager.branchExistsLocally(branch, repoRoot: repoRoot)
+        guard let branchExisted = GitWorktreeManager.branchExistsLocally(branch, repoRoot: repoRoot) else {
+            return .err(
+                code: "git_command_failed",
+                message: "Could not determine whether branch '\(branch)' already exists",
+                data: nil
+            )
+        }
         switch GitWorktreeManager.add(repoRoot: repoRoot, branch: branch, base: base, path: path) {
         case .success(let entry):
             let completion = v2MainSync {
