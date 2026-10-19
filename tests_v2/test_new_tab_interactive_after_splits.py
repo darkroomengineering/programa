@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Regression test: after creating multiple splits, creating a new terminal surface (nested tab)
-must become focused and process input/output immediately, without requiring a pane switch
+and focusing it must make it process input/output immediately, without requiring a pane switch
 or app focus toggle.
 
 This targets an intermittent freeze where the newly-created tab would display stale initial
@@ -179,7 +179,7 @@ def main() -> int:
         c.activate_app()
         time.sleep(0.2)
 
-        c.new_workspace()
+        c.select_workspace(c.new_workspace())
         time.sleep(0.35)
 
         # Create a multi-pane layout to exercise bonsplit/SwiftUI focus races.
@@ -210,6 +210,8 @@ def main() -> int:
         # Repeat: create new surface -> it must focus and accept input immediately.
         for i in range(6):
             new_id = c.new_surface(panel_type="terminal")
+            # surface.create is not a focus-intent command; focusing the new tab is the caller's job.
+            c.focus_surface(new_id)
             time.sleep(0.35)
 
             _wait_for_terminal_focus(c, new_id, timeout_s=8.0)

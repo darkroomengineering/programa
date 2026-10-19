@@ -117,8 +117,10 @@ def _split_workspace(client: ProgramaClient, workspace_id: str) -> Tuple[str, st
     client.select_workspace(workspace_id)
     time.sleep(0.3)
     original = _surfaces(client, workspace_id)[0][1]
-    client.new_split("right")
-    time.sleep(2.0)  # second shell reaches its prompt; new pane takes focus
+    new_surface = client.new_split("right")
+    # surface.split is not a focus-intent command, so it leaves focus where it was.
+    client.focus_surface_by_panel(new_surface)
+    time.sleep(2.0)  # second shell reaches its prompt
     focused = [s for s in _surfaces(client, workspace_id) if s[2]]
     if not focused or focused[0][1] == original:
         raise RuntimeError(
