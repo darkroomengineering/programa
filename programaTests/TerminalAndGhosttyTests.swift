@@ -103,6 +103,69 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         )
     }
 
+    func testClipboardWritePreviewKeepsShortTextWhole() {
+        let preview = ClipboardWritePreview("hello\nworld\n")
+
+        XCTAssertEqual(preview.text, "hello\nworld")
+        XCTAssertFalse(preview.isTruncated)
+        XCTAssertEqual(preview.lineCount, 2)
+        XCTAssertEqual(preview.byteCount, 12)
+    }
+
+    func testClipboardWritePreviewCutsLongTextAndReportsFullSize() {
+        let manyLines = (1...20).map { "line \($0)" }.joined(separator: "\n")
+        let byLines = ClipboardWritePreview(manyLines)
+        XCTAssertTrue(byLines.isTruncated)
+        XCTAssertEqual(byLines.lineCount, 20)
+        XCTAssertEqual(byLines.text.split(separator: "\n").count, ClipboardWritePreview.maxLines)
+
+        let longLine = String(repeating: "é", count: ClipboardWritePreview.maxCharacters + 50)
+        let byCharacters = ClipboardWritePreview(longLine)
+        XCTAssertTrue(byCharacters.isTruncated)
+        XCTAssertEqual(byCharacters.text.count, ClipboardWritePreview.maxCharacters)
+        XCTAssertEqual(byCharacters.byteCount, longLine.utf8.count)
+        XCTAssertEqual(byCharacters.lineCount, 1)
+    }
+
+    func testClipboardWriteAllowIsRememberedPerTerminalAndEndsWithIt() {
+        _ = NSApplication.shared
+        func makeTerminal() -> TerminalSurface {
+            TerminalSurface(
+                tabId: UUID(),
+                context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
+                configTemplate: nil,
+                workingDirectory: nil
+            )
+        }
+        let trusted = makeTerminal()
+        let other = makeTerminal()
+        XCTAssertFalse(GhosttyApp.allowsClipboardWrites(from: trusted))
+
+        GhosttyApp.rememberClipboardWriteAllowed(for: trusted)
+
+        XCTAssertTrue(GhosttyApp.allowsClipboardWrites(from: trusted))
+        XCTAssertFalse(GhosttyApp.allowsClipboardWrites(from: other), "Allowing one terminal must not allow another")
+    }
+
+    func testReportedDirectoryMustBeAnExistingAbsoluteDirectoryWithoutRelativeComponents() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("reported-dir-\(UUID().uuidString)", isDirectory: true)
+        let child = root.appendingPathComponent("child", isDirectory: true)
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("file.txt")
+        try "x".write(to: file, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertEqual(GhosttyApp.validatedReportedDirectory(child.path), child.path)
+        XCTAssertEqual(GhosttyApp.validatedReportedDirectory(child.absoluteString), child.path)
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(""))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory("relative/dir"))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(child.path + "/../child"))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(child.path + "/./"))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(root.appendingPathComponent("missing").path))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(file.path), "A file is not a working directory")
+    }
+
     private func make1x1PNG(color: NSColor) throws -> Data {
         let image = NSImage(size: NSSize(width: 1, height: 1))
         image.lockFocus()

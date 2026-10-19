@@ -443,7 +443,8 @@ extension CanonicalSubprocessRunner {
     /// `core.fsmonitor` names a command git would run, `safe.bareRepository=explicit` stops a
     /// bare repository committed inside a checkout from being discovered, and
     /// `--no-optional-locks` keeps a background probe from taking `index.lock` while the user
-    /// runs git themselves.
+    /// runs git themselves. Filter drivers need per-repository handling, see
+    /// `automaticGitEnvironment(directory:executableURL:)`.
     static let automaticGitOptions: [String] = [
         "--no-optional-locks",
         "-c", "core.fsmonitor=false",
@@ -451,25 +452,168 @@ extension CanonicalSubprocessRunner {
         "-c", "safe.bareRepository=explicit",
     ]
 
-    /// Environment for automatic git commands and for `gh`, which runs git internally where
-    /// command-line `-c` cannot reach. `GIT_CONFIG_COUNT` entries apply at command-line scope,
-    /// the same as `-c`.
-    static let automaticGitEnvironment: [String: String] = [
-        "GIT_OPTIONAL_LOCKS": "0",
-        "GIT_CONFIG_COUNT": "3",
-        "GIT_CONFIG_KEY_0": "core.fsmonitor",
-        "GIT_CONFIG_VALUE_0": "false",
-        "GIT_CONFIG_KEY_1": "core.untrackedCache",
-        "GIT_CONFIG_VALUE_1": "false",
-        "GIT_CONFIG_KEY_2": "safe.bareRepository",
-        "GIT_CONFIG_VALUE_2": "explicit",
+    private static let automaticGitConfig: [(key: String, value: String)] = [
+        ("core.fsmonitor", "false"),
+        ("core.untrackedCache", "false"),
+        ("safe.bareRepository", "explicit"),
     ]
+
+    /// Numbered config environment entries apply at command-line scope, the same as `-c`, but
+    /// take the key verbatim, so a filter driver name containing `=` is still addressable.
+    static func gitConfigEnvironment(_ entries: [(key: String, value: String)]) -> [String: String] {
+        var environment = ["GIT_OPTIONAL_LOCKS": "0", "GIT_CONFIG_COUNT": String(entries.count)]
+        for (index, entry) in entries.enumerated() {
+            environment["GIT_CONFIG_KEY_\(index)"] = entry.key
+            environment["GIT_CONFIG_VALUE_\(index)"] = entry.value
+        }
+        return environment
+    }
+
+    /// Environment for automatic git commands without a repository, and for `gh`, which runs
+    /// git internally where command-line `-c` cannot reach.
+    static let automaticGitEnvironment: [String: String] = gitConfigEnvironment(automaticGitConfig)
+
+    /// `automaticGitEnvironment` plus overrides that disable the repository-local filter
+    /// drivers in `directory`. `git status` and `git diff` run `filter.<name>.clean` and
+    /// `.process` for every path whose `.gitattributes` entry names the driver, and both the
+    /// attributes and the driver live in a repository an extracted archive can pre-seed.
+    /// Returns nil when the repository's filter config could not be read, in which case the
+    /// caller must not run git.
+    static func automaticGitEnvironment(directory: String, executableURL: URL? = nil) -> [String: String]? {
+        guard let overrides = repositoryLocalFilterOverrides(directory: directory, executableURL: executableURL) else {
+            return nil
+        }
+        return gitConfigEnvironment(automaticGitConfig + overrides)
+    }
+
+    /// Result for a git command refused because the repository's filter config was unreadable.
+    static let filterConfigUnavailableResult = CanonicalSubprocessResult(
+        stdout: nil,
+        stderr: nil,
+        exitStatus: nil,
+        outcome: .launchError("repository filter config unavailable")
+    )
+
+    /// Config that disables every filter driver defined or redefined by repository-local config
+    /// (`local` and `worktree` scope). Drivers that only global/system config defines, such as
+    /// Git LFS, keep working. A repository that sets a driver to exactly the global value
+    /// (`git lfs install --local`) is left alone. Input is the output of
+    /// `git config -z --show-scope --get-regexp '^filter\.'`: `scope NUL key LF value NUL`
+    /// records in precedence order.
+    static func untrustedFilterDriverConfig(
+        fromShowScopeOutput output: String
+    ) -> [(key: String, value: String)] {
+        struct Entry {
+            let scope: String
+            let value: String?
+        }
+        let prefix = "filter."
+        let tokens = output.split(separator: "\0", omittingEmptySubsequences: false)
+        var driverOrder: [String] = []
+        var variablesByDriver: [String: [String: [Entry]]] = [:]
+        var index = 0
+        while index + 1 < tokens.count {
+            let scope = String(tokens[index])
+            let record = tokens[index + 1]
+            index += 2
+            let key: Substring
+            let value: String?
+            if let newline = record.firstIndex(of: "\n") {
+                key = record[..<newline]
+                value = String(record[record.index(after: newline)...])
+            } else {
+                key = record
+                value = nil
+            }
+            guard key.hasPrefix(prefix),
+                  let lastDot = key.lastIndex(of: "."),
+                  lastDot > key.index(key.startIndex, offsetBy: prefix.count) else { continue }
+            let driver = String(key[key.index(key.startIndex, offsetBy: prefix.count)..<lastDot])
+            let variable = String(key[key.index(after: lastDot)...])
+            if variablesByDriver[driver] == nil { driverOrder.append(driver) }
+            variablesByDriver[driver, default: [:]][variable, default: []].append(Entry(scope: scope, value: value))
+        }
+
+        func isRepositoryLocal(_ scope: String) -> Bool { scope == "local" || scope == "worktree" }
+
+        var overrides: [(key: String, value: String)] = []
+        for driver in driverOrder {
+            let untrusted = variablesByDriver[driver, default: [:]].values.contains { entries in
+                guard let effective = entries.last, isRepositoryLocal(effective.scope) else { return false }
+                guard let trusted = entries.last(where: { !isRepositoryLocal($0.scope) }) else { return true }
+                return trusted.value != effective.value
+            }
+            guard untrusted else { continue }
+            overrides += [
+                ("filter.\(driver).clean", ""),
+                ("filter.\(driver).smudge", ""),
+                ("filter.\(driver).process", ""),
+                ("filter.\(driver).required", "false"),
+            ]
+        }
+        return overrides
+    }
+
+    /// nil only when the config could not be read; "not a repository" and "no filters" are `[]`.
+    private static func repositoryLocalFilterOverrides(
+        directory: String,
+        executableURL: URL?
+    ) -> [(key: String, value: String)]? {
+        if let cached = filterOverridesCache.value(for: directory, now: Date()) { return cached }
+        let result = run(
+            executable: "git",
+            arguments: automaticGitArguments(["config", "-z", "--show-scope", "--get-regexp", "^filter\\."]),
+            currentDirectory: directory,
+            timeout: 5,
+            stdoutLimit: 1 << 20,
+            stderrLimit: 4096,
+            executableURL: executableURL,
+            environmentOverrides: automaticGitEnvironment
+        )
+        // Exit 1: no filter keys. 128: not a repository; the command that follows fails on its own.
+        guard result.outcome == .exited,
+              let status = result.exitStatus,
+              status == 0 || status == 1 || status == 128 else { return nil }
+        let overrides = status == 0
+            ? untrustedFilterDriverConfig(fromShowScopeOutput: result.stdout ?? "")
+            : []
+        filterOverridesCache.store(overrides, for: directory, now: Date())
+        return overrides
+    }
+
+    /// One `git config` read serves the several git calls a single probe cycle makes in the
+    /// same directory.
+    private static let filterOverridesCache = FilterOverridesCache()
+
+    private final class FilterOverridesCache: @unchecked Sendable {
+        private static let lifetime: TimeInterval = 10
+        private static let limit = 64
+        private let lock = NSLock()
+        private var entries: [String: (storedAt: Date, overrides: [(key: String, value: String)])] = [:]
+
+        func value(for directory: String, now: Date) -> [(key: String, value: String)]? {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let entry = entries[directory], now.timeIntervalSince(entry.storedAt) < Self.lifetime else {
+                return nil
+            }
+            return entry.overrides
+        }
+
+        func store(_ overrides: [(key: String, value: String)], for directory: String, now: Date) {
+            lock.lock()
+            defer { lock.unlock() }
+            if entries.count >= Self.limit { entries.removeAll() }
+            entries[directory] = (now, overrides)
+        }
+    }
 
     static func automaticGitArguments(_ arguments: [String]) -> [String] {
         automaticGitOptions + arguments
     }
 
-    /// Runs `git` with `automaticGitOptions` before `arguments` and `automaticGitEnvironment`.
+    /// Runs `git` with `automaticGitOptions` before `arguments` and the repository's
+    /// `automaticGitEnvironment`.
     static func runAutomaticGit(
         arguments: [String],
         currentDirectory: String,
@@ -478,7 +622,10 @@ extension CanonicalSubprocessRunner {
         stderrLimit: Int,
         executableURL: URL? = nil
     ) -> CanonicalSubprocessResult {
-        run(
+        guard let environment = automaticGitEnvironment(directory: currentDirectory, executableURL: executableURL) else {
+            return filterConfigUnavailableResult
+        }
+        return run(
             executable: "git",
             arguments: automaticGitArguments(arguments),
             currentDirectory: currentDirectory,
@@ -486,7 +633,7 @@ extension CanonicalSubprocessRunner {
             stdoutLimit: stdoutLimit,
             stderrLimit: stderrLimit,
             executableURL: executableURL,
-            environmentOverrides: automaticGitEnvironment
+            environmentOverrides: environment
         )
     }
 }
@@ -996,19 +1143,26 @@ struct GitMetadataProber {
         return result.stdout
     }
 
-    /// Every probe here is automatic, so git gets `automaticGitOptions` and both git and `gh`
-    /// get `automaticGitEnvironment`.
+    /// Every probe here is automatic, so git gets `automaticGitOptions` and the repository's
+    /// filter-driver overrides, and `gh` gets `automaticGitEnvironment`.
     private nonisolated static func runCommandResult(
         directory: String,
         executable: String,
         arguments: [String],
         timeout: TimeInterval? = nil
     ) -> CanonicalSubprocessResult {
-        CanonicalSubprocessRunner.run(
+        if executable == "git" {
+            return CanonicalSubprocessRunner.runAutomaticGit(
+                arguments: arguments,
+                currentDirectory: directory,
+                timeout: timeout,
+                stdoutLimit: commandStdoutLimit,
+                stderrLimit: commandStderrLimit
+            )
+        }
+        return CanonicalSubprocessRunner.run(
             executable: executable,
-            arguments: executable == "git"
-                ? CanonicalSubprocessRunner.automaticGitArguments(arguments)
-                : arguments,
+            arguments: arguments,
             currentDirectory: directory,
             timeout: timeout,
             stdoutLimit: commandStdoutLimit,

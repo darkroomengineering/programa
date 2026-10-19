@@ -8161,6 +8161,57 @@
         }
       }
     },
+    "sess.clipboardWrite.deny": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deny"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒否"
+          }
+        }
+      }
+    },
+    "sess.clipboardWrite.alwaysAllow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always allow for this terminal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このターミナルでは常に許可"
+          }
+        }
+      }
+    },
+    "sess.clipboardWrite.truncated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing the start of %1$lld bytes across %2$lld lines."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld バイト（%2$lld 行）の先頭部分を表示しています。"
+          }
+        }
+      }
+    },
     "error.clipboardFolderPath": {
       "extractionState": "manual",
       "localizations": {

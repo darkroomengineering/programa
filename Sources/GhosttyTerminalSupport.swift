@@ -93,6 +93,31 @@ func programaScalarHex(_ value: String?) -> String {
 }
 #endif
 
+/// The part of an OSC 52 clipboard write the confirmation sheet shows: the first lines and
+/// characters, plus the full size when something was cut.
+struct ClipboardWritePreview: Equatable {
+    static let maxLines = 8
+    static let maxCharacters = 500
+
+    let text: String
+    let isTruncated: Bool
+    let byteCount: Int
+    let lineCount: Int
+
+    init(_ contents: String) {
+        var lines: [Substring] = []
+        contents.enumerateSubstrings(in: contents.startIndex..., options: .byLines) { line, _, _, _ in
+            if let line { lines.append(Substring(line)) }
+        }
+        byteCount = contents.utf8.count
+        lineCount = lines.count
+        let shownLines = lines.prefix(Self.maxLines).joined(separator: "\n")
+        let shown = String(shownLines.prefix(Self.maxCharacters))
+        text = shown
+        isTruncated = lines.count > Self.maxLines || shown.count < shownLines.count
+    }
+}
+
 enum GhosttyPasteboardHelper {
     private static let selectionPasteboard = NSPasteboard(
         name: NSPasteboard.Name("com.mitchellh.ghostty.selection")

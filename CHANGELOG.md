@@ -25,7 +25,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Every trusted `programa.json` asks for approval once more after updating. Trust is now recorded per config file, and the dialog says so when a config was trusted before that change.
 - `programa claude`, `codex` and `opencode` `install-integration` run without a terminal now need `--yes`.
 - The CLI no longer connects to a dev, staging or tagged app's socket on its own. Point it at one with `--socket` or `PROGRAMA_SOCKET_PATH`.
-- A program that writes to the clipboard with OSC 52 asks before the clipboard changes.
+- A program that writes to the clipboard with OSC 52 asks before the clipboard changes, showing a preview of the text. "Always allow for this terminal" stops the prompt for that terminal until it closes; a `clipboard-write` setting in your config still wins.
 - Socket errors are consistent: a reference that does not resolve returns `not_found` (a malformed one stays `invalid_params`), splitting a workspace that already has four panes returns `limit_reached` before anything is created, and closing a window's last workspace returns `invalid_state`.
 - `surface.send_text` and `agent.prompt` report `"queued": true` when the text waits for a terminal that is not attached yet. `surface.wait` resolves with `"outcome": "closed"` when its surface closes and caps `timeout_ms` at one hour.
 - A workspace's `agent_state` counts only helpers that are still running; finished helpers are counted in the new `helper_outcomes` field of `workspace.list` and `system.tree`.
