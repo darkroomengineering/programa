@@ -645,6 +645,7 @@ extension GhosttyNSView {
         ghostty_surface_mouse_pos(surface, clampedPoint.x, bounds.height - clampedPoint.y, mods)
         let pressHandled = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, mods)
         let releaseConsumed = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, mods)
+        let selectionActive = ghostty_surface_has_selection(surface)
         let resolution = handleCommandClickRelease(
             at: clampedPoint,
             modifierFlags: flags,
@@ -654,6 +655,7 @@ extension GhosttyNSView {
         var payload: [String: Any] = [
             "pressHandled": pressHandled ? "1" : "0",
             "releaseConsumed": releaseConsumed ? "1" : "0",
+            "selectionActive": selectionActive ? "1" : "0",
         ]
         if let resolution {
             payload["openedPath"] = resolution.path

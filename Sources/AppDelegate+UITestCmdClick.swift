@@ -244,12 +244,12 @@ extension AppDelegate {
                 return [
                     "tokenLayoutMatch": "0",
                     "tokenCellMetrics": [
-                        "cellWidth": cellWidth,
-                        "cellHeight": cellHeight,
+                        "cellWidth": Double(cellWidth),
+                        "cellHeight": Double(cellHeight),
                         "columns": cols,
                         "rows": rows,
-                        "xInset": xInset,
-                        "yInset": yInset,
+                        "xInset": Double(xInset),
+                        "yInset": Double(yInset),
                         "visibleLineCount": visibleLines.count
                     ]
                 ]
@@ -266,12 +266,12 @@ extension AppDelegate {
                 "tokenQuicklookWord": displayToken,
                 "tokenLayoutMatch": "1",
                 "tokenCellMetrics": [
-                    "cellWidth": cellWidth,
-                    "cellHeight": cellHeight,
+                    "cellWidth": Double(cellWidth),
+                    "cellHeight": Double(cellHeight),
                     "columns": cols,
                     "rows": rows,
-                    "xInset": xInset,
-                    "yInset": yInset,
+                    "xInset": Double(xInset),
+                    "yInset": Double(yInset),
                     "visibleLineCount": visibleLines.count,
                     "matchedRowFromTop": matchedRowFromTop,
                     "matchedColumnStart": matchedColumnStart,

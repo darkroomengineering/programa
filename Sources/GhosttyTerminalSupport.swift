@@ -667,11 +667,10 @@ private func programaIsHardPathDelimiter(
     return previousIsWhitespace || nextIsWhitespace
 }
 
-private func programaRawPathSegmentContainingColumn(
-    in line: String,
+private func programaRawPathSegmentRange(
+    in characters: [Character],
     column: Int
-) -> String? {
-    let characters = Array(line)
+) -> ClosedRange<Int>? {
     guard !characters.isEmpty, column >= 0, column < characters.count else { return nil }
     guard !programaIsHardPathDelimiter(in: characters, at: column) else { return nil }
 
@@ -685,10 +684,16 @@ private func programaRawPathSegmentContainingColumn(
         end += 1
     }
 
-    let candidate = String(characters[start...end]).trimmingCharacters(in: .whitespacesAndNewlines)
-    return candidate.isEmpty ? nil : candidate
+    return start...end
 }
 
+/// The path candidates for a clicked cell, longest first: the whole raw segment,
+/// then the segment with leading words dropped one at a time, then the
+/// shell-escaped token. The leading-word candidates resolve log lines such as
+/// `- <file>` where a bullet or timestamp precedes the path, and must outrank the
+/// single-word escaped token or a short file name would shadow the full one.
+/// Dropped words always end before `column`, so the clicked cell stays inside
+/// every candidate.
 private func programaPathCandidatesContainingColumn(
     in line: String,
     column: Int
@@ -702,7 +707,16 @@ private func programaPathCandidatesContainingColumn(
         candidates.append(trimmed)
     }
 
-    append(programaRawPathSegmentContainingColumn(in: line, column: column))
+    let characters = Array(line)
+    let segmentRange = programaRawPathSegmentRange(in: characters, column: column)
+    append(segmentRange.map { String(characters[$0]) })
+
+    if let segmentRange {
+        for index in segmentRange.lowerBound..<column where characters[index].isWhitespace {
+            append(String(characters[(index + 1)...segmentRange.upperBound]))
+        }
+    }
+
     append(programaShellEscapedTokenContainingColumn(in: line, column: column))
 
     return candidates
