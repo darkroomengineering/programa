@@ -68,16 +68,9 @@ final class BonsplitTabDragUITests: XCTestCase {
             steps: 28,
             dragDuration: 0.45
         )
-        let indicatorShown = waitForCondition(timeout: 2.0) { dropIndicator.exists }
-        if !indicatorShown {
-            let hierarchy = XCTAttachment(string: app.debugDescription)
-            hierarchy.name = "hierarchy during tab drag"
-            hierarchy.lifetime = .keepAlways
-            add(hierarchy)
-        }
         XCTAssertTrue(
-            indicatorShown,
-            "Expected dragging beta onto alpha to reveal the Bonsplit drop indicator. start=\(start) destination=\(destination) alpha=\(alphaTab.frame) beta=\(betaTab.frame) data=\(loadJSON(atPath: dataPath) ?? [:])"
+            waitForCondition(timeout: 2.0) { dropIndicator.exists },
+            "Expected dragging beta onto alpha to reveal the Bonsplit drop indicator."
         )
         endMouseDrag(dragSession, atAccessibilityPoint: destination)
 
@@ -442,6 +435,9 @@ final class BonsplitTabDragUITests: XCTestCase {
         if startWithHiddenSidebar {
             app.launchEnvironment["PROGRAMA_UI_TEST_BONSPLIT_START_WITH_HIDDEN_SIDEBAR"] = "1"
         }
+        // A relaunch must not restore the previous run's window state: the restored window
+        // keeps a SwiftUI-generated identifier and the harness never finds the main window.
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         app.launchArguments += ["-workspacePresentationMode", presentationMode.rawValue]
         app.launch()
         app.activate()
