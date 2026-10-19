@@ -1,0 +1,476 @@
+name: Extended tests
+
+# Behavior coverage that is too slow, too focus-sensitive or too load-sensitive to
+# gate every PR, run nightly against main:
+#   - the tests_v2 files listed in tests_v2/nightly_subset.txt
+#   - the XCUITest classes listed in scripts/nightly-ui-classes.txt
+# Failures here do not block merges; read the job summaries each morning.
+#
+# On-demand runs take explicit lists, which is also how a new test is triaged
+# before it is added to the nightly lists:
+#   gh workflow run nightly-extended-tests.yml --ref <branch> \
+#     -f v2_files="test_a.py test_b.py" -f ui_classes="SomeUITests"
+#
+# scripts/nightly-ui-classes.txt takes one class per line; a line "!Class/testMethod"
+# skips one test method of a listed class (a known failure waiting for an owner).
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+    inputs:
+      v2_files:
+        description: >-
+          Space- or newline-separated tests_v2 basenames. Empty runs
+          tests_v2/nightly_subset.txt.
+        type: string
+        default: ""
+      ui_classes:
+        description: >-
+          Space- or newline-separated programaUITests class names. Empty runs
+          scripts/nightly-ui-classes.txt.
+        type: string
+        default: ""
+      run_v2:
+        description: Run the tests_v2 jobs
+        type: boolean
+        default: true
+      run_ui:
+        description: Run the UI test job
+        type: boolean
+        default: true
+      v2_attempts:
+        description: Attempts per tests_v2 file; a pass on a later attempt is reported as FLAKY
+        type: string
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  build-app:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -z "$XCODE_APP" ] && [ -d "/Applications/Xcode.app" ]; then
+            XCODE_APP="/Applications/Xcode.app"
+          fi
+          if [ -z "$XCODE_APP" ]; then
+            XCODE_APP="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort | tail -n 1 || true)"
+          fi
+          if [ -z "$XCODE_APP" ]; then
+            echo "No Xcode.app found under /Applications" >&2
+            exit 1
+          fi
+          XCODE_DIR="$XCODE_APP/Contents/Developer"
+          echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
+          export DEVELOPER_DIR="$XCODE_DIR"
+          sudo xcode-select -s "$XCODE_DIR" || true
+          xcodebuild -version
+
+      - name: Resolve Ghostty revision
+        id: ghostty-revision
+        run: |
+          set -euo pipefail
+          revision="$(./scripts/ghostty_cache_revision.sh)"
+          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Cache GhosttyKit.xcframework
+        id: cache-ghosttykit-app
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: GhosttyKit.xcframework
+          key: ghosttykit-v3-${{ steps.ghostty-revision.outputs.revision }}
+
+      - name: Download pre-built GhosttyKit.xcframework
+        if: steps.cache-ghosttykit-app.outputs.cache-hit != 'true'
+        run: |
+          ./scripts/download-prebuilt-ghosttykit.sh
+
+      - name: Resolve zig version
+        id: zig-version
+        run: printf 'version=%s\n' "$(./scripts/required-zig-version.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache zig toolchain tarball
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ~/.cache/programa-zig-dist
+          key: zig-dist-macos-arm64-${{ steps.zig-version.outputs.version }}
+
+      - name: Install zig
+        run: ./scripts/install-zig.sh
+
+      - name: Cache Zig packages
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ~/.cache/zig
+          key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}
+          restore-keys: zig-packages-
+
+      - name: Cache Ghostty CLI helper build
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ghostty/.zig-cache
+          key: ghostty-cli-helper-${{ steps.ghostty-revision.outputs.revision }}-zig${{ steps.zig-version.outputs.version }}
+
+      - name: Cache DerivedData
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ${{ env.PROGRAMA_DERIVED_DATA_DIR }}
+          key: deriveddata-build-app-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            deriveddata-build-app-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
+            deriveddata-build-app-macos26-
+
+      - name: Cache Swift packages
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: .ci-source-packages
+          key: spm-build-app-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-build-app-
+
+      - name: Resolve Swift packages
+        run: |
+          set -euo pipefail
+          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
+          mkdir -p "$SOURCE_PACKAGES_DIR"
+
+          for attempt in 1 2 3; do
+            if xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
+              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+              -resolvePackageDependencies; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Failed to resolve Swift packages after 3 attempts" >&2
+              exit 1
+            fi
+            echo "Package resolution failed on attempt $attempt, retrying..."
+            sleep $((attempt * 5))
+          done
+
+      - name: Build app and UI test bundle
+        run: |
+          set -euo pipefail
+          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
+          xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+            -disableAutomaticPackageResolution \
+            -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
+            -destination "platform=macOS" \
+            build-for-testing
+
+      - name: Package build artifact
+        run: |
+          set -euo pipefail
+          tar -czf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR" Build/Products
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: programa-app-build
+          path: app-build.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  tests-v2:
+    needs: build-app
+    if: github.event_name != 'workflow_dispatch' || inputs.run_v2
+    runs-on: macos-26
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-socket-integration
+      V2_FILES: ${{ github.event_name == 'workflow_dispatch' && inputs.v2_files || '' }}
+      V2_ATTEMPTS: ${{ github.event_name == 'workflow_dispatch' && inputs.v2_attempts || '2' }}
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Select this shard's tests
+        id: select
+        run: |
+          set -euo pipefail
+          LIST="$RUNNER_TEMP/v2-subset.txt"
+          if [ -n "${V2_FILES//[[:space:]]/}" ]; then
+            printf '%s\n' "$V2_FILES" | tr -s '[:space:]' '\n' | grep . > "$RUNNER_TEMP/v2-all.txt"
+          else
+            grep -v '^#' tests_v2/nightly_subset.txt | grep . > "$RUNNER_TEMP/v2-all.txt" || true
+          fi
+          if grep -qvE '^test_[A-Za-z0-9_]+\.py$' "$RUNNER_TEMP/v2-all.txt"; then
+            echo "Invalid test name in the list:" >&2
+            grep -vE '^test_[A-Za-z0-9_]+\.py$' "$RUNNER_TEMP/v2-all.txt" >&2
+            exit 1
+          fi
+          awk -v s="$SHARD" -v n="$SHARD_COUNT" '(NR - 1) % n == s - 1' "$RUNNER_TEMP/v2-all.txt" > "$LIST"
+          echo "Shard $SHARD/$SHARD_COUNT:" && cat "$LIST"
+          if [ -s "$LIST" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Download build artifact
+        if: steps.select.outputs.run == 'true'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: programa-app-build
+          path: .
+
+      - name: Extract build artifact
+        if: steps.select.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$PROGRAMA_DERIVED_DATA_DIR"
+          tar -xzf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR"
+
+      - name: Create virtual display
+        if: steps.select.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          clang -framework Foundation -framework CoreGraphics \
+            -o /tmp/create-virtual-display scripts/create-virtual-display.m
+          /tmp/create-virtual-display &
+          VDISPLAY_PID=$!
+          echo "VDISPLAY_PID=$VDISPLAY_PID" >> "$GITHUB_ENV"
+          sleep 3
+          kill -0 "$VDISPLAY_PID"
+
+      - name: Run tests_v2 files
+        if: steps.select.outputs.run == 'true'
+        env:
+          PROGRAMA_TESTS_V2_SUBSET_FILE: ${{ runner.temp }}/v2-subset.txt
+          PROGRAMA_TESTS_V2_ATTEMPTS: ${{ env.V2_ATTEMPTS }}
+          PROGRAMA_TESTS_V2_KEEP_GOING: "1"
+          PROGRAMA_TESTS_V2_TEST_TIMEOUT: "300"
+          PROGRAMA_TESTS_V2_RESULTS_FILE: ${{ runner.temp }}/v2-results.txt
+        run: ./scripts/run-tests-v2-ci.sh
+
+      - name: Summarize results
+        if: always() && steps.select.outputs.run == 'true'
+        run: |
+          {
+            echo "### tests_v2 shard $SHARD/$SHARD_COUNT"
+            echo '```'
+            cat "$RUNNER_TEMP/v2-results.txt" 2>/dev/null || echo "no results recorded"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cp "$RUNNER_TEMP/v2-results.txt" "$RUNNER_TEMP/v2-results-shard$SHARD.txt" 2>/dev/null || true
+
+      - name: Upload results
+        if: always() && steps.select.outputs.run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v2-results-shard${{ matrix.shard }}
+          path: ${{ runner.temp }}/v2-results-shard${{ matrix.shard }}.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Cleanup virtual display
+        if: always()
+        run: |
+          if [ -n "${VDISPLAY_PID:-}" ]; then
+            kill "$VDISPLAY_PID" >/dev/null 2>&1 || true
+          fi
+          rm -f /tmp/create-virtual-display
+
+  ui-tests:
+    needs: build-app
+    if: github.event_name != 'workflow_dispatch' || inputs.run_ui
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-ui
+      UI_CLASSES: ${{ github.event_name == 'workflow_dispatch' && inputs.ui_classes || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Select UI test classes
+        id: select
+        run: |
+          set -euo pipefail
+          if [ -n "${UI_CLASSES//[[:space:]]/}" ]; then
+            printf '%s\n' "$UI_CLASSES" | tr -s '[:space:]' '\n' | grep . > "$RUNNER_TEMP/ui-classes.txt"
+          else
+            grep -v '^#' scripts/nightly-ui-classes.txt | grep . > "$RUNNER_TEMP/ui-classes.txt" || true
+          fi
+          if grep -qvE '^!?[A-Za-z0-9_]+(/[A-Za-z0-9_]+)?$' "$RUNNER_TEMP/ui-classes.txt"; then
+            echo "Invalid class name in the list:" >&2
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/ui-classes.txt"
+          if grep -qv '^!' "$RUNNER_TEMP/ui-classes.txt"; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Select Xcode
+        if: steps.select.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -z "$XCODE_APP" ] && [ -d "/Applications/Xcode.app" ]; then
+            XCODE_APP="/Applications/Xcode.app"
+          fi
+          if [ -z "$XCODE_APP" ]; then
+            XCODE_APP="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort | tail -n 1 || true)"
+          fi
+          if [ -z "$XCODE_APP" ]; then
+            echo "No Xcode.app found under /Applications" >&2
+            exit 1
+          fi
+          XCODE_DIR="$XCODE_APP/Contents/Developer"
+          echo "DEVELOPER_DIR=$XCODE_DIR" >> "$GITHUB_ENV"
+          export DEVELOPER_DIR="$XCODE_DIR"
+          sudo xcode-select -s "$XCODE_DIR" || true
+          xcodebuild -version
+
+      # test-without-building still passes -clonedSourcePackagesDirPath /
+      # -disableAutomaticPackageResolution, so it needs the resolved SPM checkouts.
+      - name: Cache Swift packages
+        if: steps.select.outputs.run == 'true'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: .ci-source-packages
+          key: spm-ui-regressions-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-ui-regressions-
+
+      - name: Resolve Swift packages
+        if: steps.select.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
+          mkdir -p "$SOURCE_PACKAGES_DIR"
+
+          for attempt in 1 2 3; do
+            if xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
+              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+              -resolvePackageDependencies; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Failed to resolve Swift packages after 3 attempts" >&2
+              exit 1
+            fi
+            echo "Package resolution failed on attempt $attempt, retrying..."
+            sleep $((attempt * 5))
+          done
+
+      - name: Download build artifact
+        if: steps.select.outputs.run == 'true'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: programa-app-build
+          path: .
+
+      - name: Extract build artifact
+        if: steps.select.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$PROGRAMA_DERIVED_DATA_DIR"
+          tar -xzf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR"
+
+      - name: Create persistent virtual display
+        if: steps.select.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          clang -framework Foundation -framework CoreGraphics \
+            -o /tmp/create-virtual-display scripts/create-virtual-display.m
+          VDISPLAY_READY="/tmp/programa-vdisplay-persistent.ready"
+          VDISPLAY_ID_PATH="/tmp/programa-vdisplay-persistent.id"
+          rm -f "$VDISPLAY_READY" "$VDISPLAY_ID_PATH"
+          /tmp/create-virtual-display \
+            --modes "1920x1080,1728x1117,1600x900,1440x810" \
+            --ready-path "$VDISPLAY_READY" \
+            --display-id-path "$VDISPLAY_ID_PATH" \
+            > /tmp/programa-vdisplay-persistent.log 2>&1 &
+          echo "VDISPLAY_PERSISTENT_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 24); do
+            if [ -f "$VDISPLAY_READY" ]; then break; fi
+            sleep 0.5
+          done
+          if [ ! -f "$VDISPLAY_READY" ]; then
+            echo "ERROR: Persistent virtual display not ready after 12s" >&2
+            cat /tmp/programa-vdisplay-persistent.log 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Run UI test classes
+        if: steps.select.outputs.run == 'true'
+        run: |
+          set -uo pipefail
+          SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
+          LOG_DIR="$RUNNER_TEMP/ui-logs"
+          mkdir -p "$LOG_DIR"
+          RESULTS="$RUNNER_TEMP/ui-results.txt"
+          : > "$RESULTS"
+          fail=0
+          SKIP_ARGS=()
+          while IFS= read -r skip; do
+            SKIP_ARGS+=("-skip-testing:programaUITests/${skip#!}")
+          done < <(grep '^!' "$RUNNER_TEMP/ui-classes.txt" || true)
+          while IFS= read -r class; do
+            pkill -x "Programa DEV" 2>/dev/null || true
+            echo "== $class =="
+            safe="${class//\//_}"
+            if xcodebuild -project GhosttyTabs.xcodeproj -scheme programa -configuration Debug \
+              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+              -disableAutomaticPackageResolution \
+              -derivedDataPath "$PROGRAMA_DERIVED_DATA_DIR" \
+              -destination "platform=macOS" \
+              -maximum-test-execution-time-allowance 180 \
+              -only-testing:"programaUITests/$class" \
+              ${SKIP_ARGS[@]+"${SKIP_ARGS[@]}"} \
+              test-without-building > "$LOG_DIR/$safe.log" 2>&1; then
+              echo "PASS $class" >> "$RESULTS"
+            else
+              echo "FAIL $class" >> "$RESULTS"
+              fail=1
+            fi
+            grep -E "^Test [Cc]ase .* (passed|failed)" "$LOG_DIR/$safe.log" | sed 's/^/    /' >> "$RESULTS" || true
+            tail -5 "$LOG_DIR/$safe.log"
+          done < <(grep -v '^!' "$RUNNER_TEMP/ui-classes.txt")
+          exit "$fail"
+
+      - name: Summarize results
+        if: always() && steps.select.outputs.run == 'true'
+        run: |
+          {
+            echo "### UI test classes"
+            echo '```'
+            cat "$RUNNER_TEMP/ui-results.txt" 2>/dev/null || echo "no results recorded"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload UI logs
+        if: always() && steps.select.outputs.run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ui-test-logs
+          path: |
+            ${{ runner.temp }}/ui-logs/
+            ${{ runner.temp }}/ui-results.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Cleanup virtual display
+        if: always()
+        run: |
+          if [ -n "${VDISPLAY_PERSISTENT_PID:-}" ]; then
+            kill "$VDISPLAY_PERSISTENT_PID" >/dev/null 2>&1 || true
+          fi
+          rm -f /tmp/create-virtual-display

@@ -58,9 +58,11 @@ def main() -> int:
             time.sleep(0.5)
             ensure_two_surfaces(client)
             term_a, term_b = first_two_terminal_indices(client)
+            term_a = surface_id_for_index(client, term_a)
+            term_b = surface_id_for_index(client, term_b)
             client.focus_surface(term_a)
 
-            surface_id = surface_id_for_index(client, term_b)
+            surface_id = term_b
             client.clear_notifications()
             client.reset_flash_counts()
             initial_flash = client.flash_count(term_b)

@@ -1,7 +1,8 @@
 # Curated stable subset of tests_v2 run as a required PR-gating CI job
 # (scripts/run-tests-v2-ci.sh). Keep this list to fast, low-flake, pure-socket
-# tests. The full suite still runs manually on the VM via
-# scripts/run-tests-v2.sh.
+# tests. tests_v2/nightly_subset.txt lists the tests that run nightly instead
+# (.github/workflows/nightly-extended-tests.yml); the whole suite can also run
+# manually on the VM via scripts/run-tests-v2.sh.
 #
 # Do NOT add: test_splits_focus_close_resize.py, test_notifications.py.
 test_cli_id_format_defaults.py

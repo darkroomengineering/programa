@@ -7,8 +7,7 @@ final class SidebarResizeUITests: XCTestCase {
     }
 
     func testSidebarResizerTracksCursor() {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchedApp()
 
         let elements = app.descendants(matching: .any)
         let resizer = elements["SidebarResizer"]
@@ -37,9 +36,8 @@ final class SidebarResizeUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(leftDelta, -122, "Resizer moved farther than requested drag-left offset")
     }
 
-    func testSidebarResizerAllowsSmallerMinimumWidth() {
-        let app = XCUIApplication()
-        app.launch()
+    func testSidebarResizerClampsToMinimumWidth() {
+        let app = launchedApp()
 
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 5.0))
@@ -54,16 +52,16 @@ final class SidebarResizeUITests: XCTestCase {
         start.press(forDuration: 0.1, thenDragTo: farLeft)
 
         let sidebarWidth = max(0, resizer.frame.midX - window.frame.minX)
-        XCTAssertLessThanOrEqual(
+        XCTAssertEqual(
             sidebarWidth,
-            185,
-            "Expected sidebar minimum width to allow a narrower sidebar than the previous 186 px floor. width=\(sidebarWidth)"
+            200,
+            accuracy: 6,
+            "Expected a far-left drag to stop at the 200 pt minimum sidebar width. width=\(sidebarWidth)"
         )
     }
 
     func testSidebarResizerHasMaximumWidthCap() {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchedApp()
 
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 5.0))
@@ -87,6 +85,14 @@ final class SidebarResizeUITests: XCTestCase {
             "Expected sidebar max-width clamp to leave substantial terminal width. " +
             "remaining=\(remainingWidth), window=\(windowFrame.width)"
         )
+    }
+
+    private func launchedApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["PROGRAMA_TAG"] = "ui-tests-sidebar-resize-\(UUID().uuidString.lowercased())"
+        app.launch()
+        return app
     }
 
     private func waitForElementHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
