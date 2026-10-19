@@ -869,11 +869,12 @@ struct TabItemView: View, Equatable {
         // those closures alive after the row was gone: closed Workspace
         // objects stayed resident (7 live for 1 open workspace in a heap dump).
         .background(SidebarRowHoverProbe(isHovering: $isHovering))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(accessibilityTitle))
-        .accessibilityValue(Text(accessibilityDescription))
-        .accessibilityIdentifier("sidebarWorkspace.\(tab.id.uuidString)")
-        .accessibilityHint(Text(accessibilityHintText))
+        .modifier(SidebarRowAccessibility(
+            label: accessibilityTitle,
+            value: accessibilityDescription,
+            hint: accessibilityHintText,
+            identifier: "sidebarWorkspace.\(tab.id.uuidString)"
+        ))
         .accessibilityAction(named: Text(moveUpActionText)) {
             moveBy(-1)
         }
@@ -1903,6 +1904,23 @@ private final class SidebarRowContextMenuCaptureView: NSView {
         guard let menu = buildMenu?() else { return false }
         menu.popUp(positioning: nil, at: NSPoint(x: bounds.midX, y: bounds.midY), in: self)
         return true
+    }
+}
+
+/// Kept out of `TabItemView.body`: that expression is already near the type checker's limit.
+private struct SidebarRowAccessibility: ViewModifier {
+    let label: String
+    let value: String
+    let hint: String
+    let identifier: String
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text(label))
+            .accessibilityValue(Text(value))
+            .accessibilityIdentifier(identifier)
+            .accessibilityHint(Text(hint))
     }
 }
 

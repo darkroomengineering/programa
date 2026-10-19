@@ -151,7 +151,7 @@ final class WorkspaceDescriptionUITests: XCTestCase {
             workspaceDescriptionPollUntil(timeout: 5.0) {
                 workspaceRow.exists && (workspaceRow.value as? String) == description
             },
-            "Expected the sidebar workspace row to expose the saved multiline description, line break included, as its accessibility value. value=\(String(describing: workspaceRow.value))"
+            "Expected the sidebar workspace row to expose the saved multiline description, line break included, as its accessibility value. value=\(String(describing: workspaceRow.value)) row=\(workspaceRow.debugDescription) tree=\(app.debugDescription)"
         )
     }
 
