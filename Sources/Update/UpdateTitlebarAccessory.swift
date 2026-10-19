@@ -560,8 +560,7 @@ struct TitlebarControlsView: View {
 
         ZStack(alignment: .topLeading) {
             ForEach(items) { item in
-                titlebarShortcutHintPill(shortcut: item.shortcut, config: config)
-                    .accessibilityIdentifier("titlebarShortcutHint.\(item.action.rawValue)")
+                titlebarShortcutHintPill(action: item.action, shortcut: item.shortcut, config: config)
                     .frame(width: item.width, alignment: .leading)
                     .offset(x: item.leftEdge, y: yOffset)
             }
@@ -572,11 +571,15 @@ struct TitlebarControlsView: View {
     }
 
     private func titlebarShortcutHintPill(
+        action: KeyboardShortcutSettings.Action,
         shortcut: StoredShortcut,
         config: TitlebarControlsStyleConfig
     ) -> some View {
         ShortcutHintPill {
+            // The identifier lives on the text itself: on macOS 26 the pill content is hosted
+            // in a separate glass view, so an identifier on the pill never reaches the label.
             Text(shortcut.displayString)
+                .accessibilityIdentifier("titlebarShortcutHint.\(action.rawValue)")
                 .font(.system(size: max(8, config.iconSize - 5), weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)

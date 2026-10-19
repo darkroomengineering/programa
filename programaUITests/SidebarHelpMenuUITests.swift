@@ -39,7 +39,7 @@ final class SidebarHelpMenuUITests: XCTestCase {
         // Right after launch the header can take longer than 3 seconds on CI to become hittable.
         XCTAssertTrue(
             sidebarHelpPollUntil(timeout: 10.0) { toggle.exists && toggle.isHittable },
-            "Expected the visible sidebar header to expose its own sidebar toggle"
+            "Expected the visible sidebar header to expose its own sidebar toggle. toggle=\(toggle.debugDescription) exists=\(toggle.exists) hittable=\(toggle.isHittable) frame=\(toggle.frame) sidebar=\(sidebar.frame)"
         )
 
         toggle.click()

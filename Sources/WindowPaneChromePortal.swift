@@ -622,6 +622,8 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         view.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
         view.layer?.cornerRadius = 1
         view.isHidden = true
+        view.setAccessibilityElement(true)
+        view.setAccessibilityIdentifier("paneTabBar.dropIndicator")
         return view
     }()
     private var dropIndicatorIndex: Int?

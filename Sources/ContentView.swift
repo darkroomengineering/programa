@@ -361,10 +361,11 @@ struct ContentView: View {
         // card's top — the legacy 32pt titlebar band is dead space there. With
         // the sidebar hidden the titlebar accessory controls still need it.
         if cardInsetAmount > 0 && sidebarState.isVisible { return 0 }
-        if isMinimalMode {
-            if cardInsetAmount > 0 { return 0 }
-            return isFullScreen ? 0 : -titlebarPadding
-        }
+        // Minimal mode keeps pane chrome at the window's top edge. The main
+        // window's hosting view reports a zero safe area (MainWindowHostingView),
+        // so SwiftUI content already starts at the window top; pulling it up by
+        // the titlebar height would push the tab strip out of the window.
+        if isMinimalMode { return 0 }
         return titlebarPadding
     }
 

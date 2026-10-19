@@ -871,6 +871,7 @@ struct TabItemView: View, Equatable {
         .background(SidebarRowHoverProbe(isHovering: $isHovering))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(accessibilityTitle))
+        .accessibilityIdentifier("sidebarWorkspace.\(tab.id.uuidString)")
         .accessibilityHint(Text(accessibilityHintText))
         .accessibilityAction(named: Text(moveUpActionText)) {
             moveBy(-1)

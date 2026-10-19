@@ -183,16 +183,17 @@ final class BonsplitTabDragUITests: XCTestCase {
         let workspaceRow = app.descendants(matching: .any).matching(identifier: workspaceRowIdentifier).firstMatch
         XCTAssertTrue(workspaceRow.waitForExistence(timeout: 5.0), "Expected workspace row to exist")
 
+        // Sidebar panel inset (6) + header strip shared with the traffic lights (40) + list padding (8).
         let topInset = distanceToTopEdge(of: workspaceRow, in: window)
         XCTAssertEqual(
             topInset,
-            36,
+            54,
             accuracy: 4,
-            "Expected minimal mode to keep the sidebar workspace row offset unchanged while reserving the existing traffic-light strip. window=\(window.frame) workspaceRow=\(workspaceRow.frame) topInset=\(topInset)"
+            "Expected minimal mode to keep the sidebar workspace row below the header strip that holds the traffic lights. window=\(window.frame) workspaceRow=\(workspaceRow.frame) topInset=\(topInset)"
         )
     }
 
-    func testStandardModeKeepsWorkspaceControlsOutOfSidebar() {
+    func testStandardModeShowsWorkspaceControlsInSidebarHeader() {
         let (app, dataPath) = launchConfiguredApp(presentationMode: .standard)
 
         XCTAssertTrue(
@@ -216,32 +217,20 @@ final class BonsplitTabDragUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any).matching(identifier: "Sidebar").firstMatch
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5.0), "Expected sidebar to exist")
 
-        let toggleSidebarButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.toggleSidebar").firstMatch
-        let notificationsButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.showNotifications").firstMatch
-        let newWorkspaceButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.newTab").firstMatch
-
+        let controls = sidebarHeaderControls(in: app)
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) {
-                toggleSidebarButton.exists && toggleSidebarButton.isHittable &&
-                    notificationsButton.exists && notificationsButton.isHittable &&
-                    newWorkspaceButton.exists && newWorkspaceButton.isHittable
-            },
-            "Expected standard mode to keep workspace controls visible in the titlebar."
+            waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists } },
+            "Expected standard mode to show the workspace controls in the sidebar header. \(describe(controls))"
         )
-
-        let leadingControlX = min(
-            toggleSidebarButton.frame.minX,
-            notificationsButton.frame.minX,
-            newWorkspaceButton.frame.minX
-        )
-        XCTAssertGreaterThanOrEqual(
-            leadingControlX,
-            sidebar.frame.maxX - 4,
-            "Expected standard mode workspace controls to stay outside the sidebar header. sidebar=\(sidebar.frame) toggle=\(toggleSidebarButton.frame) notifications=\(notificationsButton.frame) new=\(newWorkspaceButton.frame)"
-        )
+        for control in controls {
+            XCTAssertTrue(
+                sidebar.frame.contains(control.frame),
+                "Expected \(control.identifier) inside the sidebar header. sidebar=\(sidebar.frame) control=\(control.frame)"
+            )
+        }
     }
 
-    func testMinimalModeSidebarControlsRevealOnlyFromSidebarHover() {
+    func testMinimalModeKeepsSidebarControlsVisibleInSidebarHeader() {
         let (app, dataPath) = launchConfiguredApp()
 
         XCTAssertTrue(
@@ -265,9 +254,7 @@ final class BonsplitTabDragUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any).matching(identifier: "Sidebar").firstMatch
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5.0), "Expected sidebar to exist")
 
-        let toggleSidebarButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.toggleSidebar").firstMatch
-        let notificationsButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.showNotifications").firstMatch
-        let newWorkspaceButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.newTab").firstMatch
+        let controls = sidebarHeaderControls(in: app)
 
         let alphaTitle = ready["alphaTitle"] ?? "UITest Alpha"
         let alphaTab = app.buttons[alphaTitle]
@@ -280,36 +267,21 @@ final class BonsplitTabDragUITests: XCTestCase {
             "Expected visible-sidebar minimal mode to keep pane tabs tight to the sidebar edge while the traffic lights sit over the sidebar. window=\(window.frame) sidebar=\(sidebar.frame) alphaTab=\(alphaTab.frame) paneLeadingGap=\(paneLeadingGap)"
         )
 
+        XCTAssertTrue(
+            waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists } },
+            "Expected minimal-mode sidebar controls to stay in the sidebar header without hovering. \(describe(controls))"
+        )
+        for control in controls {
+            XCTAssertTrue(
+                sidebar.frame.contains(control.frame),
+                "Expected \(control.identifier) inside the sidebar header. sidebar=\(sidebar.frame) control=\(control.frame)"
+            )
+        }
+
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) {
-                !toggleSidebarButton.isHittable && !notificationsButton.isHittable && !newWorkspaceButton.isHittable
-            },
-            "Expected minimal-mode sidebar controls to stay hidden away from the sidebar hover zone."
-        )
-
-        hover(in: window, at: CGPoint(x: window.frame.maxX - 48, y: window.frame.minY + 18))
-        XCTAssertTrue(
-            waitForCondition(timeout: 2.0) {
-                !toggleSidebarButton.isHittable && !notificationsButton.isHittable && !newWorkspaceButton.isHittable
-            },
-            "Expected the removed titlebar area to stop revealing minimal-mode controls."
-        )
-
-        hover(
-            in: window,
-            at: CGPoint(
-                x: min(sidebar.frame.maxX - 36, sidebar.frame.minX + 116),
-                y: window.frame.minY + 18
-            )
-        )
-        XCTAssertTrue(
-            waitForCondition(timeout: 2.0) {
-                toggleSidebarButton.exists && toggleSidebarButton.isHittable &&
-                    notificationsButton.exists && notificationsButton.isHittable &&
-                    newWorkspaceButton.exists && newWorkspaceButton.isHittable
-            },
-            "Expected minimal-mode sidebar controls to reveal when hovering the sidebar chrome area."
+            controls.allSatisfy { $0.exists },
+            "Expected minimal-mode sidebar controls to stay visible while the pointer is over the pane. \(describe(controls))"
         )
     }
 
@@ -383,16 +355,10 @@ final class BonsplitTabDragUITests: XCTestCase {
         let window = app.windows.element(boundBy: 0)
         XCTAssertTrue(window.waitForExistence(timeout: 5.0), "Expected main window to exist")
 
-        let toggleSidebarButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.toggleSidebar").firstMatch
-        let notificationsButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.showNotifications").firstMatch
-        let newWorkspaceButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.newTab").firstMatch
-
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
+        let controls = sidebarHeaderControls(in: app)
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) {
-                !toggleSidebarButton.isHittable && !notificationsButton.isHittable && !newWorkspaceButton.isHittable
-            },
-            "Expected minimal-mode sidebar controls to start hidden away from hover."
+            waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists } },
+            "Expected minimal-mode sidebar controls to start visible. \(describe(controls))"
         )
 
         app.typeKey("i", modifierFlags: [.command])
@@ -404,16 +370,12 @@ final class BonsplitTabDragUITests: XCTestCase {
 
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) {
-                toggleSidebarButton.exists && toggleSidebarButton.isHittable &&
-                    notificationsButton.exists && notificationsButton.isHittable &&
-                    newWorkspaceButton.exists && newWorkspaceButton.isHittable
-            },
-            "Expected minimal-mode sidebar controls to remain visible while the notifications popover is open."
+            waitForCondition(timeout: 2.0) { controls.allSatisfy { $0.exists } },
+            "Expected minimal-mode sidebar controls to remain visible while the notifications popover is open. \(describe(controls))"
         )
     }
 
-    func testMinimalModeCollapsedSidebarStillRevealsPaneTabBarControlsOnHover() {
+    func testMinimalModeCollapsedSidebarKeepsPaneTabBarControlsVisible() {
         let (app, dataPath) = launchConfiguredApp(startWithHiddenSidebar: true)
 
         XCTAssertTrue(
@@ -440,30 +402,18 @@ final class BonsplitTabDragUITests: XCTestCase {
         let betaTab = app.buttons[betaTitle]
         XCTAssertTrue(betaTab.waitForExistence(timeout: 5.0), "Expected beta tab to exist")
 
-        let newTerminalButton = app.descendants(matching: .any).matching(identifier: "paneTabBarControl.newTerminal").firstMatch
-
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
+        // The workspace-level capsule (new terminal, split right/down) is always visible
+        // beside the pane tab strip; it does not depend on hover.
+        let newTerminalButton = app.buttons["New Terminal Tab"]
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) { !newTerminalButton.exists || !newTerminalButton.isHittable },
-            "Expected pane tab bar controls to hide away from the pane tab bar in minimal mode. button=\(newTerminalButton.debugDescription)"
-        )
-
-        hover(
-            in: window,
-            at: CGPoint(
-                x: min(window.frame.maxX - 140, betaTab.frame.maxX + 80),
-                y: alphaTab.frame.midY
-            )
-        )
-        XCTAssertTrue(
-            waitForCondition(timeout: 2.0) { newTerminalButton.exists && newTerminalButton.isHittable },
-            "Expected pane tab bar controls to reveal when hovering inside empty pane-tab-bar space in collapsed-sidebar minimal mode. window=\(window.frame) alphaTab=\(alphaTab.frame) betaTab=\(betaTab.frame) button=\(newTerminalButton.debugDescription)"
+            newTerminalButton.waitForExistence(timeout: 5.0),
+            "Expected the pane tab bar controls to be visible in collapsed-sidebar minimal mode. window=\(window.frame) alphaTab=\(alphaTab.frame) betaTab=\(betaTab.frame) button=\(newTerminalButton.debugDescription)"
         )
 
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) { !newTerminalButton.exists || !newTerminalButton.isHittable },
-            "Expected pane tab bar controls to hide again after leaving the pane tab bar in minimal mode. button=\(newTerminalButton.debugDescription)"
+            newTerminalButton.exists,
+            "Expected pane tab bar controls to stay visible away from the pane tab bar. button=\(newTerminalButton.debugDescription)"
         )
     }
 
@@ -489,6 +439,20 @@ final class BonsplitTabDragUITests: XCTestCase {
         app.launch()
         app.activate()
         return (app, dataPath)
+    }
+
+    private func sidebarHeaderControls(in app: XCUIApplication) -> [XCUIElement] {
+        [
+            "titlebarControl.toggleSidebar",
+            "titlebarControl.showNotifications",
+            "titlebarControl.newTab",
+        ].map { app.descendants(matching: .any).matching(identifier: $0).firstMatch }
+    }
+
+    private func describe(_ controls: [XCUIElement]) -> String {
+        controls
+            .map { "\($0.identifier) exists=\($0.exists) hittable=\($0.isHittable) frame=\($0.frame)" }
+            .joined(separator: "; ")
     }
 
     private func ensureForegroundAfterLaunch(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
