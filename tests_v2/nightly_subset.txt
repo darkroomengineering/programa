@@ -19,6 +19,7 @@ test_command_palette_switcher_all_windows.py
 test_command_palette_window_scope.py
 test_ctrl_socket.py
 test_focus_notification_dismiss.py
+test_focus_transition_workspace_split_race.py
 test_initial_terminal_interactive_and_rendering.py
 test_layout_apply_resolves_cwd_relative_to_worktree.py
 test_nested_split_no_arranged_subview_underflow.py
@@ -26,6 +27,7 @@ test_nested_split_no_detach_during_update.py
 test_nested_split_panel_routing.py
 test_nested_split_preserves_existing_split.py
 test_new_claude_workspace_shortcut.py
+test_new_tab_interactive_after_splits.py
 test_pane_break_swap_preserve_focus.py
 test_pane_resize_preserves_ls_scrollback.py
 test_pane_resize_preserves_visible_content.py
@@ -45,3 +47,4 @@ test_tab_workspace_action_naming.py
 test_terminal_focus_routing.py
 test_visual_typing_char_by_char.py
 test_workspace_create_background_starts_terminal.py
+test_workspace_split_title_updates.py
