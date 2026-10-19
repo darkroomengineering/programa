@@ -599,6 +599,53 @@ final class FocusedNotificationIndicatorTests: XCTestCase {
         XCTAssertFalse(store.hasVisibleNotificationIndicator(forTabId: workspace.id, surfaceId: panelId))
     }
 
+    func testNotificationDoesNotReorderWorkspaces() {
+        let originalShared = AppDelegate.shared
+        let appDelegate = AppDelegate()
+        AppDelegate.shared = appDelegate
+        defer { AppDelegate.shared = originalShared }
+        let manager = TabManager()
+        let owningWindow = registerFocusedNotificationWindow(appDelegate: appDelegate, manager: manager)
+        defer { withExtendedLifetime(owningWindow) {} }
+        let store = TerminalNotificationStore.shared
+
+        let originalTabManager = appDelegate.tabManager
+        let originalNotificationStore = appDelegate.notificationStore
+        let originalAppFocusOverride = AppFocusState.overrideIsFocused
+
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
+        appDelegate.tabManager = manager
+        appDelegate.notificationStore = store
+        AppFocusState.overrideIsFocused = true
+
+        defer {
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            appDelegate.tabManager = originalTabManager
+            appDelegate.notificationStore = originalNotificationStore
+            AppFocusState.overrideIsFocused = originalAppFocusOverride
+        }
+
+        let first = manager.tabs[0]
+        let second = manager.addWorkspace(select: false)
+        let third = manager.addWorkspace(select: false)
+        manager.tabs = [first, second, third]
+        manager.selectWorkspace(first)
+        let orderBefore = manager.tabs.map(\.id)
+
+        store.addNotification(
+            tabId: third.id,
+            surfaceId: nil,
+            title: "Background",
+            subtitle: "",
+            body: ""
+        )
+
+        XCTAssertEqual(manager.tabs.map(\.id), orderBefore, "A notification must not move its workspace")
+        XCTAssertTrue(store.hasUnreadNotification(forTabId: third.id, surfaceId: nil))
+    }
+
     func testNewNotificationOnDifferentSurfaceClearsPreviousFocusedReadIndicator() {
         let appDelegate = AppDelegate.shared ?? AppDelegate()
         let manager = TabManager()

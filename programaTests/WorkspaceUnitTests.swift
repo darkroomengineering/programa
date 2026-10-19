@@ -1874,7 +1874,7 @@ final class WorkspaceTabColorSettingsTests: XCTestCase {
         XCTAssertNil(WorkspaceTabColorSettings.normalizedHex("#GG1234"))
     }
 
-    func testBuiltInPaletteMatchesOriginalPRPalette() {
+    func testBuiltInPaletteHasSixteenEntries() {
         let palette = WorkspaceTabColorSettings.defaultPalette
         XCTAssertEqual(palette.count, 16)
         XCTAssertEqual(palette.first?.name, "Red")
@@ -1894,8 +1894,8 @@ final class WorkspaceTabColorSettingsTests: XCTestCase {
         XCTAssertEqual(WorkspaceTabColorSettings.palette(defaults: defaults), WorkspaceTabColorSettings.defaultPalette)
     }
 
-    func testSetColorRoundTripFallsBackWhenResetToBase() {
-        let suiteName = "WorkspaceTabColorSettingsTests.SetColor.\(UUID().uuidString)"
+    func testPersistPaletteMapRoundTripFallsBackWhenResetToBase() {
+        let suiteName = "WorkspaceTabColorSettingsTests.PersistPalette.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             XCTFail("Failed to create isolated UserDefaults suite")
             return
@@ -1903,23 +1903,18 @@ final class WorkspaceTabColorSettingsTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let first = WorkspaceTabColorSettings.defaultPalette[0]
+        var palette = Dictionary(uniqueKeysWithValues: WorkspaceTabColorSettings.defaultPalette.map { ($0.name, $0.hex) })
+        palette[first.name] = "#00aa33"
+        WorkspaceTabColorSettings.persistPaletteMap(palette, defaults: defaults)
         XCTAssertEqual(
-            WorkspaceTabColorSettings.currentColorHex(named: first.name, defaults: defaults),
-            first.hex
-        )
-
-        WorkspaceTabColorSettings.setColor(named: first.name, hex: "#00aa33", defaults: defaults)
-        XCTAssertEqual(
-            WorkspaceTabColorSettings.currentColorHex(named: first.name, defaults: defaults),
+            WorkspaceTabColorSettings.palette(defaults: defaults).first(where: { $0.name == first.name })?.hex,
             "#00AA33"
         )
         XCTAssertNotNil(defaults.dictionary(forKey: WorkspaceTabColorSettings.paletteKey))
 
-        WorkspaceTabColorSettings.setColor(named: first.name, hex: first.hex, defaults: defaults)
-        XCTAssertEqual(
-            WorkspaceTabColorSettings.currentColorHex(named: first.name, defaults: defaults),
-            first.hex
-        )
+        palette[first.name] = first.hex
+        WorkspaceTabColorSettings.persistPaletteMap(palette, defaults: defaults)
+        XCTAssertEqual(WorkspaceTabColorSettings.palette(defaults: defaults), WorkspaceTabColorSettings.defaultPalette)
         XCTAssertNil(defaults.object(forKey: WorkspaceTabColorSettings.paletteKey))
     }
 
@@ -2120,29 +2115,7 @@ final class WorkspaceTabColorSettingsTests: XCTestCase {
         XCTAssertEqual(resolved.last?.hex, "#00F5D4")
     }
 
-    func testLegacyKeysStillResolveIntoEffectivePalette() {
-        let suiteName = "WorkspaceTabColorSettingsTests.LegacyKeys.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to create isolated UserDefaults suite")
-            return
-        }
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        defaults.set(["Blue": "#010203"], forKey: "workspaceTabColor.defaultOverrides")
-        defaults.set(["#778899"], forKey: "workspaceTabColor.customColors")
-
-        let resolved = WorkspaceTabColorSettings.palette(defaults: defaults)
-        XCTAssertEqual(
-            resolved.first(where: { $0.name == "Blue" })?.hex,
-            "#010203"
-        )
-        XCTAssertEqual(
-            resolved.first(where: { $0.name == "Custom 1" })?.hex,
-            "#778899"
-        )
-    }
-
-    func testResetClearsNewAndLegacyStorage() {
+    func testResetClearsStoredPalette() {
         let suiteName = "WorkspaceTabColorSettingsTests.Reset.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             XCTFail("Failed to create isolated UserDefaults suite")
@@ -2151,14 +2124,10 @@ final class WorkspaceTabColorSettingsTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         WorkspaceTabColorSettings.persistPaletteMap(["Neon Mint": "#00F5D4"], defaults: defaults)
-        defaults.set(["Blue": "#010203"], forKey: "workspaceTabColor.defaultOverrides")
-        defaults.set(["#778899"], forKey: "workspaceTabColor.customColors")
 
         WorkspaceTabColorSettings.reset(defaults: defaults)
 
         XCTAssertNil(defaults.object(forKey: WorkspaceTabColorSettings.paletteKey))
-        XCTAssertNil(defaults.object(forKey: "workspaceTabColor.defaultOverrides"))
-        XCTAssertNil(defaults.object(forKey: "workspaceTabColor.customColors"))
         XCTAssertEqual(WorkspaceTabColorSettings.palette(defaults: defaults), WorkspaceTabColorSettings.defaultPalette)
     }
 

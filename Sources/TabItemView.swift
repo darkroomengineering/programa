@@ -186,9 +186,8 @@ struct TabItemView: View, Equatable {
     @State private var isHovering = false
     @State private var rowHeight: CGFloat = 1
     // Cached results of the expensive bonsplit tree walk + branch/dir/PR snapshot.
-    // Updated only by the debounced detail-data publisher, onAppear, and settings
-    // changes — NOT by immediate title changes or lightweight render telemetry.
-    @State private var cachedOrderedPanelIds: [UUID]? = nil
+    // Updated only by the debounced detail-data publisher and onAppear —
+    // NOT by immediate title changes or lightweight render telemetry.
     @State private var cachedBranchDirectoryLines: [VerticalBranchDirectoryLine] = []
     @State private var cachedPullRequestRows: [PullRequestDisplay] = []
 
@@ -214,10 +213,6 @@ struct TabItemView: View, Equatable {
 
     private var sidebarShowGitBranch: Bool {
         settings.showsGitBranch
-    }
-
-    private var sidebarBranchVerticalLayout: Bool {
-        settings.usesVerticalBranchLayout
     }
 
     private var sidebarShowGitBranchIcon: Bool {
@@ -363,10 +358,6 @@ struct TabItemView: View, Equatable {
         )
     }
 
-    private var visibleAuxiliaryDetails: SidebarWorkspaceAuxiliaryDetailVisibility {
-        settings.visibleAuxiliaryDetails
-    }
-
     // Read imperatively instead of @Environment(\.accessibilityReduceMotion): this
     // struct's Equatable conformance and typing-latency contract (CLAUDE.md) forbid
     // adding environment/observed properties that would need to join `==`.
@@ -392,33 +383,10 @@ struct TabItemView: View, Equatable {
         let moveDownActionText = String(localized: "sidebar.workspace.moveDownAction", defaultValue: "Move Down")
         let latestNotificationSubtitle = latestNotificationText
         let effectiveSubtitle = latestNotificationSubtitle
-        let detailVisibility = visibleAuxiliaryDetails
-        // Read from cache — updated only by the debounced publisher, onAppear,
-        // and settings changes. Title-keystroke re-renders skip this tree walk.
-        let orderedPanelIds: [UUID]? = cachedOrderedPanelIds
+        // Read from cache — updated only by the debounced publisher and onAppear.
+        // Title-keystroke re-renders skip this tree walk.
         let branchDirectoryLines: [VerticalBranchDirectoryLine] = cachedBranchDirectoryLines
         let pullRequestRows: [PullRequestDisplay] = cachedPullRequestRows
-        let compactGitBranchSummaryText: String? = {
-            guard detailVisibility.showsBranchDirectory,
-                  !sidebarBranchVerticalLayout,
-                  sidebarShowGitBranch,
-                  let orderedPanelIds else {
-                return nil
-            }
-            return gitBranchSummaryText(orderedPanelIds: orderedPanelIds)
-        }()
-        let compactDirectorySummaryText: String? = {
-            guard detailVisibility.showsBranchDirectory,
-                  !sidebarBranchVerticalLayout,
-                  let orderedPanelIds else {
-                return nil
-            }
-            return directorySummaryText(orderedPanelIds: orderedPanelIds)
-        }()
-        let compactBranchDirectoryRow = branchDirectoryRow(
-            gitSummary: compactGitBranchSummaryText,
-            directorySummary: compactDirectorySummaryText
-        )
         let branchLinesContainBranch = sidebarShowGitBranch && branchDirectoryLines.contains { $0.branch != nil }
 
         VStack(alignment: .leading, spacing: 4) {
@@ -592,35 +560,33 @@ struct TabItemView: View, Equatable {
                     .multilineTextAlignment(.leading)
             }
 
-            if detailVisibility.showsMetadata {
-                // The agent badge above is the single source for agent state now; drop any
-                // status entry that's still carrying the old duplicate phrasing (older CLI
-                // builds may still send it). Other status entries (verbose tool descriptions,
-                // progress, ports, PR) render unchanged.
-                let metadataEntries = tab.sidebarStatusEntriesInDisplayOrder().filter { entry in
-                    !(Self.agentStateStatusKeys.contains(entry.key) && Self.agentStateStatusValues.contains(entry.value))
-                }
-                let metadataBlocks = tab.sidebarMetadataBlocksInDisplayOrder()
-                if !metadataEntries.isEmpty {
-                    SidebarMetadataRows(
-                        entries: metadataEntries,
-                        isActive: usesInvertedActiveForeground,
-                        onFocus: { updateSelection() }
-                    )
-                    .transition(.opacity)
-                }
-                if !metadataBlocks.isEmpty {
-                    SidebarMetadataMarkdownBlocks(
-                        blocks: metadataBlocks,
-                        isActive: usesInvertedActiveForeground,
-                        onFocus: { updateSelection() }
-                    )
-                    .transition(.opacity)
-                }
+            // The agent badge above is the single source for agent state now; drop any
+            // status entry that's still carrying the old duplicate phrasing (older CLI
+            // builds may still send it). Other status entries (verbose tool descriptions,
+            // progress, ports, PR) render unchanged.
+            let metadataEntries = tab.sidebarStatusEntriesInDisplayOrder().filter { entry in
+                !(Self.agentStateStatusKeys.contains(entry.key) && Self.agentStateStatusValues.contains(entry.value))
+            }
+            let metadataBlocks = tab.sidebarMetadataBlocksInDisplayOrder()
+            if !metadataEntries.isEmpty {
+                SidebarMetadataRows(
+                    entries: metadataEntries,
+                    isActive: usesInvertedActiveForeground,
+                    onFocus: { updateSelection() }
+                )
+                .transition(.opacity)
+            }
+            if !metadataBlocks.isEmpty {
+                SidebarMetadataMarkdownBlocks(
+                    blocks: metadataBlocks,
+                    isActive: usesInvertedActiveForeground,
+                    onFocus: { updateSelection() }
+                )
+                .transition(.opacity)
             }
 
             // Latest log entry
-            if detailVisibility.showsLog, let latestLog = tab.logEntries.last {
+            if let latestLog = tab.logEntries.last {
                 HStack(spacing: 4) {
                     Image(systemName: logLevelIcon(latestLog.level))
                         .font(.system(size: 8))
@@ -635,7 +601,7 @@ struct TabItemView: View, Equatable {
             }
 
             // Progress bar
-            if detailVisibility.showsProgress, let progress = tab.progress {
+            if let progress = tab.progress {
                 VStack(alignment: .leading, spacing: 2) {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
@@ -659,61 +625,44 @@ struct TabItemView: View, Equatable {
             }
 
             // Branch + directory row
-            if detailVisibility.showsBranchDirectory {
-                if sidebarBranchVerticalLayout {
-                    if !branchDirectoryLines.isEmpty {
-                        HStack(alignment: .top, spacing: 3) {
-                            if sidebarShowGitBranchIcon, branchLinesContainBranch {
-                                Image(systemName: "arrow.triangle.branch")
-                                    .font(.system(size: 9))
-                                    .foregroundColor(activeSecondaryColor(0.6))
-                            }
-                            VStack(alignment: .leading, spacing: 1) {
-                                ForEach(Array(branchDirectoryLines.enumerated()), id: \.offset) { _, line in
-                                    HStack(spacing: 3) {
-                                        if let branch = line.branch {
-                                            Text(branch)
-                                                .font(.system(size: 10, design: .monospaced))
-                                                .foregroundColor(activeSecondaryColor(0.75))
-                                                .lineLimit(1)
-                                                .truncationMode(.tail)
-                                        }
-                                        if line.branch != nil, line.directory != nil {
-                                            Image(systemName: "circle.fill")
-                                                .font(.system(size: 3))
-                                                .foregroundColor(activeSecondaryColor(0.6))
-                                                .padding(.horizontal, 1)
-                                        }
-                                        if let directory = line.directory {
-                                            Text(directory)
-                                                .font(.system(size: 10, design: .monospaced))
-                                                .foregroundColor(activeSecondaryColor(0.75))
-                                                .lineLimit(1)
-                                                .truncationMode(.tail)
-                                        }
-                                    }
+            if !branchDirectoryLines.isEmpty {
+                HStack(alignment: .top, spacing: 3) {
+                    if sidebarShowGitBranchIcon, branchLinesContainBranch {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 9))
+                            .foregroundColor(activeSecondaryColor(0.6))
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(Array(branchDirectoryLines.enumerated()), id: \.offset) { _, line in
+                            HStack(spacing: 3) {
+                                if let branch = line.branch {
+                                    Text(branch)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(activeSecondaryColor(0.75))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                }
+                                if line.branch != nil, line.directory != nil {
+                                    Image(systemName: "circle.fill")
+                                        .font(.system(size: 3))
+                                        .foregroundColor(activeSecondaryColor(0.6))
+                                        .padding(.horizontal, 1)
+                                }
+                                if let directory = line.directory {
+                                    Text(directory)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(activeSecondaryColor(0.75))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
                                 }
                             }
                         }
-                    }
-                } else if let dirRow = compactBranchDirectoryRow {
-                    HStack(spacing: 3) {
-                        if sidebarShowGitBranchIcon, compactGitBranchSummaryText != nil {
-                            Image(systemName: "arrow.triangle.branch")
-                                .font(.system(size: 9))
-                                .foregroundColor(activeSecondaryColor(0.6))
-                        }
-                        Text(dirRow)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(activeSecondaryColor(0.75))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
                     }
                 }
             }
 
             // Pull request rows
-            if detailVisibility.showsPullRequests, !pullRequestRows.isEmpty {
+            if !pullRequestRows.isEmpty {
                 VStack(alignment: .leading, spacing: 1) {
                     ForEach(pullRequestRows) { pullRequest in
                         Button(action: {
@@ -742,7 +691,7 @@ struct TabItemView: View, Equatable {
             }
 
             // Ports row
-            if detailVisibility.showsPorts, !tab.listeningPorts.isEmpty {
+            if !tab.listeningPorts.isEmpty {
                 HStack(spacing: 4) {
                     ForEach(tab.listeningPorts, id: \.self) { port in
                         Button(action: {
@@ -932,10 +881,6 @@ struct TabItemView: View, Equatable {
         .onAppear {
             // Prime the cache so branch/dir/PR rows appear immediately,
             // before the first debounced publisher fires.
-            recomputeSidebarDetailCache()
-        }
-        .onChange(of: visibleAuxiliaryDetails) {
-            // Toggling branch/PR columns changes which data we need to cache.
             recomputeSidebarDetailCache()
         }
     }
@@ -1432,36 +1377,6 @@ struct TabItemView: View, Equatable {
     // latestNotificationText is now passed as a parameter from the parent view
     // to avoid subscribing to notificationStore changes in every TabItemView.
 
-    private func branchDirectoryRow(
-        gitSummary: String?,
-        directorySummary: String?
-    ) -> String? {
-        var parts: [String] = []
-
-        if let gitSummary {
-            parts.append(gitSummary)
-        }
-
-        if let directorySummary {
-            parts.append(directorySummary)
-        }
-
-        let result = parts.joined(separator: " · ")
-        return result.isEmpty ? nil : result
-    }
-
-    private func gitBranchSummaryText(orderedPanelIds: [UUID]) -> String? {
-        let lines = gitBranchSummaryLines(orderedPanelIds: orderedPanelIds)
-        guard !lines.isEmpty else { return nil }
-        return lines.joined(separator: " | ")
-    }
-
-    private func gitBranchSummaryLines(orderedPanelIds: [UUID]) -> [String] {
-        tab.sidebarGitBranchesInDisplayOrder(orderedPanelIds: orderedPanelIds).map { branch in
-            "\(branch.branch)\(branch.isDirty ? "*" : "")"
-        }
-    }
-
     private struct VerticalBranchDirectoryLine {
         let branch: String?
         let directory: String?
@@ -1469,22 +1384,12 @@ struct TabItemView: View, Equatable {
 
     /// Recomputes the expensive sidebar detail caches (bonsplit tree walk,
     /// branch/directory lines, PR snapshot) and writes them into @State.
-    /// Must be called only from the debounced detail-data publisher, onAppear,
-    /// and settings-change handlers — never from immediate title changes or
-    /// lightweight render telemetry.
+    /// Must be called only from the debounced detail-data publisher and onAppear,
+    /// never from immediate title changes or lightweight render telemetry.
     private func recomputeSidebarDetailCache() {
-        let detail = visibleAuxiliaryDetails
-        let needsDetail = detail.showsBranchDirectory || detail.showsPullRequests
-        let ids: [UUID]? = needsDetail ? tab.sidebarOrderedPanelIds() : nil
-        cachedOrderedPanelIds = ids
-        cachedBranchDirectoryLines = {
-            guard detail.showsBranchDirectory, sidebarBranchVerticalLayout, let ids else { return [] }
-            return verticalBranchDirectoryLines(orderedPanelIds: ids)
-        }()
-        cachedPullRequestRows = {
-            guard detail.showsPullRequests, let ids else { return [] }
-            return pullRequestDisplays(orderedPanelIds: ids)
-        }()
+        let orderedPanelIds = tab.sidebarOrderedPanelIds()
+        cachedBranchDirectoryLines = verticalBranchDirectoryLines(orderedPanelIds: orderedPanelIds)
+        cachedPullRequestRows = pullRequestDisplays(orderedPanelIds: orderedPanelIds)
     }
 
     private func verticalBranchDirectoryLines(orderedPanelIds: [UUID]) -> [VerticalBranchDirectoryLine] {
@@ -1513,15 +1418,6 @@ struct TabItemView: View, Equatable {
                 return nil
             }
         }
-    }
-
-    private func directorySummaryText(orderedPanelIds: [UUID]) -> String? {
-        let home = SidebarPathFormatter.homeDirectoryPath
-        let entries = tab.sidebarDirectoriesInDisplayOrder(orderedPanelIds: orderedPanelIds).compactMap { directory in
-            let shortened = SidebarPathFormatter.shortenedPath(directory, homeDirectoryPath: home)
-            return shortened.isEmpty ? nil : shortened
-        }
-        return entries.isEmpty ? nil : entries.joined(separator: " | ")
     }
 
     private struct PullRequestDisplay: Identifiable {
