@@ -112,7 +112,7 @@ extension NSWindow {
             var chain: [String] = []
             var cursor = hit
             while let view = cursor, chain.count < 6 {
-                chain.append(String(describing: type(of: view)))
+                chain.append("\(type(of: view))@\(NSStringFromRect(view.convert(view.bounds, to: nil)))")
                 cursor = view.superview
             }
             dlog(
